@@ -1,0 +1,27 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="3da96778-1640-4df4-b578-d518c2b12d56" name="chuck@CHUCKPC 2026-03-30 14:02:07" runUser="CHUCKPC\chuck" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-03-30T14:02:07.4999381-05:00" queuing="2026-03-30T14:02:07.4999382-05:00" start="2026-03-30T14:02:07.1364134-05:00" finish="2026-03-30T14:02:07.5002308-05:00" />
+  <TestSettings name="default" id="fcb2635c-ff84-4af1-b570-90d8b0308664">
+    <Deployment runDeploymentRoot="chuck_CHUCKPC_2026-03-30_14_02_07" />
+  </TestSettings>
+  <TestLists>
+    <TestList name="Results Not in a List" id="8c84fa94-04c1-424b-9868-57a2d4851a1d" />
+    <TestList name="All Loaded Results" id="19431567-8539-422a-85d7-44ee4e166bda" />
+  </TestLists>
+  <ResultSummary outcome="Completed">
+    <Counters total="0" executed="0" passed="0" failed="0" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="0" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+    <Output>
+      <StdOut>[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v2.8.2+699d445a1a (64-bit .NET 10.0.5)&#xD;
+[xUnit.net 00:00:00.04]   Discovering: ETL-SQL.LanguageServer.Tests&#xD;
+[xUnit.net 00:00:00.06]   Discovered:  ETL-SQL.LanguageServer.Tests&#xD;
+[xUnit.net 00:00:00.06]   Starting:    ETL-SQL.LanguageServer.Tests&#xD;
+[xUnit.net 00:00:00.07]   Finished:    ETL-SQL.LanguageServer.Tests&#xD;
+</StdOut>
+    </Output>
+    <RunInfos>
+      <RunInfo computerName="CHUCKPC" outcome="Warning" timestamp="2026-03-30T14:02:07.4629772-05:00">
+        <Text>No test matches the given testcase filter `FullyQualifiedName~OrchestrationTests` in C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.LanguageServer.Tests\bin\Debug\net10.0\ETL-SQL.LanguageServer.Tests.dll</Text>
+      </RunInfo>
+    </RunInfos>
+  </ResultSummary>
+</TestRun>

@@ -1,0 +1,41 @@
+-- HYPER-SCALE STRESS TEST: 1 Million Rows (Simulating 1B Scale)
+-- This script tests Disk-Spilling Hash Join and Partitioned Aggregation
+
+-- 1. Generate 1 Million source records
+WITH Source AS (
+    SELECT Value FROM UNNEST(GENERATE_SERIES(1, 1000000)) AS t(Value)
+)
+SELECT 
+    s1.Value as ID,
+    'Category_' + CAST(s1.Value % 100 AS STRING) as Category,
+    s2.Value as ParentID
+INTO #LargeDataset
+FROM Source s1
+-- Self-join to force a large Hash Join
+LEFT JOIN Source s2 ON s1.Value = s2.Value - 1;
+
+-- 2. Perform large aggregation spanning the whole dataset
+SELECT 
+    Category,
+    COUNT(*) as RowCount,
+    AVG(ID) as AverageID
+FROM #LargeDataset
+GROUP BY Category
+ORDER BY AverageID DESC;
+
+-- 3. Recursive CTE to test hierarchy on a subset
+WITH RECURSIVE Hierarchy AS (
+    -- Anchor: First 10 nodes
+    SELECT ID, ParentID, 0 as Depth
+    FROM #LargeDataset
+    WHERE ID <= 10
+    
+    UNION ALL
+    
+    -- Recursive Member: Join back to large dataset
+    SELECT d.ID, d.ParentID, h.Depth + 1
+    FROM #LargeDataset d
+    JOIN Hierarchy h ON d.ParentID = h.ID
+    WHERE h.Depth < 5
+)
+SELECT * FROM Hierarchy;

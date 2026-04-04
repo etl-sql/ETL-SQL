@@ -1,0 +1,25 @@
+-- Demonstrates Oracle connectivity and metadata discovery
+-- Note: Requires a running Oracle instance (e.g. via Docker)
+
+USE DOCKER('gvenzl/oracle-free:latest');
+DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
+
+-- Fix service name if needed for Oracle Free
+SET @conn = REPLACE(@conn, 'SERVICE_NAME=XE', 'SERVICE_NAME=FREEPDB1');
+
+CREATE CONNECTION ora ON ORACLE(@conn);
+
+-- Execute table creation
+EXECUTE ora
+BEGIN
+  CREATE TABLE Employee (id NUMBER, name VARCHAR2(100));
+  INSERT INTO  Employee (id, name) VALUES (1, 'Oracle User');
+END;
+
+-- Standard SELECT
+SELECT * FROM ora.Employee;
+
+-- Metadata discovery (returns owner.table_name)
+HELP CONNECTION ORACLE;
+
+DOCKER CLOSE;

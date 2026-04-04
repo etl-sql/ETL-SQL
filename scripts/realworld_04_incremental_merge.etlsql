@@ -1,0 +1,40 @@
+/* 
+    REAL-WORLD SCENARIO 4: Incremental UPSERT (MERGE)
+    --------------------------------------------------
+    Self-contained mock using memory tables for ProdDb and DeltaFeed.
+*/
+
+CREATE TABLE #DeltaFeed (CustomerID VARCHAR(50), Name VARCHAR(50), Email VARCHAR(50), Segment VARCHAR(50), LastLogin DATETIME);
+INSERT INTO #DeltaFeed VALUES ('CUST001', 'Alice', 'alice@corp.com', 'PREMIUM', GETDATE());
+INSERT INTO #DeltaFeed VALUES ('CUST002', 'Bob', 'bob@corp.com', 'STANDARD', GETDATE());
+INSERT INTO #DeltaFeed VALUES ('CUST003', 'Charlie', 'char@corp.com', 'NEW', GETDATE());
+
+CREATE TABLE #ProdDb (CustomerID VARCHAR(50), Name VARCHAR(50), Email VARCHAR(50), Segment VARCHAR(50), LastLogin DATETIME, CreatedAt DATETIME, UpdatedAt DATETIME);
+INSERT INTO #ProdDb VALUES ('CUST001', 'Alice', 'old@corp.com', 'STANDARD', DATEADD(DAY, -5, GETDATE()), DATEADD(DAY, -10, GETDATE()), DATEADD(DAY, -10, GETDATE()));
+INSERT INTO #ProdDb VALUES ('CUST002', 'Bob', 'bob@corp.com', 'STANDARD', GETDATE(), GETDATE(), GETDATE());
+
+-- Stage the incoming delta
+SELECT CustomerID, Name, Email, Segment, LastLogin INTO #StagingDelta FROM #DeltaFeed;
+
+CREATE TABLE #AuditTrail (ActionType VARCHAR(20), CustomerID VARCHAR(50), OldSegment VARCHAR(50), NewSegment VARCHAR(50));
+
+-- Execute the MERGE natively
+MERGE INTO #ProdDb AS Target
+USING (SELECT * FROM #StagingDelta) AS Source
+ON Target.CustomerID = Source.CustomerID
+
+WHEN MATCHED AND (Target.Segment <> Source.Segment OR Target.LastLogin > Target.LastLogin) THEN 
+    UPDATE SET 
+        Name = Source.Name, Email = Source.Email, Segment = Source.Segment,
+        LastLogin = Source.LastLogin, UpdatedAt = GETDATE()
+
+WHEN NOT MATCHED BY TARGET THEN 
+    INSERT (CustomerID, Name, Email, Segment, LastLogin, CreatedAt, UpdatedAt) 
+    VALUES (Source.CustomerID, Source.Name, Source.Email, Source.Segment, Source.LastLogin, GETDATE(), GETDATE())
+
+OUTPUT 
+    $action AS ActionType, INSERTED.CustomerID, DELETED.Segment AS OldSegment, INSERTED.Segment AS NewSegment
+INTO #AuditTrail;
+
+SELECT ActionType, COUNT(*) AS Metric FROM #AuditTrail GROUP BY ActionType;
+SELECT * FROM #ProdDb;

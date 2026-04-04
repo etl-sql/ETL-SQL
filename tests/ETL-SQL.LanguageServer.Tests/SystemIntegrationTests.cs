@@ -1,0 +1,162 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Xunit;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.LSP;
+using ETL_SQL.Connectors.MockDb;
+using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using OmniSharp.Extensions.LanguageServer.Protocol.Document;
+using DocumentUri = OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri;
+using Xunit.Abstractions;
+
+namespace ETL_SQL.LanguageServer.Tests
+{
+    public class SystemIntegrationTests
+    {
+        private readonly ITestOutputHelper _output;
+        public SystemIntegrationTests(ITestOutputHelper output)
+        {
+            _output = output;
+        }
+
+        [Fact]
+        public async Task Completion_Should_Resolve_Aliases_And_Expand_Columns()
+        {
+            // Arrange
+            var services = new ServiceCollection();
+            services.AddLogging(builder => builder.AddConsole().AddDebug());
+            var serviceProvider = services.BuildServiceProvider();
+            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+            
+            var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
+            // IMPORTANT: Register the connector manually as Program.cs does
+            connectorRegistry.Register(new MockDbConnector());
+
+            var metadataManager = new MetadataManager(loggerFactory.CreateLogger<MetadataManager>(), connectorRegistry);
+            var handler = new TextDocumentHandler(loggerFactory, metadataManager);
+            
+            var uri = DocumentUri.From("untitled:Untitled-1");
+            var normalizedUri = uri.ToString(); 
+
+            // 1. Analyze script with alias
+            var script = "CREATE CONNECTION m ON MOCKDB();\r\nSELECT u. FROM m.Users AS u;";
+            _output.WriteLine("Analyzing script...");
+            await handler.AnalyzeAsync(uri, script);
+
+            // DIAGNOSTIC: Check if connection is registered
+            var conns = metadataManager.GetConnections(normalizedUri);
+            _output.WriteLine($"Connections found: {string.Join(", ", conns.Select(c => c.Name))}");
+            Assert.Contains(conns, c => string.Equals(c.Name, "m", StringComparison.OrdinalIgnoreCase));
+
+            // 2. Request completion at u. (line 1, col 9)
+            var completionParams = new CompletionParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Position = new Position(1, 9),
+                Context = new CompletionContext { TriggerKind = CompletionTriggerKind.TriggerCharacter, TriggerCharacter = "." }
+            };
+
+            // Act
+            _output.WriteLine("Requesting completion at line 1, col 9...");
+            var list = await handler.Handle(completionParams, CancellationToken.None);
+            
+            _output.WriteLine($"Completion items returned: {list.Count()}");
+            foreach (var item in list) _output.WriteLine($" - {item.Label} ({item.Detail})");
+
+            // Assert: Should see columns from Users (UserID, UserName, Email)
+            Assert.Contains(list, i => i.Label == "UserID");
+
+            // 3. Test expand columns u.* (line 1, col 10)
+            script = "CREATE CONNECTION m ON MOCKDB();\r\nSELECT u.* FROM m.Users AS u;";
+            await handler.AnalyzeAsync(uri, script);
+            
+            completionParams = new CompletionParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Position = new Position(1, 10),
+                Context = new CompletionContext { TriggerKind = CompletionTriggerKind.TriggerCharacter, TriggerCharacter = "." }
+            };
+            list = await handler.Handle(completionParams, CancellationToken.None);
+            
+             var expandItem = list.FirstOrDefault(i => i.Label == "Expand columns");
+             Assert.NotNull(expandItem);
+             _output.WriteLine($"Expand columns InsertText: {expandItem.InsertText}");
+             
+             // Verify it contains the aliased columns
+             Assert.Contains("u.UserID, u.UserName, u.Email", expandItem.InsertText);
+
+            // 4. Test expansion WITHOUT alias: SELECT * FROM m.Users;
+            script = "CREATE CONNECTION m ON MOCKDB();\r\nSELECT * FROM m.Users;";
+            await handler.AnalyzeAsync(uri, script);
+            
+            completionParams = new CompletionParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Position = new Position(1, 8), // After *
+                Context = new CompletionContext { TriggerKind = CompletionTriggerKind.TriggerCharacter, TriggerCharacter = " " }
+            };
+            list = await handler.Handle(completionParams, CancellationToken.None);
+            
+            expandItem = list.FirstOrDefault(i => i.Label == "Expand columns");
+            Assert.NotNull(expandItem);
+            _output.WriteLine($"Expand columns (no alias) InsertText: {expandItem.InsertText}");
+            
+            // Should expand WITHOUT alias prefix if not aliased and only 1 table.
+            Assert.Contains("UserID, UserName, Email", expandItem.InsertText);
+        }
+        [Fact]
+        public async Task Variable_Completion_Should_Include_Loop_Variables()
+        {
+            // Arrange
+            var services = new ServiceCollection();
+            services.AddLogging(builder => builder.AddConsole().AddDebug());
+            var serviceProvider = services.BuildServiceProvider();
+            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+            
+            var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
+            var metadataManager = new MetadataManager(loggerFactory.CreateLogger<MetadataManager>(), connectorRegistry);
+            var handler = new TextDocumentHandler(loggerFactory, metadataManager);
+            
+            var uri = DocumentUri.From("untitled:Untitled-2");
+            
+            // Script with nested loops and declarations
+            var script = "DECLARE @global_var INT = 100;\r\nFOR @i = 1 TO 10\r\nBEGIN\r\n    PRINT @i;\r\n    FOREACH @item IN [1, 2, 3]\r\n    BEGIN\r\n        PRINT @item;\r\n    END\r\nEND";
+            await handler.AnalyzeAsync(uri, script);
+
+            // 1. Completion at line 3 (inside FOR loop)
+            var completionParams = new CompletionParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Position = new Position(3, 10), // Inside PRINT @i;
+                Context = new CompletionContext { TriggerKind = CompletionTriggerKind.Invoked }
+            };
+
+            // Act
+            var list = await handler.Handle(completionParams, CancellationToken.None);
+            
+            // Assert: Should see @global_var and @i, but NOT @item
+            Assert.Contains(list, i => i.Label == "@global_var");
+            Assert.Contains(list, i => i.Label == "@i");
+            Assert.DoesNotContain(list, i => i.Label == "@item");
+
+            // 2. Completion at line 6 (inside FOREACH loop)
+            completionParams = new CompletionParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Position = new Position(6, 14), // Inside PRINT @item;
+                Context = new CompletionContext { TriggerKind = CompletionTriggerKind.Invoked }
+            };
+
+            list = await handler.Handle(completionParams, CancellationToken.None);
+            
+            // Assert: Should see @global_var, @i, AND @item
+            Assert.Contains(list, i => i.Label == "@global_var");
+            Assert.Contains(list, i => i.Label == "@i");
+            Assert.Contains(list, i => i.Label == "@item");
+        }
+    }
+}

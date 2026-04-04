@@ -1,0 +1,124 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Renci.SshNet;
+using ETL_SQL.Data;
+using ETL_SQL.Core.Common.Exceptions;
+
+namespace ETL_SQL.Connectors
+{
+    public class SftpConnector : IRemoteFileSystem, IDataSource, IConnector
+    {
+        private readonly SftpClient _client;
+        private readonly string _host;
+
+        public string Name => "SFTP";
+        public IReadOnlyList<string> Aliases => new[] { "SSH" };
+        public string Path => $"sftp://{_host}";
+
+        public SftpConnector(string host, string username, string password)
+        {
+            _host = host;
+            _client = new SftpClient(host, username, password);
+        }
+
+        public async Task<string> GetVersionAsync(string connectionString) => "SFTP Server";
+        public HashSet<string> GetSupportedFunctions() => new();
+        public HashSet<string> GetSupportedKeywords() => new();
+        public Dictionary<string, string[]> GetSupportedOptions() => new();
+        public Dictionary<string, string[]> GetOptionValues() => new();
+        public string GetHelp() => "SFTP Connector for remote file operations over SSH.";
+
+        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null)
+        {
+            string user = options?.GetValueOrDefault("USER") ?? "";
+            string pass = options?.GetValueOrDefault("PASSWORD") ?? "";
+            return new SftpConnector(connectionString, user, pass);
+        }
+
+        public Task<IEnumerable<string>> GetTablesAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetViewsAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+
+        private void EnsureConnected()
+        {
+            if (!_client.IsConnected)
+            {
+                _client.Connect();
+            }
+        }
+
+        public Task<IEnumerable<FileMetaData>> ListFilesAsync(string path)
+        {
+            EnsureConnected();
+            var items = _client.ListDirectory(path);
+            return Task.FromResult(items.Select(i => new FileMetaData
+            {
+                Name = i.Name,
+                FullPath = i.FullName,
+                Size = i.Attributes.Size,
+                LastModified = i.LastWriteTime,
+                IsDirectory = i.IsDirectory
+            }));
+        }
+
+        public async Task UploadFileAsync(string localPath, string remotePath)
+        {
+            EnsureConnected();
+            using var fileStream = File.OpenRead(localPath);
+            await Task.Run(() => _client.UploadFile(fileStream, remotePath));
+        }
+
+        public async Task DownloadFileAsync(string remotePath, string localPath)
+        {
+            EnsureConnected();
+            using var fileStream = File.Create(localPath);
+            await Task.Run(() => _client.DownloadFile(remotePath, fileStream));
+        }
+
+        public async Task DeleteFileAsync(string remotePath)
+        {
+            EnsureConnected();
+            await Task.Run(() => _client.DeleteFile(remotePath));
+        }
+
+        // IDataSource Implementation
+        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        {
+            var files = await ListFilesAsync("");
+            var table = new DataTable();
+            table.ColumnNames.AddRange(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+            foreach (var f in files)
+            {
+                table.AddRow(new Row
+                {
+                    ["Name"] = f.Name,
+                    ["FullPath"] = f.FullPath,
+                    ["Size"] = f.Size,
+                    ["LastModified"] = f.LastModified,
+                    ["IsDirectory"] = f.IsDirectory
+                });
+            }
+            yield return table;
+        }
+
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => throw new NotSupportedException("Writing batches to SFTP directly is not supported. Use FILE_SEND.");
+        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+        public object? Snapshot() => null;
+        public void Restore(object? snapshot) { }
+        public IDataSource WithTable(string tableName) => this;
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_client.IsConnected)
+            {
+                _client.Disconnect();
+            }
+            _client.Dispose();
+            await Task.CompletedTask;
+        }
+    }
+}

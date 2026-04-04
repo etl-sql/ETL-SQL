@@ -1,0 +1,23 @@
+-- sample_avro.etlsql
+-- Demonstrates reading and writing Avro files
+
+-- Define a connection to an Avro file
+CREATE CONNECTION MyAvro TYPE AVRO TARGET 'data_sample.avro';
+
+-- Create some dummy data in memory
+CREATE TABLE #SourceData (ID INT, Name VARCHAR(50), Active BOOLEAN);
+INSERT INTO #SourceData VALUES 
+(1, 'System A', true),
+(2, 'System B', false),
+(3, 'System C', true);
+
+-- Write from memory to Avro
+INSERT INTO MyAvro SELECT * FROM #SourceData;
+
+PRINT 'Data written to Avro.';
+
+-- Read back from Avro and display
+SELECT * FROM MyAvro;
+
+-- Use EXPLAIN
+EXPLAIN SELECT Name FROM MyAvro WHERE Active = true;

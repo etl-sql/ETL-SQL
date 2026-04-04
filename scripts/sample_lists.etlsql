@@ -1,0 +1,15 @@
+CREATE CONNECTION wide_data ON FLATFILE('TestData/wide_test.csv');
+
+DECLARE @valid_cats LIST(varchar) = ['Test', 'Prod'];
+DECLARE @excluded_ids LIST(int) = [51, 52, 53];
+
+SELECT
+    col1,
+    col2,
+    col3,
+    col4,
+    col5
+FROM wide_data
+WHERE col3 IN @valid_cats
+  AND col1 NOT IN (@excluded_ids)
+  AND col4 NOT IN ['Low'];

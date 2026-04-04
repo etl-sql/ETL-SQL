@@ -1,0 +1,39 @@
+-- sample_lineage.etlsql
+-- This sample demonstrates advanced data lineage tracking and metadata inheritance.
+
+-- 1. Create a source table with metadata tags
+CREATE TABLE Orders (
+    OrderId INT PRIMARY KEY,
+    UserId INT,
+    OrderDate DATETIME
+);
+
+INSERT INTO Orders (OrderId, UserId, OrderDate) VALUES 
+(1, 101, '2024-01-01') /* @d: Initial order; */,
+(2, 102, '2024-01-02') /* @d: Follow-up order; */,
+(3, 103, '2024-01-03');
+
+-- 2. Transform data and inherit lineage/metadata
+-- Tagging columns in source tables to show inheritance
+SELECT 
+    UserId /* @d: Customer UID; @sensitive: true; */,
+    OrderDate /* @d: Timestamp of sale; @owner: SalesDept; */
+INTO #SalesAudit
+FROM Orders /* @owner: SalesDept; */;
+
+-- 3. Inferred lineage with deep ancestry
+SELECT 
+    UserId, 
+    OrderDate, 
+    GETDATE() AS AuditDate
+INTO #FinalAudit
+FROM #SalesAudit;
+
+-- 4. Query the full inheritance chain using the queryable surface
+PRINT 'Final Audit Lineage for UserId:';
+SELECT * FROM LINEAGE('#FinalAudit', 'UserId');
+
+-- 5. Export lineage to a report
+LINEAGE('#FinalAudit') TO 'LineageReport.md';
+
+PRINT 'Lineage tracking complete. Check LineageReport.md for the graph.';

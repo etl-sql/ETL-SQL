@@ -1,0 +1,7 @@
+[
+  {"id": 1, "name": "Apple", "category": "Fruit", "price": 1.20, "tags": ["fresh", "red"]},
+  {"id": 2, "name": "Banana", "category": "Fruit", "price": 0.50, "tags": ["yellow"]},
+  {"id": 3, "name": "Carrot", "category": "Vegetable", "price": 0.80, "tags": ["orange", "crunchy"]},
+  {"id": 4, "name": "Date", "category": "Fruit", "price": 3.00, "tags": ["dried"]},
+  {"id": 5, "name": "Eggplant", "category": "Vegetable", "price": 2.00, "tags": ["purple"]}
+]

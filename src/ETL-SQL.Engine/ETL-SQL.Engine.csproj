@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ 
+   <PropertyGroup>
+     <TargetFramework>net10.0</TargetFramework>
+     <ImplicitUsings>enable</ImplicitUsings>
+     <Nullable>enable</Nullable>
+     <RootNamespace>ETL_SQL.Engine</RootNamespace>
+   </PropertyGroup>
+ 
+   <ItemGroup>
+     <PackageReference Include="Spectre.Console" Version="0.54.0" />
+   </ItemGroup>
+ 
+   <ItemGroup>
+     <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
+   </ItemGroup>
+ 
+   <ItemGroup>
+     <InternalsVisibleTo Include="ETL-SQL.Tests" />
+   </ItemGroup>
+ 
+ 
+   <ItemGroup>
+     <Using Include="ETL_SQL.Core" />
+     <Using Include="ETL_SQL.Core.Parser" />
+   </ItemGroup>
+ 
+ </Project>

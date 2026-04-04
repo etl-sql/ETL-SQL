@@ -1,0 +1,3 @@
+﻿SalesRegion,ProductCategory,Q1_Revenue,Q2_Revenue,Q3_Revenue,Q4_Revenue,YTD_Revenue,TransactionVolume
+NORTH,Electronics,0,0,0,0,57000.00,3
+SOUTH,Furniture,0,0,0,0,65000.00,2

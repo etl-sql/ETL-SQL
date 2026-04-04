@@ -1,0 +1,23 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+namespace ETL_SQL.Data
+{
+    public record FileMetaData
+    {
+        public string Name { get; init; } = "";
+        public string FullPath { get; init; } = "";
+        public long Size { get; init; }
+        public DateTime? LastModified { get; init; }
+        public bool IsDirectory { get; init; }
+    }
+
+    public interface IRemoteFileSystem : IAsyncDisposable
+    {
+        Task<IEnumerable<FileMetaData>> ListFilesAsync(string path);
+        Task UploadFileAsync(string localPath, string remotePath);
+        Task DownloadFileAsync(string remotePath, string localPath);
+        Task DeleteFileAsync(string remotePath);
+    }
+}

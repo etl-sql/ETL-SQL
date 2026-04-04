@@ -1,0 +1,29 @@
+-- Setup a mock connection
+CREATE CONNECTION MyDb ON MOCKDB('mock://localhost') WITH (dialect='MSSQL');
+
+PRINT 'Testing standalone EXECUTE INTO #RemoteUsers...';
+
+-- Test standalone EXECUTE into temp table
+EXECUTE MyDb INTO #RemoteUsers
+BEGIN
+    SELECT UserID, UserName, Email FROM Users
+END;
+
+-- Verify results
+SELECT 'Results from #RemoteUsers:' as Info;
+SELECT * FROM #RemoteUsers;
+
+PRINT 'Testing INSERT INTO #TargetUsers EXECUTE...';
+
+-- Test INSERT INTO ... EXECUTE
+CREATE TABLE #TargetUsers (UID INT, UName ANY, UMail ANY);
+
+INSERT INTO #TargetUsers (UID, UName, UMail)
+EXECUTE MyDb
+BEGIN
+    SELECT UserID, UserName, Email FROM Users
+END;
+
+-- Verify results
+SELECT 'Results from #TargetUsers:' as Info;
+SELECT * FROM #TargetUsers;

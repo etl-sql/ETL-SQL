@@ -1,0 +1,62 @@
+/* 
+    REAL-WORLD SCENARIO 9: Event-Driven Directory Watcher
+    -----------------------------------------------------
+    Self-contained mock.
+*/
+
+-- Create the required sandbox directories
+CREATE_DIRECTORY('TestData/out/pickup/');
+CREATE_DIRECTORY('TestData/out/archive/');
+
+-- Drop the mock trigger file
+CREATE CONNECTION TriggerDrop ON FLATFILE('TestData/out/pickup/trigger_data.csv');
+INSERT INTO TriggerDrop.Main (ID) VALUES (1);
+INSERT INTO TriggerDrop.Main (ID) VALUES (2);
+
+CREATE CONNECTION IncomingFtpFolder ON DIRECTORY('TestData/out/pickup/');
+DECLARE @fileFound INT = 0;
+DECLARE @iterations INT = 0;
+
+PRINT 'Initiating Event-Driven Directory Watcher...';
+
+-- Infinite daemon loop scanning for a signal file
+WHILE @fileFound = 0 AND @iterations < 10
+BEGIN
+    -- Check if target exists
+    IF EXISTS (SELECT 1 FROM IncomingFtpFolder.Main WHERE FileName LIKE 'trigger_%.csv')
+    BEGIN
+        PRINT 'Signal File Discovered! Engaging Pipeline...';
+        
+        -- Retrieve exact file path
+        DECLARE @targetFile VARCHAR(500);
+        SELECT TOP 1 @targetFile = FullPath FROM IncomingFtpFolder.Main WHERE FileName LIKE 'trigger_%.csv';
+        
+        -- Ad-Hoc dynamic target creation using the variable
+        DECLARE @dynSql VARCHAR(1000) = 'CREATE CONNECTION Payload ON FLATFILE(''' + @targetFile + ''') WITH(HEADER=''ON'');';
+        EXECUTE(@dynSql);
+        
+        CREATE TABLE #DWStage (ID INT);
+        INSERT INTO #DWStage SELECT * FROM Payload.Main;
+        
+        PRINT 'Payload Ingested successfully. Triggering archival...';
+        
+        -- Archive and release directory state
+        MOVE_FILE(@targetFile, 'TestData/out/archive/' + REPLACE(@targetFile, 'TestData/out/pickup/', ''));
+        SET @fileFound = 1;
+
+        PRINT 'Data inside Stage:';
+        SELECT * FROM #DWStage;
+
+        PRINT 'Archive complete. Daemon executing successful exit.';
+    END
+    ELSE
+    BEGIN
+        PRINT 'Waiting for FTP payload heartbeat...';
+        SET @iterations = @iterations + 1;
+    END;
+END;
+
+IF @fileFound = 0
+BEGIN
+    PRINT 'Timeout reached: Daemon shutting down without processing files.';
+END;

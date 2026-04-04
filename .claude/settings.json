@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bash /tmp/count_keywords.sh)",
+      "Bash(bash /tmp/count_syntax.sh)"
+    ]
+  }
+}

@@ -1,0 +1,121 @@
+## .NET / C# build artifacts
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+## NuGet packages
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+## Visual Studio
+.vs/
+*.rsuser
+*.vspx
+*.vspscc
+.vscode/
+
+## Rider / JetBrains
+.idea/
+*.sln.iml
+
+## Build output
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## OS
+Thumbs.db
+.DS_Store
+Desktop.ini
+
+## Test data (generated large files)
+TestData/large_*.csv
+TestData/qualified_output.csv
+TestData/*.out.csv
+
+## ETL output files — keep TestData source fixtures, ignore generated outputs
+Output/
+*.output.csv
+
+## Agent-generated diagnostic / build capture files (never commit these)
+# Build log captures
+build_log*.txt
+build_logs*.txt
+build_warnings*.txt
+build_diagnostics*.txt
+*_build.txt
+*_build_*.txt
+# Test output captures
+*_tests*.txt
+*_tests_*.txt
+test_warnings*.txt
+test_errors*.txt
+full_tests_run.txt
+# Benchmark / perf captures  
+benchmark_output*.json
+# Misc one-off diagnostic files
+mixed_source_verbose.txt
+all_full_paths.txt
+all_logs.txt
+any_log_files.txt
+build_error.txt
+build_errors.txt
+build_output.txt
+debug_parse.cs
+engine_build_error.txt
+full_build.txt
+full_build_error.txt
+last_fail.txt
+ls_tests_results.txt
+merge_test.txt
+path_test.cs
+sales.csv
+test_debug_log.txt
+test_detail.txt
+test_fail_debug.txt
+test_log.txt
+test_ls_output.txt
+test_output.txt
+test_results.txt
+test_results_final.txt
+test_results_v2.txt
+test_results_v3.txt
+test_results_v4.txt
+test_v_n.txt
+tests_build_error.txt
+total_test_output.txt
+test_errors.txt
+verify_lineage_metadata.etlsql
+
+# ETL-SQL SQLite state databases (runtime, not source)
+etlsql.db
+*.db
+
+# Temporary directories
+.etlsql_temp/
+/scratch/
+/tmp/
+
+# More general scratch/diagnostic captures
+*.txt
+*.cs.scratch
+*.etlsql.scratch
+test_lineage.md
+test_out.txt
+tests_list.txt

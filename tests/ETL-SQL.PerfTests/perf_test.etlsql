@@ -1,0 +1,26 @@
+-- PERFORMANCE VALIDATION SCRIPT
+-- Tests Grace Hash Join and Recursion Depth
+
+CREATE TABLE #T1 (ID INT);
+CREATE TABLE #T2 (ID INT);
+
+DECLARE @i INT = 1;
+WHILE @i <= 150000
+BEGIN
+    INSERT INTO #T1 VALUES (@i);
+    INSERT INTO #T2 VALUES (@i);
+    SET @i = @i + 1;
+END;
+
+-- 2. Trigger External Disk-Spilling Join (Threshold 100k)
+SELECT COUNT(*) 
+FROM #T1 t1 
+JOIN #T2 t2 ON t1.ID = t2.ID;
+
+-- 3. Trigger Recursive Depth Tracking
+WITH RECURSIVE Counter AS (
+    SELECT 1 as Val
+    UNION ALL
+    SELECT Val + 1 FROM Counter WHERE Val < 50
+)
+SELECT MAX(Val) FROM Counter;

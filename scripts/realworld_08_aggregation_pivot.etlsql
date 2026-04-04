@@ -1,0 +1,43 @@
+/* 
+    REAL-WORLD SCENARIO 8: Complex Aggregation & Pivot
+    --------------------------------------------------
+    Self-contained mock.
+*/
+
+CREATE TABLE #Transactions (TransactionID INT, SalesRegion VARCHAR(20), ProductCategory VARCHAR(20), SaleDate DATETIME, TotalRevenue DECIMAL);
+
+-- Q1 Sales
+INSERT INTO #Transactions VALUES (1, 'NORTH', 'Electronics', '2026-02-15', 12000.00);
+-- Q2 Sales
+INSERT INTO #Transactions VALUES (2, 'NORTH', 'Electronics', '2026-05-15', 15000.00);
+-- Q3 Sales
+INSERT INTO #Transactions VALUES (3, 'SOUTH', 'Furniture', '2026-08-10', 25000.00);
+-- Q4 Sales
+INSERT INTO #Transactions VALUES (4, 'NORTH', 'Electronics', '2026-11-20', 30000.00);
+INSERT INTO #Transactions VALUES (5, 'SOUTH', 'Furniture', '2026-12-05', 40000.00);
+
+CREATE CONNECTION BoardReport ON FLATFILE('TestData/out/Quarterly_Board_Report_2026.csv') WITH (HEADER='ON');
+
+-- Perform massive aggregations and dynamically pivot Quarter metrics onto columns
+SELECT 
+    SalesRegion,
+    ProductCategory,
+    -- Pivot Q1
+    SUM(CASE WHEN DATEPART(QQ, SaleDate) = 1 THEN TotalRevenue ELSE 0 END) AS Q1_Revenue,
+    -- Pivot Q2
+    SUM(CASE WHEN DATEPART(QQ, SaleDate) = 2 THEN TotalRevenue ELSE 0 END) AS Q2_Revenue,
+    -- Pivot Q3
+    SUM(CASE WHEN DATEPART(QQ, SaleDate) = 3 THEN TotalRevenue ELSE 0 END) AS Q3_Revenue,
+    -- Pivot Q4
+    SUM(CASE WHEN DATEPART(QQ, SaleDate) = 4 THEN TotalRevenue ELSE 0 END) AS Q4_Revenue,
+    
+    -- Subtotals
+    SUM(TotalRevenue) AS YTD_Revenue,
+    COUNT(TransactionID) AS TransactionVolume
+INTO BoardReport.Main
+FROM #Transactions
+WHERE YEAR(SaleDate) = 2026
+GROUP BY SalesRegion, ProductCategory
+HAVING SUM(TotalRevenue) > 10000;
+
+PRINT 'Quarterly Pivot Report generation completed.';

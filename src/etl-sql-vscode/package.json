@@ -1,0 +1,229 @@
+{
+  "name": "etl-sql-vscode",
+  "displayName": "ETL-SQL Tools",
+  "description": "Language support for ETL-SQL scripts with lineage tracking and diagnostics.",
+  "version": "0.1.0",
+  "publisher": "chuck",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "etlsql-explorer",
+          "title": "ETL-SQL",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "etlsql-explorer": [
+        {
+          "id": "etlsql-connections",
+          "name": "Connections",
+          "visibility": "visible",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "languages": [
+      {
+        "id": "etlsql",
+        "aliases": [
+          "ETL-SQL",
+          "etlsql"
+        ],
+        "extensions": [
+          ".etlsql"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "etlsql",
+        "scopeName": "source.etlsql",
+        "path": "./syntaxes/etlsql.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "ETL-SQL",
+      "properties": {
+        "etlsql.server.path": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the ETL-SQL Language Server executable (ETL-SQL.LanguageServer.exe)."
+        },
+        "etlsql.executable.path": {
+          "type": "string",
+          "default": "ETL-SQL.exe",
+          "description": "Path to the ETL-SQL CLI executable (ETL-SQL.exe) for running scripts."
+        },
+        "etlsql.verbose": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable verbose output when running scripts."
+        },
+        "etlsql.runMethod": {
+          "type": "string",
+          "enum": [
+            "Terminal",
+            "Output Channel",
+            "Webview (Grid)"
+          ],
+          "default": "Webview (Grid)",
+          "description": "Where to display the output of scripts."
+        },
+        "etlsql.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the ETL-SQL language server."
+        },
+        "etlsql.debugMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable advanced diagnostic popups and extreme console logging for troubleshooting."
+        },
+        "etlsql.enableLogging": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable persistent engine-level logging to a .log file."
+        },
+        "etlsql.logPath": {
+          "type": "string",
+          "default": ".etlsql_logs",
+          "description": "Directory where engine logs will be stored."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "etlsql.runScript",
+        "title": "ETL-SQL: Run Script",
+        "icon": "$(play)"
+      },
+      {
+        "command": "etlsql.runSelection",
+        "title": "ETL-SQL: Run Selection",
+        "icon": "$(run-above)"
+      },
+      {
+        "command": "etlsql.showLineage",
+        "title": "ETL-SQL: Show Visual Lineage"
+      },
+
+      {
+        "command": "etlsql.removeConnection",
+        "title": "ETL-SQL: Remove Connection",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "etlsql.refreshConnections",
+        "title": "ETL-SQL: Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "etlsql.copyConnection",
+        "title": "ETL-SQL: Copy CREATE CONNECTION",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "etlsql.browseFile",
+        "title": "ETL-SQL: Browse for Flat File...",
+        "icon": "$(file-add)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "etlsql.runScript",
+        "key": "f5",
+        "when": "editorLangId == etlsql && !editorHasSelection"
+      },
+      {
+        "command": "etlsql.runSelection",
+        "key": "f5",
+        "when": "editorLangId == etlsql && editorHasSelection"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "etlsql.runScript",
+          "group": "etlsql",
+          "when": "editorLangId == etlsql"
+        },
+        {
+          "command": "etlsql.runSelection",
+          "group": "etlsql",
+          "when": "editorLangId == etlsql && editorHasSelection"
+        },
+        {
+          "command": "etlsql.browseFile",
+          "group": "etlsql",
+          "when": "editorLangId == etlsql"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "etlsql.runScript",
+          "group": "navigation",
+          "when": "editorLangId == etlsql"
+        },
+        {
+          "command": "etlsql.runSelection",
+          "group": "navigation",
+          "when": "editorLangId == etlsql && editorHasSelection"
+        }
+      ],
+      "view/title": [
+
+        {
+          "command": "etlsql.refreshConnections",
+          "when": "view == etlsql-connections",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "etlsql.removeConnection",
+          "when": "view == etlsql-connections && viewItem == connection-global",
+          "group": "inline"
+        },
+        {
+          "command": "etlsql.copyConnection",
+          "when": "view == etlsql-connections && (viewItem == connection-global || viewItem == connection-script)",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "16.x",
+    "@types/vscode": "^1.75.0",
+    "@typescript-eslint/eslint-plugin": "^5.53.0",
+    "@typescript-eslint/parser": "^5.53.0",
+    "eslint": "^8.34.0",
+    "typescript": "^4.9.5",
+    "vscode-languageclient": "^8.1.0"
+  }
+}

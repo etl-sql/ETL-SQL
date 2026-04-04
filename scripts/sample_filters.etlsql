@@ -1,0 +1,18 @@
+CREATE CONNECTION wide_data ON FLATFILE('TestData/wide_test.csv');
+
+SELECT
+    col1,
+    col2,
+    col3,
+    col4,
+    col5,
+    CASE 
+        WHEN col2 = 'Val1' THEN 'Primary' 
+        WHEN col2 = 'Val2' THEN 'Secondary' 
+        ELSE 'Unknown' 
+    END AS ComputedCategory
+FROM wide_data
+WHERE col3 IN ('Test', 'Prod')
+  AND col4 = 'High'
+  AND col5 LIKE 'Data%_5'
+  AND col1 > 50;

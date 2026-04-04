@@ -1,0 +1,23 @@
+-- sample_parquet.etlsql
+-- Demonstrates reading and writing Parquet files
+
+-- Define a connection to a Parquet file
+CREATE CONNECTION MyParquet TYPE PARQUET TARGET 'data_sample.parquet' WITH (COMPRESSION = 'SNAPPY');
+
+-- Create some dummy data in memory
+CREATE TABLE #SourceData (ID INT, Name VARCHAR(50), Score DOUBLE);
+INSERT INTO #SourceData VALUES 
+(1, 'Alice', 95.5),
+(2, 'Bob', 88.0),
+(3, 'Charlie', 92.3);
+
+-- Write from memory to Parquet
+INSERT INTO MyParquet SELECT * FROM #SourceData;
+
+PRINT 'Data written to Parquet.';
+
+-- Read back from Parquet and display
+SELECT * FROM MyParquet;
+
+-- Using EXPLAIN to see the plan
+EXPLAIN SELECT * FROM MyParquet WHERE Score > 90;

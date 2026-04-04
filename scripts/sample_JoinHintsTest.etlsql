@@ -1,0 +1,41 @@
+-- Create sample tables
+CREATE TABLE #SmallTable (ID INT, Name VARCHAR(50));
+INSERT INTO #SmallTable VALUES (1, 'Alice');
+INSERT INTO #SmallTable VALUES (2, 'Bob');
+
+CREATE TABLE #LargeTable (ID INT, Value VARCHAR(50));
+INSERT INTO #LargeTable VALUES (1, 'V1');
+INSERT INTO #LargeTable VALUES (2, 'V2');
+INSERT INTO #LargeTable VALUES (3, 'V3');
+INSERT INTO #LargeTable VALUES (4, 'V4');
+
+-- Test 1: INNER LOOP JOIN (Force Loop)
+PRINT 'Testing INNER LOOP JOIN...';
+SELECT s.Name, l.Value
+FROM #SmallTable s
+INNER LOOP JOIN #LargeTable l ON s.ID = l.ID;
+
+-- Test 2: INNER HASH JOIN (Force Hash)
+PRINT 'Testing INNER HASH JOIN...';
+SELECT s.Name, l.Value
+FROM #SmallTable s
+INNER HASH JOIN #LargeTable l ON s.ID = l.ID;
+
+-- Test 3: INNER MERGE JOIN (Force Merge)
+PRINT 'Testing INNER MERGE JOIN...';
+SELECT s.Name, l.Value
+FROM #SmallTable s
+INNER MERGE JOIN #LargeTable l ON s.ID = l.ID;
+
+-- Test 4: LEFT HASH JOIN (Outer + Hash)
+PRINT 'Testing LEFT HASH JOIN...';
+INSERT INTO #SmallTable VALUES (5, 'Charlie');
+SELECT s.Name, l.Value
+FROM #SmallTable s
+LEFT HASH JOIN #LargeTable l ON s.ID = l.ID;
+
+-- Test 5: Auto selection (should be Loop because tables are small < 20)
+PRINT 'Testing Auto-Selection (should be Loop)...';
+SELECT s.Name, l.Value
+FROM #SmallTable s
+JOIN #LargeTable l ON s.ID = l.ID;

@@ -1,0 +1,554 @@
+using System;
+using System.Collections.Generic;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
+
+namespace ETL_SQL.Core.Parser
+{
+    /// <summary>
+    /// Recursive descent parser for expressions in the ETL-SQL language.
+    /// Supports standard SQL operations, window functions, and custom ETL extensions.
+    /// </summary>
+    public partial class ExpressionParser
+    {
+        private readonly IParser _parser;
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ExpressionParser"/> class.
+        /// </summary>
+        /// <param name="parser">The parent parser instance for token access.</param>
+        public ExpressionParser(IParser parser)
+        {
+            _parser = parser;
+        }
+
+        /// <summary>
+        /// Consumes sequential COLUMN_TAG tokens and parses them into a metadata dictionary.
+        /// </summary>
+        public Dictionary<string, string> ParseMetadataTags()
+        {
+            var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            while (_parser.Match(TokenType.COLUMN_TAG))
+            {
+                _parser.ParseMetadataTags(_parser.Previous.Value, metadata);
+            }
+            return metadata;
+        }
+
+        /// <summary>
+        /// Parses an expression starting from the lowest precedence operator (OR).
+        /// </summary>
+        /// <returns>The root <see cref="Expression"/> node.</returns>
+        public Expression ParseExpression()
+        {
+            return ParseOr();
+        }
+
+        private Expression ParseOr()
+        {
+            var left = ParseAnd();
+            while (_parser.Match(TokenType.OR))
+            {
+                var op = TokenType.OR;
+                var right = ParseAnd();
+                left = new BinaryExpression(left, op, right) { Line = left.Line, Column = left.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
+            return left;
+        }
+
+        private Expression ParseAnd()
+        {
+            var left = ParseNot();
+            while (_parser.Match(TokenType.AND))
+            {
+                var op = TokenType.AND;
+                var right = ParseNot();
+                left = new BinaryExpression(left, op, right) { Line = left.Line, Column = left.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
+            return left;
+        }
+
+        private Expression ParseNot()
+        {
+            if (_parser.Match(TokenType.NOT))
+            {
+                var notToken = _parser.Previous;
+                if (_parser.Match(TokenType.EXISTS))
+                {
+                    _parser.Consume(TokenType.LPAREN, "Expected '(' after EXISTS");
+                    var subq = _parser.ParseQuery();
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' after subquery");
+                    return new ExistsExpression(subq, true) { Line = notToken.Line, Column = notToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn }; 
+                }
+                var expr = ParseNot();
+                return new UnaryExpression(TokenType.NOT, expr) { Line = notToken.Line, Column = notToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
+            return ParseComparison();
+        }
+
+        private bool PeekAtTimeZone()
+        {
+            if (_parser.Current.Type != TokenType.AT) return false;
+            return _parser.Peek.Type == TokenType.TIME && _parser.Peek2.Type == TokenType.ZONE;
+        }
+
+        private Expression ParseComparison()
+        {
+            var left = ParseTerm();
+            while (_parser.Current.Type == TokenType.EQUALS || _parser.Current.Type == TokenType.NOT_EQUALS ||
+                   _parser.Current.Type == TokenType.LESS_THAN || _parser.Current.Type == TokenType.GREATER_THAN ||
+                   _parser.Current.Type == TokenType.LESS_EQUALS || _parser.Current.Type == TokenType.GREATER_EQUALS ||
+                   _parser.Current.Type == TokenType.IN || _parser.Current.Type == TokenType.LIKE || _parser.Current.Type == TokenType.IS || _parser.Current.Type == TokenType.NOT)
+            {
+                bool isNot = false;
+                if (_parser.Match(TokenType.NOT))
+                {
+                    isNot = true;
+                    if (_parser.Current.Type != TokenType.IN && _parser.Current.Type != TokenType.LIKE) 
+                    {
+                        _parser.Backtrack();
+                        break; 
+                    }
+                }
+
+                var opToken = _parser.Advance();
+                var op = opToken.Type;
+
+                if (op == TokenType.IS)
+                {
+                    bool not = false;
+                    if (_parser.Match(TokenType.NOT))
+                    {
+                        not = true;
+                    }
+                    _parser.Consume(TokenType.NULL, "Expected 'NULL' after IS [NOT]");
+                    left = new IsNullExpression(left, not) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                }
+                else if (op == TokenType.IN)
+                {
+                    Expression rightExpr;
+                    if (_parser.Match(TokenType.LPAREN))
+                    {
+                        if (_parser.Current.Type == TokenType.SELECT)
+                        {
+                            var subq = _parser.ParseQuery();
+                            rightExpr = new SubqueryExpression(subq);
+                        }
+                        else if (_parser.Current.Type == TokenType.VARIABLE && _parser.Peek.Type == TokenType.RPAREN)
+                        {
+                            rightExpr = _parser.ParseExpression();
+                        }
+                        else
+                        {
+                            var inList = new List<Expression>();
+                            if (_parser.Current.Type != TokenType.RPAREN)
+                            {
+                                inList.Add(_parser.ParseExpression());
+                                while (_parser.Match(TokenType.COMMA))
+                                {
+                                    inList.Add(_parser.ParseExpression());
+                                }
+                            }
+                            rightExpr = new ListExpression(inList);
+                        }
+                        _parser.Consume(TokenType.RPAREN, "Expected ')' after IN list");
+                    }
+                    else
+                    {
+                        rightExpr = ParseTerm();
+                    }
+                    left = new InExpression(left, rightExpr, isNot) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                }
+                else if (op == TokenType.LIKE)
+                {
+                    var right = ParseTerm();
+                    left = new LikeExpression(left, right, isNot) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                }
+                else
+                {
+                    var right = ParseTerm();
+                    left = new BinaryExpression(left, op, right) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                }
+            }
+            return left;
+        }
+
+        private Expression ParseTerm()
+        {
+            var left = ParseFactor();
+            while (_parser.Current.Type == TokenType.PLUS || _parser.Current.Type == TokenType.MINUS)
+            {
+                var opToken = _parser.Advance();
+                var op = opToken.Type;
+                var right = ParseFactor();
+                left = new BinaryExpression(left, op, right) { Line = opToken.Line, Column = opToken.Column };
+            }
+            return left;
+        }
+
+        private Expression ParseFactor()
+        {
+            var left = ParsePrimary();
+            while (_parser.Current.Type == TokenType.STAR || _parser.Current.Type == TokenType.SLASH || _parser.Current.Type == TokenType.MODULO)
+            {
+                var opToken = _parser.Advance();
+                var op = opToken.Type;
+                var right = ParsePrimary();
+                left = new BinaryExpression(left, op, right) { Line = opToken.Line, Column = opToken.Column };
+            }
+            return left;
+        }
+
+        private Expression ParsePrimary()
+        {
+            var expr = ParsePrimaryBase();
+            
+            // Postfix: AT TIME ZONE
+            while (true)
+            {
+                if (_parser.Current.Type == TokenType.AT)
+                {
+                    if (PeekAtTimeZone())
+                    {
+                        _parser.Advance(); // consume AT
+                        _parser.Advance(); // consume TIME
+                        _parser.Consume(TokenType.ZONE, "Expected 'ZONE' after 'AT TIME'");
+                        var zone = ParsePrimary();
+                        expr = new AtTimeZoneExpression(expr, zone) 
+                        { 
+                            Line = expr.Line, Column = expr.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn 
+                        };
+                        continue;
+                    }
+                }
+                break;
+            }
+            return expr;
+        }
+
+        private Expression ParsePrimaryBase()
+        {
+            if (_parser.Match(TokenType.EXISTS))
+            {
+                var t = _parser.Previous;
+                _parser.Consume(TokenType.LPAREN, "Expected '(' after EXISTS");
+                var subquery = _parser.ParseQuery();
+                _parser.Consume(TokenType.RPAREN, "Expected ')' after subquery");
+                return new ExistsExpression(subquery, false) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
+            if (_parser.Match(TokenType.LBRACKET))
+            {
+                var items = new List<Expression>();
+                if (_parser.Current.Type != TokenType.RBRACKET)
+                {
+                    items.Add(_parser.ParseExpression());
+                    while (_parser.Match(TokenType.COMMA))
+                    {
+                        items.Add(_parser.ParseExpression());
+                    }
+                }
+                _parser.Consume(TokenType.RBRACKET, "Expected ']' at the end of list expression");
+                return new ListExpression(items) { Line = _parser.Previous.Line, Column = _parser.Previous.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
+            if (_parser.Match(TokenType.NUMBER))
+            {
+                var t = _parser.Previous;
+                return new LiteralExpression(decimal.Parse(t.Value), TokenType.NUMBER) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+            }
+            if (_parser.Match(TokenType.TRUE))
+            {
+                var t = _parser.Previous;
+                return new LiteralExpression(true, TokenType.TRUE) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+            }
+            if (_parser.Match(TokenType.FALSE))
+            {
+                var t = _parser.Previous;
+                return new LiteralExpression(false, TokenType.FALSE) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+            }
+            if (_parser.Match(TokenType.NULL))
+            {
+                var t = _parser.Previous;
+                return new LiteralExpression(null, TokenType.NULL) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+            }
+            if (_parser.Match(TokenType.STRING))
+            {
+                var t = _parser.Previous;
+                return new LiteralExpression(t.Value, TokenType.STRING) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+            }
+            if (_parser.Match(TokenType.CURRENT_TIMESTAMP) || _parser.Match(TokenType.CURRENT_DATE) || _parser.Match(TokenType.CURRENT_TIME))
+            {
+                var t = _parser.Previous;
+                return new FunctionCallExpression(t.Value, new List<Expression>()) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+            }
+            if (_parser.Match(TokenType.CAST) || _parser.Match(TokenType.TRY_CAST))
+            {
+                var t = _parser.Previous;
+                var funcName = t.Type == TokenType.TRY_CAST ? "TRY_CAST" : "CAST";
+                _parser.Consume(TokenType.LPAREN, "Expected '(' after CAST/TRY_CAST");
+                var expr = _parser.ParseExpression();
+                _parser.Consume(TokenType.AS, "Expected 'AS' after expression in CAST/TRY_CAST");
+                
+                string targetType = _parser.ParseType();
+                _parser.Consume(TokenType.RPAREN, "Expected ')' at end of CAST/TRY_CAST");
+                return new FunctionCallExpression(funcName, new List<Expression> { expr, new LiteralExpression(targetType, TokenType.STRING) }) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
+            if (_parser.Match(TokenType.CASE))
+            {
+                var t = _parser.Previous;
+                var clauses = new List<(Expression Condition, Expression Result)>();
+                Expression? elseResult = null;
+
+                while (_parser.Match(TokenType.WHEN))
+                {
+                    var condition = _parser.ParseExpression();
+                    _parser.Consume(TokenType.THEN, "Expected THEN after WHEN expression");
+                    var result = _parser.ParseExpression();
+                    clauses.Add((condition, result));
+                }
+
+                if (_parser.Match(TokenType.ELSE))
+                {
+                    elseResult = _parser.ParseExpression();
+                }
+
+                _parser.Consume(TokenType.END, "Expected END at the conclusion of CASE statement");
+                return new CaseExpression(clauses, elseResult) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
+            if (_parser.Match(TokenType.VARIABLE))
+            {
+                var t = _parser.Previous;
+                Expression expr = new VariableExpression(t.Value) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+                while (_parser.Match(TokenType.DOT))
+                {
+                    var member = _parser.Consume(TokenType.IDENTIFIER, "Expected member name after '.'");
+                    expr = new MemberAccessExpression(expr, member.Value) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                }
+                return expr;
+            }
+            
+            if (_parser.IsIdentifier(_parser.Current))
+            {
+                var t = _parser.Advance();
+                var name = t.Value;
+                if (_parser.Match(TokenType.LPAREN))
+                {
+                    bool isFuncDistinct = _parser.Match(TokenType.DISTINCT);
+                    var args = new List<Expression>();
+                    if (_parser.Current.Type != TokenType.RPAREN)
+                    {
+                        if (_parser.Current.Type == TokenType.STAR)
+                        {
+                            var starToken = _parser.Advance();
+                            args.Add(new IdentifierExpression("*") { Line = starToken.Line, Column = starToken.Column });
+                        }
+                        else
+                        {
+                            args.Add(_parser.ParseExpression());
+                        }
+
+                        while (_parser.Match(TokenType.COMMA))
+                        {
+                            if (_parser.Current.Type == TokenType.STAR)
+                            {
+                                var starToken = _parser.Advance();
+                                args.Add(new IdentifierExpression("*") { Line = starToken.Line, Column = starToken.Column, EndLine = starToken.EndLine, EndColumn = starToken.EndColumn });
+                            }
+                            else
+                            {
+                                args.Add(_parser.ParseExpression());
+                            }
+                        }
+                    }
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' after function arguments");
+                    var funcCall = new FunctionCallExpression(name, args) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn, IsDistinct = isFuncDistinct };
+                    
+                    if (_parser.Match(TokenType.OVER))
+                    {
+                        _parser.Consume(TokenType.LPAREN, "Expected '(' after OVER");
+                        var partitionBy = new List<Expression>();
+                        if (_parser.Match(TokenType.PARTITION))
+                        {
+                            _parser.Consume(TokenType.BY, "Expected 'BY' after 'PARTITION'");
+                            partitionBy.Add(_parser.ParseExpression());
+                            while (_parser.Match(TokenType.COMMA))
+                            {
+                                partitionBy.Add(_parser.ParseExpression());
+                            }
+                        }
+
+                        var orderBy = new List<OrderByClause>();
+                        if (_parser.Match(TokenType.ORDER))
+                        {
+                            _parser.Consume(TokenType.BY, "Expected 'BY' after 'ORDER'");
+                            do
+                            {
+                                var orderExpr = _parser.ParseExpression();
+                                bool descending = false;
+                                if (_parser.Match(TokenType.DESC)) descending = true;
+                                else _parser.Match(TokenType.ASC);
+                                orderBy.Add(new OrderByClause(orderExpr, descending));
+                            } while (_parser.Match(TokenType.COMMA));
+                        }
+                        
+                        // Parse Framing
+                        WindowFrame? frame = null;
+                        if (_parser.Match(TokenType.ROWS) || _parser.Match(TokenType.RANGE))
+                        {
+                            var frameType = _parser.Previous.Type == TokenType.ROWS ? WindowFrameType.ROWS : WindowFrameType.RANGE;
+                            if (_parser.Match(TokenType.BETWEEN))
+                            {
+                                var startBound = ParseFrameBound();
+                                _parser.Consume(TokenType.AND, "Expected 'AND' in BETWEEN frame");
+                                var endBound = ParseFrameBound();
+                                frame = new WindowFrame(frameType, startBound.Type, startBound.Value, endBound.Type, endBound.Value);
+                            }
+                            else
+                            {
+                                var bound = ParseFrameBound();
+                                frame = new WindowFrame(frameType, bound.Type, bound.Value);
+                            }
+                        }
+
+                        _parser.Consume(TokenType.RPAREN, "Expected ')' to close OVER clause");
+                        funcCall.Window = new WindowClause(partitionBy, orderBy, frame) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                    }
+
+                    if (_parser.Match(TokenType.WITHIN))
+                    {
+                        _parser.Consume(TokenType.GROUP, "Expected 'GROUP' after 'WITHIN'");
+                        _parser.Consume(TokenType.LPAREN, "Expected '(' after 'WITHIN GROUP'");
+                        _parser.Consume(TokenType.ORDER, "Expected 'ORDER' inside WITHIN GROUP");
+                        _parser.Consume(TokenType.BY, "Expected 'BY' after 'ORDER'");
+
+                        var orderBy = new List<OrderByClause>();
+                        do
+                        {
+                            var orderExpr = _parser.ParseExpression();
+                            bool descending = false;
+                            if (_parser.Match(TokenType.DESC)) descending = true;
+                            else _parser.Match(TokenType.ASC);
+                            orderBy.Add(new OrderByClause(orderExpr, descending));
+                        } while (_parser.Match(TokenType.COMMA));
+
+                        _parser.Consume(TokenType.RPAREN, "Expected ')' to close WITHIN GROUP");
+                        funcCall.WithinGroupOrderBy = orderBy;
+                    }
+                    return funcCall;
+                }
+                
+                
+                while (_parser.Match(TokenType.DOT))
+                {
+                    if (_parser.Match(TokenType.STAR))
+                    {
+                        name += ".*";
+                        break;
+                    }
+                    if (_parser.IsIdentifier(_parser.Current) || LanguageMetadata.IsKeyword(_parser.Current.Value))
+                    {
+                        var nextPart = _parser.Advance();
+                        name += "." + nextPart.Value;
+                    }
+                    else
+                    {
+                        // Resilience: Stop but keep the current name (ending in dot)
+                        break;
+                    }
+                }
+                
+                return new IdentifierExpression(name) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
+            
+            if (_parser.Match(TokenType.LPAREN))
+            {
+                var parenToken = _parser.Previous;
+                if (_parser.Current.Type == TokenType.SELECT)
+                {
+                    var select = _parser.ParseQuery();
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' after subquery");
+                    return new SubqueryExpression(select) { Line = parenToken.Line, Column = parenToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                }
+                var exprs = new List<Expression>();
+                exprs.Add(_parser.ParseExpression());
+                while (_parser.Match(TokenType.COMMA))
+                {
+                    exprs.Add(_parser.ParseExpression());
+                }
+                _parser.Consume(TokenType.RPAREN, "Expected ')' after group expression");
+                return exprs.Count == 1 ? exprs[0] : new ListExpression(exprs) { Line = parenToken.Line, Column = parenToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
+
+            if (_parser.Match(TokenType.MINUS))
+            {
+                var t = _parser.Previous;
+                var expr = ParsePrimary();
+                return new BinaryExpression(new LiteralExpression(0m, TokenType.NUMBER), TokenType.MINUS, expr) { Line = t.Line, Column = t.Column, EndLine = expr.EndLine, EndColumn = expr.EndColumn };
+            }
+
+            if (_parser.Match(TokenType.PLUS))
+            {
+                return ParsePrimary();
+            }
+
+            // Fallback: keyword tokens that are used as identifiers in expression context.
+            // Symbols (STAR and above) are never identifiers. For everything else:
+            //  - followed by '(' → function call (e.g. DIRECTORY(...), USE DOCKER(...))
+            //  - followed by '.' → identifier prefix (e.g. DOCKER.CONNECTION_STRING)
+            //  - followed by other → bare identifier (covers e.g. connector-type names used as table refs)
+            if (_parser.Current.Type < TokenType.STAR)
+            {
+                var t = _parser.Advance();
+                var name = t.Value;
+                if (_parser.Match(TokenType.LPAREN))
+                {
+                    var args = new List<Expression>();
+                    if (_parser.Current.Type != TokenType.RPAREN)
+                        args.Add(_parser.ParseExpression());
+                    while (_parser.Match(TokenType.COMMA))
+                        args.Add(_parser.ParseExpression());
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' after function arguments");
+                    return new FunctionCallExpression(name, args) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                }
+                while (_parser.Match(TokenType.DOT))
+                {
+                    if (_parser.Match(TokenType.STAR)) { name += ".*"; break; }
+                    if (_parser.IsIdentifier(_parser.Current) || LanguageMetadata.IsKeyword(_parser.Current.Value))
+                        name += "." + _parser.Advance().Value;
+                    else break;
+                }
+                return new IdentifierExpression(name) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
+
+            throw new SyntaxException($"Expected expression primary but got {_parser.Current.Type} ('{_parser.Current.Value}')", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private WindowFrameBound ParseFrameBound()
+        {
+            if (_parser.Match(TokenType.CURRENT))
+            {
+                _parser.Consume(TokenType.ROW, "Expected 'ROW' after 'CURRENT'");
+                return new WindowFrameBound(WindowFrameBoundType.CURRENT_ROW);
+            }
+            if (_parser.Match(TokenType.UNBOUNDED))
+            {
+                if (_parser.Match(TokenType.PRECEDING)) return new WindowFrameBound(WindowFrameBoundType.UNBOUNDED_PRECEDING);
+                _parser.Consume(TokenType.FOLLOWING, "Expected 'FOLLOWING' after 'UNBOUNDED'");
+                return new WindowFrameBound(WindowFrameBoundType.UNBOUNDED_FOLLOWING);
+            }
+            
+            var val = ParseExpression();
+            if (_parser.Match(TokenType.PRECEDING)) return new WindowFrameBound(WindowFrameBoundType.PRECEDING, val);
+            if (_parser.Match(TokenType.FOLLOWING)) return new WindowFrameBound(WindowFrameBoundType.FOLLOWING, val);
+            
+            throw new SyntaxException("Expected PRECEDING, FOLLOWING, CURRENT ROW, or UNBOUNDED", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private struct WindowFrameBound
+        {
+            public WindowFrameBoundType Type { get; }
+            public Expression? Value { get; }
+            public WindowFrameBound(WindowFrameBoundType type, Expression? value = null) { Type = type; Value = value; }
+        }
+    }
+}

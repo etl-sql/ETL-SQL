@@ -1,0 +1,262 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Linq;
+
+namespace ETL_SQL.Core
+{
+    public class LineageEntry
+    {
+        public string TargetTable { get; set; }
+        public string? TargetColumn { get; set; }
+        public List<string> SourceTables { get; set; } = new();
+        public List<string> SourceColumns { get; set; } = new();
+        public string Operation { get; set; }
+        public Dictionary<string, string> Metadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        public string? DerivedFromDescriptions { get; set; }
+        public string? Description => Metadata.TryGetValue("d", out var d) ? d : null;
+        public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+        public string? SourceFile { get; set; }
+        public int Line { get; set; }
+        public int Column { get; set; }
+        public int EndLine { get; set; }
+        public int EndColumn { get; set; }
+
+        public LineageEntry(string targetTable, string operation)
+        {
+            TargetTable = targetTable;
+            Operation = operation;
+        }
+
+        public override string ToString() => $"{Timestamp:yyyy-MM-dd HH:mm:ss} | {Operation,-12} | {TargetTable}{(TargetColumn != null ? "." + TargetColumn : "")} <- {string.Join(", ", SourceTables)}";
+    }
+
+    public class LineageTracker : ILineageTracker
+    {
+        private readonly List<LineageEntry> _entries = new();
+        private readonly object _lock = new object();
+        private readonly Dictionary<(string table, string op, string? col, int l, int c, string? f), LineageEntry> _lookup = new();
+        private readonly Dictionary<string, Dictionary<string, string>> _latestTableMetadata = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, Dictionary<string, Dictionary<string, string>>> _latestColumnMetadata = new(StringComparer.OrdinalIgnoreCase);
+
+        public void Record(string target, IEnumerable<string> sources, string operation, string? targetColumn = null, IEnumerable<string>? sourceColumns = null, Dictionary<string, string>? metadata = null, string? derivedFromDescriptions = null, int line = 0, int column = 0, int endLine = 0, int endColumn = 0, string? sourceFile = null)
+        {
+            if (string.IsNullOrEmpty(target)) return;
+            
+            lock (_lock)
+            {
+                var key = (target.ToLowerInvariant(), operation.ToLowerInvariant(), targetColumn?.ToLowerInvariant(), line, column, sourceFile);
+                if (_lookup.TryGetValue(key, out var existing))
+                {
+                    if (metadata != null)
+                    {
+                        foreach (var kv in metadata) existing.Metadata[kv.Key] = kv.Value;
+                    }
+                    if (derivedFromDescriptions != null) existing.DerivedFromDescriptions = derivedFromDescriptions;
+                    return;
+                }
+
+                var entry = new LineageEntry(target, operation)
+                {
+                    TargetColumn = targetColumn,
+                    SourceTables = sources.Where(s => !string.IsNullOrEmpty(s)).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                    SourceColumns = sourceColumns?.Where(c => !string.IsNullOrEmpty(c)).Distinct(StringComparer.OrdinalIgnoreCase).ToList() ?? new List<string>(),
+                    Metadata = metadata ?? new(StringComparer.OrdinalIgnoreCase),
+                    DerivedFromDescriptions = derivedFromDescriptions,
+                    Line = line,
+                    Column = column,
+                    EndLine = endLine,
+                    EndColumn = endColumn,
+                    SourceFile = sourceFile
+                };
+                _entries.Add(entry);
+                _lookup[key] = entry;
+
+                // Track latest metadata for inheritance
+                if (entry.Metadata.Count > 0)
+                {
+                    if (string.IsNullOrEmpty(targetColumn) || operation.Equals("TABLE_TAGS", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Table-level or direct table tags
+                        if (!_latestTableMetadata.ContainsKey(target))
+                            _latestTableMetadata[target] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        
+                        foreach (var kv in entry.Metadata) _latestTableMetadata[target][kv.Key] = kv.Value;
+                    }
+                    
+                    if (!string.IsNullOrEmpty(targetColumn))
+                    {
+                        // Column-level
+                        if (!_latestColumnMetadata.ContainsKey(target))
+                            _latestColumnMetadata[target] = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+                        
+                        if (!_latestColumnMetadata[target].ContainsKey(targetColumn))
+                            _latestColumnMetadata[target][targetColumn] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        
+                        foreach (var kv in entry.Metadata) _latestColumnMetadata[target][targetColumn][kv.Key] = kv.Value;
+                    }
+                }
+            }
+        }
+
+        public Dictionary<string, string> GetTableMetadata(string tableName)
+        {
+            lock (_lock)
+            {
+                if (_latestTableMetadata.TryGetValue(tableName, out var metadata))
+                {
+                    return new Dictionary<string, string>(metadata, StringComparer.OrdinalIgnoreCase);
+                }
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        public Dictionary<string, string> GetColumnMetadata(string tableName, string columnName)
+        {
+            lock (_lock)
+            {
+                if (_latestColumnMetadata.TryGetValue(tableName, out var tableMetadata) &&
+                    tableMetadata.TryGetValue(columnName, out var metadata))
+                {
+                    return new Dictionary<string, string>(metadata, StringComparer.OrdinalIgnoreCase);
+                }
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+        }
+
+        public IEnumerable<LineageEntry> GetLineage(string tableName)
+        {
+            lock (_lock)
+            {
+                return _entries.Where(e => e.TargetTable.Equals(tableName, StringComparison.OrdinalIgnoreCase))
+                               .OrderByDescending(e => e.Timestamp)
+                               .ToList();
+            }
+        }
+
+        public IEnumerable<LineageEntry> GetColumnLineage(string tableName, string columnName)
+        {
+            lock (_lock)
+            {
+                return _entries.Where(e => e.TargetTable.Equals(tableName, StringComparison.OrdinalIgnoreCase) && 
+                                          (e.TargetColumn == null || e.TargetColumn.Equals(columnName, StringComparison.OrdinalIgnoreCase)))
+                               .OrderByDescending(e => e.Timestamp)
+                               .ToList();
+            }
+        }
+
+        public IEnumerable<LineageEntry> GetAncestors(string tableName, string? columnName = null)
+        {
+            lock (_lock)
+            {
+                var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var ancestors = new List<LineageEntry>();
+                WalkAncestors(tableName, columnName, visited, ancestors);
+                return ancestors;
+            }
+        }
+
+        private void WalkAncestors(string table, string? column, HashSet<string> visited, List<LineageEntry> collective)
+        {
+            string key = column != null ? $"{table}.{column}" : table;
+            if (visited.Contains(key)) return;
+            visited.Add(key);
+
+            var entries = column != null ? GetColumnLineage(table, column) : GetLineage(table);
+            foreach (var entry in entries)
+            {
+                collective.Add(entry);
+                for (int i = 0; i < entry.SourceTables.Count; i++)
+                {
+                    var srcTable = entry.SourceTables[i];
+                    var srcColumn = (entry.SourceColumns != null && i < entry.SourceColumns.Count) ? entry.SourceColumns[i] : null;
+                    WalkAncestors(srcTable, srcColumn, visited, collective);
+                }
+            }
+        }
+
+        public Dictionary<string, string> InheritMetadata(IEnumerable<string> sourceTables, IEnumerable<string> sourceColumns, out string? derivedFromDescriptions)
+        {
+            var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var derivedList = new List<string>();
+            string? lastSeenDescription = null;
+            derivedFromDescriptions = null;
+
+            var sources = sourceTables.ToList();
+            var columns = sourceColumns.ToList();
+
+            // Iterate through sources in order. Since sources and columns are pairs from expressions,
+            // we process them together to maintain correct inheritance priority.
+            for (int i = 0; i < sources.Count; i++)
+            {
+                var sTable = sources[i];
+                
+                // 1. Table-level metadata (lower priority than columns)
+                var tm = GetTableMetadata(sTable);
+                foreach (var kv in tm)
+                {
+                    if (kv.Key.Equals("d", StringComparison.OrdinalIgnoreCase))
+                    {
+                        lastSeenDescription = kv.Value;
+                    }
+                    else
+                    {
+                        result[kv.Key] = kv.Value;
+                    }
+                }
+
+                // 2. Column-level metadata (higher priority)
+                // If we have a corresponding column in the list for this source table
+                if (i < columns.Count)
+                {
+                    var sc = columns[i];
+                    var m = GetColumnMetadata(sTable, sc);
+                    if (m != null && m.Count > 0)
+                    {
+                        foreach (var kv in m)
+                        {
+                            if (kv.Key.Equals("d", StringComparison.OrdinalIgnoreCase))
+                            {
+                                lastSeenDescription = kv.Value;
+                                derivedList.Add($"{sc}: {kv.Value}");
+                            }
+                            else
+                            {
+                                result[kv.Key] = kv.Value;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (derivedList.Any()) derivedFromDescriptions = string.Join("; ", derivedList.Distinct());
+            
+            // Apply the final winner for description if not explicitly set elsewhere
+            if (lastSeenDescription != null && !result.ContainsKey("d"))
+            {
+                result["d"] = lastSeenDescription;
+            }
+
+            return result;
+        }
+
+        public IEnumerable<LineageEntry> GetFullLineage()
+        {
+            lock (_lock)
+            {
+                return _entries.ToList();
+            }
+        }
+
+        public void Clear()
+        {
+            lock (_lock)
+            {
+                _entries.Clear();
+                _lookup.Clear();
+                _latestTableMetadata.Clear();
+                _latestColumnMetadata.Clear();
+            }
+        }
+    }
+}

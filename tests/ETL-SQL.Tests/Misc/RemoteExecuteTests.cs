@@ -1,0 +1,157 @@
+using Xunit;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using ETL_SQL.Core;
+using ETL_SQL.App;
+using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Data;
+using Spectre.Console;
+
+namespace ETL_SQL.Tests
+{
+    public class RemoteExecuteTests
+    {
+
+        [Fact]
+        public async Task TestExecuteBlockAtConnection()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mockDb = new MockDatabaseSource();
+            evaluator.Connections["mock"] = mockDb;
+
+            var script = @"
+EXECUTE (
+    CREATE TABLE t_block(a INT);
+    INSERT INTO t_block(a) VALUES(100);
+) AT mock";
+            var parser = new Parser(new Lexer(script).Tokenize());
+            var ast = parser.Parse();
+
+            await evaluator.Evaluate(ast);
+
+            Assert.True(mockDb.ExecutedSql.Any(s => s.Contains("CREATE TABLE t_block")), "Mock DB should have received CREATE TABLE from block");
+            Assert.True(mockDb.ExecutedSql.Any(s => s.Contains("INSERT INTO t_block")), "Mock DB should have received INSERT INTO from block");
+        }
+
+        [Fact]
+        public async Task TestLocalPushdownCheck()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mockDb = new MockDatabaseSource();
+            evaluator.Connections["mock"] = mockDb;
+
+            // SELECT 1 should NOT be pushed down even if mock exists, 
+            // because it has no FROM mock.
+            var script = "SELECT 1;";
+            var parser = new Parser(new Lexer(script).Tokenize());
+            var ast = parser.Parse();
+
+            await evaluator.Evaluate(ast);
+
+            Assert.True(mockDb.ExecutedSql.Count == 0, "Mock DB should NOT have received any SQL for local SELECT 1");
+        }
+
+        [Fact]
+        public async Task TestExecuteAtConnection()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mockDb = new MockDatabaseSource();
+            evaluator.Connections["mock"] = mockDb;
+
+            var script = "EXEC ('CREATE TABLE remote_t(id INT)') AT mock;";
+            var parser = new Parser(new Lexer(script).Tokenize());
+            var ast = parser.Parse();
+
+            await evaluator.Evaluate(ast);
+
+            Assert.True(mockDb.ExecutedSql.Any(s => s.Contains("CREATE TABLE remote_t")), "Mock DB should have received remote SQL");
+        }
+
+        [Fact]
+        public async Task TestExecuteRemoteBlock()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mockDb = new MockDatabaseSource();
+            evaluator.Connections["mock"] = mockDb;
+
+            var script = @"
+EXECUTE mock
+BEGIN
+    CREATE TABLE t1(a INT);
+    INSERT INTO t1(a) VALUES(1);
+END";
+            var parser = new Parser(new Lexer(script).Tokenize());
+            var ast = parser.Parse();
+
+            await evaluator.Evaluate(ast);
+
+            Assert.True(mockDb.ExecutedSql.Any(s => s.Contains("CREATE TABLE t1")), "Mock DB should have received CREATE TABLE");
+            Assert.True(mockDb.ExecutedSql.Any(s => s.Contains("INSERT INTO t1")), "Mock DB should have received INSERT INTO");
+        }
+
+        [Fact]
+        public async Task TestSingleRemoteExecute()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mockDb = new MockDatabaseSource();
+            evaluator.Connections["mock"] = mockDb;
+
+            var script = "EXECUTE mock CREATE TABLE t2(a INT);";
+            var parser = new Parser(new Lexer(script).Tokenize());
+            var ast = parser.Parse();
+
+            await evaluator.Evaluate(ast);
+
+            Assert.True(mockDb.ExecutedSql.Any(s => s.Contains("CREATE TABLE t2")), "Mock DB should have received single remote command");
+        }
+
+        [Fact]
+        public async Task TestSelect1Dual()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var script = "SELECT 1;";
+            var parser = new Parser(new Lexer(script).Tokenize());
+            var ast = parser.Parse();
+
+            await evaluator.Evaluate(ast);
+
+            Assert.True(evaluator.LastResult != null, "LastResult should not be null for SELECT 1");
+            Assert.True(evaluator.LastResult.Rows.Count == 1, "SELECT 1 should return exactly 1 row");
+            
+            var val = evaluator.LastResult.Rows[0].Columns.Values.First();
+            Assert.True(val != null && val.ToString() == "1", $"Expected 1, got {val}");
+        }
+
+        [Fact]
+        public async Task TestDockerCloseSyntax()
+        {
+            // Legacy syntax
+            var script = "DOCKER CLOSE 'mssql';";
+            var parser = new Parser(new Lexer(script).Tokenize());
+            var ast = parser.Parse();
+            
+            Assert.True(ast.Statements[0] is DockerCloseStatement, "Should parse as DockerCloseStatement (legacy)");
+            var dcs = (DockerCloseStatement)ast.Statements[0];
+            Assert.True(dcs.ImageName != null, "Image name should be captured");
+
+            // New standard syntax
+            script = "CLOSE_DOCKER 'mssql';";
+            parser = new Parser(new Lexer(script).Tokenize());
+            ast = parser.Parse();
+            Assert.True(ast.Statements[0] is DockerCloseStatement, "Should parse as DockerCloseStatement (new)");
+            
+            script = "CLOSE_DOCKER;";
+            parser = new Parser(new Lexer(script).Tokenize());
+            ast = parser.Parse();
+            Assert.True(ast.Statements[0] is DockerCloseStatement, "Should parse as DockerCloseStatement (empty)");
+            Assert.True(((DockerCloseStatement)ast.Statements[0]).ImageName == null, "Image name should be null");
+            
+            await Task.CompletedTask;
+        }
+
+        
+    }
+
+}

@@ -1,0 +1,20 @@
+{
+  "CorporateDirectory": [
+    {
+      "Department": "Accounting",
+      "Profile.ID": 1,
+      "Profile.FirstName": "John",
+      "Profile.LastName": "Doe",
+      "Profile.Contact": "jd***@secure.com",
+      "Profile.GovtID": "XXX-XX-6789"
+    },
+    {
+      "Department": "Engineering",
+      "Profile.ID": 2,
+      "Profile.FirstName": "Jane",
+      "Profile.LastName": "Smith",
+      "Profile.Contact": "ja***@secure.com",
+      "Profile.GovtID": "XXX-XX-4321"
+    }
+  ]
+}
