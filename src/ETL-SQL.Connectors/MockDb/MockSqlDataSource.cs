@@ -44,12 +44,12 @@ namespace ETL_SQL.Connectors.MockDb
             _mockTables["Products"] = products;
             
             var orders = new DataTable();
-            orders.ColumnNames.AddRange(new[] { "OrderID", "OrderDate", "TotalAmount" });
+            orders.SetColumns(new[] { "OrderID", "OrderDate", "TotalAmount" });
             orders.AddRow(new Row { ["OrderID"] = 1, ["OrderDate"] = DateTime.Now, ["TotalAmount"] = 150.0m });
             _mockTables["Orders"] = orders;
 
             var employees = new DataTable();
-            employees.ColumnNames.AddRange(new[] { "ID", "Name", "column1", "column2", "Status", "Active", "first_name", "last_name" });
+            employees.SetColumns(new[] { "ID", "Name", "column1", "column2", "Status", "Active", "first_name", "last_name" });
             employees.AddRow(new Row { ["ID"] = 1, ["Name"] = "Alice Boss", ["column1"] = "Test", ["column2"] = "Initial", ["Status"] = 0, ["Active"] = 1, ["first_name"] = "Alice", ["last_name"] = "Boss" });
             employees.AddRow(new Row { ["ID"] = 2, ["Name"] = "Bob Worker", ["column1"] = "Other", ["column2"] = "Changed", ["Status"] = 1, ["Active"] = 1, ["first_name"] = "Bob", ["last_name"] = "Worker" });
             _mockTables["Employee"] = employees;
@@ -58,7 +58,7 @@ namespace ETL_SQL.Connectors.MockDb
             _mockTables["DemoDb.dbo.Employee_Log"] = employees.Clone();
 
             var depts = new DataTable();
-            depts.ColumnNames.AddRange(new[] { "column1", "column2", "column3" });
+            depts.SetColumns(new[] { "column1", "column2", "column3" });
             depts.AddRow(new Row { ["column1"] = "Test", ["column2"] = "HR", ["column3"] = 100 });
             depts.AddRow(new Row { ["column1"] = "Other", ["column2"] = "IT", ["column3"] = 50 });
             _mockTables["departments"] = depts;

@@ -39,7 +39,7 @@ namespace ETL_SQL.Engine.Functions
 
             var files = await remoteFs.ListFilesAsync(path);
             var table = new DataTable();
-            table.ColumnNames.AddRange(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
+            table.SetColumns(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
             foreach (var fileMeta in files)
             {
                 table.AddRow(new Row

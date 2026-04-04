@@ -75,6 +75,8 @@ namespace ETL_SQL.App
             var registry = new ETL_SQL.Engine.Functions.FunctionRegistry();
             ETL_SQL.Engine.Functions.FileFunctions.Register(registry);
             ETL_SQL.Engine.Functions.StandardFunctions.Register(registry);
+            ETL_SQL.Engine.Functions.JsonFunctions.Register(registry);
+            ETL_SQL.Engine.Functions.XmlFunctions.Register(registry);
             services.AddSingleton<Core.Functions.IFunctionRegistry>(registry);
             
             services.AddSingleton<ILineageTracker, LineageTracker>();

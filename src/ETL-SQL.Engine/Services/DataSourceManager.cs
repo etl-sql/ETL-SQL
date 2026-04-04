@@ -73,7 +73,7 @@ namespace ETL_SQL.Engine.Services
                 {
                     var dual = new InMemoryDataSource();
                     var dualTable = new DataTable();
-                    dualTable.ColumnNames.Add("DUMMY");
+                    dualTable.SetColumns(new[] { "DUMMY" });
                     dualTable.AddRow(new Row { ["DUMMY"] = "X" });
                     await dual.WriteBatches(new[] { dualTable }.ToAsyncEnumerable());
                     connections["DUAL"] = dual;
@@ -84,7 +84,7 @@ namespace ETL_SQL.Engine.Services
             {
                 var mem = new InMemoryDataSource();
                 var dt = new DataTable();
-                dt.ColumnNames.Add("Val");
+                dt.SetColumns(new[] { "Val" });
                 foreach (var item in list) dt.AddRow(new Row { ["Val"] = item });
                 await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
                 return mem;
@@ -140,7 +140,7 @@ namespace ETL_SQL.Engine.Services
             }
 
             var resultTable = new DataTable();
-            if (allRows.Count > 0) resultTable.ColumnNames.AddRange(allRows[0].Columns.Keys);
+            if (allRows.Count > 0) resultTable.SetColumns(allRows[0].Columns.Keys);
             foreach (var r in allRows) resultTable.AddRow(r);
             
             yield return resultTable;

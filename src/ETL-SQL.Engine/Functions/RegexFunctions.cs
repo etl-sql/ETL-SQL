@@ -208,7 +208,7 @@ namespace ETL_SQL.Engine.Functions
             {
                 var parts = Regex.Split(input, pattern);
                 var dt = new DataTable();
-                dt.ColumnNames.Add("VALUE");
+                dt.SetColumns(new[] { "VALUE" });
                 foreach (var part in parts)
                 {
                     dt.AddRow(new Row { ["VALUE"] = part });

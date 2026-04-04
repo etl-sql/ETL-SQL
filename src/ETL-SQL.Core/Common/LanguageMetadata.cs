@@ -93,7 +93,11 @@ namespace ETL_SQL.Common
             "SIN", "COS", "TAN", "ASIN", "ACOS", "ATAN", "ATAN2", "SIGN",
             "LAG", "LEAD", "NTILE", "FIRST_VALUE", "LAST_VALUE", "STRING_AGG",
             "CUME_DIST", "PERCENT_RANK", "NTH_VALUE", "PERCENTILE_CONT", "PERCENTILE_DISC",
-            "REGEXP_LIKE", "REGEXP_SUBSTR", "REGEXP_REPLACE", "REGEXP_INSTR", "REGEXP_COUNT", "REGEXP_MATCHES", "REGEXP_SPLIT_TO_TABLE"
+            "REGEXP_LIKE", "REGEXP_SUBSTR", "REGEXP_REPLACE", "REGEXP_INSTR", "REGEXP_COUNT", "REGEXP_MATCHES", "REGEXP_SPLIT_TO_TABLE",
+            // JSON functions
+            "JSON_VALUE", "JSON_QUERY", "JSON_MODIFY", "ISJSON", "JSON_EXISTS", "JSON_OBJECT", "JSON_ARRAY", "JSON_TABLE", "JSON_EXTRACT", "OPENJSON",
+            // XML functions
+            "XMLVALUE", "XMLEXISTS", "XMLQUERY", "XMLTABLE", "XMLELEMENT", "XMLATTRIBUTES", "XMLFOREST", "EXTRACTVALUE"
         };
 
         public static bool IsKeyword(string word) => DmlKeywords.Contains(word) || DdlKeywords.Contains(word) || ControlFlowKeywords.Contains(word) || JoinKeywords.Contains(word) || OperatorKeywords.Contains(word) || Keywords.Contains(word) || ConnectorTypes.Contains(word) || Functions.Contains(word);

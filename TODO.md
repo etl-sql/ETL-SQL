@@ -79,25 +79,22 @@ NOTE: CREATE A NEW GIT BRANCH BEFORE STARTING THIS WORK
 ## Code Quality & Technical Debt
 
 ### Critical Bugs (Production Risk)
-**CQ-A. `WindowEngine.cs` — 13 `.Result` blocking calls in async sort predicates (deadlock risk)**
-   - Lines 66, 67, 85, 86, 112, 113, 116, 117, 120, 217, 220, 231, 232
-   - Sort comparators call `.Result` on async evaluation. Under load or with a synchronization context this deadlocks. Fix: pre-evaluate sort keys into a `List<(Row, object?[])>` before sorting (same pattern already used in `SelectStatementHandler` ORDER BY).
+**CQ-A.** [x] **`WindowEngine.cs` — 13 `.Result` blocking calls in async sort predicates (deadlock risk)** — Fixed: sort keys pre-evaluated into `List<(Row, object?[])>` before sorting; no `.Result` calls remain.
 
-**CQ-B. `SchedulerService.cs:35` — Fire-and-forget `Task.Run` without error handling**
-   - `Task.Run(() => RunAsync(_cts.Token))` is not awaited and has no `.ContinueWith` or exception handler. If `RunAsync` throws, the scheduler silently dies with no log entry. Fix: store the task, log unhandled exceptions in a continuation.
+**CQ-B.** [x] **`SchedulerService.cs:35` — Fire-and-forget `Task.Run` without error handling** — Fixed: task stored and `.ContinueWith(OnlyOnFaulted)` logs unhandled exceptions.
 
 ### Silent Exception Swallowing (23+ instances)
-**CQ-C. `SuggestionProviders.cs`** — Lines 193, 313, 314, 327, 328, 376: 6 empty `catch {}` blocks in autocomplete. Users get incomplete suggestions with zero diagnostics.
+**CQ-C.** [x] **`SuggestionProviders.cs`** — Empty `catch {}` blocks in autocomplete. Fixed: no empty catches remain.
 
-**CQ-D. `ETLSuggestEngine.cs:254`** — Empty `catch {}` in suggestion logic.
+**CQ-D.** [x] **`ETLSuggestEngine.cs:254`** — Empty `catch {}` in suggestion logic. Fixed: no empty catches remain.
 
-**CQ-E. `ConsoleEditor.cs:100`** — Empty `catch {}` swallows `Console.Clear()` errors.
+**CQ-E.** [x] **`ConsoleEditor.cs:100`** — Empty `catch {}` swallows `Console.Clear()` errors. Fixed: logs at Verbose.
 
-**CQ-F. `EvaluationUtils.cs:28`** — Empty `catch {}` swallows unspecified core exception.
+**CQ-F.** [x] **`EvaluationUtils.cs:28`** — Empty `catch {}` swallows unspecified core exception. Fixed: logs at Verbose.
 
-**CQ-G. Connector temp-file cleanup** — `FlatFileDataSource.cs` (381, 548, 609), `ExcelDataSource.cs` (138, 188), `JsonDataSource.cs` (138, 220, 277), `XmlDataSource.cs` (147, 236): 10 silent `catch {}` on `File.Delete`. Should log at Verbose. Extract to a shared `TempFileHelper.SafeDelete(path)` utility.
+**CQ-G.** [x] **Connector temp-file cleanup** — Fixed: all 10 locations across FlatFile/Excel/Json/Xml connectors use `TempFileHelper.SafeDelete(path)`.
 
-**CQ-H. `OracleConnector.cs:65`** — Empty `catch {}` swallows connection error.
+**CQ-H.** [x] **`OracleConnector.cs:65`** — Empty `catch {}` swallows connection error. Fixed: logs at Verbose.
 
 ### SRP Violations
 **CQ-1.** **`Evaluator.cs`** (~673 LOC) holds too many responsibilities: procedure/function execution, pipeline utilities, metrics dispatch, and output capture all live inline alongside the core statement-dispatch loop.
@@ -119,14 +116,14 @@ NOTE: CREATE A NEW GIT BRANCH BEFORE STARTING THIS WORK
 **CQ-8.** [x] **`SelectStatementHandler`** — `LastResult` capped at 50,000 rows; true counts preserved in `TotalRowsMatched`/`RowsProcessed`.
 **CQ-9.** **`SelectStatementHandler` ORDER BY** — No hyper-scale mitigation. Aggregation checks `>100,000` rows and switches to `ExternalAggregateEngine`, but ORDER BY buffers the entire result set unconditionally. Add the same threshold check.
 **CQ-10.** **DI violations in `SelectStatementHandler`** — Lines 31–33 lazy-init `JoinEngine`, `AggregateEngine`, `WindowEngine` with `new`. Lines 453, 567, 580, 594 create `ExternalAggregateEngine` and `InMemoryDataSource` directly. Should be injected or factory-created.
-**CQ-11.** **Linter rule registration hardcoded** — `LintStatementHandler.cs` (lines 50–54) and `TextDocumentHandler.cs` (lines 46–52) both manually `AddRule()` for specific rule types. Rules should be discovered via DI registration so new rules auto-register.
+**CQ-11.** [x] **Linter rule registration hardcoded** — Fixed: `LintStatementHandler` uses `Assembly.GetTypes()` reflection to discover and register all `ILintRule` implementations automatically.
 
 ### Thread Safety
 **CQ-12.** [x] **`Evaluator.IsVerbose` setter** — Fixed: no longer writes to global `Logger.IsVerbose`.
 **CQ-13.** **`Stack<Row> _outerRowStack`** — Not thread-safe. Must be addressed before multi-script work begins (Engine Item 1).
-**CQ-14.** **`DockerContainerManager.cs:17-18`** — Static `Dictionary` (not `ConcurrentDictionary`) accessed from async methods. Race condition when multiple containers start concurrently.
-**CQ-15.** **`MetadataManager.cs`** — `ConcurrentDictionary` holds `List<ConnectionInfo>` values. Adds/removes are locked (lines 60–64) but reads elsewhere iterate the list without a lock. Replace inner `List<>` with `ConcurrentBag` or lock consistently.
-**CQ-16.** **`Evaluator.cs`** — `lock (LastResultSets)` and `lock (Messages)` on public properties (lines 647, 654). External callers can iterate without locks, defeating the synchronization.
+**CQ-14.** [x] **`DockerContainerManager.cs:17-18`** — Fixed: uses `ConcurrentDictionary` for `_activeContainers` and `_connectionStrings`.
+**CQ-15.** [x] **`MetadataManager.cs`** — Fixed: all `List<ConnectionInfo>` accesses are guarded with `lock (list)`; reads and writes are consistent.
+**CQ-16.** [x] **`Evaluator.cs`** — Fixed: uses private `_lastResultSetsLock` and `_messagesLock` objects instead of locking on public properties.
 
 ### Logging Gaps
 **CQ-17.** **No structured logging** — `Logger.Verbose(string)` discards context. Move to structured Serilog calls for queryable logs.
@@ -138,10 +135,10 @@ NOTE: CREATE A NEW GIT BRANCH BEFORE STARTING THIS WORK
 **CQ-21.** **Unknown coverage %** — Add Coverlet + ReportGenerator to CI.
 
 ### Minor Issues
-**CQ-22.** `ExternalJoinEngine` hardcoded partition count (20000) — expose as configurable constant.
-**CQ-23.** `SubqueryCache` can grow unbounded in long sessions — add eviction or size limit.
+**CQ-22.** [x] `ExternalJoinEngine` hardcoded partition count — exposed as `private const int PARTITION_COUNT = 32`.
+**CQ-23.** [x] `SubqueryCache` can grow unbounded — Fixed: `ExpressionEvaluator` only caches when `Count < 1000`.
 **CQ-24.** No retry logic for transient DB failures in connectors — consider Polly.
-**CQ-25.** Temp-file cleanup pattern duplicated across 5+ connector files — extract to `TempFileHelper.SafeDelete(path)` that logs at Verbose on failure (see CQ-G above).
+**CQ-25.** [x] Temp-file cleanup pattern duplicated across 5+ connector files — Fixed: extracted to `TempFileHelper.SafeDelete(path)` (see CQ-G).
 
 ---
 
@@ -169,11 +166,11 @@ NOTE: CREATE A NEW GIT BRANCH BEFORE STARTING THIS WORK
 
 [x] 11. Missing some string functions: STUFF, STRING_ESCAPE, STRING_SPLIT, ASCII, CHAR, FORMAT, PATINDEX, STR, QUOTENAME, TRANSLATE, UNICODE, DATALENGTH, TO_STR, REPLICATE, TRY_CAST
 
-12. Missing JSON and XML functions.  
+[x] 12. Missing JSON and XML functions.  
 
 [x] 13. Missing some math functions: SIN, COS, TAN, ASIN, ACOS, ATAN, ATAN2, ROUND, FLOOR, SIGN
 
-14. Is NEWID ftc4122 compliant?  We want to be up to the latest version.  UUID v7.
+[x] 14. Is NEWID ftc4122 compliant?  We want to be up to the latest version.  UUID v7.
 
 [x] 15. Missing some aggregate functions/window functions: CUME_DIST, DENSE_RANK, NTH_VALUE, PERCENT_RANK, RANK, PERCENTILE_CONT, PERCENTILE_DISC
 

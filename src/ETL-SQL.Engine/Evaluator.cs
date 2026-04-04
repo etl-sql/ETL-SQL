@@ -165,6 +165,8 @@ namespace ETL_SQL.Engine
             Functions.FileFunctions.Register(FunctionRegistry);
             Functions.LineageFunctions.Register(FunctionRegistry);
             Functions.RegexFunctions.Register(FunctionRegistry);
+            Functions.JsonFunctions.Register(FunctionRegistry);
+            Functions.XmlFunctions.Register(FunctionRegistry);
             foreach (var handler in handlers)
             {
                 _statementHandlers[handler.SupportedStatementType] = handler;

@@ -145,11 +145,14 @@ namespace ETL_SQL.Tests
             Assert.NotEqual(ck1, ck2);
             Assert.True(ck1 is long, "CHECKSUM should return long");
             
-            // NewID
+            // NewID - UUID v7 (RFC 9562)
             var id1 = await EvaluateExpression(evaluator, "NEWID()");
             var id2 = await EvaluateExpression(evaluator, "NEWID()");
             Assert.NotEqual(id1, id2);
             Assert.True(id1 is Guid, "NEWID should return Guid");
+            // Verify UUID version 7: 4th group starts with '7'
+            var guidStr = id1!.ToString()!;
+            Assert.Equal('7', guidStr[14]); // xxxxxxxx-xxxx-7xxx-... position 14
         }
 
         [Fact]

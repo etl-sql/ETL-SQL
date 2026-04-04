@@ -169,37 +169,46 @@ namespace ETL_SQL.Engine.Handlers
             }
             else if (stmt.Values != null)
             {
-                var colNames = new List<string>();
-                if (stmt.Columns != null)
+                var destinationCols = (await destination.GetColumnsAsync()).ToList();
+                if (destinationCols.Count == 0 && stmt.Values.Count > 0)
                 {
-                    colNames.AddRange(stmt.Columns);
-                }
-                else
-                {
-                    colNames.AddRange(await destination.GetColumnsAsync());
-                    if (colNames.Count == 0 && stmt.Values.Count > 0)
-                    {
-                        for (int i = 0; i < stmt.Values[0].Count; i++) colNames.Add($"Col{i + 1}");
-                    }
+                    for (int i = 0; i < stmt.Values[0].Count; i++) destinationCols.Add($"Col{i + 1}");
                 }
 
                 var batch = new DataTable();
-                batch.SetColumns(colNames);
+                batch.SetColumns(destinationCols);
 
                 var schema = (destination as InMemoryDataSource)?.Schema;
 
                 foreach (var rowExprs in stmt.Values)
                 {
-                    var row = new Row();
-                    for (int i = 0; i < colNames.Count && i < rowExprs.Count; i++)
-                        row[colNames[i]] = await context.EvaluateValue(rowExprs[i], new Row());
+                    var row = batch.NewRow();
+                    
+                    // Map provided values to the correct row slots
+                    for (int i = 0; i < rowExprs.Count; i++)
+                    {
+                        string colName = stmt.Columns != null ? stmt.Columns[i] : (i < destinationCols.Count ? destinationCols[i] : null);
+                        if (colName != null)
+                        {
+                            row[colName] = await context.EvaluateValue(rowExprs[i], new Row());
+                        }
+                    }
 
                     // Apply defaults for missing columns
                     if (schema != null)
                     {
                         foreach (var colDef in schema.Values)
                         {
-                            if (!row.Columns.ContainsKey(colDef.ColumnName) && colDef.DefaultExpression != null)
+                            bool isProvided = false;
+                            if (stmt.Columns != null)
+                                isProvided = stmt.Columns.Any(c => string.Equals(c, colDef.ColumnName, StringComparison.OrdinalIgnoreCase));
+                            else
+                            {
+                                int destIdx = destinationCols.FindIndex(c => string.Equals(c, colDef.ColumnName, StringComparison.OrdinalIgnoreCase));
+                                isProvided = destIdx >= 0 && destIdx < rowExprs.Count;
+                            }
+
+                            if (!isProvided && colDef.DefaultExpression != null)
                             {
                                 row[colDef.ColumnName] = await context.EvaluateValue(colDef.DefaultExpression, new Row());
                             }
@@ -229,17 +238,17 @@ namespace ETL_SQL.Engine.Handlers
             foreach (var insertedRow in insertedRows)
             {
                 var contextRow = new Row();
+                contextRow["INSERTED"] = insertedRow;
                 foreach (var col in insertedRow.Columns)
                 {
-                    contextRow.Columns[$"INSERTED.{col.Key}"] = col.Value;
-                    if (!contextRow.Columns.ContainsKey(col.Key)) contextRow.Columns[col.Key] = col.Value;
+                    if (!contextRow.HasColumn(col.Key)) contextRow[col.Key] = col.Value;
                 }
 
                 var outputRow = new Row();
                 foreach (var outCol in output.Columns)
                 {
                     var val = await context.EvaluateValue(outCol.Expression, contextRow);
-                    outputRow.Columns[outCol.Alias ?? outCol.ToSql()] = val;
+                    outputRow[outCol.Alias ?? outCol.ToSql()] = val;
                 }
                 outputRows.Add(outputRow);
             }

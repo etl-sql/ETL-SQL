@@ -76,8 +76,8 @@ namespace ETL_SQL.Engine.Functions
             registry.Register("TIMEFROMPARTS", TimeFromParts);
             registry.Register("DATETIMEOFFSETSFROMPARTS", DateTimeOffsetsFromParts);
             registry.Register("HASHBYTES", HashBytes);
-            registry.Register("NEWID", (args, ctx) => Guid.NewGuid());
-            registry.Register("NEWSEQUENTIALID", (args, ctx) => Guid.NewGuid());
+            registry.Register("NEWID", (args, ctx) => NewUuidV7());
+            registry.Register("NEWSEQUENTIALID", (args, ctx) => NewUuidV7());
             registry.Register("CHECKSUM", Checksum);
             registry.Register("BINARY_CHECKSUM", Checksum);
             
@@ -319,6 +319,9 @@ namespace ETL_SQL.Engine.Functions
                 return hash.ComputeHash(data);
             }
         }
+
+        /// <summary>Generates a UUID v7 (RFC 9562): time-ordered, random GUID.</summary>
+        private static Guid NewUuidV7() => Guid.CreateVersion7();
 
         /// <summary>Computes a 64-bit checksum / hash of the input values.</summary>
         private static object? Checksum(List<object?> args, IExecutionContext ctx)
