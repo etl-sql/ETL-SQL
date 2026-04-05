@@ -686,6 +686,32 @@ ORDER BY TotalSales DESC
 LIMIT 10;
 ```
 
+*Example (ROLLUP — subtotals and grand total):*
+```sql
+-- Produces per-region/product detail, per-region subtotals, and a grand total
+SELECT Region, Product, SUM(Amount) AS Total
+FROM #sales
+GROUP BY ROLLUP(Region, Product)
+ORDER BY Region, Product;
+-- NULL in Region/Product marks the subtotal / grand-total rows
+```
+
+*Example (CUBE — all combinations):*
+```sql
+-- Subtotals by Region, by Product, and grand total
+SELECT Region, Product, SUM(Amount) AS Total
+FROM #sales
+GROUP BY CUBE(Region, Product);
+```
+
+*Example (GROUPING SETS — explicit groupings):*
+```sql
+-- Only (Region+Product) detail and Region subtotals; no per-product or grand total
+SELECT Region, Product, SUM(Amount) AS Total
+FROM #sales
+GROUP BY GROUPING SETS((Region, Product), (Region));
+```
+
 ### Common Table Expressions (CTE)
 CTEs provide a way to define temporary result sets that can be referenced within the scope of a single `SELECT`, `INSERT`, `UPDATE`, or `DELETE` statement. They improve readability and support recursive logic.
 
