@@ -33,6 +33,7 @@ namespace ETL_SQL.Tests
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
+            services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>();
             
             services.AddTransient<Evaluator>();
             

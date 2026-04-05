@@ -37,7 +37,7 @@ namespace ETL_SQL.Engine.Handlers
 
             if (variables.ContainsVariableInCurrentScope(stmt.VariableName))
             {
-                if (variables.VariableMetadata.TryGetValue(stmt.VariableName, out var existingMeta) && existingMeta.IsDeclared)
+                if (variables.CurrentMetadata.TryGetValue(stmt.VariableName, out var existingMeta) && existingMeta.IsDeclared)
                 {
                     throw new ExecutionException($"Variable {stmt.VariableName} has already been declared in this scope (Line {stmt.Line}, Col {stmt.Column}).");
                 }

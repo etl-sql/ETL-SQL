@@ -101,9 +101,8 @@ NOTE: CREATE A NEW GIT BRANCH BEFORE STARTING THIS WORK
    - [ ] **Parser NOT yet wired** — `StatementParser` `ParseGroupBy` does not yet handle `ROLLUP`/`CUBE`/`GROUPING SETS` tokens
    - [ ] **Engine NOT yet wired** — `AggregateEngine` does not yet expand `GroupingSetClause` into multiple aggregation passes
 
-5. [ ] Structured CREATE CONNECTION linter check — `ConnectionStringBuilder.cs` and docs are already complete for MSSQL, POSTGRES, and ORACLE.
-   - [ ] **Only missing piece:** Linter rule that fails when a connection is defined with both `TRUSTED_CONNECTION=TRUE` **and** `USER_ID`/`PASSWORD`. These are mutually exclusive — Windows auth vs SQL auth — and should never be combined.
-   - Rule should live in `src/ETL-SQL.Core/Linting/Rules/` alongside the other connection rules.
+5. [x] Structured CREATE CONNECTION linter check — `ConnectionStringBuilder.cs` and docs are already complete for MSSQL, POSTGRES, and ORACLE.
+   - [x] **`ConnectionAuthConflictRule`** added to `src/ETL-SQL.Core/Linting/Rules/`. Fires an `Error` when `TRUSTED_CONNECTION=TRUE` is combined with `USER_ID` or `PASSWORD` on any database connector. File connectors are exempt. 5 tests added to `LinterTests.cs`, all passing.
 
 6. [ ] ALTER CONNECTION and CREATE OR ALTER CONNECTION.
    - **NOT IMPLEMENTED** — No `ALTER` token, no `AlterConnectionStatement` AST node, no handler

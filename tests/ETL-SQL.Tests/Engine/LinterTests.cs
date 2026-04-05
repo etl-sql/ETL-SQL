@@ -118,5 +118,85 @@ SELECT * FROM MyTable WHERE Id = @param2; -- Should error
             Assert.Single(results);
             Assert.Equal("@param2", results[0].Message.Split('\'')[1]);
         }
+
+        [Fact]
+        public async Task TestConnectionAuthConflictRule_TrustedPlusUserId_IsError()
+        {
+            var linter = new Linter();
+            linter.AddRule(new ConnectionAuthConflictRule());
+
+            // TRUSTED_CONNECTION and USER_ID together — should be flagged
+            var sql = "CREATE CONNECTION db ON MSSQL() WITH(TRUSTED_CONNECTION='TRUE', USER_ID='sa', DATABASE='AdventureWorks');";
+
+            var script = Parse(sql);
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.Single(results);
+            Assert.Equal(LintSeverity.Error, results[0].Severity);
+            Assert.Contains("TRUSTED_CONNECTION", results[0].Message);
+            Assert.Contains("USER_ID", results[0].Message);
+        }
+
+        [Fact]
+        public async Task TestConnectionAuthConflictRule_TrustedPlusPassword_IsError()
+        {
+            var linter = new Linter();
+            linter.AddRule(new ConnectionAuthConflictRule());
+
+            // TRUSTED_CONNECTION and PASSWORD together — should also be flagged
+            var sql = "CREATE CONNECTION db ON MSSQL() WITH(TRUSTED_CONNECTION='TRUE', PASSWORD='secret');";
+
+            var script = Parse(sql);
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.Single(results);
+            Assert.Equal(LintSeverity.Error, results[0].Severity);
+            Assert.Contains("TRUSTED_CONNECTION", results[0].Message);
+        }
+
+        [Fact]
+        public async Task TestConnectionAuthConflictRule_SqlAuthOnly_NoError()
+        {
+            var linter = new Linter();
+            linter.AddRule(new ConnectionAuthConflictRule());
+
+            // Valid SQL auth — no TRUSTED_CONNECTION at all
+            var sql = "CREATE CONNECTION db ON MSSQL() WITH(USER_ID='sa', PASSWORD='secret', DATABASE='AdventureWorks');";
+
+            var script = Parse(sql);
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task TestConnectionAuthConflictRule_WindowsAuthOnly_NoError()
+        {
+            var linter = new Linter();
+            linter.AddRule(new ConnectionAuthConflictRule());
+
+            // Valid Windows auth — TRUSTED_CONNECTION with no USER_ID or PASSWORD
+            var sql = "CREATE CONNECTION db ON MSSQL() WITH(TRUSTED_CONNECTION='TRUE', DATABASE='AdventureWorks');";
+
+            var script = Parse(sql);
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task TestConnectionAuthConflictRule_FileConnectorExempt()
+        {
+            var linter = new Linter();
+            linter.AddRule(new ConnectionAuthConflictRule());
+
+            // File connectors should not be checked for TRUSTED_CONNECTION conflicts
+            var sql = "CREATE CONNECTION f ON FLATFILE('C:\\Data\\') WITH(TRUSTED_CONNECTION='TRUE', PASSWORD='secret');";
+
+            var script = Parse(sql);
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.Empty(results);
+        }
     }
 }
