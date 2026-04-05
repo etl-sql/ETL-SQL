@@ -51,12 +51,57 @@ namespace ETL_SQL.Core.Data
             return BinaryOperatorFactory.Execute(tokenType.Value, a, b);
         }
 
-        public static bool EvaluateLike(object? input, object? pattern)
+        public static bool EvaluateLike(object? input, object? pattern, string? escapeChar = null)
         {
             if (input == null || pattern == null) return false;
             string s = input.ToString() ?? "";
             string p = pattern.ToString() ?? "";
-            string regexPattern = "^" + Regex.Escape(p).Replace("%", ".*").Replace("_", ".") + "$";
+
+            string regexPattern;
+            if (!string.IsNullOrEmpty(escapeChar) && escapeChar.Length == 1)
+            {
+                char esc = escapeChar[0];
+                // Manually build regex for explicitly escaped sequences vs non-escaped wildcards
+                var sb = new System.Text.StringBuilder("^");
+                bool escaped = false;
+                for (int i = 0; i < p.Length; i++)
+                {
+                    char c = p[i];
+                    if (escaped)
+                    {
+                        sb.Append(Regex.Escape(c.ToString()));
+                        escaped = false;
+                    }
+                    else if (c == esc)
+                    {
+                        escaped = true;
+                    }
+                    else if (c == '%')
+                    {
+                        sb.Append(".*");
+                    }
+                    else if (c == '_')
+                    {
+                        sb.Append(".");
+                    }
+                    else
+                    {
+                        sb.Append(Regex.Escape(c.ToString()));
+                    }
+                }
+                if (escaped)
+                {
+                     // hanging escape character
+                     sb.Append(Regex.Escape(esc.ToString()));
+                }
+                sb.Append("$");
+                regexPattern = sb.ToString();
+            }
+            else
+            {
+                regexPattern = "^" + Regex.Escape(p).Replace("%", ".*").Replace("_", ".") + "$";
+            }
+
             return Regex.IsMatch(s, regexPattern, RegexOptions.IgnoreCase);
         }
 

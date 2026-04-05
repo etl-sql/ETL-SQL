@@ -605,20 +605,46 @@ SET SHOW_PASSWORD OFF;     -- restore masked mode
 ```
 
 ### Supported Data Types
-ETL-SQL supports a wide range of data types for variable declarations and table schemas.
+ETL-SQL supports a wide range of data types tailored for ETL operations, variable declarations, and table schemas. Below is a detailed breakdown of the supported types, their default formats, and cast behavior.
 
-| Category | Types |
-| :--- | :--- |
-| **Numeric** | `INT`, `INTEGER`, `BIGINT`, `SMALLINT`, `TINYINT`, `DECIMAL`, `NUMERIC`, `MONEY`, `FLOAT`, `REAL`, `DOUBLE` |
-| **Temporal** | `DATE`, `DATETIME`, `DATETIME2`, `TIMESTAMP`, `TIME`, `DATETIMEOFFSET` |
-| **Character** | `STRING`, `VARCHAR`, `NVARCHAR`, `TEXT`, `CHAR` |
-| **Logic** | `BIT`, `BOOLEAN`, `BOOL` (True/False) |
-| **Binary** | `VARBINARY`, `BINARY`, `IMAGE`, `BLOB` |
-| **Structured** | `JSON`, `XML` |
-| **Collections** | `LIST` (An ordered collection of values) |
-| **Specialized** | `PATH`, `ENCRYPTED`, `UNIQUEIDENTIFIER` (UUID/Guid), `GEOMETRY`, `GEOGRAPHY`, `HIERARCHYID`, `VECTOR`, `ANY` |
+#### 1. Numeric Types
+*   **Types**: `INT`, `INTEGER`, `BIGINT`, `SMALLINT`, `TINYINT`, `DECIMAL`, `NUMERIC`, `MONEY`, `FLOAT`, `REAL`, `DOUBLE`
+*   **Accepted Literals**: `123`, `-45`, `3.14`
+*   **Default Behavior**: Inferred from literals automatically. Computations on integers yield integers unless a decimal/float is involved.
+*   **Cast Behavior**: `CAST('12.5' AS INT)` rounds or truncates depending on context. `CAST('3.14' AS DECIMAL)` converts accurately to a high-precision decimal.
 
-#### Specialized Variables
+#### 2. Temporal (Date & Time) Types
+*   **Types**: `DATE`, `DATETIME`, `DATETIME2`, `TIMESTAMP`, `TIME`, `DATETIMEOFFSET`
+*   **Accepted Literals**: `'2023-10-31'`, `'2023-10-31 15:30:00'`, `'15:30:00'`
+*   **Default Behavior**: Parsed automatically if the string matches common ISO 8601 formatting, or by using explicit functions like `DATETIMEFROMPARTS`.
+*   **Cast Behavior**: `CAST('2024-01-01' AS DATE)` parses the string into a `DateTime` struct. Casting a date back to a string uses the standard `yyyy-MM-dd HH:mm:ss` format unless otherwise specified via `FORMAT()`.
+
+#### 3. Character & String Types
+*   **Types**: `STRING`, `VARCHAR`, `NVARCHAR`, `TEXT`, `CHAR`
+*   **Accepted Literals**: `'Hello World'`, `"ColumnName"` (for identifiers, though some engines permit double quotes for strings depending on dialect config)
+*   **Default Behavior**: Uses Unicode by default (equivalent to `NVARCHAR` in MSSQL).
+*   **Cast Behavior**: Any value can be cast to `STRING`. Nulls cast to `NULL`.
+
+#### 4. Logical & Boolean Types
+*   **Types**: `BIT`, `BOOLEAN`, `BOOL`
+*   **Accepted Literals**: `TRUE`, `FALSE`, `1`, `0`
+*   **Default Behavior**: Used naturally in `IF` statements and conditionals.
+*   **Cast Behavior**: `CAST(1 AS BOOL)` -> `TRUE`. `CAST('true' AS BOOL)` -> `TRUE`. `CAST('yes' AS BOOL)` might throw a casting error depending on strictness.
+
+#### 5. Binary
+*   **Types**: `VARBINARY`, `BINARY`, `IMAGE`, `BLOB`
+*   **Accepted Literals**: Typically generated via functions like `HASHBYTES` or reading from binary `FILE` connectors.
+*   **Cast Behavior**: Casting to string typically yields a base64 or hex representation.
+
+#### 6. Structured Types
+*   **Types**: `JSON`, `XML`
+*   **Default Behavior**: Can be parsed and manipulated using path extraction functions or loaded directly into relational tables via `SELECT * FROM JSON(...)`.
+
+#### 7. Collections & Specialized Types
+*   **`LIST`**: An ordered collection of values. Used with `IN` operators or traversed in `FOREACH` loops.
+    ```sql
+    DECLARE @myList LIST = (1, 2, 3);
+    ```
 *   **`PATH`**: Used specifically for file system paths or connection URIs. It ensures consistent handling of separators across different operating systems.
     ```sql
     DECLARE @sourcePath PATH = 'C:\Data\Source\';
@@ -627,14 +653,12 @@ ETL-SQL supports a wide range of data types for variable declarations and table 
     ```sql
     DECLARE @apiKey ENCRYPTED = 'ENC:U2FsdGVkX1+...';
     ```
-*   **`LIST`**: Holds multiple values that can be used with `IN` operators or traversed in `FOREACH` loops.
-    ```sql
-    DECLARE @myList LIST = [1, 2, 3];
-    ```
+*   **`UNIQUEIDENTIFIER` / `UUID`**: Represents a globally unique identifier (e.g. `NEWID()`).
 *   **`ANY`**: The default type when no type is specified in a `DECLARE` statement. It allows for dynamic type inference based on the assigned value.
     ```sql
     DECLARE @id = 123; -- Implicitly ANY, inferred as INT
     ```
+
 
 ## Querying & Filtering
 **`SELECT`**
@@ -798,8 +822,10 @@ WHERE category IN ('A', 'B')
 
 **`LIKE`**
 Matches strings against SQL-standard wildcard patterns (`%` for any string, `_` for any single character).
+You can optionally use `ESCAPE '<char>'` to treat wildcard characters as literal characters.
 ```sql
 WHERE email LIKE '%@gmail.com'
+  AND url LIKE 'https://test\_%' ESCAPE '\'
 ```
 
 **`EXISTS`** and **`NOT EXISTS`**

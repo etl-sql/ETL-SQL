@@ -190,6 +190,28 @@ namespace ETL_SQL.Tests
             return ev.Variables[varName];
         }
 
+        [Fact]
+        public async Task TestLikeEscape()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            
+            // Should match '100% pure'
+            await AssertEval(evaluator, "'100% pure' LIKE '100\\% pure' ESCAPE '\\'", true);
+            // Should not match '1000 pure' (escaped % is literal)
+            await AssertEval(evaluator, "'1000 pure' LIKE '100\\% pure' ESCAPE '\\'", false);
+            
+            // Should match 'A_B'
+            await AssertEval(evaluator, "'A_B' LIKE 'A\\_B' ESCAPE '\\'", true);
+            // Should not match 'ATB' (escaped _ is literal)
+            await AssertEval(evaluator, "'ATB' LIKE 'A\\_B' ESCAPE '\\'", false);
+
+            // Escaping the escape character itself '\\' -> '\'
+            await AssertEval(evaluator, "'C:\\dir' LIKE 'C:\\\\dir' ESCAPE '\\'", true);
+            
+            // Mixing escaped characters and wildcards
+            await AssertEval(evaluator, "'100% pure orange juice' LIKE '100\\% pure %' ESCAPE '\\'", true);
+        }
+
         private static Script Parse(string source)
         {
             var lexer = new Lexer(source);

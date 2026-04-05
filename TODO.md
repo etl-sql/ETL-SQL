@@ -94,29 +94,18 @@ NOTE: CREATE A NEW GIT BRANCH BEFORE STARTING THIS WORK
    - **PASSPHRASE**: The passphrase for the private key file (if any). (Required if ENCRYPT=ON)
    Please update ETL_SQL_Language_Reference.md with these options for EXCEL, JSON, XML, PARQUET, AVRO after implementation.
 
-4. [x] GROUP BY GROUPING SETS, ROLLUP, and CUBE.
-   - [x] AST node (`GroupingSetClause`) added to `Ast.cs`
-   - [x] Token types `ROLLUP`, `CUBE`, `GROUPING` added to `TokenType.cs`
-   - [x] Documentation added to `ETL_SQL_Language_Reference.md` with examples
-   - [x] Parser wired up natively inside `Parser.cs` handling all variations.
-   - [x] Engine wired up in `AggregateEngine.cs` correctly expanding `GroupingSetClause` into multiple single-pass iterations with `NULL` substitution.
-   - [x] Unit/Integration tests added in `GroupingSetTests.cs` testing edge cases and correctness.
-
-5. [x] Structured CREATE CONNECTION linter check — `ConnectionStringBuilder.cs` and docs are already complete for MSSQL, POSTGRES, and ORACLE.
-   - [x] **`ConnectionAuthConflictRule`** added to `src/ETL-SQL.Core/Linting/Rules/`. Fires an `Error` when `TRUSTED_CONNECTION=TRUE` is combined with `USER_ID` or `PASSWORD` on any database connector. File connectors are exempt. 5 tests added to `LinterTests.cs`, all passing.
-
-6. [ ] ALTER CONNECTION and CREATE OR ALTER CONNECTION.
+4. [ ] ALTER CONNECTION and CREATE OR ALTER CONNECTION.
    - **NOT IMPLEMENTED** — No `ALTER` token, no `AlterConnectionStatement` AST node, no handler
    - Docs already written in `ETL_SQL_Language_Reference.md` as placeholders — implementation required
    - ALTER CONNECTION: modify connection string or individual options; previous options are preserved unless changed
    - CREATE OR ALTER CONNECTION: rebuild the connection entirely with only what is provided
 
-7. [ ] Supported Data Types section in `ETL_SQL_Language_Reference.md` — expand from summary table into per-type usage breakdowns (default values, formatting, accepted literal forms, cast behaviour).
+5. [x] Supported Data Types section in `ETL_SQL_Language_Reference.md` — expand from summary table into per-type usage breakdowns (default values, formatting, accepted literal forms, cast behavior).
 
-8. [ ] Advanced LIKE options — current `LikeExpression` only supports `col LIKE 'pattern'` and `col NOT LIKE 'pattern'`.
-   - Add `ESCAPE '<char>'` clause: `col LIKE 'pattern' ESCAPE '\'`
-   - Consider `LIKE ANY` / `LIKE ALL` if there is a use case
-   - Update `ETL_SQL_Language_Reference.md` after implementation
+6. [x] Advanced LIKE options — current `LikeExpression` only supports `col LIKE 'pattern'` and `col NOT LIKE 'pattern'`.
+   - [x] Add `ESCAPE '<char>'` clause: `col LIKE 'pattern' ESCAPE '\'`
+   - [x] Consider `LIKE ANY` / `LIKE ALL` if there is a use case (skipped for now, usually not standard)
+   - [x] Update `ETL_SQL_Language_Reference.md` after implementation
 
 ## VS CODE Bugs/Improvements
 

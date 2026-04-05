@@ -1730,15 +1730,17 @@ namespace ETL_SQL.Core
         public Expression Left { get; }
         public Expression Pattern { get; }
         public bool IsNot { get; }
+        public Expression? EscapeChar { get; }
 
-        public LikeExpression(Expression left, Expression pattern, bool isNot = false)
+        public LikeExpression(Expression left, Expression pattern, bool isNot = false, Expression? escapeChar = null)
         {
             Left = left;
             Pattern = pattern;
             IsNot = isNot;
+            EscapeChar = escapeChar;
         }
 
-        public override string ToSql() => $"{Left.ToSql()} {(IsNot ? "NOT " : "")}LIKE {Pattern.ToSql()}";
+        public override string ToSql() => $"{Left.ToSql()} {(IsNot ? "NOT " : "")}LIKE {Pattern.ToSql()}{(EscapeChar != null ? " ESCAPE " + EscapeChar.ToSql() : "")}";
     }
 
     public class ExistsExpression : Expression

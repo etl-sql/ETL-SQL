@@ -163,7 +163,12 @@ namespace ETL_SQL.Core.Parser
                 else if (op == TokenType.LIKE)
                 {
                     var right = ParseTerm();
-                    left = new LikeExpression(left, right, isNot) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                    Expression? escapeChar = null;
+                    if (_parser.Match(TokenType.ESCAPE))
+                    {
+                        escapeChar = ParseTerm();
+                    }
+                    left = new LikeExpression(left, right, isNot, escapeChar) { Line = opToken.Line, Column = opToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
                 }
                 else
                 {

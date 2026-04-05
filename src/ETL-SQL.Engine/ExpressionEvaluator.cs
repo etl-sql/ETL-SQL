@@ -270,7 +270,7 @@ namespace ETL_SQL.Engine
         public object? MathOp(object? a, object? b, TokenType op) => EvaluationUtils.MathOp(a, b, op switch { TokenType.PLUS => "+", TokenType.MINUS => "-", TokenType.STAR => "*", TokenType.SLASH => "/", TokenType.MODULO => "%", _ => "" });
         
         /// <summary>Evaluates a LIKE pattern match.</summary>
-        public bool EvaluateLike(object? input, object? pattern) => EvaluationUtils.EvaluateLike(input, pattern);
+        public bool EvaluateLike(object? input, object? pattern, string? escapeChar = null) => EvaluationUtils.EvaluateLike(input, pattern, escapeChar);
         
         /// <summary>Casts a value to a specific data type.</summary>
         public object? CastToType(object? value, string type) => EvaluationUtils.CastToType(value, type);
@@ -384,7 +384,13 @@ namespace ETL_SQL.Engine
         {
             var l = await EvaluateInternal(like.Left, context);
             var r = await EvaluateInternal(like.Pattern, context);
-            bool res = EvaluateLike(l, r);
+            string? escapeStr = null;
+            if (like.EscapeChar != null)
+            {
+                var escVal = await EvaluateInternal(like.EscapeChar, context);
+                escapeStr = escVal?.ToString();
+            }
+            bool res = EvaluateLike(l, r, escapeStr);
             return like.IsNot ? !res : res;
         }
 

@@ -34,7 +34,7 @@ namespace ETL_SQL.Common
 
         public static readonly HashSet<string> OperatorKeywords = new(StringComparer.OrdinalIgnoreCase)
         {
-            "AND", "OR", "NOT", "LIKE", "IN", "EXISTS", "BETWEEN", "IS", "NULL"
+            "AND", "OR", "NOT", "LIKE", "ESCAPE", "IN", "EXISTS", "BETWEEN", "IS", "NULL"
         };
 
         /// <summary>
