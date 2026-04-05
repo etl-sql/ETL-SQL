@@ -46,10 +46,12 @@ We adhere to a strict `VERB_NOUN` convention for all automation commands, ensuri
 | **Data Flow** | `SEND_EMAIL`, `SEND_FILE`, `RECEIVE_FILE` |
 | **Filesystem** | `CREATE_DIRECTORY`, `DELETE_FILE`, `COMPRESS_FILE`, `ENCRYPT_FILE` |
 | **Management** | `CREATE CONNECTION`, `DROP CONNECTION`, `START_DOCKER`, `CREATE JOB` |
+| **Scripting** | `CREATE PROCEDURE`, `CREATE FUNCTION`, `CREATE SETS`, `USE SETS` |
+| **Analysis** | `LINT`, `EXPLAIN`, `LINEAGE()` |
 
 ### 🔍 Deep Observability
-- **Data Lineage**: Visualize exactly where your data comes from and how it transforms using `LINEAGE()`.
-- **Static Analysis (LINT)**: Catch logic errors, missing indices, or unoptimized joins before they hit production.
+- **Data Lineage**: Trace exactly where every column came from and how it was transformed using `LINEAGE()`. Export full Mermaid.js diagrams and audit tables with `LINEAGE(#result) TO 'report.md';`.
+- **Static Analysis (LINT)**: Catch logic errors, missing indices, or unoptimized joins before they hit production. Run `LINT 'script.etlsql';` to get a structured table of findings.
 - **Execution Profiling**: Enable `SET PROFILING ON` to see exactly where your bottlenecks are.
 
 ---
@@ -83,7 +85,7 @@ graph TD
 Clone the repository and ensure you have the **.NET 10.0 SDK** installed.
 
 ```bash
-git clone https://github.com/user/ETL-SQL.git
+git clone https://github.com/AmericanSuperstar/ETL-SQL.git
 cd ETL-SQL
 dotnet build
 ```

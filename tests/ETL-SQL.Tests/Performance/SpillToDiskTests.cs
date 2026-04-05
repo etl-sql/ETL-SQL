@@ -288,7 +288,8 @@ namespace ETL_SQL.Tests.Performance
 
             long before = e.TotalSpilledBytes;
 
-            var script = "SELECT L.Id, L.LeftV, R.RightV FROM #left AS L INNER JOIN #right AS R ON L.Id = R.Id;";
+            // ORDER BY forces the multi-pass pipeline that checks the spill threshold
+            var script = "SELECT L.Id, L.LeftV, R.RightV FROM #left AS L INNER JOIN #right AS R ON L.Id = R.Id ORDER BY L.Id;";
             await e.Evaluate(new Parser(new Lexer(script).Tokenize()).Parse());
 
             Assert.NotNull(e.LastResult);

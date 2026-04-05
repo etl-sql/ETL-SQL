@@ -532,6 +532,35 @@ Assigns a value to an existing variable.
 SET @name = 'Charles';
 ```
 
+#### USE PASSWORD
+Sets the master password for the current session. This password is used to encrypt and decrypt sensitive data within the script (e.g., connection strings marked with `ENC:`). It is **not** the password for individual file connectors (SFTP, FLATFILE, etc.).
+
+When typed interactively the characters are masked as `*`. Use `SET SHOW_PASSWORD ON` to reveal the password in plain text output.
+
+*Syntax:*
+`USE PASSWORD = '<password>';`
+
+*Example:*
+```sql
+USE PASSWORD = 'myMasterSecret';
+
+-- Now this encrypted connection string can be decrypted by the engine
+CREATE CONNECTION db ON MSSQL('ENC:U2FsdGVkX1+...');
+```
+
+#### SET SHOW_PASSWORD
+Controls whether the password supplied by `USE PASSWORD` is shown in plain text in the console/messages output. Default is `OFF`.
+
+*Syntax:*  
+`SET SHOW_PASSWORD ON;`  
+`SET SHOW_PASSWORD OFF;`
+
+```sql
+SET SHOW_PASSWORD ON;
+USE PASSWORD = 'mySecret'; -- password visible in output
+SET SHOW_PASSWORD OFF;     -- restore masked mode
+```
+
 ### Supported Data Types
 ETL-SQL supports a wide range of data types for variable declarations and table schemas.
 
@@ -1034,12 +1063,15 @@ RAISERROR('Custom error message', 16, 1);
 THROW 50000, 'Error message', 1;
 ```
 
-#### WAITFOR
-Pause execution for a specific duration or until a specific time.
+#### WAITFOR DELAY
+Pauses execution for a specified duration.
 ```sql
 WAITFOR DELAY '00:00:05'; -- Wait 5 seconds
-WAITFOR TIME '23:59:59';  -- Wait until midnight
+WAITFOR DELAY '00:01:30'; -- Wait 1 minute 30 seconds
 ```
+
+> [!NOTE]
+> `WAITFOR TIME '<HH:MM:SS>'` (wait until a specific clock time) is not currently implemented. Use `WAITFOR DELAY` with a calculated duration instead.
 
 ### Data Movement & Transformation
 
@@ -1058,10 +1090,49 @@ INSERT INTO TargetTable SELECT * FROM SourceTable;
 
 ### Job & Profile Management
 
+#### CREATE JOB
+Schedules a script to run automatically on a repeating interval.
+
+*Syntax:*
+```sql
+CREATE JOB <job_name> ON SCHEDULE EVERY <n> SECONDS|MINUTES|HOURS|DAYS [AT '<HH:MM>'] AS <statement>;
+```
+
+- **EVERY `<n>` SECONDS/MINUTES/HOURS/DAYS**: The interval between runs.
+- **AT `'HH:MM'`**: Optional. Pin the job to a specific time of day (e.g., run daily at 02:00 midnight).
+- **AS `<statement>`**: The ETL-SQL statement or block to execute. Typically a `RUN SCRIPT` or `BEGIN...END` block.
+
+*Examples:*
+```sql
+-- Run a cleanup script every 30 minutes
+CREATE JOB CleanupJob ON SCHEDULE EVERY 30 MINUTES AS
+    RUN SCRIPT 'scripts/cleanup.etlsql';
+
+-- Run a daily archive job at 2 AM
+CREATE JOB NightlyArchive ON SCHEDULE EVERY 1 DAY AT '02:00' AS
+BEGIN
+    INSERT INTO archive_db.logs SELECT * FROM prod_db.logs WHERE log_date < DATEADD(DAY, -30, GETDATE());
+    DELETE FROM prod_db.logs WHERE log_date < DATEADD(DAY, -30, GETDATE());
+END;
+```
+
+#### DROP JOB
+Removes a scheduled job.
+```sql
+DROP JOB [IF EXISTS] <job_name>;
+```
+
 #### SHOW JOBS
-Lists all currently running or recently completed background jobs.
+Lists all currently registered background jobs.
 ```sql
 SHOW JOBS;
+```
+
+#### SHOW JOB HISTORY
+Displays the execution history and status of scheduled jobs.
+```sql
+SHOW JOB HISTORY;           -- all jobs
+SHOW JOB HISTORY NightlyArchive;  -- specific job
 ```
 
 #### KILL JOB
@@ -1208,16 +1279,75 @@ Functions to query the state of the local or remote filesystem.
 - **`FILE_EXISTS('path')`**: Returns true if the file exists.
 - **`DIRECTORY_EXISTS('path')`**: Returns true if the directory exists.
 - **`FILE_LIST('path'[, 'filter'])`**: Returns a table containing information about files in a directory.
+- **`REMOTE_FILE_LIST(conn_name [, 'path'])`**: Returns a table of files from a remote connection (SFTP, FTP, or Azure Blob). The `conn_name` is the name of a configured remote connector.
 
-### Remote File Management
-Transfers files between the local system and a remote connector (SFTP, FTP, Azure Blob).
 ```sql
-GET_FILE 'remote/path/data.csv' TO 'local/data.csv' FROM @MySftp;
-PUT_FILE 'local/upload.txt' TO 'uploads/upload.txt' AT @AzureBlob;
+-- List all files in an SFTP directory
+SELECT * FROM REMOTE_FILE_LIST('my_sftp', '/uploads');
+
+-- List files using a configured Azure Blob connection
+SELECT FileName, Size FROM REMOTE_FILE_LIST('cloud_store', 'backups/');
+```
+
+### File Transfer
+Transfers files between the local machine and a remote connector (SFTP, FTP, Azure Blob).
+
+#### SEND_FILE
+Uploads a local file to a remote connection.
+
+*Syntax:*
+`SEND_FILE '<local_path>', <connection_name>, '<remote_path>';`
+
+```sql
+SEND_FILE 'C:\Exports\report.csv', my_sftp, '/uploads/report.csv';
+```
+
+#### RECEIVE_FILE
+Downloads a file from a remote connection to the local machine.
+
+*Syntax:*
+`RECEIVE_FILE <connection_name>, '<remote_path>', '<local_path>';`
+
+```sql
+RECEIVE_FILE my_sftp, '/data/input.csv', 'C:\Imports\input.csv';
 ```
 
 ### Email Operations
-- `SEND_EMAIL TO '<to>' SUBJECT '<subject>' BODY '<body>' [AT <connection>];`: Sends an automated email alert (requires an SMTP connection).
+
+#### SEND_EMAIL
+Sends an automated email (requires a configured `SMTP` connection).
+
+*Syntax:*
+```sql
+SEND_EMAIL TO '<to_address>'
+SUBJECT '<subject>'
+BODY '<body>'
+[CC '<cc_address>' [, '<cc2>', ...]]
+[BCC '<bcc_address>' [, '<bcc2>', ...]]
+[ATTACH '<file_path>' [, '<file2>', ...]]
+[AT <smtp_connection>];
+```
+
+- **TO** *(required)*: Recipient email address.
+- **SUBJECT** *(required)*: Email subject line.
+- **BODY** *(required)*: Email body text.
+- **CC**: One or more carbon-copy recipients.
+- **BCC**: One or more blind carbon-copy recipients.
+- **ATTACH**: One or more local file paths to attach.
+- **AT**: The name of the `SMTP` connection to use. Required if no default SMTP connection is configured.
+
+*Example:*
+```sql
+CREATE CONNECTION mailer ON SMTP('smtp.company.com')
+    WITH(PORT=587, USERNAME='alerts@company.com', PASSWORD='secret', USE_SSL=TRUE);
+
+SEND_EMAIL TO 'admin@company.com'
+SUBJECT 'ETL Job Completed'
+BODY 'All records processed successfully.'
+CC 'manager@company.com'
+ATTACH 'C:\Reports\summary.xlsx'
+AT mailer;
+```
 
 ### Aggregation
 - **`COUNT([DISTINCT] col)`**: Aggregation tally. If `DISTINCT` is specified, only unique non-null values are counted.
@@ -1560,26 +1690,74 @@ Specialized commands for filesystem management. Supports **Connection-based Path
 
 ## Introspection
 
-### `SHOW CONNECTIONS;`
-Displays all configured connections.
+> [!NOTE]
+> `SHOW CONNECTIONS`, `SHOW TABLES`, and `SHOW COLUMNS` are supported in the VS Code extension and console editor UI. They are not currently available as standalone SQL statements in batch scripts.
 
-### `SHOW TABLES [connection_name];`
+### `SHOW CONNECTIONS`
+Displays all configured connections in the current session.
+
+### `SHOW TABLES [connection_name]`
 Displays all tables in a connection.
 
-### `SHOW COLUMNS <table_name> [connection_name];`
-Displays all columns in a table.
+### `SHOW COLUMNS <connection_name>.<table_name>`
+Displays all columns for a table via a specific connection.
 
 ### Utility Commands
-- `EXPLAIN <query>`: Displays the query execution plan.
-- `HELP CONNECTION <type>`: Displays help and options for a specific connection provider.
-- `PRINT(message[, timestamp[, format]])`: Outputs a message to the console.
 
-### Static Analysis & Linting
-- `LINT '<script_path>';`: Analyzes the specified script for errors and best practices (e.g., missing `WHERE` clauses on `DELETE`, undeclared variables). Returns a table of findings.
+#### `EXPLAIN`
+Displays the execution plan for a query — showing the join strategies, index usage, and data flow before the query runs.
 
-### Job Scheduling & History
-- `CREATE JOB <job_name> ON <schedule_cron> AS '<script_path>';`: Schedules a script to run automatically.
-- `SHOW JOB HISTORY [<job_name>];`: Displays the execution history and status of scheduled jobs.
+```sql
+EXPLAIN
+SELECT o.OrderId, c.Name
+FROM orders_db.Orders AS o
+JOIN customers_db.Customers AS c ON o.CustomerId = c.Id
+WHERE o.Status = 'Open';
+```
+
+#### `HELP CONNECTION <type>`
+Displays connection-specific options and supported operations for the given connector type.
+
+```sql
+HELP CONNECTION SFTP;
+HELP CONNECTION MSSQL;
+HELP CONNECTION FLATFILE;
+```
+
+#### `LINT`
+Statically analyzes a script for errors and best practices without executing it. Returns a result set of findings.
+
+*Syntax:*
+`LINT ['<script_path>'];`
+
+- With a path: analyzes the specified `.etlsql` file.
+- Without a path: analyzes the current script (useful in interactive mode).
+
+```sql
+-- Analyze a script file
+LINT 'scripts/nightly_load.etlsql';
+```
+
+#### `PRINT`
+Outputs a message to the console or messages panel.
+
+*Syntax:*
+`PRINT(message[, show_timestamp[, format]]);`
+
+```sql
+PRINT('Starting job...');
+PRINT('Load complete', TRUE);          -- with timestamp
+PRINT(GETDATE(), TRUE, 'yyyy-MM-dd'); -- formatted date
+```
+
+### Job Scheduling
+
+See [CREATE JOB](#create-job) in Job & Profile Management for the full scheduling syntax.
+
+```sql
+SHOW JOB HISTORY;               -- view all job runs
+SHOW JOB HISTORY NightlyArchive; -- view a specific job's history
+```
 
 ### `LINEAGE`
 The lineage system provides end-to-end traceability of data movement, capturing every transformation, source-to-target mapping, and metadata tag inheritance.
