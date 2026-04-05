@@ -35,6 +35,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.ALTER)) return ParseAlter();
             if (_parser.Match(TokenType.EXPLAIN)) return ParseExplain();
             if (_parser.Match(TokenType.DROP)) return ParseDrop();
+            if (_parser.Match(TokenType.CLEAR)) return ParseClear();
             if (_parser.Match(TokenType.TRUNCATE)) return ParseTruncate();
             if (_parser.Match(TokenType.DELETE)) return ParseDelete();
             if (_parser.Match(TokenType.DECLARE)) return ParseDeclare();
@@ -128,6 +129,14 @@ namespace ETL_SQL.Core.Parser
                 return ParseDirectoryOperation();
 
             throw new SyntaxException($"Unexpected token {_parser.Current.Type} ('{_parser.Current.Value}')", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private Statement ParseClear()
+        {
+            var startToken = _parser.Previous;
+            _parser.Consume(TokenType.SESSION, "Expected SESSION after CLEAR");
+            _parser.Match(TokenType.SEMICOLON);
+            return new ClearSessionStatement { Line = startToken.Line, Column = startToken.Column };
         }
 
         private Statement ParseHelp()

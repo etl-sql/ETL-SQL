@@ -81,6 +81,7 @@ namespace ETL_SQL.App
             
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
+            services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>();
             
             // Connectors
             services.AddSingleton<IConnector, MockDbConnector>();

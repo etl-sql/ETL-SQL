@@ -59,6 +59,8 @@ namespace ETL_SQL.Connectors
 
         public string Path => $"sftp://{_host}";
 
+        public Dictionary<string, string>? Options => null;
+
         public async Task<string> GetVersionAsync(string connectionString) => "SFTP Server";
         public HashSet<string> GetSupportedFunctions() => new();
         public HashSet<string> GetSupportedKeywords() => new();
@@ -85,6 +87,10 @@ namespace ETL_SQL.Connectors
         public Task<IEnumerable<string>> GetViewsAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName) => Task.FromResult(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+
+        /// <summary>Builds an SFTP host address from named properties.</summary>
+        public string BuildConnectionString(Dictionary<string, string> properties) => 
+            ConnectionStringBuilder.Build(Name, properties);
 
         private void EnsureConnected()
         {

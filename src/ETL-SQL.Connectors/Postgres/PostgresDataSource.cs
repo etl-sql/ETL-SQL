@@ -15,6 +15,7 @@ namespace ETL_SQL.Connectors.Postgres
     {
         private readonly string _connectionString;
         private readonly string? _tableName;
+        private readonly Dictionary<string, string>? _options;
         private NpgsqlConnection? _transactionalConnection;
         private NpgsqlTransaction? _activeTransaction;
 
@@ -23,10 +24,12 @@ namespace ETL_SQL.Connectors.Postgres
         /// </summary>
         /// <param name="connectionString">The PostgreSQL connection string.</param>
         /// <param name="tableName">The target table name (optional for raw SQL).</param>
-        public PostgresDataSource(string connectionString, string? tableName = null)
+        /// <param name="options">The options used to create this data source.</param>
+        public PostgresDataSource(string connectionString, string? tableName = null, Dictionary<string, string>? options = null)
         {
             _connectionString = connectionString;
             _tableName = tableName;
+            _options = options;
         }
 
         /// <summary>Gets the connection string for this data source.</summary>
@@ -38,8 +41,11 @@ namespace ETL_SQL.Connectors.Postgres
         /// <summary>Gets the database dialect name.</summary>
         public string Dialect => "POSTGRES";
 
+        /// <summary>The options used to create this data source.</summary>
+        public Dictionary<string, string>? Options => _options;
+
         /// <summary>Returns a new instance scoped to the specified table.</summary>
-        public IDataSource WithTable(string tableName) => new PostgresDataSource(_connectionString, tableName);
+        public IDataSource WithTable(string tableName) => new PostgresDataSource(_connectionString, tableName, _options);
 
         /// <summary>Retrieves the PostgreSQL version information.</summary>
         public async Task<string> GetVersionAsync()

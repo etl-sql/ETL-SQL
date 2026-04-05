@@ -17,16 +17,19 @@ namespace ETL_SQL.Connectors.Oracle
     {
         private readonly string _connectionString;
         private readonly string? _tableName;
+        private readonly Dictionary<string, string>? _options;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="OracleDataSource"/> class.
         /// </summary>
         /// <param name="connectionString">The Oracle connection string.</param>
         /// <param name="tableName">The target table name (optional for raw SQL).</param>
-        public OracleDataSource(string connectionString, string? tableName = null)
+        /// <param name="options">The options used to create this data source.</param>
+        public OracleDataSource(string connectionString, string? tableName = null, Dictionary<string, string>? options = null)
         {
             _connectionString = connectionString;
             _tableName = tableName;
+            _options = options;
         }
 
         /// <summary>Gets the connection string for this data source.</summary>
@@ -38,8 +41,11 @@ namespace ETL_SQL.Connectors.Oracle
         /// <summary>Gets the database dialect name.</summary>
         public string Dialect => "ORACLE";
 
+        /// <summary>The options used to create this data source.</summary>
+        public Dictionary<string, string>? Options => _options;
+
         /// <summary>Returns a new instance of the data source scoped to the specified table.</summary>
-        public IDataSource WithTable(string tableName) => new OracleDataSource(_connectionString, tableName);
+        public IDataSource WithTable(string tableName) => new OracleDataSource(_connectionString, tableName, _options);
 
         /// <summary>Retrieves the Oracle database version.</summary>
         public async Task<string> GetVersionAsync()

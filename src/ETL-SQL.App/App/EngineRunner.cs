@@ -53,7 +53,7 @@ namespace ETL_SQL.App
                     Logger.WriteLine("Session ID is required for clear command.", ConsoleColor.Red);
                     return 1;
                 }
-                var sessionManager = new ETL_SQL.Engine.Services.SessionStateManager();
+                var sessionManager = Program.ServiceProvider.GetRequiredService<ETL_SQL.Engine.Services.SessionStateManager>();
                 sessionManager.ClearSession(ctx.SessionId);
                 Logger.WriteLine($"Session {ctx.SessionId} cleared.", ConsoleColor.Green);
                 return 0;
@@ -192,8 +192,9 @@ namespace ETL_SQL.App
                     evaluator.BatchSize = ctx.BatchSize;
                     evaluator.IsVerbose = ctx.IsVerbose;
                     evaluator.MasterPassword = ctx.Password;
+                    evaluator.SessionId = ctx.SessionId;
 
-                    var sessionManager = new ETL_SQL.Engine.Services.SessionStateManager();
+                    var sessionManager = Program.ServiceProvider.GetRequiredService<ETL_SQL.Engine.Services.SessionStateManager>();
                     if (!string.IsNullOrEmpty(ctx.SessionId))
                     {
                         var state = await sessionManager.LoadSession(ctx.SessionId, ctx.Password);

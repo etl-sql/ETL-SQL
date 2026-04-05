@@ -133,6 +133,12 @@ namespace ETL_SQL.Engine
         /// <summary>Interface for tracking data lineage.</summary>
         public ILineageTracker LineageTracker { get; }
 
+        /// <summary>Manager for session persistence and cleanup.</summary>
+        public SessionStateManager SessionStateManager { get; }
+
+        /// <summary>Unique identifier for the current session.</summary>
+        public string? SessionId { get; set; }
+
         private readonly Dictionary<Type, IStatementHandler> _statementHandlers = new();
         private readonly IEnumerable<IStatementHandler> _allHandlers;
         private readonly IServiceProvider _serviceProvider;
@@ -174,12 +180,12 @@ namespace ETL_SQL.Engine
         /// <summary>
         /// Initializes a new instance of the Evaluator.
         /// </summary>
-        public Evaluator(IEnumerable<IStatementHandler> handlers, IServiceProvider serviceProvider, Core.Functions.IFunctionRegistry functionRegistry, ILineageTracker lineageTracker, IDockerManager dockerManager, IConnectorRegistry connectorRegistry)
-            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, connectorRegistry, new ConcurrentDictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase), new VariableScopeManager())
+        public Evaluator(IEnumerable<IStatementHandler> handlers, IServiceProvider serviceProvider, Core.Functions.IFunctionRegistry functionRegistry, ILineageTracker lineageTracker, IDockerManager dockerManager, IConnectorRegistry connectorRegistry, SessionStateManager sessionStateManager)
+            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, connectorRegistry, sessionStateManager, new ConcurrentDictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase), new VariableScopeManager())
         {
         }
 
-        private Evaluator(IEnumerable<IStatementHandler> handlers, IServiceProvider serviceProvider, Core.Functions.IFunctionRegistry functionRegistry, ILineageTracker lineageTracker, IDockerManager dockerManager, IConnectorRegistry connectorRegistry, ConcurrentDictionary<string, IDataSource> connections, VariableScopeManager variableScopeManager)
+        private Evaluator(IEnumerable<IStatementHandler> handlers, IServiceProvider serviceProvider, Core.Functions.IFunctionRegistry functionRegistry, ILineageTracker lineageTracker, IDockerManager dockerManager, IConnectorRegistry connectorRegistry, SessionStateManager sessionStateManager, ConcurrentDictionary<string, IDataSource> connections, VariableScopeManager variableScopeManager)
         {
             _allHandlers = handlers;
             _serviceProvider = serviceProvider;
@@ -187,6 +193,7 @@ namespace ETL_SQL.Engine
             LineageTracker = lineageTracker;
             DockerManager = dockerManager;
             _connectorRegistry = connectorRegistry;
+            SessionStateManager = sessionStateManager;
             
             _connections = connections;
             _variableScopeManager = variableScopeManager;
@@ -277,7 +284,7 @@ namespace ETL_SQL.Engine
             // 5. Restore Temp Tables (#tables)
             foreach (var temp in state.TempTables)
             {
-                _connections[temp.Name] = await _dataSourceManager.RestoreTempTable(temp, ScriptPassword ?? $"{Environment.MachineName}:{Environment.UserName}");
+                _connections[temp.Name] = await _dataSourceManager.RestoreTempTable(temp, ScriptPassword ?? SessionStateManager.GetMachineKey());
             }
         }
 
@@ -449,6 +456,17 @@ namespace ETL_SQL.Engine
 
         /// <summary>Executes a CREATE INDEX statement.</summary>
         public Task EvaluateCreateIndex(CreateIndexStatement stmt) => _schemaManager.EvaluateCreateIndex(stmt, _connections);
+
+        /// <summary>Executes a CLEAR SESSION statement, explicitly deleting session files.</summary>
+        public Task EvaluateClearSession(ClearSessionStatement stmt)
+        {
+            if (!string.IsNullOrEmpty(SessionId))
+            {
+                Logger.WriteLine($"Clearing session {SessionId}...", ConsoleColor.Cyan);
+                SessionStateManager.ClearSession(SessionId);
+            }
+            return Task.CompletedTask;
+        }
 
         /// <summary>Registers a new stored procedure in the session.</summary>
         public void EvaluateCreateProcedure(CreateProcedureStatement stmt)
@@ -662,7 +680,7 @@ namespace ETL_SQL.Engine
         {
             // Resolve fresh handlers to avoid sharing mutable handler state across forks (resolves Item #20 race condition)
             var freshHandlers = _serviceProvider.GetServices<IStatementHandler>();
-            var fork = new Evaluator(freshHandlers, _serviceProvider, FunctionRegistry, LineageTracker, DockerManager, _connectorRegistry, _connections, _variableScopeManager.Fork())
+            var fork = new Evaluator(freshHandlers, _serviceProvider, FunctionRegistry, LineageTracker, DockerManager, _connectorRegistry, SessionStateManager, _connections, _variableScopeManager.Fork())
             {
                 IsVerbose = IsVerbose,
                 RedirectOutput = RedirectOutput,
@@ -670,7 +688,8 @@ namespace ETL_SQL.Engine
                 ShowPassword = ShowPassword,
                 BatchSize = BatchSize,
                 PreviewLimit = PreviewLimit,
-                ScriptPassword = ScriptPassword
+                ScriptPassword = ScriptPassword,
+                SessionId = SessionId
             };
             return fork;
         }

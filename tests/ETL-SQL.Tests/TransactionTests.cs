@@ -167,6 +167,7 @@ namespace ETL_SQL.Tests
             public string ConnectionString => "MOCK";
             public string Path => "MOCK";
             public string Dialect => "MSSQL";
+            public Dictionary<string, string>? Options => null;
             public IDataSource WithTable(string tableName) => this;
             public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) { yield break; }
             public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => Task.CompletedTask;

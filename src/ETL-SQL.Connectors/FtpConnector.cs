@@ -18,6 +18,7 @@ namespace ETL_SQL.Connectors
         public string Name => "FTP_CONN";
         public IReadOnlyList<string> Aliases => new[] { "FTP" };
         public string Path => $"ftp://{_host}";
+        public Dictionary<string, string>? Options => null;
 
         public FtpConnector(string host, string username, string password)
         {
@@ -45,6 +46,10 @@ namespace ETL_SQL.Connectors
         public Task<IEnumerable<string>> GetViewsAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName) => Task.FromResult(Enumerable.Empty<string>());
         public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+
+        /// <summary>Builds an FTP host address from named properties.</summary>
+        public string BuildConnectionString(Dictionary<string, string> properties) => 
+            ConnectionStringBuilder.Build(Name, properties);
 
         private void EnsureConnected()
         {

@@ -62,7 +62,7 @@ namespace ETL_SQL.Connectors.Oracle
         {
             string? table = null;
             options?.TryGetValue("TABLE", out table);
-            return new OracleDataSource(connectionString, table);
+            return new OracleDataSource(connectionString, table, options);
         }
 
         /// <summary>Returns a list of logical tables from the connection source.</summary>
@@ -113,6 +113,10 @@ namespace ETL_SQL.Connectors.Oracle
             while (await reader.ReadAsync()) procs.Add(reader.GetString(0));
             return procs;
         }
+
+        /// <summary>Builds an Oracle connection string from named properties.</summary>
+        public string BuildConnectionString(Dictionary<string, string> properties) => 
+            ConnectionStringBuilder.Build(Name, properties);
     }
 }
 

@@ -51,6 +51,7 @@ namespace ETL_SQL.Tests.Engine
             public string Dialect => "MSSQL";
             public string ConnectionString => "mock://local";
             public string Path => "mock://local";
+            public Dictionary<string, string>? Options => null;
             public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?> parameters = null)
             {
                 var dt = new DataTable();
@@ -66,8 +67,8 @@ namespace ETL_SQL.Tests.Engine
             public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => Enumerable.Empty<DataTable>().ToAsyncEnumerable();
             public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => Task.CompletedTask;
             public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(Enumerable.Empty<string>());
-            public object Snapshot() => null;
-            public void Restore(object snapshot) { }
+            public object? Snapshot() => null;
+            public void Restore(object? snapshot) { }
             public IDataSource WithTable(string tableName) => this;
             public async ValueTask DisposeAsync() => await Task.CompletedTask;
             public Task TruncateAsync() => Task.CompletedTask;

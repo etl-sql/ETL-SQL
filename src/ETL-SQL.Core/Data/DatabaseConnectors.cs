@@ -35,6 +35,8 @@ namespace ETL_SQL.Data
         Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName);
         /// <summary>Returns a list of stored procedures available in the database.</summary>
         Task<IEnumerable<string>> GetProceduresAsync(string connectionString);
+        /// <summary>Builds a provider-specific connection string from a dictionary of properties.</summary>
+        string BuildConnectionString(Dictionary<string, string> properties) => string.Empty;
     }
 
     public interface IConnectorRegistry

@@ -9,6 +9,8 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ConnectionInfo = ETL_SQL.Core.Data.ConnectionInfo;
 using ETL_SQL.Data;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ETL_SQL.Engine.Services
 {
@@ -32,7 +34,13 @@ namespace ETL_SQL.Engine.Services
         private string GetRecoveryFilePath(string sessionId) => Path.Combine(_sessionRoot, sessionId + RecoveryManifestExtension);
         private string GetTempTableDir(string sessionId) => Path.Combine(_sessionRoot, sessionId + "_temp");
 
-        private string GetMachineKey() => $"{Environment.MachineName}:{Environment.UserName}";
+        public string GetMachineKey()
+        {
+            var rawKey = $"{Environment.MachineName}:{Environment.UserName}";
+            using var sha256 = SHA256.Create();
+            var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(rawKey));
+            return Convert.ToBase64String(bytes);
+        }
 
         /// <summary>Saves the current evaluator state to a session file.</summary>
         public async Task SaveSession(string sessionId, Evaluator evaluator, string? scriptSource = null)
@@ -60,13 +68,14 @@ namespace ETL_SQL.Engine.Services
             // 2. Capture Connections
             foreach (var conn in evaluator.Connections)
             {
-                if (conn.Value is IDatabaseSource db)
+                if (conn.Value is IDataSource ds) // Capture all IDataSource implementations
                 {
                     state.Connections.Add(new ConnectionInfo
                     {
                         Name = conn.Key,
-                        Type = db.Dialect,
-                        ConnectionString = db.ConnectionString
+                        Type = (ds as IDatabaseSource)?.Dialect ?? ds.GetType().Name.Replace("DataSource", "").ToUpperInvariant(),
+                        ConnectionString = (ds as IDatabaseSource)?.ConnectionString ?? ds.Path,
+                        Options = ds.Options != null ? new Dictionary<string, string>(ds.Options) : new Dictionary<string, string>()
                     });
                 }
             }

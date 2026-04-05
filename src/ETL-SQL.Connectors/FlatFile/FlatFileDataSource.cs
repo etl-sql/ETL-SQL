@@ -35,9 +35,12 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly bool _compress;
         private readonly bool _encrypt;
         private readonly string _password;
+        private readonly Dictionary<string, string>? _options;
 
         /// <summary>Gets the physical path to the flat file.</summary>
         public string Path => _filePath;
+        /// <summary>The options used to create this data source.</summary>
+        public Dictionary<string, string>? Options => _options;
         /// <summary>Returns this instance as a typed table (no-op for FlatFile).</summary>
         public IDataSource WithTable(string tableName) => this;
 
@@ -49,6 +52,7 @@ namespace ETL_SQL.Connectors.FlatFile
         public FlatFileDataSource(string filePath, Dictionary<string, string>? options = null)
         {
             _filePath = filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n');
+            _options = options;
             _hasHeader = true;
             _delimiter = ',';
             _encoding = Encoding.UTF8;

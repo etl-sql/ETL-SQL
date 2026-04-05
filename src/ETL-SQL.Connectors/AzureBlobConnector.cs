@@ -27,6 +27,9 @@ namespace ETL_SQL.Connectors
         /// <summary>Gets the virtual path for the blob container.</summary>
         public string Path => $"azure-blob://{_containerName}";
 
+        /// <summary>The options used to create this data source.</summary>
+        public Dictionary<string, string>? Options => null;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="AzureBlobConnector"/> class.
         /// </summary>
@@ -85,7 +88,12 @@ namespace ETL_SQL.Connectors
         /// <summary>Returns a list of procedures/functions from the connection source.</summary>
         public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
+        /// <summary>Builds an Azure Storage connection string from named properties.</summary>
+        public string BuildConnectionString(Dictionary<string, string> properties) => 
+            ConnectionStringBuilder.Build(Name, properties);
+
         private BlobContainerClient GetContainer() => _client.GetBlobContainerClient(_containerName);
+        
 
         /// <summary>Lists files (blobs) in the specified container path.</summary>
         public async Task<IEnumerable<FileMetaData>> ListFilesAsync(string path)

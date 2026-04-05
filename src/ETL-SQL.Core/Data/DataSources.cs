@@ -80,6 +80,8 @@ namespace ETL_SQL.Data
         IDataSource WithTable(string tableName);
         /// <summary>The physical or logical path to the data source.</summary>
         string Path { get; }
+        /// <summary>The options used to create this data source.</summary>
+        Dictionary<string, string>? Options { get; }
     }
 
     public interface IDatabaseSource : IDataSource
@@ -103,6 +105,7 @@ namespace ETL_SQL.Data
         private readonly List<DataTable> _batches = new();
         private readonly SemaphoreSlim _lock = new(1, 1);
         public string Path => "";
+        public Dictionary<string, string>? Options => null;
         private readonly List<string> _columnOrder = new();
         public Dictionary<string, ColumnDefinition> Schema { get; } = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Dictionary<object, List<Row>>> _indexes = new(StringComparer.OrdinalIgnoreCase);
@@ -550,6 +553,7 @@ namespace ETL_SQL.Data
         private List<string>? _columns;
         private DataTable? _firstBatch;
         public string Path => "";
+        public Dictionary<string, string>? Options => null;
 
         public StreamingSubqueryDataSource(IAsyncEnumerable<DataTable> batches)
         {

@@ -79,6 +79,19 @@ namespace ETL_SQL.Engine.Handlers
 
             if (connector != null)
             {
+                // If a connection string target was not provided, try building it from structured options
+                if (string.IsNullOrEmpty(target) && interpolatedOptions != null)
+                {
+                    try
+                    {
+                        target = connector.BuildConnectionString(interpolatedOptions);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new ExecutionException($"Failed to build connection string for {stmt.ConnectionType}: {ex.Message}");
+                    }
+                }
+
                 ds = connector.CreateDataSource(target, interpolatedOptions);
             }
             else

@@ -147,6 +147,7 @@ namespace ETL_SQL.Core
         Task EvaluateDropIndex(DropIndexStatement stmt);
         void EvaluateDropProcedure(DropProcedureStatement stmt);
         Task EvaluateDropTable(DropTableStatement stmt);
+        Task EvaluateClearSession(ClearSessionStatement stmt);
 
         /// <summary>Creates a thread-safe shallow clone of the context for parallel execution branches.</summary>
         IExecutionContext Fork();

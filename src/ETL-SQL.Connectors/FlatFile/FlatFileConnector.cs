@@ -111,5 +111,9 @@ namespace ETL_SQL.Connectors.FlatFile
 
         /// <summary>Returns a list of procedures/functions (none for FlatFile).</summary>
         public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+
+        /// <summary>Builds a flat file path from named properties.</summary>
+        public string BuildConnectionString(Dictionary<string, string> properties) => 
+            ConnectionStringBuilder.Build(Name, properties);
     }
 }

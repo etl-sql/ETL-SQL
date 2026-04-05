@@ -18,9 +18,12 @@ namespace ETL_SQL.Connectors.Avro
     {
         private readonly string _filePath;
         private readonly string? _schemaFile;
+        private readonly Dictionary<string, string>? _options;
 
         /// <summary>Gets the physical path to the Avro file.</summary>
         public string Path => _filePath;
+        /// <summary>The options used to create this data source.</summary>
+        public Dictionary<string, string>? Options => _options;
         /// <summary>Returns this instance as a typed table (no-op for Avro).</summary>
         public IDataSource WithTable(string tableName) => this;
 
@@ -32,6 +35,7 @@ namespace ETL_SQL.Connectors.Avro
         public AvroDataSource(string filePath, Dictionary<string, string>? options = null)
         {
             _filePath = filePath;
+            _options = options;
             if (options != null && options.TryGetValue("SCHEMA_FILE", out var sf)) _schemaFile = sf;
         }
 

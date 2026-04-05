@@ -19,12 +19,17 @@ namespace ETL_SQL.Connectors.Excel
         private readonly bool _encrypt;
         private readonly string _password;
         private readonly string? _range;
+        private readonly Dictionary<string, string>? _options;
+
         public string Path => _filePath;
+        /// <summary>The options used to create this data source.</summary>
+        public Dictionary<string, string>? Options => _options;
         public IDataSource WithTable(string tableName) => this;
 
         public ExcelDataSource(string filePath, Dictionary<string, string>? options = null)
         {
             _filePath = filePath;
+            _options = options;
             _hasHeader = true; // Default
             _password = "DefaultETLPass123!";
 

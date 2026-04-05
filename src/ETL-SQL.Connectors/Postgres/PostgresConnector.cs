@@ -55,7 +55,7 @@ namespace ETL_SQL.Connectors.Postgres
         {
             string? table = null;
             options?.TryGetValue("TABLE", out table);
-            return new PostgresDataSource(connectionString, table);
+            return new PostgresDataSource(connectionString, table, options);
         }
 
         /// <summary>Returns a list of logical tables from the connection source.</summary>
@@ -90,6 +90,10 @@ namespace ETL_SQL.Connectors.Postgres
             while (await reader.ReadAsync()) procs.Add(reader.GetString(0));
             return procs;
         }
+
+        /// <summary>Builds a PostgreSQL connection string from named properties.</summary>
+        public string BuildConnectionString(Dictionary<string, string> properties) => 
+            ConnectionStringBuilder.Build(Name, properties);
     }
 }
 

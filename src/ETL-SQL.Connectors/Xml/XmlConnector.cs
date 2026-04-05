@@ -69,5 +69,9 @@ namespace ETL_SQL.Connectors.Xml
 
         /// <summary>Returns a list of procedures/functions (none for XML).</summary>
         public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+
+        /// <summary>Builds an XML file path from named properties.</summary>
+        public string BuildConnectionString(Dictionary<string, string> properties) => 
+            ConnectionStringBuilder.Build(Name, properties);
     }
 }

@@ -1,14 +1,24 @@
   Determining projects to restore...
   All projects are up-to-date for restore.
   ETL-SQL.Core -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\bin\Debug\net10.0\ETL-SQL.Core.dll
-C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\HelpStatementHandler.cs(78,48): error CS1061: 'IExecutionContext' does not contain a definition for 'Functions' and no accessible extension method 'Functions' accepting a first argument of type 'IExecutionContext' could be found (are you missing a using directive or an assembly reference?) [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\ETL-SQL.Engine.csproj]
-C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\InsertStatementHandler.cs(190,42): warning CS8600: Converting null literal or possible null value to non-nullable type. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\ETL-SQL.Engine.csproj]
+  ETL-SQL.Engine -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\bin\Debug\net10.0\ETL-SQL.Engine.dll
+  ETL-SQL.LintTests -> C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.LintTests\bin\Debug\net10.0\ETL-SQL.LintTests.dll
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\Excel\ExcelDataSource.cs(41,67): error CS0103: The name '_encrypt' does not exist in the current context [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj]
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\Excel\ExcelDataSource.cs(56,17): error CS0103: The name '_encrypt' does not exist in the current context [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj]
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\Xml\XmlDataSource.cs(64,21): warning CS0219: The variable 'tempFile' is assigned but its value is never used [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj]
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\SftpConnector.cs(80,27): warning CS8600: Converting null literal or possible null value to non-nullable type. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj]
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\SftpConnector.cs(81,30): warning CS8600: Converting null literal or possible null value to non-nullable type. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj]
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\SftpConnector.cs(82,33): warning CS8600: Converting null literal or possible null value to non-nullable type. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj]
 
 Build FAILED.
 
-C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\InsertStatementHandler.cs(190,42): warning CS8600: Converting null literal or possible null value to non-nullable type. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\ETL-SQL.Engine.csproj]
-C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\HelpStatementHandler.cs(78,48): error CS1061: 'IExecutionContext' does not contain a definition for 'Functions' and no accessible extension method 'Functions' accepting a first argument of type 'IExecutionContext' could be found (are you missing a using directive or an assembly reference?) [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\ETL-SQL.Engine.csproj]
-    1 Warning(s)
-    1 Error(s)
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\Xml\XmlDataSource.cs(64,21): warning CS0219: The variable 'tempFile' is assigned but its value is never used [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj]
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\SftpConnector.cs(80,27): warning CS8600: Converting null literal or possible null value to non-nullable type. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj]
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\SftpConnector.cs(81,30): warning CS8600: Converting null literal or possible null value to non-nullable type. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj]
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\SftpConnector.cs(82,33): warning CS8600: Converting null literal or possible null value to non-nullable type. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj]
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\Excel\ExcelDataSource.cs(41,67): error CS0103: The name '_encrypt' does not exist in the current context [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj]
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\Excel\ExcelDataSource.cs(56,17): error CS0103: The name '_encrypt' does not exist in the current context [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj]
+    4 Warning(s)
+    2 Error(s)
 
-Time Elapsed 00:00:00.86
+Time Elapsed 00:00:00.82

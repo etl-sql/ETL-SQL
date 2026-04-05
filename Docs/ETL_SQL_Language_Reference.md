@@ -11,14 +11,22 @@ Defines a reusable connection to a source or destination platform. Connections m
 
 *Syntax:*
 ```sql
-CREATE CONNECTION <name> ON <provider>(['<connection_string>']) [WITH(<options>)];
+-- Traditional (String-based)
+CREATE CONNECTION <name> ON <provider>('<connection_string>') [WITH(<options>)];
+
+-- Structured (Property-based)
+CREATE CONNECTION <name> ON <provider>() WITH(<properties...>, <options...>);
 ```
 
 ### Connection Types & Options
 
 #### FLATFILE (or CSV)
 For delimited text files.  
-CREATE CONNECTION <name you choose> ON FLATFILE(<file path>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON FLATFILE('<file_path>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON FLATFILE() WITH(PATH='<file_path>', <options>);`
+
+- **PATH**: The full path to the file. (Required in structured form)
 - **HEADER**: `ON`, `OFF` (Default: `ON`).
 - **DELIMITER**: `COMMA`, `PIPE`, `TAB`, `SEMICOLON`, `COLON`, `TILDE` or a literal `<char>` (Default: `COMMA`).
 - **ROW_DELIMITER**: `LF`, `CR`, `CRLF`. `TILDE`, `SEMICOLON`, `COLON`, `COMMA`, `TAB`, `PIPE` or a literal `<char>` (Default: `CRLF`).
@@ -40,8 +48,9 @@ CREATE CONNECTION <name you choose> ON FLATFILE(<file path>) [WITH(<options belo
 
 #### MSSQL (or SQLSERVER)
 For Microsoft SQL Server.
-CREATE CONNECTION <name you choose> ON MSSQL(<connection string or server name if you want to use options to build the connection string>) [WITH(<options below separated by commas>)]
+CREATE CONNECTION <name you choose> ON MSSQL(<connection string>) [WITH(<options below separated by commas>)]
 - **TABLE**: Default table context.
+- **SERVER**: The server name or IP address for the MSSQL connection.
 - **DATABASE**: The database name for the MSSQL connection.
 - **TRUSTED_CONNECTION**: `TRUE` / `FALSE`. (Default: `FALSE`)
 - **USER**: The username for the MSSQL connection. Do not use if TRUSTED_CONNECTION is set to TRUE.
@@ -52,29 +61,41 @@ CREATE CONNECTION <name you choose> ON MSSQL(<connection string or server name i
 
 #### POSTGRES (or NPSQL)
 For PostgreSQL.
-CREATE CONNECTION <name you choose> ON POSTGRES(<connection string or server name if you want to use options to build the connection string>) [WITH(<options below separated by commas>)]
+CREATE CONNECTION <name you choose> ON POSTGRES(<connection string>) [WITH(<options below separated by commas>)]
 - **TABLE**: Default table context.
 - Supports native SQL pushdown.
 
 #### ORACLE
 For Oracle Database.
-CREATE CONNECTION <name you choose> ON ORACLE(<connection string or server name if you want to use options to build the connection string>) [WITH(<options below separated by commas>)]
+CREATE CONNECTION <name you choose> ON ORACLE(<connection string>) [WITH(<options below separated by commas>)]
 - **TABLE**: Default table context (e.g. `SCHEMA.TABLE`).
 - Supports PL/SQL pushdown.
 
 #### PARQUET    
 For Apache Parquet columnar files.
-CREATE CONNECTION <name you choose> ON PARQUET(<File path>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON PARQUET('<file_path>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON PARQUET() WITH(PATH='<file_path>', <options>);`
+
+- **PATH**: The full path to the file. (Required in structured form)
 - **COMPRESSION**: `SNAPPY` (Default), `GZIP`, `LZO`, `BROTLI`, `LZ4`, `ZSTD`, `UNCOMPRESSED`.
 
 #### AVRO
 For Apache Avro files.
-CREATE CONNECTION <name you choose> ON AVRO(<File path>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON AVRO('<file_path>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON AVRO() WITH(PATH='<file_path>', <options>);`
+
+- **PATH**: The full path to the file. (Required in structured form)
 - **SCHEMA_FILE**: Path to a `.avsc` schema file.
 
 #### EXCEL
 For Excel file formats (.xlsx, .xls, .xlsb).
-CREATE CONNECTION <name you choose> ON EXCEL(<File path>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON EXCEL('<file_path>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON EXCEL() WITH(PATH='<file_path>', <options>);`
+
+- **PATH**: The full path to the file. (Required in structured form)
 - **SHEET**: Specific sheet name (Default: first sheet).
 - **HEADER**: `ON`, `OFF` — treat first row as column headers (Default: `ON`).
 - **RANGE**: Explicit cell range to read (e.g. `'A1:D100'`).
@@ -84,7 +105,11 @@ CREATE CONNECTION <name you choose> ON EXCEL(<File path>) [WITH(<options below s
 
 #### JSON
 For JSON data files.
-CREATE CONNECTION <name you choose> ON JSON(<File path>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON JSON('<file_path>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON JSON() WITH(PATH='<file_path>', <options>);`
+
+- **PATH**: The full path to the file. (Required in structured form)
 - **ROOT_PATH**: JSONPath to the data array (e.g. `$.Rows`, `$.data.items`).
 - **COMPRESS**: `ON`, `OFF` — transparent GZip support.
 - **ENCRYPT**: `ON`, `OFF` — AES encryption for the file.
@@ -92,7 +117,11 @@ CREATE CONNECTION <name you choose> ON JSON(<File path>) [WITH(<options below se
 
 #### XML
 For XML data files.
-CREATE CONNECTION <name you choose> ON XML(<File path>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON XML('<file_path>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON XML() WITH(PATH='<file_path>', <options>);`
+
+- **PATH**: The full path to the file. (Required in structured form)
 - **ROOT_PATH**: XPath to the repeating element (e.g. `/Catalog/Book`).
 - **COMPRESS**: `ON`, `OFF` — transparent GZip support.
 - **ENCRYPT**: `ON`, `OFF` — AES encryption for the file.
@@ -100,7 +129,11 @@ CREATE CONNECTION <name you choose> ON XML(<File path>) [WITH(<options below sep
 
 #### FTP (or FTP_CONN)
 For remote file operations over FTP.
-CREATE CONNECTION <name you choose> ON FTP(<host address or IP address>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON FTP('<host_address>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON FTP() WITH(HOST='<host_address>', <options>);`
+
+- **HOST**: The FTP server address or IP. (Required in structured form)
 - **PORT**: The port for the FTP connection. (Default: `21`)
 - **USER**: The username for the FTP connection.
 - **PASSWORD**: The password for the FTP connection.
@@ -108,7 +141,11 @@ CREATE CONNECTION <name you choose> ON FTP(<host address or IP address>) [WITH(<
 
 #### SFTP (or SSH)
 For remote file operations over SSH.
-CREATE CONNECTION <name you choose> ON SFTP(<Host address or IP address>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON SFTP('<host_address>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON SFTP() WITH(HOST='<host_address>', <options>);`
+
+- **HOST**: The SSH server address or IP. (Required in structured form)
 - **PORT**: The port for the SSH connection. (Default: `22`)
 - **USER**: The username for the SSH connection.
 - **PASSWORD**: The password for the SSH connection. Do not use if KEYFILE is set.
@@ -140,9 +177,13 @@ CREATE CONNECTION <name you choose> ON DIRECTORY(<Directory path>) [WITH(<option
 
 *Examples:*
 ```sql
--- Delimited CSV file with custom options
+-- Delimited CSV file: Traditional
 CREATE CONNECTION csv_in ON FLATFILE('C:\Data\employees.csv')
-    WITH(HEADER=ON, DELIMITER=COMMA, ENCODING=UTF8, NULL_AS=EMPTY);
+    WITH(HEADER=ON, DELIMITER=COMMA);
+
+-- Delimited CSV file: Structured
+CREATE CONNECTION csv_struct ON FLATFILE()
+    WITH(PATH='C:\Data\employees.csv', HEADER=ON, DELIMITER=COMMA);
 
 -- Encrypted and compressed flat file
 CREATE CONNECTION secure_file ON FLATFILE('C:\Data\payroll.csv.gz')
@@ -164,16 +205,24 @@ CREATE CONNECTION xml_src ON XML('C:\Data\catalog.xml')
 CREATE CONNECTION parquet_out ON PARQUET('C:\Data\output.parquet')
     WITH(COMPRESSION=SNAPPY);
 
--- SQL Server with default table
+-- SQL Server: Traditional (String-based)
 CREATE CONNECTION db ON MSSQL('Server=myserver;Database=DW;Integrated Security=true')
     WITH(TABLE='dbo.Employees');
+
+-- SQL Server: Structured (Property-based)
+CREATE CONNECTION db_new ON MSSQL()
+    WITH(SERVER='myserver', DATABASE='DW', TRUSTED_CONNECTION=TRUE, TABLE='dbo.Employees');
 
 -- PostgreSQL
 CREATE CONNECTION pg ON POSTGRES('Host=localhost;Database=mydb;Username=etl;Password=pass');
 
--- SFTP remote file system
+-- SFTP: Traditional
 CREATE CONNECTION sftp_conn ON SFTP('sftp.example.com')
     WITH(USER='admin', PASSWORD='secret');
+
+-- SFTP: Structured
+CREATE CONNECTION sftp_struct ON SFTP()
+    WITH(HOST='sftp.example.com', USER='admin', PASSWORD='secret');
 
 -- SFTP with key-based auth
 CREATE CONNECTION sftp_key ON SFTP('sftp.example.com')
@@ -229,6 +278,22 @@ Creates a new connection or modifies an existing connection.  If the connection 
 ```sql
 CREATE OR ALTER CONNECTION remote_srv ON MSSQL('Server=myserver;Database=DW;Integrated Security=true')
     WITH(TABLE='dbo.Employees');
+```
+
+### Session Management
+
+#### CLEAR SESSION
+Explicitly deletes all temporary files, recovery manifests, and encrypted state associated with the current session. This is recommended for security-critical scripts or to free up disk space after large data operations.
+
+*Syntax:*
+`CLEAR SESSION;`
+
+*Example:*
+```sql
+-- Perform sensitive operations
+...
+-- Cleanup before exiting
+CLEAR SESSION;
 ```
 
 ### USE DOCKER
@@ -353,6 +418,74 @@ BEGIN
 END
 ```
 You can explicitly define the columns you want to insert into the temp table.  This is a good practice because it will prevent errors if the source table changes.  You just have to make sure you have the same number of columns and the same data types or it will fail.
+
+### Flow Control
+**`EXECUTE` (Remote Execution)**
+Executes SQL code on a remote connection. Supports capturing results into local tables and passing parameters for secure, parameterized execution.
+
+*Connection Block Form:*
+```sql
+EXECUTE ds [INTO #target] [WITH (@param1, @param2, ...)]
+BEGIN
+  -- Remote SQL dialect (e.g. T-SQL for MSSQL)
+  SELECT id, name FROM remote_table WHERE category_id = ?1 OR alt_id = ?1;
+END;
+```
+
+*String Literal Form:*
+```sql
+EXECUTE (
+  'SELECT id, name FROM remote_table WHERE category_id = ?1'
+) AT ds [INTO #target] [WITH (@cat_id)];
+```
+
+*Key Parameters:*
+- **INTO #table**: Streams results from the remote execution directly into a local ETL-SQL memory table.
+- **WITH (@vars)**: Passes local variables to the remote server. 
+  - **Sequential**: Use `?` placeholders in the remote SQL; variables are applied in the order they are listed.
+  - **Indexed**: Use `?1`, `?2`, etc., to refer to specific parameters in the `WITH` list. This allows using the same parameter multiple times or referring to them out of order.
+- **Note**: The string literal form sends raw SQL directly to the server, so it requires valid target server syntax and standard single-quote escaping (`''`).
+
+**`PARALLEL`**
+The `PARALLEL` keyword allows for concurrent execution of multiple statements or blocks. This is particularly useful for independent data streams that do not have inter-dependencies, such as loading multiple dimension tables simultaneously.
+
+*Syntax:*
+```sql
+PARALLEL
+BEGIN
+    <statement_1>;
+    <statement_2>;
+    ...
+END
+```
+
+*Key Characteristics:*
+- **Non-blocking**: Statements within a `PARALLEL` block are fired concurrently.
+- **Wait-all**: The execution engine waits for *all* statements in the block to complete before moving to the next statement outside the block.
+- **Isolated Scopes**: Each branch typically operates on its own connection state to avoid race conditions, though global variables are accessible.
+
+*Example:*
+```sql
+-- Load three independent tables in parallel
+PARALLEL
+BEGIN
+    SELECT * INTO #Dimensions_Date FROM src_db.DateDim;
+    SELECT * INTO #Dimensions_Product FROM src_db.ProductDim;
+    SELECT * INTO #Dimensions_Store FROM src_db.StoreDim;
+END
+
+-- Sequential execution resumes here after all three above are finished
+```
+
+**`RUN SCRIPT`**
+Executes another ETL-SQL script file, optionally passing parameters.
+*Syntax:*
+`RUN SCRIPT '<script_path>' [WITH (@param1 = val1, ...)];`
+
+*Example:*
+```sql
+RUN SCRIPT 'sub_process.etlsql' WITH (@batchId = 1234, @env = 'PROD');
+```
 
 ### Variable Management
 
@@ -710,13 +843,6 @@ Removes an existing index.
 *Syntax:*
 `DROP INDEX <table_name>.<index_name>;`
 
-#### DROP FUNCTION / PROCEDURE
-Removes a user-defined function or procedure.
-```sql
-DROP FUNCTION MyFunc;
-DROP PROCEDURE MyProc;
-```
-
 ### Environment Sets
 
 Environment sets let you define named groups of variable assignments that can be applied to the current session in one step. This is useful for switching between environments (e.g. DEV, QA, PROD) without changing the script logic.
@@ -886,9 +1012,6 @@ WAITFOR DELAY '00:00:05'; -- Wait 5 seconds
 WAITFOR TIME '23:59:59';  -- Wait until midnight
 ```
 
-
-```
-
 ### Data Movement & Transformation
 
 #### EXECUTE / EXEC
@@ -902,12 +1025,6 @@ EXEC('SELECT * FROM Table') AT RemoteConn;
 Appends data to a table.
 ```sql
 INSERT INTO TargetTable SELECT * FROM SourceTable;
-```
-
-#### TRUNCATE TABLE
-Removes all rows from a table without dropping its schema.
-```sql
-TRUNCATE TABLE TempStaging;
 ```
 
 ### Job & Profile Management
@@ -1069,6 +1186,9 @@ Transfers files between the local system and a remote connector (SFTP, FTP, Azur
 GET_FILE 'remote/path/data.csv' TO 'local/data.csv' FROM @MySftp;
 PUT_FILE 'local/upload.txt' TO 'uploads/upload.txt' AT @AzureBlob;
 
+### Email Operations
+- `SEND_EMAIL TO '<to>' SUBJECT '<subject>' BODY '<body>' [AT <connection>];`: Sends an automated email alert (requires an SMTP connection).
+
 ### Aggregation
 - **`COUNT([DISTINCT] col)`**: Aggregation tally. If `DISTINCT` is specified, only unique non-null values are counted.
 - **`SUM(col)`**: Aggregation total.
@@ -1077,20 +1197,10 @@ PUT_FILE 'local/upload.txt' TO 'uploads/upload.txt' AT @AzureBlob;
 - **`AVG(col)`**: Aggregation mathematical mean.
 - **`STRING_AGG(col, separator) [WITHIN GROUP (ORDER BY col [ASC|DESC])]`**: Concatenates values from multiple rows into a single string, separated by the specified string. Optionally orders the values before concatenation. NULL values are ignored.
 
-## Windows Functions
+## Window Functions
 
-Window functions operate on a set of rows and return a single value for each row from the underlying query. The `OVER` clause defines the window or user-specified set of rows.
+Window functions operate on a set of rows and return a single value for each row from the underlying query. The `OVER` clause defines the window or user-specified set of rows. The framing clause is optional and is used to define the window or user-specified set of rows.### Window Framing (`ROWS` | `RANGE`)
 
-**`LAG(col[, offset[, default]])` and `LEAD(col[, offset[, default]])`**
-Accesses data from a previous or subsequent row in the same result set without the use of a self-join.
-
-**`FIRST_VALUE(col)` and `LAST_VALUE(col)`**
-Returns the first or last value in an ordered set of values.
-
-**`NTILE(n)`**
-Distributes rows into `n` specified number of ranked groups (buckets). Rows are distributed as evenly as possible.
-
-**Window Framing (`ROWS` | `RANGE`)**
 Window functions support framing to restrict the rows within the partition used for calculation.
 - `ROWS BETWEEN <start> AND <end>`: Specifies a physical offset from the current row.
 - `RANGE BETWEEN <start> AND <end>`: Specifies a logical range based on values.
@@ -1109,13 +1219,164 @@ SELECT
 FROM #sales;
 ```
 
-**Advanced Window Functions**
-- **`CUME_DIST()`**: Calculates the cumulative distribution of a value in a group of values.
-- **`PERCENT_RANK()`**: Calculates the relative rank of a row within a group of rows.
-- **`NTH_VALUE(col, n)`**: Returns the value of the `n`-th row in the window frame.
-- **`PERCENTILE_CONT(n)`**, **`PERCENTILE_DISC(n)`**: Statistical functions that calculate a percentile based on a continuous or discrete distribution. These require the `WITHIN GROUP (ORDER BY col [ASC|DESC])` clause.
+### `COUNT(col) OVER (ORDER BY col [ASC|DESC])`
+Counts the number of rows in the window.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    COUNT(OrderID) OVER (ORDER BY OrderDate) AS RunningCount
+FROM Orders;
+```
 
-*Example (Statistical):*
+### `SUM(col) OVER (ORDER BY col [ASC|DESC])`
+Calculates the running total of a column.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    SUM(TotalAmount) OVER (ORDER BY OrderDate) AS RunningTotal
+FROM Orders;
+```
+
+### `MIN(col) OVER (ORDER BY col [ASC|DESC])`
+Calculates the running minimum of a column.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    MIN(TotalAmount) OVER (ORDER BY OrderDate) AS RunningMin
+FROM Orders;
+```
+### `MAX(col) OVER (ORDER BY col [ASC|DESC])`
+Calculates the running maximum of a column.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    MAX(TotalAmount) OVER (ORDER BY OrderDate) AS RunningMax
+FROM Orders;
+```
+### `AVG(col) OVER (ORDER BY col [ASC|DESC])`
+Calculates the running average of a column.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    AVG(TotalAmount) OVER (ORDER BY OrderDate) AS RunningAvg
+FROM Orders;
+```
+
+### `ROW_NUMBER() OVER (ORDER BY col [ASC|DESC])`
+Assigns a unique sequential integer to each row within a partition, starting from 1.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    ROW_NUMBER() OVER (ORDER BY OrderDate) AS RowNum
+FROM Orders;
+```
+
+### `RANK() OVER (ORDER BY col [ASC|DESC])`
+Assigns a rank to each row within a partition based on the specified order. Rows with the same value receive the same rank, and the next rank is skipped (e.g., 1, 1, 3, 4).
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    RANK() OVER (ORDER BY OrderDate) AS Rank
+FROM Orders;
+```
+### `DENSE_RANK() OVER (ORDER BY col [ASC|DESC])`
+Assigns a rank to each row within a partition based on the specified order. Rows with the same value receive the same rank, but the next rank is not skipped (e.g., 1, 1, 2, 3).
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    DENSE_RANK() OVER (ORDER BY OrderDate) AS DenseRank
+FROM Orders;
+```
+
+### `LAG(col[, offset[, default]])` and `LEAD(col[, offset[, default]])`
+Accesses data from a previous or subsequent row in the same result set without the use of a self-join.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    LAG(TotalAmount, 1, 0) OVER (ORDER BY OrderDate) AS PreviousAmount,
+    LEAD(TotalAmount, 1, 0) OVER (ORDER BY OrderDate) AS NextAmount
+FROM Orders;
+```
+### `FIRST_VALUE(col)` and `LAST_VALUE(col)`
+Returns the first or last value in an ordered set of values.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    FIRST_VALUE(TotalAmount) OVER (ORDER BY OrderDate) AS FirstAmount,
+    LAST_VALUE(TotalAmount) OVER (ORDER BY OrderDate) AS LastAmount
+FROM Orders;
+```
+
+### `NTILE(n)`
+Distributes rows into `n` specified number of ranked groups (buckets). Rows are distributed as evenly as possible.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    NTILE(4) OVER (ORDER BY OrderDate) AS Quartile
+FROM Orders;
+```
+##  CUME_DIST()`
+Calculates the cumulative distribution of a value in a group of values.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    CUME_DIST() OVER (ORDER BY OrderDate) AS CumulativeDistribution
+FROM Orders;
+```
+### `PERCENT_RANK()`
+Calculates the relative rank of a row within a group of rows.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    PERCENT_RANK() OVER (ORDER BY OrderDate) AS PercentRank
+FROM Orders;
+```
+### `NTH_VALUE(col, n)`
+Returns the value of the `n`-th row in the window frame.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    NTH_VALUE(TotalAmount, 2) OVER (ORDER BY OrderDate) AS SecondAmount
+FROM Orders;
+```
+### `PERCENTILE_CONT(n)` and `PERCENTILE_DISC(n)`
+Statistical functions that calculate a percentile based on a continuous or discrete distribution. These require the `WITHIN GROUP (ORDER BY col [ASC|DESC])` clause.
+```sql
+SELECT 
+    OrderID,
+    OrderDate,
+    TotalAmount,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY TotalAmount) OVER (ORDER BY OrderDate) AS MedianAmount
+FROM Orders;
+```
 ```sql
 SELECT 
     category,
@@ -1123,14 +1384,15 @@ SELECT
 FROM #products;
 ```
 
-## Loops and Flow Control
+
+## Loops
 
 Procedural loops are supported natively via C# execution within the ETL-SQL evaluator to handle repetition.
 
-**`BEGIN ... END`**
+### `BEGIN ... END`
 A Block wrapper that allows for multiple statements inside flow controls.
 
-**`IF ... ELSE IF ... ELSE`**
+### `IF ... ELSE IF ... ELSE`
 Branches data operations conditionally.
 ```sql
 IF @amount > 1000
@@ -1147,7 +1409,7 @@ BEGIN
 END;
 ```
 
-**`WHILE`**
+### `WHILE`
 Repeats a statement or block while a specified condition is true.
 ```sql
 DECLARE @accumulator INT = 0;
@@ -1157,7 +1419,7 @@ SET @accumulator = @accumulator + 1;
 END;
 ```
 
-**`FOR`**
+### `FOR`
 Iterates a variable through a numeric range with an optional `STEP`.
 ```sql
 FOR @idx = 100 TO 95 STEP -1
@@ -1166,7 +1428,7 @@ BEGIN
 END;
 ```
 
-**`FOREACH`**
+### `FOREACH`
 Iterates comprehensively through a designated `LIST` variable.
 ```sql
 DECLARE @result_list LIST = [10, 20, 30];
@@ -1176,79 +1438,10 @@ BEGIN
 END;
 ```
 
-**`EXECUTE` (Remote Execution)**
-Executes SQL code on a remote connection. Supports capturing results into local tables and passing parameters for secure, parameterized execution.
-
-*Connection Block Form:*
-```sql
-EXECUTE ds [INTO #target] [WITH (@param1, @param2, ...)]
-BEGIN
-  -- Remote SQL dialect (e.g. T-SQL for MSSQL)
-  SELECT id, name FROM remote_table WHERE category_id = ?1 OR alt_id = ?1;
-END;
-```
-
-*String Literal Form:*
-```sql
-EXECUTE (
-  'SELECT id, name FROM remote_table WHERE category_id = ?1'
-) AT ds [INTO #target] [WITH (@cat_id)];
-```
-
-*Key Parameters:*
-- **INTO #table**: Streams results from the remote execution directly into a local ETL-SQL memory table.
-- **WITH (@vars)**: Passes local variables to the remote server. 
-  - **Sequential**: Use `?` placeholders in the remote SQL; variables are applied in the order they are listed.
-  - **Indexed**: Use `?1`, `?2`, etc., to refer to specific parameters in the `WITH` list. This allows using the same parameter multiple times or referring to them out of order.
-- **Note**: The string literal form sends raw SQL directly to the server, so it requires valid target server syntax and standard single-quote escaping (`''`).
-
-**`PARALLEL`**
-The `PARALLEL` keyword allows for concurrent execution of multiple statements or blocks. This is particularly useful for independent data streams that do not have inter-dependencies, such as loading multiple dimension tables simultaneously.
-
-*Syntax:*
-```sql
-PARALLEL
-BEGIN
-    <statement_1>;
-    <statement_2>;
-    ...
-END
-```
-
-*Key Characteristics:*
-- **Non-blocking**: Statements within a `PARALLEL` block are fired concurrently.
-- **Wait-all**: The execution engine waits for *all* statements in the block to complete before moving to the next statement outside the block.
-- **Isolated Scopes**: Each branch typically operates on its own connection state to avoid race conditions, though global variables are accessible.
-
-*Example:*
-```sql
--- Load three independent tables in parallel
-PARALLEL
-BEGIN
-    SELECT * INTO #Dimensions_Date FROM src_db.DateDim;
-    SELECT * INTO #Dimensions_Product FROM src_db.ProductDim;
-    SELECT * INTO #Dimensions_Store FROM src_db.StoreDim;
-END
-
--- Sequential execution resumes here after all three above are finished
-```
 
 
-```
-
-**`RUN SCRIPT`**
-Executes another ETL-SQL script file, optionally passing parameters.
-*Syntax:*
-`RUN SCRIPT '<script_path>' [WITH (@param1 = val1, ...)];`
-
-*Example:*
-```sql
-RUN SCRIPT 'sub_process.etlsql' WITH (@batchId = 1234, @env = 'PROD');
-```
-
-## 9. Modular ETL (Procedures & Functions)
-
-**`CREATE PROCEDURE`**
+## Modular ETL (Procedures & Functions)
+### `CREATE PROCEDURE`
 Defines a reusable block of ETL-SQL statements.
 ```sql
 CREATE PROCEDURE ArchiveSales @olderThan DATE
@@ -1261,7 +1454,7 @@ END;
 EXEC ArchiveSales '2025-01-01';
 ```
 
-**`CREATE FUNCTION`**
+### `CREATE FUNCTION`
 Defines a User-Defined Function (UDF) that returns a scalar value.
 ```sql
 CREATE FUNCTION CalculateTax(@amount DECIMAL) RETURNS DECIMAL
@@ -1273,16 +1466,23 @@ END;
 SELECT id, CalculateTax(price) AS tax FROM #sales;
 ```
 
-## 10. Transactions & Error Handling
+#### DROP FUNCTION / PROCEDURE
+Removes a user-defined function or procedure.
+```sql
+DROP FUNCTION [IF EXISTS] MyFunc;
+DROP PROCEDURE [IF EXISTS] MyProc;
+```
 
-**Transactions**
+## Transactions & Error Handling
+
+### Transactions
 Supports atomic operations via a transaction stack.
 - `BEGIN TRANSACTION` (or `BEGIN TRAN`)
 - `COMMIT` (or `COMMIT TRAN`)
 - `ROLLBACK` (or `ROLLBACK TRAN`)
 - `@@TRANCOUNT`: Built-in variable returning the current nesting level.
 
-**Error Handling**
+### Error Handling
 - `TRY...CATCH`: Standard block for capturing runtime exceptions.
 - `THROW [number, 'message', state]`: Raises a custom error.
 
@@ -1299,9 +1499,9 @@ BEGIN CATCH
 END CATCH;
 ```
 
-## 11. Automation & Introspection
+## Automation 
 
-**File & Directory Operations**
+### File & Directory Operations
 Specialized commands for filesystem management. Supports **Connection-based Path Resolution** (e.g., `MyDir + '/file.csv'` where `MyDir` is a connection name).
 
 - `COPY_FILE('src', 'dest')`
@@ -1312,7 +1512,7 @@ Specialized commands for filesystem management. Supports **Connection-based Path
 - `ENCRYPT_FILE('src'[, 'dest'])` (Uses master password)
 - `DECRYPT_FILE('src'[, 'dest'])`
 
-**Directory Management**
+### Directory Management
 - `CREATE_DIRECTORY('path')`
 - `DELETE_DIRECTORY('path')`
 - `RENAME_DIRECTORY('path', 'new_name')`
@@ -1320,25 +1520,36 @@ Specialized commands for filesystem management. Supports **Connection-based Path
 - `COPY_DIRECTORY('src', 'dest')`
 - `DELETE_DIRECTORY_CONTENTS('path')`
 
-**Docker Operations**
+### Docker Operations
 - `START_DOCKER <alias>`: Starts a Docker container for the specified connection.
 - `STOP_DOCKER <alias>`: Stops a running Docker container.
 - `PAUSE_DOCKER <alias>`: Pauses a running Docker container.
 - `CLOSE_DOCKER <alias>`: Stops and removes a Docker container.
 
-**Utility Commands**
+## Introspection
+
+### `SHOW CONNECTIONS;`
+Displays all configured connections.
+
+### `SHOW TABLES [connection_name];`
+Displays all tables in a connection.
+
+### `SHOW COLUMNS <table_name> [connection_name];`
+Displays all columns in a table.
+
+### Utility Commands
 - `EXPLAIN <query>`: Displays the query execution plan.
 - `HELP CONNECTION <type>`: Displays help and options for a specific connection provider.
 - `PRINT(message[, timestamp[, format]])`: Outputs a message to the console.
 
-**Static Analysis & Linting**
+### Static Analysis & Linting
 - `LINT '<script_path>';`: Analyzes the specified script for errors and best practices (e.g., missing `WHERE` clauses on `DELETE`, undeclared variables). Returns a table of findings.
 
-**Job Scheduling & History**
+### Job Scheduling & History
 - `CREATE JOB <job_name> ON <schedule_cron> AS '<script_path>';`: Schedules a script to run automatically.
 - `SHOW JOB HISTORY [<job_name>];`: Displays the execution history and status of scheduled jobs.
 
-**`LINEAGE`**
+### `LINEAGE`
 The lineage system provides end-to-end traceability of data movement, capturing every transformation, source-to-target mapping, and metadata tag inheritance.
 
 *Syntax:*
@@ -1393,7 +1604,3 @@ SELECT
 INTO #TaggedUsers
 FROM m.Users /* @owner: SecurityTeam; */;
 ```
-
-**Email Operations**
-- `SEND_EMAIL TO '<to>' SUBJECT '<subject>' BODY '<body>' [AT <connection>];`: Sends an automated email alert (requires an SMTP connection).
-

@@ -55,5 +55,9 @@ namespace ETL_SQL.Connectors.Excel
             return await ds.GetColumnsAsync();
         }
         public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+
+        /// <summary>Builds an Excel file path from named properties.</summary>
+        public string BuildConnectionString(Dictionary<string, string> properties) => 
+            ConnectionStringBuilder.Build(Name, properties);
     }
 }

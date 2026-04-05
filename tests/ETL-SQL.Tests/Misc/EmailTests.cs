@@ -100,6 +100,7 @@ namespace ETL_SQL.Tests
         public bool Sent { get; private set; }
         public string LastTo { get; private set; }
         public string Path => "mock";
+        public Dictionary<string, string>? Options => null;
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) { yield break; }
 

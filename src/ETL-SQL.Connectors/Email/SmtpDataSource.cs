@@ -19,6 +19,9 @@ namespace ETL_SQL.Connectors.Email
         /// <summary>Gets the SMTP host from the connection options.</summary>
         public string Path => _options.TryGetValue("HOST", out var h) ? h : "localhost";
 
+        /// <summary>The options used to create this data source.</summary>
+        public Dictionary<string, string>? Options => _options;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="SmtpDataSource"/> class.
         /// </summary>

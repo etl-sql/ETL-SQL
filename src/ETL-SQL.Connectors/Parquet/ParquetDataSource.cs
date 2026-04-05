@@ -19,9 +19,12 @@ namespace ETL_SQL.Connectors.Parquet
     {
         private readonly string _filePath;
         private readonly string _compression;
+        private readonly Dictionary<string, string>? _options;
 
         /// <summary>Gets the physical path to the Parquet file.</summary>
         public string Path => _filePath;
+        /// <summary>The options used to create this data source.</summary>
+        public Dictionary<string, string>? Options => _options;
         
         /// <summary>Returns this instance as a typed table (no-op for Parquet).</summary>
         public IDataSource WithTable(string tableName) => this;
@@ -34,6 +37,7 @@ namespace ETL_SQL.Connectors.Parquet
         public ParquetDataSource(string filePath, Dictionary<string, string>? options = null)
         {
             _filePath = filePath;
+            _options = options;
             _compression = options != null && options.TryGetValue("COMPRESSION", out var c) ? c.ToUpperInvariant() : "SNAPPY";
         }
 

@@ -21,8 +21,12 @@ namespace ETL_SQL.Connectors.Json
         private readonly bool _compress;
         private readonly bool _encrypt;
         private readonly string _password;
+        private readonly Dictionary<string, string>? _options;
+
         /// <summary>Gets the physical path to the JSON file.</summary>
         public string Path => _filePath;
+        /// <summary>The options used to create this data source.</summary>
+        public Dictionary<string, string>? Options => _options;
         
         /// <summary>Returns this instance as a typed table (no-op for JSON).</summary>
         public IDataSource WithTable(string tableName) => this;
@@ -35,6 +39,7 @@ namespace ETL_SQL.Connectors.Json
         public JsonDataSource(string filePath, Dictionary<string, string>? options = null)
         {
             _filePath = filePath;
+            _options = options;
             if (options != null)
             {
                 if (options.TryGetValue("ROOT_PATH", out var rp)) _rootPath = rp;

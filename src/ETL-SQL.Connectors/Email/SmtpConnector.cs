@@ -73,5 +73,9 @@ Options:
 
         /// <summary>Returns a list of procedures/functions (none for SMTP).</summary>
         public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+
+        /// <summary>Builds an SMTP host address from named properties.</summary>
+        public string BuildConnectionString(Dictionary<string, string> properties) => 
+            ConnectionStringBuilder.Build(Name, properties);
     }
 }

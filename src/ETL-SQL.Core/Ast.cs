@@ -888,6 +888,11 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"DROP CONNECTION {(IfExists ? "IF EXISTS " : "")}{ConnectionName};";
     }
 
+    public class ClearSessionStatement : Statement
+    {
+        public override string ToSql() => "CLEAR SESSION;";
+    }
+
     public class DropProcedureStatement : Statement
     {
         public string ProcedureName { get; }

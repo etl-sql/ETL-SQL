@@ -53,7 +53,7 @@ namespace ETL_SQL.Connectors.SqlServer
         {
             string? table = null;
             options?.TryGetValue("TABLE", out table);
-            return new SqlServerDataSource(connectionString, table);
+            return new SqlServerDataSource(connectionString, table, options);
         }
 
         /// <summary>Returns a list of logical tables from the connection source.</summary>
@@ -95,6 +95,10 @@ namespace ETL_SQL.Connectors.SqlServer
             while (await reader.ReadAsync()) procs.Add(reader.GetString(0));
             return procs;
         }
+
+        /// <summary>Builds a SQL Server connection string from named properties.</summary>
+        public string BuildConnectionString(Dictionary<string, string> properties) => 
+            ConnectionStringBuilder.Build(Name, properties);
     }
 }
 
