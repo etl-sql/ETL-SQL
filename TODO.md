@@ -94,12 +94,13 @@ NOTE: CREATE A NEW GIT BRANCH BEFORE STARTING THIS WORK
    - **PASSPHRASE**: The passphrase for the private key file (if any). (Required if ENCRYPT=ON)
    Please update ETL_SQL_Language_Reference.md with these options for EXCEL, JSON, XML, PARQUET, AVRO after implementation.
 
-4. [ ] GROUP BY GROUPING SETS, ROLLUP, and CUBE.
+4. [x] GROUP BY GROUPING SETS, ROLLUP, and CUBE.
    - [x] AST node (`GroupingSetClause`) added to `Ast.cs`
    - [x] Token types `ROLLUP`, `CUBE`, `GROUPING` added to `TokenType.cs`
    - [x] Documentation added to `ETL_SQL_Language_Reference.md` with examples
-   - [ ] **Parser NOT yet wired** — `StatementParser` `ParseGroupBy` does not yet handle `ROLLUP`/`CUBE`/`GROUPING SETS` tokens
-   - [ ] **Engine NOT yet wired** — `AggregateEngine` does not yet expand `GroupingSetClause` into multiple aggregation passes
+   - [x] Parser wired up natively inside `Parser.cs` handling all variations.
+   - [x] Engine wired up in `AggregateEngine.cs` correctly expanding `GroupingSetClause` into multiple single-pass iterations with `NULL` substitution.
+   - [x] Unit/Integration tests added in `GroupingSetTests.cs` testing edge cases and correctness.
 
 5. [x] Structured CREATE CONNECTION linter check — `ConnectionStringBuilder.cs` and docs are already complete for MSSQL, POSTGRES, and ORACLE.
    - [x] **`ConnectionAuthConflictRule`** added to `src/ETL-SQL.Core/Linting/Rules/`. Fires an `Error` when `TRUSTED_CONNECTION=TRUE` is combined with `USER_ID` or `PASSWORD` on any database connector. File connectors are exempt. 5 tests added to `LinterTests.cs`, all passing.
