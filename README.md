@@ -99,7 +99,7 @@ dotnet run --project src/ETL-SQL.App -- --ui edit MyScript.etlsql
 -- Define your environment
 CREATE CONNECTION prod_db ON MSSQL('Server=prod;Database=Sales;');
 CREATE CONNECTION archive ON FLATFILE('C:\Exports\') WITH (DELIMITER=PIPE);
-CREATE CONNECTION my_smtp ON SMTP('smtp.company.com') WITH (USER='admin', PASS='secret');
+CREATE CONNECTION my_smtp ON SMTP('smtp.company.com') WITH (USERNAME='admin', PASSWORD='secret');
 
 -- Perform the ETL
 INSERT INTO archive.Sales_2026
@@ -119,6 +119,7 @@ AT my_smtp;
 For a complete list of commands, functions, and connector options, refer to the [Language Reference](docs/ETL_SQL_Language_Reference.md).
 
 ---
+
 © 2026 ETL-SQL Team. Built for speed, designed for clarity.
 
-Commercial Use & LicensingThis software is free for personal, non-commercial use only. If you wish to use this software for commercial purposes (including use by a business or for-profit entity), or if you are interested in a service agreement, please contact me at etlsqlsoftware@gmail.com for a commercial license.
+**Commercial Use & Licensing** — This software is free for personal, non-commercial use only. If you wish to use this software for commercial purposes (including use by a business or for-profit entity), or if you are interested in a service agreement, please contact [etlsqlsoftware@gmail.com](mailto:etlsqlsoftware@gmail.com) for a commercial license.

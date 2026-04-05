@@ -178,6 +178,7 @@ For Azure Blob Storage.
 `CREATE CONNECTION <name> ON AZURE_BLOB('<host_address_or_ip>') [WITH(<options>)];`  
 -- OR --  
 `CREATE CONNECTION <name> ON AZURE_BLOB() WITH(HOST='<host_address_or_ip>', <options>);`
+
 - **CONTAINER**: The target blob container name.
 - **ACCOUNT_NAME** / **ACCOUNT_KEY**: Storage credentials.
 - Supports `GET_FILE`, `PUT_FILE`, and `REMOTE_FILE_LIST`.
@@ -187,6 +188,7 @@ For sending emails.
 `CREATE CONNECTION <name> ON SMTP('<host_address_or_ip>') [WITH(<options>)];`  
 -- OR --  
 `CREATE CONNECTION <name> ON SMTP() WITH(HOST='<host_address_or_ip>', <options>);`
+
 - **PORT**: SMTP server port. (Default: `25`)
 - **USERNAME** / **PASSWORD**: Authentication details.
 - **USE_SSL**: `TRUE` / `FALSE`. (Default: `FALSE`)
@@ -198,6 +200,7 @@ Represents a local file system directory for listing files and performing filesy
 `CREATE CONNECTION <name> ON DIRECTORY('<directory_path>') [WITH(<options>)];`  
 -- OR --  
 `CREATE CONNECTION <name> ON DIRECTORY() WITH(PATH='<directory_path>', <options>);`
+
 - **CREATE**: `ON` / `OFF` — Create a new directory if it doesn't exist. (Default: `ON`)
 - Supports `COPY_FILE`, `MOVE_FILE`, `DELETE_FILE`, and directory listing via `SELECT`.
 
@@ -375,7 +378,7 @@ BEGIN
     SELECT @date;
 END
 ```
-Now everything inside the the EXECUTE <name> BEGIN .. <inside here> .. END is run from the context of the Sql Server Engine.
+Now everything inside the `EXECUTE <name> BEGIN...END` block is run from the context of the SQL Server Engine.
 
 What if I want the results
 ```sql
@@ -1211,6 +1214,7 @@ Transfers files between the local system and a remote connector (SFTP, FTP, Azur
 ```sql
 GET_FILE 'remote/path/data.csv' TO 'local/data.csv' FROM @MySftp;
 PUT_FILE 'local/upload.txt' TO 'uploads/upload.txt' AT @AzureBlob;
+```
 
 ### Email Operations
 - `SEND_EMAIL TO '<to>' SUBJECT '<subject>' BODY '<body>' [AT <connection>];`: Sends an automated email alert (requires an SMTP connection).
@@ -1225,7 +1229,9 @@ PUT_FILE 'local/upload.txt' TO 'uploads/upload.txt' AT @AzureBlob;
 
 ## Window Functions
 
-Window functions operate on a set of rows and return a single value for each row from the underlying query. The `OVER` clause defines the window or user-specified set of rows. The framing clause is optional and is used to define the window or user-specified set of rows.### Window Framing (`ROWS` | `RANGE`)
+Window functions operate on a set of rows and return a single value for each row from the underlying query. The `OVER` clause defines the window or user-specified set of rows. The framing clause is optional and is used to define the window or user-specified set of rows.
+
+### Window Framing (`ROWS` | `RANGE`)
 
 Window functions support framing to restrict the rows within the partition used for calculation.
 - `ROWS BETWEEN <start> AND <end>`: Specifies a physical offset from the current row.
@@ -1363,7 +1369,7 @@ SELECT
     NTILE(4) OVER (ORDER BY OrderDate) AS Quartile
 FROM Orders;
 ```
-##  CUME_DIST()`
+## `CUME_DIST()`
 Calculates the cumulative distribution of a value in a group of values.
 ```sql
 SELECT 

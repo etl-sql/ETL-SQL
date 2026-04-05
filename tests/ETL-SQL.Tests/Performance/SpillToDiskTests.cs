@@ -265,9 +265,9 @@ namespace ETL_SQL.Tests.Performance
             var rightSchema = new TableSchema(new[] { "Id", "RightV" });
 
             var leftTable  = new DataTable();
-            leftTable.ColumnNames.AddRange(new[] { "Id", "LeftV" });
+            leftTable.SetColumns(new[] { "Id", "LeftV" });
             var rightTable = new DataTable();
-            rightTable.ColumnNames.AddRange(new[] { "Id", "RightV" });
+            rightTable.SetColumns(new[] { "Id", "RightV" });
 
             for (int i = 0; i < RIGHT_SIDE; i++)
             {
@@ -292,10 +292,10 @@ namespace ETL_SQL.Tests.Performance
             await e.Evaluate(new Parser(new Lexer(script).Tokenize()).Parse());
 
             Assert.NotNull(e.LastResult);
-            Assert.Equal(LEFT_SIDE, e.LastResult.Rows.Count);
+            Assert.Equal(LEFT_SIDE, e.LastResult.TotalRowsMatched);
             Assert.True(e.TotalSpilledBytes > before,
                 $"Expected spill for {LEFT_SIDE}x{RIGHT_SIDE} join. Before={before}, After={e.TotalSpilledBytes}");
-            _output.WriteLine($"JoinEngine spilled {e.TotalSpilledBytes - before:N0} bytes. Result rows: {e.LastResult.Rows.Count:N0}");
+            _output.WriteLine($"JoinEngine spilled {e.TotalSpilledBytes - before:N0} bytes. Result rows: {e.LastResult.TotalRowsMatched:N0}");
         }
     }
 }

@@ -153,3 +153,79 @@ We'll need to do the same for ORACLE and POSTGRES as well.  Please update ETL_SQ
 
 ## VS CODE Bugs/Improvements
 
+
+---
+
+## Doc Review: README.md vs ETL_SQL_Language_Reference.md
+
+Items below were found by comparing both documents. These are things present in one document but missing or inconsistent with the other. **No code changes were made — review to decide what to add/fix.**
+
+### ❌ README Features Not Documented in Language Reference
+
+**DR-1. Console Editor (`ui edit`) Command**  
+The README describes a full terminal-based editor launched via `dotnet run -- --ui edit MyScript.etlsql`, including shortcuts like `F5`, `Shift+F5`, `Ctrl+I`, `F1`. The language reference has no section for how to launch or use the console editor. Consider adding a "Getting Started / Running Scripts" section.
+
+**DR-2. VS Code Extension**  
+The README mentions a dedicated VS Code language server extension. The language reference has no mention of it at all — not even a pointer to where to install it.
+
+**DR-3. `SEND_EMAIL` Syntax Shape**  
+The README example uses:
+```sql
+SEND_EMAIL TO 'admin@company.com' SUBJECT 'ETL Success' BODY '...' AT my_smtp;
+```
+The language reference lists `SEND_EMAIL` only as a one-liner under "Email Operations" with no dedicated section, no full syntax definition, no example of optional fields like CC/BCC/ATTACHMENT, and no mention of when `AT <connection>` is required vs optional. Consider giving `SEND_EMAIL` its own full section.
+
+**DR-4. `RECEIVE_FILE` Command**  
+`RECEIVE_FILE` is listed in the README's command table but does not appear anywhere in the language reference. No syntax, no example.
+
+**DR-5. `CREATE JOB` / `SHOW JOB HISTORY` / `KILL JOB`**  
+The README lists `CREATE JOB` under the Management command table. The language reference documents `SHOW JOBS`, `KILL JOB`, `SHOW JOB HISTORY`, and `CREATE JOB` briefly, but there is no full syntax or example for `CREATE JOB` showing the cron schedule format. The README says "Designed for data engineers" implying jobs are a core feature — this needs better coverage.
+
+**DR-6. `LINEAGE()` Function — Not Mentioned in README**  
+The language reference has a thorough Lineage section. The README's Observability bullet says "Visualize exactly where your data comes from" but doesn't show any syntax example. Consider adding a brief lineage snippet to the README.
+
+**DR-7. Native SQL Pushdown — README Claims Are Not Reflected in Reference**  
+README says "Automatically detects when to push operations (Joins, Filters) to source databases." The language reference never explains when pushdown is triggered or how to force/prevent it. No section covers this behavior. The `EXECUTE...BEGIN...END` walkthrough touches it informally but there's no clear guide.
+
+---
+
+### ⚠️ Language Reference Items That Should Be Reviewed for Accuracy
+
+**DR-8. `SEND_FILE` / `GET_FILE` / `PUT_FILE` Syntax**  
+The language reference shows `GET_FILE` and `PUT_FILE` as bare SQL-style commands without a dedicated syntax header. `SEND_FILE` and `RECEIVE_FILE` are mentioned in the `CREATE CONNECTION` sections as supported operations but there is no standalone syntax section for them. Need a unified "File Transfer" section with full syntax.
+
+**DR-9. `WAITFOR TIME` Variant**  
+The language reference documents `WAITFOR DELAY '00:00:05'` and `WAITFOR TIME '23:59:59'`. Verify that `WAITFOR TIME` is actually implemented (the parser may only support `DELAY`).
+
+**DR-10. `FOR` Loop Keyword — Missing from README Automation Table**  
+The `FOR` and `FOREACH` loops are documented in the language reference but not mentioned in the README's feature overview at all.
+
+**DR-11. `USE SETS` / `CREATE SETS` — Not in README**  
+Environment sets are a significant feature (switch between DEV/QA/PROD) but are not mentioned anywhere in the README.
+
+**DR-12. `LINT` Statement**  
+Documented in the language reference but not mentioned in the README despite "Static Analysis (LINT)" being listed as a Core Pillar. No example in the readme showing a `LINT 'script.etlsql'` call.
+
+**DR-13. `HELP CONNECTION <type>` Command**  
+Listed in the language reference under Introspection. Not mentioned in README. Probably worth a one-liner in the README quick-start.
+
+**DR-14. Encryption Options Missing from Non-FLATFILE File Connectors**  
+The FLATFILE connector documents `ALGORITHM`, `KEYFILE`, and `PASSPHRASE` for encryption. The EXCEL, JSON, XML connectors only list `ENCRYPT`, `COMPRESS`, and `PASSWORD` — they do not document `ALGORITHM`, `KEYFILE`, or `PASSPHRASE`. TODO item 6 tracks the implementation; this is the doc gap to fill once that is done.
+
+**DR-15. `MOCKDB` Connector**  
+The parser's `IsContextualKeyword()` method recognizes `MOCKDB` as a keyword, and `MockSqlDataSource.cs` exists as a connector. It is not documented anywhere in the language reference. Decide if this should be documented (even as an internal/testing-only option) or suppressed from autocomplete.
+
+**DR-16. `REMOTE_FILE_LIST` Command**  
+Listed as supported in FTP, SFTP, and AZURE_BLOB connector descriptions ("Supports GET_FILE, PUT_FILE, and REMOTE_FILE_LIST") but there is no syntax section for `REMOTE_FILE_LIST` anywhere in the language reference.
+
+**DR-17. `SHOW COLUMNS` Syntax Discrepancy**  
+Language reference shows: `SHOW COLUMNS <table_name> [connection_name];` (no dot separator). Verify this matches the actual parser — most SQL tools use `SHOW COLUMNS IN table FROM connection` or `SHOW COLUMNS connection.table`.
+
+**DR-18. `EXPLAIN` Statement**  
+Listed under Introspection as `EXPLAIN <query>` but no example is given. The README mentions "Static Analysis" but not EXPLAIN. Add a code example.
+
+**DR-19. `USE PASSWORD` Statement**  
+Documented in TODO item 1 as implemented (`[x]`). It does not appear anywhere in the language reference. Should be added.
+
+**DR-20. `SET SHOW_PASSWORD ON/OFF`**  
+Documented in TODO item 2 as implemented (`[x]`). Does not appear in the language reference. Should be added.
