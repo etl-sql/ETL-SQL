@@ -48,10 +48,13 @@ For delimited text files.
 
 #### MSSQL (or SQLSERVER)
 For Microsoft SQL Server.
-CREATE CONNECTION <name you choose> ON MSSQL(<connection string>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON MSSQL('<connection_string>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON MSSQL() WITH(SERVER='<server>', DATABASE='<database>', <options>);`
+
+- **SERVER**: The server name or IP address for the MSSQL connection. (Required in structured form)
+- **DATABASE**: The database name for the MSSQL connection. (Required in structured form)
 - **TABLE**: Default table context.
-- **SERVER**: The server name or IP address for the MSSQL connection.
-- **DATABASE**: The database name for the MSSQL connection.
 - **TRUSTED_CONNECTION**: `TRUE` / `FALSE`. (Default: `FALSE`)
 - **USER**: The username for the MSSQL connection. Do not use if TRUSTED_CONNECTION is set to TRUE.
 - **PASSWORD**: The password for the MSSQL connection. Do not use if TRUSTED_CONNECTION is set to TRUE.
@@ -61,13 +64,30 @@ CREATE CONNECTION <name you choose> ON MSSQL(<connection string>) [WITH(<options
 
 #### POSTGRES (or NPSQL)
 For PostgreSQL.
-CREATE CONNECTION <name you choose> ON POSTGRES(<connection string>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON POSTGRES('<connection_string>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON POSTGRES() WITH(HOST='<host>', DATABASE='<database>', <options>);`
+
+- **HOST**: The server name or IP address for the POSTGRES connection. (Required in structured form)
+- **DATABASE**: The database name for the POSTGRES connection. (Required in structured form)
+- **PORT**: Port for the connection. (Default: `5432`)
+- **USER**: The username for the connection.
+- **PASSWORD**: The password for the connection.
 - **TABLE**: Default table context.
 - Supports native SQL pushdown.
 
 #### ORACLE
 For Oracle Database.
-CREATE CONNECTION <name you choose> ON ORACLE(<connection string>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON ORACLE('<connection_string>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON ORACLE() WITH(HOST='<host>', <options>);`
+
+- **HOST**: The server name or IP address for the ORACLE connection. (Required in structured form)
+- **PORT**: Port for the connection. (Default: `1521`)
+- **SERVICE_NAME**: The Oracle service name.
+- **TNS_NAME**: The Oracle TNS alias.
+- **USER**: The username for the connection.
+- **PASSWORD**: The password for the connection.
 - **TABLE**: Default table context (e.g. `SCHEMA.TABLE`).
 - Supports PL/SQL pushdown.
 
@@ -155,14 +175,18 @@ For remote file operations over SSH.
 
 #### AZURE_BLOB (or BLOB)
 For Azure Blob Storage.
-CREATE CONNECTION <name you choose> ON AZURE_BLOB(<host address or IP address>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON AZURE_BLOB('<host_address_or_ip>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON AZURE_BLOB() WITH(HOST='<host_address_or_ip>', <options>);`
 - **CONTAINER**: The target blob container name.
 - **ACCOUNT_NAME** / **ACCOUNT_KEY**: Storage credentials.
 - Supports `GET_FILE`, `PUT_FILE`, and `REMOTE_FILE_LIST`.
 
 #### SMTP (or EMAIL)
 For sending emails.
-CREATE CONNECTION <name you choose> ON SMTP(<host address or IP address>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON SMTP('<host_address_or_ip>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON SMTP() WITH(HOST='<host_address_or_ip>', <options>);`
 - **PORT**: SMTP server port. (Default: `25`)
 - **USERNAME** / **PASSWORD**: Authentication details.
 - **USE_SSL**: `TRUE` / `FALSE`. (Default: `FALSE`)
@@ -171,7 +195,9 @@ CREATE CONNECTION <name you choose> ON SMTP(<host address or IP address>) [WITH(
 
 #### DIRECTORY
 Represents a local file system directory for listing files and performing filesystem operations.
-CREATE CONNECTION <name you choose> ON DIRECTORY(<Directory path>) [WITH(<options below separated by commas>)]
+`CREATE CONNECTION <name> ON DIRECTORY('<directory_path>') [WITH(<options>)];`  
+-- OR --  
+`CREATE CONNECTION <name> ON DIRECTORY() WITH(PATH='<directory_path>', <options>);`
 - **CREATE**: `ON` / `OFF` — Create a new directory if it doesn't exist. (Default: `ON`)
 - Supports `COPY_FILE`, `MOVE_FILE`, `DELETE_FILE`, and directory listing via `SELECT`.
 
