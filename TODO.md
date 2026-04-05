@@ -208,8 +208,8 @@ Expanded into a full `HELP CONNECTION <type>` section with examples under Utilit
 **DR-14. Encryption Options (ALGORITHM/KEYFILE/PASSPHRASE) for EXCEL/JSON/XML** — *Pending implementation (see TODO item 6)*  
 Once the encryption options are implemented for non-FLATFILE connectors, add `ALGORITHM`, `KEYFILE`, and `PASSPHRASE` to EXCEL, JSON, XML connector docs.
 
-**DR-15. `MOCKDB` Connector** — *Decision needed*  
-`MOCKDB` is a recognized parser keyword and has a `MockSqlDataSource.cs` implementation. Decide: document it (even as "for testing only") or suppress it from autocomplete suggestions in the language server.
+**[x] DR-15. `MOCKDB` Connector**  
+Decision: **Document it.** Added a full `MOCKDB` section to the language reference between ORACLE and PARQUET connectors. Includes: syntax, pre-populated table reference table, behavior notes, `[!NOTE]` "testing only" callout, and two complete usage examples (`SELECT` with JOIN and `EXECUTE...BEGIN...END`).
 
 **[x] DR-16. `REMOTE_FILE_LIST` Syntax**  
 Documented as a table-valued function `REMOTE_FILE_LIST(conn_name [, 'path'])` with SELECT examples in the File & Directory Introspection section.

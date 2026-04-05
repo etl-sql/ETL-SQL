@@ -40,6 +40,7 @@ namespace ETL_SQL.Core.Parser
         LINEAGE, SEND_EMAIL, SUBJECT, BODY, ATTACH, CC, BCC,
         JOB, SCHEDULE, EVERY, HISTORY, JOBS, LINT,
         SETS, BANG,     // SETS keyword and ! prefix for set names
+        ROLLUP, CUBE, GROUPING,   // GROUP BY extensions
         RANGE, BETWEEN, PRECEDING, FOLLOWING, UNBOUNDED, CURRENT,
         
         // Joins

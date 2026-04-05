@@ -437,10 +437,10 @@ namespace ETL_SQL.Engine.Handlers
                 allBufferedRows = filtered;
             }
 
-            // 1. GROUP BY / HAVING
-            if (stmt.GroupBy != null || hasAggInColumns)
+            // 1. GROUP BY / HAVING  (includes GROUPING SETS / ROLLUP / CUBE)
+            if (stmt.GroupBy != null || stmt.GroupingSet != null || hasAggInColumns)
             {
-                if (allBufferedRows.Count > 100000)
+                if (allBufferedRows.Count > 100000 && stmt.GroupingSet == null)
                 {
                     Logger.WriteLine($"[yellow]HYPER-SCALE: Aggregate input exceeded memory limit ({allBufferedRows.Count} rows). Switching to external aggregation.[/]");
                     var externalAgg = new ExternalAggregateEngine(context);
@@ -448,7 +448,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 else
                 {
-                    allBufferedRows = await aggregateEngine.ApplyAggregation(allBufferedRows, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause);
+                    allBufferedRows = await aggregateEngine.ApplyAggregation(allBufferedRows, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
                 }
                 Logger.Verbose($"Aggregation applied: {allBufferedRows.Count} groups remaining");
             }

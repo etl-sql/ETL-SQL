@@ -20,8 +20,40 @@ namespace ETL_SQL.Engine.Engines
         }
 
         /// <summary>Applies aggregation logic to a buffer of rows, grouping them and calculating aggregate functions.</summary>
-        public async Task<List<Row>> ApplyAggregation(List<Row> allBufferedRows, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null)
+        public async Task<List<Row>> ApplyAggregation(List<Row> allBufferedRows, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null)
         {
+            // When groupingSet is present, expand into multiple GROUP BY passes and union the results.
+            if (groupingSet != null && groupingSet.Type != GroupingSetType.None)
+            {
+                var expandedSets = ExpandGroupingSets(groupingSet);
+                var allResults = new List<Row>();
+                foreach (var activeGroupBy in expandedSets)
+                {
+                    var setRows = await ApplyAggregation(allBufferedRows, activeGroupBy, finalColumns, colNames, havingClause, null);
+                    // Mark which columns were NULL-substituted (GROUPING() support)
+                    var activeKeys = new HashSet<string>(activeGroupBy.Select(e => e.ToSql()), StringComparer.OrdinalIgnoreCase);
+                    foreach (var row in setRows)
+                    {
+                        // For every groupBy column NOT in this set, null out its output column
+                        if (groupBy != null)
+                        {
+                            foreach (var expr in groupBy)
+                            {
+                                if (!activeKeys.Contains(expr.ToSql()))
+                                {
+                                    var colName = expr is IdentifierExpression id ? id.Name.Split('.').Last() : expr.ToSql();
+                                    // Match the output column name
+                                    var matchIdx = colNames.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
+                                    if (matchIdx >= 0) row[colNames[matchIdx]] = null;
+                                }
+                            }
+                        }
+                    }
+                    allResults.AddRange(setRows);
+                }
+                return allResults;
+            }
+
             var groups = new Dictionary<CompoundKey, List<Row>>();
             bool hasAgg = finalColumns.Any(c => IsAggregate(c.Expression));
 
@@ -80,6 +112,39 @@ namespace ETL_SQL.Engine.Engines
                 resultRows.Add(resRow);
             }
             return resultRows;
+        }
+
+        /// <summary>Expands a GroupingSetClause into a list of effective GROUP BY lists (one per pass).</summary>
+        private static List<List<Expression>> ExpandGroupingSets(GroupingSetClause clause)
+        {
+            var cols = clause.GroupSets[0]; // ROLLUP/CUBE: single list; GroupingSets: N lists
+            int n = cols.Count;
+
+            if (clause.Type == GroupingSetType.Rollup)
+            {
+                // ROLLUP(a, b, c) → (a,b,c), (a,b), (a), ()
+                var result = new List<List<Expression>>();
+                for (int i = n; i >= 0; i--)
+                    result.Add(cols.Take(i).ToList());
+                return result;
+            }
+
+            if (clause.Type == GroupingSetType.Cube)
+            {
+                // CUBE(a, b, c) → all 2^n subsets in descending cardinality order
+                var result = new List<List<Expression>>();
+                for (int mask = (1 << n) - 1; mask >= 0; mask--)
+                {
+                    var subset = new List<Expression>();
+                    for (int bit = 0; bit < n; bit++)
+                        if ((mask & (1 << bit)) != 0) subset.Add(cols[bit]);
+                    result.Add(subset);
+                }
+                return result;
+            }
+
+            // GroupingSets: use the sets as-is
+            return clause.GroupSets.Select(s => s.ToList()).ToList();
         }
 
         public bool IsAggregate(Expression? expr)

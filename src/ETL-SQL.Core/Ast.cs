@@ -304,6 +304,8 @@ namespace ETL_SQL.Core
         public List<JoinClause> Joins { get; }
         public Expression? WhereClause { get; }
         public List<Expression>? GroupBy { get; }
+        /// <summary>Non-null when GROUP BY uses GROUPING SETS / ROLLUP / CUBE. Null for plain GROUP BY.</summary>
+        public GroupingSetClause? GroupingSet { get; set; }
         public Expression? HavingClause { get; }
         public List<OrderByClause>? OrderBy { get; }
         public bool IsDistinct { get; set; }
@@ -349,7 +351,8 @@ namespace ETL_SQL.Core
             var from = $" FROM {FromTable.ToSql()}";
             var joins = Joins.Count > 0 ? " " + string.Join(" ", Joins.Select(j => j.ToSql())) : "";
             var where = WhereClause != null ? $" WHERE {WhereClause.ToSql()}" : "";
-            var group = GroupBy != null && GroupBy.Count > 0 ? $" GROUP BY {string.Join(", ", GroupBy.Select(g => g.ToSql()))}" : "";
+            var group = GroupingSet != null ? $" GROUP BY {GroupingSet.ToSql()}" :
+                        GroupBy != null && GroupBy.Count > 0 ? $" GROUP BY {string.Join(", ", GroupBy.Select(g => g.ToSql()))}" : "";
             var having = HavingClause != null ? $" HAVING {HavingClause.ToSql()}" : "";
             var order = OrderBy != null && OrderBy.Count > 0 ? $" ORDER BY {string.Join(", ", OrderBy.Select(o => o.ToSql()))}" : "";
             var limit = LimitCount != null ? $" LIMIT {LimitCount.ToSql()}" : "";
@@ -357,6 +360,42 @@ namespace ETL_SQL.Core
             var forClause = ForClause != null ? $" {ForClause.ToSql()}" : "";
 
             return $"{with}SELECT {distinct}{top}{cols}{into}{from}{joins}{where}{group}{having}{order}{limit}{offset}{forClause};";
+        }
+    }
+
+    public enum GroupingSetType { None, GroupingSets, Rollup, Cube }
+
+    /// <summary>
+    /// Represents GROUP BY GROUPING SETS(...), ROLLUP(...), or CUBE(...).
+    /// When Type == None, GroupSets contains exactly one entry (the plain GROUP BY list).
+    /// </summary>
+    public class GroupingSetClause
+    {
+        public GroupingSetType Type { get; }
+        /// <summary>
+        /// For GROUPING SETS: each inner list is one grouping set (empty list = grand total row).
+        /// For ROLLUP/CUBE: exactly one inner list — the column list; expansion is done in the engine.
+        /// </summary>
+        public List<List<Expression>> GroupSets { get; }
+
+        public GroupingSetClause(GroupingSetType type, List<List<Expression>> groupSets)
+        {
+            Type = type;
+            GroupSets = groupSets;
+        }
+
+        public string ToSql()
+        {
+            string FmtSet(List<Expression> set) =>
+                set.Count == 0 ? "()" : $"({string.Join(", ", set.Select(e => e.ToSql()))})";
+
+            return Type switch
+            {
+                GroupingSetType.Rollup       => $"ROLLUP({string.Join(", ", GroupSets[0].Select(e => e.ToSql()))})",
+                GroupingSetType.Cube         => $"CUBE({string.Join(", ", GroupSets[0].Select(e => e.ToSql()))})",
+                GroupingSetType.GroupingSets => $"GROUPING SETS({string.Join(", ", GroupSets.Select(FmtSet))})",
+                _                            => string.Join(", ", GroupSets[0].Select(e => e.ToSql()))
+            };
         }
     }
 

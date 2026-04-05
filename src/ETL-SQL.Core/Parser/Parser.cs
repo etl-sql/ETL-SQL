@@ -317,14 +317,59 @@ namespace ETL_SQL.Core.Parser
             }
 
             List<Expression>? groupBy = null;
+            GroupingSetClause? groupingSet = null;
             if (Match(TokenType.GROUP))
             {
                 Consume(TokenType.BY, "Expected 'BY' after 'GROUP'");
-                groupBy = new List<Expression>();
-                groupBy.Add(ParseExpression());
-                while (Match(TokenType.COMMA))
+                if (Current.Type == TokenType.ROLLUP)
                 {
+                    Advance();
+                    Consume(TokenType.LPAREN, "Expected '(' after ROLLUP");
+                    var cols = ParseCommaSeparatedExpressions();
+                    Consume(TokenType.RPAREN, "Expected ')' after ROLLUP columns");
+                    groupingSet = new GroupingSetClause(GroupingSetType.Rollup, new List<List<Expression>> { cols });
+                    groupBy = cols; // plain fallback columns (engine will expand)
+                }
+                else if (Current.Type == TokenType.CUBE)
+                {
+                    Advance();
+                    Consume(TokenType.LPAREN, "Expected '(' after CUBE");
+                    var cols = ParseCommaSeparatedExpressions();
+                    Consume(TokenType.RPAREN, "Expected ')' after CUBE columns");
+                    groupingSet = new GroupingSetClause(GroupingSetType.Cube, new List<List<Expression>> { cols });
+                    groupBy = cols;
+                }
+                else if (Current.Type == TokenType.GROUPING && Peek.Type == TokenType.SETS)
+                {
+                    Advance(); // GROUPING
+                    Advance(); // SETS
+                    Consume(TokenType.LPAREN, "Expected '(' after GROUPING SETS");
+                    var sets = new List<List<Expression>>();
+                    do
+                    {
+                        Consume(TokenType.LPAREN, "Expected '(' for each grouping set");
+                        var setExprs = new List<Expression>();
+                        if (Current.Type != TokenType.RPAREN)
+                        {
+                            setExprs.Add(ParseExpression());
+                            while (Match(TokenType.COMMA)) setExprs.Add(ParseExpression());
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' to close grouping set");
+                        sets.Add(setExprs);
+                    } while (Match(TokenType.COMMA));
+                    Consume(TokenType.RPAREN, "Expected ')' to close GROUPING SETS");
+                    groupingSet = new GroupingSetClause(GroupingSetType.GroupingSets, sets);
+                    // Collect all distinct expressions from the sets as the plain groupBy for compatibility
+                    groupBy = sets.SelectMany(s => s).Distinct().ToList();
+                }
+                else
+                {
+                    groupBy = new List<Expression>();
                     groupBy.Add(ParseExpression());
+                    while (Match(TokenType.COMMA))
+                    {
+                        groupBy.Add(ParseExpression());
+                    }
                 }
             }
 
@@ -390,7 +435,8 @@ namespace ETL_SQL.Core.Parser
                 IsDistinct = isDistinct,
                 TopCount = topCount,
                 LimitCount = limitCount,
-                Offset = offset
+                Offset = offset,
+                GroupingSet = groupingSet
             };
 
             if (Match(TokenType.FOR))
@@ -401,6 +447,17 @@ namespace ETL_SQL.Core.Parser
             }
 
             return selectStmt;
+        }
+
+        private List<Expression> ParseCommaSeparatedExpressions()
+        {
+            var result = new List<Expression>();
+            if (Current.Type != TokenType.RPAREN)
+            {
+                result.Add(ParseExpression());
+                while (Match(TokenType.COMMA)) result.Add(ParseExpression());
+            }
+            return result;
         }
 
         private ForClause ParseForClause()

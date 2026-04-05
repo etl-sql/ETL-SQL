@@ -43,6 +43,9 @@ namespace ETL_SQL.Core.Parser
             dict["GROUP"] = TokenType.GROUP;
             dict["BY"] = TokenType.BY;
             dict["ORDER"] = TokenType.ORDER;
+            dict["ROLLUP"] = TokenType.ROLLUP;
+            dict["CUBE"] = TokenType.CUBE;
+            dict["GROUPING"] = TokenType.GROUPING;
             dict["FILE"] = TokenType.FILE;  // Reserved table name — not a keyword, but must lex as FILE for deprecation detection
             dict["ENCRYPT_FILE"] = TokenType.ENCRYPT_FILE;
             dict["DECRYPT_FILE"] = TokenType.DECRYPT_FILE;

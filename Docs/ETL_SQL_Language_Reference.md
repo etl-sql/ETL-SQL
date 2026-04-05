@@ -91,6 +91,49 @@ For Oracle Database.
 - **TABLE**: Default table context (e.g. `SCHEMA.TABLE`).
 - Supports PL/SQL pushdown.
 
+#### MOCKDB
+An in-memory mock database designed for script development and testing. It requires no server, no credentials, and no configuration. The engine provides a set of pre-populated tables so you can write and test queries, joins, and ETL logic immediately.
+
+`CREATE CONNECTION <name> ON MOCKDB();`  
+*(No connection string or options are required.)*
+
+**Pre-populated Tables:**
+
+| Table | Columns |
+| :---- | :------ |
+| `Users` | `UserID`, `UserName`, `Email` |
+| `Products` | `ProductID`, `ProductName`, `Price` |
+| `Orders` | `OrderID`, `OrderDate`, `TotalAmount` |
+| `Employee` | `ID`, `Name`, `Status`, `Active`, `first_name`, `last_name` |
+| `departments` | `column1`, `column2`, `column3` |
+
+- All tables are seeded with a small number of sample rows.
+- Writes (`INSERT`, `UPDATE`, `DELETE`) are accepted but do not persist between sessions.
+- Supports `EXECUTE...BEGIN...END` blocks with pass-through SQL execution against the mock tables.
+- Supports `EXPLAIN`, schema introspection, and linting (treated as a database-type connector).
+
+> [!NOTE]
+> `MOCKDB` is intended for **development and testing only**. It should not be used in production scripts.
+
+*Example:*
+```sql
+-- Develop and test a query without a real database
+CREATE CONNECTION mock ON MOCKDB();
+
+SELECT u.UserName, o.TotalAmount
+INTO #result
+FROM mock.Users AS u
+JOIN mock.Orders AS o ON u.UserID = o.OrderID;
+
+SELECT * FROM #result;
+
+-- Test an EXECUTE block
+EXECUTE mock INTO #emp
+BEGIN
+    SELECT ID, Name FROM Employee WHERE Active = 1;
+END
+```
+
 #### PARQUET    
 For Apache Parquet columnar files.
 `CREATE CONNECTION <name> ON PARQUET('<file_path>') [WITH(<options>)];`  
@@ -608,6 +651,9 @@ Fetches, transforms, and projects data from an established connection or tempora
 - `[CROSS | OUTER] APPLY (<subquery>) <alias>`: Correlated subquery join. Allows the subquery to refer to columns from the left side of the apply.
 - `WHERE <condition>`: Filters rows based on standard logical evaluations.
 - `GROUP BY <columns>`: Aggregates datasets based on unique column pairings.
+- `GROUP BY ROLLUP(<columns>)`: Produces a result set with subtotals and a grand total. For `ROLLUP(a, b, c)`, generates groupings `(a,b,c)`, `(a,b)`, `(a)`, and `()` (grand total). Columns not in the current grouping are `NULL`.
+- `GROUP BY CUBE(<columns>)`: Produces a result set for all possible combinations of the specified columns (2ⁿ groupings). Includes individual column subtotals and a grand total.
+- `GROUP BY GROUPING SETS(<set1>, <set2>, ...)`: Explicitly specifies which groupings to compute. Each set is a parenthesized, comma-separated column list. An empty set `()` adds a grand-total row.
 - `HAVING <condition>`: Filters result sets *after* GROUP BY aggregation has been applied.
 - `PIVOT ( <aggregate_func>(<col>) FOR <pivot_col> IN (<values...>) ) AS <alias>`: Rotates a table-valued expression by turning unique values from one column in the expression into multiple columns in the output.
 - `UNPIVOT ( <value_col> FOR <name_col> IN (<cols...>) ) AS <alias>`: Rotates a table-valued expression from a column-based form into a row-based form.
