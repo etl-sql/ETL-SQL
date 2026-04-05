@@ -9,6 +9,9 @@ using Microsoft.Extensions.Logging;
 using DotNet.Testcontainers.Configurations;
 using System.Linq;
 using ETL_SQL.Core.Common.Exceptions;
+using Docker.DotNet;
+using Docker.DotNet.Models;
+using System.Runtime.InteropServices;
 
 namespace ETL_SQL.Core
 {
@@ -17,6 +20,7 @@ namespace ETL_SQL.Core
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, IContainer> _activeContainers = new(StringComparer.OrdinalIgnoreCase);
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _connectionStrings = new(StringComparer.OrdinalIgnoreCase);
         public string? LastConnectionString { get; private set; }
+        public bool HasActiveContainers => !_activeContainers.IsEmpty;
         private static readonly ILoggerFactory _loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder => builder.AddProvider(new TestcontainersLoggerProvider()));
 
         /// <summary>
@@ -43,11 +47,22 @@ namespace ETL_SQL.Core
             string key = alias ?? imageName;
             if (_activeContainers.TryGetValue(key, out var activeContainer) && activeContainer.State.ToString() == "Running")
             {
-                ETL_SQL.Common.Logger.WriteLine($"Using existing Docker container for {key}...", ConsoleColor.Cyan);
+                ETL_SQL.Common.Logger.WriteLine($"Using existing session Docker container for {key}...", ConsoleColor.Cyan);
                 string activeConnStr = GetConnectionString(activeContainer, imageName);
                 _connectionStrings[key] = activeConnStr;
                 LastConnectionString = activeConnStr;
                 return activeConnStr;
+            }
+
+            // Attempt to find an already running container on the system by name
+            string containerName = "etlsql_" + (alias ?? imageName.Split('/').Last().Split(':').First()).Replace(".", "_").Replace(":", "_");
+            var existingConnStr = await GetExistingContainerConnectionString(containerName, imageName);
+            if (existingConnStr != null)
+            {
+                ETL_SQL.Common.Logger.WriteLine($"Re-attached to existing Docker container: {containerName}", ConsoleColor.Cyan);
+                _connectionStrings[key] = existingConnStr;
+                LastConnectionString = existingConnStr;
+                return existingConnStr;
             }
 
             IContainer container;
@@ -55,18 +70,25 @@ namespace ETL_SQL.Core
             if (imageName.Contains("mssql", StringComparison.OrdinalIgnoreCase))
             {
                 container = new MsSqlBuilder(imageName)
+                    .WithName(containerName)
+                    .WithPassword("Password123!")
                     .WithLogger(_loggerFactory.CreateLogger<MsSqlBuilder>())
                     .Build();
             }
             else if (imageName.Contains("postgres", StringComparison.OrdinalIgnoreCase))
             {
                 container = new PostgreSqlBuilder(imageName)
+                    .WithName(containerName)
+                    .WithUsername("postgres")
+                    .WithPassword("postgres")
+                    .WithDatabase("postgres")
                     .WithLogger(_loggerFactory.CreateLogger<PostgreSqlBuilder>())
                     .Build();
             }
             else if (imageName.Contains("oracle", StringComparison.OrdinalIgnoreCase))
             {
                 container = new OracleBuilder(imageName)
+                    .WithName(containerName)
                     .WithLogger(_loggerFactory.CreateLogger<OracleBuilder>())
                     .Build();
             }
@@ -75,13 +97,63 @@ namespace ETL_SQL.Core
                 throw new ExecutionException($"Unsupported Docker image for database: {imageName}. Currently supported: MsSql, Postgres, Oracle.");
             }
 
-            await container.StartAsync();
+            try 
+            {
+                await container.StartAsync();
+            }
+            catch (Exception ex) when (ex.Message.Contains("already in use", StringComparison.OrdinalIgnoreCase))
+            {
+                // Final fallback if name exists but wasn't found by ListContainers
+                var retryConnStr = await GetExistingContainerConnectionString(containerName, imageName);
+                if (retryConnStr != null) return retryConnStr;
+                throw;
+            }
+
             _activeContainers[key] = container;
 
             string connectionString = GetConnectionString(container, imageName);
             _connectionStrings[key] = connectionString;
             LastConnectionString = connectionString;
             return connectionString;
+        }
+
+        private async Task<string?> GetExistingContainerConnectionString(string name, string imageName)
+        {
+            try
+            {
+                var uri = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) 
+                    ? new Uri("npipe://./pipe/docker_engine") 
+                    : new Uri("unix:///var/run/docker.sock");
+                
+                using var config = new DockerClientConfiguration(uri);
+                using var client = config.CreateClient();
+                var containers = await client.Containers.ListContainersAsync(new ContainersListParameters { All = false });
+                var target = containers.FirstOrDefault(c => c.Names.Any(n => n.Equals("/" + name, StringComparison.OrdinalIgnoreCase)));
+                
+                if (target != null)
+                {
+                    int internalPort = imageName.Contains("mssql") ? 1433 : (imageName.Contains("postgres") ? 5432 : 1521);
+                    var portMap = target.Ports.FirstOrDefault(p => p.PrivatePort == internalPort);
+                    if (portMap != null)
+                    {
+                        var host = "localhost";
+                        var publicPort = portMap.PublicPort;
+                        
+                        if (imageName.Contains("mssql"))
+                            return $"Server={host},{publicPort};Database=master;User Id=sa;Password=Password123!;Trusted_Connection=False;Encrypt=False;";
+                        if (imageName.Contains("postgres"))
+                            return $"Host={host};Port={publicPort};Database=postgres;Username=postgres;Password=postgres";
+                        if (imageName.Contains("oracle"))
+                        {
+                             if (imageName.Contains("free", StringComparison.OrdinalIgnoreCase))
+                                return $"User Id=system;Password=oracle;Data Source={host}:{publicPort}/FREE";
+                            return $"User Id=oracle;Password=oracle;Data Source={host}:{publicPort}/XE";
+                        }
+                    }
+                }
+            }
+            catch { }
+            return null;
         }
 
         /// <summary>
@@ -157,9 +229,11 @@ namespace ETL_SQL.Core
             return "";
         }
 
-        public async ValueTask DisposeAsync()
+        public ValueTask DisposeAsync()
         {
-            await CloseContainers();
+            // Do not automatically close containers! 
+            // We want them to persist across multiple "Run" commands in the same session.
+            return ValueTask.CompletedTask;
         }
     }
 }

@@ -48,7 +48,10 @@ namespace ETL_SQL.Connectors
         public HashSet<string> GetSupportedKeywords() => new();
 
         /// <summary>Returns supported connection string options for this connector.</summary>
-        public Dictionary<string, string[]> GetSupportedOptions() => new();
+        public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "CONTAINER", Array.Empty<string>() }
+        };
 
         /// <summary>Returns a map of option keys to their current selected values.</summary>
         public Dictionary<string, string[]> GetOptionValues() => new();

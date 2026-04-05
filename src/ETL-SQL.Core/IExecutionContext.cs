@@ -62,6 +62,7 @@ namespace ETL_SQL.Core
     public interface ILoggingContext
     {
         bool IsVerbose { get; set; }
+        bool ShowPassword { get; set; }
         bool RedirectOutput { get; set; }
         List<string> Messages { get; }
         int MaxMessages { get; set; }
@@ -87,6 +88,7 @@ namespace ETL_SQL.Core
     {
         IDictionary<string, IDataSource> Connections { get; }
         string? MasterPassword { get; }
+        string? ScriptPassword { get; set; }
         DataTable? LastResult { get; set; }
         List<DataTable> LastResultSets { get; }
         long RowsProcessed { get; set; }
@@ -166,6 +168,7 @@ namespace ETL_SQL.Core
 
     public interface IDockerManager : IAsyncDisposable
     {
+        bool HasActiveContainers { get; }
         string? LastConnectionString { get; }
         Task<string> StartContainer(string imageName, string? alias = null);
         Task StopContainer(string alias);

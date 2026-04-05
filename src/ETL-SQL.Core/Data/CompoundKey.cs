@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 
 namespace ETL_SQL.Data
 {
@@ -46,6 +47,22 @@ namespace ETL_SQL.Data
         private static object? NormalizeValue(object? val)
         {
             if (val == null || val == DBNull.Value) return null;
+
+            // Unwrap JsonElement that arrives after JSON deserialization (spill-to-disk paths)
+            if (val is JsonElement je)
+            {
+                val = je.ValueKind switch
+                {
+                    JsonValueKind.Number when je.TryGetInt64(out var jl) => jl,
+                    JsonValueKind.Number => je.GetDouble(),
+                    JsonValueKind.True  => true,
+                    JsonValueKind.False => false,
+                    JsonValueKind.String => je.GetString(),
+                    JsonValueKind.Null  => null,
+                    _                   => (object?)je.ToString()
+                };
+                if (val == null) return null;
+            }
             
             // Ensure numeric types hash consistently
             if (val is int i) return (decimal)i;

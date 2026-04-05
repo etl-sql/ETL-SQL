@@ -11,26 +11,53 @@ namespace ETL_SQL.Connectors
 {
     public class SftpConnector : IRemoteFileSystem, IDataSource, IConnector
     {
-        private readonly SftpClient _client;
-        private readonly string _host;
+        private SftpClient? _client;
+        private readonly string? _host;
+        private readonly string? _username;
+        private readonly string? _password;
+        private readonly string? _keyFilePath;
+        private readonly string? _passphrase;
+        private readonly Func<string, string, string?, string?, string?, SftpClient>? _clientFactory;
 
         public string Name => "SFTP";
         public IReadOnlyList<string> Aliases => new[] { "SSH" };
-        public string Path => $"sftp://{_host}";
+
+        public SftpConnector()
+        {
+        }
 
         public SftpConnector(string host, string username, string? password = null, string? keyFilePath = null, string? passphrase = null)
+            : this(host, username, password, keyFilePath, passphrase, 
+                  (h, u, p, k, pp) => !string.IsNullOrEmpty(k) ? new SftpClient(h, u, new PrivateKeyFile(k, pp)) : new SftpClient(h, u, p ?? ""))
+        {
+        }
+
+        internal SftpConnector(string host, string username, string? password, string? keyFilePath, string? passphrase, 
+            Func<string, string, string?, string?, string?, SftpClient> clientFactory)
         {
             _host = host;
-            if (!string.IsNullOrEmpty(keyFilePath))
+            _username = username;
+            _password = password;
+            _keyFilePath = keyFilePath;
+            _passphrase = passphrase;
+            _clientFactory = clientFactory;
+        }
+
+        private SftpClient Client
+        {
+            get
             {
-                var pk = new PrivateKeyFile(keyFilePath, passphrase);
-                _client = new SftpClient(host, username, pk);
-            }
-            else
-            {
-                _client = new SftpClient(host, username, password ?? "");
+                if (_client == null)
+                {
+                    if (_clientFactory == null || _host == null || _username == null)
+                        throw new InvalidOperationException("Connector not initialized with connection details.");
+                    _client = _clientFactory(_host, _username, _password, _keyFilePath, _passphrase);
+                }
+                return _client;
             }
         }
+
+        public string Path => $"sftp://{_host}";
 
         public async Task<string> GetVersionAsync(string connectionString) => "SFTP Server";
         public HashSet<string> GetSupportedFunctions() => new();
@@ -61,16 +88,16 @@ namespace ETL_SQL.Connectors
 
         private void EnsureConnected()
         {
-            if (!_client.IsConnected)
+            if (!Client.IsConnected)
             {
-                _client.Connect();
+                Client.Connect();
             }
         }
 
         public Task<IEnumerable<FileMetaData>> ListFilesAsync(string path)
         {
             EnsureConnected();
-            var items = _client.ListDirectory(path);
+            var items = Client.ListDirectory(path);
             return Task.FromResult(items.Select(i => new FileMetaData
             {
                 Name = i.Name,
@@ -85,20 +112,20 @@ namespace ETL_SQL.Connectors
         {
             EnsureConnected();
             using var fileStream = File.OpenRead(localPath);
-            await Task.Run(() => _client.UploadFile(fileStream, remotePath));
+            await Task.Run(() => Client.UploadFile(fileStream, remotePath));
         }
 
         public async Task DownloadFileAsync(string remotePath, string localPath)
         {
             EnsureConnected();
             using var fileStream = File.Create(localPath);
-            await Task.Run(() => _client.DownloadFile(remotePath, fileStream));
+            await Task.Run(() => Client.DownloadFile(remotePath, fileStream));
         }
 
         public async Task DeleteFileAsync(string remotePath)
         {
             EnsureConnected();
-            await Task.Run(() => _client.DeleteFile(remotePath));
+            await Task.Run(() => Client.DeleteFile(remotePath));
         }
 
         // IDataSource Implementation
@@ -129,11 +156,14 @@ namespace ETL_SQL.Connectors
 
         public async ValueTask DisposeAsync()
         {
-            if (_client.IsConnected)
+            if (_client != null)
             {
-                _client.Disconnect();
+                if (_client.IsConnected)
+                {
+                    _client.Disconnect();
+                }
+                _client.Dispose();
             }
-            _client.Dispose();
             await Task.CompletedTask;
         }
     }

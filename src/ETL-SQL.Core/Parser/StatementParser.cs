@@ -42,6 +42,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.SET)) 
             {
                 if (_parser.Match(TokenType.PROFILING) || _parser.Match(TokenType.PROFILE)) return ParseSetProfiling();
+                if (_parser.Match(TokenType.SHOW_PASSWORD)) return ParseSetShowPassword();
                 return ParseSetVariable();
             }
             if (_parser.Match(TokenType.SHOW)) return ParseShow();
@@ -175,7 +176,15 @@ namespace ETL_SQL.Core.Parser
                 return new UseSetsStatement(name) { Line = startToken.Line, Column = startToken.Column };
             }
 
-            throw new SyntaxException("Expected DOCKER or SETS after USE", _parser.Current.Line, _parser.Current.Column);
+            if (_parser.Match(TokenType.PASSWORD))
+            {
+                _parser.Consume(TokenType.EQUALS, "Expected '=' after USE PASSWORD");
+                var password = _parser.Consume(TokenType.STRING, "Expected password string").Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                return new UsePasswordStatement(password) { Line = startToken.Line, Column = startToken.Column };
+            }
+
+            throw new SyntaxException("Expected DOCKER, SETS, or PASSWORD after USE", _parser.Current.Line, _parser.Current.Column);
         }
 
         private bool IsContextualKeyword(TokenType type)
@@ -979,6 +988,13 @@ namespace ETL_SQL.Core.Parser
                             break;
                         }
                     }
+
+                    // Parse any trailing tags
+                    while (_parser.Match(TokenType.COLUMN_TAG))
+                    {
+                        _parser.ParseMetadataTags(_parser.Previous.Value, colDef.Metadata);
+                    }
+
                     columns.Add(colDef);
                 }
 
@@ -1614,6 +1630,17 @@ namespace ETL_SQL.Core.Parser
 
             if (_parser.Match(TokenType.SEMICOLON)) { }
             return new SetProfilingStatement { Enabled = enabled };
+        }
+
+        private Statement ParseSetShowPassword()
+        {
+            var enabled = true;
+            if (_parser.Match(TokenType.ON)) enabled = true;
+            else if (_parser.Match(TokenType.OFF)) enabled = false;
+            else throw new SyntaxException($"Expected ON or OFF after SET SHOW_PASSWORD", _parser.Current.Line, _parser.Current.Column);
+
+            if (_parser.Match(TokenType.SEMICOLON)) { }
+            return new SetShowPasswordStatement(enabled);
         }
 
         private Statement ParseShow()

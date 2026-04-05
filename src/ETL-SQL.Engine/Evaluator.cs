@@ -84,8 +84,14 @@ namespace ETL_SQL.Engine
         /// <summary>Limit the number of rows returned for previews.</summary>
         public int? PreviewLimit { get; set; }
         
+        /// <summary>Preference for showing sensitive data in plain text in the UI.</summary>
+        public bool ShowPassword { get; set; }
+        
         /// <summary>Master password for decrypting connection strings.</summary>
         public string? MasterPassword { get; set; }
+
+        /// <summary>Script-level password for encryption/decryption of sensitive data within the script.</summary>
+        public string? ScriptPassword { get; set; }
         
         /// <summary>Event raised when a batch of rows is processed.</summary>
         public Action<long>? OnBatchProcessed { get; set; }
@@ -231,7 +237,8 @@ namespace ETL_SQL.Engine
                 sw = Stopwatch.StartNew();
                 if (IsVerbose)
                 {
-                    Logger.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] EXECUTING: {statement.ToSql()}", ConsoleColor.DarkGray);
+                    string sql = (statement is UsePasswordStatement ups) ? ups.ToSql(!ShowPassword) : statement.ToSql();
+                    Logger.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] EXECUTING: {sql}", ConsoleColor.DarkGray);
                 }
                 _metricsReporter.ReportPreExecutionMetrics(statement);
                 if (IsProfiling) startMem = GC.GetTotalMemory(false);
@@ -641,8 +648,10 @@ namespace ETL_SQL.Engine
                 IsVerbose = IsVerbose,
                 RedirectOutput = RedirectOutput,
                 IsProfiling = IsProfiling,
+                ShowPassword = ShowPassword,
                 BatchSize = BatchSize,
-                PreviewLimit = PreviewLimit
+                PreviewLimit = PreviewLimit,
+                ScriptPassword = ScriptPassword
             };
             return fork;
         }

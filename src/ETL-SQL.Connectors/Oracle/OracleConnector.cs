@@ -39,8 +39,11 @@ namespace ETL_SQL.Connectors.Oracle
         /// <summary>Returns baseline keywords not supported in Oracle pushdown queries.</summary>
         public HashSet<string> GetExcludedKeywords() => OracleSyntax.Exclusions;
         
-        /// <summary>Returns supported options (none currently required for base connection).</summary>
-        public Dictionary<string, string[]> GetSupportedOptions() => new();
+        /// <summary>Returns supported connection string options.</summary>
+        public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "TABLE", Array.Empty<string>() }
+        };
 
         /// <summary>Returns allowed option values.</summary>
         public Dictionary<string, string[]> GetOptionValues() => new();

@@ -7,7 +7,7 @@ The ETL-SQL engine is designed to parse and execute data transformations dynamic
 Connectors define how the engine interacts with external data sources.
 
 **`CREATE CONNECTION`**
-Defines a reusable connection to a source or destination platform. Connections must be defined before selecting from or inserting to them, unless using ad-hoc temporary tables (e.g., `#temp`).
+Defines a reusable connection to a source or destination platform. Connections must be defined before selecting from or inserting to them.
 
 *Syntax:*
 ```sql
@@ -19,13 +19,20 @@ CREATE CONNECTION <name> ON <provider>('<connection_string>') [WITH(<options>)];
 #### FLATFILE (or CSV, FILE)
 For delimited text files.
 - **HEADER**: `ON`, `OFF` (Default: `ON`).
-- **DELIMITER**: `COMMA`, `PIPE`, `TAB`, `SEMICOLON`, `COLON`, `TILDE` or a literal `<char>`.
+- **DELIMITER**: `COMMA`, `PIPE`, `TAB`, `SEMICOLON`, `COLON`, `TILDE` or a literal `<char>` (Default: `COMMA`).
 - **ROW_DELIMITER**: `LF`, `CR`, `CRLF` (Default: `CRLF`).
-- **ENCODING**: `UTF8`, `ANSI`, `UNICODE`, `LATIN1` (Default: `UTF8`).
-- **TEXT_QUALIFIER**: `DOUBLEQUOTE`, `SINGLEQUOTE`.
+- **ENCODING**: `UTF8`, `ANSI`, `UTF16`, `LATIN1`, `UNICODE` (Default: `UTF8`).
+- **TEXT_QUALIFIER**: `DOUBLEQUOTE`, `SINGLEQUOTE` or a literal `<char>`.
+- **ESCAPE_CHAR**: Character used to escape delimiters within fields (e.g. `'\'`).
+- **NULL_AS**: `NULL`, `EMPTY`, `BACKSLASH_N` — how null values are represented in the file.
+- **DATE_FORMAT**: Custom date parsing format (e.g. `'yyyy-MM-dd'`).
+- **STRICT_SCHEMA**: `ON`, `OFF` — enforces column count matching (Default: `OFF`).
 - **START_AT**: Line number to start reading (1-based).
 - **END_AT**: Line number to stop reading.
 - **COUNT_AT_END**: `ON` (Validates row count at trailer).
+- **COMPRESS**: `ON`, `OFF` — transparent GZip support.
+- **ENCRYPT**: `ON`, `OFF` — AES encryption for the file.
+- **PASSWORD**: Password for encryption/decryption.
 
 #### MSSQL (or SQLSERVER)
 For Microsoft SQL Server.
@@ -66,7 +73,7 @@ For sending emails.
 
 #### PARQUET
 For Apache Parquet columnar files.
-- **COMPRESSION**: `SNAPPY`, `GZIP`, `LZ4`, `ZSTD` (Default: `SNAPPY`).
+- **COMPRESSION**: `SNAPPY` (Default), `GZIP`, `LZO`, `BROTLI`, `LZ4`, `ZSTD`, `UNCOMPRESSED`.
 
 #### AVRO
 For Apache Avro files.
@@ -74,17 +81,95 @@ For Apache Avro files.
 
 #### EXCEL
 For Excel file formats (.xlsx, .xls, .xlsb).
-- **SHEET**: Specific sheet name.
-- **RANGE**: Explicit cell range (e.g. `'A1:B10'`).
+- **SHEET**: Specific sheet name (Default: first sheet).
+- **HEADER**: `ON`, `OFF` — treat first row as column headers (Default: `ON`).
+- **RANGE**: Explicit cell range to read (e.g. `'A1:D100'`).
+- **COMPRESS**: `ON`, `OFF` — GZip compress the output file.
+- **ENCRYPT**: `ON`, `OFF` — AES encryption for the file.
+- **PASSWORD**: Password for encryption/decryption.
 
-#### JSON / XML
-For structured document files.
-- **ROOT_PATH**: JSONPath or XPath to the data root (e.g. `$.Rows` or `/Catalog/Book`).
+#### JSON
+For JSON data files.
+- **ROOT_PATH**: JSONPath to the data array (e.g. `$.Rows`, `$.data.items`).
+- **COMPRESS**: `ON`, `OFF` — transparent GZip support.
+- **ENCRYPT**: `ON`, `OFF` — AES encryption for the file.
+- **PASSWORD**: Password for encryption/decryption.
 
-*Example:*
+#### XML
+For XML data files.
+- **ROOT_PATH**: XPath to the repeating element (e.g. `/Catalog/Book`).
+- **COMPRESS**: `ON`, `OFF` — transparent GZip support.
+- **ENCRYPT**: `ON`, `OFF` — AES encryption for the file.
+- **PASSWORD**: Password for encryption/decryption.
+
+#### FTP (or FTP_CONN)
+For remote file operations over FTP.
+- **USER**: The username for the FTP connection.
+- **PASSWORD**: The password for the FTP connection.
+- Supports `GET_FILE`, `PUT_FILE`, and `REMOTE_FILE_LIST`.
+
+#### DIRECTORY
+Represents a local file system directory for listing files and performing filesystem operations.
+- No connection string options required — the connection string is the directory path.
+- Supports `COPY_FILE`, `MOVE_FILE`, `DELETE_FILE`, and directory listing via `SELECT`.
+
+*Examples:*
 ```sql
-CREATE CONNECTION remote_srv ON SFTP('sftp.example.com') WITH(USER='admin', PASS='secret');
-CREATE CONNECTION cloud_store ON AZUREBLOB('UseDevelopmentStorage=true') WITH(CONTAINER='backup');
+-- Delimited CSV file with custom options
+CREATE CONNECTION csv_in ON FLATFILE('C:\Data\employees.csv')
+    WITH(HEADER=ON, DELIMITER=COMMA, ENCODING=UTF8, NULL_AS=EMPTY);
+
+-- Encrypted and compressed flat file
+CREATE CONNECTION secure_file ON FLATFILE('C:\Data\payroll.csv.gz')
+    WITH(COMPRESS=ON, ENCRYPT=ON, PASSWORD='s3cr3t');
+
+-- Excel workbook — specific sheet and range
+CREATE CONNECTION xl_src ON EXCEL('C:\Reports\Q4.xlsx')
+    WITH(SHEET='Summary', HEADER=ON, RANGE='A1:F500');
+
+-- JSON file with nested data path
+CREATE CONNECTION json_src ON JSON('C:\Data\orders.json')
+    WITH(ROOT_PATH='$.orders');
+
+-- XML file with XPath root
+CREATE CONNECTION xml_src ON XML('C:\Data\catalog.xml')
+    WITH(ROOT_PATH='/Catalog/Product');
+
+-- Parquet with explicit compression
+CREATE CONNECTION parquet_out ON PARQUET('C:\Data\output.parquet')
+    WITH(COMPRESSION=SNAPPY);
+
+-- SQL Server with default table
+CREATE CONNECTION db ON MSSQL('Server=myserver;Database=DW;Integrated Security=true')
+    WITH(TABLE='dbo.Employees');
+
+-- PostgreSQL
+CREATE CONNECTION pg ON POSTGRES('Host=localhost;Database=mydb;Username=etl;Password=pass');
+
+-- SFTP remote file system
+CREATE CONNECTION sftp_conn ON SFTP('sftp.example.com')
+    WITH(USER='admin', PASSWORD='secret');
+
+-- SFTP with key-based auth
+CREATE CONNECTION sftp_key ON SFTP('sftp.example.com')
+    WITH(USER='deploy', KEYFILE='/home/etl/.ssh/id_rsa', PASSPHRASE='keypass');
+
+-- FTP
+CREATE CONNECTION ftp_conn ON FTP('ftp.example.com')
+    WITH(USER='ftpuser', PASSWORD='ftppass');
+
+-- Azure Blob Storage
+CREATE CONNECTION cloud_store ON AZURE_BLOB('DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=...')
+    WITH(CONTAINER='backup');
+
+-- Local directory
+CREATE CONNECTION data_dir ON DIRECTORY('C:\Data\Incoming');
+
+-- SMTP email
+CREATE CONNECTION mailer ON SMTP('smtp.gmail.com')
+    WITH(PORT=587, USERNAME='alerts@example.com', PASSWORD='apppassword', USE_SSL=TRUE);
+
+-- Encrypted connection string
 CREATE CONNECTION secure_db ON MSSQL('ENC:U2FsdGVkX1+...');
 ```
 
@@ -318,7 +403,7 @@ Fetches, transforms, and projects data from an established connection or tempora
     - `RAW`: Returns each row as a `<row>` element.
     - `ELEMENTS`: Formats column values as nested sub-elements instead of attributes (default).
 
-*Example:*
+*Example (standard query):*
 ```sql
 SELECT DISTINCT
     category, 
@@ -331,6 +416,44 @@ GROUP BY category
 HAVING TotalSales > @threshold
 ORDER BY TotalSales DESC
 LIMIT 10;
+```
+
+*Example (PIVOT — rotate rows to columns):*
+```sql
+-- Sales per quarter, pivoted so each quarter becomes a column
+SELECT category, [Q1], [Q2], [Q3], [Q4]
+FROM (
+    SELECT category, quarter, amount FROM #sales
+) AS src
+PIVOT (
+    SUM(amount) FOR quarter IN ([Q1], [Q2], [Q3], [Q4])
+) AS pvt;
+```
+
+*Example (UNPIVOT — rotate columns back to rows):*
+```sql
+-- Normalize Q1–Q4 columns back into rows
+SELECT category, quarter, amount
+FROM #quarterly_sales
+UNPIVOT (
+    amount FOR quarter IN ([Q1], [Q2], [Q3], [Q4])
+) AS unpvt;
+```
+
+*Example (pagination with OFFSET / FETCH NEXT):*
+```sql
+SELECT id, name, amount
+FROM #sales
+ORDER BY amount DESC
+OFFSET 20 ROWS
+FETCH NEXT 10 ROWS ONLY;
+```
+
+*Example (FOR JSON):*
+```sql
+SELECT id, name, amount
+FROM #sales
+FOR JSON PATH, ROOT('Sales'), INCLUDE_NULL_VALUES;
 ```
 
 ## Logical Operators & Advanced Filters
@@ -545,6 +668,104 @@ Removes a user-defined function or procedure.
 ```sql
 DROP FUNCTION MyFunc;
 DROP PROCEDURE MyProc;
+```
+
+### Environment Sets
+
+Environment sets let you define named groups of variable assignments that can be applied to the current session in one step. This is useful for switching between environments (e.g. DEV, QA, PROD) without changing the script logic.
+
+#### CREATE SETS
+Defines a named set of variable assignments. The `BEGIN...END` block contains comma-separated `@variable = value` assignments. The optional `SET WITH_PROMPT ON` directive causes `USE SETS` to ask for confirmation before applying the set in interactive mode.
+
+*Syntax:*
+```sql
+CREATE SETS !<name>
+BEGIN
+    @variable1 = <expression>,
+    @variable2 = <expression>
+    [SET WITH_PROMPT ON;]
+END
+```
+
+*Example:*
+```sql
+-- Define a DEV environment
+CREATE SETS !DEV
+BEGIN
+    @server   = 'dev-db.internal',
+    @database = 'DevWarehouse',
+    @schema   = 'dbo'
+END
+
+-- Define a PROD environment with a safety prompt
+CREATE SETS !PROD
+BEGIN
+    @server   = 'prod-db.internal',
+    @database = 'ProdWarehouse',
+    @schema   = 'dbo';
+    SET WITH_PROMPT ON;
+END
+```
+
+#### USE SETS
+Applies a previously defined named set, assigning all of its variables to the current session. If the set was created with `SET WITH_PROMPT ON`, the engine will prompt for confirmation before applying it (in interactive mode). In batch/non-interactive mode, the set is applied automatically.
+
+*Syntax:*
+```sql
+USE SETS !<name>;
+```
+
+*Example:*
+```sql
+DECLARE @server   VARCHAR(100);
+DECLARE @database VARCHAR(100);
+DECLARE @schema   VARCHAR(50);
+
+USE SETS !DEV;
+
+-- @server, @database, and @schema are now set to the DEV values
+SELECT @server, @database, @schema;
+```
+
+#### DROP SETS
+Removes a named set from the current session.
+
+*Syntax:*
+```sql
+DROP SETS [IF EXISTS] !<name>;
+```
+
+*Example:*
+```sql
+DROP SETS !DEV;
+DROP SETS IF EXISTS !STAGING;  -- No error if it doesn't exist
+```
+
+*Full environment-switching example:*
+```sql
+DECLARE @conn VARCHAR(200);
+DECLARE @mode VARCHAR(50) = 'unknown';
+
+CREATE SETS !DEV
+BEGIN
+    @conn = 'Server=dev-db;Database=Dev;',
+    @mode = 'development'
+END
+
+CREATE SETS !PROD
+BEGIN
+    @conn = 'Server=prod-db;Database=Prod;',
+    @mode = 'production';
+    SET WITH_PROMPT ON;
+END
+
+-- Switch to DEV (no prompt)
+USE SETS !DEV;
+CREATE CONNECTION src ON MSSQL(@conn);
+
+-- Switch to PROD (will prompt in interactive mode)
+USE SETS !PROD;
+CREATE CONNECTION dest ON MSSQL(@conn);
 ```
 
 ### Control Flow

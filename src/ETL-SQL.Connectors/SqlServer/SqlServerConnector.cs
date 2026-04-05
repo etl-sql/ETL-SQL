@@ -30,8 +30,11 @@ namespace ETL_SQL.Connectors.SqlServer
         /// <summary>Returns baseline keywords not supported in T-SQL pushdown queries.</summary>
         public HashSet<string> GetExcludedKeywords() => SqlServerSyntax.Exclusions;
         
-        /// <summary>Returns supported options (none currently required for base connection).</summary>
-        public Dictionary<string, string[]> GetSupportedOptions() => new();
+        /// <summary>Returns supported connection string options.</summary>
+        public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "TABLE", Array.Empty<string>() }
+        };
 
         /// <summary>Returns allowed option values.</summary>
         public Dictionary<string, string[]> GetOptionValues() => new();

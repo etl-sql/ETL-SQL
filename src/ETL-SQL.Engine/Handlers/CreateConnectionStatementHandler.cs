@@ -36,11 +36,29 @@ namespace ETL_SQL.Engine.Handlers
             string target = (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString() ?? "";
             if (target.StartsWith("ENC:"))
             {
-                if (string.IsNullOrEmpty(context.MasterPassword))
+                string? decryptionKey = context.MasterPassword ?? context.ScriptPassword;
+                if (string.IsNullOrEmpty(decryptionKey))
                 {
-                    throw new ExecutionException("Master password is required to decrypt connection string.");
+                    throw new ExecutionException("A password is required to decrypt the connection string. Use 'USE PASSWORD' in the script or provide a master password.");
                 }
-                target = CryptoUtils.Decrypt(target, context.MasterPassword);
+                
+                try 
+                {
+                    target = CryptoUtils.Decrypt(target, decryptionKey);
+                }
+                catch (Exception ex)
+                {
+                    // If MasterPassword failed, and we have a ScriptPassword, try it too (if they were different)
+                    if (context.MasterPassword != null && context.ScriptPassword != null && context.MasterPassword != context.ScriptPassword)
+                    {
+                         try { target = CryptoUtils.Decrypt(target, context.ScriptPassword); }
+                         catch { throw new ExecutionException($"Failed to decrypt connection string with provided passwords: {ex.Message}"); }
+                    }
+                    else
+                    {
+                        throw new ExecutionException($"Failed to decrypt connection string: {ex.Message}");
+                    }
+                }
             }
             target = Interpolate(target);
 

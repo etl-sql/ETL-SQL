@@ -39,10 +39,13 @@ namespace ETL_SQL.Connectors.Json
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Returns a human-readable help string for the JSON connector.</summary>
-        public string GetHelp() => 
+        public string GetHelp() =>
             "JSON Connector: Connects to JSON files.\n" +
             "Options:\n" +
-            "  ROOT_PATH: JSONPath to the data array (e.g. '$.Rows')";
+            "  ROOT_PATH: JSONPath to the data array (e.g. '$.Rows')\n" +
+            "  COMPRESS: ON | OFF (Transparent GZip support)\n" +
+            "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
+            "  PASSWORD: Password for encryption/decryption";
 
         /// <summary>Creates a new JSON data source instance.</summary>
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null)

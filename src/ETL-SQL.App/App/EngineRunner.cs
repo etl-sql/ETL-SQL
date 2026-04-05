@@ -2,15 +2,19 @@ using System;
 using System.IO;
 using System.Diagnostics;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using Spectre.Console;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common;
 using ETL_SQL.UI;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Linting;
+using ETL_SQL.Core.Linting.Rules;
 
 namespace ETL_SQL.App
 {
@@ -114,6 +118,59 @@ namespace ETL_SQL.App
                 var parser = new Parser(tokens, source);
                 var script = parser.Parse();
                 parseTime.Stop();
+
+                var errors = script.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+                if (errors.Any())
+                {
+                    if (ctx.IsJsonMode)
+                    {
+                        // Output the error messages to stderr for the extension to capture
+                        foreach (var err in errors) {
+                            Console.Error.WriteLine($"Syntax Error at line {err.Line}, col {err.Column}: {err.Message}");
+                        }
+                    } 
+                    else 
+                    {
+                        Logger.WriteLine("Parsing failed:", ConsoleColor.Red);
+                        foreach (var err in errors) {
+                            Logger.WriteLine($"  - Line {err.Line}, Col {err.Column}: {err.Message}", ConsoleColor.Yellow);
+                        }
+                    }
+                    return 1;
+                }
+
+                // 3. Linting Phase
+                var lintTime = Stopwatch.StartNew();
+                Logger.WriteLine("Linter phase...");
+                var linter = new Linter();
+                foreach (var type in typeof(ILintRule).Assembly.GetTypes()
+                    .Where(t => typeof(ILintRule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract))
+                {
+                    if (Activator.CreateInstance(type) is ILintRule rule)
+                        linter.AddRule(rule);
+                }
+
+                var lintResults = await linter.AnalyzeAsync(script, new DefaultLintContext { DocumentUri = ctx.ScriptFile.FullName });
+                lintTime.Stop();
+
+                var lintErrors = lintResults.Where(r => r.Severity == LintSeverity.Error).ToList();
+                if (lintErrors.Any())
+                {
+                    if (ctx.IsJsonMode)
+                    {
+                        foreach (var err in lintErrors) {
+                            Console.Error.WriteLine($"Linter Error at line {err.LineNumber}, col {err.ColumnNumber}: {err.Message}");
+                        }
+                    } 
+                    else 
+                    {
+                        Logger.WriteLine("Linting failed:", ConsoleColor.Red);
+                        foreach (var err in lintErrors) {
+                            Logger.WriteLine($"  - Line {err.LineNumber}, Col {err.ColumnNumber}: {err.Message}", ConsoleColor.Yellow);
+                        }
+                    }
+                    return 1;
+                }
                 
                 try
                 {
@@ -199,6 +256,22 @@ namespace ETL_SQL.App
                     {
                         Logger.WriteLine($"Execution finished in {execTime.ElapsedMilliseconds}ms.", ConsoleColor.Green);
                         Logger.WriteLine($"Rows affected: {evaluator.RowsProcessed}");
+                    }
+
+                    if (evaluator.DockerManager.HasActiveContainers)
+                    {
+                        if (ctx.IsJsonMode)
+                        {
+                            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { 
+                                type = "message", 
+                                level = "warning",
+                                text = "Docker containers are still running. Remember to use 'DOCKER CLOSE;' when finished." 
+                            }));
+                        }
+                        else
+                        {
+                            Logger.WriteLine("Note: Docker containers are still running. Use 'DOCKER CLOSE;' to terminate them when finished.", ConsoleColor.Yellow);
+                        }
                     }
 
                     return 0;

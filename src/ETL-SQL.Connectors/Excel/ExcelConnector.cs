@@ -21,6 +21,7 @@ namespace ETL_SQL.Connectors.Excel
         {
             { "SHEET", Array.Empty<string>() },
             { "HEADER", new[] { "ON", "OFF" } },
+            { "RANGE", Array.Empty<string>() },
             { "COMPRESS", new[] { "ON", "OFF" } },
             { "ENCRYPT", new[] { "ON", "OFF" } },
             { "PASSWORD", Array.Empty<string>() }
@@ -33,13 +34,15 @@ namespace ETL_SQL.Connectors.Excel
             { "ENCRYPT", new[] { "ON", "OFF" } }
         };
 
-        public string GetHelp() => 
+        public string GetHelp() =>
             "EXCEL Connector: Connects to Excel workbooks (.xlsx, .xls, .xlsb).\n" +
             "Options:\n" +
-            "  SHEET: Name of the sheet (default is the first one)\n" +
-            "  HEADER: ON|OFF (treat first row as header, default ON)\n" +
-            "  ENCRYPT: ON|OFF (use AES encryption for the file)\n" +
-            "  PASS: Password for encryption/decryption";
+            "  SHEET: Name of the sheet to read (default: first sheet)\n" +
+            "  HEADER: ON | OFF (treat first row as header, default ON)\n" +
+            "  RANGE: Cell range to read (e.g. 'A1:D100')\n" +
+            "  COMPRESS: ON | OFF (GZip compress the output file)\n" +
+            "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
+            "  PASSWORD: Password for encryption/decryption";
 
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null) 
             => new ExcelDataSource(connectionString, options);

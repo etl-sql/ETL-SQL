@@ -17,12 +17,12 @@ namespace ETL_SQL.LSP
     [Method("etlsql/refreshMetadata", Direction.ClientToServer)]
     public interface IRefreshMetadataHandler : IJsonRpcNotificationHandler<RefreshMetadataParams> { }
 
-    public class RefreshMetadataHandler(ILogger<RefreshMetadataHandler> logger, TextDocumentHandler textDocumentHandler) : IRefreshMetadataHandler
+    public class RefreshMetadataHandler(ILogger<RefreshMetadataHandler> logger, DocumentStateStore store, TextDocumentHandler textDocumentHandler) : IRefreshMetadataHandler
     {
         public async Task<Unit> Handle(RefreshMetadataParams request, CancellationToken cancellationToken)
         {
             logger.LogInformation("LSP: RefreshMetadata requested for {Uri}", request.Uri);
-            var text = textDocumentHandler.GetDocumentText(request.Uri);
+            var text = store.GetDocumentText(request.Uri);
             if (text != null)
             {
                 await textDocumentHandler.AnalyzeAsync(request.Uri, text);

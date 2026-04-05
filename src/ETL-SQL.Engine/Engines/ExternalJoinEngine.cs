@@ -110,14 +110,30 @@ namespace ETL_SQL.Engine.Engines
             while ((line = await reader.ReadLineAsync()) != null)
             {
                 var cols = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(line);
-                if (cols != null) 
+                if (cols != null)
                 {
                     var row = new Row();
-                    foreach (var kvp in cols) row[kvp.Key] = kvp.Value;
+                    foreach (var kvp in cols) row[kvp.Key] = UnwrapJsonValue(kvp.Value);
                     rows.Add(row);
                 }
             }
             return rows;
+        }
+
+        private static object? UnwrapJsonValue(object? val)
+        {
+            if (val is System.Text.Json.JsonElement je)
+                return je.ValueKind switch
+                {
+                    System.Text.Json.JsonValueKind.Number when je.TryGetInt64(out var l) => l,
+                    System.Text.Json.JsonValueKind.Number => je.GetDouble(),
+                    System.Text.Json.JsonValueKind.True   => true,
+                    System.Text.Json.JsonValueKind.False  => false,
+                    System.Text.Json.JsonValueKind.String => je.GetString(),
+                    System.Text.Json.JsonValueKind.Null   => null,
+                    _                                     => (object?)je.ToString()
+                };
+            return val;
         }
 
         private int GetKeyHash(Row row, List<string> keys)

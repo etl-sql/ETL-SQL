@@ -47,15 +47,21 @@ namespace ETL_SQL.LSP
                         registry.Register(new SqlServerConnector());
                         registry.Register(new PostgresConnector());
                         registry.Register(new OracleConnector());
-                        
+
                         services.AddSingleton<IConnectorRegistry>(registry);
                         services.AddSingleton<IMetadataManager, MetadataManager>();
+                        services.AddSingleton<DocumentStateStore>();
                     })
                     .OnStarted((server, ct) => {
                         server.Configuration.AddConfigurationItem(new ConfigurationItem { Section = "etlsql" });
                         return Task.CompletedTask;
                     })
                     .WithHandler<TextDocumentHandler>()
+                    .WithHandler<HoverProvider>()
+                    .WithHandler<DefinitionProvider>()
+                    .WithHandler<CompletionProvider>()
+                    .WithHandler<SignatureHelpProvider>()
+                    .WithHandler<FormattingProvider>()
                     .WithHandler<CustomMethodsHandler>()
                     .WithHandler<RefreshMetadataHandler>()
             );

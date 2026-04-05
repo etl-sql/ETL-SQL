@@ -105,7 +105,7 @@ namespace ETL_SQL.Engine.Engines
                     if (e?.Columns != null)
                     {
                         var row = new Row();
-                        foreach (var kvp in e.Columns) row[kvp.Key] = kvp.Value;
+                        foreach (var kvp in e.Columns) row[kvp.Key] = UnwrapJsonValue(kvp.Value);
                         rows.Add(row);
                     }
                 }
@@ -154,9 +154,25 @@ namespace ETL_SQL.Engine.Engines
             var e = System.Text.Json.JsonSerializer.Deserialize<SortEntry>(line);
             if (e?.Columns == null) return null;
             var row = new Row();
-            foreach (var kvp in e.Columns) row[kvp.Key] = kvp.Value;
+            foreach (var kvp in e.Columns) row[kvp.Key] = UnwrapJsonValue(kvp.Value);
             var keys = e.Keys?.Select(DeserializeKey).ToArray() ?? Array.Empty<object?>();
             return (row, keys);
+        }
+
+        private static object? UnwrapJsonValue(object? val)
+        {
+            if (val is System.Text.Json.JsonElement je)
+                return je.ValueKind switch
+                {
+                    System.Text.Json.JsonValueKind.Number when je.TryGetInt64(out var l) => l,
+                    System.Text.Json.JsonValueKind.Number => je.GetDouble(),
+                    System.Text.Json.JsonValueKind.True   => true,
+                    System.Text.Json.JsonValueKind.False  => false,
+                    System.Text.Json.JsonValueKind.String => je.GetString(),
+                    System.Text.Json.JsonValueKind.Null   => null,
+                    _                                     => (object?)je.ToString()
+                };
+            return val;
         }
 
         private static string? SerializeKey(object? v) => v == null ? null : System.Text.Json.JsonSerializer.Serialize(v);

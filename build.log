@@ -1,0 +1,14 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  ETL-SQL.Core -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\bin\Debug\net10.0\ETL-SQL.Core.dll
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\HelpStatementHandler.cs(78,48): error CS1061: 'IExecutionContext' does not contain a definition for 'Functions' and no accessible extension method 'Functions' accepting a first argument of type 'IExecutionContext' could be found (are you missing a using directive or an assembly reference?) [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\ETL-SQL.Engine.csproj]
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\InsertStatementHandler.cs(190,42): warning CS8600: Converting null literal or possible null value to non-nullable type. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\ETL-SQL.Engine.csproj]
+
+Build FAILED.
+
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\InsertStatementHandler.cs(190,42): warning CS8600: Converting null literal or possible null value to non-nullable type. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\ETL-SQL.Engine.csproj]
+C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\Handlers\HelpStatementHandler.cs(78,48): error CS1061: 'IExecutionContext' does not contain a definition for 'Functions' and no accessible extension method 'Functions' accepting a first argument of type 'IExecutionContext' could be found (are you missing a using directive or an assembly reference?) [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\ETL-SQL.Engine.csproj]
+    1 Warning(s)
+    1 Error(s)
+
+Time Elapsed 00:00:00.86

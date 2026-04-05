@@ -37,10 +37,10 @@ namespace ETL_SQL.Connectors.Parquet
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Returns a human-readable help string for the Parquet connector.</summary>
-        public string GetHelp() => 
+        public string GetHelp() =>
             "Parquet Connector: Connects to Apache Parquet files.\n" +
             "Options:\n" +
-            "  COMPRESSION: The compression codec to use (Default: SNAPPY)";
+            "  COMPRESSION: SNAPPY (default) | GZIP | LZO | BROTLI | LZ4 | ZSTD | UNCOMPRESSED";
 
         /// <summary>Creates a new Parquet data source instance.</summary>
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null) 

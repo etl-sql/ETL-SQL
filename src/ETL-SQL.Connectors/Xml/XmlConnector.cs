@@ -40,10 +40,13 @@ namespace ETL_SQL.Connectors.Xml
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Returns a human-readable help string for the XML connector.</summary>
-        public string GetHelp() => 
+        public string GetHelp() =>
             "XML Connector: Connects to XML files.\n" +
             "Options:\n" +
-            "  ROOT_PATH: XPath to the repeating element (e.g. '/Catalog/Book')";
+            "  ROOT_PATH: XPath to the repeating element (e.g. '/Catalog/Book')\n" +
+            "  COMPRESS: ON | OFF (Transparent GZip support)\n" +
+            "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
+            "  PASSWORD: Password for encryption/decryption";
 
         /// <summary>Creates a new XML data source instance.</summary>
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null)

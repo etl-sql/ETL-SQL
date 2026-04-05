@@ -10,6 +10,7 @@ namespace ETL_SQL.Connectors.MockDb
     public class MockSqlDataSource : IDatabaseSource
     {
         private readonly string _connectionString;
+        public string ConnectionString => _connectionString;
         private readonly string _dialect; 
         private readonly Dictionary<string, DataTable> _mockTables = new(StringComparer.OrdinalIgnoreCase);
         public string Path => "MOCK";

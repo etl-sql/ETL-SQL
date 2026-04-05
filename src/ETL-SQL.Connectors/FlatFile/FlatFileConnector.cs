@@ -61,20 +61,24 @@ namespace ETL_SQL.Connectors.FlatFile
         };
 
         /// <summary>Returns a human-readable help string for the FlatFile connector.</summary>
-        public string GetHelp() => 
+        public string GetHelp() =>
             "FLATFILE Connector: High-performance delimited text processing.\n" +
             "Options:\n" +
             "  DELIMITER: COMMA | PIPE | TAB | SEMICOLON | COLON | TILDE | <char>\n" +
             "  HEADER: ON (default) | OFF\n" +
             "  ENCODING: UTF8 | ANSI | UTF16 | LATIN1 | UNICODE\n" +
             "  TEXT_QUALIFIER: DOUBLEQUOTE | SINGLEQUOTE\n" +
+            "  ESCAPE_CHAR: Character used to escape delimiters within fields (e.g. '\\')\n" +
             "  ROW_DELIMITER: LF | CR | CRLF\n" +
             "  NULL_AS: NULL | EMPTY | BACKSLASH_N\n" +
+            "  DATE_FORMAT: Date parsing format string (e.g. 'yyyy-MM-dd')\n" +
             "  STRICT_SCHEMA: ON | OFF (Enforces column counts)\n" +
             "  START_AT: <n> (Start reading at line n)\n" +
             "  END_AT: <n> (Stop reading at line n)\n" +
             "  COUNT_AT_END: ON (Validate row count at trailer)\n" +
-            "  COMPRESS: ON | OFF (Transparent GZip support)";
+            "  COMPRESS: ON | OFF (Transparent GZip support)\n" +
+            "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
+            "  PASSWORD: Password for encryption/decryption";
 
         /// <summary>Creates a new FlatFile, JSON, or XML data source based on the file extension.</summary>
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null)

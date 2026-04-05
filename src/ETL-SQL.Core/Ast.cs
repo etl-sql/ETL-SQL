@@ -758,7 +758,13 @@ namespace ETL_SQL.Core
             var check = CheckConstraint != null ? $" CHECK ({CheckConstraint.ToSql()})" : "";
             var fk = ForeignKey != null ? $" {ForeignKey.ToSql()}" : "";
             
-            return $"{ColumnName} {DataType}{pk}{unq}{nullable}{identity}{def}{check}{fk}";
+            var tags = "";
+            if (Metadata.Count > 0)
+            {
+                tags = " /* " + string.Join(" ", Metadata.Select(kv => $"@{kv.Key}: {kv.Value}")) + " */";
+            }
+            
+            return $"{ColumnName} {DataType}{pk}{unq}{nullable}{identity}{def}{check}{fk}{tags}";
         }
     }
 
@@ -2034,11 +2040,34 @@ namespace ETL_SQL.Core
         public override string ToSql() => IfExists ? $"DROP SETS IF EXISTS !{Name};" : $"DROP SETS !{Name};";
     }
 
-    /// <summary>USE SETS !&lt;name&gt;</summary>
+    /// <summary>USE SETS !<name></summary>
     public class UseSetsStatement : Statement
     {
         public string Name { get; }
         public UseSetsStatement(string name) { Name = name; }
         public override string ToSql() => $"USE SETS !{Name};";
     }
+
+    /// <summary>USE PASSWORD = 'password'</summary>
+    public class UsePasswordStatement : Statement
+    {
+        public string Password { get; }
+        public UsePasswordStatement(string password) { Password = password; }
+        
+        /// <summary>
+        /// Converts the statement to its SQL string, optionally masking the password for security.
+        /// When masked, results in: USE PASSWORD = '********';
+        /// </summary>
+        public string ToSql(bool mask) => $"USE PASSWORD = '{(mask ? "********" : Password.Replace("'", "''"))}';";
+        public override string ToSql() => ToSql(true); // Default to masked for safety in serialization
+    }
+
+    /// <summary>SET SHOW_PASSWORD ON/OFF</summary>
+    public class SetShowPasswordStatement : Statement
+    {
+        public bool Enabled { get; }
+        public SetShowPasswordStatement(bool enabled) { Enabled = enabled; }
+        public override string ToSql() => $"SET SHOW_PASSWORD {(Enabled ? "ON" : "OFF")};";
+    }
 }
+
