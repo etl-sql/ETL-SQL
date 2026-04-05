@@ -295,7 +295,7 @@ namespace ETL_SQL.Core.Parser
                         }
                         else
                         {
-                            // Avoid crash/infinite loop on unexpected !
+                            tokens.Add(new Token(TokenType.BANG, "!", startLine, startColumn, startLine, startColumn + 1, startOffset, startOffset + 1));
                             Advance();
                         }
                         break;

@@ -66,6 +66,11 @@ namespace ETL_SQL.Core
         List<string> Messages { get; }
         int MaxMessages { get; set; }
         void Log(string message, ConsoleColor color = ConsoleColor.White);
+        /// <summary>
+        /// Optional interactive prompt callback. Returns true to proceed, false to abort.
+        /// Null means non-interactive (auto-proceed).
+        /// </summary>
+        Func<string, Task<bool>>? OnPrompt { get; set; }
     }
 
     public interface IEvaluationContext
@@ -89,6 +94,16 @@ namespace ETL_SQL.Core
         int PartitionsCount { get; set; }
         Action<DataTable>? OnResultSet { get; set; }
         bool IsSqlPushdown(string connName);
+        /// <summary>Named environment sets created by CREATE SETS.</summary>
+        IDictionary<string, NamedSet> NamedSets { get; }
+    }
+
+    /// <summary>A stored collection of variable assignments created by CREATE SETS.</summary>
+    public class NamedSet
+    {
+        public List<SetsAssignment> Assignments { get; }
+        public bool WithPrompt { get; }
+        public NamedSet(List<SetsAssignment> assignments, bool withPrompt) { Assignments = assignments; WithPrompt = withPrompt; }
     }
 
     public interface IEngineContext

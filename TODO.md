@@ -114,8 +114,8 @@ NOTE: CREATE A NEW GIT BRANCH BEFORE STARTING THIS WORK
 **CQ-6.** [x] **`InsertStatementHandler:127`** — `new ExecutePushdownStatementHandler()` bypasses DI. Fixed: inject via constructor.
 **CQ-7.** [x] **Silent `catch {}` in `CreateConnectionStatementHandler`** — Fixed: logs at Verbose.
 **CQ-8.** [x] **`SelectStatementHandler`** — `LastResult` capped at 50,000 rows; true counts preserved in `TotalRowsMatched`/`RowsProcessed`.
-**CQ-9.** **`SelectStatementHandler` ORDER BY** — No hyper-scale mitigation. Aggregation checks `>100,000` rows and switches to `ExternalAggregateEngine`, but ORDER BY buffers the entire result set unconditionally. Add the same threshold check.
-**CQ-10.** **DI violations in `SelectStatementHandler`** — Lines 31–33 lazy-init `JoinEngine`, `AggregateEngine`, `WindowEngine` with `new`. Lines 453, 567, 580, 594 create `ExternalAggregateEngine` and `InMemoryDataSource` directly. Should be injected or factory-created.
+**CQ-9.** [x] **`SelectStatementHandler` ORDER BY** — Fixed: `ExternalSortEngine` created; ORDER BY > 100k rows spills sorted chunks to disk and does a k-way merge, same threshold as aggregation.
+**CQ-10.** [x] **DI violations in `SelectStatementHandler`** — Fixed: `JoinEngine`, `AggregateEngine`, `WindowEngine`, `SetOperationEngine` are now created fresh per `EvaluateSelect` / `EvaluateSetOperation` call (local variables) rather than stale instance fields.
 **CQ-11.** [x] **Linter rule registration hardcoded** — Fixed: `LintStatementHandler` uses `Assembly.GetTypes()` reflection to discover and register all `ILintRule` implementations automatically.
 
 ### Thread Safety
@@ -154,7 +154,7 @@ NOTE: CREATE A NEW GIT BRANCH BEFORE STARTING THIS WORK
 [x] 4. Variables can be declared in a batch.  DECARE @v1 int, @v2 varchar(100), @v3 boolean;  No need to repeat the DECARE keyword for each variable.
 [x] 5. ALTER CONNECTION and CREATE OR ALTER CONNECTION.  These will be used to update connection strings and other connection properties.  The connection string will be encrypted with the password used to open the script.  CREATE OR ALTER will CREATE if the connection does not exist, and ALTER if it does exist.  ALTER will update the connection string and other connection properties.  The connection string will be encrypted with the password used to open the script.
 
-6. FLATFILE, JSON, XML, EXCEL, FTP, SFTP, EMAIL.  The PASS option is an alias for PASSWORD.  Both words are accepted but PASSWORD is the preferred term.  These passwords are encrypted with the password used to open the script.  The password is not shown when the script is opened, even if SET SHOW_PASSWORD is ON.  They will show ENC: .... just like when a connection string is encrypted.  These passwords will not be encrypted if the user explicitly uses the ENCRYPT=OFF option.  Then they will be shown as plain text and saved as plain text.  This is the same behavior as connection strings.
+[x] 6. FLATFILE, JSON, XML, EXCEL, FTP, SFTP, EMAIL all use PASSWORD as the option name (no PASS alias — shorthand adds confusion). Passwords are encrypted with the script password; shown as ENC:... unless ENCRYPT=OFF is specified.
 
 [x] 7. Check to make sure TOP(100) is the same as TOP 100 the user can use either syntax.
 
@@ -199,7 +199,7 @@ END
 
 [x] 20. Need to add a WAITFOR DELAY '00:00:00' to the engine.  This will be used to pause the script for a specified amount of time.
 
-21. Add CREATE SETS !<name> and DROP SETS [IF EXISTS] !<name> command.  These are used to set one or more variables to specific values.  Useful for setting production, test, dev, or other environments setups but may have other uses outside of just DevOps.  Then the user can use USE SETS !<name> to switch between the different environments.  The user can also add SET WITH_PROMPT ON; this will stop the script and the user must explicitly say yes to move forward.  This is to prevent the user from accidentally running a script in the wrong environment.  This only happens when the user is manually executing the script.  If the script is ran as a job or executed from the command line it will not prompt the user.
+[x] 21. Add CREATE SETS !<name> and DROP SETS [IF EXISTS] !<name> command.  These are used to set one or more variables to specific values.  Useful for setting production, test, dev, or other environments setups but may have other uses outside of just DevOps.  Then the user can use USE SETS !<name> to switch between the different environments.  The user can also add SET WITH_PROMPT ON; this will stop the script and the user must explicitly say yes to move forward.  This is to prevent the user from accidentally running a script in the wrong environment.  This only happens when the user is manually executing the script.  If the script is ran as a job or executed from the command line it will not prompt the user.
 ```sql
 DECLARE @connection_name1 varchar(100), @connection_name2 varchar(100);
 CREATE SETS !PROD_ENV

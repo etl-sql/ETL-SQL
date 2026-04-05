@@ -156,7 +156,7 @@ namespace ETL_SQL.Core.Parser
                 _parser.Consume(TokenType.LPAREN, "Expected '(' after DOCKER");
                 var imageName = _parser.ParseExpression();
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after image name");
-                
+
                 string? alias = null;
                 if (_parser.Match(TokenType.AS))
                 {
@@ -166,7 +166,16 @@ namespace ETL_SQL.Core.Parser
                 if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
                 return new DockerStatement(imageName, alias) { Line = startToken.Line, Column = startToken.Column };
             }
-            throw new SyntaxException("Expected DOCKER after USE", _parser.Current.Line, _parser.Current.Column);
+
+            if (_parser.Match(TokenType.SETS))
+            {
+                _parser.Consume(TokenType.BANG, "Expected '!' before set name in USE SETS");
+                var name = _parser.ConsumeIdentifier("Expected set name after '!'").Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                return new UseSetsStatement(name) { Line = startToken.Line, Column = startToken.Column };
+            }
+
+            throw new SyntaxException("Expected DOCKER or SETS after USE", _parser.Current.Line, _parser.Current.Column);
         }
 
         private bool IsContextualKeyword(TokenType type)
@@ -666,7 +675,14 @@ namespace ETL_SQL.Core.Parser
                 bool isUnique = _parser.Match(TokenType.UNIQUE);
                 return ParseCreateIndex(startToken, isUnique);
             }
-            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION or INDEX after CREATE", _parser.Current.Line, _parser.Current.Column);
+
+            if (_parser.Match(TokenType.SETS))
+            {
+                if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for SETS.", _parser.Current.Line, _parser.Current.Column);
+                return ParseCreateSets(startToken);
+            }
+
+            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, or SETS after CREATE", _parser.Current.Line, _parser.Current.Column);
         }
 
         private Statement ParseAlter()
@@ -1164,8 +1180,16 @@ namespace ETL_SQL.Core.Parser
                 if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
                 return new DropIndexStatement(name, target, ifExists) { Line = startToken.Line, Column = startToken.Column };
             }
-            
-            throw new SyntaxException("Expected TABLE, CONNECTION, PROCEDURE, FUNCTION or INDEX after DROP", _parser.Current.Line, _parser.Current.Column);
+            else if (_parser.Match(TokenType.SETS))
+            {
+                if (_parser.Match(TokenType.IF)) { _parser.Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+                _parser.Consume(TokenType.BANG, "Expected '!' before set name in DROP SETS");
+                var name = _parser.ConsumeIdentifier("Expected set name after '!'").Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                return new DropSetsStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
+            }
+
+            throw new SyntaxException("Expected TABLE, CONNECTION, PROCEDURE, FUNCTION, INDEX, or SETS after DROP", _parser.Current.Line, _parser.Current.Column);
         }
 
         private Statement ParseDelete()
@@ -1934,6 +1958,51 @@ namespace ETL_SQL.Core.Parser
             }
             _parser.Match(TokenType.SEMICOLON);
             return new LintStatement(path) { Line = token.Line, Column = token.Column };
+        }
+
+        private Statement ParseCreateSets(Token startToken)
+        {
+            // CREATE SETS !<name> BEGIN @var = expr, @var = expr [SET WITH_PROMPT ON;] END
+            _parser.Consume(TokenType.BANG, "Expected '!' before set name in CREATE SETS");
+            var name = _parser.ConsumeIdentifier("Expected set name after '!'").Value;
+
+            _parser.Consume(TokenType.BEGIN, "Expected BEGIN after set name");
+
+            var assignments = new List<SetsAssignment>();
+            bool withPrompt = false;
+
+            while (_parser.Current.Type != TokenType.END && _parser.Current.Type != TokenType.EOF)
+            {
+                // SET WITH_PROMPT ON | OFF
+                if (_parser.Current.Type == TokenType.SET)
+                {
+                    _parser.Advance();
+                    var directive = _parser.ConsumeIdentifier("Expected WITH_PROMPT after SET in SETS block").Value;
+                    if (!string.Equals(directive, "WITH_PROMPT", StringComparison.OrdinalIgnoreCase))
+                        throw new SyntaxException("Expected WITH_PROMPT after SET inside SETS block", _parser.Current.Line, _parser.Current.Column);
+                    if (_parser.Match(TokenType.ON)) withPrompt = true;
+                    else if (_parser.Match(TokenType.OFF)) withPrompt = false;
+                    else throw new SyntaxException("Expected ON or OFF after SET WITH_PROMPT", _parser.Current.Line, _parser.Current.Column);
+                    _parser.Match(TokenType.SEMICOLON);
+                    continue;
+                }
+
+                // @var = expr
+                if (_parser.Current.Type != TokenType.VARIABLE) break;
+                var varName = _parser.Advance().Value.TrimStart('@');
+                _parser.Consume(TokenType.EQUALS, "Expected '=' after variable name in SETS block");
+                var valueExpr = _parser.ParseExpression();
+                assignments.Add(new SetsAssignment(varName, valueExpr));
+
+                // Allow comma-separated or semicolon-terminated
+                _parser.Match(TokenType.COMMA);
+                _parser.Match(TokenType.SEMICOLON);
+            }
+
+            _parser.Consume(TokenType.END, "Expected END to close CREATE SETS block");
+            _parser.Match(TokenType.SEMICOLON);
+
+            return new CreateSetsStatement(name, assignments, withPrompt) { Line = startToken.Line, Column = startToken.Column };
         }
     }
 }

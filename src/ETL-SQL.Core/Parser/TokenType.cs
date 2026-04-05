@@ -39,6 +39,7 @@ namespace ETL_SQL.Core.Parser
         NULL, YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, INCLUDE_NULL_VALUES, WITHOUT_ARRAY_WRAPPER,
         LINEAGE, SEND_EMAIL, SUBJECT, BODY, ATTACH, CC, BCC,
         JOB, SCHEDULE, EVERY, HISTORY, JOBS, LINT,
+        SETS, BANG,     // SETS keyword and ! prefix for set names
         RANGE, BETWEEN, PRECEDING, FOLLOWING, UNBOUNDED, CURRENT,
         
         // Joins

@@ -66,7 +66,8 @@ namespace ETL_SQL.Common
             "BULK", "LOAD", "BATCHSIZE", "MAXERRORS", "FIELDTERMINATOR", "ROWTERMINATOR", "FIRSTROW", "DATA_SOURCE",
             "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND", "INCLUDE_NULL_VALUES", "WITHOUT_ARRAY_WRAPPER",
             "LINEAGE", "SEND_EMAIL", "SUBJECT", "BODY", "ATTACH", "CC", "BCC",
-            "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT"
+            "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT",
+            "SETS"
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)

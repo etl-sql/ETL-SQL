@@ -102,6 +102,12 @@ namespace ETL_SQL.Engine
         /// <summary>Collection of all result sets produced during the last execution.</summary>
         public List<DataTable> LastResultSets { get; } = new();
         
+        /// <summary>Named environment sets created by CREATE SETS.</summary>
+        public IDictionary<string, NamedSet> NamedSets { get; } = new Dictionary<string, NamedSet>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Optional prompt callback for interactive USE SETS WITH_PROMPT. Null = non-interactive (auto-proceed).</summary>
+        public Func<string, Task<bool>>? OnPrompt { get; set; }
+
         /// <summary>Whether to capture execution metrics for profiling.</summary>
         public bool IsProfiling { get; set; }
         

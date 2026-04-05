@@ -17,20 +17,12 @@ namespace ETL_SQL.Engine.Handlers
     {
         public Type SupportedStatementType => typeof(SelectStatement);
         private const int MaxLastResultRows = 50_000;
-        private JoinEngine? _joinEngine;
-        private AggregateEngine? _aggregateEngine;
-        private WindowEngine? _windowEngine;
-        private SetOperationEngine? _setOpEngine;
-        private PivotEngine? _pivotEngine;
 
         /// <summary>
         /// Executes a SELECT statement, handling pushdown to remote sources or local evaluation.
         /// </summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
-            _joinEngine ??= new JoinEngine(context);
-            _aggregateEngine ??= new AggregateEngine(context);
-            _windowEngine ??= new WindowEngine(context, _aggregateEngine);
 
             // Handle pushdown if applicable (only if no INTO clause)
             if (statement is SelectStatement selPush && selPush.IntoTable == null && context.IsSqlPushdown(selPush.FromTable.ConnectionName ?? selPush.FromTable.TableName))
@@ -256,10 +248,9 @@ namespace ETL_SQL.Engine.Handlers
         /// </summary>
         public async IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt, IExecutionContext context)
         {
-            _joinEngine ??= new JoinEngine(context);
-            _aggregateEngine ??= new AggregateEngine(context);
-            _windowEngine ??= new WindowEngine(context, _aggregateEngine);
-            _pivotEngine ??= new PivotEngine(context);
+            var joinEngine = new JoinEngine(context);
+            var aggregateEngine = new AggregateEngine(context);
+            var windowEngine = new WindowEngine(context, aggregateEngine);
             
             // Handle CTEs are now in EvaluateQuery or Execute
             
@@ -326,8 +317,8 @@ namespace ETL_SQL.Engine.Handlers
             string fromName = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
 
             // OPTIMIZATION: Streaming for queries without GROUP BY or WINDOW functions
-            bool hasAggInColumns = stmt.Columns.Any(c => _aggregateEngine.IsAggregate(c.Expression));
-            bool hasWindowInColumns = stmt.Columns.Any(c => _windowEngine.IsWindowFunction(c.Expression));
+            bool hasAggInColumns = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression));
+            bool hasWindowInColumns = stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression));
             bool hasOrderBy = stmt.OrderBy != null && stmt.OrderBy.Count > 0;
             bool hasOffset = stmt.Offset != null;
 
@@ -363,7 +354,7 @@ namespace ETL_SQL.Engine.Handlers
 
                 if (stmt.Joins != null && stmt.Joins.Count > 0)
                 {
-                    rowStream = _joinEngine!.ApplyJoinsStreaming(rowStream, stmt.Joins, stmt);
+                    rowStream = joinEngine.ApplyJoinsStreaming(rowStream, stmt.Joins, stmt);
                 }
 
                 var streamResultBatch = new DataTable();
@@ -429,7 +420,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 else
                 {
-                    allBufferedRows = await _joinEngine!.ApplyJoins(allBufferedRows, stmt.Joins, stmt);
+                    allBufferedRows = await joinEngine.ApplyJoins(allBufferedRows, stmt.Joins, stmt);
                 }
             }
             else
@@ -456,7 +447,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 else
                 {
-                    allBufferedRows = await _aggregateEngine!.ApplyAggregation(allBufferedRows, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause);
+                    allBufferedRows = await aggregateEngine.ApplyAggregation(allBufferedRows, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause);
                 }
                 Logger.Verbose($"Aggregation applied: {allBufferedRows.Count} groups remaining");
             }
@@ -464,38 +455,41 @@ namespace ETL_SQL.Engine.Handlers
             // 2. WINDOW FUNCTIONS
             if (hasWindowInColumns)
             {
-                allBufferedRows = await _windowEngine!.ApplyWindowFunctions(allBufferedRows, stmt);
+                allBufferedRows = await windowEngine.ApplyWindowFunctions(allBufferedRows, stmt);
                 Logger.Verbose("Window functions applied");
             }
 
             // 3. Global ORDER BY
             if (stmt.OrderBy != null && stmt.OrderBy.Count > 0)
             {
-                if (allBufferedRows.Count > 100000)
-                    Logger.WriteLine($"[yellow]HYPER-SCALE: ORDER BY input has {allBufferedRows.Count:N0} rows. In-memory sort — consider adding a LIMIT or pushing ORDER BY to the source query.[/]");
-
-                var rowSortKeys = new List<(Row Row, object?[] Keys)>(allBufferedRows.Count);
-                foreach (var row in allBufferedRows)
+                if (allBufferedRows.Count > 100_000)
                 {
-                    var keys = new object?[stmt.OrderBy.Count];
-                    for (int i = 0; i < stmt.OrderBy.Count; i++)
-                    {
-                        keys[i] = await context.EvaluateValue(stmt.OrderBy[i].Expression, row);
-                    }
-                    rowSortKeys.Add((row, keys));
+                    var externalSort = new ExternalSortEngine(context);
+                    allBufferedRows = await externalSort.SortExternal(allBufferedRows, stmt.OrderBy);
                 }
-
-                rowSortKeys.Sort((a, b) =>
+                else
                 {
-                    for (int i = 0; i < stmt.OrderBy.Count; i++)
+                    var rowSortKeys = new List<(Row Row, object?[] Keys)>(allBufferedRows.Count);
+                    foreach (var row in allBufferedRows)
                     {
-                        var res = context.CompareConstants(a.Keys[i], b.Keys[i]);
-                        if (res != 0) return stmt.OrderBy[i].Descending ? -res : res;
+                        var keys = new object?[stmt.OrderBy.Count];
+                        for (int i = 0; i < stmt.OrderBy.Count; i++)
+                            keys[i] = await context.EvaluateValue(stmt.OrderBy[i].Expression, row);
+                        rowSortKeys.Add((row, keys));
                     }
-                    return 0;
-                });
 
-                allBufferedRows = rowSortKeys.Select(x => x.Row).ToList();
+                    rowSortKeys.Sort((a, b) =>
+                    {
+                        for (int i = 0; i < stmt.OrderBy.Count; i++)
+                        {
+                            var res = context.CompareConstants(a.Keys[i], b.Keys[i]);
+                            if (res != 0) return stmt.OrderBy[i].Descending ? -res : res;
+                        }
+                        return 0;
+                    });
+
+                    allBufferedRows = rowSortKeys.Select(x => x.Row).ToList();
+                }
             }
 
             // 4. OFFSET / LIMIT
@@ -533,8 +527,8 @@ namespace ETL_SQL.Engine.Handlers
         /// <summary>Evaluates a set operation (UNION, EXCEPT, INTERSECT).</summary>
         public async IAsyncEnumerable<DataTable> EvaluateSetOperation(SetOperationStatement setOp, IExecutionContext context)
         {
-            _setOpEngine ??= new SetOperationEngine(context);
-            await foreach (var batch in _setOpEngine.ApplySetOperation(setOp))
+            var setOpEngine = new SetOperationEngine(context);
+            await foreach (var batch in setOpEngine.ApplySetOperation(setOp))
             {
                 yield return batch;
             }

@@ -1992,4 +1992,53 @@ namespace ETL_SQL.Core
 
         public override string ToSql() => ScriptPath != null ? $"LINT '{ScriptPath}';" : "LINT;";
     }
+
+    /// <summary>A single variable assignment inside a CREATE SETS block.</summary>
+    public class SetsAssignment
+    {
+        public string VariableName { get; }
+        public Expression Value { get; }
+        public SetsAssignment(string variableName, Expression value) { VariableName = variableName; Value = value; }
+    }
+
+    /// <summary>CREATE SETS !&lt;name&gt; BEGIN @var = val, ... [SET WITH_PROMPT ON;] END</summary>
+    public class CreateSetsStatement : Statement
+    {
+        public string Name { get; }
+        public List<SetsAssignment> Assignments { get; }
+        public bool WithPrompt { get; }
+
+        public CreateSetsStatement(string name, List<SetsAssignment> assignments, bool withPrompt)
+        {
+            Name = name;
+            Assignments = assignments;
+            WithPrompt = withPrompt;
+        }
+
+        public override string ToSql()
+        {
+            var assignments = string.Join(",\n    ", Assignments.Select(a => $"@{a.VariableName} = {a.Value.ToSql()}"));
+            var prompt = WithPrompt ? "\n    SET WITH_PROMPT ON;" : "";
+            return $"CREATE SETS !{Name}\nBEGIN\n    {assignments};{prompt}\nEND";
+        }
+    }
+
+    /// <summary>DROP SETS [IF EXISTS] !&lt;name&gt;</summary>
+    public class DropSetsStatement : Statement
+    {
+        public string Name { get; }
+        public bool IfExists { get; }
+
+        public DropSetsStatement(string name, bool ifExists) { Name = name; IfExists = ifExists; }
+
+        public override string ToSql() => IfExists ? $"DROP SETS IF EXISTS !{Name};" : $"DROP SETS !{Name};";
+    }
+
+    /// <summary>USE SETS !&lt;name&gt;</summary>
+    public class UseSetsStatement : Statement
+    {
+        public string Name { get; }
+        public UseSetsStatement(string name) { Name = name; }
+        public override string ToSql() => $"USE SETS !{Name};";
+    }
 }
