@@ -18,8 +18,8 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Registers lineage-related functions into the global function registry.</summary>
         public static void Register(IFunctionRegistry registry)
         {
-            registry.Register("GET_TAGS", GetTags);
-            registry.Register("GET_TAG_VALUE", GetTagValue);
+            registry.RegisterWithHelp("GET_TAGS", GetTags, "GET_TAGS(target): Returns a list of tags associated with a table or column.");
+            registry.RegisterWithHelp("GET_TAG_VALUE", GetTagValue, "GET_TAG_VALUE(target, tag_name): Returns the value of a specific tag.");
         }
 
         /// <summary>

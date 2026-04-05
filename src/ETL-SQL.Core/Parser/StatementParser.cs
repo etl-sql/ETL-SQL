@@ -395,56 +395,78 @@ namespace ETL_SQL.Core.Parser
                     }
                     _parser.Consume(TokenType.RPAREN, "Expected ')' after EXEC SQL block");
                     
-                    Expression? connectionName = null;
+                    Expression? blockConnName = null;
                     if (_parser.Match(TokenType.AT))
                     {
-                        connectionName = _parser.ParseExpression();
+                        blockConnName = _parser.ParseExpression();
                     }
                     
                     if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
                     
-                    if (connectionName == null)
+                    if (blockConnName == null)
                     {
                          // If no AT, it's just a local block? Unusual for EXECUTE (...) so maybe error or just block
                          return new BlockStatement(statements);
                     }
-                    return new ExecuteRemoteBlockStatement(connectionName, new BlockStatement(statements));
+                    return new ExecuteRemoteBlockStatement(blockConnName, new BlockStatement(statements));
                 }
                 else
                 {
                     var sqlExpr = _parser.ParseExpression();
                     _parser.Consume(TokenType.RPAREN, "Expected ')' after EXEC SQL expression");
                     
-                    Expression? connectionName = null;
+                    Expression? execConnName = null;
                     if (_parser.Match(TokenType.AT))
                     {
-                        connectionName = _parser.ParseExpression();
+                        execConnName = _parser.ParseExpression();
+                    }
+
+                    TableReference? execIntoTable = null;
+                    if (_parser.Match(TokenType.INTO))
+                    {
+                        execIntoTable = ParseTableReference(false);
+                    }
+
+                    List<Expression>? execParameters = null;
+                    if (_parser.Match(TokenType.WITH))
+                    {
+                        _parser.Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                        execParameters = new List<Expression>();
+                        if (_parser.Current.Type != TokenType.RPAREN)
+                        {
+                            execParameters.Add(_parser.ParseExpression());
+                            while (_parser.Match(TokenType.COMMA))
+                            {
+                                execParameters.Add(_parser.ParseExpression());
+                            }
+                        }
+                        _parser.Consume(TokenType.RPAREN, "Expected ')' after WITH parameters");
                     }
 
                     if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
-                    return new ExecStatement(sqlExpr, connectionName);
+                    return new ExecStatement(sqlExpr, execConnName, execIntoTable, execParameters);
                 }
             }
 
             var identifierExpr = _parser.ParseExpression(); // Could be connection name or proc name
             
-            TableReference? intoTable = null;
+            TableReference? remoteIntoTable = null;
             if (_parser.Match(TokenType.INTO))
             {
-                intoTable = ParseTableReference(false);
+                remoteIntoTable = ParseTableReference(false);
             }
 
-            List<Expression>? parameters = null;
+            List<Expression>? remoteParameters = null;
             if (_parser.Match(TokenType.WITH))
             {
                 _parser.Consume(TokenType.LPAREN, "Expected '(' after WITH");
-                parameters = new List<Expression>();
+                remoteParameters = new List<Expression>();
                 if (_parser.Current.Type != TokenType.RPAREN)
                 {
-                    parameters.Add(_parser.ParseExpression());
+                    remoteParameters.Add(_parser.ParseExpression());
                     while (_parser.Match(TokenType.COMMA))
                     {
-                        parameters.Add(_parser.ParseExpression());
+                        remoteParameters.Add(_parser.ParseExpression());
                     }
                 }
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after WITH parameters");
@@ -466,7 +488,7 @@ namespace ETL_SQL.Core.Parser
                 }
 
                 if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
-                return new ExecutePushdownStatement(identifierExpr, sqlText, intoTable, parameters) { Line = startToken.Line, Column = startToken.Column, HasUnbalancedBlocks = unbalanced };
+                return new ExecutePushdownStatement(identifierExpr, sqlText, remoteIntoTable, remoteParameters) { Line = startToken.Line, Column = startToken.Column, HasUnbalancedBlocks = unbalanced };
             }
 
             // Single statement remote execution: EXECUTE c CREATE TABLE...
@@ -484,18 +506,18 @@ namespace ETL_SQL.Core.Parser
             // Clean up quotes if it's a string literal
             if (identifierExpr is LiteralExpression lit && lit.Value is string s) procedureName = s;
 
-            var execParameters = new List<ExecuteParameter>();
+            var procParameters = new List<ExecuteParameter>();
             if (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.EOF && _parser.Current.Type != TokenType.END)
             {
-                execParameters.Add(ParseExecuteParameter());
+                procParameters.Add(ParseExecuteParameter());
                 while (_parser.Match(TokenType.COMMA))
                 {
-                    execParameters.Add(ParseExecuteParameter());
+                    procParameters.Add(ParseExecuteParameter());
                 }
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
-            return new ExecuteStatement(procedureName, execParameters);
+            return new ExecuteStatement(procedureName, procParameters);
         }
 
         private ExecuteParameter ParseExecuteParameter()
@@ -1197,7 +1219,12 @@ namespace ETL_SQL.Core.Parser
             do
             {
                 var varToken = _parser.Consume(TokenType.VARIABLE, "Expected variable name starting with '@'");
-                var type = _parser.ParseType();
+                // Modified: Make type optional, defaulting to ANY if not provided (fixes syntax error in common user scripts)
+                string type = "ANY";
+                if (_parser.IsIdentifier(_parser.Current))
+                {
+                    type = _parser.ParseType();
+                }
                 
                 bool isSensitive = _parser.Match(TokenType.PASSWORD);
                 bool isInput = _parser.Match(TokenType.INPUT);

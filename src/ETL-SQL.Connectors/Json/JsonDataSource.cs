@@ -109,6 +109,7 @@ namespace ETL_SQL.Connectors.Json
                     {
                         if (element.ValueKind != JsonValueKind.Object) continue;
 
+                        // Start with a dynamic row since we don't know the schema yet
                         var row = new Row();
                         foreach (var property in element.EnumerateObject())
                         {
@@ -119,7 +120,7 @@ namespace ETL_SQL.Connectors.Json
 
                         if (currentBatch.Rows.Count >= batchSize)
                         {
-                            EnsureColumns(currentBatch, allColumns);
+                            currentBatch.SetColumns(allColumns);
                             yield return currentBatch;
                             currentBatch = new DataTable();
                         }
@@ -127,7 +128,7 @@ namespace ETL_SQL.Connectors.Json
 
                     if (currentBatch.Rows.Count > 0)
                     {
-                        EnsureColumns(currentBatch, allColumns);
+                        currentBatch.SetColumns(allColumns);
                         yield return currentBatch;
                     }
                 }
@@ -136,11 +137,6 @@ namespace ETL_SQL.Connectors.Json
             {
                 TempFileHelper.SafeDelete(tempFile);
             }
-        }
-
-        private void EnsureColumns(DataTable dt, HashSet<string> cols)
-        {
-            foreach (var col in cols) if (!dt.ColumnNames.Contains(col)) dt.ColumnNames.Add(col);
         }
 
         private object? GetJsonValue(JsonElement element) => element.ValueKind switch

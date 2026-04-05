@@ -46,7 +46,13 @@ namespace ETL_SQL.Connectors.Oracle
         public Dictionary<string, string[]> GetOptionValues() => new();
 
         /// <summary>Returns a human-readable help string for the Oracle connector.</summary>
-        public string GetHelp() => "ORACLE Connector: Used for Oracle Database connections. Supports PL/SQL-style syntax.";
+        /// <summary>Returns a human-readable help string for the Oracle connector.</summary>
+        public string GetHelp() => 
+            "ORACLE Connector: Connects to Oracle Database instances.\n" +
+            "Supports PL/SQL pushdown and deep schema discovery.\n\n" +
+            "Options:\n" +
+            "  TABLE: Pre-selects a default table context for simple SELECT queries.";
+
         
         /// <summary>Creates a new Oracle data source instance.</summary>
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null) 

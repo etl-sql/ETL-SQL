@@ -7,6 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Functions;
 using JNode = System.Text.Json.Nodes.JsonNode;
 using JValue = System.Text.Json.Nodes.JsonValue;
 using JObject = System.Text.Json.Nodes.JsonObject;
@@ -23,16 +24,16 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Registers all JSON functions into the global function registry.</summary>
         public static void Register(IFunctionRegistry registry)
         {
-            registry.Register("JSON_VALUE",  JsonValue);
-            registry.Register("JSON_QUERY",  JsonQuery);
-            registry.Register("JSON_MODIFY", JsonModify);
-            registry.Register("ISJSON",      IsJson);
-            registry.Register("JSON_EXISTS", JsonExists);
-            registry.Register("JSON_OBJECT", JsonObject);
-            registry.Register("JSON_ARRAY",  JsonArray);
-            registry.Register("JSON_TABLE",  JsonTable);
-            registry.Register("JSON_EXTRACT", JsonValue); // MySQL/Postgres alias
-            registry.Register("OPENJSON",    OpenJson);
+            registry.RegisterWithHelp("JSON_VALUE",  JsonValue, "JSON_VALUE(json, path): Extracts a scalar value from a JSON string at the given path.");
+            registry.RegisterWithHelp("JSON_QUERY",  JsonQuery, "JSON_QUERY(json, path): Extracts an object or array fragment from a JSON string.");
+            registry.RegisterWithHelp("JSON_MODIFY", JsonModify, "JSON_MODIFY(json, path, val): Updates or inserts a value in a JSON string.");
+            registry.RegisterWithHelp("ISJSON",      IsJson, "ISJSON(str): Returns 1 if the string is valid JSON, 0 otherwise.");
+            registry.RegisterWithHelp("JSON_EXISTS", JsonExists, "JSON_EXISTS(json, path): Returns 1 if the path exists in the JSON string.");
+            registry.RegisterWithHelp("JSON_OBJECT", JsonObject, "JSON_OBJECT(k1, v1, k2, v2, ...): Constructs a JSON object from key/value pairs.");
+            registry.RegisterWithHelp("JSON_ARRAY",  JsonArray, "JSON_ARRAY(v1, v2, ...): Constructs a JSON array from the provided values.");
+            registry.RegisterWithHelp("JSON_TABLE",  JsonTable, "JSON_TABLE(json, path): Expands a JSON array or object into a table.");
+            registry.RegisterWithHelp("JSON_EXTRACT", JsonValue, "JSON_EXTRACT(json, path): Alias for JSON_VALUE.");
+            registry.RegisterWithHelp("OPENJSON",    OpenJson, "OPENJSON(json[, path]): Expands JSON into a table (SQL Server style).");
         }
 
         // ── Scalar helpers ────────────────────────────────────────────────────

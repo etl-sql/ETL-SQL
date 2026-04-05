@@ -54,7 +54,13 @@ namespace ETL_SQL.Connectors
         public Dictionary<string, string[]> GetOptionValues() => new();
 
         /// <summary>Returns a human-readable help string for the connector.</summary>
-        public string GetHelp() => "Azure Blob Storage Connector.";
+        /// <summary>Returns a human-readable help string for the Azure Blob connector.</summary>
+        public string GetHelp() => 
+            "AZURE_BLOB Connector: Connects to Azure Blob Storage containers.\n" +
+            "Supports listing blobs as a table and performing file transfers (GET_FILE, PUT_FILE).\n\n" +
+            "Options:\n" +
+            "  CONTAINER: The name of the storage container to use.";
+
 
         /// <summary>Creates a new data source instance for this connector.</summary>
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null)

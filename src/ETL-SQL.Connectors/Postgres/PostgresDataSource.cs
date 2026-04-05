@@ -75,14 +75,14 @@ namespace ETL_SQL.Connectors.Postgres
             }
 
             var currentBatch = new DataTable();
-            foreach (var col in columns) currentBatch.ColumnNames.Add(col);
+            currentBatch.SetColumns(columns);
 
             while (await reader.ReadAsync())
             {
-                var row = new Row();
+                var row = currentBatch.NewRow();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
-                    row[columns[i]] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                    row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
                 }
                 currentBatch.Rows.Add(row);
 
@@ -90,7 +90,7 @@ namespace ETL_SQL.Connectors.Postgres
                 {
                     yield return currentBatch;
                     currentBatch = new DataTable();
-                    foreach (var col in columns) currentBatch.ColumnNames.Add(col);
+                    currentBatch.SetColumns(columns);
                 }
             }
 
@@ -128,7 +128,7 @@ namespace ETL_SQL.Connectors.Postgres
                     foreach (var row in batch.Rows)
                     {
                         var values = batch.ColumnNames.Select(key => {
-                            var val = row.Columns.TryGetValue(key, out var v) ? v : null;
+                            var val = row[key];
                             if (val == null || val == DBNull.Value) return "\\N";
                             var s = val.ToString() ?? "";
                             return s.Replace("\t", " ").Replace("\n", " ").Replace("\r", " ");
@@ -164,9 +164,7 @@ namespace ETL_SQL.Connectors.Postgres
 
                 if (paramCount > 0)
                 {
-                    // Replace ? with named parameters sequentially for raw SQL
-                    int paramIndex = 0;
-                    cmd.CommandText = System.Text.RegularExpressions.Regex.Replace(cmd.CommandText, @"\?(?![0-9])", match => $"@p{paramIndex++}");
+                    cmd.CommandText = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(cmd.CommandText);
                 }
 
                 await using var reader = await cmd.ExecuteReaderAsync();
@@ -181,14 +179,14 @@ namespace ETL_SQL.Connectors.Postgres
                 }
 
                 var currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
-                foreach (var col in columns) currentBatch.ColumnNames.Add(col);
+                currentBatch.SetColumns(columns);
 
                 while (await reader.ReadAsync())
                 {
-                    var row = new Row();
+                    var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
-                        row[columns[i]] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                        row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
                     }
                     currentBatch.Rows.Add(row);
 
@@ -196,7 +194,7 @@ namespace ETL_SQL.Connectors.Postgres
                     {
                         yield return currentBatch;
                         currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
-                        foreach (var col in columns) currentBatch.ColumnNames.Add(col);
+                        currentBatch.SetColumns(columns);
                     }
                 }
 

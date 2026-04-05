@@ -18,24 +18,40 @@ namespace ETL_SQL.Connectors
         public IReadOnlyList<string> Aliases => new[] { "SSH" };
         public string Path => $"sftp://{_host}";
 
-        public SftpConnector(string host, string username, string password)
+        public SftpConnector(string host, string username, string? password = null, string? keyFilePath = null, string? passphrase = null)
         {
             _host = host;
-            _client = new SftpClient(host, username, password);
+            if (!string.IsNullOrEmpty(keyFilePath))
+            {
+                var pk = new PrivateKeyFile(keyFilePath, passphrase);
+                _client = new SftpClient(host, username, pk);
+            }
+            else
+            {
+                _client = new SftpClient(host, username, password ?? "");
+            }
         }
 
         public async Task<string> GetVersionAsync(string connectionString) => "SFTP Server";
         public HashSet<string> GetSupportedFunctions() => new();
         public HashSet<string> GetSupportedKeywords() => new();
-        public Dictionary<string, string[]> GetSupportedOptions() => new();
+        public Dictionary<string, string[]> GetSupportedOptions() => new() 
+        { 
+            ["USER"] = new[] { "Username for SSH" }, 
+            ["PASSWORD"] = new[] { "Password for SSH" },
+            ["KEYFILE"] = new[] { "Path to the private key file" },
+            ["PASSPHRASE"] = new[] { "Passphrase for the private key" }
+        };
         public Dictionary<string, string[]> GetOptionValues() => new();
-        public string GetHelp() => "SFTP Connector for remote file operations over SSH.";
+        public string GetHelp() => "SFTP Connector for remote file operations over SSH.\nOptions:\n  USER: The username for the SSH connection.\n  PASSWORD: The password for the SSH connection.\n  KEYFILE: Path to the private key file for authentication.\n  PASSPHRASE: The passphrase for the private key file.\nMethods: GET_FILE, PUT_FILE, REMOTE_FILE_LIST.";
 
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null)
         {
             string user = options?.GetValueOrDefault("USER") ?? "";
-            string pass = options?.GetValueOrDefault("PASSWORD") ?? "";
-            return new SftpConnector(connectionString, user, pass);
+            string pass = options?.GetValueOrDefault("PASSWORD");
+            string keyFile = options?.GetValueOrDefault("KEYFILE");
+            string passphrase = options?.GetValueOrDefault("PASSPHRASE");
+            return new SftpConnector(connectionString, user, pass, keyFile, passphrase);
         }
 
         public Task<IEnumerable<string>> GetTablesAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());

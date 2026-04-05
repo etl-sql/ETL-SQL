@@ -30,9 +30,9 @@ namespace ETL_SQL.Connectors
         public async Task<string> GetVersionAsync(string connectionString) => "FTP Server";
         public HashSet<string> GetSupportedFunctions() => new();
         public HashSet<string> GetSupportedKeywords() => new();
-        public Dictionary<string, string[]> GetSupportedOptions() => new();
+        public Dictionary<string, string[]> GetSupportedOptions() => new() { ["USER"] = new[] { "Username for FTP server" }, ["PASSWORD"] = new[] { "Password for FTP server" } };
         public Dictionary<string, string[]> GetOptionValues() => new();
-        public string GetHelp() => "FTP Connector for remote file operations.";
+        public string GetHelp() => "FTP Connector for remote file operations.\nOptions:\n  USER: The username for the FTP connection.\n  PASSWORD: The password for the FTP connection.\nMethods: GET_FILE, PUT_FILE, REMOTE_FILE_LIST.";
 
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null)
         {

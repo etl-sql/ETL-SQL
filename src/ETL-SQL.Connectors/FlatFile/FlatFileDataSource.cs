@@ -334,12 +334,13 @@ namespace ETL_SQL.Connectors.FlatFile
 
             if (_hasHeader)
             {
-                foreach (var h in headers) currentBatch.ColumnNames.Add(h.Trim());
+                currentBatch.SetColumns(headers.Select(h => h.Trim()));
             }
             else
             {
-                for (int i = 0; i < headers.Length; i++) currentBatch.ColumnNames.Add($"Col{i + 1}");
-                currentBatch.AddRow(CreateRow(headers, currentBatch.ColumnNames));
+                var colNames = Enumerable.Range(1, headers.Length).Select(i => $"Col{i}").ToList();
+                currentBatch.SetColumns(colNames);
+                currentBatch.AddRow(CreateRow(headers, currentBatch));
             }
 
             var actualHeaders = new List<string>(currentBatch.ColumnNames);
@@ -419,22 +420,16 @@ namespace ETL_SQL.Connectors.FlatFile
             return sb.Length > 0 ? sb.ToString() : null;
         }
 
-        private void ProcessDataLine(string line, DataTable batch, List<string> headers)
+        private void ProcessDataLine(string line, DataTable batch, List<string> actualHeaders)
         {
             var values = SplitLine(line);
-            
-            if (_strictSchema && values.Length != batch.ColumnNames.Count)
-            {
-                Logger.WriteLine($"[WARNING] CSV Strict Schema Mismatch! Expected {batch.ColumnNames.Count} columns, found {values.Length}");
-                if (values.Length < batch.ColumnNames.Count) return;
-            }
-
-            batch.AddRow(CreateRow(values, batch.ColumnNames));
+            batch.AddRow(CreateRow(values, batch));
         }
 
-        private Row CreateRow(string[] values, IList<string> columnNames)
+        private Row CreateRow(string[] values, DataTable batch)
         {
-            var row = new Row();
+            var row = batch.NewRow();
+            var columnNames = batch.ColumnNames;
             for (int i = 0; i < columnNames.Count && i < values.Length; i++)
             {
                 string val = _textQualifier == null ? values[i].Trim() : values[i];
@@ -442,18 +437,18 @@ namespace ETL_SQL.Connectors.FlatFile
                 // Handle NULL_AS
                 if (_nullAs != null && (val.Equals(_nullAs, StringComparison.OrdinalIgnoreCase) || (string.IsNullOrEmpty(val) && _nullAs == "")))
                 {
-                    row[columnNames[i]] = null;
+                    row[i] = null;
                 }
                 else
                 {
                     // Handle DATE_FORMAT
                     if (_dateFormat != null && DateTime.TryParseExact(val, _dateFormat, null, System.Globalization.DateTimeStyles.None, out var dt))
                     {
-                        row[columnNames[i]] = dt;
+                        row[i] = dt;
                     }
                     else
                     {
-                        row[columnNames[i]] = val;
+                        row[i] = val;
                     }
                 }
             }

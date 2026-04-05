@@ -188,9 +188,15 @@ namespace ETL_SQL.LSP
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in AnalyzeAsync for {Uri}", uri);
+                int errLine = 0, errCol = 0;
+                if (ex is ETL_SQL.Core.Common.Exceptions.SyntaxException sx)
+                {
+                    errLine = Math.Max(0, sx.Line - 1);
+                    errCol  = Math.Max(0, sx.Column - 1);
+                }
                 diagnostics.Add(new Diagnostic
                 {
-                    Range = new LSPRange(0, 0, 0, 1),
+                    Range = new LSPRange(errLine, errCol, errLine, errCol + 5),
                     Severity = DiagnosticSeverity.Error,
                     Message = ex.Message,
                     Source = "ETL-SQL Parser"

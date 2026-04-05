@@ -56,28 +56,15 @@ namespace ETL_SQL.Connectors.Xml
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
 
-            string effectivePath = _filePath;
             string? tempFile = null;
-
-            if (_encrypt)
+            string effectivePath = await GetEffectivePathAsync();
+            if (effectivePath == _filePath && _encrypt) // Decryption failed or not applicable? No, GetEffectivePath handles it.
             {
-                tempFile = System.IO.Path.GetTempFileName();
-                CryptoUtils.DecryptFile(_filePath, tempFile, _password);
-                effectivePath = tempFile;
+                 // Handle temporary file tracking
             }
-            else if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
-            {
-                tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString() + ".xml");
-                using (var zip = System.IO.Compression.ZipFile.OpenRead(_filePath))
-                {
-                    var entry = zip.Entries.FirstOrDefault();
-                    if (entry != null)
-                    {
-                        entry.ExtractToFile(tempFile, true);
-                        effectivePath = tempFile;
-                    }
-                }
-            }
+            
+            // We need to track if we created a temp file to delete it later
+            bool isTemp = effectivePath != _filePath;
 
             try
             {
@@ -87,68 +74,108 @@ namespace ETL_SQL.Connectors.Xml
                     doc = await XDocument.LoadAsync(stream, LoadOptions.None, default);
                 }
 
-            IEnumerable<XElement> elements;
-            if (string.IsNullOrEmpty(_rootPath))
-            {
-                elements = doc.Root?.Elements() ?? Enumerable.Empty<XElement>();
-            }
-            else
-            {
-                var current = doc.Root;
-                var parts = _rootPath.Split('.', StringSplitOptions.RemoveEmptyEntries);
-                foreach (var part in parts)
-                {
-                    if (current == null) break;
-                    if (current.Name.LocalName.Equals(part, StringComparison.OrdinalIgnoreCase) && part == parts[0]) continue;
-                    current = current.Element(part);
-                }
-                elements = current?.Elements() ?? Enumerable.Empty<XElement>();
-            }
+                var elements = GetElements(doc).ToList();
+                if (elements.Count == 0) yield break;
 
-            var currentBatch = new DataTable();
-            var allColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var element in elements)
-            {
-                var row = new Row();
-                foreach (var attr in element.Attributes())
+                // Pass 1: Discover Schema
+                var allColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var element in elements)
                 {
-                    row[attr.Name.LocalName] = attr.Value;
-                    allColumns.Add(attr.Name.LocalName);
-                }
-                foreach (var sub in element.Elements())
-                {
-                    if (!sub.HasElements)
+                    foreach (var attr in element.Attributes()) allColumns.Add(attr.Name.LocalName);
+                    foreach (var sub in element.Elements())
                     {
-                        row[sub.Name.LocalName] = sub.Value;
-                        allColumns.Add(sub.Name.LocalName);
+                        if (!sub.HasElements) allColumns.Add(sub.Name.LocalName);
                     }
                 }
 
-                currentBatch.AddRow(row);
-                if (currentBatch.Rows.Count >= batchSize)
+                var schema = new TableSchema();
+                foreach (var col in allColumns.OrderBy(c => c))
                 {
-                    EnsureColumns(currentBatch, allColumns);
-                    yield return currentBatch;
-                    currentBatch = new DataTable();
+                    schema.AddColumn(col);
                 }
-            }
 
-            if (currentBatch.Rows.Count > 0)
-            {
-                EnsureColumns(currentBatch, allColumns);
-                yield return currentBatch;
-            }
+                // Pass 2: Populate Batches
+                var currentBatch = new DataTable();
+                currentBatch.SetColumns(schema.ColumnNames);
+                var activeSchema = currentBatch.Schema;
+
+                foreach (var element in elements)
+                {
+                    var row = currentBatch.NewRow();
+                    foreach (var attr in element.Attributes())
+                    {
+                        int idx = activeSchema.GetIndex(attr.Name.LocalName);
+                        if (idx >= 0) row[idx] = attr.Value;
+                    }
+                    foreach (var sub in element.Elements())
+                    {
+                        if (!sub.HasElements)
+                        {
+                            int idx = activeSchema.GetIndex(sub.Name.LocalName);
+                            if (idx >= 0) row[idx] = sub.Value;
+                        }
+                    }
+
+                    currentBatch.AddRow(row);
+                    if (currentBatch.Rows.Count >= batchSize)
+                    {
+                        yield return currentBatch;
+                        currentBatch = new DataTable();
+                        currentBatch.SetColumns(schema.ColumnNames);
+                    }
+                }
+
+                if (currentBatch.Rows.Count > 0)
+                {
+                    yield return currentBatch;
+                }
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                if (isTemp) TempFileHelper.SafeDelete(effectivePath);
             }
         }
 
-        private void EnsureColumns(DataTable dt, HashSet<string> cols)
+        private async Task<string> GetEffectivePathAsync()
         {
-            foreach (var col in cols) if (!dt.ColumnNames.Contains(col)) dt.ColumnNames.Add(col);
+            if (_encrypt)
+            {
+                string tempFile = System.IO.Path.GetTempFileName();
+                CryptoUtils.DecryptFile(_filePath, tempFile, _password);
+                return tempFile;
+            }
+            if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+            {
+                string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid().ToString() + ".xml");
+                using (var zip = System.IO.Compression.ZipFile.OpenRead(_filePath))
+                {
+                    var entry = zip.Entries.FirstOrDefault();
+                    if (entry != null)
+                    {
+                        entry.ExtractToFile(tempFile, true);
+                        return tempFile;
+                    }
+                }
+            }
+            return _filePath;
+        }
+
+        private IEnumerable<XElement> GetElements(XDocument doc)
+        {
+            if (string.IsNullOrEmpty(_rootPath))
+            {
+                return doc.Root?.Elements() ?? Enumerable.Empty<XElement>();
+            }
+            
+            var current = doc.Root;
+            var parts = _rootPath.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                if (current == null) break;
+                if (current.Name.LocalName.Equals(part, StringComparison.OrdinalIgnoreCase) && part == parts[0]) continue;
+                current = current.Element(part);
+            }
+            return current?.Elements() ?? Enumerable.Empty<XElement>();
         }
 
         /// <summary>Writes batches of data to the XML file.</summary>
@@ -158,13 +185,19 @@ namespace ETL_SQL.Connectors.Xml
             bool alreadyXml = false;
             string? singleXml = null;
 
+            // Check if first batch is a passthrough XML result
             await foreach (var b in batches)
             {
                 if (b.ColumnNames.Count == 1 && b.ColumnNames[0] == "XML_F52E2B61")
                 {
                     alreadyXml = true;
-                    singleXml = b.Rows.FirstOrDefault()?.Columns.Values.FirstOrDefault()?.ToString();
+                    singleXml = b.Rows.FirstOrDefault()?[0]?.ToString();
                     break;
+                }
+                else
+                {
+                    // If not XML result, we need to process all batches as rows
+                    break; 
                 }
             }
 
@@ -181,24 +214,29 @@ namespace ETL_SQL.Connectors.Xml
                     var root = new XElement(rootName);
                     await foreach (var b in batches)
                     {
+                        var columnNames = b.ColumnNames;
                         foreach (var r in b.Rows)
                         {
                             var rowElem = new XElement("row");
-                            foreach (var col in b.ColumnNames)
+                            for (int i = 0; i < columnNames.Count; i++)
                             {
+                                var col = columnNames[i];
+                                var val = r[i];
+                                if (val == null) continue;
+
                                 var parts = col.Split('.');
                                 XElement current = rowElem;
-                                for (int i = 0; i < parts.Length - 1; i++)
+                                for (int j = 0; j < parts.Length - 1; j++)
                                 {
-                                    var sub = current.Element(parts[i]);
+                                    var sub = current.Element(parts[j]);
                                     if (sub == null)
                                     {
-                                        sub = new XElement(parts[i]);
+                                        sub = new XElement(parts[j]);
                                         current.Add(sub);
                                     }
                                     current = sub;
                                 }
-                                current.Add(new XElement(parts.Last(), r[col]));
+                                current.Add(new XElement(parts.Last(), val));
                             }
                             root.Add(rowElem);
                         }

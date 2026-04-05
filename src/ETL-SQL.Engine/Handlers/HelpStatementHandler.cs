@@ -73,9 +73,41 @@ namespace ETL_SQL.Engine.Handlers
                     }
                 }
             }
+            else if (stmt.Topic.Equals("FUNCTION", StringComparison.OrdinalIgnoreCase))
+            {
+                var functionRegistry = context.FunctionRegistry;
+                if (string.IsNullOrEmpty(stmt.SubTopic))
+                {
+                    Logger.WriteLine("Available Functions:", ConsoleColor.Cyan);
+                    var names = functionRegistry.GetRegisteredNames().OrderBy(n => n).ToList();
+                    for (int i = 0; i < names.Count; i += 3)
+                    {
+                        Logger.WriteLine(string.Join("\t", names.Skip(i).Take(3)));
+                    }
+                    Logger.WriteLine("\nUse HELP FUNCTION <name> for details.");
+                }
+                else
+                {
+                    var help = functionRegistry.GetHelp(stmt.SubTopic);
+                    if (help != null)
+                    {
+                        Logger.WriteLine($"HELP: {stmt.SubTopic.ToUpperInvariant()}", ConsoleColor.Cyan);
+                        Logger.WriteLine(help);
+                    }
+                    else if (functionRegistry.IsRegistered(stmt.SubTopic))
+                    {
+                        Logger.WriteLine($"Function '{stmt.SubTopic}' is registered but has no help documentation.", ConsoleColor.Yellow);
+                    }
+                    else
+                    {
+                        Logger.WriteLine($"Function '{stmt.SubTopic}' not found.", ConsoleColor.Red);
+                    }
+                }
+            }
             else
             {
                 Logger.WriteLine($"Help for topic '{stmt.Topic}' is not yet implemented.", ConsoleColor.Yellow);
+                Logger.WriteLine("Available topics: CONNECTION, FUNCTION");
             }
             await Task.CompletedTask;
         }

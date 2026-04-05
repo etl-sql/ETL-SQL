@@ -399,17 +399,23 @@ namespace ETL_SQL.Core
     {
         public Expression SqlExpression { get; }
         public Expression? ConnectionName { get; set; }
+        public TableReference? IntoTable { get; set; }
+        public List<Expression> Parameters { get; } = new();
         
-        public ExecStatement(Expression sqlExpression, Expression? connectionName = null)
+        public ExecStatement(Expression sqlExpression, Expression? connectionName = null, TableReference? intoTable = null, List<Expression>? parameters = null)
         {
             SqlExpression = sqlExpression;
             ConnectionName = connectionName;
+            IntoTable = intoTable;
+            if (parameters != null) Parameters.AddRange(parameters);
         }
         
         public override string ToSql() 
         {
             var sql = $"EXEC ({SqlExpression.ToSql()})";
             if (ConnectionName != null) sql += $" AT {ConnectionName.ToSql()}";
+            if (IntoTable != null) sql += $" INTO {IntoTable.ToSql()}";
+            if (Parameters.Count > 0) sql += $" WITH (" + string.Join(", ", Parameters.Select(p => p.ToSql())) + ")";
             return sql + ";";
         }
     }

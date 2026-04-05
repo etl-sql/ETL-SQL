@@ -23,22 +23,22 @@ namespace ETL_SQL.Engine
             _context = context;
         }
 
-        /// <summary>
-        /// Resolves an identifier to a value, checking immediate row context and outer scopes for correlated subqueries.
-        /// </summary>
         private object? ResolveIdentifier(string name, Row? context)
         {
             // 1. Check immediate context (exact match)
-            if (context != null && context.Columns.TryGetValue(name, out var val)) return val;
+            if (context != null)
+            {
+                var val = context[name];
+                if (val != null || context.HasColumn(name)) return val;
+            }
 
             // 2. Check outer scopes (exact match)
             foreach (var outer in _context.OuterRowStack)
             {
-                if (outer != null && outer.Columns.TryGetValue(name, out var outerVal))
+                if (outer != null)
                 {
-                    // Correlation logic might need to be shifted if CorrelationDetected is moved to IExecutionContext
-                    // For now, if we can't move it, we might still need a cast or a more general property
-                    return outerVal;
+                    var outerVal = outer[name];
+                    if (outerVal != null || outer.HasColumn(name)) return outerVal;
                 }
             }
 
@@ -70,8 +70,10 @@ namespace ETL_SQL.Engine
             if (!name.Contains("."))
             {
                 var suffix = "." + name;
-                var matches = context.Columns.Keys.Where(k => k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)).ToList();
-                if (matches.Count == 1) return context[matches[0]];
+                foreach (var k in context.Columns.Keys) // Still need to iterate keys for fallback, but this is less frequent
+                {
+                    if (k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return context[k];
+                }
             }
             
             // Case 2: name is qualified ('s.date'), but we only have 'date'
@@ -81,16 +83,22 @@ namespace ETL_SQL.Engine
             {
                 var baseName = parts.Last();
                 // Check if 'baseName' exists unqualified
-                if (context.Columns.TryGetValue(baseName, out var val))
+                var val = context[baseName];
+                if (val != null || context.HasColumn(baseName))
                 {
                     // Only return if no other qualified version of this basename exists in the row
                     // (to avoid matching rj1.ID to rj2.ID when row has ID and rj2.ID)
                     var suffix = "." + baseName;
-                    var otherMatches = context.Columns.Keys.Where(k => k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)).ToList();
-                    if (otherMatches.Count == 0 || (otherMatches.Count == 1 && otherMatches[0].Equals(name, StringComparison.OrdinalIgnoreCase)))
+                    bool hasOther = false;
+                    foreach (var k in context.Columns.Keys)
                     {
-                        return val;
+                        if (k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) && !k.Equals(name, StringComparison.OrdinalIgnoreCase))
+                        {
+                            hasOther = true;
+                            break;
+                        }
                     }
+                    if (!hasOther) return val;
                 }
             }
 
@@ -140,9 +148,9 @@ namespace ETL_SQL.Engine
                 {
                     foreach (var row in batch.Rows)
                     {
-                        if (row.Columns.Count > 0)
+                        if (batch.ColumnNames.Count > 0)
                         {
-                            var val = row.Columns.First().Value;
+                            var val = row[0];
                             if (IsSoftEqual(l, val)) { found = true; break; }
                         }
                     }
@@ -234,15 +242,20 @@ namespace ETL_SQL.Engine
         /// <summary>Evaluates a scalar subquery.</summary>
         private async Task<object?> EvaluateSubquery(SubqueryExpression subq, Row context)
         {
+            object? result = null;
             if (_context.SubqueryCache.TryGetValue(subq.Query, out var cached)) return cached;
             _context.OuterRowStack.Push(context);
-            var batches = _context.ExecuteQuery(subq.Query);
-            var firstBatch = await batches.FirstOrDefaultAsync();
-            object? result = null;
-            if (firstBatch != null && firstBatch.Rows.Count > 0 && firstBatch.Rows[0].Columns.Count > 0) result = firstBatch.Rows[0].Columns.First().Value;
+            await foreach (var batch in _context.ExecuteQuery(subq.Query))
+            {
+                if (batch.Rows.Count > 0 && batch.ColumnNames.Count > 0)
+                {
+                    result = batch.Rows[0][0];
+                }
+                break;
+            }
             _context.OuterRowStack.Pop();
             // Limit cache size to prevent unbounded growth in long-running sessions.
-            if (_context.SubqueryCache.Count < 1000)
+            if (result != null && _context.SubqueryCache.Count < 1000)
                 _context.SubqueryCache[subq.Query] = result;
             return result;
         }

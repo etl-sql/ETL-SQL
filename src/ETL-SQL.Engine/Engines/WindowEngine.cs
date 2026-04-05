@@ -205,7 +205,7 @@ namespace ETL_SQL.Engine.Engines
                                 winVal = await _aggregateEngine.EvaluateAggregate(f, frameRows);
                                 break;
                         }
-                        partitionRows[i].Columns[$"WINDOW_{f.ToSql().ToUpperInvariant()}"] = winVal;
+                        partitionRows[i][$"WINDOW_{f.ToSql().ToUpperInvariant()}"] = winVal;
                     }
                 }
                 allBufferedRows = partitionKeysOrder.SelectMany(k => partitions[k]).ToList();

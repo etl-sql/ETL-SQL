@@ -102,10 +102,12 @@ namespace ETL_SQL.Connectors.MockDb
         }
         public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) 
         {
+             string processedSql = sql;
              if (parameters != null && parameters.Any())
              {
-                 var dt = new DataTable { ColumnNames = { "ParameterValue" } };
-                 foreach (var p in parameters) dt.AddRow(new Row { ["ParameterValue"] = p });
+                 processedSql = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(sql);
+                 var dt = new DataTable { ColumnNames = { "ParameterValue", "ProcessedSql" } };
+                 foreach (var p in parameters) dt.AddRow(new Row { ["ParameterValue"] = p, ["ProcessedSql"] = processedSql });
                  yield return dt;
                  yield break;
              }

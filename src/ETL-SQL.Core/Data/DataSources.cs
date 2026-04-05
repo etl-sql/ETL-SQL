@@ -285,10 +285,8 @@ namespace ETL_SQL.Data
             foreach (var batch in _batches)
             {
                 batch.RemoveColumn(columnName);
-                foreach (var row in batch.Rows)
-                {
-                    row.Columns.TryRemove(columnName, out _);
-                }
+                // In a high-perf scenario, we don't necessarily need to clear the underlying array storage immediately.
+                // It just becomes inaccessible via the schema.
             }
         }
 
@@ -326,13 +324,7 @@ namespace ETL_SQL.Data
             foreach (var batch in _batches)
             {
                 batch.RenameColumn(oldName, newName);
-                foreach (var row in batch.Rows)
-                {
-                    if (row.Columns.TryRemove(oldName, out var val))
-                    {
-                        row.Columns[newName] = val;
-                    }
-                }
+                // The new schema indices will map to the same slots in the row array.
             }
         }
  

@@ -160,9 +160,7 @@ namespace ETL_SQL.Connectors.Oracle
             
             if (paramCount > 0)
             {
-                // Replace ? with named parameters sequentially for raw SQL
-                int paramIndex = 0;
-                cmd.CommandText = System.Text.RegularExpressions.Regex.Replace(cmd.CommandText, @"\?(?![0-9])", match => $":p{paramIndex++}");
+                cmd.CommandText = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(cmd.CommandText, ":");
             }
 
             using var reader = await cmd.ExecuteReaderAsync();

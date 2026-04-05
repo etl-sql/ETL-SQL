@@ -39,7 +39,13 @@ namespace ETL_SQL.Connectors.Postgres
         public Dictionary<string, string[]> GetOptionValues() => new();
 
         /// <summary>Returns a human-readable help string for the Postgres connector.</summary>
-        public string GetHelp() => "POSTGRES Connector: Used for PostgreSQL database connections.";
+        /// <summary>Returns a human-readable help string for the PostgreSQL connector.</summary>
+        public string GetHelp() => 
+            "POSTGRES Connector: Used for PostgreSQL database connections.\n" +
+            "Supports native SQL pushdown, schema discovery, and bulk copy operations.\n\n" +
+            "Options:\n" +
+            "  TABLE: Pre-selects a default table context for simple SELECT queries.";
+
         
         /// <summary>Creates a new PostgreSQL data source instance.</summary>
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null) 

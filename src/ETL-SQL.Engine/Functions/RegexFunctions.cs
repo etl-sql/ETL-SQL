@@ -19,13 +19,13 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Registers all REGEXP functions into the registry.</summary>
         public static void Register(IFunctionRegistry registry)
         {
-            registry.Register("REGEXP_LIKE", RegexpLike);
-            registry.Register("REGEXP_SUBSTR", RegexpSubstr);
-            registry.Register("REGEXP_REPLACE", RegexpReplace);
-            registry.Register("REGEXP_INSTR", RegexpInstr);
-            registry.Register("REGEXP_COUNT", RegexpCount);
-            registry.Register("REGEXP_MATCHES", RegexpMatches);
-            registry.Register("REGEXP_SPLIT_TO_TABLE", RegexpSplitToTable);
+            registry.RegisterWithHelp("REGEXP_LIKE", RegexpLike, "REGEXP_LIKE(str, pattern[, flags]): Returns 1 if the string matches the pattern.");
+            registry.RegisterWithHelp("REGEXP_SUBSTR", RegexpSubstr, "REGEXP_SUBSTR(str, pattern[, pos[, occ[, flags]]]): Extracts a substring matching the pattern.");
+            registry.RegisterWithHelp("REGEXP_REPLACE", RegexpReplace, "REGEXP_REPLACE(str, pattern, new_str[, pos[, occ[, flags]]]): Replaces matching substrings.");
+            registry.RegisterWithHelp("REGEXP_INSTR", RegexpInstr, "REGEXP_INSTR(str, pat[, pos[, occ[, option[, flags]]]]): Returns the position of a match.");
+            registry.RegisterWithHelp("REGEXP_COUNT", RegexpCount, "REGEXP_COUNT(str, pattern[, pos[, flags]]): Returns the number of matches found.");
+            registry.RegisterWithHelp("REGEXP_MATCHES", RegexpMatches, "REGEXP_MATCHES(str, pattern): Returns a table of all matches found.");
+            registry.RegisterWithHelp("REGEXP_SPLIT_TO_TABLE", RegexpSplitToTable, "REGEXP_SPLIT_TO_TABLE(str, pattern): Splits a string into a table using regex.");
         }
 
         private static RegexOptions GetOptions(string? flags)

@@ -60,8 +60,10 @@ namespace ETL_SQL.Engine.Services
                     allRows, forClause.Mode, forClause.RootName,
                     forClause.IncludeNullValues, forClause.WithoutArrayWrapper);
                 var result = new DataTable();
-                result.ColumnNames.Add("JSON_F52E2B61");
-                result.AddRow(new Row { ["JSON_F52E2B61"] = json });
+                result.SetColumns(new[] { "JSON_F52E2B61" });
+                var row = result.NewRow();
+                row[0] = json;
+                result.AddRow(row);
                 yield return result;
             }
             else if (forClause.Type == ForType.XML)
@@ -70,8 +72,10 @@ namespace ETL_SQL.Engine.Services
                     allRows, forClause.Mode, forClause.RootName,
                     forClause.IncludeNullValues, forClause.UseElements);
                 var result = new DataTable();
-                result.ColumnNames.Add("XML_F52E2B61");
-                result.AddRow(new Row { ["XML_F52E2B61"] = xml });
+                result.SetColumns(new[] { "XML_F52E2B61" });
+                var row = result.NewRow();
+                row[0] = xml;
+                result.AddRow(row);
                 yield return result;
             }
         }
@@ -83,22 +87,23 @@ namespace ETL_SQL.Engine.Services
             var newBatch = new DataTable();
             newBatch.SetColumns(targetCols);
             foreach (Row oldRow in batch.Rows)
-                newBatch.AddRow(MapRow(oldRow, batch.ColumnNames, targetCols));
+                newBatch.AddRow(MapRow(oldRow, batch.ColumnNames, newBatch));
             return newBatch;
         }
 
-        private static Row MapRow(Row oldRow, IReadOnlyList<string> sourceCols, List<string> targetCols)
+        private static Row MapRow(Row oldRow, IReadOnlyList<string> sourceCols, DataTable targetTable)
         {
-            var newRow = new Row();
+            var newRow = targetTable.NewRow();
+            var targetCols = targetTable.ColumnNames;
             for (int i = 0; i < targetCols.Count; i++)
             {
                 var target = targetCols[i];
                 if (oldRow.HasColumn(target))
-                    newRow[target] = oldRow[target];
+                    newRow[i] = oldRow[target];
                 else if (i < sourceCols.Count)
-                    newRow[target] = oldRow[sourceCols[i]];
+                    newRow[i] = oldRow[sourceCols[i]];
                 else
-                    newRow[target] = null;
+                    newRow[i] = null;
             }
             return newRow;
         }

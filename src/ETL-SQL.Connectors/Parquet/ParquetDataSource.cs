@@ -99,8 +99,14 @@ namespace ETL_SQL.Connectors.Parquet
             if (!await enumerator.MoveNextAsync()) return;
 
             var firstBatch = enumerator.Current;
+            var colNames = firstBatch.ColumnNames;
+            if (!colNames.Any() && firstBatch.Rows.Count > 0)
+            {
+                colNames = firstBatch.Rows[0].Columns.Keys.ToList();
+            }
+
             var fields = new List<Field>();
-            foreach (var col in firstBatch.ColumnNames)
+            foreach (var col in colNames)
             {
                 object? firstVal = firstBatch.Rows.Count > 0 ? firstBatch.Rows[0][col] : null;
                 Type t = firstVal?.GetType() ?? typeof(string);

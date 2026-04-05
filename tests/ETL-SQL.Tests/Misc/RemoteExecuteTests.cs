@@ -7,6 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Data;
+using ETL_SQL.Connectors.MockDb;
 using Spectre.Console;
 
 namespace ETL_SQL.Tests
@@ -122,6 +123,51 @@ END";
             
             var val = evaluator.LastResult.Rows[0].Columns.Values.First();
             Assert.True(val != null && val.ToString() == "1", $"Expected 1, got {val}");
+        }
+
+        [Fact]
+        public async Task TestExecuteAtConnectionIntoTemp()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mockDb = new MockSqlDataSource("mock://", "MSSQL");
+            evaluator.Connections["mock"] = mockDb;
+
+            // EXECUTE (@stmt) AT connection INTO #temp — VS Code bug #5
+            var script = @"
+DECLARE @stmt VARCHAR(500) = 'SELECT * FROM Employee';
+EXECUTE (@stmt) AT mock INTO #emp;
+SELECT * FROM #emp;";
+            var parser = new Parser(new Lexer(script).Tokenize());
+            var ast = parser.Parse();
+
+            await evaluator.Evaluate(ast);
+
+            Assert.NotNull(evaluator.LastResult);
+            Assert.True(evaluator.LastResult.Rows.Count > 0, "INTO #emp should have received rows from remote execution");
+            Assert.True(evaluator.Connections.ContainsKey("#emp"), "Temp table #emp should exist after EXECUTE ... INTO");
+        }
+
+        [Fact]
+        public async Task TestExecuteAtConnectionIntoExistingTemp()
+        {
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mockDb = new MockSqlDataSource("mock://", "MSSQL");
+            evaluator.Connections["mock"] = mockDb;
+
+            // Pre-create the temp table, then load into it
+            var script = @"
+CREATE TABLE #emp (ID INT, Name VARCHAR(100));
+DECLARE @stmt VARCHAR(500) = 'SELECT * FROM Employee';
+EXECUTE (@stmt) AT mock INTO #emp;
+SELECT COUNT(*) AS cnt FROM #emp;";
+            var parser = new Parser(new Lexer(script).Tokenize());
+            var ast = parser.Parse();
+
+            await evaluator.Evaluate(ast);
+
+            Assert.NotNull(evaluator.LastResult);
+            var cnt = Convert.ToInt32(evaluator.LastResult.Rows[0].Columns.Values.First());
+            Assert.True(cnt > 0, "Pre-created #emp should have rows after EXECUTE ... INTO");
         }
 
         [Fact]

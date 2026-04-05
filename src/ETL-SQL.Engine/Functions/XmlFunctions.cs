@@ -10,6 +10,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Functions;
 
 namespace ETL_SQL.Engine.Functions
 {
@@ -22,14 +23,14 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Registers all XML functions into the global function registry.</summary>
         public static void Register(IFunctionRegistry registry)
         {
-            registry.Register("XMLVALUE",      XmlValue);
-            registry.Register("XMLEXISTS",     XmlExists);
-            registry.Register("XMLQUERY",      XmlQuery);
-            registry.Register("XMLTABLE",      XmlTable);
-            registry.Register("XMLELEMENT",    XmlElement);
-            registry.Register("XMLATTRIBUTES", XmlAttributes);
-            registry.Register("XMLFOREST",     XmlForest);
-            registry.Register("EXTRACTVALUE",  XmlValue);  // MySQL/Oracle alias
+            registry.RegisterWithHelp("XMLVALUE", XmlValue, "XMLVALUE(xml, xpath): Extracts a scalar value from an XML string using an XPath expression.");
+            registry.RegisterWithHelp("XMLEXISTS", XmlExists, "XMLEXISTS(xml, xpath): Returns 1 if the XPath expression matches any node in the XML.");
+            registry.RegisterWithHelp("XMLQUERY", XmlQuery, "XMLQUERY(xml, xpath): Returns an XML fragment from the string using XPath.");
+            registry.RegisterWithHelp("XMLTABLE", XmlTable, "XMLTABLE(xml, xpath): Expands an XML document into a table based on the row-level XPath.");
+            registry.RegisterWithHelp("XMLELEMENT", XmlElement, "XMLELEMENT(name, contents): Constructs an XML element with the given name and child content.");
+            registry.RegisterWithHelp("XMLATTRIBUTES", XmlAttributes, "XMLATTRIBUTES(n1, v1, n2, v2, ...): Constructs XML attributes for an element.");
+            registry.RegisterWithHelp("XMLFOREST", XmlForest, "XMLFOREST(n1, v1, n2, v2, ...): Constructs a forest of XML elements from name/value pairs.");
+            registry.RegisterWithHelp("EXTRACTVALUE", XmlValue, "EXTRACTVALUE(xml, xpath): Alias for XMLVALUE.");
         }
 
         // ── Scalar functions ──────────────────────────────────────────────────

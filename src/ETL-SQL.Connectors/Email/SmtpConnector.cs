@@ -44,17 +44,16 @@ namespace ETL_SQL.Connectors.Email
             { "USE_SSL", new[] { "TRUE", "FALSE" } }
         };
 
-        /// <summary>Returns a human-readable help string for the SMTP connector.</summary>
         public string GetHelp()
         {
-            return @"SMTP Connector
+            return @"SMTP Connector: Integrated email notification service.
 Options:
-  HOST: SMTP server hostname
-  PORT: SMTP server port (default: 25 or 587)
-  USERNAME: SMTP username
-  PASSWORD: SMTP password
-  USE_SSL: TRUE/FALSE (default: FALSE)
-  DEFAULT_FROM: Default sender address if not specified in SEND_EMAIL";
+  HOST: SMTP server hostname (e.g. smtp.gmail.com)
+  PORT: SMTP server port (default: 25 | 587 | 465)
+  USERNAME: The SMTP authentication username.
+  PASSWORD: The SMTP authentication password.
+  USE_SSL: TRUE | FALSE (default: FALSE)
+  DEFAULT_FROM: Default sender address if unspecified in SEND_EMAIL.";
         }
 
         /// <summary>Creates a new instance of the SMTP data source.</summary>

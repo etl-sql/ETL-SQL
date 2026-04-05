@@ -411,6 +411,7 @@ export class ResultsPanel {
                 case 'performance': renderPerformance(message.metrics); break;
                 case 'message': appendMessage(message); break;
                 case 'clear': clearAll(); break;
+                case 'done': onExecutionDone(message.exitCode); break;
             }
         });
 
@@ -488,6 +489,9 @@ export class ResultsPanel {
             div.className = 'msg-entry message-' + (msg.level || 'info');
             div.innerHTML = \`<span style="opacity:0.4; margin-right:8px">\${new Date().toLocaleTimeString()}</span> \${msg.text}\`;
             messagesLog.appendChild(div);
+            if (msg.level === 'error') {
+                showTab('messages');
+            }
         }
 
         function toggleHideInfo() {
@@ -512,6 +516,13 @@ export class ResultsPanel {
         function cancelScript() {
             vscode.postMessage({ type: 'cancel' });
             appendMessage({ level: 'info', text: 'Cancellation requested...' });
+        }
+
+        function onExecutionDone(exitCode) {
+            runningIndicator.classList.remove('active');
+            if (exitCode !== 0 && exitCode !== null) {
+                showTab('messages');
+            }
         }
 
         function exportData(format) {

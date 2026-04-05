@@ -2,61 +2,90 @@
 
 The ETL-SQL engine is designed to parse and execute data transformations dynamically using standard SQL syntax as well as extended automation keywords. 
 
-## 1. Connection Management
+## Connection Management
+
+Connectors define how the engine interacts with external data sources.
 
 **`CREATE CONNECTION`**
 Defines a reusable connection to a source or destination platform. Connections must be defined before selecting from or inserting to them, unless using ad-hoc temporary tables (e.g., `#temp`).
 
 *Syntax:*
-`CREATE CONNECTION <connection_name> ON <provider_type>('<connection_string_or_filepath>') [WITH(<options>)];`
+```sql
+CREATE CONNECTION <name> ON <provider>('<connection_string>') [WITH(<options>)];
+```
 
-*Supported Providers:*
-- **FLATFILE** (Alias: `CSV`): Standard delimited text files.
-  - *Options*: 
-    - `HEADER=ON|OFF|'filepath'` (Defaults to ON)
-    - `DELIMITER=COMMA|PIPE|TAB|SEMICOLON|COLON|TILDE|<char>` (Defaults to COMMA)
-    - `ROW_DELIMITER=LF|CR|CRLF|TILDE|SEMICOLON|COLON|COMMA|TAB|PIPE` (Defaults to CRLF)
-    - `ENCODING=UTF8|ANSI|UTF16|LATIN1|UNICODE` (Defaults to UTF8)
-    - `TEXT_QUALIFIER=DOUBLEQUOTE|SINGLEQUOTE` (Wraps fields with delimiters)
-    - `ESCAPE_CHAR=<char>` (Escapes special characters)
-    - `NULL_AS=NULL|EMPTY|BACKSLASH_N` (How to represent null values)
-    - `DATE_FORMAT=<format>` (Global date parsing format)
-    - `STRICT_SCHEMA=ON|OFF` (Enforces column count/types strictly)
-    - `START_AT=n`, `END_AT=n` (Line ranges to process)
-    - `COUNT_AT_END=ON|OFF|'pattern'` (Validate trailing record counts)
-    - `COMPRESS/ENCRYPT=ON|OFF`, `PASS=<password>` (File-level encryption/compression)
-    - For fixed width files, use a temporary table to define the column widths and positions before inserting into the target file.
-- **MSSQL** (Alias: `SQLSERVER`): Microsoft SQL Server.
-  - *Options*: `TABLE=<name>` (Sets default context table).
-- **POSTGRES**: PostgreSQL database.
-  - *Options*: `TABLE=<name>`.
-- **ORACLE**: Oracle database.
-  - *Options*: `TABLE=<name>`.
-- **JSON**: JSON file connector.
-  - *Options*: `ROOT_PATH=<jsonpath>` (e.g. `$.Rows`), `COMPRESS`, `ENCRYPT`, `PASS`.
-- **XML**: XML file connector.
-  - *Options*: `ROOT_PATH=<xpath>` (e.g. `/Catalog/Book`), `COMPRESS`, `ENCRYPT`, `PASS`.
-- **EXCEL**: Excel file connector (.xlsx, .xls, .xlsb).
-  - *Options*: `SHEET=<name>`, `RANGE='A1:B10'`, `HEADER=ON|OFF`, `COMPRESS`, `ENCRYPT`, `PASS`.
-- **PARQUET**: Apache Parquet files.
-  - *Options*: `COMPRESSION=SNAPPY|GZIP|LZO|BROTLI|LZ4|ZSTD|UNCOMPRESSED`.
-- **AVRO**: Apache Avro files.
-  - *Options*: `SCHEMA_FILE=<path>` (Optional schema definition).
-- **DIRECTORY**: Connector for listing and managing directory contents.
-- **FTP | SFTP**: Connectors for remote file systems.
-  - *Options*: `HOST`, `USER`, `PASS`, `PORT`, `TEMP_DIR`.
-- **AZUREBLOB**: Azure Blob Storage connector.
-  - *Options*: `CONTAINER=<name>`, `ACCOUNT_NAME`, `ACCOUNT_KEY` (or SAS token).
-- **EMAIL** (Alias: `SMTP`): Connector for sending automated emails.
-  - *Options*: `HOST`, `PORT`, `USER`, `PASS`, `USE_SSL=TRUE|FALSE`, `DEFAULT_FROM`.
+### Connection Types & Options
+
+#### FLATFILE (or CSV, FILE)
+For delimited text files.
+- **HEADER**: `ON`, `OFF` (Default: `ON`).
+- **DELIMITER**: `COMMA`, `PIPE`, `TAB`, `SEMICOLON`, `COLON`, `TILDE` or a literal `<char>`.
+- **ROW_DELIMITER**: `LF`, `CR`, `CRLF` (Default: `CRLF`).
+- **ENCODING**: `UTF8`, `ANSI`, `UNICODE`, `LATIN1` (Default: `UTF8`).
+- **TEXT_QUALIFIER**: `DOUBLEQUOTE`, `SINGLEQUOTE`.
+- **START_AT**: Line number to start reading (1-based).
+- **END_AT**: Line number to stop reading.
+- **COUNT_AT_END**: `ON` (Validates row count at trailer).
+
+#### MSSQL (or SQLSERVER)
+For Microsoft SQL Server.
+- **TABLE**: Default table context.
+- Supports integrated security and T-SQL pushdown.
+
+#### POSTGRES (or NPSQL)
+For PostgreSQL.
+- **TABLE**: Default table context.
+- Supports native SQL pushdown.
+
+#### ORACLE
+For Oracle Database.
+- **TABLE**: Default table context (e.g. `SCHEMA.TABLE`).
+- Supports PL/SQL pushdown.
+
+#### SFTP (or SSH)
+For remote file operations over SSH.
+- **USER**: The username for the SSH connection.
+- **PASSWORD**: The password for the SSH connection.
+- **KEYFILE**: Path to the private key file for public-key authentication.
+- **PASSPHRASE**: The passphrase for the private key file (if any).
+- Supports `GET_FILE`, `PUT_FILE`, and `REMOTE_FILE_LIST`.
+
+#### AZURE_BLOB (or BLOB)
+For Azure Blob Storage.
+- **CONTAINER**: The target blob container name.
+- **ACCOUNT_NAME** / **ACCOUNT_KEY**: Storage credentials.
+- Supports `GET_FILE`, `PUT_FILE`, and `REMOTE_FILE_LIST`.
+
+#### SMTP (or EMAIL)
+For sending emails.
+- **HOST**: SMTP server name.
+- **PORT**: SMTP server port.
+- **USERNAME** / **PASSWORD**: Authentication details.
+- **USE_SSL**: `TRUE` / `FALSE`.
+- **DEFAULT_FROM**: Default sender email.
+
+#### PARQUET
+For Apache Parquet columnar files.
+- **COMPRESSION**: `SNAPPY`, `GZIP`, `LZ4`, `ZSTD` (Default: `SNAPPY`).
+
+#### AVRO
+For Apache Avro files.
+- **SCHEMA_FILE**: Path to a `.avsc` schema file.
+
+#### EXCEL
+For Excel file formats (.xlsx, .xls, .xlsb).
+- **SHEET**: Specific sheet name.
+- **RANGE**: Explicit cell range (e.g. `'A1:B10'`).
+
+#### JSON / XML
+For structured document files.
+- **ROOT_PATH**: JSONPath or XPath to the data root (e.g. `$.Rows` or `/Catalog/Book`).
 
 *Example:*
 ```sql
 CREATE CONNECTION remote_srv ON SFTP('sftp.example.com') WITH(USER='admin', PASS='secret');
 CREATE CONNECTION cloud_store ON AZUREBLOB('UseDevelopmentStorage=true') WITH(CONTAINER='backup');
 CREATE CONNECTION secure_db ON MSSQL('ENC:U2FsdGVkX1+...');
-```
-
 ```
 
 **`DROP CONNECTION`**
@@ -103,31 +132,40 @@ dms CLOSE;
 dpost CLOSE;
 ```
 
-## 2. Variables & State Management
-
-**`DECLARE`**
-Initializes a new variable into the local script scope. Variables must be affixed with an `@` symbol. Supported types include `VARCHAR`, `INT`, `DECIMAL`, `DATE`, `DATETIME`, and `LIST`.
-
-*Syntax:*
-`DECLARE @<var_name> <data_type> [= <initial_value>];`
-
-*Examples:*
-```sql
-DECLARE @status VARCHAR(20) = 'Active';
-DECLARE @batchId INT = 1234;
-DECLARE @threshold DECIMAL(10,2) = 150.50;
-DECLARE @validCats LIST(varchar) = ['Toys', 'Electronics'];
-```
-
-**`SET`**
-Updates the value of an existing variable mid-script.
-
-*Example:*
-```sql
-SET @status = 'Archived';
-```
-## 3. Context
+## Variables & State Management
 You have the ability to query from multiple different source databases and files.  When using these different sources you have access to different processes and syntax.  Knowing your context will help to avoid issues.
+
+### Supported Data Types
+ETL-SQL supports a wide range of data types for variable declarations and table schemas.
+
+| Category | Types |
+| :--- | :--- |
+| **Numeric** | `INT`, `INTEGER`, `BIGINT`, `SMALLINT`, `TINYINT`, `DECIMAL`, `NUMERIC`, `MONEY`, `FLOAT`, `REAL`, `DOUBLE` |
+| **Temporal** | `DATE`, `DATETIME`, `DATETIME2`, `TIMESTAMP`, `TIME`, `DATETIMEOFFSET` |
+| **Character** | `STRING`, `VARCHAR`, `NVARCHAR`, `TEXT`, `CHAR` |
+| **Logic** | `BIT`, `BOOLEAN`, `BOOL` (True/False) |
+| **Binary** | `VARBINARY`, `BINARY`, `IMAGE`, `BLOB` |
+| **Structured** | `JSON`, `XML` |
+| **Collections** | `LIST` (An ordered collection of values) |
+| **Specialized** | `PATH`, `ENCRYPTED`, `UNIQUEIDENTIFIER` (UUID/Guid), `GEOMETRY`, `GEOGRAPHY`, `HIERARCHYID`, `VECTOR`, `ANY` |
+
+#### Specialized Variables
+*   **`PATH`**: Used specifically for file system paths or connection URIs. It ensures consistent handling of separators across different operating systems.
+    ```sql
+    DECLARE @sourcePath PATH = 'C:\Data\Source\';
+    ```
+*   **`ENCRYPTED`**: A semantic type for sensitive data such as connection strings, passwords, or API keys. 
+    ```sql
+    DECLARE @apiKey ENCRYPTED = 'ENC:U2FsdGVkX1+...';
+    ```
+*   **`LIST`**: Holds multiple values that can be used with `IN` operators or traversed in `FOREACH` loops.
+    ```sql
+    DECLARE @myList LIST = [1, 2, 3];
+    ```
+*   **`ANY`**: The default type when no type is specified in a `DECLARE` statement. It allows for dynamic type inference based on the assigned value.
+    ```sql
+    DECLARE @id = 123; -- Implicitly ANY, inferred as INT
+    ```
 
 In the query below your context is the ETL-SQL engine.
 ```sql
@@ -158,33 +196,127 @@ END
 ```
 Now the ETL-SQL engine will run the query in the EXECUTE block and the results returned from that query will be stored in a temporary table called #emp in the ETL-SQL engine.  So the results (#emp) now live in the context of ETL-SQL and as such it can transform, join, load them back into other connections.
 
-In this scenario #emp i
+In this scenario #emp is a temporary table in the ETL-SQL engine.  It is not a table in the Sql Server database.  It is a table in the ETL-SQL engine's memory.
 
-## 3. Querying & Filtering
+What if I need to pass parameters down to the database?
+```sql
+CREATE CONNECTION m ON MSSQL('localhost');
+DECLARE @id INT = 1;
+       ,@name VARCHAR(50) = 'John';
+
+EXECUTE m INTO #emp WITH(@id, @name)
+BEGIN
+    SELECT t.id, t.[name] FROM dbo.Employee AS t WHERE t.id > ? AND t.[name] = ?;
+END
+```
+This pushes the value of @id into the stored procedure as the first parameter.  The ? is a placeholder for the parameter.  You can add as many parameters as you need to.  They will be processed in order.
+
+What if I need to do way harder ones?
+```sql
+CREATE CONNECTION m ON MSSQL('localhost');
+DECLARE @id INT = 1;
+       ,@name varchar(50) = 'John';
+       ,@stmt varchar(2000)
+SET @stmt = 'SELECT t.id, t.[name] FROM dbo.Employee AS t WHERE t.id > ' + @id + ' AND t.[name] = ''' + @name + ''';';
+
+EXECUTE (
+    @stmt
+) AT m
+```
+Dynamic SQL is a powerful tool, but it can be dangerous.  It is important to use it with caution.
+
+My query is really straight forward.  I just want to select from a table and get the results.
+```sql
+CREATE CONNECTION m ON MSSQL('localhost');
+
+SELECT t.id, t.[name] INTO #temp FROM m.dbo.Employee AS t WHERE t.id > 1;
+```
+There is a shorthand you can use for simple select queries.  You just need to add the connection to the table name in the FROM/JOIN clause.  In the above example we have to assume it knows what database to connect to from either security or the connection string.  The ETL-SQL engine will then run this query against the Sql Server connection and connect to the dbo.Employee table.  It will then return the results to the ETL-SQL engine and store them in the #temp table.
+
+Cool but the temp tables in the ETL-SQL engine do not have the correct data types.
+```sql
+CREATE CONNECTION m ON MSSQL('localhost');
+CREATE TABLE #emp(
+   id int
+  ,name varchar(50)
+);
+
+INSERT INTO #emp (id, name)
+SELECT t.id, t.[name] FROM m.dbo.Employee AS t WHERE t.id > 1;
+
+-- OR
+INSERT INTO #emp (id, name)
+EXECUTE m
+BEGIN
+  SELECT t.id, t.[name] FROM dbo.Employee AS t WHERE t.id > 1;
+END
+```
+You can explicitly define the columns you want to insert into the temp table.  This is a good practice because it will prevent errors if the source table changes.  You just have to make sure you have the same number of columns and the same data types or it will fail.
+
+## Querying & Filtering
+
+### Common Table Expressions (CTE)
+CTEs provide a way to define temporary result sets that can be referenced within the scope of a single `SELECT`, `INSERT`, `UPDATE`, or `DELETE` statement. They improve readability and support recursive logic.
+
+*Syntax:*
+```sql
+WITH [RECURSIVE] cte_name AS (
+    <query_definition>
+) [, ...]
+<main_statement>;
+```
+
+*Example (Standard CTE):*
+```sql
+WITH HighSales AS (
+    SELECT category, SUM(price) AS Total
+    FROM sales_db.transactions
+    GROUP BY category
+)
+SELECT * FROM HighSales WHERE Total > 10000;
+```
+
+*Example (Recursive CTE):*
+```sql
+-- Generate a sequence of numbers
+WITH RECURSIVE Counter AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM Counter WHERE n < 10
+)
+SELECT n FROM Counter;
+```
 
 **`SELECT`**
 Fetches, transforms, and projects data from an established connection or temporary memory table. 
 
-*Supported clauses:*
+*Supported clauses (Syntactic Order):*
+- `DISTINCT`: When used after `SELECT`, filters out duplicate rows from the final result set.
+- `TOP <expression>`: Caps the number of returned rows (placed after `SELECT`). Supports literal numbers and variables.
+- `INTO <target>`: (ETL specific) Streams the results directly into a destination connection or memory table (tables prefixed with `#`).
 - `FROM <target>`: The source table or connection name. Supports aliases (e.g., `FROM my_conn AS T1`).
 - `[INNER | LEFT | RIGHT | FULL | LEFT SEMI | LEFT ANTI] [HASH | LOOP | MERGE] JOIN <target> ON <condition>`: Combines data from multiple sources. You can optionally force a specific execution algorithm (`HASH`, `LOOP`, or `MERGE`) to explicitly optimize streaming performance against massive datasets.
     - `LEFT SEMI JOIN`: Returns rows from the left table where a match exists in the right table.
     - `LEFT ANTI JOIN`: Returns rows from the left table where *no* match exists in the right table.
 - `[CROSS | OUTER] APPLY (<subquery>) <alias>`: Correlated subquery join. Allows the subquery to refer to columns from the left side of the apply.
-- `INTO <target>`: (ETL specific) Streams the results directly into a destination connection or memory table (tables prefixed with `#`).
 - `WHERE <condition>`: Filters rows based on standard logical evaluations.
 - `GROUP BY <columns>`: Aggregates datasets based on unique column pairings.
-- `TOP <expression>`: Caps the number of returned rows (placed after `SELECT`). Supports literal numbers and variables.
-- `LIMIT <expression>`: Caps the number of returned rows (placed at the end of the query). Supports literal numbers and variables.
-- `OFFSET <expression> [ROWS]`: Skips a specific number of rows before returning results. Usually used with `ORDER BY`.
-- `FETCH NEXT <expression> ROWS ONLY`: An alternative syntax for `LIMIT`, often used with `OFFSET`.
-- `ORDER BY <column> [ASC|DESC] [, ...]`: Sorts the result set. Multiple columns are supported. `ASC` (default) or `DESC`. Can be used with `OFFSET`/`FETCH NEXT` for pagination.
 - `HAVING <condition>`: Filters result sets *after* GROUP BY aggregation has been applied.
-- `DISTINCT`: When used after `SELECT`, filters out duplicate rows from the final result set.
-- `FOR JSON AUTO | PATH | RAW [, ROOT('name')] [, INCLUDE_NULL_VALUES] [, WITHOUT_ARRAY_WRAPPER]`: Formats results as a JSON string.
-- `FOR XML AUTO | PATH | RAW [, ROOT('name')]`: Formats results as an XML string.
 - `PIVOT ( <aggregate_func>(<col>) FOR <pivot_col> IN (<values...>) ) AS <alias>`: Rotates a table-valued expression by turning unique values from one column in the expression into multiple columns in the output.
 - `UNPIVOT ( <value_col> FOR <name_col> IN (<cols...>) ) AS <alias>`: Rotates a table-valued expression from a column-based form into a row-based form.
+- `ORDER BY <column> [ASC|DESC] [, ...]`: Sorts the result set. Multiple columns are supported. `ASC` (default) or `DESC`. Can be used with `OFFSET`/`FETCH NEXT` for pagination.
+- `OFFSET <expression> [ROWS]`: Skips a specific number of rows before returning results. Usually used with `ORDER BY`.
+- `FETCH NEXT <expression> ROWS ONLY`: An alternative syntax for `LIMIT`, often used with `OFFSET`.
+- `LIMIT <expression>`: Caps the number of returned rows (placed at the end of the query). Supports literal numbers and variables.
+- `FOR JSON AUTO | PATH | RAW [, ROOT('name')] [, INCLUDE_NULL_VALUES] [, WITHOUT_ARRAY_WRAPPER]`: Formats results as a JSON string.
+    - `AUTO`: Automatically determines the JSON hierarchy.
+    - `PATH`: Provides full control over the JSON structure via column aliases (e.g., `col AS "Node.Child"`).
+    - `RAW`: Returns each row as a single JSON object.
+- `FOR XML AUTO | PATH | RAW [, ROOT('name')] [, ELEMENTS]`: Formats results as an XML string.
+    - `AUTO`: Automatically determines the XML hierarchy.
+    - `PATH`: Uses column aliases for nesting (e.g., `col AS "Node/Child"`).
+    - `RAW`: Returns each row as a `<row>` element.
+    - `ELEMENTS`: Formats column values as nested sub-elements instead of attributes (default).
 
 *Example:*
 ```sql
@@ -201,7 +333,7 @@ ORDER BY TotalSales DESC
 LIMIT 10;
 ```
 
-## 4. Logical Operators & Advanced Filters
+## Logical Operators & Advanced Filters
 
 Standard binary and logical operators are natively supported (`=`, `<`, `>`, `<=`, `>=`, `<>`, `AND`, `OR`).
 
@@ -224,7 +356,7 @@ Evaluates whether a subquery returns any rows.
 WHERE EXISTS (SELECT 1 FROM #temp WHERE id = main.id)
 ```
 
-## 5. Set Operations
+## Set Operations
 
 Combine results from multiple queries.
 - **`UNION ALL`**: Combines all rows from both queries.
@@ -244,7 +376,7 @@ SELECT
 FROM system_table;
 ```
 
-## 5. Data Manipulation Language (DML)
+## Data Manipulation Language (DML)
 
 **`INSERT INTO`**
 Injects evaluated query outputs directly into a target table or connection. 
@@ -265,7 +397,17 @@ WHERE TotalSales < 1000;
 Dramatically accelerates data loading directly by streaming payload binaries (such as CSVs) onto target databases or tables using strict destination schema adherence. Features advanced column-reordering maps natively.
 
 *Syntax:*
-`BULK INSERT <connection_or_table> [(target_cols...)] FROM '<file_path>' WITH (FORMAT = 'CSV');`
+`BULK INSERT <connection_or_table> [(target_cols...)] FROM '<file_path>' WITH (<options>);`
+
+*Supported Options:*
+- **FORMAT**: `CSV`, `PARQUET`, `AVRO`, `EXCEL` (Default: `CSV`).
+- **BATCHSIZE**: Number of rows to commit per transaction (e.g., `10000`).
+- **MAXERRORS**: Number of parsing errors allowed before the job fails (Default: `0`).
+- **FIELDTERMINATOR**: Column separator (e.g., `','`, `'|'`, `'\t'`).
+- **ROWTERMINATOR**: Row separator (e.g., `'\n'`, `'\r\n'`).
+- **FIRSTROW**: The 1-based index of the first row to be imported (e.g., `2` to skip a header).
+- **DATE_FORMAT**: Custom format for date fields.
+- **STRICT_SCHEMA**: `ON`, `OFF` (Default: `ON`). If `OFF`, allows for extra columns or missing columns in the data.
 
 *Example:*
 ```sql
@@ -382,17 +524,158 @@ WHEN NOT MATCHED BY SOURCE THEN
     DELETE;
 ```
 
-## 6. Supported Built-In Functions
+## Statements
 
-### String and General Scalars
-- **`UPPER(str)`**: Returns the string in all-caps.
-- **`LOWER(str)`**: Returns the string in all-lowercase.
-- **`CONCAT(str1, str2...)`**: Merges multiple strings into one.
-- **`SUBSTRING(str, start, length)`**: Extracts a substring using 1-based indexing. Non-positive start values offset the window (T-SQL style). For example, `SUBSTRING('abc', 0, 2)` returns `a`.
-- **`SUBSTR(str, start[, length])`**: Extracts a substring with Oracle-style behavior. Negative `start` indexes count from the end of the string. `0` and `1` are both treated as the start of the string.
-- **`TRIM(str)`**, **`LTRIM(str)`**, **`RTRIM(str)`**: Removes whitespaces.
-- **`REPLACE(string, old, new)`**: Replaces occurrences of a substring.
-- **`LEN(string)`** (or **`LENGTH(string)`**): Returns the character count.
+### DDL & Resource Management
+
+#### CREATE TABLE
+Creates a new table or virtual view.
+```sql
+CREATE TABLE table_name AS SELECT ...;
+```
+
+#### DROP TABLE
+Deletes a table from the engine's memory or the target data source.
+```sql
+DROP TABLE table_name;
+```
+
+#### DROP FUNCTION / PROCEDURE
+Removes a user-defined function or procedure.
+```sql
+DROP FUNCTION MyFunc;
+DROP PROCEDURE MyProc;
+```
+
+### Control Flow
+
+#### IF...ELSE
+Conditional execution.
+```sql
+IF @val > 10
+BEGIN
+    PRINT 'High';
+END
+ELSE
+BEGIN
+    PRINT 'Low';
+END
+```
+
+#### WHILE
+Loop execution.
+```sql
+WHILE @i < 10
+BEGIN
+    SET @i = @i + 1;
+    IF @i = 5 CONTINUE;
+    IF @i = 8 BREAK;
+END
+```
+
+#### BREAK / CONTINUE
+Control the flow of a `WHILE` loop. `BREAK` exits the loop immediately, and `CONTINUE` skips to the next iteration.
+
+#### TRY...CATCH
+Error handling block.
+```sql
+BEGIN TRY
+    -- potentially failing code
+END TRY
+BEGIN CATCH
+    PRINT 'Error: ' + ERROR_MESSAGE();
+END CATCH
+```
+
+#### RAISERROR / THROW
+Manually raise an error.
+```sql
+RAISERROR('Custom error message', 16, 1);
+-- or
+THROW 50000, 'Error message', 1;
+```
+
+#### WAITFOR
+Pause execution for a specific duration or until a specific time.
+```sql
+WAITFOR DELAY '00:00:05'; -- Wait 5 seconds
+WAITFOR TIME '23:59:59';  -- Wait until midnight
+```
+
+### Variable Management
+
+#### DECLARE
+Defines a variable. The data type is optional; if omitted, it defaults to `ANY`. Multiple variables can be declared in a single statement.
+```sql
+DECLARE @name STRING = 'Chuck';
+DECLARE @id = 123; -- Optional type (defaults to ANY)
+DECLARE @list LIST = [1, 2, 3], @count INT = 0;
+```
+
+#### SET
+Assigns a value to an existing variable.
+```sql
+SET @name = 'Charles';
+```
+
+### Data Movement & Transformation
+
+#### EXECUTE / EXEC
+Executes a stored procedure or a dynamic SQL block.
+```sql
+EXECUTE RemoteProc @param1 = 'val';
+EXEC('SELECT * FROM Table') AT RemoteConn;
+```
+
+#### INSERT INTO
+Appends data to a table.
+```sql
+INSERT INTO TargetTable SELECT * FROM SourceTable;
+```
+
+#### TRUNCATE TABLE
+Removes all rows from a table without dropping its schema.
+```sql
+TRUNCATE TABLE TempStaging;
+```
+
+### Job & Profile Management
+
+#### SHOW JOBS
+Lists all currently running or recently completed background jobs.
+```sql
+SHOW JOBS;
+```
+
+#### KILL JOB
+Terminates a running background job by its ID.
+```sql
+KILL JOB 'job_id_123';
+```
+
+#### SET PROFILING
+Enables or disables performance profiling for the session.
+```sql
+SET PROFILING ON;
+-- run scripts
+SET PROFILING OFF;
+```
+
+#### SHOW PROFILE
+Displays the timing and resource usage for the most recently executed statements.
+```sql
+SHOW PROFILE;
+```
+
+### Remote File Management
+
+#### GET_FILE / PUT_FILE
+Transfers files between the local system and a remote connector (SFTP, FTP, Azure Blob).
+```sql
+GET_FILE 'remote/path/data.csv' TO 'local/data.csv' FROM @MySftp;
+PUT_FILE 'local/upload.txt' TO 'uploads/upload.txt' AT @AzureBlob;
+```
+
 - **`LEFT(string, n)`**, **`RIGHT(string, n)`**: Extracts `n` characters from either side.
 - **`CHARINDEX(substring, string)`** (or **`INSTR(string, substring)`**): Finds the 1-based index position of a substring. Not: `CHARINDEX` takes `(sub, str)` while `INSTR` takes `(str, sub)`.
 - **`REVERSE(string)`**: Reverses the string characters.
@@ -461,6 +744,48 @@ WHEN NOT MATCHED BY SOURCE THEN
 - **`NEWID()`**: Returns a new unique identifier (GUID).
 - **`NEWSEQUENTIALID()`**: Returns a new GUID optimized for sequential insertion.
 
+### JSON Functions
+ETL-SQL provides native support for parsing, querying, and modifying JSON data.
+- **`JSON_VALUE(json, path)`**: Extracts a scalar value from a JSON string.
+- **`JSON_QUERY(json, path)`**: Extracts an object or an array from a JSON string.
+- **`JSON_MODIFY(json, path, value)`**: Updates the value of a property in a JSON string.
+- **`ISJSON(json)`**: Validates whether a string contains valid JSON.
+- **`JSON_EXISTS(json, path)`**: Tests whether a specific path exists in a JSON string.
+- **`JSON_OBJECT(key:val, ...)`**: Constructs a JSON object from key-value pairs.
+- **`JSON_ARRAY(val, ...)`**: Constructs a JSON array from a list of values.
+- **`OPENJSON(json[, path])`**: (Table-valued) Parses JSON text and returns data as a table.
+- **`JSON_EXTRACT(json, path)`**: Returns the data at the specified path (alias for `JSON_QUERY`).
+
+### XML Functions
+Comprehensive XML processing capabilities for structured data interchange.
+- **`XMLVALUE(xml, xpath)`**: Extracts a scalar value using XPath.
+- **`XMLEXISTS(xml, xpath)`**: Returns true if the XPath expression matches any nodes.
+- **`XMLQUERY(xml, xpath)`**: Returns an XML fragment matching the XPath.
+- **`XMLELEMENT(name, ...)`, `XMLATTRIBUTES(...)`, `XMLFOREST(...)`**: Constructs XML elements and structures.
+- **`EXTRACTVALUE(xml, xpath)`**: Traditional function for extracting text from XML nodes.
+
+### Regular Expressions (Regex)
+Powerful pattern matching and manipulation using standard Regex syntax.
+- **`REGEXP_LIKE(str, pattern)`**: Returns true if the string matches the pattern.
+- **`REGEXP_SUBSTR(str, pattern)`**: Returns the substring that matches the pattern.
+- **`REGEXP_REPLACE(str, pattern, replacement)`**: Replaces occurrences of the pattern.
+- **`REGEXP_INSTR(str, pattern)`**: Returns the 1-based start position of the match.
+- **`REGEXP_COUNT(str, pattern)`**: Returns the number of times the pattern occurs.
+- **`REGEXP_MATCHES(str, pattern)`**: (Table-valued) Returns all matches as a result set.
+
+### Additional Scalar & Math Functions
+- **`EXP(n)`**, **`LOG(n)`**, **`LN(n)`**: Exponential and logarithmic functions.
+- **`MOD(n, m)`**: Returns the remainder of `n/m`.
+- **`NVL(val, default)`**, **`NVL2(val, if_not_null, if_null)`**: Oracle-style null handling.
+- **`CUME_DIST()`, `PERCENT_RANK()`, `NTH_VALUE(col, n)`**: Advanced window and distribution functions.
+- **`PERCENTILE_CONT(n)`, `PERCENTILE_DISC(n)`**: Statistical percentile calculations.
+
+### File & Directory Introspection
+Functions to query the state of the local or remote filesystem.
+- **`FILE_EXISTS('path')`**: Returns true if the file exists.
+- **`DIRECTORY_EXISTS('path')`**: Returns true if the directory exists.
+- **`FILE_LIST('path'[, 'filter'])`**: Returns a table containing information about files in a directory.
+
 ### Aggregation
 - **`COUNT([DISTINCT] col)`**: Aggregation tally. If `DISTINCT` is specified, only unique non-null values are counted.
 - **`SUM(col)`**: Aggregation total.
@@ -469,7 +794,7 @@ WHEN NOT MATCHED BY SOURCE THEN
 - **`AVG(col)`**: Aggregation mathematical mean.
 - **`STRING_AGG(col, separator) [WITHIN GROUP (ORDER BY col [ASC|DESC])]`**: Concatenates values from multiple rows into a single string, separated by the specified string. Optionally orders the values before concatenation. NULL values are ignored.
 
-## 7. Windows Functions
+## Windows Functions
 
 Window functions operate on a set of rows and return a single value for each row from the underlying query. The `OVER` clause defines the window or user-specified set of rows.
 
@@ -501,7 +826,21 @@ SELECT
 FROM #sales;
 ```
 
-## 8. Loops and Flow Control
+**Advanced Window Functions**
+- **`CUME_DIST()`**: Calculates the cumulative distribution of a value in a group of values.
+- **`PERCENT_RANK()`**: Calculates the relative rank of a row within a group of rows.
+- **`NTH_VALUE(col, n)`**: Returns the value of the `n`-th row in the window frame.
+- **`PERCENTILE_CONT(n)`**, **`PERCENTILE_DISC(n)`**: Statistical functions that calculate a percentile based on a continuous or discrete distribution. These require the `WITHIN GROUP (ORDER BY col [ASC|DESC])` clause.
+
+*Example (Statistical):*
+```sql
+SELECT 
+    category,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY price) OVER(PARTITION BY category) AS MedianPrice
+FROM #products;
+```
+
+## Loops and Flow Control
 
 Procedural loops are supported natively via C# execution within the ETL-SQL evaluator to handle repetition.
 
@@ -536,25 +875,61 @@ END;
 ```
 
 **`EXECUTE` (Remote Execution)**
-Executes SQL code on a remote connection.
+Executes SQL code on a remote connection. Supports capturing results into local tables and passing parameters for secure, parameterized execution.
 
 *Connection Block Form:*
 ```sql
-EXECUTE ds
+EXECUTE ds [INTO #target] [WITH (@param1, @param2, ...)]
 BEGIN
-  CREATE TABLE Employee (id, employee_name);
-  INSERT INTO  Employee(id, employee_name) VALUES (1, 'New');
+  -- Remote SQL dialect (e.g. T-SQL for MSSQL)
+  SELECT id, name FROM remote_table WHERE category_id = ?1 OR alt_id = ?1;
 END;
 ```
 
 *String Literal Form:*
 ```sql
 EXECUTE (
-  'CREATE TABLE Employee (id INT, employee_name NVARCHAR(MAX));
-  INSERT INTO  Employee(id, employee_name) VALUES (1, ''New'');'
-) AT ds;
+  'SELECT id, name FROM remote_table WHERE category_id = ?1'
+) AT ds [INTO #target] [WITH (@cat_id)];
 ```
-*Note:* The string literal form sends raw SQL directly to the server, so it requires valid target server syntax and standard single-quote escaping (`''`).
+
+*Key Parameters:*
+- **INTO #table**: Streams results from the remote execution directly into a local ETL-SQL memory table.
+- **WITH (@vars)**: Passes local variables to the remote server. 
+  - **Sequential**: Use `?` placeholders in the remote SQL; variables are applied in the order they are listed.
+  - **Indexed**: Use `?1`, `?2`, etc., to refer to specific parameters in the `WITH` list. This allows using the same parameter multiple times or referring to them out of order.
+- **Note**: The string literal form sends raw SQL directly to the server, so it requires valid target server syntax and standard single-quote escaping (`''`).
+
+**`PARALLEL`**
+The `PARALLEL` keyword allows for concurrent execution of multiple statements or blocks. This is particularly useful for independent data streams that do not have inter-dependencies, such as loading multiple dimension tables simultaneously.
+
+*Syntax:*
+```sql
+PARALLEL
+BEGIN
+    <statement_1>;
+    <statement_2>;
+    ...
+END
+```
+
+*Key Characteristics:*
+- **Non-blocking**: Statements within a `PARALLEL` block are fired concurrently.
+- **Wait-all**: The execution engine waits for *all* statements in the block to complete before moving to the next statement outside the block.
+- **Isolated Scopes**: Each branch typically operates on its own connection state to avoid race conditions, though global variables are accessible.
+
+*Example:*
+```sql
+-- Load three independent tables in parallel
+PARALLEL
+BEGIN
+    SELECT * INTO #Dimensions_Date FROM src_db.DateDim;
+    SELECT * INTO #Dimensions_Product FROM src_db.ProductDim;
+    SELECT * INTO #Dimensions_Store FROM src_db.StoreDim;
+END
+
+-- Sequential execution resumes here after all three above are finished
+```
 
 **`FOR`**
 Iterates a variable through a numeric range with an optional `STEP`.
@@ -693,6 +1068,12 @@ The lineage system provides end-to-end traceability of data movement, capturing 
 *Queryable Columns:*
 - `Timestamp`, `Operation`, `TargetTable`, `TargetColumn`, `SourceTables`, `SourceColumns`, `Description`, `Metadata` (JSON), `DerivedFromDescriptions`, `SourceFile`, `Line`, `Column`.
 
+### Metadata Inheritance & Amalgamation
+When columns are combined or transformed (e.g., `UnitPrice * Qty AS Total`), the system automatically propagates metadata:
+1. **Last-Seen Wins**: The primary description (`@d`) and individual custom tags are inherited from the last source column in the expression that has them defined.
+2. **Amalgamation**: The `DerivedFromDescriptions` field is populated with a structured list of all involved source descriptions (e.g., `UnitPrice: Base price per unit, Qty: Number of items sold`), ensuring no context is lost during transformations.
+3. **Global Persistence**: All tags assigned anywhere in the lineage chain are preserved and queryable at the final destination.
+
 ### Lineage Transformation Functions
 - **`GET_TAGS(table_name [, column_name])`**: Returns a `LIST` of all custom metadata tag names defined for a table or specific column.
 - **`GET_TAG_VALUE(table_name, column_name, tag_name)`**: Returns the string value of a specific metadata tag.
@@ -706,7 +1087,6 @@ BEGIN
 END;
 ```
 
-### Column & Table Metadata Tags
 Attach arbitrary metadata tags to columns and tables using special comment blocks. Tags are captured by the lineage system for auditing, governance, and UI documentation. `@d:` is the reserved description tag.
 
 **Column Tags** — placed immediately after a column expression in a `SELECT` list:
@@ -728,44 +1108,6 @@ INTO #TaggedUsers
 FROM m.Users /* @owner: SecurityTeam; */;
 ```
 
-### Metadata Inheritance & Amalgamation
-When columns are combined or transformed (e.g., `UnitPrice * Qty AS Total`), the system automatically propagates metadata:
-1. **Last-Seen Wins**: The primary description (`@d`) and individual custom tags are inherited from the last source column in the expression that has them defined.
-2. **Amalgamation**: The `DerivedFromDescriptions` field is populated with a structured list of all involved source descriptions (e.g., `UnitPrice: Base price per unit, Qty: Number of items sold`), ensuring no context is lost during transformations.
-3. **Global Persistence**: All tags assigned anywhere in the lineage chain are preserved and queryable at the final destination.
-
 **Email Operations**
 - `SEND_EMAIL TO '<to>' SUBJECT '<subject>' BODY '<body>' [AT <connection>];`: Sends an automated email alert (requires an SMTP connection).
 
-## 12. Parallel Execution
-
-The `PARALLEL` keyword allows for concurrent execution of multiple statements or blocks. This is particularly useful for independent data streams that do not have inter-dependencies, such as loading multiple dimension tables simultaneously.
-
-*Syntax:*
-```sql
-PARALLEL
-BEGIN
-    <statement_1>;
-    <statement_2>;
-    ...
-END
-```
-
-*Key Characteristics:*
-- **Non-blocking**: Statements within a `PARALLEL` block are fired concurrently.
-- **Wait-all**: The execution engine waits for *all* statements in the block to complete before moving to the next statement outside the block.
-- **Isolated Scopes**: Each branch typically operates on its own connection state to avoid race conditions, though global variables are accessible.
-
-*Example:*
-```sql
--- Load three independent tables in parallel
-PARALLEL
-BEGIN
-    SELECT * INTO #Dimensions_Date FROM src_db.DateDim;
-    SELECT * INTO #Dimensions_Product FROM src_db.ProductDim;
-    SELECT * INTO #Dimensions_Store FROM src_db.StoreDim;
-END
-
--- Sequential execution resumes here after all three above are finished
-SELECT * FROM #Dimensions_Date;
-```

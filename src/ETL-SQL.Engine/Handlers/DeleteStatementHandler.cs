@@ -1,6 +1,7 @@
 using ETL_SQL.Data;
 using ETL_SQL.Core.Common.Exceptions;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
@@ -17,7 +18,6 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (DeleteStatement)statement;
-            
 
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
             Logger.Verbose($"Deleting from {connName}");
@@ -46,15 +46,15 @@ namespace ETL_SQL.Engine.Handlers
                         var contextRow = new Row();
                         foreach (var col in deletedRow.Columns)
                         {
-                            contextRow.Columns[$"DELETED.{col.Key}"] = col.Value;
-                            if (!contextRow.Columns.ContainsKey(col.Key)) contextRow.Columns[col.Key] = col.Value;
+                            contextRow[$"DELETED.{col.Key}"] = col.Value;
+                            if (!contextRow.HasColumn(col.Key)) contextRow[col.Key] = col.Value;
                         }
 
                         var outputRow = new Row();
                         foreach (var outCol in stmt.Output.Columns)
                         {
                             var val = await context.EvaluateValue(outCol.Expression, contextRow);
-                            outputRow.Columns[outCol.Alias ?? outCol.ToSql()] = val;
+                            outputRow[outCol.Alias ?? outCol.ToSql()] = val;
                         }
                         outputRows.Add(outputRow);
                     }
@@ -79,6 +79,3 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
-
-
-

@@ -75,14 +75,14 @@ namespace ETL_SQL.Connectors.SqlServer
             }
 
             var currentBatch = new DataTable();
-            foreach (var col in columns) currentBatch.ColumnNames.Add(col);
+            currentBatch.SetColumns(columns);
 
             while (await reader.ReadAsync())
             {
-                var row = new Row();
+                var row = currentBatch.NewRow();
                 for (int i = 0; i < reader.FieldCount; i++)
                 {
-                    row[columns[i]] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                    row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
                 }
                 currentBatch.Rows.Add(row);
 
@@ -90,7 +90,7 @@ namespace ETL_SQL.Connectors.SqlServer
                 {
                     yield return currentBatch;
                     currentBatch = new DataTable();
-                    foreach (var col in columns) currentBatch.ColumnNames.Add(col);
+                    currentBatch.SetColumns(columns);
                 }
             }
 
@@ -141,7 +141,7 @@ namespace ETL_SQL.Connectors.SqlServer
                     var dataRow = dt.NewRow();
                     foreach (var col in batch.ColumnNames)
                     {
-                        dataRow[col] = row.Columns.TryGetValue(col, out var val) && val != null ? val : DBNull.Value;
+                        dataRow[col] = row[col] ?? DBNull.Value;
                     }
                     dt.Rows.Add(dataRow);
                 }
@@ -173,9 +173,7 @@ namespace ETL_SQL.Connectors.SqlServer
                 
                 if (paramCount > 0)
                 {
-                    // Replace ? with named parameters sequentially for raw SQL
-                    int paramIndex = 0;
-                    cmd.CommandText = System.Text.RegularExpressions.Regex.Replace(cmd.CommandText, @"\?(?![0-9])", match => $"@p{paramIndex++}");
+                    cmd.CommandText = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(cmd.CommandText);
                 }
 
                 await using var reader = await cmd.ExecuteReaderAsync();
@@ -190,14 +188,14 @@ namespace ETL_SQL.Connectors.SqlServer
                 }
 
                 var currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
-                foreach (var col in columns) currentBatch.ColumnNames.Add(col);
+                currentBatch.SetColumns(columns);
 
                 while (await reader.ReadAsync())
                 {
-                    var row = new Row();
+                    var row = currentBatch.NewRow();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
-                        row[columns[i]] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                        row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
                     }
                     currentBatch.Rows.Add(row);
 
@@ -205,7 +203,7 @@ namespace ETL_SQL.Connectors.SqlServer
                     {
                         yield return currentBatch;
                         currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
-                        foreach (var col in columns) currentBatch.ColumnNames.Add(col);
+                        currentBatch.SetColumns(columns);
                     }
                 }
 

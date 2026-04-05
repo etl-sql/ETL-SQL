@@ -29,36 +29,39 @@ namespace ETL_SQL.Engine.Handlers
                 
                 if (context.Connections.TryGetValue(connName, out var source) && source is IDatabaseSource db)
                 {
+                    var parameters = new List<object?>();
+                    foreach (var paramExpr in stmt.Parameters)
+                    {
+                        parameters.Add(await context.EvaluateValue(paramExpr, new Row()));
+                    }
+
                     context.Log($"Executing remote SQL on {connName}...");
                     context.LastResultSets.Clear();
                     var sw = System.Diagnostics.Stopwatch.StartNew();
-                    var batches = db.ExecuteRawSql(sql);
+                    var batches = db.ExecuteRawSql(sql, parameters);
                     
-                    var currentKey = -1;
-                    DataTable? currentSet = null;
-
+                    var results = new List<DataTable>();
                     await foreach (var batch in batches)
                     {
-                        if (batch.ResultSetIndex != currentKey)
-                        {
-                            if (currentSet != null) context.LastResultSets.Add(currentSet);
-                            currentSet = new DataTable { ResultSetIndex = batch.ResultSetIndex };
-                            currentKey = batch.ResultSetIndex;
-                        }
-                        
-                        if (currentSet!.ColumnNames.Count == 0) currentSet.SetColumns(batch.ColumnNames);
-                        foreach (var r in batch.Rows) currentSet.AddRow(r);
+                        results.Add(batch);
                     }
-                    if (currentSet != null) context.LastResultSets.Add(currentSet);
-
+                    
                     sw.Stop();
-                    if (context.LastResultSets.Count > 0)
+                    if (results.Count > 0)
                     {
-                        context.LastResult = context.LastResultSets[^1];
+                        context.LastResult = results[^1];
+                        context.LastResultSets.Clear();
+                        context.LastResultSets.AddRange(results);
+                        
                         foreach (var rs in context.LastResultSets)
                         {
                             rs.ExecutionTimeMs = sw.ElapsedMilliseconds / context.LastResultSets.Count;
                             rs.TotalRowsMatched = rs.Rows.Count;
+                        }
+
+                        if (stmt.IntoTable != null)
+                        {
+                            await LoadIntoTable(stmt.IntoTable, results, context);
                         }
                     }
                 }
@@ -72,6 +75,42 @@ namespace ETL_SQL.Engine.Handlers
                 var parser = new Parser(new Lexer(sql).Tokenize());
                 var script = parser.Parse();
                 await context.Evaluate(script);
+            }
+        }
+
+        private async Task LoadIntoTable(TableReference target, List<DataTable> results, IExecutionContext context)
+        {
+            string tableName = target.TableName;
+            
+            if (tableName.StartsWith("#") && !context.Connections.ContainsKey(tableName))
+            {
+                var firstBatch = results.FirstOrDefault();
+                if (firstBatch != null)
+                {
+                    var mem = new InMemoryDataSource();
+                    var columns = firstBatch.ColumnNames.Select(c => new ColumnDefinition(c, "ANY", false));
+                    mem.SetSchema(columns);
+                    context.Connections[tableName] = mem;
+                }
+            }
+
+            if (context.Connections.TryGetValue(tableName, out var targetSource))
+            {
+                await targetSource.TruncateAsync();
+                
+                async IAsyncEnumerable<DataTable> GetBatches()
+                {
+                    foreach (var b in results) yield return b;
+                    await Task.CompletedTask;
+                }
+                
+                await targetSource.WriteBatches(GetBatches());
+                int totalRows = results.Sum(r => r.Rows.Count);
+                context.Log($"Loaded {totalRows} rows into {tableName}.");
+            }
+            else
+            {
+                throw new System.Exception($"Target table '{tableName}' not found for INTO clause.");
             }
         }
     }

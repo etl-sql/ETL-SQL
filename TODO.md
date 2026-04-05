@@ -332,3 +332,70 @@ Example diffs (very short after stripping the shared baseline):
 - `src/ETL-SQL.Core/Data/DatabaseConnectors.cs` — define `IConnectorSyntax`, rename plugin→connector methods
 - `src/ETL-SQL.App/UI/SuggestionProviders.cs` — rename plugin→connector call sites
 - Each `*Syntax.cs` in `src/ETL-SQL.Connectors/` — strip baseline words, keep only diffs
+
+29. Tags should be able to be used to in CREATE TABLE.  So the user can define the columns as its created.
+
+## VS CODE Bugs/Improvements
+1. Linter errors should stop executing and bounce to the Messages tabs showing the errors
+``` sql
+    DECLARE @id int;
+          ,@name varchar(100);
+```
+The linter already knows this is an error but its not red so that should be step 1.  Step 2 if the user does execute it should jump to the Messages tab with the error.
+
+2. Using the same example above, on error the Executing message with the cancel button is showing but the query has stopped.  Cancel does nothing when clicked.
+
+[x] 3. Need a comment/uncomment keyboard shortcut.  Need this for both ui edit and vs code.  This will comment or uncomment out the selected
+
+4. When running DOCKER in vs code, first I ran this code:
+```sql
+USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest');
+
+-- 2. Define a connection using the dynamic connection string
+DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
+CREATE CONNECTION m ON MSSQL(@conn);
+```
+Next I selected this code and ran run with selection
+```sql
+EXECUTE m
+BEGIN
+    CREATE TABLE dbo.Employee (
+        id INT PRIMARY KEY,
+        [name] NVARCHAR(100)
+    );
+    INSERT INTO dbo.Employee (id, [name]) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'John');   
+END
+```
+I noticed the container was closed and it sat at the executing message, cancel didn't work and there was no error messages.
+
+[x] 5. This statement should have worked but did not.  Error message: LSP: Syntax error in Parser: Only native EXECUTE ... BEGIN ... END blocks are supported as an INSERT source. at line 24, col 1 at 24:1.  I'm guessing we forgot to implement INTO #temp for this kind of EXECUTE block.  Fixed: parser and handler both support EXECUTE (@stmt) AT connection INTO #temp. Tests added to RemoteExecuteTests.cs.
+```sql
+USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest');
+
+-- 2. Define a connection using the dynamic connection string
+DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
+CREATE CONNECTION m ON MSSQL(@conn);
+
+EXECUTE m
+BEGIN
+    CREATE TABLE dbo.Employee (
+        id INT PRIMARY KEY,
+        [name] NVARCHAR(100)
+    );
+    INSERT INTO dbo.Employee (id, [name]) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'John');   
+END
+
+DECLARE @id INT = 1
+       ,@name varchar(50) = 'John'
+       ,@stmt varchar(2000)
+SET @stmt = 'SELECT t.id, t.[name] FROM dbo.Employee AS t WHERE t.id > ' + @id + ' AND t.[name] = ''' + @name + ''';';
+SELECT @stmt;
+
+EXECUTE (
+    @stmt
+) AT m INTO #emp;
+
+SELECT * FROM #emp;
+```
+
+6. LINEAGE gets lost when using a EXECUTE block.  Well need to read the pushdown SQL statement as best we can for the hover LINEAGE and then capture the actual LINEAGE after execute when we know exactly what came back from the PUSHDOWN.  The goal would be to track this back and say id came from MSSQL dbo.Employee's table

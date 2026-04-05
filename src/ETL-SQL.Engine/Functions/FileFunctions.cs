@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Functions;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Functions
@@ -19,11 +20,11 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Registers file-related functions into the global function registry.</summary>
         public static void Register(IFunctionRegistry registry)
         {
-            registry.Register("REMOTE_FILE_LIST", RemoteFileList);
-            registry.Register("FILE_LIST", FileList);
-            registry.Register("DIRECTORY", FileList); // Alias for consistency
-            registry.Register("FILE_EXISTS", FileExists);
-            registry.Register("DIRECTORY_EXISTS", DirectoryExists);
+            registry.RegisterWithHelp("REMOTE_FILE_LIST", RemoteFileList, "REMOTE_FILE_LIST(conn_str, [path]): Returns a table of files from a remote connection (SFTP/FTP/Blob).");
+            registry.RegisterWithHelp("FILE_LIST", FileList, "FILE_LIST(path, [recursive]): Returns a table of files in a local directory.");
+            registry.RegisterWithHelp("DIRECTORY", FileList, "DIRECTORY(path, [recursive]): Alias for FILE_LIST.");
+            registry.RegisterWithHelp("FILE_EXISTS", FileExists, "FILE_EXISTS(path): Returns true if the file exists.");
+            registry.RegisterWithHelp("DIRECTORY_EXISTS", DirectoryExists, "DIRECTORY_EXISTS(path): Returns true if the directory exists.");
         }
 
         private static async Task<object?> RemoteFileList(List<object?> args, IExecutionContext context)

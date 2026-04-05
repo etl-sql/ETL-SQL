@@ -50,7 +50,7 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     if (pushdownResult.ColumnNames.Count == 0)
                     {
-                        pushdownResult.ColumnNames.AddRange(batch.ColumnNames);
+                        pushdownResult.SetColumns(batch.ColumnNames);
                     }
                     foreach (var r in batch.Rows)
                     {
@@ -196,7 +196,7 @@ namespace ETL_SQL.Engine.Handlers
                 bool capped = false;
                 await foreach (var batch in batches)
                 {
-                    if (result.ColumnNames.Count == 0) result.ColumnNames.AddRange(batch.ColumnNames);
+                    if (result.ColumnNames.Count == 0) result.SetColumns(batch.ColumnNames);
                     foreach (var r in batch.Rows)
                     {
                         totalRows++;
@@ -213,7 +213,7 @@ namespace ETL_SQL.Engine.Handlers
                     {
                         if (forClause != null)
                         {
-                            foreach (var r in batch.Rows) Logger.WriteLine(r.Columns.Values.FirstOrDefault()?.ToString() ?? "");
+                            foreach (var r in batch.Rows) Logger.WriteLine(r[0]?.ToString() ?? "");
                         }
                         else
                         {
@@ -289,7 +289,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // Create a new enumerable that includes the first batch if we found one
-            /// <summary>Helper to replay the first buffered batch followed by the remaining stream.</summary>
+            // Helper to replay the first buffered batch followed by the remaining stream.
             async IAsyncEnumerable<DataTable> ReplayBatches(DataTable? first, IAsyncEnumerator<DataTable> e)
             {
                 try
@@ -347,13 +347,14 @@ namespace ETL_SQL.Engine.Handlers
                     {
                         foreach (var row in batch.Rows)
                         {
-                            var evalRow = row;
                             if (!string.IsNullOrEmpty(alias))
                             {
-                                evalRow = row.Clone();
-                                foreach (var kv in row.Columns.ToList()) evalRow[$"{alias}.{kv.Key}"] = kv.Value;
+                                var evalRow = row.Clone();
+                                var cols = batch.ColumnNames;
+                                for(int i=0; i<cols.Count; i++) evalRow[$"{alias}.{cols[i]}"] = row[i];
+                                yield return evalRow;
                             }
-                            yield return evalRow;
+                            else yield return row;
                         }
                     }
                 }
@@ -372,9 +373,9 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     if (stmt.WhereClause != null && !await context.EvaluateCondition(stmt.WhereClause, evalRow)) continue;
                     
-                    var resRow = new Row();
+                    var resRow = streamResultBatch.NewRow();
                     for (int i = 0; i < finalColumns.Count; i++)
-                        resRow[colNames[i]] = await context.EvaluateValue(finalColumns[i].Expression, evalRow);
+                        resRow[i] = await context.EvaluateValue(finalColumns[i].Expression, evalRow);
                     
                     streamResultBatch.AddRow(resRow);
                     if (streamResultBatch.Rows.Count >= context.BatchSize)
@@ -512,18 +513,18 @@ namespace ETL_SQL.Engine.Handlers
 
             // Final buffered projection
             var currentResultBatch = new DataTable();
-            currentResultBatch.ColumnNames.AddRange(colNames);
+            currentResultBatch.SetColumns(colNames);
             foreach (var row in allBufferedRows)
             {
-                var resRow = new Row();
+                var resRow = currentResultBatch.NewRow();
                 for (int i = 0; i < finalColumns.Count; i++)
-                    resRow[colNames[i]] = await context.EvaluateValue(finalColumns[i].Expression, row);
+                    resRow[i] = await context.EvaluateValue(finalColumns[i].Expression, row);
                 currentResultBatch.AddRow(resRow);
                 if (currentResultBatch.Rows.Count >= context.BatchSize)
                 {
                     yield return currentResultBatch;
                     currentResultBatch = new DataTable();
-                    currentResultBatch.ColumnNames.AddRange(colNames);
+                    currentResultBatch.SetColumns(colNames);
                 }
             }
             if (currentResultBatch.Rows.Count > 0) yield return currentResultBatch;
@@ -580,6 +581,10 @@ namespace ETL_SQL.Engine.Handlers
                         currentStep = nextStep;
                     }
                     
+                    if (finalResult.Schema.ColumnCount == 0 && finalResult.Rows.Count > 0)
+                    {
+                        finalResult.SetColumns(finalResult.Rows[0].Columns.Keys);
+                    }
                     var finalMem = new InMemoryDataSource();
                     finalMem.SetSchema(finalResult.ColumnNames.Select(c => new ColumnDefinition(c, "STRING", false)));
                     await finalMem.WriteBatches(new[] { finalResult }.ToAsyncEnumerable());
@@ -591,7 +596,7 @@ namespace ETL_SQL.Engine.Handlers
                     var cteResult = new DataTable();
                     await foreach (var batch in EvaluateQuery(cte.Query, context))
                     {
-                        if (cteResult.ColumnNames.Count == 0) cteResult.ColumnNames.AddRange(batch.ColumnNames);
+                        if (cteResult.Schema.ColumnCount == 0) cteResult.SetColumns(batch.ColumnNames);
                         foreach (var r in batch.Rows) cteResult.AddRow(r);
                     }
                     var mem = new InMemoryDataSource();

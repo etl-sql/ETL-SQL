@@ -220,6 +220,24 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     const workspaceFolder = workspaceFolders ? workspaceFolders[0] : undefined;
 
     const document = editor.document;
+
+    // Warn before execution if the LSP has already published error-level diagnostics.
+    // This is best-effort: if the LSP hasn't finished analysis yet there are no diagnostics
+    // and we let the engine handle errors at runtime (see appendMessage auto-tab-switch below).
+    if (!selectionOnly) {
+        const diagnostics = vscode.languages.getDiagnostics(document.uri);
+        const errors = diagnostics.filter(d => d.severity === vscode.DiagnosticSeverity.Error);
+        if (errors.length > 0) {
+            const label = errors.length === 1 ? '1 error' : `${errors.length} errors`;
+            const choice = await vscode.window.showWarningMessage(
+                `This script has ${label}. Run anyway?`,
+                { modal: true },
+                'Run'
+            );
+            if (choice !== 'Run') return;
+        }
+    }
+
     let scriptPath = document.fileName;
     let deleteTemp = false;
 
@@ -308,7 +326,8 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
         child.on('close', (code) => {
             if (currentProcess === child) currentProcess = undefined;
             if (deleteTemp && fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath);
-            ResultsPanel.postMessage({ type: 'message', text: `Finished with exit code \${code}` });
+            ResultsPanel.postMessage({ type: 'done', exitCode: code });
+            ResultsPanel.postMessage({ type: 'message', text: `Finished with exit code ${code}` });
         });
 
     } else if (runMethod === 'Output Channel') {

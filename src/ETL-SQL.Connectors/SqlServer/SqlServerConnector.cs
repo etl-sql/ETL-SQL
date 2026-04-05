@@ -37,7 +37,13 @@ namespace ETL_SQL.Connectors.SqlServer
         public Dictionary<string, string[]> GetOptionValues() => new();
 
         /// <summary>Returns a human-readable help string for the SQL Server connector.</summary>
-        public string GetHelp() => "MSSQL Connector: Used for Microsoft SQL Server connections. Supports T-SQL syntax.";
+        /// <summary>Returns a human-readable help string for the Microsoft SQL Server connector.</summary>
+        public string GetHelp() => 
+            "MSSQL Connector: Connects to Microsoft SQL Server.\n" +
+            "Supports T-SQL pushdown, stored procedure calls, and integrated security.\n\n" +
+            "Options:\n" +
+            "  TABLE: Pre-selects a default table context for simple SELECT queries.";
+
         
         /// <summary>Creates a new SQL Server data source instance.</summary>
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null) 
