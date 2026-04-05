@@ -7,6 +7,8 @@ using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Engine.Storage;
+using System.Text.Json;
+using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.Engine.Services
 {
@@ -99,6 +101,66 @@ namespace ETL_SQL.Engine.Services
 
             if (table.ConnectionName != null) return source.WithTable(table.TableName);
             return source;
+        }
+
+        /// <summary>Restores a temporary table from a session data file.</summary>
+        public async Task<IDataSource> RestoreTempTable(TempTableInfo info, string password)
+        {
+            var ds = new InMemoryDataSource();
+            ds.Validator = _evaluator;
+            
+            if (File.Exists(info.DataFilePath))
+            {
+                try
+                {
+                    string encryptedJson = await File.ReadAllTextAsync(info.DataFilePath);
+                    string plainJson = CryptoUtils.Decrypt(encryptedJson, password);
+                    var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(plainJson);
+                    
+                    if (rows != null && rows.Count > 0)
+                    {
+                        var dt = new DataTable();
+                        dt.SetColumns(info.Columns);
+                        foreach (var rowDict in rows)
+                        {
+                            var row = dt.NewRow();
+                            foreach (var kvp in rowDict)
+                            {
+                                // Handle JSON element conversion if necessary
+                                row[kvp.Key] = JsonToClr(kvp.Value);
+                            }
+                            dt.AddRow(row);
+                        }
+                        await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.WriteLine($"Warning: Failed to restore temp table {info.Name}: {ex.Message}", ConsoleColor.Yellow);
+                }
+            }
+            
+            return ds;
+        }
+
+        private object? JsonToClr(object? val)
+        {
+            if (val is JsonElement elem)
+            {
+                switch (elem.ValueKind)
+                {
+                    case JsonValueKind.String: return elem.GetString();
+                    case JsonValueKind.Number: 
+                        if (elem.TryGetInt32(out int i)) return i;
+                        if (elem.TryGetInt64(out long l)) return l;
+                        return elem.GetDouble();
+                    case JsonValueKind.True: return true;
+                    case JsonValueKind.False: return false;
+                    case JsonValueKind.Null: return null;
+                    default: return elem.ToString();
+                }
+            }
+            return val;
         }
 
         /// <summary>

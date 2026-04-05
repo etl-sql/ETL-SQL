@@ -29,6 +29,9 @@ namespace ETL_SQL.Connectors.Oracle
             _tableName = tableName;
         }
 
+        /// <summary>Gets the connection string for this data source.</summary>
+        public string ConnectionString => _connectionString;
+        
         /// <summary>Gets the placeholder path for Oracle.</summary>
         public string Path => "ORACLE";
 

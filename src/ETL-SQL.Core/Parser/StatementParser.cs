@@ -513,6 +513,58 @@ namespace ETL_SQL.Core.Parser
             // If the next token is a known statement start (and it's not a comma/semicolon)
             if (IsStatementStart(_parser.Current.Type))
             {
+                // SPECIAL CASE (Bug E): If it's a SELECT ... INTO #temp, we want to treat it as a pushdown
+                // so that the evaluator can intercept the INTO #temp locally.
+                if (_parser.Current.Type == TokenType.SELECT)
+                {
+                    // Lookahead for INTO #temp
+                    bool hasIntoTemp = false;
+                    int i = 1;
+                    while (true)
+                    {
+                        var tok = _parser.LookAhead(i++);
+                        if (tok.Type == TokenType.EOF || tok.Type == TokenType.SEMICOLON || tok.Type == TokenType.FROM) break;
+                        if (tok.Type == TokenType.INTO)
+                        {
+                            var next = _parser.LookAhead(i);
+                            if (next.Value.StartsWith("#")) hasIntoTemp = true;
+                            break;
+                        }
+                    }
+
+                    if (hasIntoTemp)
+                    {
+                        // Treat as pushdown (single statement style)
+                        string sqlText = "";
+                        while (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.EOF && _parser.Current.Type != TokenType.END)
+                        {
+                            // If we see INTO #temp, extract it and don't include it in the pushdown SQL
+                            if (_parser.Current.Type == TokenType.INTO && _parser.LookAhead(1).Value.StartsWith("#"))
+                            {
+                                _parser.Advance(); // INTO
+                                var tempName = _parser.Advance().Value;
+                                remoteIntoTable = new TableReference(tempName);
+                                continue;
+                            }
+
+                            var t = _parser.Advance();
+                            string val = t.Type == TokenType.STRING ? $"'{t.Value.Replace("'", "''")}'" : t.Value;
+                            
+                            // Smarter spacing: don't add space before or after certain tokens
+                            sqlText += val;
+                            
+                            var next = _parser.Current.Type;
+                            bool needsSpace = true;
+                            if (next == TokenType.DOT || next == TokenType.COMMA || next == TokenType.LPAREN || next == TokenType.RPAREN || next == TokenType.SEMICOLON) needsSpace = false;
+                            if (t.Type == TokenType.DOT || t.Type == TokenType.LPAREN) needsSpace = false;
+                            
+                            if (needsSpace) sqlText += " ";
+                        }
+                        if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                        return new ExecutePushdownStatement(identifierExpr, sqlText.Trim(), remoteIntoTable, remoteParameters) { Line = startToken.Line, Column = startToken.Column };
+                    }
+                }
+
                 var stmt = ParseStatement();
                 // We wrap this in ExecuteRemoteBlockStatement for backwards compatibility if it's a parsed statement
                 var block = new BlockStatement(new List<Statement> { stmt });

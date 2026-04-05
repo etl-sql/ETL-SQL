@@ -30,6 +30,9 @@ namespace ETL_SQL.Engine.Services
         /// <summary>Gets the global (session-level) variable dictionary.</summary>
         public IDictionary<string, object?> GlobalVariables => _variables;
 
+        /// <summary>Gets the global (session-level) variable metadata.</summary>
+        public IDictionary<string, VariableMetadata> GlobalMetadata => _variableMetadata;
+
         /// <summary>Pushes a new variable scope onto the stack.</summary>
         public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null)
         {
@@ -169,6 +172,22 @@ namespace ETL_SQL.Engine.Services
                               new Dictionary<string, VariableMetadata>(metas[i], StringComparer.OrdinalIgnoreCase));
             }
             return fork;
+        }
+
+        /// <summary>Captures the global state of the variables for session persistence.</summary>
+        public (Dictionary<string, object?>, Dictionary<string, VariableMetadata>) GetGlobalState()
+        {
+            return (new Dictionary<string, object?>(_variables, StringComparer.OrdinalIgnoreCase),
+                    new Dictionary<string, VariableMetadata>(_variableMetadata, StringComparer.OrdinalIgnoreCase));
+        }
+
+        /// <summary>Loads the global state of the variables from a session snapshot.</summary>
+        public void LoadGlobalState(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata> meta)
+        {
+            _variables.Clear();
+            foreach (var kvp in vars) _variables[kvp.Key] = kvp.Value;
+            _variableMetadata.Clear();
+            foreach (var kvp in meta) _variableMetadata[kvp.Key] = kvp.Value;
         }
 
         /// <summary>Merges changes from a forked scope back into this one.</summary>

@@ -1,86 +1,80 @@
 # ETL-SQL Language Reference
 
-The ETL-SQL engine is designed to parse and execute data transformations dynamically using standard SQL syntax as well as extended automation keywords. 
+A powerful, high-performance ETL (Extract, Transform, Load) engine that blends the simplicity of **Standard SQL** with the flexibility of **Procedural Automation**. Designed for data engineers who need to orchestrate complex data flows without leaving the comfort of a SQL-first environment.
 
 ## Connection Management
 
 Connectors define how the engine interacts with external data sources.
 
-**`CREATE CONNECTION`**
-Defines a reusable connection to a source or destination platform. Connections must be defined before selecting from or inserting to them.
+### CREATE CONNECTION
+Defines a reusable connection to a source or destination platform. Connections must be defined before using them.
 
 *Syntax:*
 ```sql
-CREATE CONNECTION <name> ON <provider>('<connection_string>') [WITH(<options>)];
+CREATE CONNECTION <name> ON <provider>(['<connection_string>']) [WITH(<options>)];
 ```
 
 ### Connection Types & Options
 
-#### FLATFILE (or CSV, FILE)
-For delimited text files.
+#### FLATFILE (or CSV)
+For delimited text files.  
+CREATE CONNECTION <name you choose> ON FLATFILE(<file path>) [WITH(<options below separated by commas>)]
 - **HEADER**: `ON`, `OFF` (Default: `ON`).
 - **DELIMITER**: `COMMA`, `PIPE`, `TAB`, `SEMICOLON`, `COLON`, `TILDE` or a literal `<char>` (Default: `COMMA`).
-- **ROW_DELIMITER**: `LF`, `CR`, `CRLF` (Default: `CRLF`).
+- **ROW_DELIMITER**: `LF`, `CR`, `CRLF`. `TILDE`, `SEMICOLON`, `COLON`, `COMMA`, `TAB`, `PIPE` or a literal `<char>` (Default: `CRLF`).
 - **ENCODING**: `UTF8`, `ANSI`, `UTF16`, `LATIN1`, `UNICODE` (Default: `UTF8`).
 - **TEXT_QUALIFIER**: `DOUBLEQUOTE`, `SINGLEQUOTE` or a literal `<char>`.
 - **ESCAPE_CHAR**: Character used to escape delimiters within fields (e.g. `'\'`).
 - **NULL_AS**: `NULL`, `EMPTY`, `BACKSLASH_N` — how null values are represented in the file.
 - **DATE_FORMAT**: Custom date parsing format (e.g. `'yyyy-MM-dd'`).
-- **STRICT_SCHEMA**: `ON`, `OFF` — enforces column count matching (Default: `OFF`).
 - **START_AT**: Line number to start reading (1-based).
 - **END_AT**: Line number to stop reading.
-- **COUNT_AT_END**: `ON` (Validates row count at trailer).
-- **COMPRESS**: `ON`, `OFF` — transparent GZip support.
-- **ENCRYPT**: `ON`, `OFF` — AES encryption for the file.
-- **PASSWORD**: Password for encryption/decryption.
+- **COUNT_AT_END**: `ON`, `OFF` — Validates row count at trailer. (Default: `OFF`)
+- **STRICT_SCHEMA**: `ON`, `OFF` — enforces column count matching (Default: `OFF`).
+- **COMPRESS**: `ON`, `OFF` — transparent GZip support. (Default: `OFF`)
+- **ENCRYPT**: `ON`, `OFF` — AES encryption for the file. (Default: `OFF`)
+- **PASSWORD**: Password for encryption/decryption. (Required if ENCRYPT=ON)    
+- **ALGORITHM**: `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` — algorithm to use for encryption/decryption. (Default: `SHA2_256`)
+- **KEYFILE**: Path to the private key file for public-key authentication. (Required if ENCRYPT=ON)
+- **PASSPHRASE**: The passphrase for the private key file (if any). (Required if ENCRYPT=ON)
 
 #### MSSQL (or SQLSERVER)
 For Microsoft SQL Server.
+CREATE CONNECTION <name you choose> ON MSSQL(<connection string or server name if you want to use options to build the connection string>) [WITH(<options below separated by commas>)]
 - **TABLE**: Default table context.
+- **DATABASE**: The database name for the MSSQL connection.
+- **TRUSTED_CONNECTION**: `TRUE` / `FALSE`. (Default: `FALSE`)
+- **USER**: The username for the MSSQL connection. Do not use if TRUSTED_CONNECTION is set to TRUE.
+- **PASSWORD**: The password for the MSSQL connection. Do not use if TRUSTED_CONNECTION is set to TRUE.
+- **USE_SSL**: `TRUE` / `FALSE`. (Default: `FALSE`)
+- **TRUST_SERVER_CERTIFICATE**: `TRUE` / `FALSE`. (Default: `FALSE`)
 - Supports integrated security and T-SQL pushdown.
 
 #### POSTGRES (or NPSQL)
 For PostgreSQL.
+CREATE CONNECTION <name you choose> ON POSTGRES(<connection string or server name if you want to use options to build the connection string>) [WITH(<options below separated by commas>)]
 - **TABLE**: Default table context.
 - Supports native SQL pushdown.
 
 #### ORACLE
 For Oracle Database.
+CREATE CONNECTION <name you choose> ON ORACLE(<connection string or server name if you want to use options to build the connection string>) [WITH(<options below separated by commas>)]
 - **TABLE**: Default table context (e.g. `SCHEMA.TABLE`).
 - Supports PL/SQL pushdown.
 
-#### SFTP (or SSH)
-For remote file operations over SSH.
-- **USER**: The username for the SSH connection.
-- **PASSWORD**: The password for the SSH connection.
-- **KEYFILE**: Path to the private key file for public-key authentication.
-- **PASSPHRASE**: The passphrase for the private key file (if any).
-- Supports `GET_FILE`, `PUT_FILE`, and `REMOTE_FILE_LIST`.
-
-#### AZURE_BLOB (or BLOB)
-For Azure Blob Storage.
-- **CONTAINER**: The target blob container name.
-- **ACCOUNT_NAME** / **ACCOUNT_KEY**: Storage credentials.
-- Supports `GET_FILE`, `PUT_FILE`, and `REMOTE_FILE_LIST`.
-
-#### SMTP (or EMAIL)
-For sending emails.
-- **HOST**: SMTP server name.
-- **PORT**: SMTP server port.
-- **USERNAME** / **PASSWORD**: Authentication details.
-- **USE_SSL**: `TRUE` / `FALSE`.
-- **DEFAULT_FROM**: Default sender email.
-
-#### PARQUET
+#### PARQUET    
 For Apache Parquet columnar files.
+CREATE CONNECTION <name you choose> ON PARQUET(<File path>) [WITH(<options below separated by commas>)]
 - **COMPRESSION**: `SNAPPY` (Default), `GZIP`, `LZO`, `BROTLI`, `LZ4`, `ZSTD`, `UNCOMPRESSED`.
 
 #### AVRO
 For Apache Avro files.
+CREATE CONNECTION <name you choose> ON AVRO(<File path>) [WITH(<options below separated by commas>)]
 - **SCHEMA_FILE**: Path to a `.avsc` schema file.
 
 #### EXCEL
 For Excel file formats (.xlsx, .xls, .xlsb).
+CREATE CONNECTION <name you choose> ON EXCEL(<File path>) [WITH(<options below separated by commas>)]
 - **SHEET**: Specific sheet name (Default: first sheet).
 - **HEADER**: `ON`, `OFF` — treat first row as column headers (Default: `ON`).
 - **RANGE**: Explicit cell range to read (e.g. `'A1:D100'`).
@@ -90,6 +84,7 @@ For Excel file formats (.xlsx, .xls, .xlsb).
 
 #### JSON
 For JSON data files.
+CREATE CONNECTION <name you choose> ON JSON(<File path>) [WITH(<options below separated by commas>)]
 - **ROOT_PATH**: JSONPath to the data array (e.g. `$.Rows`, `$.data.items`).
 - **COMPRESS**: `ON`, `OFF` — transparent GZip support.
 - **ENCRYPT**: `ON`, `OFF` — AES encryption for the file.
@@ -97,6 +92,7 @@ For JSON data files.
 
 #### XML
 For XML data files.
+CREATE CONNECTION <name you choose> ON XML(<File path>) [WITH(<options below separated by commas>)]
 - **ROOT_PATH**: XPath to the repeating element (e.g. `/Catalog/Book`).
 - **COMPRESS**: `ON`, `OFF` — transparent GZip support.
 - **ENCRYPT**: `ON`, `OFF` — AES encryption for the file.
@@ -104,13 +100,42 @@ For XML data files.
 
 #### FTP (or FTP_CONN)
 For remote file operations over FTP.
+CREATE CONNECTION <name you choose> ON FTP(<host address or IP address>) [WITH(<options below separated by commas>)]
+- **PORT**: The port for the FTP connection. (Default: `21`)
 - **USER**: The username for the FTP connection.
 - **PASSWORD**: The password for the FTP connection.
 - Supports `GET_FILE`, `PUT_FILE`, and `REMOTE_FILE_LIST`.
 
+#### SFTP (or SSH)
+For remote file operations over SSH.
+CREATE CONNECTION <name you choose> ON SFTP(<Host address or IP address>) [WITH(<options below separated by commas>)]
+- **PORT**: The port for the SSH connection. (Default: `22`)
+- **USER**: The username for the SSH connection.
+- **PASSWORD**: The password for the SSH connection. Do not use if KEYFILE is set.
+- **KEYFILE**: Path to the private key file for public-key authentication.
+- **PASSPHRASE**: The passphrase for the private key file (if any).
+- Supports `GET_FILE`, `PUT_FILE`, and `REMOTE_FILE_LIST`.
+
+#### AZURE_BLOB (or BLOB)
+For Azure Blob Storage.
+CREATE CONNECTION <name you choose> ON AZURE_BLOB(<host address or IP address>) [WITH(<options below separated by commas>)]
+- **CONTAINER**: The target blob container name.
+- **ACCOUNT_NAME** / **ACCOUNT_KEY**: Storage credentials.
+- Supports `GET_FILE`, `PUT_FILE`, and `REMOTE_FILE_LIST`.
+
+#### SMTP (or EMAIL)
+For sending emails.
+CREATE CONNECTION <name you choose> ON SMTP(<host address or IP address>) [WITH(<options below separated by commas>)]
+- **PORT**: SMTP server port. (Default: `25`)
+- **USERNAME** / **PASSWORD**: Authentication details.
+- **USE_SSL**: `TRUE` / `FALSE`. (Default: `FALSE`)
+- **DEFAULT_FROM**: Default sender email.
+- Supports `SEND_EMAIL`.
+
 #### DIRECTORY
 Represents a local file system directory for listing files and performing filesystem operations.
-- No connection string options required — the connection string is the directory path.
+CREATE CONNECTION <name you choose> ON DIRECTORY(<Directory path>) [WITH(<options below separated by commas>)]
+- **CREATE**: `ON` / `OFF` — Create a new directory if it doesn't exist. (Default: `ON`)
 - Supports `COPY_FILE`, `MOVE_FILE`, `DELETE_FILE`, and directory listing via `SELECT`.
 
 *Examples:*
@@ -173,7 +198,7 @@ CREATE CONNECTION mailer ON SMTP('smtp.gmail.com')
 CREATE CONNECTION secure_db ON MSSQL('ENC:U2FsdGVkX1+...');
 ```
 
-**`DROP CONNECTION`**
+### DROP CONNECTION
 Removes a previously defined connection from the current execution context.
 
 *Syntax:*
@@ -184,8 +209,30 @@ Removes a previously defined connection from the current execution context.
 DROP CONNECTION IF EXISTS remote_srv;
 ```
 
-**`USE DOCKER`**
-Spins up a containerized database instance (MsSql, Postgres, or Oracle) for temporary orchestration or testing.
+### ALTER CONNECTION
+Modifies a previously defined connection.  Previous options are preserved unless explicitly changed.
+
+*Syntax:*
+`ALTER CONNECTION <connection_name> [WITH(<options below separated by commas>)];`
+
+*Example:*
+```sql
+ALTER CONNECTION remote_srv WITH(PASSWORD='newpassword');
+```
+### CREATE OR ALTER CONNECTION
+Creates a new connection or modifies an existing connection.  If the connection exists it will be rebuilt with the new options provided.  Previous options are not preserved.
+
+*Syntax:*
+`CREATE OR ALTER CONNECTION <connection_name> ON <connection_type>(<connection_string>) [WITH(<options below separated by commas>)];`
+
+*Example:*
+```sql
+CREATE OR ALTER CONNECTION remote_srv ON MSSQL('Server=myserver;Database=DW;Integrated Security=true')
+    WITH(TABLE='dbo.Employees');
+```
+
+### USE DOCKER
+Spins up a containerized database instance (MsSql, Postgres, or Oracle) for temporary orchestration or testing.  Needs to happen before a connection is created that uses it.
 
 *Syntax:*
 `USE DOCKER('<image_name>') [AS <alias>];`
@@ -220,38 +267,7 @@ dpost CLOSE;
 ## Variables & State Management
 You have the ability to query from multiple different source databases and files.  When using these different sources you have access to different processes and syntax.  Knowing your context will help to avoid issues.
 
-### Supported Data Types
-ETL-SQL supports a wide range of data types for variable declarations and table schemas.
-
-| Category | Types |
-| :--- | :--- |
-| **Numeric** | `INT`, `INTEGER`, `BIGINT`, `SMALLINT`, `TINYINT`, `DECIMAL`, `NUMERIC`, `MONEY`, `FLOAT`, `REAL`, `DOUBLE` |
-| **Temporal** | `DATE`, `DATETIME`, `DATETIME2`, `TIMESTAMP`, `TIME`, `DATETIMEOFFSET` |
-| **Character** | `STRING`, `VARCHAR`, `NVARCHAR`, `TEXT`, `CHAR` |
-| **Logic** | `BIT`, `BOOLEAN`, `BOOL` (True/False) |
-| **Binary** | `VARBINARY`, `BINARY`, `IMAGE`, `BLOB` |
-| **Structured** | `JSON`, `XML` |
-| **Collections** | `LIST` (An ordered collection of values) |
-| **Specialized** | `PATH`, `ENCRYPTED`, `UNIQUEIDENTIFIER` (UUID/Guid), `GEOMETRY`, `GEOGRAPHY`, `HIERARCHYID`, `VECTOR`, `ANY` |
-
-#### Specialized Variables
-*   **`PATH`**: Used specifically for file system paths or connection URIs. It ensures consistent handling of separators across different operating systems.
-    ```sql
-    DECLARE @sourcePath PATH = 'C:\Data\Source\';
-    ```
-*   **`ENCRYPTED`**: A semantic type for sensitive data such as connection strings, passwords, or API keys. 
-    ```sql
-    DECLARE @apiKey ENCRYPTED = 'ENC:U2FsdGVkX1+...';
-    ```
-*   **`LIST`**: Holds multiple values that can be used with `IN` operators or traversed in `FOREACH` loops.
-    ```sql
-    DECLARE @myList LIST = [1, 2, 3];
-    ```
-*   **`ANY`**: The default type when no type is specified in a `DECLARE` statement. It allows for dynamic type inference based on the assigned value.
-    ```sql
-    DECLARE @id = 123; -- Implicitly ANY, inferred as INT
-    ```
-
+### Walk thru
 In the query below your context is the ETL-SQL engine.
 ```sql
 CREATE CONNECTION c ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\TestData\test_categories.csv');
@@ -308,7 +324,7 @@ EXECUTE (
     @stmt
 ) AT m
 ```
-Dynamic SQL is a powerful tool, but it can be dangerous.  It is important to use it with caution.
+Dynamic SQL is a powerful tool, but it can be dangerous.  It is important to use it with caution.  Note the above query could be written with parameters as shown in the previous example this was just shown as an example of how to use dynamic sql.
 
 My query is really straight forward.  I just want to select from a table and get the results.
 ```sql
@@ -338,40 +354,55 @@ END
 ```
 You can explicitly define the columns you want to insert into the temp table.  This is a good practice because it will prevent errors if the source table changes.  You just have to make sure you have the same number of columns and the same data types or it will fail.
 
+### Variable Management
+
+#### DECLARE
+Defines a variable. The data type is optional; if omitted, it defaults to `ANY`. Multiple variables can be declared in a single statement.
+```sql
+DECLARE @name STRING = 'Chuck';
+DECLARE @id = 123; -- Optional type (defaults to ANY)
+DECLARE @list LIST = [1, 2, 3], @count INT = 0;
+```
+
+#### SET
+Assigns a value to an existing variable.
+```sql
+SET @name = 'Charles';
+```
+
+### Supported Data Types
+ETL-SQL supports a wide range of data types for variable declarations and table schemas.
+
+| Category | Types |
+| :--- | :--- |
+| **Numeric** | `INT`, `INTEGER`, `BIGINT`, `SMALLINT`, `TINYINT`, `DECIMAL`, `NUMERIC`, `MONEY`, `FLOAT`, `REAL`, `DOUBLE` |
+| **Temporal** | `DATE`, `DATETIME`, `DATETIME2`, `TIMESTAMP`, `TIME`, `DATETIMEOFFSET` |
+| **Character** | `STRING`, `VARCHAR`, `NVARCHAR`, `TEXT`, `CHAR` |
+| **Logic** | `BIT`, `BOOLEAN`, `BOOL` (True/False) |
+| **Binary** | `VARBINARY`, `BINARY`, `IMAGE`, `BLOB` |
+| **Structured** | `JSON`, `XML` |
+| **Collections** | `LIST` (An ordered collection of values) |
+| **Specialized** | `PATH`, `ENCRYPTED`, `UNIQUEIDENTIFIER` (UUID/Guid), `GEOMETRY`, `GEOGRAPHY`, `HIERARCHYID`, `VECTOR`, `ANY` |
+
+#### Specialized Variables
+*   **`PATH`**: Used specifically for file system paths or connection URIs. It ensures consistent handling of separators across different operating systems.
+    ```sql
+    DECLARE @sourcePath PATH = 'C:\Data\Source\';
+    ```
+*   **`ENCRYPTED`**: A semantic type for sensitive data such as connection strings, passwords, or API keys. 
+    ```sql
+    DECLARE @apiKey ENCRYPTED = 'ENC:U2FsdGVkX1+...';
+    ```
+*   **`LIST`**: Holds multiple values that can be used with `IN` operators or traversed in `FOREACH` loops.
+    ```sql
+    DECLARE @myList LIST = [1, 2, 3];
+    ```
+*   **`ANY`**: The default type when no type is specified in a `DECLARE` statement. It allows for dynamic type inference based on the assigned value.
+    ```sql
+    DECLARE @id = 123; -- Implicitly ANY, inferred as INT
+    ```
+
 ## Querying & Filtering
-
-### Common Table Expressions (CTE)
-CTEs provide a way to define temporary result sets that can be referenced within the scope of a single `SELECT`, `INSERT`, `UPDATE`, or `DELETE` statement. They improve readability and support recursive logic.
-
-*Syntax:*
-```sql
-WITH [RECURSIVE] cte_name AS (
-    <query_definition>
-) [, ...]
-<main_statement>;
-```
-
-*Example (Standard CTE):*
-```sql
-WITH HighSales AS (
-    SELECT category, SUM(price) AS Total
-    FROM sales_db.transactions
-    GROUP BY category
-)
-SELECT * FROM HighSales WHERE Total > 10000;
-```
-
-*Example (Recursive CTE):*
-```sql
--- Generate a sequence of numbers
-WITH RECURSIVE Counter AS (
-    SELECT 1 AS n
-    UNION ALL
-    SELECT n + 1 FROM Counter WHERE n < 10
-)
-SELECT n FROM Counter;
-```
-
 **`SELECT`**
 Fetches, transforms, and projects data from an established connection or temporary memory table. 
 
@@ -418,6 +449,39 @@ ORDER BY TotalSales DESC
 LIMIT 10;
 ```
 
+### Common Table Expressions (CTE)
+CTEs provide a way to define temporary result sets that can be referenced within the scope of a single `SELECT`, `INSERT`, `UPDATE`, or `DELETE` statement. They improve readability and support recursive logic.
+
+*Syntax:*
+```sql
+WITH [RECURSIVE] cte_name AS (
+    <query_definition>
+) [, ...]
+<main_statement>;
+```
+
+*Example (Standard CTE):*
+```sql
+WITH HighSales AS (
+    SELECT category, SUM(price) AS Total
+    FROM sales_db.transactions
+    GROUP BY category
+)
+SELECT * FROM HighSales WHERE Total > 10000;
+```
+
+*Example (Recursive CTE):*
+```sql
+-- Generate a sequence of numbers
+WITH RECURSIVE Counter AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM Counter WHERE n < 10
+)
+SELECT n FROM Counter;
+```
+
+### PIVOT and UNPIVOT
 *Example (PIVOT — rotate rows to columns):*
 ```sql
 -- Sales per quarter, pivoted so each quarter becomes a column
@@ -440,6 +504,7 @@ UNPIVOT (
 ) AS unpvt;
 ```
 
+### Pagination
 *Example (pagination with OFFSET / FETCH NEXT):*
 ```sql
 SELECT id, name, amount
@@ -449,6 +514,7 @@ OFFSET 20 ROWS
 FETCH NEXT 10 ROWS ONLY;
 ```
 
+### JSON and XML
 *Example (FOR JSON):*
 ```sql
 SELECT id, name, amount
@@ -487,21 +553,9 @@ Combine results from multiple queries.
 - **`EXCEPT`**: Returns rows from the first query that are not in the second.
 - **`INTERSECT`**: Returns rows present in both queries.
 
-**`CASE ... WHEN ... THEN ... ELSE ... END`**
-Evaluates conditions sequentially to return specific projected outputs natively.
-```sql
-SELECT
-    CASE 
-        WHEN id < 1000 THEN 'Legacy'
-        WHEN id >= 1000 THEN 'Modern'
-        ELSE 'Unknown'
-    END AS SystemType
-FROM system_table;
-```
-
 ## Data Manipulation Language (DML)
 
-**`INSERT INTO`**
+#### INSERT INTO
 Injects evaluated query outputs directly into a target table or connection. 
 
 *Syntax:*
@@ -516,7 +570,58 @@ FROM #sales_summary
 WHERE TotalSales < 1000;
 ```
 
-**`BULK INSERT`**
+#### UPDATE
+Updates pre-existing datasets. Supports `OUTPUT` to capture before/after states via `DELETED` and `INSERTED` pseudo-tables.
+
+*Syntax:*
+`UPDATE <connection.table> SET <col> = <val> [OUTPUT clauses...] [WHERE <condition>];`
+
+*Example:*
+```sql
+UPDATE sales_db.archive 
+SET status = 'Closed' 
+OUTPUT DELETED.status AS OldStatus, INSERTED.status AS NewStatus
+WHERE created_at < '2020-01-01';
+```
+
+#### DELETE
+Removes rows from a table.
+
+*Syntax:*
+`DELETE FROM <connection.table> [OUTPUT clauses...] [WHERE <condition>];`
+
+#### MERGE (UPSERT)
+Synchronizes data between a source and target by performing multiple DML actions (INSERT, UPDATE, DELETE) in a single statement. It is the core of incremental ETL processing.
+
+*Syntax:*
+```sql
+MERGE INTO <target> [AS T]
+USING <source_table_or_subquery> [AS S]
+ON <match_condition>
+[WHEN MATCHED [AND <condition>] THEN <action>]
+[WHEN NOT MATCHED [BY TARGET] [AND <condition>] THEN <action>]
+[WHEN NOT MATCHED BY SOURCE [AND <condition>] THEN <action>];
+```
+
+*Supported Actions:*
+- `UPDATE SET col = val, ...`
+- `INSERT (cols...) VALUES (vals...)`
+- `DELETE`
+
+*Example:*
+```sql
+MERGE INTO target_table AS T
+USING (SELECT * FROM staging_table) AS S
+ON T.id = S.id
+WHEN MATCHED THEN 
+    UPDATE SET name = S.name, updated_at = GETDATE()
+WHEN NOT MATCHED THEN
+    INSERT (id, name) VALUES (S.id, S.name)
+WHEN NOT MATCHED BY SOURCE THEN
+    DELETE;
+```
+
+#### BULK INSERT
 Dramatically accelerates data loading directly by streaming payload binaries (such as CSVs) onto target databases or tables using strict destination schema adherence. Features advanced column-reordering maps natively.
 
 *Syntax:*
@@ -539,33 +644,10 @@ FROM 'TestData\test_bulk_mapped.csv'
 WITH (FORMAT = 'CSV');
 ```
 
-**`UPDATE`**
-Updates pre-existing datasets. Supports `OUTPUT` to capture before/after states via `DELETED` and `INSERTED` pseudo-tables.
+## Statements
+### DDL & Resource Management
 
-*Syntax:*
-`UPDATE <connection.table> SET <col> = <val> [OUTPUT clauses...] [WHERE <condition>];`
-
-*Example:*
-```sql
-UPDATE sales_db.archive 
-SET status = 'Closed' 
-OUTPUT DELETED.status AS OldStatus, INSERTED.status AS NewStatus
-WHERE created_at < '2020-01-01';
-```
-
-**`DELETE`**
-Removes rows from a table.
-
-*Syntax:*
-`DELETE FROM <connection.table> [OUTPUT clauses...] [WHERE <condition>];`
-
-**`TRUNCATE TABLE`**
-Efficiently removes all rows from a table. Faster than `DELETE` for large datasets.
-
-*Syntax:*
-`TRUNCATE TABLE <connection.table>;`
-
-**`CREATE TABLE`**
+#### CREATE TABLE
 Defines a structure for storing data, including support for various constraints.
 
 *Syntax:*
@@ -598,7 +680,7 @@ CREATE TABLE OrderItems (
 );
 ```
 
-**`ALTER TABLE`**
+#### ALTER TABLE
 Modifies an existing table's structure.
 
 *Syntax:*
@@ -606,62 +688,27 @@ Modifies an existing table's structure.
 - `ALTER TABLE <name> DROP COLUMN <col_name>;`
 - `ALTER TABLE <name> RENAME COLUMN <old_name> TO <new_name>;`
 
-**`CREATE INDEX`**
+#### DROP TABLE
+Deletes a table from the engine's memory or the target data source.
+```sql
+DROP TABLE [IF EXISTS] table_name;
+```
+
+#### TRUNCATE TABLE
+Efficiently removes all rows from a table. Faster than `DELETE` for large datasets.
+
+*Syntax:*
+`TRUNCATE TABLE <connection.table>;`
+
+#### CREATE INDEX
 Creates an index on a table to improve query performance.
 *Syntax:*
 `CREATE [UNIQUE] INDEX <index_name> ON <table_name> (<column_name> [ASC|DESC] [, ...]);`
 
-**`DROP INDEX`**
+#### DROP INDEX
 Removes an existing index.
 *Syntax:*
 `DROP INDEX <table_name>.<index_name>;`
-
-**`MERGE`** (UPSERT)
-Synchronizes data between a source and target by performing multiple DML actions (INSERT, UPDATE, DELETE) in a single statement. It is the core of incremental ETL processing.
-
-*Syntax:*
-```sql
-MERGE INTO <target> [AS T]
-USING <source_table_or_subquery> [AS S]
-ON <match_condition>
-[WHEN MATCHED [AND <condition>] THEN <action>]
-[WHEN NOT MATCHED [BY TARGET] [AND <condition>] THEN <action>]
-[WHEN NOT MATCHED BY SOURCE [AND <condition>] THEN <action>];
-```
-
-*Supported Actions:*
-- `UPDATE SET col = val, ...`
-- `INSERT (cols...) VALUES (vals...)`
-- `DELETE`
-
-*Example:*
-```sql
-MERGE INTO target_table AS T
-USING (SELECT * FROM staging_table) AS S
-ON T.id = S.id
-WHEN MATCHED THEN 
-    UPDATE SET name = S.name, updated_at = GETDATE()
-WHEN NOT MATCHED THEN
-    INSERT (id, name) VALUES (S.id, S.name)
-WHEN NOT MATCHED BY SOURCE THEN
-    DELETE;
-```
-
-## Statements
-
-### DDL & Resource Management
-
-#### CREATE TABLE
-Creates a new table or virtual view.
-```sql
-CREATE TABLE table_name AS SELECT ...;
-```
-
-#### DROP TABLE
-Deletes a table from the engine's memory or the target data source.
-```sql
-DROP TABLE table_name;
-```
 
 #### DROP FUNCTION / PROCEDURE
 Removes a user-defined function or procedure.
@@ -720,6 +767,22 @@ USE SETS !<name>;
 DECLARE @server   VARCHAR(100);
 DECLARE @database VARCHAR(100);
 DECLARE @schema   VARCHAR(50);
+
+CREATE SETS !DEV
+BEGIN
+    @server   = 'dev-db.internal',
+    @database = 'DevWarehouse',
+    @schema   = 'dbo'
+END
+
+-- Define a PROD environment with a safety prompt
+CREATE SETS !PROD
+BEGIN
+    @server   = 'prod-db.internal',
+    @database = 'ProdWarehouse',
+    @schema   = 'dbo';
+    SET WITH_PROMPT ON;
+END
 
 USE SETS !DEV;
 
@@ -823,20 +886,7 @@ WAITFOR DELAY '00:00:05'; -- Wait 5 seconds
 WAITFOR TIME '23:59:59';  -- Wait until midnight
 ```
 
-### Variable Management
 
-#### DECLARE
-Defines a variable. The data type is optional; if omitted, it defaults to `ANY`. Multiple variables can be declared in a single statement.
-```sql
-DECLARE @name STRING = 'Chuck';
-DECLARE @id = 123; -- Optional type (defaults to ANY)
-DECLARE @list LIST = [1, 2, 3], @count INT = 0;
-```
-
-#### SET
-Assigns a value to an existing variable.
-```sql
-SET @name = 'Charles';
 ```
 
 ### Data Movement & Transformation
@@ -888,15 +938,21 @@ Displays the timing and resource usage for the most recently executed statements
 SHOW PROFILE;
 ```
 
-### Remote File Management
-
-#### GET_FILE / PUT_FILE
-Transfers files between the local system and a remote connector (SFTP, FTP, Azure Blob).
+## Functions
+### Conditional Logic
+**`CASE ... WHEN ... THEN ... ELSE ... END`**
+Evaluates conditions sequentially to return specific projected outputs natively.
 ```sql
-GET_FILE 'remote/path/data.csv' TO 'local/data.csv' FROM @MySftp;
-PUT_FILE 'local/upload.txt' TO 'uploads/upload.txt' AT @AzureBlob;
+SELECT
+    CASE 
+        WHEN id < 1000 THEN 'Legacy'
+        WHEN id >= 1000 THEN 'Modern'
+        ELSE 'Unknown'
+    END AS SystemType
+FROM system_table;
 ```
 
+### String Functions
 - **`LEFT(string, n)`**, **`RIGHT(string, n)`**: Extracts `n` characters from either side.
 - **`CHARINDEX(substring, string)`** (or **`INSTR(string, substring)`**): Finds the 1-based index position of a substring. Not: `CHARINDEX` takes `(sub, str)` while `INSTR` takes `(str, sub)`.
 - **`REVERSE(string)`**: Reverses the string characters.
@@ -1007,6 +1063,12 @@ Functions to query the state of the local or remote filesystem.
 - **`DIRECTORY_EXISTS('path')`**: Returns true if the directory exists.
 - **`FILE_LIST('path'[, 'filter'])`**: Returns a table containing information about files in a directory.
 
+### Remote File Management
+Transfers files between the local system and a remote connector (SFTP, FTP, Azure Blob).
+```sql
+GET_FILE 'remote/path/data.csv' TO 'local/data.csv' FROM @MySftp;
+PUT_FILE 'local/upload.txt' TO 'uploads/upload.txt' AT @AzureBlob;
+
 ### Aggregation
 - **`COUNT([DISTINCT] col)`**: Aggregation tally. If `DISTINCT` is specified, only unique non-null values are counted.
 - **`SUM(col)`**: Aggregation total.
@@ -1095,6 +1157,25 @@ SET @accumulator = @accumulator + 1;
 END;
 ```
 
+**`FOR`**
+Iterates a variable through a numeric range with an optional `STEP`.
+```sql
+FOR @idx = 100 TO 95 STEP -1
+BEGIN
+    INSERT INTO #results (loop_val) VALUES (@idx);
+END;
+```
+
+**`FOREACH`**
+Iterates comprehensively through a designated `LIST` variable.
+```sql
+DECLARE @result_list LIST = [10, 20, 30];
+FOREACH @val IN @result_list
+BEGIN
+    INSERT INTO #results (loop_val) VALUES (@val);
+END;
+```
+
 **`EXECUTE` (Remote Execution)**
 Executes SQL code on a remote connection. Supports capturing results into local tables and passing parameters for secure, parameterized execution.
 
@@ -1152,23 +1233,7 @@ END
 -- Sequential execution resumes here after all three above are finished
 ```
 
-**`FOR`**
-Iterates a variable through a numeric range with an optional `STEP`.
-```sql
-FOR @idx = 100 TO 95 STEP -1
-BEGIN
-    INSERT INTO #results (loop_val) VALUES (@idx);
-END;
-```
 
-**`FOREACH`**
-Iterates comprehensively through a designated `LIST` variable.
-```sql
-DECLARE @result_list LIST = [10, 20, 30];
-FOREACH @val IN @result_list
-BEGIN
-    INSERT INTO #results (loop_val) VALUES (@val);
-END;
 ```
 
 **`RUN SCRIPT`**

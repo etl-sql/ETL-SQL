@@ -46,6 +46,19 @@ namespace ETL_SQL.App
                 return 0;
             }
 
+            if (ctx.Command == "session-clear")
+            {
+                if (string.IsNullOrEmpty(ctx.SessionId))
+                {
+                    Logger.WriteLine("Session ID is required for clear command.", ConsoleColor.Red);
+                    return 1;
+                }
+                var sessionManager = new ETL_SQL.Engine.Services.SessionStateManager();
+                sessionManager.ClearSession(ctx.SessionId);
+                Logger.WriteLine($"Session {ctx.SessionId} cleared.", ConsoleColor.Green);
+                return 0;
+            }
+
             if (ctx.Command == "test")
             {
                 // Placeholder for internal test runner if needed
@@ -180,6 +193,20 @@ namespace ETL_SQL.App
                     evaluator.IsVerbose = ctx.IsVerbose;
                     evaluator.MasterPassword = ctx.Password;
 
+                    var sessionManager = new ETL_SQL.Engine.Services.SessionStateManager();
+                    if (!string.IsNullOrEmpty(ctx.SessionId))
+                    {
+                        var state = await sessionManager.LoadSession(ctx.SessionId, ctx.Password);
+                        if (state != null)
+                        {
+                            Logger.WriteLine($"Restoring session {ctx.SessionId}...", ConsoleColor.Cyan);
+                            await evaluator.LoadSessionState(state);
+                        }
+                    }
+                    
+                    // Periodic reaping of stale sessions
+                    sessionManager.ReapStaleSessions(TimeSpan.FromDays(7));
+
                     if (ctx.IsJsonMode)
                     {
                         Logger.SuppressConsole = true;
@@ -189,6 +216,12 @@ namespace ETL_SQL.App
                     var execTime = Stopwatch.StartNew();
                     await evaluator.Evaluate(script);
                     execTime.Stop();
+
+                    if (!string.IsNullOrEmpty(ctx.SessionId))
+                    {
+                        Logger.WriteLine($"Saving session {ctx.SessionId}...", ConsoleColor.Cyan);
+                        await sessionManager.SaveSession(ctx.SessionId, evaluator, source);
+                    }
 
                     if (ctx.IsPerfMode || evaluator.IsProfiling)
                     {

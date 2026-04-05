@@ -13,7 +13,7 @@ namespace ETL_SQL.Tests
         {
             var lexer = new Lexer(sql);
             var tokens = lexer.Tokenize();
-            var parser = new Parser(tokens);
+            var parser = new Parser(tokens, sql);
             return parser.Parse();
         }
 
@@ -27,6 +27,7 @@ namespace ETL_SQL.Tests
     {
         public List<string> ExecutedSql { get; } = new();
         public string Dialect { get; set; } = "MSSQL";
+        public string ConnectionString => "mock://local";
         public string Path => "mock://local";
 
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)

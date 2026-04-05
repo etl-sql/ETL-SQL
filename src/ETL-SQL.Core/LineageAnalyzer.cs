@@ -198,6 +198,18 @@ namespace ETL_SQL.Core
                     }
                 }
             }
+            else if (stmt is ExecuteRemoteBlockStatement execBlock)
+            {
+                // Recursive analysis of the block
+                AnalyzeStatements(execBlock.Body.Statements);
+            }
+            else if (stmt is ExecutePushdownStatement pushdown)
+            {
+                var sources = pushdown.GetSourceTables().ToList();
+                string target = (pushdown.IntoTable?.ConnectionName != null ? pushdown.IntoTable.ConnectionName + "." + pushdown.IntoTable.TableName : pushdown.IntoTable?.TableName) ?? "RESULTSET";
+                
+                Tracker.Record(target, sources, "EXECUTE PUSHDOWN", line: pushdown.Line, column: pushdown.Column, endLine: pushdown.EndLine, endColumn: pushdown.EndColumn);
+            }
         }
     }
 }

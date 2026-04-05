@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.CommandLine;
 using System.CommandLine.Invocation;
+using System.CommandLine.Parsing;
 using Spectre.Console;
 using ETL_SQL.Common;
 
@@ -20,6 +21,7 @@ namespace ETL_SQL.App
         private static readonly Option<string> PassOption = new(new[] { "--pass" }, "Master password for encryption.");
         private static readonly Option<bool> JsonOption = new(new[] { "--json" }, "Output results and messages in structured JSON format.");
         private static readonly Option<bool> PageOption = new(new[] { "--page", "-pa" }, "Pause and page between multiple result sets in the console.");
+        private static readonly Option<string?> SessionOption = new(new[] { "--session" }, "Enable session persistence with the specified session ID.");
         
         private static readonly Argument<string> RunScriptArg = new("script", "The ETL-SQL script to execute.");
         private static readonly Argument<string> UiModeArg = new("mode", () => "edit", "UI mode: edit, simple, silent, or verbose");
@@ -35,7 +37,7 @@ namespace ETL_SQL.App
             var runCommand = new Command("run", "Execute an ETL-SQL script")
             {
                 RunScriptArg,
-                BatchSizeOption, PerfOption, VerboseOption, LogOption, SilentOption, PreviewOption, JsonOption, PageOption
+                BatchSizeOption, PerfOption, VerboseOption, LogOption, SilentOption, PreviewOption, JsonOption, PageOption, SessionOption
             };
             runCommand.SetHandler(async (context) => await Dispatch(context, "run", handler));
 
@@ -70,11 +72,21 @@ namespace ETL_SQL.App
             };
             generateCommand.SetHandler(async (context) => await Dispatch(context, "generate", handler));
 
+            // 5. SESSION Command
+            var sessionCommand = new Command("session", "Manage ad-hoc execution sessions");
+            var clearSubcommand = new Command("clear", "Clear a session state")
+            {
+                new Argument<string>("id", "The session ID to clear")
+            };
+            clearSubcommand.SetHandler(async (context) => await Dispatch(context, "session-clear", handler));
+            sessionCommand.AddCommand(clearSubcommand);
+
             rootCommand.AddCommand(runCommand);
             rootCommand.AddCommand(uiCommand);
             rootCommand.AddCommand(testCommand);
             rootCommand.AddCommand(encryptCommand);
             rootCommand.AddCommand(generateCommand);
+            rootCommand.AddCommand(sessionCommand);
 
             return rootCommand;
         }
@@ -117,6 +129,13 @@ namespace ETL_SQL.App
             {
                 cliContext.TestVal = res.GetValueForArgument(TestValArg);
             }
+            else if (commandName == "session-clear")
+            {
+                var idArg = res.CommandResult.Children.OfType<ArgumentResult>().FirstOrDefault();
+                cliContext.SessionId = idArg?.GetValueOrDefault<string>();
+            }
+
+            cliContext.SessionId ??= res.FindResultFor(SessionOption) != null ? res.GetValueForOption(SessionOption) : null;
 
             context.ExitCode = await handler(cliContext);
         }
@@ -162,5 +181,6 @@ namespace ETL_SQL.App
         public string? EncryptValue { get; set; }
         public bool IsJsonMode { get; set; }
         public bool EnablePaging { get; set; }
+        public string? SessionId { get; set; }
     }
 }

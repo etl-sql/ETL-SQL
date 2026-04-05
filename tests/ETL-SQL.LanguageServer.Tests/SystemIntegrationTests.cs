@@ -37,7 +37,9 @@ namespace ETL_SQL.LanguageServer.Tests
             connectorRegistry.Register(new MockDbConnector());
 
             var metadataManager = new MetadataManager(loggerFactory.CreateLogger<MetadataManager>(), connectorRegistry);
-            var handler = new TextDocumentHandler(loggerFactory, metadataManager);
+            var store = new DocumentStateStore();
+            var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
+            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, metadataManager);
             
             var uri = DocumentUri.From("untitled:Untitled-1");
             var normalizedUri = uri.ToString(); 
@@ -62,7 +64,7 @@ namespace ETL_SQL.LanguageServer.Tests
 
             // Act
             _output.WriteLine("Requesting completion at line 1, col 9...");
-            var list = await handler.Handle(completionParams, CancellationToken.None);
+            var list = await completionProvider.Handle(completionParams, CancellationToken.None);
             
             _output.WriteLine($"Completion items returned: {list.Count()}");
             foreach (var item in list) _output.WriteLine($" - {item.Label} ({item.Detail})");
@@ -80,7 +82,7 @@ namespace ETL_SQL.LanguageServer.Tests
                 Position = new Position(1, 10),
                 Context = new CompletionContext { TriggerKind = CompletionTriggerKind.TriggerCharacter, TriggerCharacter = "." }
             };
-            list = await handler.Handle(completionParams, CancellationToken.None);
+            list = await completionProvider.Handle(completionParams, CancellationToken.None);
             
              var expandItem = list.FirstOrDefault(i => i.Label == "Expand columns");
              Assert.NotNull(expandItem);
@@ -99,7 +101,7 @@ namespace ETL_SQL.LanguageServer.Tests
                 Position = new Position(1, 8), // After *
                 Context = new CompletionContext { TriggerKind = CompletionTriggerKind.TriggerCharacter, TriggerCharacter = " " }
             };
-            list = await handler.Handle(completionParams, CancellationToken.None);
+            list = await completionProvider.Handle(completionParams, CancellationToken.None);
             
             expandItem = list.FirstOrDefault(i => i.Label == "Expand columns");
             Assert.NotNull(expandItem);
@@ -119,7 +121,9 @@ namespace ETL_SQL.LanguageServer.Tests
             
             var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
             var metadataManager = new MetadataManager(loggerFactory.CreateLogger<MetadataManager>(), connectorRegistry);
-            var handler = new TextDocumentHandler(loggerFactory, metadataManager);
+            var store = new DocumentStateStore();
+            var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
+            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, metadataManager);
             
             var uri = DocumentUri.From("untitled:Untitled-2");
             
@@ -136,7 +140,7 @@ namespace ETL_SQL.LanguageServer.Tests
             };
 
             // Act
-            var list = await handler.Handle(completionParams, CancellationToken.None);
+            var list = await completionProvider.Handle(completionParams, CancellationToken.None);
             
             // Assert: Should see @global_var and @i, but NOT @item
             Assert.Contains(list, i => i.Label == "@global_var");
@@ -151,7 +155,7 @@ namespace ETL_SQL.LanguageServer.Tests
                 Context = new CompletionContext { TriggerKind = CompletionTriggerKind.Invoked }
             };
 
-            list = await handler.Handle(completionParams, CancellationToken.None);
+            list = await completionProvider.Handle(completionParams, CancellationToken.None);
             
             // Assert: Should see @global_var, @i, AND @item
             Assert.Contains(list, i => i.Label == "@global_var");

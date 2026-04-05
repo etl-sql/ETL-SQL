@@ -14,6 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Engine.Services;
+using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.Engine
 {
@@ -138,6 +139,7 @@ namespace ETL_SQL.Engine
         private readonly ExpressionEvaluator _expressionEvaluator;
         private readonly ProcedureExecutor _procedureExecutor;
         private readonly BatchPipelineHelper _batchPipelineHelper;
+        private readonly IConnectorRegistry _connectorRegistry;
         
         /// <summary>Cache for scalar subquery results to avoid redundant execution.</summary>
         public Dictionary<Statement, object?> SubqueryCache => _subqueryCache;
@@ -145,24 +147,46 @@ namespace ETL_SQL.Engine
         /// <summary>Stack of row contexts for correlated subquery resolution.</summary>
         public Stack<Row> OuterRowStack => _outerRowStack;
         
-        /// <summary>Registry of all scalar and aggregate functions available in the session.</summary>
+        /// <summaryRegistry of all scalar and aggregate functions available in the session.</summary>
         public Core.Functions.IFunctionRegistry FunctionRegistry { get; }
+
+        // ── Interface Implementations (IDataContext, IVariableContext, IEngineContext, etc.) ────────────────
+        public IDictionary<string, IDataSource> Connections => _connections;
+        public IDictionary<string, object?> Variables => _variableScopeManager.GlobalVariables;
+        public IDictionary<string, object?> CurrentVariables => _variableScopeManager.CurrentVariables;
+        public IDictionary<string, VariableMetadata> VariableMetadata => _variableScopeManager.GlobalMetadata;
+        public IDictionary<string, VariableMetadata> CurrentMetadata => _variableScopeManager.CurrentMetadata;
+
+        public void SetVariable(string name, object? value) => _variableScopeManager.SetVariable(name, value);
+        public object? GetVariable(string name)
+        {
+            if (name.Equals("@@TRANCOUNT", StringComparison.OrdinalIgnoreCase)) return TranCount;
+            return _variableScopeManager.GetVariable(name);
+        }
+        public bool ContainsVariable(string name) => _variableScopeManager.ContainsVariable(name);
+        public bool ContainsVariableInCurrentScope(string name) => _variableScopeManager.CurrentVariables.ContainsKey(name);
+        public void DeclareVariable(string name, object? value, VariableMetadata? metadata = null) => _variableScopeManager.DeclareVariable(name, value, metadata);
+        public Dictionary<string, object?> GetVariablesWithMetadata(Func<VariableMetadata, bool> predicate) => _variableScopeManager.GetVariablesWithMetadata(predicate);
+
+        public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null) => _variableScopeManager.PushScope(vars, metadata);
+        public void PopScope() => _variableScopeManager.PopScope();
 
         /// <summary>
         /// Initializes a new instance of the Evaluator.
         /// </summary>
-        public Evaluator(IEnumerable<IStatementHandler> handlers, IServiceProvider serviceProvider, Core.Functions.IFunctionRegistry functionRegistry, ILineageTracker lineageTracker, IDockerManager dockerManager)
-            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, new ConcurrentDictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase), new VariableScopeManager())
+        public Evaluator(IEnumerable<IStatementHandler> handlers, IServiceProvider serviceProvider, Core.Functions.IFunctionRegistry functionRegistry, ILineageTracker lineageTracker, IDockerManager dockerManager, IConnectorRegistry connectorRegistry)
+            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, connectorRegistry, new ConcurrentDictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase), new VariableScopeManager())
         {
         }
 
-        private Evaluator(IEnumerable<IStatementHandler> handlers, IServiceProvider serviceProvider, Core.Functions.IFunctionRegistry functionRegistry, ILineageTracker lineageTracker, IDockerManager dockerManager, ConcurrentDictionary<string, IDataSource> connections, VariableScopeManager variableScopeManager)
+        private Evaluator(IEnumerable<IStatementHandler> handlers, IServiceProvider serviceProvider, Core.Functions.IFunctionRegistry functionRegistry, ILineageTracker lineageTracker, IDockerManager dockerManager, IConnectorRegistry connectorRegistry, ConcurrentDictionary<string, IDataSource> connections, VariableScopeManager variableScopeManager)
         {
             _allHandlers = handlers;
             _serviceProvider = serviceProvider;
             FunctionRegistry = functionRegistry;
             LineageTracker = lineageTracker;
             DockerManager = dockerManager;
+            _connectorRegistry = connectorRegistry;
             
             _connections = connections;
             _variableScopeManager = variableScopeManager;
@@ -223,6 +247,40 @@ namespace ETL_SQL.Engine
         /// <summary>Clears the cached result of the last query.</summary>
         public void ClearResults() => LastResult = null;
 
+        /// <summary>Captures the global variable state for session persistence.</summary>
+        public (Dictionary<string, object?>, Dictionary<string, VariableMetadata>) GetGlobalState() => _variableScopeManager.GetGlobalState();
+
+        /// <summary>Loads a previously saved session state into this evaluator instance.</summary>
+        public async Task LoadSessionState(SessionState state)
+        {
+            // 1. Restore Variables
+            _variableScopeManager.LoadGlobalState(state.GlobalVariables, state.GlobalMetadata);
+
+            // 2. Restore Docker State
+            DockerManager.LoadState(state.DockerConnectionStrings, state.LastDockerConnectionString);
+
+            // 3. Restore Connections
+            foreach (var conn in state.Connections)
+            {
+                var connector = _connectorRegistry.GetConnector(conn.Type);
+                if (connector != null)
+                {
+                    var ds = connector.CreateDataSource(conn.ConnectionString, conn.Options);
+                    _connections[conn.Name] = ds;
+                }
+            }
+
+            // 4. Restore Lineage
+            LineageTracker.Clear();
+            LineageTracker.LoadState(state.LineageEntries);
+            
+            // 5. Restore Temp Tables (#tables)
+            foreach (var temp in state.TempTables)
+            {
+                _connections[temp.Name] = await _dataSourceManager.RestoreTempTable(temp, ScriptPassword ?? $"{Environment.MachineName}:{Environment.UserName}");
+            }
+        }
+
         /// <summary>
         /// Dispatches a single statement to its registered handler and captures metrics.
         /// </summary>
@@ -268,33 +326,6 @@ namespace ETL_SQL.Engine
                 LastIndexUsedName = null;
             }
         }
-
-        /// <summary>Access to all registered data sources.</summary>
-        public IDictionary<string, IDataSource> Connections => _connections;
-
-        /// <summary>Access to variables in the current scope.</summary>
-        public IDictionary<string, object?> Variables => _variableScopeManager.GlobalVariables;
-        public IDictionary<string, object?> CurrentVariables => _variableScopeManager.CurrentVariables;
-        public IDictionary<string, VariableMetadata> VariableMetadata => _variableScopeManager.CurrentMetadata;
-        public IDictionary<string, VariableMetadata> CurrentMetadata => _variableScopeManager.CurrentMetadata;
-        public Dictionary<string, object?> GetVariablesWithMetadata(Func<VariableMetadata, bool> predicate) => _variableScopeManager.GetVariablesWithMetadata(predicate);
-        public void DeclareVariable(string name, object? value, VariableMetadata? metadata = null) => _variableScopeManager.DeclareVariable(name, value, metadata);
-
-        /// <summary>Stores a value in the current variable scope.</summary>
-        public void SetVariable(string name, object? value) => _variableScopeManager.SetVariable(name, value);
-        
-        /// <summary>Retrieves a variable value from the current scope or built-in system variables.</summary>
-        public object? GetVariable(string name)
-        {
-            if (name.Equals("@@TRANCOUNT", StringComparison.OrdinalIgnoreCase)) return TranCount;
-            return _variableScopeManager.GetVariable(name);
-        }
-
-        /// <summary>Checks if a variable exists in any accessible scope.</summary>
-        public bool ContainsVariable(string name) => _variableScopeManager.ContainsVariable(name);
-
-        /// <summary>Checks if a variable was declared in the current local scope only.</summary>
-        public bool ContainsVariableInCurrentScope(string name) => _variableScopeManager.CurrentVariables.ContainsKey(name);
 
         /// <summary>
         /// Resolves a table reference to a functional IDataSource.
@@ -429,18 +460,6 @@ namespace ETL_SQL.Engine
         public void EvaluateCreateFunction(CreateFunctionStatement stmt)
         {
             _variableScopeManager.SetFunction(stmt.FunctionName, stmt);
-        }
-
-        /// <summary>Pushes a new variable scope onto the stack.</summary>
-        public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null)
-        {
-            _variableScopeManager.PushScope(vars, metadata);
-        }
-
-        /// <summary>Pops the current variable scope from the stack.</summary>
-        public void PopScope()
-        {
-            _variableScopeManager.PopScope();
         }
 
         /// <summary>Checks if a procedure with the given name exists.</summary>
@@ -643,7 +662,7 @@ namespace ETL_SQL.Engine
         {
             // Resolve fresh handlers to avoid sharing mutable handler state across forks (resolves Item #20 race condition)
             var freshHandlers = _serviceProvider.GetServices<IStatementHandler>();
-            var fork = new Evaluator(freshHandlers, _serviceProvider, FunctionRegistry, LineageTracker, DockerManager, _connections, _variableScopeManager.Fork())
+            var fork = new Evaluator(freshHandlers, _serviceProvider, FunctionRegistry, LineageTracker, DockerManager, _connectorRegistry, _connections, _variableScopeManager.Fork())
             {
                 IsVerbose = IsVerbose,
                 RedirectOutput = RedirectOutput,

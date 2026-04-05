@@ -11,6 +11,7 @@ namespace ETL_SQL.Core.Parser
         Token Previous { get; }
         int LastTokenEndLine { get; }
         int LastTokenEndColumn { get; }
+        Token LookAhead(int distance);
         Token Advance();
         bool Match(TokenType type);
         Token Consume(TokenType type, string message);

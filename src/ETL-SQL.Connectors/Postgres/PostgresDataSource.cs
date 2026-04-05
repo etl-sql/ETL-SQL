@@ -29,6 +29,9 @@ namespace ETL_SQL.Connectors.Postgres
             _tableName = tableName;
         }
 
+        /// <summary>Gets the connection string for this data source.</summary>
+        public string ConnectionString => _connectionString;
+        
         /// <summary>Gets the placeholder path for PostgreSQL.</summary>
         public string Path => "POSTGRES";
 

@@ -87,6 +87,7 @@ namespace ETL_SQL.Data
         Task<string> GetVersionAsync();
         HashSet<string> GetSupportedFunctions();
         IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null);
+        string ConnectionString { get; }
         string Dialect { get; }
         Task<IEnumerable<string>> GetTablesAsync();
         Task<IEnumerable<string>> GetViewsAsync();

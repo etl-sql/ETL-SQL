@@ -7,11 +7,11 @@ namespace ETL_SQL.Core
 {
     public class LineageEntry
     {
-        public string TargetTable { get; set; }
+        public string TargetTable { get; set; } = string.Empty;
         public string? TargetColumn { get; set; }
         public List<string> SourceTables { get; set; } = new();
         public List<string> SourceColumns { get; set; } = new();
-        public string Operation { get; set; }
+        public string Operation { get; set; } = string.Empty;
         public Dictionary<string, string> Metadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public string? DerivedFromDescriptions { get; set; }
         public string? Description => Metadata.TryGetValue("d", out var d) ? d : null;
@@ -22,11 +22,16 @@ namespace ETL_SQL.Core
         public int EndLine { get; set; }
         public int EndColumn { get; set; }
 
+        public LineageEntry() { }
+
         public LineageEntry(string targetTable, string operation)
         {
             TargetTable = targetTable;
             Operation = operation;
         }
+        
+        public string GetTarget() => TargetTable;
+        public string GetOperation() => Operation;
 
         public override string ToString() => $"{Timestamp:yyyy-MM-dd HH:mm:ss} | {Operation,-12} | {TargetTable}{(TargetColumn != null ? "." + TargetColumn : "")} <- {string.Join(", ", SourceTables)}";
     }
@@ -245,6 +250,15 @@ namespace ETL_SQL.Core
             lock (_lock)
             {
                 return _entries.ToList();
+            }
+        }
+
+        public void LoadState(IEnumerable<LineageEntry> entries)
+        {
+            if (entries == null) return;
+            foreach (var entry in entries)
+            {
+                Record(entry.TargetTable, entry.SourceTables, entry.Operation, entry.TargetColumn, entry.SourceColumns, entry.Metadata, entry.DerivedFromDescriptions, entry.Line, entry.Column, entry.EndLine, entry.EndColumn, entry.SourceFile);
             }
         }
 

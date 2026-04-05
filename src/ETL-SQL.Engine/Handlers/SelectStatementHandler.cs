@@ -79,6 +79,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 string intoName = intoTable.ConnectionName ?? intoTable.TableName;
                 var destination = await context.ResolveDataSourceAsync(intoTable);
+                await destination.TruncateAsync(); // SELECT INTO should overwrite/refresh the target
                 var batches = EvaluateQuery(statement, context);
                 
                 // Align columns if target table already has a schema

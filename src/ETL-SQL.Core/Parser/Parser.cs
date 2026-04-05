@@ -38,6 +38,14 @@ namespace ETL_SQL.Core.Parser
         public Token Peek2 => _position + 2 < _tokens.Count ? _tokens[_position + 2] : _tokens[^1];
         public Token Previous => _position > 0 ? _tokens[_position - 1] : _tokens[0];
 
+        public Token LookAhead(int distance)
+        {
+            int pos = _position + distance;
+            if (pos < 0) return _tokens[0];
+            if (pos >= _tokens.Count) return _tokens[^1];
+            return _tokens[pos];
+        }
+
         public int LastTokenEndLine { get; private set; }
         public int LastTokenEndColumn { get; private set; }
 

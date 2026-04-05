@@ -164,6 +164,7 @@ namespace ETL_SQL.Tests
             public Task CommitAsync() { CommitCalled = true; return Task.CompletedTask; }
             public Task RollbackAsync() { RollbackCalled = true; return Task.CompletedTask; }
 
+            public string ConnectionString => "MOCK";
             public string Path => "MOCK";
             public string Dialect => "MSSQL";
             public IDataSource WithTable(string tableName) => this;

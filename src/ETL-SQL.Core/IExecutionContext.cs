@@ -163,6 +163,7 @@ namespace ETL_SQL.Core
         IEnumerable<LineageEntry> GetAncestors(string tableName, string? columnName = null);
         Dictionary<string, string> InheritMetadata(IEnumerable<string> sourceTables, IEnumerable<string> sourceColumns, out string? derivedFromDescriptions);
         IEnumerable<LineageEntry> GetFullLineage();
+        void LoadState(IEnumerable<LineageEntry> entries);
         void Clear();
     }
 
@@ -176,5 +177,7 @@ namespace ETL_SQL.Core
         Task ResumeContainer(string alias);
         Task CloseContainers(string? nameOrAlias = null);
         string? GetConnectionString(string alias);
+        Dictionary<string, string> GetState();
+        void LoadState(Dictionary<string, string> connectionStrings, string? lastConnectionString);
     }
 }

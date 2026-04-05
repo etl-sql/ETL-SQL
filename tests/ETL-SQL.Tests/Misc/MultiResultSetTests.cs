@@ -57,6 +57,7 @@ namespace ETL_SQL.Tests
 
     public class MockMultiResultDb : IDatabaseSource
     {
+        public string ConnectionString => "MockDB";
         public string Path => "MockDB";
         public string Dialect => "MSSQL";
 

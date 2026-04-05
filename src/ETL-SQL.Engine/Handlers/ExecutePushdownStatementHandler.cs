@@ -50,8 +50,24 @@ namespace ETL_SQL.Engine.Handlers
 
             Logger.WriteLine($"Pushing down native SQL to {connectionName}...", ConsoleColor.Cyan);
 
+            string sqlToExecute = stmt.SqlText;
+            
+            // If the user included the connection prefix, strip it (e.g. m.dbo.Employee -> dbo.Employee)
+            // This is necessary because some users write fully-qualified ETL-SQL names even in pushdown blocks.
+            string prefix = connectionName + ".";
+            if (sqlToExecute.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                sqlToExecute = sqlToExecute.Substring(prefix.Length);
+            }
+            else
+            {
+                // Simple cleanup for common cases (e.g. FROM m.table)
+                sqlToExecute = sqlToExecute.Replace(" " + prefix, " ", StringComparison.OrdinalIgnoreCase)
+                                         .Replace("(" + prefix, "(", StringComparison.OrdinalIgnoreCase);
+            }
+
             var results = new List<DataTable>();
-            await foreach (var batch in databaseSource.ExecuteRawSql(stmt.SqlText, parameters))
+            await foreach (var batch in databaseSource.ExecuteRawSql(sqlToExecute, parameters))
             {
                 results.Add(batch);
             }
@@ -65,6 +81,7 @@ namespace ETL_SQL.Engine.Handlers
                 if (stmt.IntoTable != null)
                 {
                     await LoadIntoTable(stmt.IntoTable, results, evaluator);
+                    RecordLineage(stmt, results, evaluator);
                 }
             }
             else
@@ -112,6 +129,24 @@ namespace ETL_SQL.Engine.Handlers
             else
             {
                 throw new ExecutionException($"Target table '{tableName}' not found for INTO clause.");
+            }
+        }
+
+        private void RecordLineage(ExecutePushdownStatement stmt, List<DataTable> results, Evaluator context)
+        {
+            if (stmt.IntoTable == null || results.Count == 0) return;
+
+            string target = (stmt.IntoTable.ConnectionName != null ? stmt.IntoTable.ConnectionName + "." + stmt.IntoTable.TableName : stmt.IntoTable.TableName);
+            var sources = stmt.GetSourceTables().ToList();
+            var lastBatch = results.Last();
+
+            // Record table-level lineage
+            context.LineageTracker.Record(target, sources, "EXECUTE PUSHDOWN (ACTUAL)", line: stmt.Line, column: stmt.Column);
+
+            // Record column-level lineage from the actual result set
+            foreach (var colName in lastBatch.ColumnNames)
+            {
+                context.LineageTracker.Record(target, sources, "EXECUTE PUSHDOWN COLUMN (ACTUAL)", targetColumn: colName, line: stmt.Line, column: stmt.Column);
             }
         }
     }

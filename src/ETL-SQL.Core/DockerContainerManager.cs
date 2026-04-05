@@ -229,6 +229,20 @@ namespace ETL_SQL.Core
             return "";
         }
 
+        public Dictionary<string, string> GetState()
+        {
+            return new Dictionary<string, string>(_connectionStrings, StringComparer.OrdinalIgnoreCase);
+        }
+
+        public void LoadState(Dictionary<string, string> connectionStrings, string? lastConnectionString)
+        {
+            foreach (var kvp in connectionStrings)
+            {
+                _connectionStrings[kvp.Key] = kvp.Value;
+            }
+            if (lastConnectionString != null) LastConnectionString = lastConnectionString;
+        }
+
         public ValueTask DisposeAsync()
         {
             // Do not automatically close containers! 

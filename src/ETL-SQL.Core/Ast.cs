@@ -4,6 +4,7 @@ using System.Linq;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Parser;
+using System.Text.RegularExpressions;
 
 namespace ETL_SQL.Core
 {
@@ -459,9 +460,42 @@ namespace ETL_SQL.Core
 
         public override IEnumerable<string> GetSourceTables()
         {
-            // For pushdown, we don't know the source tables without parsing the native SQL, 
-            // so we return a representative string for lineage tracking.
-            return new[] { $"Native SQL on {ConnectionName.ToSql()}" };
+            if (string.IsNullOrEmpty(SqlText)) return Enumerable.Empty<string>();
+
+            var sources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            
+            // Refined regex for identifying potential table names in FROM and JOIN clauses.
+            // Handles multi-part identifiers like [db].[schema].[table] or schema.table
+            var tableRegex = new Regex(@"(?i)\b(?:FROM|JOIN)\s+([\[\]\w\.-]+)", RegexOptions.Compiled);
+            
+            var matches = tableRegex.Matches(SqlText);
+            foreach (Match m in matches)
+            {
+                var tbl = m.Groups[1].Value;
+                if (!string.IsNullOrEmpty(tbl))
+                {
+                    // Clean up brackets for consistent lineage tracking
+                    tbl = tbl.Replace("[", "").Replace("]", "");
+                    
+                    // Prefix with connection name if it's not already qualified by this connection
+                    var connPrefix = ConnectionName.ToSql().Trim('\'', '(', ')');
+                    if (tbl.StartsWith(connPrefix + ".", StringComparison.OrdinalIgnoreCase))
+                    {
+                        sources.Add(tbl);
+                    }
+                    else
+                    {
+                        sources.Add($"{connPrefix}.{tbl}");
+                    }
+                }
+            }
+
+            if (sources.Count == 0)
+            {
+                return new[] { $"Native SQL on {ConnectionName.ToSql()}" };
+            }
+
+            return sources;
         }
     }
 
