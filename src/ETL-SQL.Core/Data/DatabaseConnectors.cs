@@ -1,3 +1,5 @@
+using ETL_SQL.Core;
+
 namespace ETL_SQL.Data
 {
     /// <summary>
@@ -27,6 +29,8 @@ namespace ETL_SQL.Data
         string GetHelp();
         /// <summary>Creates a new <see cref="IDataSource"/> instance for the specified connection string.</summary>
         IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null);
+        /// <summary>Creates a new <see cref="IDataSource"/> instance for the specified connection string with a template schema.</summary>
+        IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options, IEnumerable<ColumnDefinition>? templateSchema) => CreateDataSource(connectionString, options);
         /// <summary>Returns a list of tables available in the database.</summary>
         Task<IEnumerable<string>> GetTablesAsync(string connectionString);
         /// <summary>Returns a list of views available in the database.</summary>

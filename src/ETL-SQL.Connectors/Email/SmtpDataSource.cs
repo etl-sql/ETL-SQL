@@ -139,7 +139,7 @@ namespace ETL_SQL.Connectors.Email
         public Task TruncateAsync() => Task.CompletedTask;
 
         /// <summary>Returns the virtual column names recognized for email sending.</summary>
-        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(new[] { "To", "Cc", "Bcc", "Subject", "Body", "Attachments" }.AsEnumerable());
+        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(new[] { "To", "From", "Cc", "Bcc", "Subject", "Body", "Attachments" }.AsEnumerable());
 
         /// <summary>Captures a snapshot (no-op for SMTP).</summary>
         public object? Snapshot() => null;

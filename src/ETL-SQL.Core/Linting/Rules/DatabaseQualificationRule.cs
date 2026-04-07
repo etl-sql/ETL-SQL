@@ -100,17 +100,13 @@ namespace ETL_SQL.Core.Linting.Rules
 
             // Check if the default connection (or the only connection) is a database type
             var connections = context.Metadata!.GetConnections().ToList();
-            if (connections.Count == 0) return;
+            if (connections.Count <= 1) return; // Only one connection, unqualified name is fine
 
-            // We need to know the type of the connection. 
-            // In the current architecture, IMetadataProvider.GetConnections() only returns names.
-            // However, we can ask the MetadataManager via the context if we had access to it.
-            // Since we are in the Linter, we rely on the provider.
-            
             // For now, if there's only one connection and it's NOT qualified, we warn 
             // IF we can determine it's a DB. 
             // A safer approach for this rule: If it's a one-part name, and the "DEFAULT" or first connection 
             // is known to be a database (which we'll assume for now if it's not a known file type), warn.
+
 
             results.Add(new LintResult
             {

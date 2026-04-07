@@ -59,11 +59,11 @@ namespace ETL_SQL.Tests
         public void CryptoUtils_PasswordEncryption_SHA256()
         {
             string pwd = "Password123!";
-            CryptoUtils.EncryptFile(_plainFile, _encryptedFile, pwd, HashAlgorithmName.SHA256);
+            CryptoUtils.EncryptFile(_plainFile, _encryptedFile, pwd, true, HashAlgorithmName.SHA256);
             Assert.True(File.Exists(_encryptedFile));
             Assert.NotEqual(File.ReadAllText(_plainFile), File.ReadAllText(_encryptedFile));
 
-            CryptoUtils.DecryptFile(_encryptedFile, _decryptedFile, pwd, HashAlgorithmName.SHA256);
+            CryptoUtils.DecryptFile(_encryptedFile, _decryptedFile, pwd, true, HashAlgorithmName.SHA256);
             Assert.Equal(File.ReadAllText(_plainFile), File.ReadAllText(_decryptedFile));
         }
 
@@ -71,33 +71,33 @@ namespace ETL_SQL.Tests
         public void CryptoUtils_PasswordEncryption_SHA512()
         {
             string pwd = "Password123!";
-            CryptoUtils.EncryptFile(_plainFile, _encryptedFile, pwd, HashAlgorithmName.SHA512);
+            CryptoUtils.EncryptFile(_plainFile, _encryptedFile, pwd, true, HashAlgorithmName.SHA512);
             
-            CryptoUtils.DecryptFile(_encryptedFile, _decryptedFile, pwd, HashAlgorithmName.SHA512);
+            CryptoUtils.DecryptFile(_encryptedFile, _decryptedFile, pwd, true, HashAlgorithmName.SHA512);
             Assert.Equal(File.ReadAllText(_plainFile), File.ReadAllText(_decryptedFile));
         }
 
         [Fact]
         public void CryptoUtils_SshKeyEncryption_NoPassphrase()
         {
-            CryptoUtils.EncryptFileWithSsh(_plainFile, _encryptedFile, _publicKeyFile);
+            CryptoUtils.EncryptFileWithSsh(_plainFile, _encryptedFile, _publicKeyFile, true);
             Assert.True(File.Exists(_encryptedFile));
 
-            CryptoUtils.DecryptFileWithSsh(_encryptedFile, _decryptedFile, _privateKeyFile);
+            CryptoUtils.DecryptFileWithSsh(_encryptedFile, _decryptedFile, _privateKeyFile, true);
             Assert.Equal(File.ReadAllText(_plainFile), File.ReadAllText(_decryptedFile));
         }
 
         [Fact]
         public void CryptoUtils_SshKeyEncryption_WithPassphrase()
         {
-            CryptoUtils.EncryptFileWithSsh(_plainFile, _encryptedFile, _publicKeyFile);
+            CryptoUtils.EncryptFileWithSsh(_plainFile, _encryptedFile, _publicKeyFile, true);
             
             // Decrypt with correct passphrase
-            CryptoUtils.DecryptFileWithSsh(_encryptedFile, _decryptedFile, _passphraseKeyFile, Passphrase);
+            CryptoUtils.DecryptFileWithSsh(_encryptedFile, _decryptedFile, _passphraseKeyFile, true, Passphrase);
             Assert.Equal(File.ReadAllText(_plainFile), File.ReadAllText(_decryptedFile));
 
             // Decrypt with WRONG passphrase should throw
-            Assert.ThrowsAny<Exception>(() => CryptoUtils.DecryptFileWithSsh(_encryptedFile, _decryptedFile, _passphraseKeyFile, "wrong"));
+            Assert.ThrowsAny<Exception>(() => CryptoUtils.DecryptFileWithSsh(_encryptedFile, _decryptedFile, _passphraseKeyFile, true, "wrong"));
         }
 
         [Fact]

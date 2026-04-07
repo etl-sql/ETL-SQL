@@ -5,6 +5,9 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Linting;
 using ETL_SQL.Core.Linting.Rules;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
+using ETL_SQL.Connectors;
+
 
 namespace ETL_SQL.Tests.Statements
 {
@@ -22,11 +25,23 @@ namespace ETL_SQL.Tests.Statements
 
         private static async Task<System.Collections.Generic.List<LintResult>> Lint(string sql)
         {
+            // Initialize ConnectorRegistry for the linter (Rule requires it)
+            if (ConnectorRegistry.Instance == null || !ConnectorRegistry.Instance.GetRegisteredNames().Any())
+            {
+                var connectors = new System.Collections.Generic.List<IConnector> 
+                { 
+                    new ETL_SQL.Connectors.SqlServer.SqlServerConnector(),
+                    new ETL_SQL.Connectors.Postgres.PostgresConnector()
+                };
+                new ConnectorRegistry(connectors);
+            }
+
             var script = Parse(sql);
             var linter = new Linter();
             linter.AddRule(new DialectKeywordRule());
             return (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
         }
+
 
         [Fact]
         public async Task DialectKeyword_Warns_When_TOP_Used_In_Postgres_Pushdown()

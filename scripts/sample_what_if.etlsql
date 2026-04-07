@@ -1,0 +1,34 @@
+-- Sample: SET WHAT_IF
+-- Purpose: Demonstrates the dry-run mode for safe script validation.
+
+CREATE CONNECTION local_db ON MOCKDB();
+
+-- 1. Enable WHAT_IF mode
+SET WHAT_IF ON;
+
+PRINT('--- DRY RUN START ---');
+
+-- This INSERT will be logged but NOT executed
+INSERT INTO local_db.Users (UserID, UserName, Email)
+VALUES (99, 'DryRunUser', 'dryrun@example.com');
+
+-- This DELETE will be logged but NOT executed
+DELETE FROM local_db.Orders WHERE OrderID = 1;
+
+-- This FILE_OPERATION will be logged but NOT executed
+COMPRESS_FILE 'TestData/sample.csv' TO 'TestData/sample.csv.zip';
+
+PRINT('--- DRY RUN END ---');
+
+-- 2. Disable WHAT_IF mode to perform actual changes
+SET WHAT_IF OFF;
+
+PRINT('--- ACTUAL EXECUTION START ---');
+
+INSERT INTO local_db.Users (UserID, UserName, Email)
+VALUES (100, 'RealUser', 'real@example.com');
+
+SELECT * FROM local_db.Users WHERE UserID >= 99;
+-- Only UserID 100 will be present because 99 was skipped during WHAT_IF ON.
+
+PRINT('--- ACTUAL EXECUTION END ---');

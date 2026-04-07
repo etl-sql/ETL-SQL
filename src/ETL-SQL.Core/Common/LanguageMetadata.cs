@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 
 namespace ETL_SQL.Common
@@ -17,13 +18,14 @@ namespace ETL_SQL.Common
         {
             "CREATE", "TABLE", "CONNECTION", "DROP", "DECLARE", "ADD", "COLUMN", "INDEX", "UNIQUE",
             "PRIMARY", "KEY", "FOREIGN", "CHECK", "REFERENCES", "CONSTRAINT", "PROCEDURE", "FUNCTION", "RETURNS",
-            "DATABASE", "DIRECTORY", "ALTER", "VIEW", "SCHEMA", "TRANSACTION", "TRAN", "COMMIT", "ROLLBACK", "CLEAR", "SSH_KEY_PAIR"
+            "DATABASE", "DIRECTORY", "ALTER", "VIEW", "SCHEMA", "TRANSACTION", "TRAN", "COMMIT", "ROLLBACK", "CLEAR", "SSH_KEY_PAIR",
+            "RENAME", "ENCRYPT", "DECRYPT", "DIRECTORY_CONTENTS"
         };
 
         public static readonly HashSet<string> ControlFlowKeywords = new(StringComparer.OrdinalIgnoreCase)
         {
             "IF", "ELSE", "WHILE", "FOR", "FOREACH", "EACH", "BEGIN", "END", "TRY", "CATCH", "THROW",
-            "RAISEERROR", "EXEC", "EXECUTE", "RETURN", "BREAK", "CONTINUE", "CASE", "WHEN", "THEN"
+            "RAISEERROR", "EXEC", "EXECUTE", "RETURN", "BREAK", "CONTINUE", "CASE", "WHEN", "THEN", "SEND_EMAIL"
         };
 
         public static readonly HashSet<string> JoinKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -55,17 +57,17 @@ namespace ETL_SQL.Common
             "WITH", "RECURSIVE", "HASH", "LOOP",
             "IDENTITY", "DEFAULT", "RANGE", "PRECEDING", "FOLLOWING", "UNBOUNDED", "CURRENT",
             "OVER", "PARTITION", "PATH", "ROOT", "AUTO", "RAW", "EXPLICIT", "ELEMENTS",
-            "EXPLAIN", "SEMI", "ANTI", "WITHIN", "AT", "TIME", "ZONE",
+            "EXPLAIN", "SEMI", "ANTI", "WITHIN", "AT", "TIME", "ZONE", "COPY", "MOVE", "DELETE", "COMPRESS",
             "RENAME", "COPY_FILE", "MOVE_FILE", "RENAME_FILE", "DELETE_FILE", "COMPRESS_FILE", "ENCRYPT_FILE", "DECRYPT_FILE", "CLOSE",
             "CREATE_DIRECTORY", "DELETE_DIRECTORY", "RENAME_DIRECTORY", "MOVE_DIRECTORY", "COPY_DIRECTORY", "DELETE_DIRECTORY_CONTENTS",
-            "SEND_FILE", "RECEIVE_FILE", "FILE_SEND", "FILE_RECEIVE", "HELP", "TYPE", "TARGET", "TRUE", "FALSE",
+            "COMPRESS_DIRECTORY", "ENCRYPT_DIRECTORY", "DECRYPT_DIRECTORY",
+            "SEND", "RECEIVE", "EMAIL", "SEND_FILE", "RECEIVE_FILE", "FILE_SEND", "FILE_RECEIVE", "HELP", "TYPE", "TARGET", "TRUE", "FALSE",
             "SINGLEQUOTE", "DOUBLEQUOTE", "SINGLEQUOTES", "DOUBLEQUOTES", "LF", "CR", "CRLF", "TILDE", "SEMICOLON", "COLON", "COMMA", "TAB", "PIPE",
             "ESCAPE_CHAR", "NULL_AS", "DATE_FORMAT", "STRICT_SCHEMA", "UTF16", "LATIN1", "UNICODE", "BACKSLASH_N", "EMPTY",
             "PASSWORD", "SHOW_PASSWORD", "OUTPUT", "INPUT", "PARALLEL", "RUN", "SCRIPT", "USE", "START", "STOP", "PAUSE",
             "START_DOCKER", "STOP_DOCKER", "PAUSE_DOCKER", "CLOSE_DOCKER",
             "BULK", "LOAD", "BATCHSIZE", "MAXERRORS", "FIELDTERMINATOR", "ROWTERMINATOR", "FIRSTROW", "DATA_SOURCE",
             "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND", "INCLUDE_NULL_VALUES", "WITHOUT_ARRAY_WRAPPER",
-            "LINEAGE", "SEND_EMAIL", "SUBJECT", "BODY", "ATTACH", "CC", "BCC",
             "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT",
             "SETS", "SESSION"
         };
@@ -112,5 +114,3 @@ namespace ETL_SQL.Common
         }
     }
 }
-
-

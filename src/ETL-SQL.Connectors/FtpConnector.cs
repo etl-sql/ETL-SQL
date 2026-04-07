@@ -74,18 +74,22 @@ namespace ETL_SQL.Connectors
             }));
         }
 
-        public Task UploadFileAsync(string localPath, string remotePath)
+        public Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
         {
             EnsureConnected();
-            var status = _client.UploadFile(localPath, remotePath);
+            var existsMode = overwrite ? FtpRemoteExists.Overwrite : FtpRemoteExists.Skip;
+            var status = _client.UploadFile(localPath, remotePath, existsMode);
+            if (status == FtpStatus.Skipped && !overwrite) throw new ExecutionException($"Remote file already exists (overwrite=OFF): {remotePath}");
             if (status == FtpStatus.Failed) throw new ExecutionException($"Failed to upload file to FTP: {remotePath}");
             return Task.CompletedTask;
         }
 
-        public Task DownloadFileAsync(string remotePath, string localPath)
+        public Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true)
         {
             EnsureConnected();
-            var status = _client.DownloadFile(localPath, remotePath);
+            var existsMode = overwrite ? FtpLocalExists.Overwrite : FtpLocalExists.Skip;
+            var status = _client.DownloadFile(localPath, remotePath, existsMode);
+            if (status == FtpStatus.Skipped && !overwrite) throw new ExecutionException($"Local file already exists (overwrite=OFF): {localPath}");
             if (status == FtpStatus.Failed) throw new ExecutionException($"Failed to download file from FTP: {remotePath}");
             return Task.CompletedTask;
         }

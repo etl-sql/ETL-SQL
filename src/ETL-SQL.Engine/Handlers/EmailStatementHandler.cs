@@ -58,14 +58,15 @@ namespace ETL_SQL.Engine.Handlers
             if (dataSource == null)
                 throw new ExecutionException("Email destination (dataSource) not resolved.");
 
-            // 2. Evaluate Email Fields
             var dummyRow = new Row();
             var toVal = await context.EvaluateValue(stmt.To, dummyRow);
+            var fromVal = await context.EvaluateValue(stmt.From, dummyRow);
             var subjectVal = await context.EvaluateValue(stmt.Subject, dummyRow);
             var bodyVal = await context.EvaluateValue(stmt.Body, dummyRow);
 
             var row = new Row();
             row["To"] = toVal?.ToString() ?? "";
+            row["From"] = fromVal?.ToString() ?? "";
             row["Subject"] = subjectVal?.ToString() ?? "";
             row["Body"] = bodyVal?.ToString() ?? "";
 

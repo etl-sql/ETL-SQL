@@ -81,8 +81,11 @@ namespace ETL_SQL.Common
         /// <summary>
         /// Encrypts a file on disk using a password.
         /// </summary>
-        public static void EncryptFile(string inputFile, string outputFile, string password, HashAlgorithmName? algo = null)
+        public static void EncryptFile(string inputFile, string outputFile, string password, bool overwrite, HashAlgorithmName? algo = null)
         {
+            if (File.Exists(outputFile) && !overwrite)
+                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
+
             var hashAlgo = algo ?? HashAlgorithmName.SHA256;
             byte[] salt = RandomNumberGenerator.GetBytes(SaltSize);
             byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
@@ -109,8 +112,11 @@ namespace ETL_SQL.Common
         /// <summary>
         /// Decrypts a file on disk using a password.
         /// </summary>
-        public static void DecryptFile(string inputFile, string outputFile, string password, HashAlgorithmName? algo = null)
+        public static void DecryptFile(string inputFile, string outputFile, string password, bool overwrite, HashAlgorithmName? algo = null)
         {
+            if (File.Exists(outputFile) && !overwrite)
+                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
+
             var hashAlgo = algo ?? HashAlgorithmName.SHA256;
             using (var fsIn = new FileStream(inputFile, FileMode.Open))
             {
@@ -134,8 +140,11 @@ namespace ETL_SQL.Common
         /// <summary>
         /// Encrypts a file using an SSH (RSA) public key.
         /// </summary>
-        public static void EncryptFileWithSsh(string inputFile, string outputFile, string keyFile)
+        public static void EncryptFileWithSsh(string inputFile, string outputFile, string keyFile, bool overwrite)
         {
+            if (File.Exists(outputFile) && !overwrite)
+                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
+
             string pem = File.ReadAllText(keyFile);
             using var rsa = RSA.Create();
             rsa.ImportFromPem(pem);
@@ -167,8 +176,11 @@ namespace ETL_SQL.Common
         /// <summary>
         /// Decrypts a file using an SSH (RSA) private key.
         /// </summary>
-        public static void DecryptFileWithSsh(string inputFile, string outputFile, string keyFile, string? passphrase = null)
+        public static void DecryptFileWithSsh(string inputFile, string outputFile, string keyFile, bool overwrite, string? passphrase = null)
         {
+            if (File.Exists(outputFile) && !overwrite)
+                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
+
             string pem = File.ReadAllText(keyFile);
             using var rsa = RSA.Create();
             if (string.IsNullOrEmpty(passphrase)) rsa.ImportFromPem(pem);

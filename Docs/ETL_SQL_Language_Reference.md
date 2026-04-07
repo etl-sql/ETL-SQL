@@ -45,8 +45,50 @@ For delimited text files.
 - **ALGORITHM**: `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` — algorithm to use for encryption/decryption. (Default: `SHA2_256`)
 - **KEYFILE**: Path to the private key file for public-key authentication. (Required if ENCRYPT=ON)
 - **PASSPHRASE**: The passphrase for the private key file (if any). (Required if ENCRYPT=ON)
+- **FORMAT**: `DELIMITED` (Default) or `FIXED`.
+- **TEMPLATE**: The name of an in-memory table (e.g. `#temp`) used to define field offsets for `FORMAT='FIXED'`.
+- **TRIM**: `ON`, `OFF` — Removes leading/trailing spaces from fields. (Default: `ON` for FIXED, `OFF` for DELIMITED).
 
-#### MSSQL (or SQLSERVER)
+#### Fixed-Width Data Processing
+
+ETL-SQL supports processing non-delimited, fixed-width text files by leveraging a template table to define the layout.
+
+**Setting up a Fixed-Width Connection:**
+
+1. **Define the Template**: Create an in-memory table where the column types or metadata specify the widths.
+2. **Create the Connection**: Use `FORMAT='FIXED'` and `TEMPLATE=#YourTable`.
+
+**Width Definition Rules:**
+- **Data Type Length**: The engine automatically uses the length from `VARCHAR(N)`, `CHAR(N)`, or `NVARCHAR(N)`.
+- **Metadata Tag**: Use the `/* @width: N */` comment to explicitly set a width (overrides data type length).
+
+*Example:*
+```sql
+-- 1. Define the layout
+CREATE TABLE #EmployeeLayout (
+    ID INT /* @width: 5 */,
+    Name VARCHAR(20),
+    DeptCode CHAR(3),
+    Active BIT /* @width: 1 */
+);
+
+-- 2. Connect to the fixed-width file
+CREATE CONNECTION employees ON FLATFILE('employees.dat')
+WITH (
+    FORMAT='FIXED',
+    TEMPLATE=#EmployeeLayout,
+    HEADER='OFF',
+    TRIM='ON'
+);
+
+-- 3. Query as normal
+SELECT * FROM employees;
+```
+
+> [!IMPORTANT]
+> When using `FORMAT='FIXED'`, the `TEMPLATE` option is **mandatory**. The engine will raise an error if it cannot determine the width for every column in the template.
+
+---
 For Microsoft SQL Server.
 `CREATE CONNECTION <name> ON MSSQL('<connection_string>') [WITH(<options>)];`  
 -- OR --  
@@ -1118,6 +1160,30 @@ Removes a named set from the current session.
 DROP SETS [IF EXISTS] !<name>;
 ```
 
+### Engine Configuration
+
+#### SET WHAT_IF
+Toggles the engine's "dry-run" mode. When `ON`, all destructive operations (e.g., `INSERT`, `UPDATE`, `DELETE`, `FILE_OPERATION`, `SEND_EMAIL`) are logged to the console but not actually executed. This is useful for validating script logic, variable evaluation, and lineage tracing without modifying data or external resources.
+
+*Syntax:*
+`SET WHAT_IF { ON | OFF };`
+
+*Default:* `OFF`
+
+*Example:*
+```sql
+-- Safely test a delete operation
+SET WHAT_IF ON;
+
+DELETE FROM m.dbo.ArchiveEmployees 
+WHERE TerminatedDate < '2024-01-01';
+
+-- Lineage is still tracked, and logs will show which rows WOULD be deleted.
+-- Set back to OFF to perform actual data modifications.
+SET WHAT_IF OFF;
+```
+
+
 *Example:*
 ```sql
 DROP SETS !DEV;
@@ -1428,61 +1494,87 @@ SELECT FileName, Size FROM REMOTE_FILE_LIST('cloud_store', 'backups/');
 ### File Transfer
 Transfers files between the local machine and a remote connector (SFTP, FTP, Azure Blob).
 
-#### SEND_FILE
+#### SEND FILE
 Uploads a local file to a remote connection.
 
-*Syntax:*
-`SEND_FILE '<local_path>', <connection_name>, '<remote_path>';`
-
+*Syntax (SQL Style):*
 ```sql
-SEND_FILE 'C:\Exports\report.csv', my_sftp, '/uploads/report.csv';
+SEND FILE '<local_path>' TO '<remote_path>' AT <connection_name> [WITH(OVERWRITE=ON|OFF)];
 ```
 
-#### RECEIVE_FILE
+*Syntax (Function Style):*
+```sql
+SEND_FILE('<local_path>', <connection_name>, '<remote_path>' [, ON|OFF]);
+```
+
+*Example:*
+```sql
+SEND FILE 'C:\Exports\report.csv' TO '/uploads/report.csv' AT my_sftp WITH(OVERWRITE=ON);
+```
+
+#### RECEIVE FILE
 Downloads a file from a remote connection to the local machine.
 
-*Syntax:*
-`RECEIVE_FILE <connection_name>, '<remote_path>', '<local_path>';`
-
+*Syntax (SQL Style):*
 ```sql
-RECEIVE_FILE my_sftp, '/data/input.csv', 'C:\Imports\input.csv';
+RECEIVE FILE FROM '<remote_path>' TO '<local_path>' AT <connection_name> [WITH(OVERWRITE=ON|OFF)];
+```
+
+*Syntax (Function Style):*
+```sql
+RECEIVE_FILE('<remote_path>', <connection_name>, '<local_path>' [, ON|OFF]);
+```
+
+*Example:*
+```sql
+RECEIVE FILE FROM '/data/input.csv' TO 'C:\Imports\input.csv' AT my_sftp WITH(OVERWRITE=OFF);
 ```
 
 ### Email Operations
 
-#### SEND_EMAIL
-Sends an automated email (requires a configured `SMTP` connection).
+#### SEND EMAIL
+Sends an automated email (requires a configured `SMTP` connection). Supports flexible, any-order SQL-style block syntax.
 
-*Syntax:*
+*Syntax (SQL Style):*
 ```sql
-SEND_EMAIL TO '<to_address>'
-SUBJECT '<subject>'
-BODY '<body>'
-[CC '<cc_address>' [, '<cc2>', ...]]
-[BCC '<bcc_address>' [, '<bcc2>', ...]]
-[ATTACH '<file_path>' [, '<file2>', ...]]
-[AT <smtp_connection>];
+SEND EMAIL 
+    TO '<to_address>'
+    FROM '<from_address>'
+    SUBJECT '<subject>'
+    BODY '<body>'
+    [CC '<cc_address>' [, '<cc2>', ...]]
+    [BCC '<bcc_address>' [, '<bcc2>', ...]]
+    [ATTACH '<file_path>' [, '<file2>', ...]]
+    [AT <smtp_connection>];
+```
+
+*Syntax (Function Style):*
+```sql
+SEND_EMAIL(<smtp_connection>, '<to>', '<from>', '<subject>', '<body>' [, '<cc>', '<bcc>', '<attach>']);
 ```
 
 - **TO** *(required)*: Recipient email address.
+- **FROM** *(required)*: Sender email address.
 - **SUBJECT** *(required)*: Email subject line.
 - **BODY** *(required)*: Email body text.
 - **CC**: One or more carbon-copy recipients.
 - **BCC**: One or more blind carbon-copy recipients.
 - **ATTACH**: One or more local file paths to attach.
-- **AT**: The name of the `SMTP` connection to use. Required if no default SMTP connection is configured.
+- **AT**: The name of the `SMTP` connection to use.
 
 *Example:*
 ```sql
 CREATE CONNECTION mailer ON SMTP('smtp.company.com')
     WITH(PORT=587, USERNAME='alerts@company.com', PASSWORD='secret', USE_SSL=TRUE);
 
-SEND_EMAIL TO 'admin@company.com'
-SUBJECT 'ETL Job Completed'
-BODY 'All records processed successfully.'
-CC 'manager@company.com'
-ATTACH 'C:\Reports\summary.xlsx'
-AT mailer;
+-- Clauses can be in any order
+SEND EMAIL 
+    FROM 'alerts@company.com'
+    TO 'admin@company.com'
+    SUBJECT 'ETL Job Completed'
+    BODY 'All records processed successfully.'
+    ATTACH 'C:\Reports\summary.xlsx'
+    AT mailer;
 ```
 
 ### Aggregation
@@ -1800,23 +1892,43 @@ END CATCH;
 ## Automation 
 
 ### File & Directory Operations
-Specialized commands for filesystem management. Supports **Connection-based Path Resolution** (e.g., `MyDir + '/file.csv'` where `MyDir` is a connection name).
+Specialized statements for filesystem management. Supports both a function-like syntax and a SQL-like syntax. Paths support **Connection-based Path Resolution** (e.g., `MyDir + '/file.csv'`).
 
-- `COPY_FILE('src', 'dest')`
-- `MOVE_FILE('src', 'dest')`
-- `RENAME_FILE('src', 'new_name')`
+#### Standard File Operations
+- `COPY FILE <source> TO <destination> [WITH(OVERWRITE=ON|OFF)];`
+- `MOVE FILE <source> TO <destination> [WITH(OVERWRITE=ON|OFF)];`
+- `RENAME FILE <source> TO <new_name> [WITH(OVERWRITE=ON|OFF)];`
+- `DELETE FILE <path>;`
+- `COMPRESS FILE <source> TO <destination> [WITH(OVERWRITE=ON|OFF)];`
+- `ENCRYPT FILE <source> TO <destination> [WITH(OVERWRITE=ON|OFF)];`
+- `DECRYPT FILE <source> TO <destination> [WITH(OVERWRITE=ON|OFF)];`
+
+#### Standard Directory Operations
+- `CREATE DIRECTORY <path> [WITH(OVERWRITE=ON|OFF)];`
+- `COPY DIRECTORY <source> TO <destination> [WITH(OVERWRITE=ON|OFF)];`
+- `MOVE DIRECTORY <source> TO <destination> [WITH(OVERWRITE=ON|OFF)];`
+- `RENAME DIRECTORY <source> TO <new_name> [WITH(OVERWRITE=ON|OFF)];`
+- `DELETE DIRECTORY <path>;`
+- `DELETE DIRECTORY_CONTENTS <path> [WITH(RECURSIVE=ON|OFF)];`
+- `COMPRESS DIRECTORY <source> TO <destination.zip> [WITH(OVERWRITE=ON|OFF)];`
+- `ENCRYPT DIRECTORY <source> TO <destination> PASSWORD('<pwd>') [WITH(OVERWRITE=ON|OFF)];`
+- `DECRYPT DIRECTORY <source> TO <destination> PASSWORD('<pwd>') [WITH(OVERWRITE=ON|OFF)];`
+
+#### Underscore-based "Function" Syntax (Backward Compatible)
+The following also support an optional 3rd parameter for `OVERWRITE` (default `ON`):
+- `COPY_FILE('src', 'dest', [ON|OFF])`
+- `MOVE_FILE('src', 'dest', [ON|OFF])`
+- `RENAME_FILE('src', 'new_name', [ON|OFF])`
 - `DELETE_FILE('path')`
-- `COMPRESS_FILE('src'[, 'dest'])`
-- `ENCRYPT_FILE('src'[, 'dest'])` (Uses master password)
-- `DECRYPT_FILE('src'[, 'dest'])`
-
-### Directory Management
-- `CREATE_DIRECTORY('path')`
+- `COMPRESS_FILE('src', 'dest', [ON|OFF])`
+- `ENCRYPT_FILE('src', 'dest', [ON|OFF])`
+- `DECRYPT_FILE('src', 'dest', [ON|OFF])`
+- `CREATE_DIRECTORY('path', [ON|OFF])`
 - `DELETE_DIRECTORY('path')`
-- `RENAME_DIRECTORY('path', 'new_name')`
-- `MOVE_DIRECTORY('path', 'dest')`
-- `COPY_DIRECTORY('src', 'dest')`
-- `DELETE_DIRECTORY_CONTENTS('path')`
+- `DELETE_DIRECTORY_CONTENTS('path', [ON|OFF])`
+- `COMPRESS_DIRECTORY('src', 'dest', [ON|OFF])`
+- `ENCRYPT_DIRECTORY('src', 'dest', 'pwd', [ON|OFF])`
+- `DECRYPT_DIRECTORY('src', 'dest', 'pwd', [ON|OFF])`
 
 ### SSH Key Pair Generation
 Generate cryptographic SSH key pairs for secure file encryption and SFTP authentication.
@@ -1971,3 +2083,121 @@ SELECT
 INTO #TaggedUsers
 FROM m.Users /* @owner: SecurityTeam; */;
 ```
+
+---
+
+## Interactive Terminal Editor (`ui edit`)
+
+Experience a modern, terminal-based development environment designed for high-productivity ETL scripting. The editor provides real-time feedback, intelligent assistance, and professional-grade text editing features directly in your console.
+
+### Launching the Editor
+Open any `.etlsql` script (or start a new one) by passing the `--ui edit` flag to the application:
+
+```bash
+dotnet run --project src/ETL-SQL.App -- --ui edit MyScript.etlsql
+```
+
+### Key Features
+- **Live Results Grid**: Interactive paging and multi-result set navigation. Focus the results pane with `F3` to scroll through large datasets.
+- **Vibrant Syntax Highlighting**: Context-aware coloring for DML, DDL, Control Flow, and specific ETL keywords.
+- **Intelligent Autocomplete**: Deep integration with data source schemas, variables, and file systems. Trigger manually with `Ctrl+Space`.
+- **Execution Profiling**: Toggle the performance panel with `F4` to see millisecond-level metrics for every step of your script.
+- **Multi-Cursor Editing**: Edit multiple lines simultaneously using `Alt+Up/Down` to add vertical cursors.
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+| :--- | :--- |
+| **`F1`** | **Help Overlay** - View all shortcuts and commands. |
+| **`F5`** | **Run Script** - Execute the entire current buffer. |
+| **`Shift+F5`** | **Run Statement** - Execute only the line at the cursor. |
+| **`Ctrl+Space`** | **Autocomplete** - Trigger IntelliSense for keywords, tables, or columns. |
+| **`Ctrl+S`** | **Save** - Persist changes to disk (use `Shift+Ctrl+S` for Save As). |
+| **`Ctrl+I` / `Alt+F`** | **Format Document** - Standardize indentation and keyword casing. |
+| **`F3`** | **Focus Toggle** - Switch focus between the Editor and the Results Grid. |
+| **`F4`** | **Performance Toggle** - Switch between Results and Performance metrics. |
+| **`Ctrl+F`** | **Find** - Search for text within the current buffer. |
+| **`Ctrl+H`** | **Replace** - Search and replace text (supports case-insensitive matching). |
+| **`Ctrl+P`** | **Export Results** - Save the last result set to a CSV file. |
+| **`Ctrl+Z` / `Ctrl+Y`** | **Undo / Redo** - Revert or re-apply text changes. |
+| **`Ctrl+D`** | **Duplicate Line** - Copy the current line immediately below. |
+| **`Ctrl+K`** | **Delete Line** - Remove the current line entirely. |
+| **`Alt+Up/Down`** | **Multi-Cursor** - Add another cursor on the line above or below. |
+| **`Esc`** | **Clear** - Remove multi-cursors or hide overlays. |
+| **`Ctrl+Q`** | **Exit** - Close the editor (prompts to save if modified). |
+
+---
+
+## VS Code Extension Support
+
+For developers who prefer a full IDE experience, ETL-SQL includes a dedicated Visual Studio Code extension powered by a high-performance Language Server.
+
+### Installation
+The extension is currently available in **Developer Mode**. To install it locally:
+1. Open PowerShell as **Administrator**.
+2. Create a directory junction from the source folder to your VS Code extensions directory:
+   ```powershell
+   New-Item -ItemType Junction -Path "$HOME\.vscode\extensions\etl-sql-vscode" -Target "C:\Users\chuck\scratch\ETL-SQL\src\etl-sql-vscode"
+   ```
+3. Restart Visual Studio Code.
+
+### Configuration
+Go to VS Code Settings (`Ctrl+,`) and search for **ETL-SQL** to configure the following:
+- **Server Path**: The absolute path to the `ETL-SQL.LanguageServer.exe` binary.
+- **Executable Path**: The absolute path to the main `ETL-SQL.exe` engine.
+
+### Features
+- **Real-time Diagnostics**: Syntax and linter errors appear in the "Problems" tab as you type.
+- **Lineage Hover**: Hover over any column or table to see a visual graph of its ancestry and metadata.
+- **Smart Formatting**: Use `Alt+Shift+F` to format your scripts according to engine standards.
+- **Direct Execution**: Run the current script or selection using integrated command palette actions.
+
+---
+
+## Native SQL Pushdown & Performance
+
+ETL-SQL is designed with a **"Pushdown-First"** philosophy. Whenever possible, the engine delegates computation to the source database system to minimize data movement and leverage remote indexing.
+
+### How Automatic Pushdown Works
+The engine analyzes your script and automatically identifies blocks that can be executed as a single unit on the remote server.
+
+- **SELECT & Filters**: Simple `SELECT` statements with `WHERE` and `JOIN` clauses on a single database connection are pushed down entirely.
+- **INSERT...SELECT**: If both the source and target tables reside on the same database connection, the engine executes a `INSERT INTO ... SELECT ...` statement directly, resulting in **Zero-Copy** transfers.
+- **MERGE**: Remote pushdown is supported for MSSQL when both source and target are on the same connection.
+- **UPDATE & DELETE**: These are automatically pushed to the remote server using optimized SQL.
+
+### Manual Pushdown (`EXECUTE ... BEGIN ... END`)
+In cases where you need to use highly specific database features (like Recursive CTEs, specialized hints, or complex stored procedures) that may not be fully represented in ETL-SQL syntax, you can use a manual pushdown block:
+
+```sql
+-- This block is passed EXACTLY as written to the 'prod_db' connection
+EXECUTE prod_db 
+BEGIN
+    WITH RecursiveCTE AS (
+        SELECT id, parent_id FROM Categories WHERE parent_id IS NULL
+        UNION ALL
+        SELECT c.id, c.parent_id FROM Categories c 
+        INNER JOIN RecursiveCTE r ON c.parent_id = r.id
+    )
+    SELECT * INTO #CategoryHierarchy FROM RecursiveCTE;
+END;
+```
+
+### Capturing Pushdown Results
+You can capture the output of a pushdown block into a local temporary table using the `INTO` syntax:
+
+```sql
+EXECUTE my_db INTO #RemoteStats
+BEGIN
+    SELECT Category, COUNT(*) as Total 
+    FROM Sales 
+    GROUP BY Category;
+END;
+
+-- #RemoteStats is now available as a standard ETL-SQL result set
+SELECT * FROM #RemoteStats ORDER BY Total DESC;
+```
+
+### Verification
+To verify if a statement was pushed down, check the execution logs (or the "Messages" tab in the UI). You look for the line:
+`Strategy: Remote SQL Pushdown (Insert from Select)` or similar "Pushdown" indicators. If these are absent, the engine is streaming data through local memory.

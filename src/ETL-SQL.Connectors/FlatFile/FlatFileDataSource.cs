@@ -36,6 +36,15 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly bool _compress;
         private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
+        private readonly List<FixedWidthColumn>? _fixedColumns;
+        private readonly bool _trim = true;
+
+        private class FixedWidthColumn
+        {
+            public string Name { get; set; } = "";
+            public int Start { get; set; }
+            public int Length { get; set; }
+        }
 
         /// <summary>The physical or logical path to the data source.</summary>
         public string Path => _filePath;
@@ -52,7 +61,8 @@ namespace ETL_SQL.Connectors.FlatFile
         /// </summary>
         /// <param name="filePath">The path to the delimited file.</param>
         /// <param name="options">Optional configuration parameters.</param>
-        public FlatFileDataSource(string filePath, Dictionary<string, string>? options = null)
+        /// <param name="templateSchema">Optional schema template for fixed-width or validation.</param>
+        public FlatFileDataSource(string filePath, Dictionary<string, string>? options = null, IEnumerable<ColumnDefinition>? templateSchema = null)
         {
             _filePath = filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n');
             _options = options;
@@ -165,9 +175,66 @@ namespace ETL_SQL.Connectors.FlatFile
 
                 if (options.TryGetValue("COMPRESS", out var comp))
                     _compress = comp.ToUpperInvariant() == "ON" || comp.ToUpperInvariant() == "TRUE";
+
+                if (options.TryGetValue("TRIM", out var tr))
+                    _trim = tr.ToUpperInvariant() == "ON" || tr.ToUpperInvariant() == "TRUE";
+
+                if (options.TryGetValue("FORMAT", out var fmt) && fmt.ToUpperInvariant() == "FIXED")
+                {
+                    if (templateSchema == null)
+                        throw new ExecutionException("TEMPLATE table required for FORMAT='FIXED'.");
+
+                    _fixedColumns = new List<FixedWidthColumn>();
+                    int currentStart = 0;
+                    foreach (var col in templateSchema)
+                    {
+                        int? width = GetWidthFromColumn(col);
+                        if (!width.HasValue)
+                            throw new ExecutionException($"Width not defined for fixed-width column '{col.ColumnName}'. Use VARCHAR(N) or /* @width: N */.");
+
+                        _fixedColumns.Add(new FixedWidthColumn
+                        {
+                            Name = col.ColumnName,
+                            Start = currentStart,
+                            Length = width.Value
+                        });
+                        currentStart += width.Value;
+                    }
+                }
             }
 
             _encryption = new EncryptionOptions(options);
+        }
+
+        private int? GetWidthFromColumn(ColumnDefinition col)
+        {
+            if (col.Metadata.TryGetValue("width", out var wStr) && int.TryParse(wStr, out var w))
+                return w;
+
+            var match = Regex.Match(col.DataType, @"\((\d+)\)");
+            if (match.Success && int.TryParse(match.Groups[1].Value, out var typeWidth))
+                return typeWidth;
+
+            return null;
+        }
+
+        private string[] SplitFixedWidthLine(string line)
+        {
+            if (_fixedColumns == null) return Array.Empty<string>();
+            var result = new string[_fixedColumns.Count];
+            for (int i = 0; i < _fixedColumns.Count; i++)
+            {
+                var col = _fixedColumns[i];
+                if (col.Start >= line.Length)
+                {
+                    result[i] = "";
+                    continue;
+                }
+                int len = Math.Min(col.Length, line.Length - col.Start);
+                var val = line.Substring(col.Start, len);
+                result[i] = _trim ? val.Trim() : val;
+            }
+            return result;
         }
 
         /// <summary>Captures a snapshot (no-op for FlatFile).</summary>
@@ -326,7 +393,7 @@ namespace ETL_SQL.Connectors.FlatFile
             if (string.IsNullOrWhiteSpace(headerLine))
                 yield break;
 
-            var headers = SplitLine(headerLine);
+            var headers = _fixedColumns != null ? SplitFixedWidthLine(headerLine) : SplitLine(headerLine);
             var currentBatch = new DataTable();
 
             if (_hasHeader)
@@ -335,7 +402,9 @@ namespace ETL_SQL.Connectors.FlatFile
             }
             else
             {
-                var colNames = Enumerable.Range(1, headers.Length).Select(i => $"Col{i}").ToList();
+                var colNames = _fixedColumns != null 
+                    ? _fixedColumns.Select(c => c.Name).ToList() 
+                    : Enumerable.Range(1, headers.Length).Select(i => $"Col{i}").ToList();
                 currentBatch.SetColumns(colNames);
                 currentBatch.AddRow(CreateRow(headers, currentBatch));
             }
@@ -419,7 +488,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
         private void ProcessDataLine(string line, DataTable batch, List<string> actualHeaders)
         {
-            var values = SplitLine(line);
+            var values = _fixedColumns != null ? SplitFixedWidthLine(line) : SplitLine(line);
             batch.AddRow(CreateRow(values, batch));
         }
 

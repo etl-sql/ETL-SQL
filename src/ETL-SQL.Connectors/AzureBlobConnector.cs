@@ -117,17 +117,21 @@ namespace ETL_SQL.Connectors
         }
 
         /// <summary>Uploads a local file to Azure Blob Storage.</summary>
-        public async Task UploadFileAsync(string localPath, string remotePath)
+        public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
         {
             var container = GetContainer();
             var blobClient = container.GetBlobClient(remotePath);
             using var fileStream = File.OpenRead(localPath);
-            await blobClient.UploadAsync(fileStream, overwrite: true);
+            await blobClient.UploadAsync(fileStream, overwrite: overwrite);
         }
 
         /// <summary>Downloads a file from Azure Blob Storage to a local path.</summary>
-        public async Task DownloadFileAsync(string remotePath, string localPath)
+        public async Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true)
         {
+            if (!overwrite && File.Exists(localPath))
+            {
+                throw new ExecutionException($"Local file already exists (overwrite=OFF): {localPath}");
+            }
             var container = GetContainer();
             var blobClient = container.GetBlobClient(remotePath);
             await blobClient.DownloadToAsync(localPath);

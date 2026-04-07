@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Data;
+using ETL_SQL.Core;
 using ETL_SQL.Connectors.Json;
 using ETL_SQL.Connectors.Xml;
 
@@ -82,12 +83,16 @@ namespace ETL_SQL.Connectors.FlatFile
 
         /// <summary>Creates a new FlatFile, JSON, or XML data source based on the file extension.</summary>
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null)
+             => CreateDataSource(connectionString, options, null);
+
+        /// <summary>Creates a new FlatFile, JSON, or XML data source with an optional template schema.</summary>
+        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options, IEnumerable<ColumnDefinition>? templateSchema)
         {
             if (connectionString.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                 return new JsonDataSource(connectionString, options);
             if (connectionString.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
                 return new XmlDataSource(connectionString, options);
-            return new FlatFileDataSource(connectionString, options);
+            return new FlatFileDataSource(connectionString, options, templateSchema);
         }
 
         /// <summary>Returns the logical table name from the file system path.</summary>

@@ -23,6 +23,14 @@ namespace ETL_SQL.Engine.Handlers
             string localPath = context.ResolvePath(localPathVal);
             string remotePath = (await context.EvaluateValue(stmt.RemotePath, new Row()))?.ToString() ?? "";
             
+            bool overwrite = true;
+            if (stmt.Overwrite != null)
+            {
+                var ovVal = await context.EvaluateValue(stmt.Overwrite, new Row());
+                if (ovVal is bool b) overwrite = b;
+                else if (ovVal != null) overwrite = ovVal.ToString()?.ToUpperInvariant() == "ON" || ovVal.ToString()?.ToUpperInvariant() == "TRUE";
+            }
+
             if (!context.Connections.TryGetValue(stmt.ConnectionName, out var ds) || ds is not IRemoteFileSystem remoteFs)
             {
                 throw new ExecutionException($"Connection '{stmt.ConnectionName}' not found or does not support remote file transfer.");
@@ -30,7 +38,7 @@ namespace ETL_SQL.Engine.Handlers
 
             if (stmt.Type == FileTransferType.Send)
             {
-                Logger.WriteLine($"SENDING: {localPath} -> {stmt.ConnectionName}:{remotePath}", ConsoleColor.Cyan);
+                Logger.WriteLine($"SENDING: {localPath} -> {stmt.ConnectionName}:{remotePath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
                 
                 if (context.IsWhatIf)
                 {
@@ -39,12 +47,12 @@ namespace ETL_SQL.Engine.Handlers
                 }
 
                 if (!File.Exists(localPath)) throw new ExecutionException($"Local file not found: {localPath}");
-                await remoteFs.UploadFileAsync(localPath, remotePath);
+                await remoteFs.UploadFileAsync(localPath, remotePath, overwrite);
                 Logger.WriteLine("Upload complete.", ConsoleColor.Green);
             }
             else // Receive
             {
-                Logger.WriteLine($"RECEIVING: {stmt.ConnectionName}:{remotePath} -> {localPath}", ConsoleColor.Cyan);
+                Logger.WriteLine($"RECEIVING: {stmt.ConnectionName}:{remotePath} -> {localPath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
                 
                 if (context.IsWhatIf)
                 {
@@ -54,7 +62,7 @@ namespace ETL_SQL.Engine.Handlers
 
                 var dir = Path.GetDirectoryName(localPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
-                await remoteFs.DownloadFileAsync(remotePath, localPath);
+                await remoteFs.DownloadFileAsync(remotePath, localPath, overwrite);
                 Logger.WriteLine("Download complete.", ConsoleColor.Green);
             }
         }

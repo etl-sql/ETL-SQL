@@ -115,17 +115,25 @@ namespace ETL_SQL.Connectors
             }));
         }
 
-        public async Task UploadFileAsync(string localPath, string remotePath)
+        public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
         {
             EnsureConnected();
+            if (!overwrite && await Task.Run(() => Client.Exists(remotePath)))
+            {
+                throw new ExecutionException($"Remote file already exists: {remotePath}");
+            }
             using var fileStream = File.OpenRead(localPath);
             await Task.Run(() => Client.UploadFile(fileStream, remotePath));
         }
 
-        public async Task DownloadFileAsync(string remotePath, string localPath)
+        public async Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true)
         {
             EnsureConnected();
-            using var fileStream = File.Create(localPath);
+            if (!overwrite && File.Exists(localPath))
+            {
+                throw new ExecutionException($"Local file already exists: {localPath}");
+            }
+            using var fileStream = File.Open(localPath, overwrite ? FileMode.Create : FileMode.CreateNew);
             await Task.Run(() => Client.DownloadFile(remotePath, fileStream));
         }
 

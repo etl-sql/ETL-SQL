@@ -4,16 +4,16 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
-using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
-
 using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.App;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests
 {
-    public class FileTransferTests
+    public class RemoteTransferTests
     {
         private class MockRemoteFileSystem : IRemoteFileSystem, IDataSource, IConnector
         {
@@ -37,12 +37,17 @@ namespace ETL_SQL.Tests
 
             public Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
             {
+                if (!overwrite && RemoteFiles.ContainsKey(remotePath))
+                    throw new Exception("Remote file already exists");
                 RemoteFiles[remotePath] = File.ReadAllText(localPath);
                 return Task.CompletedTask;
             }
 
             public Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true)
             {
+                if (!overwrite && File.Exists(localPath))
+                    throw new Exception("Local file already exists");
+                
                 if (RemoteFiles.TryGetValue(remotePath, out var content))
                 {
                     File.WriteAllText(localPath, content);
@@ -85,52 +90,78 @@ namespace ETL_SQL.Tests
             public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }
 
+        private async Task RunScriptAsync(Evaluator evaluator, string sql)
+        {
+            var lexer = new Lexer(sql);
+            var tokens = lexer.Tokenize();
+            var parser = new Parser(tokens, sql);
+            var script = parser.Parse();
+            if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+                throw new Exception(script.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error).Message);
+            await evaluator.Evaluate(script);
+        }
+
         [Fact]
-        public async Task Test_FileSend_And_Receive()
+        public async Task Test_SqlStyle_FileTransfer()
         {
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = services.GetRequiredService<Evaluator>();
             var mockFs = new MockRemoteFileSystem();
             evaluator.Connections["MYREMOTE"] = mockFs;
 
-            string localFile = Path.Combine(Path.GetTempPath(), "test_upload.txt");
-            string downloadFile = Path.Combine(Path.GetTempPath(), "test_download.txt");
-            File.WriteAllText(localFile, "Hello Remote World");
+            string localFile = Path.Combine(Path.GetTempPath(), "sql_upload.txt");
+            string downloadFile = Path.Combine(Path.GetTempPath(), "sql_download.txt");
+            File.WriteAllText(localFile, "Initial Content");
 
-            // 1. FILE_SEND
-            string sqlSend = $"FILE_SEND '{localFile.Replace("\\", "\\\\")}', MYREMOTE, 'remote/test.txt'";
-            var lexerSend = new Lexer(sqlSend);
-            var parserSend = new Parser(lexerSend.Tokenize());
-            var scriptSend = parserSend.Parse();
-            await evaluator.EvaluateStatement(scriptSend.Statements[0]);
+            // 1. SEND FILE (Initial)
+            await RunScriptAsync(evaluator, $"SEND FILE '{localFile.Replace("\\", "\\\\")}' TO 'remote.txt' AT MYREMOTE;");
+            Assert.Equal("Initial Content", mockFs.RemoteFiles["remote.txt"]);
 
-            Assert.True(mockFs.RemoteFiles.ContainsKey("remote/test.txt"));
-            Assert.Equal("Hello Remote World", mockFs.RemoteFiles["remote/test.txt"]);
+            // 2. SEND FILE (Overwrite ON)
+            File.WriteAllText(localFile, "New Content");
+            await RunScriptAsync(evaluator, $"SEND FILE '{localFile.Replace("\\", "\\\\")}' TO 'remote.txt' AT MYREMOTE WITH(OVERWRITE=ON);");
+            Assert.Equal("New Content", mockFs.RemoteFiles["remote.txt"]);
 
-            // 2. REMOTE_FILE_LIST
-            string sqlList = "SELECT * FROM REMOTE_FILE_LIST('MYREMOTE', 'remote/')";
-            var lexerList = new Lexer(sqlList);
-            var parserList = new Parser(lexerList.Tokenize());
-            var scriptList = parserList.Parse();
-            var results = new List<DataTable>();
-            await foreach (var batch in evaluator.ExecuteQuery(scriptList.Statements[0])) results.Add(batch);
+            // 3. SEND FILE (Overwrite OFF - Success if not exists)
+            await RunScriptAsync(evaluator, $"SEND FILE '{localFile.Replace("\\", "\\\\")}' TO 'new_remote.txt' AT MYREMOTE WITH(OVERWRITE=OFF);");
+            Assert.True(mockFs.RemoteFiles.ContainsKey("new_remote.txt"));
 
-            Assert.Single(results);
-            Assert.Contains(results[0].Rows, r => r["Name"].ToString() == "remote/test.txt");
+            // 4. SEND FILE (Overwrite OFF - Failure if exists)
+            await Assert.ThrowsAsync<Exception>(async () => 
+                await RunScriptAsync(evaluator, $"SEND FILE '{localFile.Replace("\\", "\\\\")}' TO 'remote.txt' AT MYREMOTE WITH(OVERWRITE=OFF);"));
 
-            // 3. FILE_RECEIVE
-            string sqlReceive = $"FILE_RECEIVE MYREMOTE, 'remote/test.txt', '{downloadFile.Replace("\\", "\\\\")}'";
-            var lexerReceive = new Lexer(sqlReceive);
-            var parserReceive = new Parser(lexerReceive.Tokenize());
-            var scriptReceive = parserReceive.Parse();
-            await evaluator.EvaluateStatement(scriptReceive.Statements[0]);
-
+            // 5. RECEIVE FILE
+            if (File.Exists(downloadFile)) File.Delete(downloadFile);
+            await RunScriptAsync(evaluator, $"RECEIVE FILE FROM 'remote.txt' TO '{downloadFile.Replace("\\", "\\\\")}' AT MYREMOTE;");
             Assert.True(File.Exists(downloadFile));
-            Assert.Equal("Hello Remote World", File.ReadAllText(downloadFile));
+            Assert.Equal("New Content", File.ReadAllText(downloadFile));
+
+            // Clean up
+            if (File.Exists(localFile)) File.Delete(localFile);
+            if (File.Exists(downloadFile)) File.Delete(downloadFile);
+        }
+
+        [Fact]
+        public async Task Test_FunctionStyle_FileTransfer()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = services.GetRequiredService<Evaluator>();
+            var mockFs = new MockRemoteFileSystem();
+            evaluator.Connections["MYREMOTE"] = mockFs;
+
+            string localFile = Path.Combine(Path.GetTempPath(), "func_upload.txt");
+            File.WriteAllText(localFile, "Func Content");
+
+            // 1. SEND_FILE(local, conn, remote, over)
+            await RunScriptAsync(evaluator, $"SEND_FILE('{localFile.Replace("\\", "\\\\")}', MYREMOTE, 'func_remote.txt', ON);");
+            Assert.Equal("Func Content", mockFs.RemoteFiles["func_remote.txt"]);
+
+            // 2. SEND_FILE Overwrite OFF
+            await Assert.ThrowsAsync<Exception>(async () => 
+                await RunScriptAsync(evaluator, $"SEND_FILE('{localFile.Replace("\\", "\\\\")}', MYREMOTE, 'func_remote.txt', OFF);"));
 
             // Cleanup
             if (File.Exists(localFile)) File.Delete(localFile);
-            if (File.Exists(downloadFile)) File.Delete(downloadFile);
         }
     }
 }

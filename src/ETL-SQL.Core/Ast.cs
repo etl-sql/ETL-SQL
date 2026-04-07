@@ -1718,16 +1718,19 @@ namespace ETL_SQL.Core
     public class EmailStatement : Statement
     {
         public Expression To { get; }
+        public Expression From { get; }
         public Expression Subject { get; }
         public Expression Body { get; }
         public Expression? ConnectionName { get; set; }
         public List<Expression>? Attachments { get; set; }
         public List<Expression>? Cc { get; set; }
         public List<Expression>? Bcc { get; set; }
+        public bool IsSqlStyle { get; set; }
 
-        public EmailStatement(Expression to, Expression subject, Expression body, Expression? connectionName = null)
+        public EmailStatement(Expression to, Expression from, Expression subject, Expression body, Expression? connectionName = null)
         {
             To = to;
+            From = from;
             Subject = subject;
             Body = body;
             ConnectionName = connectionName;
@@ -1735,12 +1738,26 @@ namespace ETL_SQL.Core
 
         public override string ToSql()
         {
-            var sql = $"SEND_EMAIL TO {To.ToSql()} SUBJECT {Subject.ToSql()} BODY {Body.ToSql()}";
-            if (Cc != null && Cc.Count > 0) sql += " CC " + string.Join(", ", Cc.Select(e => e.ToSql()));
-            if (Bcc != null && Bcc.Count > 0) sql += " BCC " + string.Join(", ", Bcc.Select(e => e.ToSql()));
-            if (Attachments != null && Attachments.Count > 0) sql += " ATTACH " + string.Join(", ", Attachments.Select(e => e.ToSql()));
-            if (ConnectionName != null) sql += $" AT {ConnectionName.ToSql()}";
-            return sql + ";";
+            if (IsSqlStyle)
+            {
+                var sql = $"SEND EMAIL TO {To.ToSql()}\nFROM {From.ToSql()}\nSUBJECT {Subject.ToSql()}\nBODY {Body.ToSql()}";
+                if (Cc != null && Cc.Count > 0) sql += "\nCC " + string.Join(", ", Cc.Select(e => e.ToSql()));
+                if (Bcc != null && Bcc.Count > 0) sql += "\nBCC " + string.Join(", ", Bcc.Select(e => e.ToSql()));
+                if (Attachments != null && Attachments.Count > 0) sql += "\nATTACH " + string.Join(", ", Attachments.Select(e => e.ToSql()));
+                if (ConnectionName != null) sql += $"\nAT {ConnectionName.ToSql()}";
+                return sql + ";";
+            }
+            else
+            {
+                var args = new List<string> { ConnectionName?.ToSql() ?? "NULL", To.ToSql(), From.ToSql(), Subject.ToSql(), Body.ToSql() };
+                if (Cc != null || Bcc != null || Attachments != null)
+                {
+                    args.Add(Cc != null ? "[" + string.Join(", ", Cc.Select(e => e.ToSql())) + "]" : "NULL");
+                    args.Add(Bcc != null ? "[" + string.Join(", ", Bcc.Select(e => e.ToSql())) + "]" : "NULL");
+                    args.Add(Attachments != null ? "[" + string.Join(", ", Attachments.Select(e => e.ToSql())) + "]" : "NULL");
+                }
+                return $"SEND_EMAIL({string.Join(", ", args)});";
+            }
         }
     }
 
@@ -1951,42 +1968,54 @@ namespace ETL_SQL.Core
         public FileOpType Type { get; }
         public Expression Source { get; }
         public Expression? Destination { get; }
+        public Expression? Overwrite { get; set; }
 
-        public FileOperationStatement(FileOpType type, Expression source, Expression? destination = null)
+        public FileOperationStatement(FileOpType type, Expression source, Expression? destination = null, Expression? overwrite = null)
         {
             Type = type;
             Source = source;
             Destination = destination;
+            Overwrite = overwrite;
         }
 
         public override string ToSql()
         {
-            var op = Type.ToString().ToUpper() + "_FILE";
-            var dest = Destination != null ? ", " + Destination.ToSql() : "";
-            return $"{op}({Source.ToSql()}{dest});";
+            var op = Type.ToString().ToUpper() + " FILE";
+            var dest = Destination != null ? " TO " + Destination.ToSql() : "";
+            var options = Overwrite != null ? $" WITH(OVERWRITE={Overwrite.ToSql()})" : "";
+            return $"{op} {Source.ToSql()}{dest}{options};";
         }
     }
 
-    public enum DirectoryOpType { Create, Delete, Rename, Move, Copy, DeleteContents }
+    public enum DirectoryOpType { Create, Delete, Rename, Move, Copy, DeleteContents, Compress, Encrypt, Decrypt }
 
     public class DirectoryOperationStatement : Statement
     {
         public DirectoryOpType Type { get; }
         public Expression Path { get; }
         public Expression? NewNameOrDest { get; }
+        public Expression? Overwrite { get; set; }
+        public Expression? Recursive { get; set; }
 
-        public DirectoryOperationStatement(DirectoryOpType type, Expression path, Expression? newNameOrDest = null)
+        public DirectoryOperationStatement(DirectoryOpType type, Expression path, Expression? newNameOrDest = null, Expression? overwrite = null, Expression? recursive = null)
         {
             Type = type;
             Path = path;
             NewNameOrDest = newNameOrDest;
+            Overwrite = overwrite;
+            Recursive = recursive;
         }
 
         public override string ToSql()
         {
-            var op = Type.ToString().ToUpper() + "_DIRECTORY";
-            var extra = NewNameOrDest != null ? ", " + NewNameOrDest.ToSql() : "";
-            return $"{op}({Path.ToSql()}{extra});";
+            var op = Type.ToString().ToUpper() + " DIRECTORY" + (Type == DirectoryOpType.DeleteContents ? "_CONTENTS" : "");
+            var extra = NewNameOrDest != null ? " TO " + NewNameOrDest.ToSql() : "";
+            var options = new List<string>();
+            if (Overwrite != null) options.Add($"OVERWRITE={Overwrite.ToSql()}");
+            if (Recursive != null) options.Add($"RECURSIVE={Recursive.ToSql()}");
+            
+            var with = options.Count > 0 ? " WITH(" + string.Join(", ", options) + ")" : "";
+            return $"{op} {Path.ToSql()}{extra}{with};";
         }
     }
 
@@ -1998,14 +2027,29 @@ namespace ETL_SQL.Core
         public Expression LocalPath { get; set; } = null!;
         public string ConnectionName { get; set; } = "";
         public Expression RemotePath { get; set; } = null!;
+        public Expression? Overwrite { get; set; }
+        public bool IsSqlStyle { get; set; }
 
         public override string ToSql()
         {
-            var op = Type == FileTransferType.Send ? "SEND_FILE" : "RECEIVE_FILE";
-            if (Type == FileTransferType.Send)
-                return $"{op} {LocalPath.ToSql()}, {ConnectionName}, {RemotePath.ToSql()};";
+            if (IsSqlStyle)
+            {
+                var op = Type == FileTransferType.Send ? "SEND FILE" : "RECEIVE FILE";
+                var fromTo = Type == FileTransferType.Send ? $"{LocalPath.ToSql()} TO {RemotePath.ToSql()}" : $"FROM {RemotePath.ToSql()} TO {LocalPath.ToSql()}";
+                var options = Overwrite != null ? $" WITH(OVERWRITE={Overwrite.ToSql()})" : "";
+                return $"{op} {fromTo} AT {ConnectionName}{options};";
+            }
             else
-                return $"{op} {ConnectionName}, {RemotePath.ToSql()}, {LocalPath.ToSql()};";
+            {
+                var op = Type == FileTransferType.Send ? "SEND_FILE" : "RECEIVE_FILE";
+                var args = Type == FileTransferType.Send 
+                    ? new List<string> { LocalPath.ToSql(), ConnectionName, RemotePath.ToSql() }
+                    : new List<string> { ConnectionName, RemotePath.ToSql(), LocalPath.ToSql() };
+                
+                if (Overwrite != null) args.Add(Overwrite.ToSql());
+                
+                return $"{op}({string.Join(", ", args)});";
+            }
         }
     }
 

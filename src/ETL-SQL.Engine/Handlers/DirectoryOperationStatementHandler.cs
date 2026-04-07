@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -23,6 +24,34 @@ namespace ETL_SQL.Engine.Handlers
 
             string? dest = stmt.NewNameOrDest != null ? context.ResolvePath((await context.EvaluateValue(stmt.NewNameOrDest, new Row()))?.ToString() ?? "") : null;
             
+            bool overwrite = true; // Default to true for backward compatibility
+            if (stmt.Overwrite != null)
+            {
+                var ovrVal = await context.EvaluateValue(stmt.Overwrite, new Row());
+                if (ovrVal != null)
+                {
+                    if (ovrVal is bool b) overwrite = b;
+                    else if (string.Equals(ovrVal.ToString(), "ON", StringComparison.OrdinalIgnoreCase)) overwrite = true;
+                    else if (string.Equals(ovrVal.ToString(), "OFF", StringComparison.OrdinalIgnoreCase)) overwrite = false;
+                    else if (string.Equals(ovrVal.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase)) overwrite = true;
+                    else if (string.Equals(ovrVal.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase)) overwrite = false;
+                }
+            }
+
+            bool recursive = true; // Default to true for backward compatibility
+            if (stmt.Recursive != null)
+            {
+                var recVal = await context.EvaluateValue(stmt.Recursive, new Row());
+                if (recVal != null)
+                {
+                    if (recVal is bool b) recursive = b;
+                    else if (string.Equals(recVal.ToString(), "ON", StringComparison.OrdinalIgnoreCase)) recursive = true;
+                    else if (string.Equals(recVal.ToString(), "OFF", StringComparison.OrdinalIgnoreCase)) recursive = false;
+                    else if (string.Equals(recVal.ToString(), "TRUE", StringComparison.OrdinalIgnoreCase)) recursive = true;
+                    else if (string.Equals(recVal.ToString(), "FALSE", StringComparison.OrdinalIgnoreCase)) recursive = false;
+                }
+            }
+
             Logger.Verbose($"Directory Operation: {stmt.Type} on {path}{(dest != null ? $" -> {dest}" : "")}");
 
             if (context.IsWhatIf)
@@ -54,26 +83,85 @@ namespace ETL_SQL.Engine.Handlers
                             var parent = System.IO.Path.GetDirectoryName(path.TrimEnd('/', '\\')) ?? "";
                             target = System.IO.Path.Combine(parent, dest);
                         }
-                        if (Directory.Exists(target)) Directory.Delete(target, true);
+                        if (Directory.Exists(target))
+                        {
+                            if (overwrite) Directory.Delete(target, true);
+                            else throw new ExecutionException($"Destination directory already exists and OVERWRITE is OFF: {target}");
+                        }
                         Directory.Move(path, target);
                     }
                     break;
                 case DirectoryOpType.Copy:
                     if (dest != null)
                     {
-                        CopyDirectory(path, dest, true);
+                        CopyDirectory(path, dest, overwrite);
                         Logger.WriteLine($"Directory copied: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
                 case DirectoryOpType.DeleteContents:
-                    DeleteDirectoryContents(path, true);
+                    DeleteDirectoryContents(path, recursive);
                     Logger.WriteLine($"Directory contents deleted: {path}", ConsoleColor.Green);
+                    break;
+                case DirectoryOpType.Compress:
+                    if (dest != null)
+                    {
+                        if (File.Exists(dest))
+                        {
+                            if (overwrite) File.Delete(dest);
+                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                        }
+                        System.IO.Compression.ZipFile.CreateFromDirectory(path, dest);
+                        Logger.WriteLine($"Directory compressed: {path} -> {dest}", ConsoleColor.Green);
+                    }
+                    break;
+                case DirectoryOpType.Encrypt:
+                    if (dest != null)
+                    {
+                        EncryptDirectory(path, dest, "DefaultETLPass123!", overwrite);
+                        Logger.WriteLine($"Directory encrypted: {path} -> {dest}", ConsoleColor.Green);
+                    }
+                    break;
+                case DirectoryOpType.Decrypt:
+                    if (dest != null)
+                    {
+                        DecryptDirectory(path, dest, "DefaultETLPass123!", overwrite);
+                        Logger.WriteLine($"Directory decrypted: {path} -> {dest}", ConsoleColor.Green);
+                    }
                     break;
             }
             await Task.CompletedTask;
         }
 
-        private void CopyDirectory(string sourceDir, string destinationDir, bool recursive)
+        private void EncryptDirectory(string sourceDir, string destDir, string password, bool overwrite)
+        {
+            if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
+            foreach (string file in Directory.GetFiles(sourceDir))
+            {
+                string destFile = Path.Combine(destDir, Path.GetFileName(file) + ".enc");
+                CryptoUtils.EncryptFile(file, destFile, password, overwrite);
+            }
+            foreach (string subDir in Directory.GetDirectories(sourceDir))
+            {
+                EncryptDirectory(subDir, Path.Combine(destDir, Path.GetFileName(subDir)), password, overwrite);
+            }
+        }
+
+        private void DecryptDirectory(string sourceDir, string destDir, string password, bool overwrite)
+        {
+            if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
+            foreach (string file in Directory.GetFiles(sourceDir))
+            {
+                if (!file.EndsWith(".enc")) continue;
+                string destFile = Path.Combine(destDir, Path.GetFileNameWithoutExtension(file));
+                CryptoUtils.DecryptFile(file, destFile, password, overwrite);
+            }
+            foreach (string subDir in Directory.GetDirectories(sourceDir))
+            {
+                DecryptDirectory(subDir, Path.Combine(destDir, Path.GetFileName(subDir)), password, overwrite);
+            }
+        }
+
+        private void CopyDirectory(string sourceDir, string destinationDir, bool overwrite)
         {
             var dir = new DirectoryInfo(sourceDir);
             if (!dir.Exists) throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
@@ -84,16 +172,13 @@ namespace ETL_SQL.Engine.Handlers
             foreach (FileInfo file in dir.GetFiles())
             {
                 string targetFilePath = Path.Combine(destinationDir, file.Name);
-                file.CopyTo(targetFilePath, true);
+                file.CopyTo(targetFilePath, overwrite);
             }
 
-            if (recursive)
+            foreach (DirectoryInfo subDir in dirs)
             {
-                foreach (DirectoryInfo subDir in dirs)
-                {
-                    string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
-                    CopyDirectory(subDir.FullName, newDestinationDir, true);
-                }
+                string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+                CopyDirectory(subDir.FullName, newDestinationDir, overwrite);
             }
         }
 

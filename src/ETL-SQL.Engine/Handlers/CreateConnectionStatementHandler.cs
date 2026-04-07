@@ -1,5 +1,6 @@
 using ETL_SQL.Common;
 using ETL_SQL.Data;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using System;
 using System.Collections.Generic;
@@ -131,7 +132,20 @@ namespace ETL_SQL.Engine.Handlers
                     }
                 }
 
-                ds = connector.CreateDataSource(target, interpolatedOptions);
+                IEnumerable<ColumnDefinition>? templateSchema = null;
+                if (interpolatedOptions != null && interpolatedOptions.TryGetValue("TEMPLATE", out var templateName))
+                {
+                    if (context.Connections.TryGetValue(templateName, out var templateDs) && templateDs is InMemoryDataSource imds)
+                    {
+                        templateSchema = imds.Schema.Values;
+                    }
+                    else
+                    {
+                        throw new ExecutionException($"Template table '{templateName}' not found in in-memory session.");
+                    }
+                }
+
+                ds = connector.CreateDataSource(target, interpolatedOptions, templateSchema);
             }
             else
             {

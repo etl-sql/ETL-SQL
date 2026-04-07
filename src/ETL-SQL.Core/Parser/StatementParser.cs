@@ -81,9 +81,32 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.USE)) return ParseUse();
             if (_parser.Match(TokenType.BULK)) return ParseBulkInsert();
             if (_parser.Match(TokenType.LINEAGE)) return ParseLineage();
-            if (_parser.Match(TokenType.SEND_EMAIL)) return ParseSendEmail();
-            if (_parser.Match(TokenType.SEND_FILE)) return ParseFileTransfer(FileTransferType.Send);
-            if (_parser.Match(TokenType.RECEIVE_FILE)) return ParseFileTransfer(FileTransferType.Receive);
+            if (_parser.Match(TokenType.SEND_EMAIL)) return ParseSendEmail(false);
+            if (_parser.Match(TokenType.SEND))
+            {
+                if (_parser.Current.Type == TokenType.FILE)
+                {
+                    _parser.Advance(); // consume FILE
+                    return ParseFileTransfer(FileTransferType.Send, true);
+                }
+                if (_parser.Current.Type == TokenType.EMAIL)
+                {
+                    _parser.Advance(); // consume EMAIL
+                    return ParseSendEmail(true);
+                }
+                _parser.Backtrack(); // Not a special SEND
+            }
+            if (_parser.Match(TokenType.SEND_FILE) || _parser.Match(TokenType.FILE_SEND)) return ParseFileTransfer(FileTransferType.Send, false);
+            if (_parser.Match(TokenType.RECEIVE_FILE) || _parser.Match(TokenType.FILE_RECEIVE)) return ParseFileTransfer(FileTransferType.Receive, false);
+            if (_parser.Match(TokenType.RECEIVE))
+            {
+                if (_parser.Current.Type == TokenType.FILE)
+                {
+                    _parser.Advance(); // consume FILE
+                    return ParseFileTransfer(FileTransferType.Receive, true);
+                }
+                _parser.Backtrack();
+            }
             if (_parser.Match(TokenType.START_DOCKER)) return ParseDockerAction(DockerAction.Start);
             if (_parser.Match(TokenType.STOP_DOCKER)) return ParseDockerAction(DockerAction.Stop);
             if (_parser.Match(TokenType.PAUSE_DOCKER)) return ParseDockerAction(DockerAction.Pause);
@@ -118,6 +141,13 @@ namespace ETL_SQL.Core.Parser
                 _parser.Backtrack(); // Not a Docker action
             }
             
+            if (_parser.Match(TokenType.COPY)) return ParseFileOrDirOp(FileOpType.Copy, DirectoryOpType.Copy);
+            if (_parser.Match(TokenType.MOVE)) return ParseFileOrDirOp(FileOpType.Move, DirectoryOpType.Move);
+            if (_parser.Match(TokenType.RENAME)) return ParseFileOrDirOp(FileOpType.Rename, DirectoryOpType.Rename);
+            if (_parser.Match(TokenType.COMPRESS)) return ParseFileOrDirOp(FileOpType.Compress, DirectoryOpType.Compress);
+            if (_parser.Match(TokenType.ENCRYPT)) return ParseFileOrDirOp(FileOpType.Encrypt, DirectoryOpType.Encrypt);
+            if (_parser.Match(TokenType.DECRYPT)) return ParseFileOrDirOp(FileOpType.Decrypt, DirectoryOpType.Decrypt);
+
             if (_parser.Current.Type == TokenType.COPY_FILE || _parser.Current.Type == TokenType.MOVE_FILE || 
                 _parser.Current.Type == TokenType.RENAME_FILE || _parser.Current.Type == TokenType.DELETE_FILE || 
                 _parser.Current.Type == TokenType.COMPRESS_FILE || _parser.Current.Type == TokenType.ENCRYPT_FILE ||
@@ -126,7 +156,9 @@ namespace ETL_SQL.Core.Parser
 
             if (_parser.Current.Type == TokenType.CREATE_DIRECTORY || _parser.Current.Type == TokenType.DELETE_DIRECTORY || 
                 _parser.Current.Type == TokenType.RENAME_DIRECTORY || _parser.Current.Type == TokenType.MOVE_DIRECTORY ||
-                _parser.Current.Type == TokenType.COPY_DIRECTORY || _parser.Current.Type == TokenType.DELETE_DIRECTORY_CONTENTS)
+                _parser.Current.Type == TokenType.COPY_DIRECTORY || _parser.Current.Type == TokenType.DELETE_DIRECTORY_CONTENTS ||
+                _parser.Current.Type == TokenType.COMPRESS_DIRECTORY || _parser.Current.Type == TokenType.ENCRYPT_DIRECTORY ||
+                _parser.Current.Type == TokenType.DECRYPT_DIRECTORY)
                 return ParseDirectoryOperation();
 
             throw new SyntaxException($"Unexpected token {_parser.Current.Type} ('{_parser.Current.Value}')", _parser.Current.Line, _parser.Current.Column);
@@ -277,10 +309,15 @@ namespace ETL_SQL.Core.Parser
             {
                 dest = _parser.ParseExpression();
             }
+            Expression? overwrite = null;
+            if (_parser.Match(TokenType.COMMA))
+            {
+                overwrite = _parser.ParseExpression();
+            }
             _parser.Consume(TokenType.RPAREN, "Expected ')' after arguments");
             _parser.Match(TokenType.SEMICOLON);
 
-            return new FileOperationStatement(type, source, dest) { Line = startToken.Line, Column = startToken.Column };
+            return new FileOperationStatement(type, source, dest, overwrite) { Line = startToken.Line, Column = startToken.Column };
         }
 
         private Statement ParseDirectoryOperation()
@@ -294,6 +331,9 @@ namespace ETL_SQL.Core.Parser
                 TokenType.MOVE_DIRECTORY => DirectoryOpType.Move,
                 TokenType.COPY_DIRECTORY => DirectoryOpType.Copy,
                 TokenType.DELETE_DIRECTORY_CONTENTS => DirectoryOpType.DeleteContents,
+                TokenType.COMPRESS_DIRECTORY => DirectoryOpType.Compress,
+                TokenType.ENCRYPT_DIRECTORY => DirectoryOpType.Encrypt,
+                TokenType.DECRYPT_DIRECTORY => DirectoryOpType.Decrypt,
                 _ => throw new SyntaxException($"Unexpected directory operation: {startToken.Type}", startToken.Line, startToken.Column)
             };
 
@@ -304,10 +344,15 @@ namespace ETL_SQL.Core.Parser
             {
                 extra = _parser.ParseExpression();
             }
+            Expression? overwrite = null;
+            if (_parser.Match(TokenType.COMMA))
+            {
+                overwrite = _parser.ParseExpression();
+            }
             _parser.Consume(TokenType.RPAREN, "Expected ')' after arguments");
             _parser.Match(TokenType.SEMICOLON);
 
-            return new DirectoryOperationStatement(type, path, extra) { Line = startToken.Line, Column = startToken.Column };
+            return new DirectoryOperationStatement(type, path, extra, overwrite) { Line = startToken.Line, Column = startToken.Column };
         }
 
         private Statement ParseBeginTransaction()
@@ -738,6 +783,18 @@ namespace ETL_SQL.Core.Parser
             {
                 if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for JOB. Use DROP and CREATE.", _parser.Current.Line, _parser.Current.Column);
                 return ParseCreateJob(startToken);
+            }
+            
+            if (_parser.Match(TokenType.DIRECTORY))
+            {
+                var path = _parser.ParseExpression();
+                Expression? overwrite = null;
+                if (_parser.Match(TokenType.WITH))
+                {
+                    overwrite = ParseWithOverwrite();
+                }
+                _parser.Match(TokenType.SEMICOLON);
+                return new DirectoryOperationStatement(DirectoryOpType.Create, path, null, overwrite) { Line = startToken.Line, Column = startToken.Column };
             }
             
             if (_parser.Current.Type == TokenType.UNIQUE || _parser.Current.Type == TokenType.INDEX)
@@ -1322,6 +1379,31 @@ namespace ETL_SQL.Core.Parser
         private Statement ParseDelete()
         {
             var startToken = _parser.Previous;
+            
+            if (_parser.Match(TokenType.FILE))
+            {
+                var source = _parser.ParseExpression();
+                _parser.Match(TokenType.SEMICOLON);
+                return new FileOperationStatement(FileOpType.Delete, source) { Line = startToken.Line, Column = startToken.Column };
+            }
+            if (_parser.Match(TokenType.DIRECTORY))
+            {
+                var path = _parser.ParseExpression();
+                _parser.Match(TokenType.SEMICOLON);
+                return new DirectoryOperationStatement(DirectoryOpType.Delete, path) { Line = startToken.Line, Column = startToken.Column };
+            }
+            if (_parser.Match(TokenType.DIRECTORY_CONTENTS))
+            {
+                var path = _parser.ParseExpression();
+                Expression? recursive = null;
+                if (_parser.Match(TokenType.WITH))
+                {
+                    recursive = ParseWithRecursive();
+                }
+                _parser.Match(TokenType.SEMICOLON);
+                return new DirectoryOperationStatement(DirectoryOpType.DeleteContents, path, null, null, recursive) { Line = startToken.Line, Column = startToken.Column };
+            }
+
             _parser.Match(TokenType.FROM);
             var targetTable = ParseTableReference(false);
 
@@ -1959,28 +2041,65 @@ namespace ETL_SQL.Core.Parser
             };
         }
 
-        private Statement ParseFileTransfer(FileTransferType type)
+        private Statement ParseFileTransfer(FileTransferType type, bool isSqlStyle)
         {
             var startToken = _parser.Previous;
             Expression localPath;
             string connectionName;
             Expression remotePath;
+            Expression? overwrite = null;
 
-            if (type == FileTransferType.Send)
+            if (isSqlStyle)
             {
-                localPath = _parser.ParseExpression();
-                _parser.Consume(TokenType.COMMA, "Expected ',' after local path");
-                connectionName = _parser.ConsumeIdentifier("Expected connection name").Value;
-                _parser.Consume(TokenType.COMMA, "Expected ',' after connection name");
-                remotePath = _parser.ParseExpression();
+                if (type == FileTransferType.Send)
+                {
+                    localPath = _parser.ParseExpression();
+                    _parser.Consume(TokenType.TO, "Expected TO after local path");
+                    remotePath = _parser.ParseExpression();
+                    _parser.Consume(TokenType.AT, "Expected AT before connection name");
+                    connectionName = _parser.ConsumeIdentifier("Expected connection name").Value;
+                }
+                else // Receive
+                {
+                    _parser.Consume(TokenType.FROM, "Expected FROM after RECEIVE FILE");
+                    remotePath = _parser.ParseExpression();
+                    _parser.Consume(TokenType.TO, "Expected TO before local path");
+                    localPath = _parser.ParseExpression();
+                    _parser.Consume(TokenType.AT, "Expected AT before connection name");
+                    connectionName = _parser.ConsumeIdentifier("Expected connection name").Value;
+                }
+
+                if (_parser.Match(TokenType.WITH))
+                {
+                    overwrite = ParseWithOverwrite();
+                }
             }
-            else // Receive
+            else // Function style
             {
-                connectionName = _parser.ConsumeIdentifier("Expected connection name").Value;
-                _parser.Consume(TokenType.COMMA, "Expected ',' after connection name");
-                remotePath = _parser.ParseExpression();
-                _parser.Consume(TokenType.COMMA, "Expected ',' after remote path");
-                localPath = _parser.ParseExpression();
+                _parser.Consume(TokenType.LPAREN, "Expected '('");
+                
+                if (type == FileTransferType.Send)
+                {
+                    localPath = _parser.ParseExpression();
+                    _parser.Consume(TokenType.COMMA, "Expected ',' after local path");
+                    connectionName = _parser.ConsumeIdentifier("Expected connection name").Value;
+                    _parser.Consume(TokenType.COMMA, "Expected ',' after connection name");
+                    remotePath = _parser.ParseExpression();
+                }
+                else // Receive
+                {
+                    connectionName = _parser.ConsumeIdentifier("Expected connection name").Value;
+                    _parser.Consume(TokenType.COMMA, "Expected ',' after connection name");
+                    remotePath = _parser.ParseExpression();
+                    _parser.Consume(TokenType.COMMA, "Expected ',' after remote path");
+                    localPath = _parser.ParseExpression();
+                }
+
+                if (_parser.Match(TokenType.COMMA))
+                {
+                    overwrite = _parser.ParseExpression();
+                }
+                _parser.Consume(TokenType.RPAREN, "Expected ')'");
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
@@ -1990,6 +2109,8 @@ namespace ETL_SQL.Core.Parser
                 LocalPath = localPath,
                 ConnectionName = connectionName,
                 RemotePath = remotePath,
+                Overwrite = overwrite,
+                IsSqlStyle = isSqlStyle,
                 Line = startToken.Line,
                 Column = startToken.Column
             };
@@ -2053,45 +2174,135 @@ namespace ETL_SQL.Core.Parser
             return new DockerActionStatement(alias, action) { Line = startToken.Line, Column = startToken.Column };
         }
 
-        private Statement ParseSendEmail()
+        private Statement ParseSendEmail(bool isSqlStyle)
         {
-            _parser.Consume(TokenType.TO, "Expected TO after SEND_EMAIL");
-            var to = _parser.ParseExpression();
+            var startToken = _parser.Previous;
+            Expression? to = null;
+            Expression? from = null;
+            Expression? subject = null;
+            Expression? body = null;
+            Expression? connectionName = null;
+            List<Expression>? attachments = null;
+            List<Expression>? cc = null;
+            List<Expression>? bcc = null;
 
-            _parser.Consume(TokenType.SUBJECT, "Expected SUBJECT");
-            var subject = _parser.ParseExpression();
-
-            _parser.Consume(TokenType.BODY, "Expected BODY");
-            var body = _parser.ParseExpression();
-
-            var stmt = new EmailStatement(to, subject, body);
-
-            while (true)
+            if (isSqlStyle)
             {
-                if (_parser.Match(TokenType.CC))
+                while (true)
                 {
-                    stmt.Cc ??= new List<Expression>();
-                    stmt.Cc.Add(_parser.ParseExpression());
-                    while (_parser.Match(TokenType.COMMA)) stmt.Cc.Add(_parser.ParseExpression());
+                    if (_parser.Match(TokenType.TO)) to = _parser.ParseExpression();
+                    else if (_parser.Match(TokenType.FROM)) from = _parser.ParseExpression();
+                    else if (_parser.Match(TokenType.SUBJECT)) subject = _parser.ParseExpression();
+                    else if (_parser.Match(TokenType.BODY)) body = _parser.ParseExpression();
+                    else if (_parser.Match(TokenType.CC))
+                    {
+                        cc ??= new List<Expression>();
+                        cc.Add(_parser.ParseExpression());
+                        while (_parser.Match(TokenType.COMMA)) cc.Add(_parser.ParseExpression());
+                    }
+                    else if (_parser.Match(TokenType.BCC))
+                    {
+                        bcc ??= new List<Expression>();
+                        bcc.Add(_parser.ParseExpression());
+                        while (_parser.Match(TokenType.COMMA)) bcc.Add(_parser.ParseExpression());
+                    }
+                    else if (_parser.Match(TokenType.ATTACH))
+                    {
+                        attachments ??= new List<Expression>();
+                        attachments.Add(_parser.ParseExpression());
+                        while (_parser.Match(TokenType.COMMA)) attachments.Add(_parser.ParseExpression());
+                    }
+                    else if (_parser.Match(TokenType.AT))
+                    {
+                        connectionName = _parser.ParseExpression();
+                    }
+                    else break;
                 }
-                else if (_parser.Match(TokenType.BCC))
-                {
-                    stmt.Bcc ??= new List<Expression>();
-                    stmt.Bcc.Add(_parser.ParseExpression());
-                    while (_parser.Match(TokenType.COMMA)) stmt.Bcc.Add(_parser.ParseExpression());
-                }
-                else if (_parser.Match(TokenType.ATTACH))
-                {
-                    stmt.Attachments ??= new List<Expression>();
-                    stmt.Attachments.Add(_parser.ParseExpression());
-                    while (_parser.Match(TokenType.COMMA)) stmt.Attachments.Add(_parser.ParseExpression());
-                }
-                else if (_parser.Match(TokenType.AT))
-                {
-                    stmt.ConnectionName = _parser.ParseExpression();
-                }
-                else break;
+                
+                if (to == null) throw new SyntaxException("Email TO is mandatory", _parser.Current.Line, _parser.Current.Column);
+                if (from == null) throw new SyntaxException("Email FROM is mandatory", _parser.Current.Line, _parser.Current.Column);
+                if (subject == null) throw new SyntaxException("Email SUBJECT is mandatory", _parser.Current.Line, _parser.Current.Column);
+                if (body == null) throw new SyntaxException("Email BODY is mandatory", _parser.Current.Line, _parser.Current.Column);
             }
+            else // Function style
+            {
+                _parser.Consume(TokenType.LPAREN, "Expected '('");
+                connectionName = _parser.ParseExpression();
+                _parser.Consume(TokenType.COMMA, "Expected ','");
+                to = _parser.ParseExpression();
+                _parser.Consume(TokenType.COMMA, "Expected ','");
+                from = _parser.ParseExpression();
+                _parser.Consume(TokenType.COMMA, "Expected ','");
+                subject = _parser.ParseExpression();
+                _parser.Consume(TokenType.COMMA, "Expected ','");
+                body = _parser.ParseExpression();
+
+                if (_parser.Match(TokenType.COMMA)) // CC
+                {
+                    if (_parser.Match(TokenType.LBRACKET))
+                    {
+                        cc = new List<Expression>();
+                        if (_parser.Current.Type != TokenType.RBRACKET)
+                        {
+                            cc.Add(_parser.ParseExpression());
+                            while (_parser.Match(TokenType.COMMA)) cc.Add(_parser.ParseExpression());
+                        }
+                        _parser.Consume(TokenType.RBRACKET, "Expected ']'");
+                    }
+                    else if (_parser.Current.Type != TokenType.COMMA && _parser.Current.Type != TokenType.RPAREN)
+                    {
+                        cc = new List<Expression> { _parser.ParseExpression() };
+                    }
+                }
+
+                if (_parser.Match(TokenType.COMMA)) // BCC
+                {
+                    if (_parser.Match(TokenType.LBRACKET))
+                    {
+                        bcc = new List<Expression>();
+                        if (_parser.Current.Type != TokenType.RBRACKET)
+                        {
+                            bcc.Add(_parser.ParseExpression());
+                            while (_parser.Match(TokenType.COMMA)) bcc.Add(_parser.ParseExpression());
+                        }
+                        _parser.Consume(TokenType.RBRACKET, "Expected ']'");
+                    }
+                    else if (_parser.Current.Type != TokenType.COMMA && _parser.Current.Type != TokenType.RPAREN)
+                    {
+                        bcc = new List<Expression> { _parser.ParseExpression() };
+                    }
+                }
+
+                if (_parser.Match(TokenType.COMMA)) // Attachments
+                {
+                    if (_parser.Match(TokenType.LBRACKET))
+                    {
+                        attachments = new List<Expression>();
+                        if (_parser.Current.Type != TokenType.RBRACKET)
+                        {
+                            attachments.Add(_parser.ParseExpression());
+                            while (_parser.Match(TokenType.COMMA)) attachments.Add(_parser.ParseExpression());
+                        }
+                        _parser.Consume(TokenType.RBRACKET, "Expected ']'");
+                    }
+                    else if (_parser.Current.Type != TokenType.COMMA && _parser.Current.Type != TokenType.RPAREN)
+                    {
+                        attachments = new List<Expression> { _parser.ParseExpression() };
+                    }
+                }
+
+                _parser.Consume(TokenType.RPAREN, "Expected ')'");
+            }
+
+            var stmt = new EmailStatement(to, from, subject, body, connectionName)
+            {
+                IsSqlStyle = isSqlStyle,
+                Cc = cc,
+                Bcc = bcc,
+                Attachments = attachments,
+                Line = startToken.Line,
+                Column = startToken.Column
+            };
 
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
             return stmt;
@@ -2152,6 +2363,90 @@ namespace ETL_SQL.Core.Parser
             _parser.Match(TokenType.SEMICOLON);
 
             return new CreateSetsStatement(name, assignments, withPrompt) { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        private Statement ParseFileOrDirOp(FileOpType fileOp, DirectoryOpType? dirOp)
+        {
+            var startToken = _parser.Previous;
+            bool isDirectory = _parser.Match(TokenType.DIRECTORY);
+            if (!isDirectory && !_parser.Match(TokenType.FILE))
+            {
+                // If neither FILE nor DIRECTORY, we assume FILE if dirOp is null, or error if ambiguous
+                if (dirOp == null) isDirectory = false;
+                else throw new SyntaxException($"Expected FILE or DIRECTORY after {startToken.Value}", _parser.Current.Line, _parser.Current.Column);
+            }
+
+            var source = _parser.ParseExpression();
+            Expression? dest = null;
+            if (_parser.Match(TokenType.TO))
+            {
+                dest = _parser.ParseExpression();
+            }
+
+            Expression? overwrite = null;
+            if (_parser.Match(TokenType.WITH))
+            {
+                overwrite = ParseWithOverwrite();
+            }
+
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+
+            if (isDirectory)
+            {
+                if (dirOp == null) throw new SyntaxException($"{startToken.Value} is not supported for DIRECTORY", _parser.Current.Line, _parser.Current.Column);
+                return new DirectoryOperationStatement(dirOp.Value, source, dest, overwrite) { Line = startToken.Line, Column = startToken.Column };
+            }
+            else
+            {
+                return new FileOperationStatement(fileOp, source, dest, overwrite) { Line = startToken.Line, Column = startToken.Column };
+            }
+        }
+
+        private Expression? ParseWithOverwrite()
+        {
+            _parser.Consume(TokenType.LPAREN, "Expected '(' after WITH");
+            Expression? overwrite = null;
+            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+            {
+                string key = _parser.Advance().Value;
+                _parser.Consume(TokenType.EQUALS, "Expected '=' after option name");
+                if (string.Equals(key, "OVERWRITE", StringComparison.OrdinalIgnoreCase))
+                {
+                    overwrite = _parser.ParseExpression();
+                }
+                else
+                {
+                    // Skip unknown options for now or throw?
+                    _parser.ParseExpression();
+                }
+
+                if (!_parser.Match(TokenType.COMMA)) break;
+            }
+            _parser.Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+            return overwrite;
+        }
+
+        private Expression? ParseWithRecursive()
+        {
+            _parser.Consume(TokenType.LPAREN, "Expected '(' after WITH");
+            Expression? recursive = null;
+            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+            {
+                string key = _parser.Advance().Value;
+                _parser.Consume(TokenType.EQUALS, "Expected '=' after option name");
+                if (string.Equals(key, "RECURSIVE", StringComparison.OrdinalIgnoreCase))
+                {
+                    recursive = _parser.ParseExpression();
+                }
+                else
+                {
+                    _parser.ParseExpression();
+                }
+
+                if (!_parser.Match(TokenType.COMMA)) break;
+            }
+            _parser.Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+            return recursive;
         }
     }
 }

@@ -271,6 +271,16 @@ namespace ETL_SQL.Core.Parser
                 var t = _parser.Previous;
                 return new LiteralExpression(false, TokenType.FALSE) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
             }
+            if (_parser.Match(TokenType.ON))
+            {
+                var t = _parser.Previous;
+                return new LiteralExpression(true, TokenType.ON) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+            }
+            if (_parser.Match(TokenType.OFF))
+            {
+                var t = _parser.Previous;
+                return new LiteralExpression(false, TokenType.OFF) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+            }
             if (_parser.Match(TokenType.NULL))
             {
                 var t = _parser.Previous;

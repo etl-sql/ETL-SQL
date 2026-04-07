@@ -63,11 +63,11 @@ namespace ETL_SQL.Core.Common
 
             if (!string.IsNullOrEmpty(KeyFile))
             {
-                CryptoUtils.DecryptFileWithSsh(inputFile, outputFile, KeyFile, Passphrase);
+                CryptoUtils.DecryptFileWithSsh(inputFile, outputFile, KeyFile, true, Passphrase);
             }
             else
             {
-                CryptoUtils.DecryptFile(inputFile, outputFile, Password, Algorithm);
+                CryptoUtils.DecryptFile(inputFile, outputFile, Password, true, Algorithm);
             }
         }
 
@@ -86,11 +86,11 @@ namespace ETL_SQL.Core.Common
 
             if (!string.IsNullOrEmpty(KeyFile))
             {
-                CryptoUtils.EncryptFileWithSsh(inputFile, outputFile, KeyFile);
+                CryptoUtils.EncryptFileWithSsh(inputFile, outputFile, KeyFile, true);
             }
             else
             {
-                CryptoUtils.EncryptFile(inputFile, outputFile, Password, Algorithm);
+                CryptoUtils.EncryptFile(inputFile, outputFile, Password, true, Algorithm);
             }
         }
     }

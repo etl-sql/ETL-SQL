@@ -70,6 +70,12 @@ This guide describes the provided sample scripts in the `scripts/` folder. These
 **Purpose**: Using the preview mode.
 - Demonstrates how to limit result sets for quick data inspection.
 
+### 13. [sample_what_if.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_what_if.etlsql)
+**Purpose**: Using the dry-run mode.
+- Demonstrates `SET WHAT_IF ON` to skip destructive operations during validation.
+- Shows how to toggle back to `OFF` for actual execution.
+
+
 ## Docker & Remote Execution
 
 ### 13. [sample_docker.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_docker.etlsql)
