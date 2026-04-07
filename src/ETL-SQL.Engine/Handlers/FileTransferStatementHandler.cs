@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -18,8 +19,8 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (FileTransferStatement)statement;
             
-
-            string localPath = context.ResolvePath((await context.EvaluateValue(stmt.LocalPath, new Row()))?.ToString() ?? "");
+            string localPathVal = (await context.EvaluateValue(stmt.LocalPath, new Row()))?.ToString() ?? "";
+            string localPath = context.ResolvePath(localPathVal);
             string remotePath = (await context.EvaluateValue(stmt.RemotePath, new Row()))?.ToString() ?? "";
             
             if (!context.Connections.TryGetValue(stmt.ConnectionName, out var ds) || ds is not IRemoteFileSystem remoteFs)
@@ -30,6 +31,13 @@ namespace ETL_SQL.Engine.Handlers
             if (stmt.Type == FileTransferType.Send)
             {
                 Logger.WriteLine($"SENDING: {localPath} -> {stmt.ConnectionName}:{remotePath}", ConsoleColor.Cyan);
+                
+                if (context.IsWhatIf)
+                {
+                    Logger.WriteLine($"WHAT IF: Would send local file {localPath} to {stmt.ConnectionName}:{remotePath}", ConsoleColor.Yellow);
+                    return;
+                }
+
                 if (!File.Exists(localPath)) throw new ExecutionException($"Local file not found: {localPath}");
                 await remoteFs.UploadFileAsync(localPath, remotePath);
                 Logger.WriteLine("Upload complete.", ConsoleColor.Green);
@@ -37,6 +45,13 @@ namespace ETL_SQL.Engine.Handlers
             else // Receive
             {
                 Logger.WriteLine($"RECEIVING: {stmt.ConnectionName}:{remotePath} -> {localPath}", ConsoleColor.Cyan);
+                
+                if (context.IsWhatIf)
+                {
+                    Logger.WriteLine($"WHAT IF: Would receive {stmt.ConnectionName}:{remotePath} to local file {localPath}", ConsoleColor.Yellow);
+                    return;
+                }
+
                 var dir = Path.GetDirectoryName(localPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 await remoteFs.DownloadFileAsync(remotePath, localPath);
@@ -45,6 +60,3 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
-
-
-

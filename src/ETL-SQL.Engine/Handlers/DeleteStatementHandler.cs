@@ -28,50 +28,65 @@ namespace ETL_SQL.Engine.Handlers
                 Logger.Verbose("Strategy: Remote SQL DELETE");
                 var sql = $"DELETE FROM {context.GetSqlTableName(stmt.TargetTable)}";
                 if (stmt.WhereClause != null) sql += $"\nWHERE {context.CompileExpression(stmt.WhereClause, sqlConn.Dialect)}";
-                await foreach(var _ in sqlConn.ExecuteRawSql(sql)){}
+                
+                if (context.IsWhatIf)
+                {
+                    Logger.WriteLine($"WHAT IF: Would execute remote SQL delete on {connName}:\n{sql}", ConsoleColor.Yellow);
+                }
+                else
+                {
+                    await foreach (var _ in sqlConn.ExecuteRawSql(sql)) { }
+                }
                 context.RowsProcessed = 0; // Unknown for remote SQL
             }
             else if (connection is InMemoryDataSource memConn)
             {
-                var deletedRows = await memConn.DeleteRows(async row => stmt.WhereClause == null || await context.EvaluateCondition(stmt.WhereClause, row));
-                context.RowsProcessed = deletedRows.Count;
-
-                if (stmt.Output != null)
+                if (context.IsWhatIf)
                 {
-                    var outputTable = new DataTable();
-                    var outputRows = new List<Row>();
+                    Logger.WriteLine($"WHAT IF: Would delete rows from in-memory table {connName}.", ConsoleColor.Yellow);
+                    context.RowsProcessed = 0;
+                }
+                else
+                {
+                    var deletedRows = await memConn.DeleteRows(async row => stmt.WhereClause == null || await context.EvaluateCondition(stmt.WhereClause, row));
+                    context.RowsProcessed = deletedRows.Count;
 
-                    foreach (var deletedRow in deletedRows)
+                    if (stmt.Output != null)
                     {
-                        var contextRow = new Row();
-                        foreach (var col in deletedRow.Columns)
+                        var outputRows = new List<Row>();
+                        foreach (var deletedRow in deletedRows)
                         {
-                            contextRow[$"DELETED.{col.Key}"] = col.Value;
-                            if (!contextRow.HasColumn(col.Key)) contextRow[col.Key] = col.Value;
+                            var contextRow = new Row();
+                            foreach (var col in deletedRow.Columns)
+                            {
+                                contextRow[$"DELETED.{col.Key}"] = col.Value;
+                                if (!contextRow.HasColumn(col.Key)) contextRow[col.Key] = col.Value;
+                            }
+
+                            var outputRow = new Row();
+                            foreach (var outCol in stmt.Output.Columns)
+                            {
+                                var val = await context.EvaluateValue(outCol.Expression, contextRow);
+                                outputRow[outCol.Alias ?? outCol.ToSql()] = val;
+                            }
+                            outputRows.Add(outputRow);
                         }
 
-                        var outputRow = new Row();
-                        foreach (var outCol in stmt.Output.Columns)
+                        if (outputRows.Count > 0)
                         {
-                            var val = await context.EvaluateValue(outCol.Expression, contextRow);
-                            outputRow[outCol.Alias ?? outCol.ToSql()] = val;
-                        }
-                        outputRows.Add(outputRow);
-                    }
+                            var outputTable = new DataTable();
+                            outputTable.SetColumns(outputRows[0].Columns.Keys);
+                            foreach (var r in outputRows) outputTable.AddRow(r);
 
-                    if (outputRows.Count > 0)
-                    {
-                        outputTable.SetColumns(outputRows[0].Columns.Keys);
-                        foreach (var r in outputRows) outputTable.AddRow(r);
-
-                        if (stmt.Output.IntoTable != null)
-                        {
-                            var intoDest = await context.ResolveDataSourceAsync(stmt.Output.IntoTable);
-                            await intoDest.WriteBatches(new[] { outputTable }.ToAsyncEnumerable());
-                        }
-                        else
-                        {
-                            context.LastResult = outputTable;
+                            if (stmt.Output.IntoTable != null)
+                            {
+                                var intoDest = await context.ResolveDataSourceAsync(stmt.Output.IntoTable);
+                                await intoDest.WriteBatches(new[] { outputTable }.ToAsyncEnumerable());
+                            }
+                            else
+                            {
+                                context.LastResult = outputTable;
+                            }
                         }
                     }
                 }

@@ -93,7 +93,14 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     Logger.Verbose("Strategy: Remote SQL Pushdown (Insert from Select)");
                     var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable)}\n{context.CompileQuery(stmt.SelectQuery, sqlDest.Dialect)}";
-                    await foreach(var _ in sqlDest.ExecuteRawSql(sql)){}
+                    if (context.IsWhatIf)
+                    {
+                        Logger.WriteLine($"WHAT IF: Would execute remote SQL pushdown insert on {connName}:\n{sql}", ConsoleColor.Yellow);
+                    }
+                    else
+                    {
+                        await foreach (var _ in sqlDest.ExecuteRawSql(sql)) { }
+                    }
                 }
                 else if (stmt.SelectQuery != null && stmt.SelectQuery is ExecutePushdownStatement pushdown)
                 {
@@ -107,7 +114,15 @@ namespace ETL_SQL.Engine.Handlers
                     var rowStrings = stmt.Values.Select(row => "(" + string.Join(", ", row.Select(v => context.CompileExpression(v, sqlDest.Dialect))) + ")");
                     var colList = stmt.Columns != null ? "(" + string.Join(", ", stmt.Columns) + ") " : "";
                     var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable)} {colList}VALUES {string.Join(", ", rowStrings)}";
-                    await foreach(var _ in sqlDest.ExecuteRawSql(sql)){}
+                    
+                    if (context.IsWhatIf)
+                    {
+                        Logger.WriteLine($"WHAT IF: Would insert {stmt.Values.Count} rows into {connName} using raw SQL.", ConsoleColor.Yellow);
+                    }
+                    else
+                    {
+                        await foreach (var _ in sqlDest.ExecuteRawSql(sql)) { }
+                    }
                 }
                 else
                 {
@@ -154,9 +169,21 @@ namespace ETL_SQL.Engine.Handlers
                 var allInsertedRows = new List<Row>();
                 await foreach (var batch in boundBatches)
                 {
-                    await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable());
+                    if (context.IsWhatIf)
+                    {
+                        // Dry run: don't write
+                    }
+                    else
+                    {
+                        await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable());
+                    }
                     count += batch.Rows.Count;
                     if (stmt.Output != null) allInsertedRows.AddRange(batch.Rows);
+                }
+                
+                if (context.IsWhatIf)
+                {
+                    Logger.WriteLine($"WHAT IF: Would insert {count} rows into {connName} via batch transfer.", ConsoleColor.Yellow);
                 }
                 context.RowsProcessed += count;
 
@@ -187,7 +214,7 @@ namespace ETL_SQL.Engine.Handlers
                     // Map provided values to the correct row slots
                     for (int i = 0; i < rowExprs.Count; i++)
                     {
-                        string colName = stmt.Columns != null ? stmt.Columns[i] : (i < destinationCols.Count ? destinationCols[i] : null);
+                        string? colName = stmt.Columns != null ? stmt.Columns[i] : (i < destinationCols.Count ? destinationCols[i] : null);
                         if (colName != null)
                         {
                             row[colName] = await context.EvaluateValue(rowExprs[i], new Row());
@@ -217,7 +244,15 @@ namespace ETL_SQL.Engine.Handlers
 
                     batch.AddRow(row);
                 }
-                await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable());
+
+                if (context.IsWhatIf)
+                {
+                    Logger.WriteLine($"WHAT IF: Would insert {stmt.Values.Count} rows into {connName} via memory batch.", ConsoleColor.Yellow);
+                }
+                else
+                {
+                    await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable());
+                }
                 context.RowsProcessed += stmt.Values.Count;
 
                 if (stmt.Output != null && batch.Rows.Count > 0)

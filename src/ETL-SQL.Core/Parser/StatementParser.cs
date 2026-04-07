@@ -43,6 +43,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.SET)) 
             {
                 if (_parser.Match(TokenType.PROFILING) || _parser.Match(TokenType.PROFILE)) return ParseSetProfiling();
+                if (_parser.Match(TokenType.WHAT_IF)) return ParseSetWhatIf();
                 if (_parser.Match(TokenType.SHOW_PASSWORD)) return ParseSetShowPassword();
                 return ParseSetVariable();
             }
@@ -1740,6 +1741,17 @@ namespace ETL_SQL.Core.Parser
 
             if (_parser.Match(TokenType.SEMICOLON)) { }
             return new SetProfilingStatement { Enabled = enabled };
+        }
+
+        private Statement ParseSetWhatIf()
+        {
+            var enabled = true;
+            if (_parser.Match(TokenType.ON)) enabled = true;
+            else if (_parser.Match(TokenType.OFF)) enabled = false;
+            else throw new SyntaxException($"Expected ON or OFF after SET WHAT_IF", _parser.Current.Line, _parser.Current.Column);
+
+            if (_parser.Match(TokenType.SEMICOLON)) { }
+            return new SetWhatIfStatement { Enabled = enabled };
         }
 
         private Statement ParseSetShowPassword()

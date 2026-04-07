@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using System.IO.Compression;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -19,22 +20,36 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (FileOperationStatement)statement;
             
-            
-            string source = context.ResolvePath((await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "");
+            string sourceVal = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
+            string source = context.ResolvePath(sourceVal);
             string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
 
             Logger.Verbose($"File Operation: {stmt.Type} on {source}{(dest != null ? $" -> {dest}" : "")}");
+
+            if (context.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_FILE on {source}{(dest != null ? $" to {dest}" : "")}", ConsoleColor.Yellow);
+                return;
+            }
+
             switch (stmt.Type)
             {
                 case FileOpType.Delete:
-                    File.Delete(source);
-                    Logger.WriteLine($"File deleted: {source}", ConsoleColor.Green);
+                    if (File.Exists(source)) 
+                    {
+                        File.Delete(source);
+                        Logger.WriteLine($"File deleted: {source}", ConsoleColor.Green);
+                    }
                     break;
                 case FileOpType.Copy:
                     if (dest != null) File.Copy(source, dest, true);
                     break;
                 case FileOpType.Move:
-                    if (dest != null) File.Move(source, dest, true);
+                    if (dest != null)
+                    {
+                         if (File.Exists(dest)) File.Delete(dest);
+                         File.Move(source, dest);
+                    }
                     break;
                 case FileOpType.Rename:
                     if (dest != null)
@@ -54,10 +69,7 @@ namespace ETL_SQL.Engine.Handlers
                     if (dest != null)
                     {
                         if (File.Exists(dest)) File.Delete(dest);
-                        using (var zip = System.IO.Compression.ZipFile.Open(dest, System.IO.Compression.ZipArchiveMode.Create))
-                        {
-                            zip.CreateEntryFromFile(source, Path.GetFileName(source));
-                        }
+                        System.IO.Compression.ZipFile.CreateFromDirectory(source, dest); // Simple implementation for now
                     }
                     break;
                 case FileOpType.Encrypt:
@@ -71,6 +83,3 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
-
-
-

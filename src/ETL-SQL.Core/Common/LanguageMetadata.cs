@@ -50,7 +50,7 @@ namespace ETL_SQL.Common
 
         public static readonly HashSet<string> Keywords = new(StringComparer.OrdinalIgnoreCase)
         {
-            "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON",
+            "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON", "WHAT_IF",
             "WAITFOR", "DELAY",
             "WITH", "RECURSIVE", "HASH", "LOOP",
             "IDENTITY", "DEFAULT", "RANGE", "PRECEDING", "FOLLOWING", "UNBOUNDED", "CURRENT",

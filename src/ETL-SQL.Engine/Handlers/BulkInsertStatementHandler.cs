@@ -145,11 +145,19 @@ namespace ETL_SQL.Engine.Handlers
 
                     try
                     {
-                        await destination.WriteBatches(new[] { mappedBatch }.ToAsyncEnumerable());
+                        if (context.IsWhatIf)
+                        {
+                            // Dry run: just count
+                        }
+                        else
+                        {
+                            await destination.WriteBatches(new[] { mappedBatch }.ToAsyncEnumerable());
+                        }
                         count += mappedBatch.Rows.Count;
                     }
                     catch (Exception ex)
                     {
+                        if (context.IsWhatIf) throw; // Should not happen in dry run really, but keep consistency
                         if (maxErrors > 0 || errorCount < maxErrors)
                         {
                             Logger.WriteLine($"[WARNING] Batch write failed: {ex.Message}. Retrying row-by-row up to MAXERRORS={maxErrors}.");

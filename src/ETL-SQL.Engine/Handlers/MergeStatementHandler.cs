@@ -91,7 +91,14 @@ namespace ETL_SQL.Engine.Handlers
             {
                 Logger.Verbose("Strategy: Remote SQL MERGE Pushdown (MSSQL)");
                 var sql = context.CompileQuery(stmt, targetSql.Dialect);
-                await foreach (var _ in targetSql.ExecuteRawSql(sql)) { }
+                if (context.IsWhatIf)
+                {
+                    Logger.WriteLine($"WHAT IF: Would execute remote SQL pushdown merge on {targetConnName}:\n{sql}", ConsoleColor.Yellow);
+                }
+                else
+                {
+                    await foreach (var _ in targetSql.ExecuteRawSql(sql)) { }
+                }
                 return;
             }
 
@@ -199,18 +206,25 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // Apply Mutations
-            foreach (var r in rowsToDelete) targetRows.Remove(r);
-            targetRows.AddRange(rowsToAdd);
-
-            if (target is InMemoryDataSource mem)
+            if (context.IsWhatIf)
             {
-                 mem.Restore(new List<DataTable> { CreateDataTable(targetRows, await target.GetColumnsAsync()) });
+                Logger.WriteLine($"WHAT IF: Would perform in-memory merge on {target.GetType().Name}. Actions: {processedCount}.", ConsoleColor.Yellow);
             }
             else
             {
-                Logger.Verbose($"Finalizing MERGE by overwriting {target.GetType().Name}");
-                var finalBatch = CreateDataTable(targetRows, await target.GetColumnsAsync());
-                await target.WriteBatches(new[] { finalBatch }.ToAsyncEnumerable());
+                foreach (var r in rowsToDelete) targetRows.Remove(r);
+                targetRows.AddRange(rowsToAdd);
+
+                if (target is InMemoryDataSource mem)
+                {
+                    mem.Restore(new List<DataTable> { CreateDataTable(targetRows, await target.GetColumnsAsync()) });
+                }
+                else
+                {
+                    Logger.Verbose($"Finalizing MERGE by overwriting {target.GetType().Name}");
+                    var finalBatch = CreateDataTable(targetRows, await target.GetColumnsAsync());
+                    await target.WriteBatches(new[] { finalBatch }.ToAsyncEnumerable());
+                }
             }
 
             context.RowsProcessed = processedCount;

@@ -623,6 +623,25 @@ USE PASSWORD = 'mySecret'; -- password visible in output
 SET SHOW_PASSWORD OFF;     -- restore masked mode
 ```
 
+#### SET WHAT_IF
+Enables or disables "dry-run" mode. When `ON`, the engine will suppress all side-effect-producing operations (database writes, file system changes, emails, etc.) while logging the intended actions in yellow text to the messages console. This is essential for validating complex scripts before execution.
+
+*Syntax:*  
+`SET WHAT_IF ON;`  
+`SET WHAT_IF OFF;`
+
+*Behavior:*
+- **Suppressed**: `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, `BULK INSERT`, `FILE` operations, `DIRECTORY` operations, `SEND_EMAIL`, `DOCKER` actions, and DDL (`CREATE/DROP TABLE/INDEX`).
+- **Allowed**: `SELECT`, `DECLARE`, `SET` (variables), `CREATE CONNECTION`, `PRINT`, `EXECUTE` (local), `IF/WHILE` logic.
+- **Logging**: Intended side effects are printed as `WHAT IF: Would [action]...` in yellow.
+
+```sql
+SET WHAT_IF ON;
+-- This will log that it would delete, but won't actually touch the file
+DELETE_FILE 'C:\Data\OldBackup.zip';
+SET WHAT_IF OFF;
+```
+
 ### Supported Data Types
 ETL-SQL supports a wide range of data types tailored for ETL operations, variable declarations, and table schemas. Below is a detailed breakdown of the supported types, their default formats, and cast behavior.
 

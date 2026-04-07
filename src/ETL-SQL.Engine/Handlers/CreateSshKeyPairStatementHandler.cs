@@ -24,13 +24,15 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (CreateSshKeyPairStatement)statement;
 
-            var path = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString();
-            if (string.IsNullOrEmpty(path)) throw new ExecutionException("Path must be specified for CREATE SSH_KEY_PAIR.");
+            var pathVal = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString();
+            if (string.IsNullOrEmpty(pathVal)) throw new ExecutionException("Path must be specified for CREATE SSH_KEY_PAIR.");
 
-            // Resolve full path relative to script/context if not absolute
-            if (!Path.IsPathRooted(path))
+            string path = context.ResolvePath(pathVal);
+
+            if (context.IsWhatIf)
             {
-                path = context.ResolvePath(path);
+                Logger.WriteLine($"WHAT IF: Would generate SSH key pair at {path}", ConsoleColor.Yellow);
+                return;
             }
 
             if (!Directory.Exists(path)) Directory.CreateDirectory(path);
@@ -111,29 +113,8 @@ namespace ETL_SQL.Engine.Handlers
                     }
                     break;
 
-                /* 
-                case "ED25519":
-                    // Ed25519 requires .NET 9+ (System.Security.Cryptography.EdDsa)
-                    using (var eddsa = EdDsa.Create())
-                    {
-                        privateKeyFile = Path.Combine(path, "id_ed25519");
-                        publicKeyFile = privateKeyFile + ".pub";
-
-                        if (string.IsNullOrEmpty(passphrase))
-                        {
-                            privateKeyPem = eddsa.ExportPkcs8PrivateKeyPem();
-                        }
-                        else
-                        {
-                            privateKeyPem = eddsa.ExportEncryptedPkcs8PrivateKeyPem(passphrase, new PbeParameters(PbeEncryptionAlgorithm.Aes256Cbc, HashAlgorithmName.SHA256, 100000));
-                        }
-                        publicKeyPem = eddsa.ExportSubjectPublicKeyInfoPem();
-                    }
-                    break;
-                */
-
                 default:
-                    throw new ExecutionException($"Unsupported SSH key algorithm: {algorithm}. Supported: RSA, ECDSA, ED25519.");
+                    throw new ExecutionException($"Unsupported SSH key algorithm: {algorithm}. Supported: RSA, ECDSA.");
             }
 
             await File.WriteAllTextAsync(privateKeyFile, privateKeyPem);

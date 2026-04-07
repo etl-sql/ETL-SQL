@@ -118,6 +118,9 @@ namespace ETL_SQL.Engine
         /// <summary>Whether to capture execution metrics for profiling.</summary>
         public bool IsProfiling { get; set; }
         
+        /// <summary>Whether to run in dry-run mode (no side effects).</summary>
+        public bool IsWhatIf { get; set; }
+        
         /// <summary>Execution metrics for all statements run since profiling was enabled.</summary>
         public List<ExecutionMetrics> ProfileMetrics { get; } = new();
         
@@ -685,6 +688,7 @@ namespace ETL_SQL.Engine
                 IsVerbose = IsVerbose,
                 RedirectOutput = RedirectOutput,
                 IsProfiling = IsProfiling,
+                IsWhatIf = IsWhatIf,
                 ShowPassword = ShowPassword,
                 BatchSize = BatchSize,
                 PreviewLimit = PreviewLimit,

@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -15,9 +16,14 @@ namespace ETL_SQL.Engine.Handlers
         {
             if (statement is not DockerActionStatement actionStmt) return;
 
-            
             Logger.Verbose($"Docker Action: {actionStmt.Action} on {actionStmt.Alias}");
-            
+
+            if (context.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would execute Docker {actionStmt.Action} on {actionStmt.Alias}", ConsoleColor.Yellow);
+                return;
+            }
+
             switch (actionStmt.Action)
             {
                 case DockerAction.Start:
@@ -39,6 +45,3 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
-
-
-

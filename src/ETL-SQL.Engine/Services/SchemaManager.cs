@@ -27,16 +27,24 @@ namespace ETL_SQL.Engine.Services
         /// <summary>Executes a CREATE TABLE statement.</summary>
         public async Task EvaluateCreateTable(CreateTableStatement stmt, IDictionary<string, IDataSource> connections)
         {
-            if (stmt.TargetTable.ConnectionName == null && (stmt.TargetTable.TableName.StartsWith("#") || !connections.ContainsKey(stmt.TargetTable.TableName)))
+            string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
+            bool isTemp = stmt.TargetTable.TableName.StartsWith("#") && stmt.TargetTable.ConnectionName == null;
+
+            if (_evaluator.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would create table {connName}", ConsoleColor.Yellow);
+                return;
+            }
+
+            if (isTemp || !connections.ContainsKey(connName))
             {
                 var mem = new InMemoryDataSource();
                 mem.Validator = _evaluator;
                 mem.SetSchema(stmt.Columns, stmt.TableConstraints);
-                connections[stmt.TargetTable.TableName] = mem;
+                connections[connName] = mem;
             }
             else
             {
-                string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
                 if (connections.TryGetValue(connName, out var conn) && conn is IDatabaseSource sqlConn)
                 {
                     var cols = stmt.Columns.Select(c => $"{c.ColumnName} {c.DataType}{(c.IsIdentity ? " IDENTITY" : "")}{(c.DefaultExpression != null ? $" DEFAULT {c.DefaultExpression.ToSql()}" : "")}");
@@ -49,6 +57,13 @@ namespace ETL_SQL.Engine.Services
         public async Task EvaluateDropTable(DropTableStatement stmt, IDictionary<string, IDataSource> connections)
         {
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
+
+            if (_evaluator.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would drop table {connName} (IfExists: {stmt.IfExists})", ConsoleColor.Yellow);
+                return;
+            }
+
             if (connName.StartsWith("#") && stmt.TargetTable.ConnectionName == null)
             {
                 if (!connections.Remove(connName) && !stmt.IfExists) throw new ExecutionException($"Table not found: {connName}");
@@ -92,6 +107,11 @@ namespace ETL_SQL.Engine.Services
             if (stmt.Table != null)
             {
                 string connName = stmt.Table.ConnectionName ?? stmt.Table.TableName;
+                if (_evaluator.IsWhatIf)
+                {
+                    Logger.WriteLine($"WHAT IF: Would drop index {stmt.IndexName} from {connName}", ConsoleColor.Yellow);
+                    return;
+                }
                 if (connections.TryGetValue(connName, out var connection) && connection is InMemoryDataSource mem)
                 {
                     // InMemory index removal
@@ -112,6 +132,12 @@ namespace ETL_SQL.Engine.Services
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
             if (!connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown connection: {connName}");
             
+            if (_evaluator.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would create index {stmt.IndexName} on {connName} ({string.Join(", ", stmt.Columns)})", ConsoleColor.Yellow);
+                return;
+            }
+
             if (connection is InMemoryDataSource mem)
             {
                 foreach (var col in stmt.Columns) mem.CreateIndex(col, stmt.IsUnique);

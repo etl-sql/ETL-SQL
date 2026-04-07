@@ -92,6 +92,13 @@ namespace ETL_SQL.Engine.Handlers
 
             // 3. Send via WriteBatches
             Logger.Verbose($"Sending email to {row["To"]} via {connName ?? "default SMTP"}");
+            
+            if (context.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would send email to {row["To"]} with subject '{row["Subject"]}'", ConsoleColor.Yellow);
+                return;
+            }
+
             var dt = new DataTable();
             dt.ColumnNames.AddRange(row.Columns.Keys);
             dt.AddRow(row);

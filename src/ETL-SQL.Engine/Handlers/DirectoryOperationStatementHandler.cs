@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -17,12 +18,19 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (DirectoryOperationStatement)statement;
             
-            
-            string path = context.ResolvePath((await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "");
+            string pathVal = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "";
+            string path = context.ResolvePath(pathVal);
 
             string? dest = stmt.NewNameOrDest != null ? context.ResolvePath((await context.EvaluateValue(stmt.NewNameOrDest, new Row()))?.ToString() ?? "") : null;
             
             Logger.Verbose($"Directory Operation: {stmt.Type} on {path}{(dest != null ? $" -> {dest}" : "")}");
+
+            if (context.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_DIRECTORY on {path}{(dest != null ? $" to {dest}" : "")}", ConsoleColor.Yellow);
+                return;
+            }
+
             switch (stmt.Type)
             {
                 case DirectoryOpType.Create:
@@ -30,8 +38,11 @@ namespace ETL_SQL.Engine.Handlers
                     Logger.WriteLine($"Directory created: {path}", ConsoleColor.Green);
                     break;
                 case DirectoryOpType.Delete:
-                    Directory.Delete(path, true);
-                    Logger.WriteLine($"Directory deleted: {path}", ConsoleColor.Green);
+                    if (Directory.Exists(path))
+                    {
+                        Directory.Delete(path, true);
+                        Logger.WriteLine($"Directory deleted: {path}", ConsoleColor.Green);
+                    }
                     break;
                 case DirectoryOpType.Rename:
                 case DirectoryOpType.Move:
@@ -50,9 +61,6 @@ namespace ETL_SQL.Engine.Handlers
                 case DirectoryOpType.Copy:
                     if (dest != null)
                     {
-                        bool recurse = true; // Default to true for COPY_DIRECTORY
-                        if (stmt.NewNameOrDest is LiteralExpression lit && lit.Value is bool b) recurse = b; // Not quite right, need to check if 3rd arg exists
-                        // Actually, the parser only allows 2 args currently. Let me check the parser again.
                         CopyDirectory(path, dest, true);
                         Logger.WriteLine($"Directory copied: {path} -> {dest}", ConsoleColor.Green);
                     }
@@ -99,6 +107,3 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
-
-
-

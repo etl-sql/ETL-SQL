@@ -1,6 +1,8 @@
+using System;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -20,10 +22,13 @@ namespace ETL_SQL.Engine.Handlers
             if (dataSource == null)
                 throw new ExecutionException($"Table not found: {truncateStmt.TargetTable.TableName}");
 
+            if (context.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would truncate table {truncateStmt.TargetTable.TableName}", ConsoleColor.Yellow);
+                return;
+            }
+
             await dataSource.TruncateAsync();
         }
     }
 }
-
-
-

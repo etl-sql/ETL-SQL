@@ -134,6 +134,7 @@ namespace ETL_SQL.Core
         Dictionary<Statement, object?> SubqueryCache { get; }
         
         bool IsProfiling { get; set; }
+        bool IsWhatIf { get; set; }
         List<ExecutionMetrics> ProfileMetrics { get; }
 
         List<string> GetIndexedColumns(Expression? cond, string alias);
