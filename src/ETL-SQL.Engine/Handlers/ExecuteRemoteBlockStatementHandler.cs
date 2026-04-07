@@ -2,6 +2,7 @@ using System.Threading.Tasks;
 using System.Linq;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
+using System;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -31,6 +32,12 @@ namespace ETL_SQL.Engine.Handlers
                     if (string.IsNullOrWhiteSpace(sql)) continue;
 
                     context.Log($"Remote SQL: {sql}");
+                    if (context.IsWhatIf)
+                    {
+                        Logger.WriteLine($"WHAT IF: Would execute remote block SQL on {connName}:\n{sql}", ConsoleColor.Yellow);
+                        continue;
+                    }
+
                     context.LastResultSets.Clear();
                     var sw = System.Diagnostics.Stopwatch.StartNew();
                     var batches = db.ExecuteRawSql(sql);
@@ -48,7 +55,7 @@ namespace ETL_SQL.Engine.Handlers
                         }
                         
                         if (currentSet!.ColumnNames.Count == 0) currentSet.SetColumns(batch.ColumnNames);
-                        foreach (var r in batch.Rows) currentSet.AddRow(r);
+                        foreach (var row in batch.Rows) currentSet.AddRow(row);
                     }
                     if (currentSet != null) context.LastResultSets.Add(currentSet);
 
@@ -70,6 +77,3 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
-
-
-

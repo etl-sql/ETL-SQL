@@ -1,0 +1,48 @@
+-- Verification Script for FW-4 to FW-9
+PRINT '--- Testing SYSDATE, CURRENT_TIMESTAMP, GETDATE ---';
+DECLARE @d1 = SYSDATE;
+DECLARE @d2 = CURRENT_TIMESTAMP;
+DECLARE @d3 = GETDATE();
+DECLARE @d4 = NOW();
+PRINT 'SYSDATE: ' + @d1;
+PRINT 'CURRENT_TIMESTAMP: ' + @d2;
+PRINT 'GETDATE(): ' + @d3;
+PRINT 'NOW(): ' + @d4;
+
+PRINT '--- Testing Date Arithmetic (FW-6) ---';
+DECLARE @tomorrow = GETDATE() + 1;
+DECLARE @nextWeek = GETDATE() + 7;
+DECLARE @yesterday = GETDATE() - 1;
+DECLARE @diff = @tomorrow - @yesterday;
+PRINT 'Tomorrow: ' + @tomorrow;
+PRINT 'Next Week: ' + @nextWeek;
+PRINT 'Yesterday: ' + @yesterday;
+PRINT 'Diff (days): ' + @diff;
+
+PRINT '--- Testing DATEADD (FW-7) ---';
+DECLARE @da1 = DATEADD(MONTH, 1, '2026-01-01');
+DECLARE @da2 = DATEADD(YEAR, -1, '2026-01-01');
+PRINT 'DATEADD(MONTH, 1): ' + @da1;
+PRINT 'DATEADD(YEAR, -1): ' + @da2;
+
+PRINT '--- Testing Stats Functions (FW-9) ---';
+DECLARE @list LIST = [10, 20, 30, 40, 50];
+DECLARE @sum = SUM(@list);
+DECLARE @avg = AVG(@list);
+DECLARE @min = MIN(@list);
+DECLARE @max = MAX(@list);
+DECLARE @std = STDDEV(@list);
+DECLARE @var = VAR(@list);
+
+PRINT 'List: [10, 20, 30, 40, 50]';
+PRINT 'SUM: ' + @sum;
+PRINT 'AVG: ' + @avg;
+PRINT 'MIN: ' + @min;
+PRINT 'MAX: ' + @max;
+PRINT 'STDDEV: ' + @std;
+PRINT 'VAR: ' + @var;
+
+PRINT '--- Testing Help (FW-4) ---';
+HELP FUNCTION SYSDATE;
+HELP FUNCTION DATEADD;
+HELP FUNCTION STDDEV;

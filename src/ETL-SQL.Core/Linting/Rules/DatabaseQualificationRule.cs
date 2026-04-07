@@ -93,29 +93,41 @@ namespace ETL_SQL.Core.Linting.Rules
             var tableName = tableRef.TableName;
             
             // Skip temp tables and variables
-            if (tableName.StartsWith("#") || tableName.StartsWith("@")) return;
+            if (tableName.StartsWith("#") || tableName.StartsWith("@") || tableName.Equals("DUAL", StringComparison.OrdinalIgnoreCase)) return;
 
             // If it's already qualified, we're good
             if (!string.IsNullOrEmpty(tableRef.ConnectionName)) return;
 
-            // Check if the default connection (or the only connection) is a database type
-            var connections = context.Metadata!.GetConnections().ToList();
+            // Get the list of connections from the context metadata
+            var connections = context.Metadata?.GetConnections().ToList() ?? new List<string>();
             if (connections.Count <= 1) return; // Only one connection, unqualified name is fine
 
-            // For now, if there's only one connection and it's NOT qualified, we warn 
-            // IF we can determine it's a DB. 
-            // A safer approach for this rule: If it's a one-part name, and the "DEFAULT" or first connection 
-            // is known to be a database (which we'll assume for now if it's not a known file type), warn.
-
-
-            results.Add(new LintResult
+            // If we have multiple connections, we look for the "default" connection or check types
+            // In ETL-SQL, if not qualified, it often defaults to the first declared connection 
+            // but for safety in multi-source scripts, we want to encourage qualification.
+            
+            bool isDbConnection = false;
+            foreach (var conn in connections)
             {
-                RuleName = Name,
-                Severity = LintSeverity.Warning,
-                Message = $"Reference to table '{tableName}' should be qualified with a connection name (e.g. 'conn.{tableName}').",
-                LineNumber = tableRef.Line,
-                ColumnNumber = tableRef.Column
-            });
+                var type = context.Metadata?.GetConnectionType(conn);
+                if (type != null && dbTypes.Contains(type))
+                {
+                    isDbConnection = true;
+                    break;
+                }
+            }
+
+            if (isDbConnection)
+            {
+                results.Add(new LintResult
+                {
+                    RuleName = Name,
+                    Severity = LintSeverity.Warning,
+                    Message = $"Reference to table '{tableName}' should be qualified with a connection name (e.g. 'conn.{tableName}') in scripts with multiple connections.",
+                    LineNumber = tableRef.Line,
+                    ColumnNumber = tableRef.Column
+                });
+            }
         }
     }
 }

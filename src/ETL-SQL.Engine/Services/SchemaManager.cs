@@ -82,6 +82,12 @@ namespace ETL_SQL.Engine.Services
         /// <summary>Executes a DROP CONNECTION statement.</summary>
         public Task EvaluateDropConnection(DropConnectionStatement stmt, IDictionary<string, IDataSource> connections)
         {
+            if (_evaluator.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would drop connection {stmt.ConnectionName}", ConsoleColor.Yellow);
+                return Task.CompletedTask;
+            }
+
             if (!connections.Remove(stmt.ConnectionName) && !stmt.IfExists)
                 throw new ExecutionException($"Connection not found: {stmt.ConnectionName}");
             return Task.CompletedTask;
@@ -90,6 +96,12 @@ namespace ETL_SQL.Engine.Services
         /// <summary>Executes a DROP PROCEDURE statement.</summary>
         public void EvaluateDropProcedure(DropProcedureStatement stmt)
         {
+            if (_evaluator.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would drop procedure {stmt.ProcedureName}", ConsoleColor.Yellow);
+                return;
+            }
+
             if (!_variableScopeManager.RemoveProcedure(stmt.ProcedureName) && !stmt.IfExists)
                 throw new ExecutionException($"Procedure not found: {stmt.ProcedureName}");
         }
@@ -97,6 +109,12 @@ namespace ETL_SQL.Engine.Services
         /// <summary>Executes a DROP FUNCTION statement.</summary>
         public void EvaluateDropFunction(DropFunctionStatement stmt)
         {
+            if (_evaluator.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would drop function {stmt.FunctionName}", ConsoleColor.Yellow);
+                return;
+            }
+
             if (!_variableScopeManager.RemoveFunction(stmt.FunctionName) && !stmt.IfExists)
                 throw new ExecutionException($"Function not found: {stmt.FunctionName}");
         }

@@ -291,7 +291,7 @@ namespace ETL_SQL.Core.Parser
                 var t = _parser.Previous;
                 return new LiteralExpression(t.Value, TokenType.STRING) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
             }
-            if (_parser.Match(TokenType.CURRENT_TIMESTAMP) || _parser.Match(TokenType.CURRENT_DATE) || _parser.Match(TokenType.CURRENT_TIME))
+            if (_parser.Match(TokenType.CURRENT_TIMESTAMP) || _parser.Match(TokenType.CURRENT_DATE) || _parser.Match(TokenType.CURRENT_TIME) || _parser.Match(TokenType.SYSDATE))
             {
                 var t = _parser.Previous;
                 return new FunctionCallExpression(t.Value, new List<Expression>()) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };

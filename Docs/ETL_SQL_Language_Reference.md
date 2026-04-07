@@ -665,6 +665,13 @@ USE PASSWORD = 'mySecret'; -- password visible in output
 SET SHOW_PASSWORD OFF;     -- restore masked mode
 ```
 
+#### SET PROFILING
+Enables or disables detailed execution profiling. When `ON`, the engine captures millisecond-level metrics for every statement, which can be viewed in the Performance tab of the Terminal Editor (`ui edit`) or the VS Code extension.
+
+*Syntax:*  
+`SET PROFILING ON;`  
+`SET PROFILING OFF;`
+
 #### SET WHAT_IF
 Enables or disables "dry-run" mode. When `ON`, the engine will suppress all side-effect-producing operations (database writes, file system changes, emails, etc.) while logging the intended actions in yellow text to the messages console. This is essential for validating complex scripts before execution.
 
@@ -673,7 +680,7 @@ Enables or disables "dry-run" mode. When `ON`, the engine will suppress all side
 `SET WHAT_IF OFF;`
 
 *Behavior:*
-- **Suppressed**: `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, `BULK INSERT`, `FILE` operations, `DIRECTORY` operations, `SEND_EMAIL`, `DOCKER` actions, and DDL (`CREATE/DROP TABLE/INDEX`).
+- **Suppressed**: `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, `BULK INSERT`, `FILE` operations, `DIRECTORY` operations, `SEND_EMAIL`, `DOCKER` actions, and DDL (`CREATE/DROP TABLE/INDEX/PROCEDURE/FUNCTION/CONNECTION`).
 - **Allowed**: `SELECT`, `DECLARE`, `SET` (variables), `CREATE CONNECTION`, `PRINT`, `EXECUTE` (local), `IF/WHILE` logic.
 - **Logging**: Intended side effects are printed as `WHAT IF: Would [action]...` in yellow.
 
@@ -698,6 +705,10 @@ ETL-SQL supports a wide range of data types tailored for ETL operations, variabl
 *   **Accepted Literals**: `'2023-10-31'`, `'2023-10-31 15:30:00'`, `'15:30:00'`
 *   **Default Behavior**: Parsed automatically if the string matches common ISO 8601 formatting, or by using explicit functions like `DATETIMEFROMPARTS`.
 *   **Cast Behavior**: `CAST('2024-01-01' AS DATE)` parses the string into a `DateTime` struct. Casting a date back to a string uses the standard `yyyy-MM-dd HH:mm:ss` format unless otherwise specified via `FORMAT()`.
+*   **System Constants**: `SYSDATE`, `CURRENT_TIMESTAMP`, `GETDATE()`, `NOW()` return the current system date/time. 
+    - **Identifiers**: `SYSDATE` and `CURRENT_TIMESTAMP` are bare identifiers (no parentheses).
+    - **Functions**: `GETDATE()` and `NOW()` MUST include parentheses.
+*   **Date Arithmetic**: (FW-6) Supports shorthand arithmetic for days. `SYSDATE + 1` returns tomorrow. `GETDATE() - 7` returns a date from one week ago. `date1 - date2` returns the difference in days as a decimal.
 
 #### 3. Character & String Types
 *   **Types**: `STRING`, `VARCHAR`, `NVARCHAR`, `TEXT`, `CHAR`
@@ -1412,14 +1423,20 @@ FROM system_table;
 - **`POWER(base, exp)`**: Exponential calculation.
 - **`SQRT(float)`**: Square root.
 - **`RAND([seed])`**: Returns a random float between 0 and 1.
-- **`SIN(float)`**, **`COS(float)`**, **`TAN(float)`**: Standard trigonometric functions (input in radians).
-- **`ASIN(float)`**, **`ACOS(float)`**, **`ATAN(float)`**: Inverse trigonometric functions (returns radians).
-- **`ATAN2(y, x)`**: Returns the angle in radians between the positive x-axis and the point (x, y).
 - **`SIGN(numeric)`**: Returns the sign of a number: `1` for positive, `-1` for negative, and `0` for zero.
+- **`SIN(float)`, `COS(float)`, `TAN(float)`**: Standard trigonometric functions.
+
+### Statistical Functions
+- **`SUM(expression)`**: Returns the sum of all values in the numeric collection.
+- **`AVG(expression)`**: Returns the average (mean) of all values in the numeric collection.
+- **`MIN(expression)`, `MAX(expression)`**: Returns the minimum or maximum value in the collection.
+- **`COUNT(expression)`**: Returns the number of items in the collection.
+- **`STDDEV(expression)`**: Returns the statistical standard deviation of the population.
+- **`VAR(expression)`**: Returns the statistical variance of the population.
 
 ### Date and Time Scalars
-- **`CURRENT_TIMESTAMP`, `GETDATE()`, `GETUTCDATE()`**: Functions returning current system time.
-- **`DATEADD(datepart, number, date)`**: Adds a specific interval to a date.
+- **`CURRENT_TIMESTAMP`, `GETDATE()`, `GETUTCDATE()`, `SYSDATE()`**: Functions returning current system time.
+- **`DATEADD(datepart, number, date)`**: Adds a specific interval (e.g., `DAY`, `MONTH`, `YEAR`, `HOUR`) to a date.
 - **`DATEDIFF(datepart, startdate, enddate)`**: Returns the difference between two dates.
 - **`DATEPART(datepart, date)`**, **`DATENAME(datepart, date)`**: Extracts parts of a date.
 - **`YEAR(date)`**, **`MONTH(date)`**, **`DAY(date)`**: Extract integer components from a date.

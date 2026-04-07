@@ -1,7 +1,9 @@
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+using System;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -16,11 +18,16 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (AlterTableStatement)statement;
-            
 
             var destination = await context.ResolveDataSourceAsync(stmt.TargetTable);
             if (destination == null)
                 throw new ExecutionException($"Unknown table/connection: {stmt.TargetTable.TableName} at Line {stmt.Line}");
+
+            if (context.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would execute ALTER TABLE {stmt.TargetTable.TableName} ({stmt.Action})", ConsoleColor.Yellow);
+                return;
+            }
 
             if (destination is InMemoryDataSource mem)
             {
@@ -68,6 +75,3 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
-
-
-

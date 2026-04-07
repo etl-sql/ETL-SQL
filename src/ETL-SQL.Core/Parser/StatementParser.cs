@@ -233,7 +233,9 @@ namespace ETL_SQL.Core.Parser
         {
             return type == TokenType.CONNECTION || type == TokenType.FUNCTION || type == TokenType.PROCEDURE || type == TokenType.TABLE ||
                    type == TokenType.FILE || type == TokenType.JSON || type == TokenType.XML || type == TokenType.EXCEL ||
-                   type == TokenType.MSSQL || type == TokenType.ORACLE || type == TokenType.POSTGRES || type == TokenType.MOCKDB;
+                   type == TokenType.MSSQL || type == TokenType.ORACLE || type == TokenType.POSTGRES || type == TokenType.MOCKDB ||
+                   type == TokenType.SYSDATE || type == TokenType.CURRENT_TIMESTAMP || 
+                   type == TokenType.CURRENT_DATE || type == TokenType.CURRENT_TIME;
         }
 
         private Statement ParseReturn()

@@ -30,7 +30,7 @@ namespace ETL_SQL.Core.Linting.Rules
 
             foreach (var statement in script.Statements)
             {
-                AnalyzeStatement(statement, connMap, registry, results);
+                AnalyzeStatement(statement, connMap, registry, results, context);
             }
 
             return Task.FromResult<IEnumerable<LintResult>>(results);
@@ -75,12 +75,19 @@ namespace ETL_SQL.Core.Linting.Rules
         }
 
         private static void AnalyzeStatement(Statement stmt, Dictionary<string, string> connMap,
-            IConnectorRegistry registry, List<LintResult> results)
+            IConnectorRegistry registry, List<LintResult> results, ILintContext context)
         {
             if (stmt is ExecutePushdownStatement pushdown)
             {
                 var connName = pushdown.ConnectionName is IdentifierExpression id ? id.Name : pushdown.ConnectionName.ToSql();
-                if (!connMap.TryGetValue(connName, out var connType)) return;
+                
+                if (!connMap.TryGetValue(connName, out var connType))
+                {
+                    // Fallback to metadata from context (for persistent sessions)
+                    connType = context.Metadata?.GetConnectionType(connName);
+                }
+
+                if (string.IsNullOrEmpty(connType)) return;
 
                 var connector = registry.GetConnector(connType);
                 if (connector == null) return;
@@ -107,21 +114,21 @@ namespace ETL_SQL.Core.Linting.Rules
 
             // Recurse into control flow
             if (stmt is BlockStatement block)
-                foreach (var s in block.Statements) AnalyzeStatement(s, connMap, registry, results);
+                foreach (var s in block.Statements) AnalyzeStatement(s, connMap, registry, results, context);
             else if (stmt is IfStatement ifStmt)
             {
-                AnalyzeStatement(ifStmt.IfBody, connMap, registry, results);
+                AnalyzeStatement(ifStmt.IfBody, connMap, registry, results, context);
                 if (ifStmt.ElseIfClauses != null)
-                    foreach (var ei in ifStmt.ElseIfClauses) AnalyzeStatement(ei.Body, connMap, registry, results);
-                if (ifStmt.ElseBody != null) AnalyzeStatement(ifStmt.ElseBody, connMap, registry, results);
+                    foreach (var ei in ifStmt.ElseIfClauses) AnalyzeStatement(ei.Body, connMap, registry, results, context);
+                if (ifStmt.ElseBody != null) AnalyzeStatement(ifStmt.ElseBody, connMap, registry, results, context);
             }
-            else if (stmt is WhileStatement whileStmt) AnalyzeStatement(whileStmt.Body, connMap, registry, results);
-            else if (stmt is ForStatement forStmt) AnalyzeStatement(forStmt.Body, connMap, registry, results);
-            else if (stmt is ForeachStatement foreachStmt) AnalyzeStatement(foreachStmt.Body, connMap, registry, results);
+            else if (stmt is WhileStatement whileStmt) AnalyzeStatement(whileStmt.Body, connMap, registry, results, context);
+            else if (stmt is ForStatement forStmt) AnalyzeStatement(forStmt.Body, connMap, registry, results, context);
+            else if (stmt is ForeachStatement foreachStmt) AnalyzeStatement(foreachStmt.Body, connMap, registry, results, context);
             else if (stmt is TryCatchStatement tryCatch)
             {
-                AnalyzeStatement(tryCatch.TryBody, connMap, registry, results);
-                AnalyzeStatement(tryCatch.CatchBody, connMap, registry, results);
+                AnalyzeStatement(tryCatch.TryBody, connMap, registry, results, context);
+                AnalyzeStatement(tryCatch.CatchBody, connMap, registry, results, context);
             }
         }
     }

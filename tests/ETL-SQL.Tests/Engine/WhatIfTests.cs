@@ -99,6 +99,59 @@ namespace ETL_SQL.Tests
             Assert.False(forked2.IsWhatIf);
         }
 
+        [Fact]
+        public async Task TestWhatIfConnectionSuppression()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("SET WHAT_IF ON;"));
+            
+            // Should not create the connection
+            await ev.Evaluate(Parse("CREATE CONNECTION TestConn TYPE MOCKDB TARGET 'test';"));
+            Assert.False(ev.Connections.ContainsKey("TestConn"));
+        }
+
+        [Fact]
+        public async Task TestWhatIfAlterTableSuppression()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("CREATE TABLE #T (ID INT);"));
+            
+            await ev.Evaluate(Parse("SET WHAT_IF ON;"));
+            await ev.Evaluate(Parse("ALTER TABLE #T ADD Name VARCHAR(50);"));
+            
+            var cols = await (await ev.ResolveDataSourceAsync(new TableReference("#T"))).GetColumnsAsync();
+            Assert.Single(cols);
+            Assert.Equal("ID", cols.First());
+        }
+
+        [Fact]
+        public async Task TestWhatIfDockerSuppression()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("SET WHAT_IF ON;"));
+            
+            // USE DOCKER should be suppressed
+            await ev.Evaluate(Parse("USE DOCKER ('postgres:latest') AS db;"));
+            Assert.Null(ev.DockerManager.GetConnectionString("db"));
+        }
+
+        [Fact]
+        public async Task TestWhatIfExecuteNativeSuppression()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("CREATE TABLE #T (ID INT);"));
+            await ev.Evaluate(Parse("CREATE CONNECTION m TYPE MOCKDB TARGET 'test';"));
+            
+            await ev.Evaluate(Parse("SET WHAT_IF ON;"));
+            
+            // This pushdown should be suppressed
+            string sql = "EXECUTE m BEGIN INSERT INTO #T VALUES (1) END;";
+            await ev.Evaluate(Parse(sql));
+            
+            var res = await ev.ExecuteQuery(Parse("SELECT COUNT(*) AS C FROM #T;").Statements[0]).FirstAsync();
+            Assert.Equal(0, Convert.ToInt32(res.Rows[0]["C"]));
+        }
+
         private static Script Parse(string sql)
         {
             var lexer = new Lexer(sql);

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -36,6 +37,12 @@ namespace ETL_SQL.Engine.Handlers
                     }
 
                     context.Log($"Executing remote SQL on {connName}...");
+                    if (context.IsWhatIf)
+                    {
+                        Logger.WriteLine($"WHAT IF: Would execute remote SQL on {connName}:\n{sql}", ConsoleColor.Yellow);
+                        return;
+                    }
+
                     context.LastResultSets.Clear();
                     var sw = System.Diagnostics.Stopwatch.StartNew();
                     var batches = db.ExecuteRawSql(sql, parameters);

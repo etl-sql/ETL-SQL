@@ -52,7 +52,8 @@ namespace ETL_SQL.Common
 
         public static readonly HashSet<string> Keywords = new(StringComparer.OrdinalIgnoreCase)
         {
-            "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON", "WHAT_IF",
+            "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON", "WHAT_IF", "SYSDATE",
+            "CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME",
             "WAITFOR", "DELAY",
             "WITH", "RECURSIVE", "HASH", "LOOP",
             "IDENTITY", "DEFAULT", "RANGE", "PRECEDING", "FOLLOWING", "UNBOUNDED", "CURRENT",
@@ -84,7 +85,7 @@ namespace ETL_SQL.Common
 
         public static readonly HashSet<string> Functions = new(StringComparer.OrdinalIgnoreCase)
         {
-            "CAST", "CONCAT", "UPPER", "LOWER", "SUBSTR", "SUBSTRING", "LEN", "GETDATE", "ISNULL", "COALESCE",
+            "CAST", "CONCAT", "UPPER", "LOWER", "SUBSTR", "SUBSTRING", "LEN", "GETDATE", "SYSDATE", "ISNULL", "COALESCE",
             "FORMAT", "COUNT", "SUM", "AVG", "MIN", "MAX", "DENSE_RANK", "ROW_NUMBER", "RANK",
             "CHARINDEX", "TRIM", "LTRIM", "RTRIM", "DATEPART", "DATEDIFF", "INSTR", "REPLACE",
             "ABS", "ROUND", "CEILING", "FLOOR", "LPAD", "RPAD", "INITCAP", "POSITION", "STRPOS",

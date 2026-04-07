@@ -95,6 +95,13 @@ namespace ETL_SQL.Engine.Handlers
                         Logger.WriteLine($"HELP: {stmt.SubTopic.ToUpperInvariant()}", ConsoleColor.Cyan);
                         Logger.WriteLine(help);
                     }
+                    else if (stmt.SubTopic.Equals("SYSDATE", StringComparison.OrdinalIgnoreCase) || 
+                             stmt.SubTopic.Equals("CURRENT_TIMESTAMP", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Logger.WriteLine($"HELP: {stmt.SubTopic.ToUpperInvariant()}", ConsoleColor.Cyan);
+                        Logger.WriteLine($"{stmt.SubTopic.ToUpperInvariant()}: System constant returning the current date and time. Use without parentheses.");
+                        Logger.WriteLine("Supports arithmetic (e.g., SYSDATE + 1 for tomorrow).");
+                    }
                     else if (functionRegistry.IsRegistered(stmt.SubTopic))
                     {
                         Logger.WriteLine($"Function '{stmt.SubTopic}' is registered but has no help documentation.", ConsoleColor.Yellow);
@@ -108,66 +115,83 @@ namespace ETL_SQL.Engine.Handlers
             else if (stmt.Topic.Equals("DIRECTORY", StringComparison.OrdinalIgnoreCase))
             {
                 Logger.WriteLine("Directory Operations:", ConsoleColor.Cyan);
-                Logger.WriteLine("All directory operations support both VERBOSE (SQL-style) and SHORTHAND (function-style) syntax.");
                 Logger.WriteLine("\nCommands:", ConsoleColor.Yellow);
                 
-                Logger.WriteLine("  CREATE DIRECTORY 'path'");
-                Logger.WriteLine("    SHORTHAND: CREATE_DIRECTORY('path')");
+                Logger.WriteLine("  VERBOSE:   CREATE DIRECTORY 'path'");
+                Logger.WriteLine("  SHORTHAND: CREATE_DIRECTORY('path')");
                 
-                Logger.WriteLine("\n  DELETE DIRECTORY 'path'");
-                Logger.WriteLine("    SHORTHAND: DELETE_DIRECTORY('path')");
+                Logger.WriteLine("\n  VERBOSE:   DELETE DIRECTORY 'path'");
+                Logger.WriteLine("  SHORTHAND: DELETE_DIRECTORY('path')");
                 
-                Logger.WriteLine("\n  RENAME DIRECTORY 'old' TO 'new'");
-                Logger.WriteLine("    SHORTHAND: RENAME_DIRECTORY('old', 'new')");
+                Logger.WriteLine("\n  VERBOSE:   RENAME DIRECTORY 'old' TO 'new'");
+                Logger.WriteLine("  SHORTHAND: RENAME_DIRECTORY('old', 'new')");
                 
-                Logger.WriteLine("\n  MOVE DIRECTORY 'src' TO 'dest' [WITH(OVERWRITE=ON|OFF)]");
-                Logger.WriteLine("    SHORTHAND: MOVE_DIRECTORY('src', 'dest', [overwrite])");
+                Logger.WriteLine("\n  VERBOSE:   MOVE DIRECTORY 'src' TO 'dest' [WITH(OVERWRITE=ON|OFF)]");
+                Logger.WriteLine("  SHORTHAND: MOVE_DIRECTORY('src', 'dest', [overwrite])");
                 
-                Logger.WriteLine("\n  COPY DIRECTORY 'src' TO 'dest' [WITH(OVERWRITE=ON|OFF)]");
-                Logger.WriteLine("    SHORTHAND: COPY_DIRECTORY('src', 'dest', [overwrite])");
+                Logger.WriteLine("\n  VERBOSE:   COPY DIRECTORY 'src' TO 'dest' [WITH(OVERWRITE=ON|OFF)]");
+                Logger.WriteLine("  SHORTHAND: COPY_DIRECTORY('src', 'dest', [overwrite])");
 
-                Logger.WriteLine("\n  COMPRESS DIRECTORY 'src' TO 'dest.zip' [WITH(OVERWRITE=ON|OFF)]");
-                Logger.WriteLine("    SHORTHAND: COMPRESS_DIRECTORY('src', 'dest.zip', [overwrite])");
+                Logger.WriteLine("\n  VERBOSE:   COMPRESS DIRECTORY 'src' TO 'dest.zip' [WITH(OVERWRITE=ON|OFF)]");
+                Logger.WriteLine("  SHORTHAND: COMPRESS_DIRECTORY('src', 'dest.zip', [overwrite])");
 
-                Logger.WriteLine("\n  ENCRYPT DIRECTORY 'src' TO 'dest' PASSWORD('pwd') [WITH(OVERWRITE=ON|OFF)]");
-                Logger.WriteLine("    SHORTHAND: ENCRYPT_DIRECTORY('src', 'dest', 'pwd', [overwrite])");
+                Logger.WriteLine("\n  VERBOSE:   ENCRYPT DIRECTORY 'src' TO 'dest' PASSWORD('pwd') [WITH(OVERWRITE=ON|OFF)]");
+                Logger.WriteLine("  SHORTHAND: ENCRYPT_DIRECTORY('src', 'dest', 'pwd', [overwrite])");
 
-                Logger.WriteLine("\n  DECRYPT DIRECTORY 'src' TO 'dest' PASSWORD('pwd') [WITH(OVERWRITE=ON|OFF)]");
-                Logger.WriteLine("    SHORTHAND: DECRYPT_DIRECTORY('src', 'dest', 'pwd', [overwrite])");
+                Logger.WriteLine("\n  VERBOSE:   DECRYPT DIRECTORY 'src' TO 'dest' PASSWORD('pwd') [WITH(OVERWRITE=ON|OFF)]");
+                Logger.WriteLine("  SHORTHAND: DECRYPT_DIRECTORY('src', 'dest', 'pwd', [overwrite])");
 
                 Logger.WriteLine("\nNote: OVERWRITE=ON is equivalent to RECURSIVE=ON for directories.");
             }
             else if (stmt.Topic.Equals("FILE", StringComparison.OrdinalIgnoreCase))
             {
                 Logger.WriteLine("File Operations:", ConsoleColor.Cyan);
-                Logger.WriteLine("All file operations support both VERBOSE (SQL-style) and SHORTHAND (function-style) syntax.");
                 Logger.WriteLine("\nCommands:", ConsoleColor.Yellow);
 
-                Logger.WriteLine("  COPY FILE 'src' TO 'dest' [WITH(OVERWRITE=ON|OFF)]");
-                Logger.WriteLine("    SHORTHAND: COPY_FILE('src', 'dest', [overwrite])");
+                Logger.WriteLine("  VERBOSE:   COPY FILE 'src' TO 'dest' [WITH(OVERWRITE=ON|OFF)]");
+                Logger.WriteLine("  SHORTHAND: COPY_FILE('src', 'dest', [overwrite])");
 
-                Logger.WriteLine("\n  MOVE FILE 'src' TO 'dest' [WITH(OVERWRITE=ON|OFF)]");
-                Logger.WriteLine("    SHORTHAND: MOVE_FILE('src', 'dest', [overwrite])");
+                Logger.WriteLine("\n  VERBOSE:   MOVE FILE 'src' TO 'dest' [WITH(OVERWRITE=ON|OFF)]");
+                Logger.WriteLine("  SHORTHAND: MOVE_FILE('src', 'dest', [overwrite])");
 
-                Logger.WriteLine("\n  RENAME FILE 'old' TO 'new'");
-                Logger.WriteLine("    SHORTHAND: RENAME_FILE('old', 'new')");
+                Logger.WriteLine("\n  VERBOSE:   RENAME FILE 'old' TO 'new'");
+                Logger.WriteLine("  SHORTHAND: RENAME_FILE('old', 'new')");
 
-                Logger.WriteLine("\n  DELETE FILE 'path'");
-                Logger.WriteLine("    SHORTHAND: DELETE_FILE('path')");
+                Logger.WriteLine("\n  VERBOSE:   DELETE FILE 'path'");
+                Logger.WriteLine("  SHORTHAND: DELETE_FILE('path')");
 
-                Logger.WriteLine("\n  COMPRESS FILE 'src' TO 'dest.zip' [WITH(OVERWRITE=ON|OFF)]");
-                Logger.WriteLine("    SHORTHAND: COMPRESS_FILE('src', 'dest.zip', [overwrite])");
+                Logger.WriteLine("\n  VERBOSE:   COMPRESS FILE 'src' TO 'dest.zip' [WITH(OVERWRITE=ON|OFF)]");
+                Logger.WriteLine("  SHORTHAND: COMPRESS_FILE('src', 'dest.zip', [overwrite])");
 
-                Logger.WriteLine("\n  ENCRYPT FILE 'src' TO 'dest' PASSWORD('pwd') [WITH(OVERWRITE=ON|OFF)]");
-                Logger.WriteLine("    SHORTHAND: ENCRYPT_FILE('src', 'dest', 'pwd', [overwrite])");
+                Logger.WriteLine("\n  VERBOSE:   ENCRYPT FILE 'src' TO 'dest' PASSWORD('pwd') [WITH(OVERWRITE=ON|OFF)]");
+                Logger.WriteLine("  SHORTHAND: ENCRYPT_FILE('src', 'dest', 'pwd', [overwrite])");
 
-                Logger.WriteLine("\n  DECRYPT FILE 'src' TO 'dest' PASSWORD('pwd') [WITH(OVERWRITE=ON|OFF)]");
-                Logger.WriteLine("    SHORTHAND: DECRYPT_FILE('src', 'dest', 'pwd', [overwrite])");
+                Logger.WriteLine("\n  VERBOSE:   DECRYPT FILE 'src' TO 'dest' PASSWORD('pwd') [WITH(OVERWRITE=ON|OFF)]");
+                Logger.WriteLine("  SHORTHAND: DECRYPT_FILE('src', 'dest', 'pwd', [overwrite])");
+            }
+            else if (stmt.Topic.Equals("TRANSFER", StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.WriteLine("File Transfer Operations:", ConsoleColor.Cyan);
+                Logger.WriteLine("\nCommands:", ConsoleColor.Yellow);
+
+                Logger.WriteLine("  VERBOSE:   SEND FILE 'local' TO 'remote' AT conn [WITH(OVERWRITE=ON|OFF)]");
+                Logger.WriteLine("  SHORTHAND: SEND_FILE('local', 'remote', conn, [overwrite])");
+
+                Logger.WriteLine("\n  VERBOSE:   RECEIVE FILE 'remote' TO 'local' AT conn [WITH(OVERWRITE=ON|OFF)]");
+                Logger.WriteLine("  SHORTHAND: RECEIVE_FILE('remote', 'local', conn, [overwrite])");
+            }
+            else if (stmt.Topic.Equals("EMAIL", StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.WriteLine("Email Operations:", ConsoleColor.Cyan);
+                Logger.WriteLine("\nCommands:", ConsoleColor.Yellow);
+
+                Logger.WriteLine("  VERBOSE:   SEND EMAIL TO 'to' FROM 'from' SUBJECT 'subj' BODY 'body' AT conn [ATTACH 'file'] [CC 'cc'] [BCC 'bcc']");
+                Logger.WriteLine("  SHORTHAND: SEND_EMAIL(conn, 'to', 'from', 'subj', 'body', [attachments], [cc], [bcc])");
             }
             else
             {
                 Logger.WriteLine($"Help for topic '{stmt.Topic}' is not yet implemented.", ConsoleColor.Yellow);
-                Logger.WriteLine("Available topics: CONNECTION, FUNCTION, DIRECTORY, FILE");
+                Logger.WriteLine("Available topics: CONNECTION, FUNCTION, DIRECTORY, FILE, TRANSFER, EMAIL");
             }
             await Task.CompletedTask;
         }

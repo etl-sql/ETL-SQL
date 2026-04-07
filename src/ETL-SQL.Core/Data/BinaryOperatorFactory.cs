@@ -24,6 +24,24 @@ namespace ETL_SQL.Core.Data
         private static object? MathOp(object? a, object? b, string op)
         {
             if (a == null || b == null) return null;
+
+            // Handle date arithmetic (FW-6)
+            if (a is DateTime dtA)
+            {
+                if (op == "+")
+                {
+                    try { return dtA.AddDays(Convert.ToDouble(b)); } catch { return null; }
+                }
+                if (op == "-" && b is DateTime dtB)
+                {
+                    return (decimal)(dtA - dtB).TotalDays;
+                }
+                if (op == "-")
+                {
+                    try { return dtA.AddDays(-Convert.ToDouble(b)); } catch { return null; }
+                }
+            }
+
             decimal da, db;
             try {
                 da = Convert.ToDecimal(a, System.Globalization.CultureInfo.InvariantCulture);

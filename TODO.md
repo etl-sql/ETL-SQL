@@ -7,7 +7,7 @@
     - **Key Options**: Support `TRIM=ON|OFF` for automatic whitespace removal and `SKIP_HEADER=N` to handle metadata rows.
     - **Gotchas**: Ensure the template offsets account for varied line endings (`\r\n` vs `\n`).
 
-- **FW-2. Add overwrite option for copy's and moves
+- **[x] FW-2. Add overwrite option for copy's and moves**
    - `COPY_FILE(<source>, <destination>, [OVERWRITE=ON|OFF]);`
    - `MOVE_FILE(<source>, <destination>, [OVERWRITE=ON|OFF]);`
    - `COPY_DIRECTORY(<source>, <destination>, [OVERWRITE=ON|OFF]);`
@@ -52,7 +52,7 @@ BODY '<body>'
 AT <smtp_connection>;
 ```
 
- **FW-4. Add the equivalents to the help for the function.
+  **[x] FW-4. Add the equivalents to the help for the function.**
   example COPY_FILE add this to the help menu VERBOSE: 
   COPY FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];
   And for COPY FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)] help menu add SHORTHAND: COPY_FILE('<source>', '<destination>', [OVERWRITE=ON|OFF]);
@@ -61,10 +61,50 @@ AT <smtp_connection>;
 
   This way the users can see that both do the same thing and the help menu reflects that.  Also if we haven't already all the functions should have help menus showing them the options.  Also they should all be listed in the ETL_SQL_LANGUAGE_REFERENCE.md file.
 
-  **FW-5. Add SYSDATE to the language**
+  **[x] FW-5. Add SYSDATE to the language**
   - Add SYSDATE to the language
   - Add SYSDATE to the ETL_SQL_LANGUAGE_REFERENCE.md file
-  
+
+  **[x] FW-6. Add date add/subtract shorthand**
+  - GETDATE() + 1 should add 1 day, GETDATE() - 1 should subtract 1 day.
+  - Same behavior for SYSDATE, CURRENT_TIMESTAMP, NOW(), etc.
+
+  **FW-7. Add ORDER BY <number>**
+  -- Add ORDER BY <number> to the ORDER BY clause, the number corresponds to the column number in the SELECT clause. (1 based)
+
+  **FW-8. Add WITH TIES to TOP**
+  -- Add WITH TIES to TOP clause
+
+  **FW-9. Add advanced TRIM function**
+  -- TRIM ( [ LEADING | TRAILING | BOTH ] [characters FROM ] string )
+
+  **FW-10. Add advanced SUBSTRING function**
+  -- SUBSTRING ( string FROM start [ FOR length ] )
+
+  **FW-11. Position function**
+  -- POSITION ( substring IN string )
+
+  **FW-12. OVERLAY function**
+  -- OVERLAY ( string PLACING overlay_string FROM start [ FOR length ] )
+
+  **FW-13. EXTRACT function**
+  -- EXTRACT ( field FROM source )
+
+  **FW-14. OCTET_LENGTH function**
+  -- OCTET_LENGTH ( string )
+
+  **FW-15. CHARACTER_LENGTH function**
+  -- CHARACTER_LENGTH ( string )
+
+  **FW-16. CHAR_LENGTH function**
+  -- CHAR_LENGTH ( string )
+
+  **FW.17. Add advanced statistical functions**
+  -- STDDEV_POP / STDDEV_SAMP: Population and sample standard deviation.
+  -- VAR_POP / VAR_SAMP: Population and sample variance.CORR(y, x): Computes the correlation coefficient between two sets of numbers.
+  -- COVAR_POP(y, x) / COVAR_SAMP(y, x): Computes population and sample covariance.
+  -- REGR_SLOPE / REGR_INTERCEPT: Linear regression slope and y-intercept for a set of pairs.
+  -- EVERY / ANY / SOME: Aggregates for boolean values (returns true if all or some values are true).
 
 
 ## VS CODE Bugs/Improvements

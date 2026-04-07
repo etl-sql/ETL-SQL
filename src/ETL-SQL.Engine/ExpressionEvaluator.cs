@@ -331,9 +331,12 @@ namespace ETL_SQL.Engine
             // Special identifiers that act as functions/literals
             if (id.Name.Equals("*", StringComparison.OrdinalIgnoreCase)) return "*";
             if (id.Name.Equals("SYSDATE", StringComparison.OrdinalIgnoreCase) || 
-                id.Name.Equals("GETDATE", StringComparison.OrdinalIgnoreCase) ||
-                id.Name.Equals("NOW", StringComparison.OrdinalIgnoreCase))
+                id.Name.Equals("CURRENT_TIMESTAMP", StringComparison.OrdinalIgnoreCase))
                 return DateTime.Now;
+            if (id.Name.Equals("CURRENT_DATE", StringComparison.OrdinalIgnoreCase))
+                return DateTime.Today;
+            if (id.Name.Equals("CURRENT_TIME", StringComparison.OrdinalIgnoreCase))
+                return DateTime.Now.TimeOfDay;
 
             // For date parts (year, month, etc.) and others, return name if Row is null
             if (context == null) return id.Name;

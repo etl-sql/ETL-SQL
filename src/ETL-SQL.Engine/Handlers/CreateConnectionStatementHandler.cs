@@ -152,6 +152,12 @@ namespace ETL_SQL.Engine.Handlers
                 throw new ExecutionException($"Connection type '{connectionType}' is not registered or implemented.");
             }
 
+            if (context.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would {(alreadyExists ? "alter" : "create")} connection {stmt.ConnectionName}", ConsoleColor.Yellow);
+                return;
+            }
+
             // Dispose existing one if we are replacing it
             if (alreadyExists && existingDataSource != null)
             {

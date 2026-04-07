@@ -1,5 +1,7 @@
 using System;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -14,7 +16,6 @@ namespace ETL_SQL.Engine.Handlers
         {
             if (statement is not DockerCloseStatement stmt) return;
             
-            
             string? nameOrAlias = stmt.Alias;
             if (nameOrAlias == null && stmt.ImageName != null)
             {
@@ -22,10 +23,13 @@ namespace ETL_SQL.Engine.Handlers
                 nameOrAlias = val?.ToString();
             }
 
+            if (context.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would close Docker containers: {nameOrAlias ?? "all"}", ConsoleColor.Yellow);
+                return;
+            }
+
             await context.DockerManager.CloseContainers(nameOrAlias);
         }
     }
 }
-
-
-

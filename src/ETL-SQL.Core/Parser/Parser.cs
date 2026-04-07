@@ -95,7 +95,9 @@ namespace ETL_SQL.Core.Parser
 
         public bool IsIdentifier(Token token)
         {
-            if (token.Type == TokenType.IDENTIFIER || token.Type == TokenType.LINEAGE || token.Type == TokenType.FILE) return true;
+            if (token.Type == TokenType.IDENTIFIER || token.Type == TokenType.LINEAGE || token.Type == TokenType.FILE ||
+                token.Type == TokenType.SYSDATE || token.Type == TokenType.CURRENT_TIMESTAMP || 
+                token.Type == TokenType.CURRENT_DATE || token.Type == TokenType.CURRENT_TIME) return true;
             if (token.Type == TokenType.EOF) return false;
 
             // Data types are allowed as identifiers in many contexts, or at least shouldn't block parsing

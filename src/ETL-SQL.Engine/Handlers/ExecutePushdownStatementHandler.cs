@@ -66,6 +66,12 @@ namespace ETL_SQL.Engine.Handlers
                                          .Replace("(" + prefix, "(", StringComparison.OrdinalIgnoreCase);
             }
 
+            if (context.IsWhatIf)
+            {
+                Logger.WriteLine($"WHAT IF: Would execute native SQL on {connectionName}:\n{sqlToExecute}", ConsoleColor.Yellow);
+                return;
+            }
+
             var results = new List<DataTable>();
             await foreach (var batch in databaseSource.ExecuteRawSql(sqlToExecute, parameters))
             {

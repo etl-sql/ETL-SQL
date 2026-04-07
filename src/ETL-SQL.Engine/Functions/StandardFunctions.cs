@@ -60,8 +60,6 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("NULLIF", (args, ctx) => EvaluationUtils.IsSoftEqual(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1)) ? null : args.ElementAtOrDefault(0), "NULLIF(v1, v2): Returns NULL if v1 equals v2, else v1.");
             registry.RegisterWithHelp("GETDATE", (args, ctx) => DateTime.Now, "GETDATE(): Returns the current system date and time.");
             registry.RegisterWithHelp("NOW", (args, ctx) => DateTime.Now, "NOW(): Alias for GETDATE.");
-            registry.RegisterWithHelp("SYSDATE", (args, ctx) => DateTime.Now, "SYSDATE(): Alias for GETDATE.");
-            registry.RegisterWithHelp("SYSDATETIME", (args, ctx) => DateTime.Now, "SYSDATETIME(): Alias for GETDATE.");
             registry.RegisterWithHelp("CAST", (args, ctx) => args.Count >= 2 ? EvaluationUtils.CastToType(args[0], args[1]?.ToString() ?? "STRING") : args[0], "CAST(expr AS type): Converts an expression to a target data type.");
             registry.RegisterWithHelp("COUNT", Count, "COUNT(col): Returns the number of items in a collection.");
             registry.RegisterWithHelp("IS_NULL", (args, ctx) => args[0] == null || args[0] == DBNull.Value, "IS_NULL(expr): Returns TRUE if the expression is null.");
@@ -108,6 +106,15 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("ATAN", (args, ctx) => args[0] == null ? null : (decimal)Math.Atan(Convert.ToDouble(args[0])), "ATAN(f): Inverse Tangent (returns radians).");
             registry.RegisterWithHelp("ATAN2", (args, ctx) => args.Count >= 2 ? (decimal)Math.Atan2(Convert.ToDouble(args[0]), Convert.ToDouble(args[1])) : null, "ATAN2(y, x): Returns the angle in radians between the x-axis and (x, y).");
             registry.RegisterWithHelp("SIGN", (args, ctx) => args[0] == null ? null : (decimal)Math.Sign(Convert.ToDecimal(args[0])), "SIGN(n): Returns the sign of a number (1, -1, or 0).");
+            
+            // FW-7 & FW-9
+            registry.RegisterWithHelp("DATEADD", DateAdd, "DATEADD(datepart, number, date): Adds a value to a date.");
+            registry.RegisterWithHelp("SUM", Sum, "SUM(expression): Returns the sum of values in a collection.");
+            registry.RegisterWithHelp("AVG", Avg, "AVG(expression): Returns the average of values in a collection.");
+            registry.RegisterWithHelp("MIN", Min, "MIN(expression): Returns the minimum value in a collection.");
+            registry.RegisterWithHelp("MAX", Max, "MAX(expression): Returns the maximum value in a collection.");
+            registry.RegisterWithHelp("STDDEV", StdDev, "STDDEV(expression): Returns the statistical standard deviation.");
+            registry.RegisterWithHelp("VAR", Variance, "VAR(expression): Returns the statistical variance.");
         }
 
         /// <summary>Calculates the length of a string or collection.</summary>
@@ -454,6 +461,78 @@ namespace ETL_SQL.Engine.Functions
             } catch {
                 return null;
             }
+        }
+
+        private static object? DateAdd(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 3) return null;
+            string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
+            double val = Convert.ToDouble(args[1]);
+            if (!DateTime.TryParse(args[2]?.ToString(), out var dt)) return null;
+
+            return part switch {
+                "YEAR" or "YY" or "YYYY" => dt.AddYears((int)val),
+                "QUARTER" or "QQ" or "Q" => dt.AddMonths((int)val * 3),
+                "MONTH" or "MM" or "M" => dt.AddMonths((int)val),
+                "WEEK" or "WK" or "WW" => dt.AddDays(val * 7),
+                "DAY" or "DD" or "D" => dt.AddDays(val),
+                "HOUR" or "HH" => dt.AddHours(val),
+                "MINUTE" or "MI" or "N" => dt.AddMinutes(val),
+                "SECOND" or "SS" or "S" => dt.AddSeconds(val),
+                "MILLISECOND" or "MS" => dt.AddMilliseconds(val),
+                _ => dt
+            };
+        }
+
+        private static IEnumerable<decimal> GetNumbers(object? arg)
+        {
+            if (arg is IEnumerable<object?> enumerable)
+                return enumerable.Where(x => x != null).Select(x => Convert.ToDecimal(x));
+            if (arg != null)
+                return new[] { Convert.ToDecimal(arg) };
+            return Enumerable.Empty<decimal>();
+        }
+
+        private static object? Sum(List<object?> args, IExecutionContext ctx)
+        {
+            var nums = GetNumbers(args.FirstOrDefault());
+            return nums.Any() ? nums.Sum() : (decimal)0;
+        }
+
+        private static object? Avg(List<object?> args, IExecutionContext ctx)
+        {
+            var nums = GetNumbers(args.FirstOrDefault());
+            return nums.Any() ? nums.Average() : (decimal)0;
+        }
+
+        private static object? Min(List<object?> args, IExecutionContext ctx)
+        {
+            var nums = GetNumbers(args.FirstOrDefault());
+            return nums.Any() ? nums.Min() : null;
+        }
+
+        private static object? Max(List<object?> args, IExecutionContext ctx)
+        {
+            var nums = GetNumbers(args.FirstOrDefault());
+            return nums.Any() ? nums.Max() : null;
+        }
+
+        private static object? StdDev(List<object?> args, IExecutionContext ctx)
+        {
+            var nums = GetNumbers(args.FirstOrDefault()).ToList();
+            if (nums.Count < 2) return (decimal)0;
+            double avg = (double)nums.Average();
+            double sum = nums.Sum(d => Math.Pow((double)d - avg, 2));
+            return (decimal)Math.Sqrt(sum / (nums.Count - 1));
+        }
+
+        private static object? Variance(List<object?> args, IExecutionContext ctx)
+        {
+            var nums = GetNumbers(args.FirstOrDefault()).ToList();
+            if (nums.Count < 2) return (decimal)0;
+            double avg = (double)nums.Average();
+            double sum = nums.Sum(d => Math.Pow((double)d - avg, 2));
+            return (decimal)(sum / (nums.Count - 1));
         }
     }
 }
