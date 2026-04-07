@@ -88,28 +88,56 @@ This guide describes the provided sample scripts in the `scripts/` folder. These
 - Demonstrates Docker orchestration (MSSQL + Postgres).
 - Shows cross-database joins and indexing.
 
-## New Modernized Features
+## Modern SQL Extensions
 
-### 15. [sample_jobs.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_jobs.etlsql)
+### 15. [sample_ansi_sql.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_ansi_sql.etlsql)
+**Purpose**: Advanced ANSI SQL sorting and limiting.
+- Demonstrates **Positional ORDER BY** (1-based column indices).
+- Shows **TOP PERCENT** and **TOP WITH TIES** logic for rank-based filtering.
+
+### 16. [sample_statistics.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_statistics.etlsql)
+**Purpose**: Population and Sample statistics.
+- Demonstrates advanced aggregates: `VAR`, `STDEV`, `VAR_POP`, `STDDEV_POP`.
+- Shows correlation and covariance between variables: `CORR(x, y)`, `COVAR_SAMP(x, y)`.
+
+### 17. [sample_temporal.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_temporal.etlsql)
+**Purpose**: Advanced Date/Time handling.
+- Demonstrates **AT TIME ZONE** conversion between global regions.
+- Shows shorthand **Date Arithmetic** (`SYSDATE + 7`).
+- Compares `GETDATE()` (MSSQL style) and `SYSDATE` (Oracle style) usage.
+
+### 18. [sample_fixed_width.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_fixed_width.etlsql)
+**Purpose**: Template-based Fixed-Width file ingestion.
+- Demonstrates `FORMAT='FIXED'` connections.
+- Shows how to use a table schema (`#temp`) as a layout template for bit-perfect field slicing.
+
+### 19. [sample_enhanced_io.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_enhanced_io.etlsql)
+**Purpose**: Modernized IO and Automation syntax.
+- Demonstrates **Verbose Syntax** for `COPY FILE`, `MOVE FILE`, and `DELETE FILE`.
+- Shows the structural `SEND EMAIL` and `SEND FILE` (SFTP) syntax improvements.
+
+## Modern Data Formats & Integration
+
+### 20. [sample_jobs.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_jobs.etlsql)
 **Purpose**: Background jobs and scheduling.
 - Demonstrates creating scheduled tasks via `CREATE JOB`.
 - Shows how to monitor job status using `SHOW JOBS`.
 
-### 16. [sample_avro.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_avro.etlsql) / [sample_parquet.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_parquet.etlsql)
+### 21. [sample_avro.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_avro.etlsql) / [sample_parquet.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_parquet.etlsql)
 **Purpose**: Modern columnar data formats.
 - Demonstrates reading and writing Avro and Parquet files.
 
 ## Performance & Optimization Sandbox
 
-### 17. [sample_JoinHintsTest.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_JoinHintsTest.etlsql)
+### 22. [sample_JoinHintsTest.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_JoinHintsTest.etlsql)
 **Purpose**: Forcing specific join algorithms.
 - Demonstrates `INNER HASH JOIN`, `INNER LOOP JOIN`, `LEFT HASH JOIN`, etc., to explicitly configure the SQL execution engine's behavior for strict streaming allocations.
 
-### 18. [sample_BulkInsertColumnsTest.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_BulkInsertColumnsTest.etlsql)
+### 23. [sample_BulkInsertColumnsTest.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_BulkInsertColumnsTest.etlsql)
 **Purpose**: Bulk insertion with target column mapping.
 - Demonstrates the `BULK INSERT` statement allocating disparate CSV streams onto explicitly reordered table columns without a staging table.
 
-### 19. [sample_StressTest.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_StressTest.etlsql)
+### 24. [sample_StressTest.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample_StressTest.etlsql)
 **Purpose**: High-volume throughput evaluation.
 - Illustrates a 5-million row streaming data pipeline stressing engine memory ceilings directly evaluating outer-streams against fixed dimension schemas via `.csv` file orchestration.
 
@@ -117,32 +145,32 @@ This guide describes the provided sample scripts in the `scripts/` folder. These
 
 These advanced scripts demonstrate complex, production-grade business requirements implemented natively in ETL-SQL.
 
-### 20. [realworld_01_dw_load.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_01_dw_load.etlsql)
+### 25. [realworld_01_dw_load.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_01_dw_load.etlsql)
 **Multi-System DW Load**: Extracts PostgreSQL transactions, joins a legacy CSV dimension map via `INNER HASH JOIN`, aggregates metrics, and bulk inserts them into a SQL Server Data Warehouse.
 
-### 21. [realworld_02_secure_sftp_alert.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_02_secure_sftp_alert.etlsql)
+### 26. [realworld_02_secure_sftp_alert.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_02_secure_sftp_alert.etlsql)
 **Secure File Transfer & Alerting**: Extracts daily Oracle ledgers to a CSV, executes 256-bit AES `ENCRYPT_FILE`, moves the payload dynamically via `SFTP`, and uses `TRY/CATCH` blocks to send automated `EMAIL_SEND` exception reports to engineering oncalls upon failure.
 
-### 22. [realworld_03_schema_quarantine.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_03_schema_quarantine.etlsql)
+### 27. [realworld_03_schema_quarantine.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_03_schema_quarantine.etlsql)
 **Strict Schema Quarantine**: Ingests third-party files utilizing `STRICT_SCHEMA='ON'`. Splits traffic dynamically into a "Clean" #Temp table and a "Malaligned" Quarantined audit log, printing validation counts to the console natively.
 
-### 23. [realworld_04_incremental_merge.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_04_incremental_merge.etlsql)
+### 28. [realworld_04_incremental_merge.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_04_incremental_merge.etlsql)
 **Incremental UPSERT**: Evaluates a daily delta load using standard SQL `MERGE INTO`. Updates preexisting records, inserts new objects natively, and tracks every state permutation outputively via an internal audit trace matrix.
 
-### 24. [realworld_05_masking_json.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_05_masking_json.etlsql)
+### 29. [realworld_05_masking_json.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_05_masking_json.etlsql)
 **Dynamic Masking & JSON Formatting**: Redacts PII records iteratively (SSN, Email) using native `SUBSTRING`/`CONCAT` operations, reallocates projection vectors dynamically grouping profiles, and deposits a unified struct explicitly defined as JSON onto an Azure storage blob.
 
-### 25. [realworld_06_reconciliation_anti_join.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_06_reconciliation_anti_join.etlsql)
+### 30. [realworld_06_reconciliation_anti_join.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_06_reconciliation_anti_join.etlsql)
 **Data Reconciliation Anti-Join**: Extracts live dimensions simultaneously from a Postgres node versus a MySQL fulfillment database to orchestrate a `LEFT IS NULL` mapping pipeline that immediately logs untracked disparities directly to a flat report.
 
-### 26. [realworld_07_window_deduplication.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_07_window_deduplication.etlsql)
+### 31. [realworld_07_window_deduplication.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_07_window_deduplication.etlsql)
 **Window Analytics Deduplication**: Ingests unstructured clickstream events formatting natively sequentially over a unified `ROW_NUMBER() OVER(PARTITION BY UserID)` logical ranking hierarchy to dynamically compress/delete old transactions before executing a compressed `PARQUET` write.
 
-### 27. [realworld_08_aggregation_pivot.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_08_aggregation_pivot.etlsql)
+### 32. [realworld_08_aggregation_pivot.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_08_aggregation_pivot.etlsql)
 **Complex Quarterly Pivot**: Orchestrates cross-aggregate logic employing matrixed `SUM(CASE WHEN...)` groupings to artificially pivot continuous sequential transactions into physical grid columns natively deposited into an internal corporate `EXCEL` document.
 
-### 28. [realworld_09_directory_watcher.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_09_directory_watcher.etlsql)
+### 33. [realworld_09_directory_watcher.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_09_directory_watcher.etlsql)
 **Event-Driven Daemon Orchestration**: Executes an infinite state machine via a continuous generic `WHILE` loop intelligently monitoring a pickup array waiting for incoming integration drops before archiving the artifact natively out of path and breaking successfully.
 
-### 29. [realworld_10_docker_sync.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_10_docker_sync.etlsql)
+### 34. [realworld_10_docker_sync.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_10_docker_sync.etlsql)
 **Ephemeral Sandboxed Synchronization**: Instantiates temporary synchronized infrastructure utilizing simultaneous lightweight engine hooks triggering `mcr.mssql` environments and secondary `alpine.postgres` hubs, safely cloning configuration grids autonomously prior to terminating operations flawlessly.

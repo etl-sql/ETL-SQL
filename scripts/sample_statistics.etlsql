@@ -1,0 +1,47 @@
+-- Sample: Advanced Statistical Aggregates
+-- Demonstrates variance, standard deviation, covariance, and correlation.
+
+-- 1. Preparation: Data with known correlation
+CREATE TABLE #Obs (
+    x DECIMAL,
+    y DECIMAL
+);
+
+INSERT INTO #Obs (x, y) VALUES 
+(1, 10), (2, 22), (3, 28), (4, 42), (5, 51), -- Strong positive
+(6, 60), (7, 68), (8, 81), (9, 92), (10, 105);
+
+-- 2. Basic Statistics
+PRINT 'Basic Stats for X';
+SELECT 
+    COUNT(*) AS N,
+    AVG(x) AS Mean,
+    VAR(x) AS SampleVar, 
+    VAR_POP(x) AS PopVar,
+    STDEV(x) AS SampleStDev,
+    STDDEV_POP(x) AS PopStDev
+FROM #Obs;
+
+-- 3. Relationship Statistics
+PRINT 'Paired Stats for X and Y';
+SELECT 
+    COVAR_SAMP(x, y) AS CovarSamp,
+    COVAR_POP(x, y) AS CovarPop,
+    CORR(x, y) AS PearsonCorr
+FROM #Obs;
+
+-- 4. Multi-group Statistics
+-- Add extra rows for a different "Category"
+CREATE TABLE #Weighted (
+    Category VARCHAR(10),
+    Value DECIMAL
+);
+INSERT INTO #Weighted VALUES ('A', 10), ('A', 20), ('A', 30), ('B', 5), ('B', 5), ('B', 100);
+
+PRINT 'Stats by Category';
+SELECT 
+    Category,
+    AVG(Value) AS AvgVal,
+    STDEV(Value) AS Volatility
+FROM #Weighted
+GROUP BY Category;

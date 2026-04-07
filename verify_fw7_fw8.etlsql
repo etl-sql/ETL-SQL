@@ -1,0 +1,43 @@
+-- Verification for FW-7: ORDER BY <number>
+-- Verification for FW-8: TOP (n) [PERCENT] [WITH TIES]
+
+CREATE CONNECTION mock_data ON MOCKDB WITH (ROWS=10);
+
+-- 1. Test ORDER BY <number>
+PRINT 'Test 1: ORDER BY <number>';
+SELECT id, value FROM (
+    SELECT 1 AS id, 'C' AS value UNION ALL
+    SELECT 2 AS id, 'A' AS value UNION ALL
+    SELECT 3 AS id, 'B' AS value
+) AS data
+ORDER BY 2 ASC;
+
+-- 2. Test TOP PERCENT
+PRINT 'Test 2: TOP PERCENT';
+SELECT TOP (50) PERCENT id FROM (
+    SELECT 1 AS id UNION ALL
+    SELECT 2 AS id UNION ALL
+    SELECT 3 AS id UNION ALL
+    SELECT 4 AS id
+) AS data
+ORDER BY id;
+
+-- 3. Test TOP WITH TIES
+PRINT 'Test 3: TOP WITH TIES';
+SELECT TOP (2) WITH TIES value FROM (
+    SELECT 1 AS id, 'A' AS value UNION ALL
+    SELECT 2 AS id, 'A' AS value UNION ALL
+    SELECT 3 AS id, 'A' AS value UNION ALL
+    SELECT 4 AS id, 'B' AS value
+) AS data
+ORDER BY value;
+
+-- 4. Test combined TOP PERCENT WITH TIES
+PRINT 'Test 4: TOP PERCENT WITH TIES';
+SELECT TOP (25) PERCENT WITH TIES value FROM (
+    SELECT 1 AS id, 'A' AS value UNION ALL
+    SELECT 2 AS id, 'A' AS value UNION ALL
+    SELECT 3 AS id, 'A' AS value UNION ALL
+    SELECT 4 AS id, 'B' AS value
+) AS data
+ORDER BY value;

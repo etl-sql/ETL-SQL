@@ -6,6 +6,9 @@ using System.Threading.Tasks;
 using Spectre.Console;
 using ETL_SQL.Common;
 using ETL_SQL.Engine.Engines;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -460,7 +463,7 @@ namespace ETL_SQL.Engine.Handlers
                 Logger.Verbose("Window functions applied");
             }
 
-            // 3. Global ORDER BY
+            List<(Row Row, object?[] Keys)>? rowSortKeys = null;
             if (stmt.OrderBy != null && stmt.OrderBy.Count > 0)
             {
                 if (allBufferedRows.Count > 100_000)
@@ -470,15 +473,27 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 else
                 {
-                    var rowSortKeys = new List<(Row Row, object?[] Keys)>(allBufferedRows.Count);
+                    rowSortKeys = new List<(Row Row, object?[] Keys)>(allBufferedRows.Count);
                     foreach (var row in allBufferedRows)
                     {
                         var keys = new object?[stmt.OrderBy.Count];
                         for (int i = 0; i < stmt.OrderBy.Count; i++)
-                            keys[i] = await context.EvaluateValue(stmt.OrderBy[i].Expression, row);
+                        {
+                            var expr = stmt.OrderBy[i].Expression;
+                            if (expr is LiteralExpression lit && lit.Type == TokenType.NUMBER && decimal.TryParse(lit.Value?.ToString(), out var num) && num > 0 && num <= colNames.Count)
+                            {
+                                string colName = colNames[(int)num - 1];
+                                keys[i] = row[colName];
+                            }
+                            else
+                            {
+                                keys[i] = await context.EvaluateValue(expr, row);
+                            }
+                        }
                         rowSortKeys.Add((row, keys));
                     }
 
+                    context.CompareConstants(null, null); // Ensure sort comparison helper is ready if needed
                     rowSortKeys.Sort((a, b) =>
                     {
                         for (int i = 0; i < stmt.OrderBy.Count; i++)
@@ -490,20 +505,70 @@ namespace ETL_SQL.Engine.Handlers
                     });
 
                     allBufferedRows = rowSortKeys.Select(x => x.Row).ToList();
+                    
+                    // We might need rowSortKeys later for WITH TIES
+                    if (stmt.WithTies && allBufferedRows.Count > 0)
+                    {
+                         // We'll keep rowSortKeys until after the limit application
+                    }
+                    else
+                    {
+                        rowSortKeys = null; // Save memory
+                    }
                 }
             }
 
-            // 4. OFFSET / LIMIT
+            // 4. OFFSET / LIMIT / TOP
             if (stmt.Offset != null)
             {
                 int offset = Convert.ToInt32(await context.EvaluateValue(stmt.Offset, new Row()));
                 if (offset > 0) allBufferedRows = allBufferedRows.Skip(offset).ToList();
             }
 
-            if (stmt.LimitCount != null)
+            int finalTake = -1;
+            if (stmt.TopCount != null)
             {
-                int limit = Convert.ToInt32(await context.EvaluateValue(stmt.LimitCount, new Row()));
-                if (limit >= 0) allBufferedRows = allBufferedRows.Take(limit).ToList();
+                var topVal = await context.EvaluateValue(stmt.TopCount, new Row());
+                finalTake = Convert.ToInt32(topVal);
+                if (stmt.IsTopPercent)
+                {
+                    finalTake = (int)Math.Ceiling(allBufferedRows.Count * finalTake / 100.0);
+                }
+                
+                if (stmt.WithTies)
+                {
+                    if (stmt.OrderBy == null || !stmt.OrderBy.Any())
+                        throw new SyntaxException("TOP WITH TIES requires an ORDER BY clause", stmt.Line, stmt.Column);
+                    
+                    if (finalTake > 0 && finalTake < allBufferedRows.Count && rowSortKeys != null)
+                    {
+                        var lastRowKeys = rowSortKeys[finalTake - 1].Keys;
+                        while (finalTake < rowSortKeys.Count)
+                        {
+                            var nextRowKeys = rowSortKeys[finalTake].Keys;
+                            bool match = true;
+                            for (int i = 0; i < stmt.OrderBy.Count; i++)
+                            {
+                                if (context.CompareConstants(lastRowKeys[i], nextRowKeys[i]) != 0)
+                                {
+                                    match = false;
+                                    break;
+                                }
+                            }
+                            if (match) finalTake++;
+                            else break;
+                        }
+                    }
+                }
+            }
+            else if (stmt.LimitCount != null)
+            {
+                finalTake = Convert.ToInt32(await context.EvaluateValue(stmt.LimitCount, new Row()));
+            }
+
+            if (finalTake >= 0)
+            {
+                allBufferedRows = allBufferedRows.Take(finalTake).ToList();
             }
 
             // Final buffered projection

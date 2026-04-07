@@ -77,7 +77,9 @@ namespace ETL_SQL.Engine.Services
                 var selectParts = new List<string>();
                 if (sel.TopCount != null && d == "MSSQL")
                 {
-                    selectParts.Add($"TOP ({CompileExpression(sel.TopCount, d)})");
+                    var percent = sel.IsTopPercent ? " PERCENT" : "";
+                    var ties = sel.WithTies ? " WITH TIES" : "";
+                    selectParts.Add($"TOP ({CompileExpression(sel.TopCount, d)}){percent}{ties}");
                 }
 
                 if (sel.IsDistinct) selectParts.Add("DISTINCT");

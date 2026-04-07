@@ -69,13 +69,13 @@ AT <smtp_connection>;
   - GETDATE() + 1 should add 1 day, GETDATE() - 1 should subtract 1 day.
   - Same behavior for SYSDATE, CURRENT_TIMESTAMP, NOW(), etc.
 
-  **FW-7. Add ORDER BY <number>**
+  - **[x] FW-7. Add ORDER BY <number>**
   -- Add ORDER BY <number> to the ORDER BY clause, the number corresponds to the column number in the SELECT clause. (1 based)
   -- Make sure ASC | DESC is supported.
   -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for ORDER BY <number>.
   -- Add example to the ETL_SQL_LANGUAGE_REFERENCE.md file for ORDER BY column_name with ASC | DESC.
 
-  **FW-8. Add PERCENT and WITH TIES to TOP**
+  - **[x] FW-8. Add PERCENT and WITH TIES to TOP**
   -- Add TOP (expression) [ PERCENT ] [ WITH TIES ] 
 Explanation:
 PERCENT
@@ -86,41 +86,42 @@ Returns two or more rows that tie for last place in the limited results set. You
 
 You can specify the TOP clause with the WITH TIES argument only in SELECT statements, and only if you also specify the ORDER BY clause. The returned order of tying records is arbitrary. ORDER BY doesn't affect this rule.
 
-  **FW-9. Add advanced TRIM function**
+- **[x] FW-9. Add advanced TRIM function**
   -- TRIM ( [ LEADING | TRAILING | BOTH ] [characters FROM ] string )
 
-  **FW-10. Add advanced SUBSTRING function**
+- **[x] FW-10. Add advanced SUBSTRING function**
   -- SUBSTRING ( string FROM start [ FOR length ] )
 
-  **FW-11. Position function**
+- **[x] FW-11. Position function**
   -- POSITION ( substring IN string )
 
-  **FW-12. OVERLAY function**
+- **[x] FW-12. OVERLAY function**
   -- OVERLAY ( string PLACING overlay_string FROM start [ FOR length ] )
 
-  **FW-13. EXTRACT function**
+- **[x] FW-13. EXTRACT function**
   -- EXTRACT ( field FROM source )
 
-  **FW-14. OCTET_LENGTH function**
+- **[x] FW-14. OCTET_LENGTH function**
   -- OCTET_LENGTH ( string )
 
-  **FW-15. CHARACTER_LENGTH function**
+- **[x] FW-15. CHARACTER_LENGTH function**
   -- CHARACTER_LENGTH ( string )
 
-  **FW-16. CHAR_LENGTH function**
+- **[x] FW-16. CHAR_LENGTH function**
   -- CHAR_LENGTH ( string )
 
-  **FW.17. Add advanced statistical functions**
-  -- STDDEV_POP / STDDEV_SAMP: Population and sample standard deviation.
-  -- VAR_POP / VAR_SAMP: Population and sample variance.CORR(y, x): Computes the correlation coefficient between two sets of numbers.
-  -- COVAR_POP(y, x) / COVAR_SAMP(y, x): Computes population and sample covariance.
-  -- REGR_SLOPE / REGR_INTERCEPT: Linear regression slope and y-intercept for a set of pairs.
-  -- EVERY / ANY / SOME: Aggregates for boolean values (returns true if all or some values are true).
+  - **[x] FW-17. Add advanced statistical functions**
+  -- VAR_POP, VAR_SAMP, STDDEV_POP, STDDEV_SAMP, CORR, COVAR_POP, COVAR_SAMP
+  -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for the new statistical functions.
 
-  **FW-18. Examples in the documentation on AT TIME ZONE**
-  - Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for AT TIME ZONE showing the different time zones and how they work.
-  - Show an example query with AT TIME ZONE that converts a UTC timestamp to a local time zone.
-  - Be sure to list the valid time zones in the documentation.
+  - **[x] FW-18. Add AT TIME ZONE examples**
+  -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for AT TIME ZONE.
+
+- **[x] FW-19. Update Sample_Guide.md**
+- First we'll want to check the scripts in the scripts folder to make sure they still all work.
+- Then we'll want to add examples for the new functions to the Sample_Guide.md file.
+- The we'll want to see what else is missing since we added a lot of new features recently.
+- Make sure the Sample_Guide.md file is up to date with the latest features.
 
 ## VS CODE Bugs/Improvements
 

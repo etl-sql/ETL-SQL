@@ -329,6 +329,8 @@ namespace ETL_SQL.Core
         public List<OrderByClause>? OrderBy { get; }
         public bool IsDistinct { get; set; }
         public Expression? TopCount { get; set; }
+        public bool IsTopPercent { get; set; }
+        public bool WithTies { get; set; }
         public Expression? LimitCount { get; set; }
         public Expression? Offset { get; set; }
         public ForClause? ForClause { get; set; }
@@ -364,7 +366,13 @@ namespace ETL_SQL.Core
             var recursive = IsRecursive ? "RECURSIVE " : "";
             var with = (Ctes != null && Ctes.Count > 0) ? $"WITH {recursive}" + string.Join(", ", Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
             var distinct = IsDistinct ? "DISTINCT " : "";
-            var top = TopCount != null ? $"TOP ({TopCount.ToSql()}) " : "";
+            var top = "";
+            if (TopCount != null)
+            {
+                var percent = IsTopPercent ? " PERCENT" : "";
+                var ties = WithTies ? " WITH TIES" : "";
+                top = $"TOP ({TopCount.ToSql()}){percent}{ties} ";
+            }
             var cols = string.Join(", ", Columns.Select(c => c.ToSql()));
             var into = IntoTable != null ? $" INTO {IntoTable.ToSql()}" : "";
             var from = $" FROM {FromTable.ToSql()}";

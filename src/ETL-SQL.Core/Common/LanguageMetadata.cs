@@ -11,7 +11,7 @@ namespace ETL_SQL.Common
         {
             "SELECT", "FROM", "WHERE", "GROUP", "BY", "HAVING", "ORDER", "ASC", "DESC",
             "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE", "TRUNCATE", "PIVOT", "UNPIVOT", "MERGE", "USING", "MATCHED", "SOURCE", "TARGET",
-            "DISTINCT", "TOP", "LIMIT", "OFFSET", "ROWS", "ROW", "FETCH", "NEXT", "ONLY", "AS"
+            "DISTINCT", "TOP", "PERCENT", "TIES", "LIMIT", "OFFSET", "ROWS", "ROW", "FETCH", "NEXT", "ONLY", "AS"
         };
 
         public static readonly HashSet<string> DdlKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -52,7 +52,7 @@ namespace ETL_SQL.Common
 
         public static readonly HashSet<string> Keywords = new(StringComparer.OrdinalIgnoreCase)
         {
-            "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON", "WHAT_IF", "SYSDATE",
+            "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON", "WHAT_IF", "SYSDATE", "PERCENT", "TIES",
             "CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME",
             "WAITFOR", "DELAY",
             "WITH", "RECURSIVE", "HASH", "LOOP",
@@ -99,6 +99,8 @@ namespace ETL_SQL.Common
             "SIN", "COS", "TAN", "ASIN", "ACOS", "ATAN", "ATAN2", "SIGN",
             "LAG", "LEAD", "NTILE", "FIRST_VALUE", "LAST_VALUE", "STRING_AGG",
             "CUME_DIST", "PERCENT_RANK", "NTH_VALUE", "PERCENTILE_CONT", "PERCENTILE_DISC",
+            "VAR", "VARP", "VAR_SAMP", "VAR_POP", "STDEV", "STDEVP", "STDDEV", "STDDEV_SAMP", "STDDEV_POP",
+            "COVAR_SAMP", "COVAR_POP", "CORR",
             "REGEXP_LIKE", "REGEXP_SUBSTR", "REGEXP_REPLACE", "REGEXP_INSTR", "REGEXP_COUNT", "REGEXP_MATCHES", "REGEXP_SPLIT_TO_TABLE",
             // JSON functions
             "JSON_VALUE", "JSON_QUERY", "JSON_MODIFY", "ISJSON", "JSON_EXISTS", "JSON_OBJECT", "JSON_ARRAY", "JSON_TABLE", "JSON_EXTRACT", "OPENJSON",

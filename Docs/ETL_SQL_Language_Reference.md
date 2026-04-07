@@ -709,6 +709,28 @@ ETL-SQL supports a wide range of data types tailored for ETL operations, variabl
     - **Identifiers**: `SYSDATE` and `CURRENT_TIMESTAMP` are bare identifiers (no parentheses).
     - **Functions**: `GETDATE()` and `NOW()` MUST include parentheses.
 *   **Date Arithmetic**: (FW-6) Supports shorthand arithmetic for days. `SYSDATE + 1` returns tomorrow. `GETDATE() - 7` returns a date from one week ago. `date1 - date2` returns the difference in days as a decimal.
+*   **Time Zone Conversion**: Use the `AT TIME ZONE` expression to convert a date-time value between time zones.
+    - *Syntax*: `<expression> AT TIME ZONE '<timezone_id>'`
+    - *Common Windows Time Zone IDs*:
+        - `UTC` (Coordinated Universal Time)
+        - `Eastern Standard Time` (New York, Toronto)
+        - `Central Standard Time` (Chicago, Mexico City)
+        - `Mountain Standard Time` (Denver, Phoenix)
+        - `Pacific Standard Time` (Los Angeles, Vancouver)
+        - `GMT Standard Time` (London, Dublin)
+        - `W. Europe Standard Time` (Berlin, Paris, Rome)
+        - `Tokyo Standard Time` (Tokyo, Osaka)
+    - *Example*:
+      ```sql
+      -- Convert UTC current time to Eastern Standard Time
+      DECLARE @nyTime = GETDATE() AT TIME ZONE 'Eastern Standard Time';
+      PRINT @nyTime;
+  
+      -- Use a variable for the time zone
+      DECLARE @tz = 'Pacific Standard Time';
+      SELECT OrderDate AT TIME ZONE @tz FROM Orders;
+      ```
+  
 
 #### 3. Character & String Types
 *   **Types**: `STRING`, `VARCHAR`, `NVARCHAR`, `TEXT`, `CHAR`
@@ -757,7 +779,10 @@ Fetches, transforms, and projects data from an established connection or tempora
 
 *Supported clauses (Syntactic Order):*
 - `DISTINCT`: When used after `SELECT`, filters out duplicate rows from the final result set.
-- `TOP <expression>`: Caps the number of returned rows (placed after `SELECT`). Supports literal numbers and variables.
+- `TOP <expression> [PERCENT] [WITH TIES]`: Caps the number of returned rows (placed after `SELECT`). 
+    - `PERCENT`: Interprets the count as a percentage of the total result set (rounded up).
+    - `WITH TIES`: Includes additional rows that have the same values in the `ORDER BY` columns as the last row in the limited set. Requires an `ORDER BY` clause.
+    - Supports literal numbers and variables.
 - `INTO <target>`: (ETL specific) Streams the results directly into a destination connection or memory table (tables prefixed with `#`).
 - `FROM <target>`: The source table or connection name. Supports aliases (e.g., `FROM my_conn AS T1`).
 - `[INNER | LEFT | RIGHT | FULL | LEFT SEMI | LEFT ANTI] [HASH | LOOP | MERGE] JOIN <target> ON <condition>`: Combines data from multiple sources. You can optionally force a specific execution algorithm (`HASH`, `LOOP`, or `MERGE`) to explicitly optimize streaming performance against massive datasets.
@@ -772,7 +797,9 @@ Fetches, transforms, and projects data from an established connection or tempora
 - `HAVING <condition>`: Filters result sets *after* GROUP BY aggregation has been applied.
 - `PIVOT ( <aggregate_func>(<col>) FOR <pivot_col> IN (<values...>) ) AS <alias>`: Rotates a table-valued expression by turning unique values from one column in the expression into multiple columns in the output.
 - `UNPIVOT ( <value_col> FOR <name_col> IN (<cols...>) ) AS <alias>`: Rotates a table-valued expression from a column-based form into a row-based form.
-- `ORDER BY <column> [ASC|DESC] [, ...]`: Sorts the result set. Multiple columns are supported. `ASC` (default) or `DESC`. Can be used with `OFFSET`/`FETCH NEXT` for pagination.
+- `ORDER BY <column> [ASC|DESC] [, ...]`: Sorts the result set. Multiple columns are supported. `ASC` (default) or `DESC`.
+    - **Note**: You can also use 1-based column indices (e.g., `ORDER BY 2 ASC` sorts by the second column).
+    - Can be used with `OFFSET`/`FETCH NEXT` for pagination.
 - `OFFSET <expression> [ROWS]`: Skips a specific number of rows before returning results. Usually used with `ORDER BY`.
 - `FETCH NEXT <expression> ROWS ONLY`: An alternative syntax for `LIMIT`, often used with `OFFSET`.
 - `LIMIT <expression>`: Caps the number of returned rows (placed at the end of the query). Supports literal numbers and variables.
@@ -898,6 +925,26 @@ FETCH NEXT 10 ROWS ONLY;
 SELECT id, name, amount
 FROM #sales
 FOR JSON PATH, ROOT('Sales'), INCLUDE_NULL_VALUES;
+```
+
+### Statistical Aggregates
+Advanced aggregate functions for statistical analysis. These functions ignore `NULL` values. For paired functions (`CORR`, `COVAR`), rows are excluded if either input is `NULL`.
+
+*   **VAR(x)** / **VAR_SAMP(x)**: Returns the sample variance of a set of numbers.
+*   **VARP(x)** / **VAR_POP(x)**: Returns the population variance of a set of numbers.
+*   **STDEV(x)** / **STDDEV_SAMP(x)**: Returns the sample standard deviation.
+*   **STDEVP(x)** / **STDDEV_POP(x)**: Returns the population standard deviation.
+*   **COVAR_SAMP(x, y)**: Returns the sample covariance of two sets of numbers.
+*   **COVAR_POP(x, y)**: Returns the population covariance of two sets of numbers.
+*   **CORR(x, y)**: Returns the Pearson correlation coefficient between two sets of numbers (range -1.0 to 1.0).
+
+*Example:*
+```sql
+SELECT 
+    AVG(Price) AS AvgPrice,
+    STDEV(Price) AS PriceVolatility,
+    CORR(Price, Quantity) AS PriceQuantityCorr
+FROM Sales;
 ```
 
 ## Logical Operators & Advanced Filters
@@ -1383,8 +1430,13 @@ FROM system_table;
 ```
 
 ### String Functions
+- **`SUBSTRING(string FROM start [FOR length])`**: ANSI-standard substring extraction. Note that SQL indices are 1-based.
+- **`TRIM([LEADING | TRAILING | BOTH] [characters FROM] string)`**: Removes spaces or specified characters from the beginning, end, or both sides of a string.
+- **`POSITION(substring IN string)`**: Returns the 1-based starting position of a substring within a string. Returns 0 if not found.
+- **`OVERLAY(string PLACING overlay FROM start [FOR length])`**: Replaces a portion of a string with another string starting at the specified position.
+- **`CHARACTER_LENGTH(string)`**, **`CHAR_LENGTH(string)`**, **`OCTET_LENGTH(string)`**: Returns the length of the string in characters (or octets).
 - **`LEFT(string, n)`**, **`RIGHT(string, n)`**: Extracts `n` characters from either side.
-- **`CHARINDEX(substring, string)`** (or **`INSTR(string, substring)`**): Finds the 1-based index position of a substring. Not: `CHARINDEX` takes `(sub, str)` while `INSTR` takes `(str, sub)`.
+- **`CHARINDEX(substring, string)`** (or **`INSTR(string, substring)`**): Finds the 1-based index position of a substring. Note: `CHARINDEX` takes `(sub, str)` while `INSTR` takes `(str, sub)`.
 - **`REVERSE(string)`**: Reverses the string characters.
 - **`COALESCE(val1, val2...)`**: Returns the first non-null value in a list.
 - **`ISNULL(val1, val2)`**: Returns `val2` if `val1` is null.
@@ -1406,7 +1458,7 @@ FROM system_table;
 - **`REPLICATE(string, count)`**: Repeats a string value a specified number of times.
 
 ### List Scalars
-- **`LENGTH(list)`**: Returns the number of items in a list.
+- **`LENGTH(list_or_string)`**: Returns the number of items in a list or the length of a string.
 - **`SORT_LIST(list[, 'ASC'|'DESC'])`**: Returns a sorted version of the list.
 - **`APPEND_TO_LIST(@list, value)`**: Adds an item to a list variable.
 - **`REMOVE_FROM_LIST(@list, value)`**: Removes an item from a list variable.
@@ -1435,6 +1487,7 @@ FROM system_table;
 - **`VAR(expression)`**: Returns the statistical variance of the population.
 
 ### Date and Time Scalars
+- **`EXTRACT(field FROM source)`**: Extracts a component (e.g., `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `DOW`, `DOY`) from a datetime.
 - **`CURRENT_TIMESTAMP`, `GETDATE()`, `GETUTCDATE()`, `SYSDATE()`**: Functions returning current system time.
 - **`DATEADD(datepart, number, date)`**: Adds a specific interval (e.g., `DAY`, `MONTH`, `YEAR`, `HOUR`) to a date.
 - **`DATEDIFF(datepart, startdate, enddate)`**: Returns the difference between two dates.

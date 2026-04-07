@@ -155,7 +155,10 @@ namespace ETL_SQL.Engine.Engines
                 var name = f.FunctionName.ToUpperInvariant();
                 return name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX"
                     || name == "STRING_AGG" || name == "LIST_AGG"
-                    || name == "PERCENTILE_CONT" || name == "PERCENTILE_DISC";
+                    || name == "PERCENTILE_CONT" || name == "PERCENTILE_DISC"
+                    || name == "VAR" || name == "VARP" || name == "VAR_SAMP" || name == "VAR_POP"
+                    || name == "STDEV" || name == "STDEVP" || name == "STDDEV" || name == "STDDEV_SAMP" || name == "STDDEV_POP"
+                    || name == "CORR" || name == "COVAR_SAMP" || name == "COVAR_POP";
             }
             if (expr is BinaryExpression b) return IsAggregate(b.Left) || IsAggregate(b.Right);
             return false;
@@ -192,27 +195,131 @@ namespace ETL_SQL.Engine.Engines
             if (expr is FunctionCallExpression f)
             {
                 var name = f.FunctionName.ToUpperInvariant();
-                var vals = new List<object?>();
-                if (f.Arguments.Count > 0)
+                
+                // Collect results for all arguments
+                var valsByArg = new List<List<object?>>();
+                for (int i = 0; i < f.Arguments.Count; i++)
                 {
-                    foreach (var r in rows) vals.Add(await _context.EvaluateValue(f.Arguments[0], r));
+                    var argVals = new List<object?>();
+                    foreach (var r in rows) argVals.Add(await _context.EvaluateValue(f.Arguments[i], r));
+                    valsByArg.Add(argVals);
                 }
 
-                return name switch
+                switch (name)
                 {
-                    "COUNT" => (decimal)vals.Count(v => v != null || (f.Arguments.Count == 1 && f.Arguments[0] is IdentifierExpression id && id.Name == "*")),
-                    "SUM" => (decimal)vals.Where(v => v != null).Sum(v => Convert.ToDecimal(v)),
-                    "AVG" => (decimal)vals.Where(v => v != null).Average(v => Convert.ToDecimal(v)),
-                    "MIN" => vals.Where(v => v != null).Min(),
-                    "MAX" => vals.Where(v => v != null).Max(),
-                    "STRING_AGG" => string.Join(f.Arguments.Count >= 2 ? (await _context.EvaluateValue(f.Arguments[1], new Row()))?.ToString() ?? "" : ",",
-                        f.WithinGroupOrderBy != null ? await SortRows(rows, f.WithinGroupOrderBy) : vals.Select(v => v?.ToString() ?? "")),
-                    "PERCENTILE_CONT" => await EvaluatePercentileCont(f, rows),
-                    "PERCENTILE_DISC" => await EvaluatePercentileDisc(f, rows),
-                    _ => null
-                };
+                    case "COUNT":
+                        if (f.Arguments.Count == 0) return (decimal)rows.Count;
+                        return (decimal)valsByArg[0].Count(v => v != null || (f.Arguments[0] is IdentifierExpression id && id.Name == "*"));
+                    case "SUM":
+                        return (decimal)valsByArg[0].Where(v => v != null).Sum(v => Convert.ToDecimal(v));
+                    case "AVG":
+                        return (decimal)valsByArg[0].Where(v => v != null).Average(v => Convert.ToDecimal(v));
+                    case "MIN":
+                        return valsByArg[0].Where(v => v != null).Min();
+                    case "MAX":
+                        return valsByArg[0].Where(v => v != null).Max();
+                    case "STRING_AGG":
+                        return string.Join(f.Arguments.Count >= 2 ? (await _context.EvaluateValue(f.Arguments[1], new Row()))?.ToString() ?? "" : ",",
+                            f.WithinGroupOrderBy != null ? await SortRows(rows, f.WithinGroupOrderBy) : valsByArg[0].Select(v => v?.ToString() ?? ""));
+                    case "PERCENTILE_CONT":
+                        return await EvaluatePercentileCont(f, rows);
+                    case "PERCENTILE_DISC":
+                        return await EvaluatePercentileDisc(f, rows);
+                    case "VAR":
+                    case "VAR_SAMP":
+                        return CalculateVariance(valsByArg[0], false);
+                    case "VARP":
+                    case "VAR_POP":
+                        return CalculateVariance(valsByArg[0], true);
+                    case "STDEV":
+                    case "STDDEV_SAMP":
+                    case "STDDEV":
+                        return CalculateStDev(valsByArg[0], false);
+                    case "STDEVP":
+                    case "STDDEV_POP":
+                        return CalculateStDev(valsByArg[0], true);
+                    case "COVAR_SAMP":
+                        return CalculateCovariance(valsByArg[0], valsByArg[1], false);
+                    case "COVAR_POP":
+                        return CalculateCovariance(valsByArg[0], valsByArg[1], true);
+                    case "CORR":
+                        return CalculateCorrelation(valsByArg[0], valsByArg[1]);
+                    default:
+                        return null;
+                }
             }
             return null;
+        }
+
+        private decimal? CalculateVariance(List<object?> vals, bool population)
+        {
+            var numbers = vals.Where(v => v != null).Select(v => Convert.ToDecimal(v)).ToList();
+            int n = numbers.Count;
+            if (n == 0 || (!population && n == 1)) return null;
+
+            decimal avg = numbers.Average();
+            decimal sumSqDiff = numbers.Sum(x => (x - avg) * (x - avg));
+            return sumSqDiff / (population ? n : n - 1);
+        }
+
+        private decimal? CalculateStDev(List<object?> vals, bool population)
+        {
+            var var = CalculateVariance(vals, population);
+            if (var == null) return null;
+            return (decimal)Math.Sqrt((double)var.Value);
+        }
+
+        private decimal? CalculateCovariance(List<object?> xVals, List<object?> yVals, bool population)
+        {
+            var xNums = new List<decimal>();
+            var yNums = new List<decimal>();
+            for (int i = 0; i < xVals.Count; i++)
+            {
+                if (xVals[i] != null && yVals[i] != null)
+                {
+                    xNums.Add(Convert.ToDecimal(xVals[i]));
+                    yNums.Add(Convert.ToDecimal(yVals[i]));
+                }
+            }
+
+            int n = xNums.Count;
+            if (n == 0 || (!population && n == 1)) return null;
+
+            decimal xAvg = xNums.Average();
+            decimal yAvg = yNums.Average();
+            decimal sumDiffProd = 0;
+            for (int i = 0; i < n; i++)
+            {
+                sumDiffProd += (xNums[i] - xAvg) * (yNums[i] - yAvg);
+            }
+
+            return sumDiffProd / (population ? n : n - 1);
+        }
+
+        private decimal? CalculateCorrelation(List<object?> xVals, List<object?> yVals)
+        {
+            var cov = CalculateCovariance(xVals, yVals, true);
+            if (cov == null) return null;
+
+            // Specifically for correlation, we need the standard deviations of the SAME set of pairs (where neither is NULL)
+            var xNums = new List<decimal>();
+            var yNums = new List<decimal>();
+            for (int i = 0; i < xVals.Count; i++)
+            {
+                if (xVals[i] != null && yVals[i] != null)
+                {
+                    xNums.Add(Convert.ToDecimal(xVals[i]));
+                    yNums.Add(Convert.ToDecimal(yVals[i]));
+                }
+            }
+            
+            if (xNums.Count == 0) return null;
+            
+            double xStd = Math.Sqrt((double)CalculateVariance(xNums.Cast<object?>().ToList(), true)!);
+            double yStd = Math.Sqrt((double)CalculateVariance(yNums.Cast<object?>().ToList(), true)!);
+
+            if (xStd == 0 || yStd == 0) return null;
+            return (decimal)((double)cov.Value / (xStd * yStd));
         }
 
         public async Task<IEnumerable<string>> SortRows(List<Row> rows, List<OrderByClause> orderBy)

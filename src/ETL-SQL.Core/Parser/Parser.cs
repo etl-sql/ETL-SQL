@@ -247,6 +247,8 @@ namespace ETL_SQL.Core.Parser
             var startToken = Current;
             bool isDistinct = Match(TokenType.DISTINCT);
             Expression? topCount = null;
+            bool isTopPercent = false;
+            bool withTies = false;
             if (Match(TokenType.TOP))
             {
                 bool hasParen = Match(TokenType.LPAREN);
@@ -263,6 +265,13 @@ namespace ETL_SQL.Core.Parser
                 else throw new SyntaxException("Expected number or variable after TOP", Current.Line, Current.Column);
 
                 if (hasParen) Consume(TokenType.RPAREN, "Expected ')' after TOP");
+
+                if (Match(TokenType.PERCENT)) isTopPercent = true;
+                if (Match(TokenType.WITH))
+                {
+                    Consume(TokenType.TIES, "Expected 'TIES' after 'WITH' in TOP clause");
+                    withTies = true;
+                }
             }
 
             // SELECT col1, col2, ... [INTO table] FROM table [WHERE cond]
@@ -436,6 +445,8 @@ namespace ETL_SQL.Core.Parser
                 EndColumn = LastTokenEndColumn,
                 IsDistinct = isDistinct,
                 TopCount = topCount,
+                IsTopPercent = isTopPercent,
+                WithTies = withTies,
                 LimitCount = limitCount,
                 Offset = offset,
                 GroupingSet = groupingSet
