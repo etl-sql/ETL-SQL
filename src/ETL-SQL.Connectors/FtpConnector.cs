@@ -19,6 +19,7 @@ namespace ETL_SQL.Connectors
         public IReadOnlyList<string> Aliases => new[] { "FTP" };
         public string Path => $"ftp://{_host}";
         public Dictionary<string, string>? Options => null;
+        public string ConnectorType => "FTP";
 
         public FtpConnector(string host, string username, string password)
         {

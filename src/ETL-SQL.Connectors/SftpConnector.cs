@@ -60,6 +60,7 @@ namespace ETL_SQL.Connectors
         public string Path => $"sftp://{_host}";
 
         public Dictionary<string, string>? Options => null;
+        public string ConnectorType => "SFTP";
 
         public async Task<string> GetVersionAsync(string connectionString) => "SFTP Server";
         public HashSet<string> GetSupportedFunctions() => new();

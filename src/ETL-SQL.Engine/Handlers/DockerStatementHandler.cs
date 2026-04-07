@@ -25,13 +25,10 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // Start the container and track it in the evaluator's manager
-            Logger.Verbose($"Initializing Docker container: {imageName} with alias {dockerStmt.Alias ?? "none"}");
+            Logger.WriteLine($"Initializing Docker container: {imageName} with alias {dockerStmt.Alias ?? "none"}...", ConsoleColor.Cyan);
             await context.DockerManager.StartContainer(imageName, dockerStmt.Alias);
             
             Logger.WriteLine($"Docker container started: {imageName}", ConsoleColor.Green);
         }
     }
 }
-
-
-

@@ -271,13 +271,9 @@ export class ResultsPanel {
             font-weight: 600 !important;
         }
         .tabulator-col { background: transparent !important; border-right: 1px solid var(--glass-border) !important; }
-        .tabulator-row {
-            background: transparent !important;
-            border-bottom: 1px solid var(--glass-border) !important;
-            color: var(--text-main) !important;
-        }
-        .tabulator-row.tabulator-row-even { background: var(--vscode-editor-lineHighlightBackground, rgba(127, 127, 127, 0.03)) !important; }
-        .tabulator-row:hover { background: var(--vscode-editor-lineHighlightBackground) !important; }
+        .tabulator-row { background: var(--vscode-editor-background, transparent) !important; color: var(--vscode-editor-foreground, inherit) !important; }
+        .tabulator-row.tabulator-row-even { background: var(--vscode-editor-lineHighlightBackground, rgba(127, 127, 127, 0.07)) !important; }
+        .tabulator-row:hover { background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12)) !important; }
         .tabulator-cell { 
             border-right: 1px solid var(--glass-border) !important; 
             padding: 6px 8px !important; 
@@ -491,6 +487,7 @@ export class ResultsPanel {
             messagesLog.appendChild(div);
             if (msg.level === 'error') {
                 showTab('messages');
+                runningIndicator.classList.remove('active');
             }
         }
 

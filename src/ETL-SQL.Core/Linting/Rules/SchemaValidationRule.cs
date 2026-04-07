@@ -121,15 +121,17 @@ namespace ETL_SQL.Core.Linting.Rules
             }
 
             var connName = tableRef.ConnectionName ?? context.Metadata!.GetConnections().FirstOrDefault() ?? "DEFAULT";
+            var connType = context.Metadata!.GetConnectionType(connName);
             
-            // Skip temp tables - they are dynamic and not in the static metadata
-            if (tableRef.TableName.StartsWith("#"))
+            // Skip validation for DOCKER (b1)
+            if (connType == "DOCKER")
             {
                 tablesInScope.Add((connName, tableRef.TableName, tableRef.Alias));
                 return;
             }
 
             var tables = await context.Metadata!.GetTablesAsync(connName);
+            if (tables == null) return; 
             
             if (!tables.Any(t => string.Equals(t, tableRef.TableName, StringComparison.OrdinalIgnoreCase)))
             {

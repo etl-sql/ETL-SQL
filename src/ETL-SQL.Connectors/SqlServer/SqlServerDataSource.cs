@@ -4,6 +4,7 @@ using System.Linq;
 using Microsoft.Data.SqlClient;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Connectors.SqlServer
 {
@@ -40,6 +41,8 @@ namespace ETL_SQL.Connectors.SqlServer
 
         /// <summary>Gets the database dialect name.</summary>
         public string Dialect => "MSSQL";
+        public bool SupportsSqlPushdown => true;
+        public string ConnectorType => "MSSQL";
 
         /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
@@ -50,6 +53,7 @@ namespace ETL_SQL.Connectors.SqlServer
         /// <summary>Retrieves the SQL Server version information (@@VERSION).</summary>
         public async Task<string> GetVersionAsync()
         {
+            if (string.IsNullOrWhiteSpace(_connectionString)) return "MSSQL (Offline)";
             var (conn, isShared) = await GetConnectionAsync();
             try {
                 await using var cmd = new SqlCommand("SELECT @@VERSION", conn);
@@ -167,10 +171,29 @@ namespace ETL_SQL.Connectors.SqlServer
         public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
         {
             var (conn, isShared) = await GetConnectionAsync();
+
+            // Wire up InfoMessage so PRINT statements and server messages (e.g. "Table created.",
+            // "N row(s) affected.") are surfaced to the user via the logger.
+            SqlInfoMessageEventHandler infoHandler = (_, e) =>
+            {
+                foreach (SqlError msg in e.Errors)
+                {
+                    var color = msg.Class > 10 ? ConsoleColor.Red : ConsoleColor.Cyan;
+                    Logger.WriteLine(msg.Message, color);
+                }
+            };
+            conn.InfoMessage += infoHandler;
+            conn.FireInfoMessageEventOnUserErrors = true;
+
             try {
                 await using var cmd = new SqlCommand(sql, conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
-                
+                cmd.StatementCompleted += (_, e) =>
+                {
+                    if (e.RecordCount > 0)
+                        Logger.WriteLine($"{e.RecordCount} row(s) affected.", ConsoleColor.Cyan);
+                };
+
                 int paramCount = 0;
                 if (parameters != null)
                 {
@@ -179,7 +202,7 @@ namespace ETL_SQL.Connectors.SqlServer
                         cmd.Parameters.AddWithValue($"@p{paramCount++}", param ?? DBNull.Value);
                     }
                 }
-                
+
                 if (paramCount > 0)
                 {
                     cmd.CommandText = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(cmd.CommandText);
@@ -187,42 +210,43 @@ namespace ETL_SQL.Connectors.SqlServer
 
                 await using var reader = await cmd.ExecuteReaderAsync();
 
-            int resultSetIndex = 0;
-            do
-            {
-                var columns = new List<string>();
-                for (int i = 0; i < reader.FieldCount; i++)
+                int resultSetIndex = 0;
+                do
                 {
-                    columns.Add(reader.GetName(i));
-                }
-
-                var currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
-                currentBatch.SetColumns(columns);
-
-                while (await reader.ReadAsync())
-                {
-                    var row = currentBatch.NewRow();
+                    var columns = new List<string>();
                     for (int i = 0; i < reader.FieldCount; i++)
                     {
-                        row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                        columns.Add(reader.GetName(i));
                     }
-                    currentBatch.Rows.Add(row);
 
-                    if (currentBatch.Rows.Count >= 10000)
+                    var currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
+                    currentBatch.SetColumns(columns);
+
+                    while (await reader.ReadAsync())
+                    {
+                        var row = currentBatch.NewRow();
+                        for (int i = 0; i < reader.FieldCount; i++)
+                        {
+                            row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
+                        }
+                        currentBatch.Rows.Add(row);
+
+                        if (currentBatch.Rows.Count >= 10000)
+                        {
+                            yield return currentBatch;
+                            currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
+                            currentBatch.SetColumns(columns);
+                        }
+                    }
+
+                    if (currentBatch.Rows.Count > 0 || (reader.FieldCount > 0 && resultSetIndex == 0))
                     {
                         yield return currentBatch;
-                        currentBatch = new DataTable { ResultSetIndex = resultSetIndex };
-                        currentBatch.SetColumns(columns);
+                        resultSetIndex++;
                     }
-                }
-
-                if (currentBatch.Rows.Count > 0 || resultSetIndex == 0 || reader.FieldCount > 0)
-                {
-                    yield return currentBatch;
-                }
-                resultSetIndex++;
-            } while (await reader.NextResultAsync());
+                } while (await reader.NextResultAsync());
             } finally {
+                conn.InfoMessage -= infoHandler;
                 if (!isShared) await conn.DisposeAsync();
             }
         }
@@ -237,6 +261,7 @@ namespace ETL_SQL.Connectors.SqlServer
         /// <summary>Returns a list of all user-accessible base tables.</summary>
         public async Task<IEnumerable<string>> GetTablesAsync()
         {
+            if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
             await using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync();
             await using var cmd = new SqlCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'BASE TABLE'", conn);
@@ -254,6 +279,7 @@ namespace ETL_SQL.Connectors.SqlServer
         /// <summary>Returns a list of all user-accessible views.</summary>
         public async Task<IEnumerable<string>> GetViewsAsync()
         {
+            if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
             await using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync();
             await using var cmd = new SqlCommand("SELECT TABLE_SCHEMA, TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_TYPE = 'VIEW'", conn);
@@ -271,6 +297,7 @@ namespace ETL_SQL.Connectors.SqlServer
         /// <summary>Discovers column names for a specific table.</summary>
         public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
         {
+            if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
             await using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync();
             await using var cmd = new SqlCommand($"SELECT TOP 0 * FROM {tableName}", conn);
@@ -323,6 +350,8 @@ namespace ETL_SQL.Connectors.SqlServer
         private async Task<(SqlConnection, bool isShared)> GetConnectionAsync()
         {
             if (_transactionalConnection != null) return (_transactionalConnection, true);
+            if (string.IsNullOrWhiteSpace(_connectionString))
+                throw new ExecutionException("Connection string is missing for SQL Server data source. Please ensure the connection is properly defined with a valid connection string.");
             var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync();
             return (conn, false);

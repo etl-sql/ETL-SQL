@@ -9,7 +9,7 @@ namespace ETL_SQL.Common
 {
     /// <summary>
     /// Utility class for encryption and decryption of strings and files.
-    /// Uses AES-256 with PBKDF2 key derivation.
+    /// Uses AES-256 with PBKDF2 key derivation or RSA (SSH) key pairs.
     /// </summary>
     public static class CryptoUtils
     {
@@ -19,15 +19,13 @@ namespace ETL_SQL.Common
         private const int IvSize = 16;
 
         /// <summary>
-        /// Encrypts a string using the specified password.
+        /// Encrypts a string using the specified password and optional algorithm.
         /// </summary>
-        /// <param name="plainText">The text to encrypt.</param>
-        /// <param name="password">The password used for key derivation.</param>
-        /// <returns>A base64-encoded string prefixed with "ENC:".</returns>
-        public static string Encrypt(string plainText, string password)
+        public static string Encrypt(string plainText, string password, HashAlgorithmName? algo = null)
         {
+            var hashAlgo = algo ?? HashAlgorithmName.SHA256;
             byte[] salt = RandomNumberGenerator.GetBytes(SaltSize);
-            byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, KeySize / 8);
+            byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
 
             using var aes = Aes.Create();
             aes.Key = key;
@@ -51,14 +49,12 @@ namespace ETL_SQL.Common
         /// <summary>
         /// Decrypts a string that was encrypted using <see cref="Encrypt"/>.
         /// </summary>
-        /// <param name="cipherText">The encrypted text (must start with "ENC:").</param>
-        /// <param name="password">The password used for key derivation.</param>
-        /// <returns>The decrypted plaintext string.</returns>
-        public static string Decrypt(string cipherText, string password)
+        public static string Decrypt(string cipherText, string password, HashAlgorithmName? algo = null)
         {
             if (string.IsNullOrEmpty(cipherText)) return cipherText;
             if (!cipherText.StartsWith("ENC:")) return cipherText;
 
+            var hashAlgo = algo ?? HashAlgorithmName.SHA256;
             byte[] fullBytes = Convert.FromBase64String(cipherText.Substring(4));
             
             if (fullBytes.Length < SaltSize + IvSize)
@@ -72,7 +68,7 @@ namespace ETL_SQL.Common
             Buffer.BlockCopy(fullBytes, SaltSize, iv, 0, IvSize);
             Buffer.BlockCopy(fullBytes, SaltSize + IvSize, encrypted, 0, encrypted.Length);
 
-            byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, KeySize / 8);
+            byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
 
             using var aes = Aes.Create();
             using var decryptor = aes.CreateDecryptor(key, iv);
@@ -83,15 +79,13 @@ namespace ETL_SQL.Common
             return sr.ReadToEnd();
         }
         /// <summary>
-        /// Encrypts a file on disk.
+        /// Encrypts a file on disk using a password.
         /// </summary>
-        /// <param name="inputFile">The path to the source file.</param>
-        /// <param name="outputFile">The path to the destination encrypted file.</param>
-        /// <param name="password">The password used for key derivation.</param>
-        public static void EncryptFile(string inputFile, string outputFile, string password)
+        public static void EncryptFile(string inputFile, string outputFile, string password, HashAlgorithmName? algo = null)
         {
+            var hashAlgo = algo ?? HashAlgorithmName.SHA256;
             byte[] salt = RandomNumberGenerator.GetBytes(SaltSize);
-            byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, KeySize / 8);
+            byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
 
             using var aes = Aes.Create();
             aes.Key = key;
@@ -113,13 +107,11 @@ namespace ETL_SQL.Common
         }
 
         /// <summary>
-        /// Decrypts a file that was encrypted using <see cref="EncryptFile"/>.
+        /// Decrypts a file on disk using a password.
         /// </summary>
-        /// <param name="inputFile">The path to the encrypted source file.</param>
-        /// <param name="outputFile">The path to the destination decrypted file.</param>
-        /// <param name="password">The password used for key derivation.</param>
-        public static void DecryptFile(string inputFile, string outputFile, string password)
+        public static void DecryptFile(string inputFile, string outputFile, string password, HashAlgorithmName? algo = null)
         {
+            var hashAlgo = algo ?? HashAlgorithmName.SHA256;
             using (var fsIn = new FileStream(inputFile, FileMode.Open))
             {
                 byte[] salt = new byte[SaltSize];
@@ -127,10 +119,77 @@ namespace ETL_SQL.Common
                 fsIn.ReadExactly(salt, 0, SaltSize);
                 fsIn.ReadExactly(iv, 0, IvSize);
 
-                byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, KeySize / 8);
+                byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
 
                 using var aes = Aes.Create();
                 using var decryptor = aes.CreateDecryptor(key, iv);
+                using (var cs = new CryptoStream(fsIn, decryptor, CryptoStreamMode.Read))
+                using (var fsOut = new FileStream(outputFile, FileMode.Create))
+                {
+                    cs.CopyTo(fsOut);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Encrypts a file using an SSH (RSA) public key.
+        /// </summary>
+        public static void EncryptFileWithSsh(string inputFile, string outputFile, string keyFile)
+        {
+            string pem = File.ReadAllText(keyFile);
+            using var rsa = RSA.Create();
+            rsa.ImportFromPem(pem);
+
+            byte[] aesKey = RandomNumberGenerator.GetBytes(KeySize / 8);
+            byte[] encryptedKey = rsa.Encrypt(aesKey, RSAEncryptionPadding.OaepSHA256);
+
+            using var aes = Aes.Create();
+            aes.Key = aesKey;
+            aes.GenerateIV();
+            byte[] iv = aes.IV;
+
+            using (var fsOut = new FileStream(outputFile, FileMode.Create))
+            {
+                // Format: [EncKeyLength(4)] [EncryptedKey] [IV(16)] [Data...]
+                fsOut.Write(BitConverter.GetBytes(encryptedKey.Length), 0, 4);
+                fsOut.Write(encryptedKey, 0, encryptedKey.Length);
+                fsOut.Write(iv, 0, IvSize);
+
+                using (var encryptor = aes.CreateEncryptor(aes.Key, aes.IV))
+                using (var cs = new CryptoStream(fsOut, encryptor, CryptoStreamMode.Write))
+                using (var fsIn = new FileStream(inputFile, FileMode.Open))
+                {
+                    fsIn.CopyTo(cs);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Decrypts a file using an SSH (RSA) private key.
+        /// </summary>
+        public static void DecryptFileWithSsh(string inputFile, string outputFile, string keyFile, string? passphrase = null)
+        {
+            string pem = File.ReadAllText(keyFile);
+            using var rsa = RSA.Create();
+            if (string.IsNullOrEmpty(passphrase)) rsa.ImportFromPem(pem);
+            else rsa.ImportFromEncryptedPem(pem, passphrase);
+
+            using (var fsIn = new FileStream(inputFile, FileMode.Open))
+            {
+                byte[] lenBytes = new byte[4];
+                fsIn.ReadExactly(lenBytes, 0, 4);
+                int keyLen = BitConverter.ToInt32(lenBytes, 0);
+
+                byte[] encryptedKey = new byte[keyLen];
+                fsIn.ReadExactly(encryptedKey, 0, keyLen);
+
+                byte[] iv = new byte[IvSize];
+                fsIn.ReadExactly(iv, 0, IvSize);
+
+                byte[] aesKey = rsa.Decrypt(encryptedKey, RSAEncryptionPadding.OaepSHA256);
+
+                using var aes = Aes.Create();
+                using var decryptor = aes.CreateDecryptor(aesKey, iv);
                 using (var cs = new CryptoStream(fsIn, decryptor, CryptoStreamMode.Read))
                 using (var fsOut = new FileStream(outputFile, FileMode.Create))
                 {

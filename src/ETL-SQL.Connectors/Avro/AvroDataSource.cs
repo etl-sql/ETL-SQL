@@ -5,6 +5,7 @@ using System.Linq;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common;
 using Avro;
 using Avro.File;
 using Avro.Generic;
@@ -18,6 +19,7 @@ namespace ETL_SQL.Connectors.Avro
     {
         private readonly string _filePath;
         private readonly string? _schemaFile;
+        private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
 
         /// <summary>Gets the physical path to the Avro file.</summary>
@@ -26,6 +28,10 @@ namespace ETL_SQL.Connectors.Avro
         public Dictionary<string, string>? Options => _options;
         /// <summary>Returns this instance as a typed table (no-op for Avro).</summary>
         public IDataSource WithTable(string tableName) => this;
+        /// <summary>The type name of the connector that created this data source (e.g., AVRO).</summary>
+        public string ConnectorType => "AVRO";
+        public object? Snapshot() => null;
+        public void Restore(object? snapshot) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AvroDataSource"/> class.
@@ -37,18 +43,29 @@ namespace ETL_SQL.Connectors.Avro
             _filePath = filePath;
             _options = options;
             if (options != null && options.TryGetValue("SCHEMA_FILE", out var sf)) _schemaFile = sf;
+            _encryption = new EncryptionOptions(options);
         }
 
         /// <summary>Reads data from the Avro file in batches.</summary>
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
-            if (!System.IO.File.Exists(_filePath)) yield break;
+            string effectivePath = _filePath;
+            string? tempFile = null;
 
-            using var stream = System.IO.File.OpenRead(_filePath);
-            using var reader = await Task.Run(() => DataFileReader<GenericRecord>.OpenReader(stream));
-            
-            var schema = (RecordSchema)reader.GetSchema();
-            var colNames = schema.Fields.Select(f => f.Name).ToList();
+            if (_encryption.Enabled)
+            {
+                tempFile = System.IO.Path.GetTempFileName();
+                _encryption.DecryptFile(_filePath, tempFile);
+                effectivePath = tempFile;
+            }
+
+            try
+            {
+                using var stream = System.IO.File.OpenRead(effectivePath);
+                using var reader = await Task.Run(() => DataFileReader<GenericRecord>.OpenReader(stream));
+                
+                var schema = (RecordSchema)reader.GetSchema();
+                var colNames = schema.Fields.Select(f => f.Name).ToList();
 
             var currentBatch = new DataTable();
             currentBatch.SetColumns(colNames);
@@ -75,6 +92,11 @@ namespace ETL_SQL.Connectors.Avro
             {
                 yield return currentBatch;
             }
+            }
+            finally
+            {
+                TempFileHelper.SafeDelete(tempFile);
+            }
         }
 
         /// <summary>Writes batches of data to the Avro file.</summary>
@@ -96,23 +118,45 @@ namespace ETL_SQL.Connectors.Avro
                 schema = (RecordSchema)Schema.Parse(GenerateSchemaJson(firstBatch));
             }
 
-            using var stream = System.IO.File.Create(_filePath);
-            using var writer = await Task.Run(() => DataFileWriter<GenericRecord>.OpenWriter(new GenericWriter<GenericRecord>(schema), stream));
+            string targetPath = _filePath;
+            string? tempFile = null;
 
-            do
+            if (_encryption.Enabled)
             {
-                var batch = enumerator.Current;
-                foreach (var r in batch.Rows)
+                tempFile = System.IO.Path.GetTempFileName();
+                targetPath = tempFile;
+            }
+
+            try
+            {
+                using (var stream = System.IO.File.Create(targetPath))
+                using (var writer = await Task.Run(() => DataFileWriter<GenericRecord>.OpenWriter(new GenericWriter<GenericRecord>(schema), stream)))
                 {
-                    var record = new GenericRecord(schema);
-                    foreach (var field in schema.Fields)
+                    do
                     {
-                        var val = r[field.Name];
-                        record.Add(field.Name, CastValue(val, field.Schema));
-                    }
-                    await Task.Run(() => writer.Append(record));
+                        var batch = enumerator.Current;
+                        foreach (var r in batch.Rows)
+                        {
+                            var record = new GenericRecord(schema);
+                            foreach (var field in schema.Fields)
+                            {
+                                var val = r[field.Name];
+                                record.Add(field.Name, CastValue(val, field.Schema));
+                            }
+                            await Task.Run(() => writer.Append(record));
+                        }
+                    } while (await enumerator.MoveNextAsync());
                 }
-            } while (await enumerator.MoveNextAsync());
+
+                if (_encryption.Enabled)
+                {
+                    _encryption.EncryptFile(targetPath, _filePath);
+                }
+            }
+            finally
+            {
+                TempFileHelper.SafeDelete(tempFile);
+            }
         }
 
         private string GenerateSchemaJson(DataTable batch)
@@ -161,20 +205,30 @@ namespace ETL_SQL.Connectors.Avro
         }
 
         /// <summary>Discovers the column names from the Avro file schema.</summary>
-        public Task<IEnumerable<string>> GetColumnsAsync()
+        public async Task<IEnumerable<string>> GetColumnsAsync()
         {
-            if (!System.IO.File.Exists(_filePath)) return Task.FromResult(Enumerable.Empty<string>());
+            if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
+            
+            string effectivePath = _filePath;
+            string? tempFile = null;
+
+            if (_encryption.Enabled)
+            {
+                tempFile = System.IO.Path.GetTempFileName();
+                try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
+                catch (Exception ex) { Logger.Verbose($"[AvroDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+            }
+
             try
             {
-                using var stream = System.IO.File.OpenRead(_filePath);
+                using var stream = System.IO.File.OpenRead(effectivePath);
                 using var reader = DataFileReader<GenericRecord>.OpenReader(stream);
-                return Task.FromResult((IEnumerable<string>)((RecordSchema)reader.GetSchema()).Fields.Select(f => f.Name).ToList());
+                return ((RecordSchema)reader.GetSchema()).Fields.Select(f => f.Name).ToList();
             }
-            catch { return Task.FromResult(Enumerable.Empty<string>()); }
+            catch { return Enumerable.Empty<string>(); }
+            finally { TempFileHelper.SafeDelete(tempFile); }
         }
 
-        public object? Snapshot() => null;
-        public void Restore(object? snapshot) { }
         public async ValueTask DisposeAsync()
         {
             await Task.CompletedTask;

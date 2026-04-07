@@ -7,6 +7,7 @@ using ExcelDataReader;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Connectors.Excel
 {
@@ -16,8 +17,7 @@ namespace ETL_SQL.Connectors.Excel
         private readonly string? _sheetName;
         private readonly bool _hasHeader;
         private readonly bool _compress;
-        private readonly bool _encrypt;
-        private readonly string _password;
+        private readonly EncryptionOptions _encryption;
         private readonly string? _range;
         private readonly Dictionary<string, string>? _options;
 
@@ -25,13 +25,16 @@ namespace ETL_SQL.Connectors.Excel
         /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
         public IDataSource WithTable(string tableName) => this;
+        /// <summary>The type name of the connector that created this data source (e.g., EXCEL).</summary>
+        public string ConnectorType => "EXCEL";
+        public object? Snapshot() => null;
+        public void Restore(object? snapshot) { }
 
         public ExcelDataSource(string filePath, Dictionary<string, string>? options = null)
         {
             _filePath = filePath;
             _options = options;
             _hasHeader = true; // Default
-            _password = "DefaultETLPass123!";
 
             if (options != null)
             {
@@ -39,9 +42,9 @@ namespace ETL_SQL.Connectors.Excel
                 if (options.TryGetValue("HEADER", out var h)) _hasHeader = h.ToUpperInvariant() == "ON";
                 if (options.TryGetValue("RANGE", out var r)) _range = r;
                 if (options.TryGetValue("COMPRESS", out var comp)) _compress = comp.ToUpperInvariant() == "ON";
-                if (options.TryGetValue("ENCRYPT", out var encr)) _encrypt = encr.ToUpperInvariant() == "ON";
-                if (options.TryGetValue("PASSWORD", out var p)) _password = p;
             }
+            
+            _encryption = new EncryptionOptions(options);
             
             // Register encoding provider for ExcelDataReader (needed for .net core)
             System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
@@ -54,10 +57,10 @@ namespace ETL_SQL.Connectors.Excel
             string effectivePath = _filePath;
             string? tempFile = null;
 
-            if (_encrypt)
+            if (_encryption.Enabled)
             {
                 tempFile = System.IO.Path.GetTempFileName();
-                CryptoUtils.DecryptFile(_filePath, tempFile, _password);
+                _encryption.DecryptFile(_filePath, tempFile);
                 effectivePath = tempFile;
             }
 
@@ -151,9 +154,19 @@ namespace ETL_SQL.Connectors.Excel
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
             
+            string effectivePath = _filePath;
+            string? tempFile = null;
+
+            if (_encryption.Enabled)
+            {
+                tempFile = System.IO.Path.GetTempFileName();
+                try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
+                catch (Exception ex) { Logger.Verbose($"[ExcelDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+            }
+
             try
             {
-                using var stream = System.IO.File.OpenRead(_filePath);
+                using var stream = System.IO.File.OpenRead(effectivePath);
                 using var reader = ExcelReaderFactory.CreateReader(stream);
                 var result = reader.AsDataSet(new ExcelDataSetConfiguration()
                 {
@@ -188,11 +201,10 @@ namespace ETL_SQL.Connectors.Excel
                 }
             }
             catch (Exception ex) { Logger.Verbose($"[ExcelDataSource.GetColumnsAsync] Failed to read columns from '{_filePath}': {ex.Message}"); }
+            finally { TempFileHelper.SafeDelete(tempFile); }
             return Enumerable.Empty<string>();
         }
 
-        public object? Snapshot() => null;
-        public void Restore(object? snapshot) { }
         public async ValueTask DisposeAsync() => await Task.CompletedTask;
 
         private class ExcelRange

@@ -80,6 +80,7 @@ namespace ETL_SQL.Engine.Handlers
 
                 if (stmt.IntoTable != null)
                 {
+                    Console.Error.WriteLine($"[DIAG-PUSHDOWN] EXECUTE ... INTO {stmt.IntoTable.TableName} detected. Result batches: {results.Count}, Total rows: {results.Sum(r => r.Rows.Count)}");
                     await LoadIntoTable(stmt.IntoTable, results, evaluator);
                     RecordLineage(stmt, results, evaluator);
                 }
@@ -105,7 +106,6 @@ namespace ETL_SQL.Engine.Handlers
                     var columns = firstBatch.ColumnNames.Select(c => new ColumnDefinition(c, "ANY", false));
                     mem.SetSchema(columns);
                     context.Connections[tableName] = mem;
-                    Logger.Verbose($"Created temporary table {tableName} with {firstBatch.ColumnNames.Count} columns.");
                 }
             }
 

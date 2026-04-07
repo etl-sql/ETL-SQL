@@ -62,5 +62,6 @@ SELECT InvalidCol FROM NonExistentTable;
         public Task<IEnumerable<string>> GetTablesAsync(string connectionName) => Task.FromResult<IEnumerable<string>>(new[] { "ExistingTable" });
         public Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName) => Task.FromResult<IEnumerable<string>>(new[] { "ExistingCol" });
         public IEnumerable<string> GetConnections() => new[] { "DEFAULT" };
+        public string? GetConnectionType(string connectionName) => "MSSQL";
     }
 }

@@ -22,6 +22,7 @@ namespace ETL_SQL.Tests
             public IReadOnlyList<string> Aliases => new[] { "REMOTE" };
             public string Path => "mock://remote";
             public Dictionary<string, string>? Options => null;
+            public string ConnectorType => "MOCK_REMOTE";
 
             public Task<IEnumerable<FileMetaData>> ListFilesAsync(string path)
             {

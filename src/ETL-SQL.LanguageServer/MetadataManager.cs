@@ -120,6 +120,12 @@ namespace ETL_SQL.LSP
         /// <summary>Gets or sets a value indicating whether debug logging is enabled.</summary>
         public bool DebugMode { get; set; } = false;
 
+        /// <summary>Returns the resolved type of a connection (e.g., MSSQL, POSTGRES, DOCKER).</summary>
+        public string? GetConnectionType(string connectionName, string? uri = null)
+        {
+            return GetConnection(connectionName, uri)?.Type;
+        }
+
         /// <summary>Asynchronously retrieves a list of table names for the specified connection.</summary>
         /// <param name="connectionName">The name of the connection.</param>
         /// <param name="uri">The optional document URI for local connection lookups.</param>
@@ -310,6 +316,9 @@ namespace ETL_SQL.LSP
             var colKeysToRemove = _columns.Keys.Where(k => k.Contains($":{connectionName.ToUpperInvariant()}:")).ToList();
             foreach (var key in colKeysToRemove) _columns.TryRemove(key, out _);
         }
+
+        /// <summary>Clears all cached table/column metadata for a specific document URI.</summary>
+        public void ClearCacheForUri(string uri) => ClearCacheForDocument(uri);
 
         /// <summary>Clears cached metadata for a specific document, or a specific connection in that document.</summary>
         /// <param name="uri">The document URI.</param>

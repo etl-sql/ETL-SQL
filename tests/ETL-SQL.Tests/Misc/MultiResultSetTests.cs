@@ -60,7 +60,9 @@ namespace ETL_SQL.Tests
         public string ConnectionString => "MockDB";
         public string Path => "MockDB";
         public string Dialect => "MSSQL";
+        public bool SupportsSqlPushdown => true;
         public Dictionary<string, string>? Options => null;
+        public string ConnectorType => "MOCK";
 
         public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
         {

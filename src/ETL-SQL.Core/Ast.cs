@@ -45,11 +45,11 @@ namespace ETL_SQL.Core
         public override string ToSql() => ";";
     }
 
-    public class CreateConnectionStatement(string name, string type, Expression target, Dictionary<string, string>? options = null, ObjectCreationMode mode = ObjectCreationMode.Create) : Statement
+    public class CreateConnectionStatement(string name, string? type = null, Expression? target = null, Dictionary<string, string>? options = null, ObjectCreationMode mode = ObjectCreationMode.Create) : Statement
     {
         public string ConnectionName { get; } = name;
-        public string ConnectionType { get; } = type; // FILE, DATABASE, EXCEL
-        public Expression TargetExpression { get; } = target; 
+        public string? ConnectionType { get; } = type; // FILE, DATABASE, EXCEL
+        public Expression? TargetExpression { get; } = target; 
         public Dictionary<string, string>? Options { get; } = options;
         public ObjectCreationMode Mode { get; } = mode;
 
@@ -60,14 +60,33 @@ namespace ETL_SQL.Core
                 ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
                 _ => "CREATE"
             };
+            var onStr = (ConnectionType != null && TargetExpression != null) ? $" ON {ConnectionType}({TargetExpression.ToSql()})" : "";
             var optionsStr = "";
             if (Options != null && Options.Count > 0)
             {
                 optionsStr = " WITH (" + string.Join(", ", Options.Select(o => $"{o.Key}='{o.Value}'")) + ")";
             }
-            return $"{modeStr} CONNECTION {ConnectionName} ON {ConnectionType}({TargetExpression.ToSql()}){optionsStr};";
+            return $"{modeStr} CONNECTION {ConnectionName}{onStr}{optionsStr};";
+        }
+    }    public class CreateSshKeyPairStatement(Expression path, Expression? bits = null, Expression? algorithm = null, Expression? passphrase = null, Expression? comment = null) : Statement
+    {
+        public Expression Path { get; } = path;
+        public Expression? Bits { get; } = bits;
+        public Expression? Algorithm { get; } = algorithm;
+        public Expression? Passphrase { get; } = passphrase;
+        public Expression? Comment { get; } = comment;
+
+        public override string ToSql()
+        {
+            var args = new List<string> { Path.ToSql() };
+            if (Bits != null) args.Add(Bits.ToSql());
+            if (Algorithm != null) args.Add(Algorithm.ToSql());
+            if (Passphrase != null) args.Add(Passphrase.ToSql());
+            if (Comment != null) args.Add(Comment.ToSql());
+            return $"CREATE SSH_KEY_PAIR({string.Join(", ", args)});";
         }
     }
+
 
     public class SelectColumn(Expression expression, string? alias = null, Dictionary<string, string>? metadata = null) : AstNode
     {

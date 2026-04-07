@@ -91,6 +91,13 @@ namespace ETL_SQL.App
                 }
             }
 
+            if (ctx.Command == "repl")
+            {
+                var repl = new ETL_SQL.UI.ReplUi(ctx);
+                await repl.RunAsync();
+                return 0;
+            }
+
             // 2. RUN command (requires script)
             if (ctx.Command == "run")
             {

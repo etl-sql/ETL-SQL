@@ -26,6 +26,7 @@ namespace ETL_SQL.Engine.Storage
         public string Path => "LINEAGE";
 
         public Dictionary<string, string>? Options => null;
+        public string ConnectorType => "LINEAGE";
 
         public LineageDataSource(ILineageTracker tracker, string? targetTable = null, string? targetColumn = null)
         {

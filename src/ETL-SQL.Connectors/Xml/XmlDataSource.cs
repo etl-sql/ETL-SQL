@@ -6,7 +6,9 @@ using System.Xml.Linq;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common;
 using System.IO.Compression;
+using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Connectors.Xml
 {
@@ -14,13 +16,12 @@ namespace ETL_SQL.Connectors.Xml
     /// Data source implementation for reading and writing XML files.
     /// Supports XPath-style root selection, file compression (ZIP), and encryption.
     /// </summary>
-    public class XmlDataSource : IDataSource
+    public class XmlDataSource : IDatabaseSource
     {
         private readonly string _filePath;
         private readonly string? _rootPath;
         private readonly bool _compress;
-        private readonly bool _encrypt;
-        private readonly string _password;
+        private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
 
         /// <summary>Gets the physical path to the XML file.</summary>
@@ -30,6 +31,8 @@ namespace ETL_SQL.Connectors.Xml
         
         /// <summary>Returns this instance as a typed table (no-op for XML).</summary>
         public IDataSource WithTable(string tableName) => this;
+        /// <summary>The type name of the connector that created this data source (e.g., XML).</summary>
+        public string ConnectorType => "XML";
 
         /// <summary>
         /// Initializes a new instance of the <see cref="XmlDataSource"/> class.
@@ -44,14 +47,9 @@ namespace ETL_SQL.Connectors.Xml
             {
                 _rootPath = options.TryGetValue("ROOT_PATH", out var rp) ? rp : null;
                 if (options.TryGetValue("COMPRESS", out var comp)) _compress = comp.ToUpperInvariant() == "ON";
-                if (options.TryGetValue("ENCRYPT", out var encr)) _encrypt = encr.ToUpperInvariant() == "ON";
-                if (options.TryGetValue("PASSWORD", out var p)) _password = p;
-                else _password = "DefaultETLPass123!";
             }
-            else
-            {
-                _password = "DefaultETLPass123!";
-            }
+            
+            _encryption = new EncryptionOptions(options);
         }
 
         /// <summary>Reads data from the XML file in batches.</summary>
@@ -61,12 +59,7 @@ namespace ETL_SQL.Connectors.Xml
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
 
-            string? tempFile = null;
             string effectivePath = await GetEffectivePathAsync();
-            if (effectivePath == _filePath && _encrypt) // Decryption failed or not applicable? No, GetEffectivePath handles it.
-            {
-                 // Handle temporary file tracking
-            }
             
             // We need to track if we created a temp file to delete it later
             bool isTemp = effectivePath != _filePath;
@@ -143,10 +136,10 @@ namespace ETL_SQL.Connectors.Xml
 
         private async Task<string> GetEffectivePathAsync()
         {
-            if (_encrypt)
+            if (_encryption.Enabled)
             {
                 string tempFile = System.IO.Path.GetTempFileName();
-                CryptoUtils.DecryptFile(_filePath, tempFile, _password);
+                _encryption.DecryptFile(_filePath, tempFile);
                 return tempFile;
             }
             if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
@@ -249,9 +242,9 @@ namespace ETL_SQL.Connectors.Xml
                     await System.IO.File.WriteAllTextAsync(tempFile, root.ToString());
                 }
 
-                if (_encrypt)
+                if (_encryption.Enabled)
                 {
-                    CryptoUtils.EncryptFile(tempFile, _filePath, _password);
+                    _encryption.EncryptFile(tempFile, _filePath);
                 }
                 else if (_compress)
                 {
@@ -308,6 +301,28 @@ namespace ETL_SQL.Connectors.Xml
         {
             await Task.CompletedTask;
         }
+
+        public async Task<string> GetVersionAsync() => await Task.FromResult("1.0.0");
+        public HashSet<string> GetSupportedFunctions() => new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        {
+            if (sql.Trim().ToUpperInvariant().StartsWith("SELECT * FROM ROOT"))
+            {
+                await foreach (var batch in ReadBatches()) yield return batch;
+            }
+            else
+            {
+                throw new ExecutionException("Xml connector only supports 'SELECT * FROM ROOT' as native SQL.");
+            }
+        }
+
+        public string ConnectionString => _filePath;
+        public string Dialect => "XML";
+        public bool SupportsSqlPushdown => false;
+        public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "ROOT" });
+        public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
     }
 }
 

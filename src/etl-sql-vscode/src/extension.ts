@@ -10,8 +10,9 @@ import {
 } from 'vscode-languageclient/node';
 import * as cp from 'child_process';
 import { ResultsPanel } from './resultsPanel';
-
+import { ReplManager } from './ReplManager';
 import { ConnectionsProvider, Connection } from './connectionsProvider';
+import * as crypto from 'crypto';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -21,6 +22,7 @@ let currentProcess: cp.ChildProcess | undefined;
 export function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel("ETL-SQL");
     outputChannel.appendLine("ETL-SQL extension activated.");
+    ReplManager.getInstance().setOutputChannel(outputChannel);
 
     // Handle messages from ResultsPanel
     const panelMsgDisp = vscode.window.onDidChangeActiveTextEditor(() => { /* nothing for now */ });
@@ -222,8 +224,6 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     const document = editor.document;
 
     // Warn before execution if the LSP has already published error-level diagnostics.
-    // This is best-effort: if the LSP hasn't finished analysis yet there are no diagnostics
-    // and we let the engine handle errors at runtime (see appendMessage auto-tab-switch below).
     if (!selectionOnly) {
         const diagnostics = vscode.languages.getDiagnostics(document.uri);
         const errors = diagnostics.filter(d => d.severity === vscode.DiagnosticSeverity.Error);
@@ -238,33 +238,6 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
         }
     }
 
-    let scriptPath = document.fileName;
-    let deleteTemp = false;
-
-    // Handle unsaved changes or selection: Save to temp file
-    if (selectionOnly || document.isDirty || document.isUntitled) {
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        const rootPath = workspaceFolder ? workspaceFolder.uri.fsPath : os.tmpdir();
-        const tempDir = path.join(rootPath, '.etlsql_temp');
-
-        if (!fs.existsSync(tempDir)) {
-            fs.mkdirSync(tempDir, { recursive: true });
-        }
-
-        const now = new Date();
-        const timestamp = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}${now.getSeconds().toString().padStart(2, '0')}`;
-        const baseName = document.isUntitled ? 'unsaved' : path.basename(document.fileName, '.etlsql');
-        const suffix = selectionOnly ? '_selection' : '';
-        const tempFileName = `${baseName}${suffix}_${timestamp}.etlsql`;
-
-        const targetPath = path.join(tempDir, tempFileName);
-        const text = selectionOnly ? document.getText(editor.selection) : document.getText();
-
-        fs.writeFileSync(targetPath, text);
-        scriptPath = targetPath;
-        deleteTemp = true;
-    }
-
     const config = vscode.workspace.getConfiguration('etlsql');
     let exePath = getExecutablePath(config);
     const runMethod = config.get<string>('runMethod') || 'Webview (Grid)';
@@ -272,69 +245,60 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     const enableLogging = config.get<boolean>('enableLogging') === true;
     const logPath = config.get<string>('logPath') || '.etlsql_logs';
 
-    const args = ['run', scriptPath];
-    if (verbose) args.push('--verbose');
-    if (enableLogging) {
-        args.push('--log');
-        args.push(logPath);
-    }
-    if (runMethod === 'Webview (Grid)') args.push('--perf');
-
-    console.log(`ETL-SQL: Executing ${exePath} with args: ${args.join(' ')}`);
-
-    const spawnOptions = { cwd: workspaceFolder?.uri.fsPath || path.dirname(scriptPath), shell: true };
+    const scriptText = selectionOnly ? editor.document.getText(editor.selection) : editor.document.getText();
+    const fileName = path.basename(document.fileName);
 
     if (runMethod === 'Webview (Grid)') {
-        args.push('--json');
         ResultsPanel.createOrShow(context.extensionUri, (msg) => {
-            if (msg.type === 'cancel' && currentProcess) {
-                outputChannel.appendLine("ETL-SQL: Process cancellation requested.");
-                currentProcess.kill();
+            if (msg.type === 'cancel') {
+                ReplManager.getInstance().stop();
             }
         });
         ResultsPanel.postMessage({ type: 'clear' });
-        ResultsPanel.postMessage({ type: 'message', text: `Executing: ${path.basename(scriptPath)}` });
+        ResultsPanel.postMessage({ type: 'message', text: `Executing: ${fileName}` });
 
-        currentProcess = cp.spawn(exePath, args, spawnOptions);
-        const child = currentProcess;
+        const sessionId = getSessionId(document);
+        const replArgs = [];
+        if (verbose) replArgs.push('--verbose');
+        if (enableLogging) { replArgs.push('--log'); replArgs.push(logPath); }
+        replArgs.push('--perf');
+        replArgs.push('--json');
+        replArgs.push('--session');
+        replArgs.push(sessionId);
 
-        let buffer = '';
-        if (child.stdout) {
-            child.stdout.on('data', (data) => {
-                buffer += data.toString();
-                // Process JSON lines...
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-                for (const line of lines) {
-                    if (!line.trim()) continue;
-                    try {
-                        const json = JSON.parse(line);
-                        ResultsPanel.postMessage(json);
-                    } catch (e) {
-                        if (verbose) ResultsPanel.postMessage({ type: 'message', text: line });
-                    }
-                }
-            });
+        try {
+            await ReplManager.getInstance().execute(scriptText, exePath, replArgs);
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`ETL-SQL Error: ${err.message}`);
+        } finally {
+            // Refresh the sidebar so new connections/tables appear after execution.
+            connectionsProvider.refresh();
+            if (client && client.state === 2) {
+                client.sendNotification('etlsql/refreshMetadata', { uri: document.uri.toString() });
+            }
         }
-
-        if (child.stderr) {
-            child.stderr.on('data', (data) => {
-                ResultsPanel.postMessage({ type: 'message', level: 'error', text: data.toString() });
-            });
-        }
-
-        child.on('close', (code) => {
-            if (currentProcess === child) currentProcess = undefined;
-            if (deleteTemp && fs.existsSync(scriptPath)) fs.unlinkSync(scriptPath);
-            ResultsPanel.postMessage({ type: 'done', exitCode: code });
-            ResultsPanel.postMessage({ type: 'message', text: `Finished with exit code ${code}` });
-        });
-
     } else if (runMethod === 'Output Channel') {
         outputChannel.clear();
         outputChannel.show();
-        outputChannel.appendLine(`Executing: ${exePath} ${args.join(' ')}\n`);
+        outputChannel.appendLine(`Executing: ${fileName}\n`);
 
+        // For non-webview modes, we still use the one-shot run command for simplicity
+        // But we need a temp file if it's selection/dirty
+        let scriptPath = document.fileName;
+        let deleteTemp = false;
+        if (selectionOnly || document.isDirty || document.isUntitled) {
+            const tempDir = path.join(os.tmpdir(), 'etlsql_temp');
+            if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+            scriptPath = path.join(tempDir, `temp_${Date.now()}.etlsql`);
+            fs.writeFileSync(scriptPath, scriptText);
+            deleteTemp = true;
+        }
+
+        const args = ['run', scriptPath];
+        if (verbose) args.push('--verbose');
+        if (enableLogging) { args.push('--log'); args.push(logPath); }
+
+        const spawnOptions = { cwd: workspaceFolder?.uri.fsPath || path.dirname(document.fileName), shell: true };
         const child = cp.spawn(exePath, args, spawnOptions);
         child.stdout.on('data', (data) => outputChannel.append(data.toString()));
         child.stderr.on('data', (data) => outputChannel.append(data.toString()));
@@ -345,9 +309,17 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     } else {
         const terminal = vscode.window.activeTerminal || vscode.window.createTerminal('ETL-SQL');
         terminal.show();
-        const command = `& "${exePath}" ${args.join(' ')}`;
+        
+        let scriptPath = document.fileName;
+        if (selectionOnly || document.isDirty || document.isUntitled) {
+            const tempDir = path.join(os.tmpdir(), 'etlsql_temp');
+            if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+            scriptPath = path.join(tempDir, `temp_${Date.now()}.etlsql`);
+            fs.writeFileSync(scriptPath, scriptText);
+        }
+
+        const command = `& "${exePath}" run "${scriptPath}"`;
         terminal.sendText(command);
-        // We can't easily delete temp file after terminal finishes without more complex logic
     }
 }
 
@@ -366,6 +338,15 @@ function getExecutablePath(config: vscode.WorkspaceConfiguration): string {
         }
     }
     return exePath;
+}
+
+function getSessionId(document: vscode.TextDocument): string {
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+    // Use workspace root if available, otherwise file directory
+    const base = workspaceFolder ? workspaceFolder.uri.fsPath : path.dirname(document.fileName);
+    // Include filename to make it file-specific within the workspace
+    const hash = crypto.createHash('md5').update(base + ":" + document.fileName).digest('hex').substring(0, 8);
+    return `vs_${hash}`;
 }
 
 export function deactivate(): Thenable<void> | undefined {

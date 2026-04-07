@@ -82,5 +82,12 @@ namespace ETL_SQL.UI
         }
 
         public IEnumerable<string> GetConnections() => _connections.Keys;
+
+        public string? GetConnectionType(string connectionName)
+        {
+            if (!_connections.TryGetValue(connectionName, out var ds)) return null;
+            if (ds is IDatabaseSource db) return db.Dialect;
+            return "FLATFILE";
+        }
     }
 }

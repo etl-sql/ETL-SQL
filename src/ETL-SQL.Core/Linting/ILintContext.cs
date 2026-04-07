@@ -8,6 +8,7 @@ namespace ETL_SQL.Core.Linting
         Task<IEnumerable<string>> GetTablesAsync(string connectionName);
         Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName);
         IEnumerable<string> GetConnections();
+        string? GetConnectionType(string connectionName);
     }
 
     public interface ILintContext

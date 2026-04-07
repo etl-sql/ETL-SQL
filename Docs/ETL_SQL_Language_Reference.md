@@ -142,6 +142,11 @@ For Apache Parquet columnar files.
 
 - **PATH**: The full path to the file. (Required in structured form)
 - **COMPRESSION**: `SNAPPY` (Default), `GZIP`, `LZO`, `BROTLI`, `LZ4`, `ZSTD`, `UNCOMPRESSED`.
+- **ENCRYPT**: `ON`, `OFF` — encryption for the file. (Default: `OFF`)
+- **PASSWORD**: Password for encryption/decryption. (Required if ENCRYPT=ON)
+- **ALGORITHM**: `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` — algorithm for encryption/decryption. (Default: `SHA2_256`)
+- **KEYFILE**: Path to the private/public key for SSH key-pair encryption. (Required if ENCRYPT=ON)
+- **PASSPHRASE**: Passphrase for the private key file.
 
 #### AVRO
 For Apache Avro files.
@@ -151,6 +156,11 @@ For Apache Avro files.
 
 - **PATH**: The full path to the file. (Required in structured form)
 - **SCHEMA_FILE**: Path to a `.avsc` schema file.
+- **ENCRYPT**: `ON`, `OFF` — encryption for the file. (Default: `OFF`)
+- **PASSWORD**: Password for encryption/decryption. (Required if ENCRYPT=ON)
+- **ALGORITHM**: `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` — algorithm for encryption/decryption. (Default: `SHA2_256`)
+- **KEYFILE**: Path to the private/public key for SSH key-pair encryption. (Required if ENCRYPT=ON)
+- **PASSPHRASE**: Passphrase for the private key file.
 
 #### EXCEL
 For Excel file formats (.xlsx, .xls, .xlsb).
@@ -163,8 +173,11 @@ For Excel file formats (.xlsx, .xls, .xlsb).
 - **HEADER**: `ON`, `OFF` — treat first row as column headers (Default: `ON`).
 - **RANGE**: Explicit cell range to read (e.g. `'A1:D100'`).
 - **COMPRESS**: `ON`, `OFF` — GZip compress the output file.
-- **ENCRYPT**: `ON`, `OFF` — AES encryption for the file.
-- **PASSWORD**: Password for encryption/decryption.
+- **ENCRYPT**: `ON`, `OFF` — encryption for the file. (Default: `OFF`)
+- **PASSWORD**: Password for encryption/decryption. (Required if ENCRYPT=ON)
+- **ALGORITHM**: `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` — algorithm for encryption/decryption. (Default: `SHA2_256`)
+- **KEYFILE**: Path to the private/public key for SSH key-pair encryption. (Required if ENCRYPT=ON)
+- **PASSPHRASE**: Passphrase for the private key file.
 
 #### JSON
 For JSON data files.
@@ -175,8 +188,11 @@ For JSON data files.
 - **PATH**: The full path to the file. (Required in structured form)
 - **ROOT_PATH**: JSONPath to the data array (e.g. `$.Rows`, `$.data.items`).
 - **COMPRESS**: `ON`, `OFF` — transparent GZip support.
-- **ENCRYPT**: `ON`, `OFF` — AES encryption for the file.
-- **PASSWORD**: Password for encryption/decryption.
+- **ENCRYPT**: `ON`, `OFF` — encryption for the file. (Default: `OFF`)
+- **PASSWORD**: Password for encryption/decryption. (Required if ENCRYPT=ON)
+- **ALGORITHM**: `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` — algorithm for encryption/decryption. (Default: `SHA2_256`)
+- **KEYFILE**: Path to the private/public key for SSH key-pair encryption. (Required if ENCRYPT=ON)
+- **PASSPHRASE**: Passphrase for the private key file.
 
 #### XML
 For XML data files.
@@ -187,8 +203,11 @@ For XML data files.
 - **PATH**: The full path to the file. (Required in structured form)
 - **ROOT_PATH**: XPath to the repeating element (e.g. `/Catalog/Book`).
 - **COMPRESS**: `ON`, `OFF` — transparent GZip support.
-- **ENCRYPT**: `ON`, `OFF` — AES encryption for the file.
-- **PASSWORD**: Password for encryption/decryption.
+- **ENCRYPT**: `ON`, `OFF` — encryption for the file. (Default: `OFF`)
+- **PASSWORD**: Password for encryption/decryption. (Required if ENCRYPT=ON)
+- **ALGORITHM**: `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` — algorithm for encryption/decryption. (Default: `SHA2_256`)
+- **KEYFILE**: Path to the private/public key for SSH key-pair encryption. (Required if ENCRYPT=ON)
+- **PASSPHRASE**: Passphrase for the private key file.
 
 #### FTP (or FTP_CONN)
 For remote file operations over FTP.
@@ -1779,6 +1798,27 @@ Specialized commands for filesystem management. Supports **Connection-based Path
 - `MOVE_DIRECTORY('path', 'dest')`
 - `COPY_DIRECTORY('src', 'dest')`
 - `DELETE_DIRECTORY_CONTENTS('path')`
+
+### SSH Key Pair Generation
+Generate cryptographic SSH key pairs for secure file encryption and SFTP authentication.
+
+*Syntax:*
+`CREATE SSH_KEY_PAIR('<directory_path>' [, <bits>, '<algorithm>', '<passphrase>', '<comment>']);`
+
+- **directory_path**: The folder where the keys will be saved. (Required)
+- **bits**: Key size (e.g., 2048, 3072, 4096 for RSA; 256, 384, 521 for ECDSA).
+- **algorithm**: `RSA` (Default), `ECDSA`, `ED25519`.
+- **passphrase**: Optional passphrase to encrypt the private key.
+- **comment**: Optional comment to include in the public key.
+
+*Example:*
+```sql
+-- Generate a standard RSA key pair
+CREATE SSH_KEY_PAIR('C:\Keys\prod_rsa', 3072, 'RSA');
+
+-- Generate an encrypted ECDSA key pair
+CREATE SSH_KEY_PAIR('C:\Keys\prod_ecdsa', 384, 'ECDSA', 's3cr3t_pass');
+```
 
 ### Docker Operations
 - `START_DOCKER <alias>`: Starts a Docker container for the specified connection.

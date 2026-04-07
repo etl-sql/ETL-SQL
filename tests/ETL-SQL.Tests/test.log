@@ -1,0 +1,9 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  ETL-SQL.Core -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\bin\Debug\net10.0\ETL-SQL.Core.dll
+  ETL-SQL.Engine -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\bin\Debug\net10.0\ETL-SQL.Engine.dll
+  ETL-SQL.Connectors -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\bin\Debug\net10.0\ETL-SQL.Connectors.dll
+  ETL-SQL.App -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.App\bin\Debug\net10.0\ETL-SQL.dll
+C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\SshKeyPairTests.cs(31,37): error CS0426: The type name 'Parser' does not exist in the type 'Parser' [C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj]
+C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\TempDiagTests.cs(39,22): warning xUnit1031: Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead. (https://xunit.net/xunit.analyzers/rules/xUnit1031) [C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj]
+C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\TempDiagTests.cs(40,40): warning xUnit1031: Test methods should not use blocking task operations, as they can cause deadlocks. Use an async test method and await instead. (https://xunit.net/xunit.analyzers/rules/xUnit1031) [C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj]

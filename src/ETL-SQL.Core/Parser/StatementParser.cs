@@ -746,13 +746,56 @@ namespace ETL_SQL.Core.Parser
                 return ParseCreateIndex(startToken, isUnique);
             }
 
+            if (_parser.Match(TokenType.SSH_KEY_PAIR))
+            {
+                if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for SSH_KEY_PAIR.", _parser.Current.Line, _parser.Current.Column);
+                return ParseCreateSshKeyPair(startToken);
+            }
+
             if (_parser.Match(TokenType.SETS))
             {
                 if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for SETS.", _parser.Current.Line, _parser.Current.Column);
                 return ParseCreateSets(startToken);
             }
 
-            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, or SETS after CREATE", _parser.Current.Line, _parser.Current.Column);
+            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, or SSH_KEY_PAIR after CREATE", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private Statement ParseCreateSshKeyPair(Token startToken)
+        {
+            _parser.Consume(TokenType.LPAREN, "Expected '(' after SSH_KEY_PAIR");
+            var path = _parser.ParseExpression();
+            
+            Expression? bits = null;
+            Expression? algorithm = null;
+            Expression? passphrase = null;
+            Expression? comment = null;
+
+            if (_parser.Match(TokenType.COMMA))
+            {
+                bits = _parser.ParseExpression();
+                if (_parser.Match(TokenType.COMMA))
+                {
+                    algorithm = _parser.ParseExpression();
+                    if (_parser.Match(TokenType.COMMA))
+                    {
+                        passphrase = _parser.ParseExpression();
+                        if (_parser.Match(TokenType.COMMA))
+                        {
+                            comment = _parser.ParseExpression();
+                        }
+                    }
+                }
+            }
+
+            _parser.Consume(TokenType.RPAREN, "Expected ')' after arguments");
+            _parser.Match(TokenType.SEMICOLON);
+
+            return new CreateSshKeyPairStatement(path, bits, algorithm, passphrase, comment)
+            {
+                Line = startToken.Line,
+                Column = startToken.Column
+            };
         }
 
         private Statement ParseAlter()
@@ -880,37 +923,43 @@ namespace ETL_SQL.Core.Parser
         {
             var name = _parser.ConsumeIdentifier("Expected connection name").Value;
 
-            if (_parser.Match(TokenType.ON)) { /* ON is optional */ }
+            string? connectionType = null;
+            Expression? target = null;
 
-            string connectionType;
-            Expression target;
-
-            if (_parser.Match(TokenType.TYPE))
+            if (_parser.Match(TokenType.ON) || (mode == ObjectCreationMode.Create)) 
             {
-                connectionType = _parser.Advance().Value;
-                _parser.Consume(TokenType.TARGET, "Expected TARGET after connection type");
-                target = _parser.ParseExpression();
-            }
-            else
-            {
-                var typeToken = _parser.Advance();
-                connectionType = typeToken.Value;
-                
-                if (typeToken.Type == TokenType.FILE)
+                if (_parser.Match(TokenType.TYPE))
                 {
-                    throw new SyntaxException("Connection type 'FILE' is deprecated. Please use 'FLATFILE' instead.", typeToken.Line, typeToken.Column);
-                }
-
-                bool hasParen = _parser.Match(TokenType.LPAREN);
-                if (hasParen && _parser.Current.Type == TokenType.RPAREN)
-                {
-                    target = new LiteralExpression("", TokenType.STRING);
+                    connectionType = _parser.Advance().Value;
+                    _parser.Consume(TokenType.TARGET, "Expected TARGET after connection type");
+                    target = _parser.ParseExpression();
                 }
                 else
                 {
-                    target = _parser.ParseExpression();
+                    var typeToken = _parser.Advance();
+                    connectionType = typeToken.Value;
+                    
+                    if (typeToken.Type == TokenType.FILE)
+                    {
+                        throw new SyntaxException("Connection type 'FILE' is deprecated. Please use 'FLATFILE' instead.", typeToken.Line, typeToken.Column);
+                    }
+
+                    bool hasParen = _parser.Match(TokenType.LPAREN);
+                    if (hasParen && _parser.Current.Type == TokenType.RPAREN)
+                    {
+                        target = new LiteralExpression("", TokenType.STRING);
+                    }
+                    else
+                    {
+                        target = _parser.ParseExpression();
+                    }
+                    if (hasParen) _parser.Consume(TokenType.RPAREN, "Expected ')' after target string");
                 }
-                if (hasParen) _parser.Consume(TokenType.RPAREN, "Expected ')' after target string");
+            }
+            else
+            {
+                // In ALTER/CREATE OR ALTER, if no ON is provided, it's valid if WITH follows.
+                // We don't advance anything here.
             }
 
             Dictionary<string, string>? options = null;

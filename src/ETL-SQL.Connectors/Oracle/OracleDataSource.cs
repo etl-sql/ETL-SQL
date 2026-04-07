@@ -40,9 +40,12 @@ namespace ETL_SQL.Connectors.Oracle
 
         /// <summary>Gets the database dialect name.</summary>
         public string Dialect => "ORACLE";
+        public bool SupportsSqlPushdown => true;
 
         /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
+        /// <summary>The type name of the connector (ORACLE).</summary>
+        public string ConnectorType => "ORACLE";
 
         /// <summary>Returns a new instance of the data source scoped to the specified table.</summary>
         public IDataSource WithTable(string tableName) => new OracleDataSource(_connectionString, tableName, _options);
@@ -253,7 +256,6 @@ namespace ETL_SQL.Connectors.Oracle
 
         /// <summary>Captures a snapshot (no-op for Oracle).</summary>
         public object? Snapshot() => null;
-
         /// <summary>Restores from a snapshot (no-op for Oracle).</summary>
         public void Restore(object? snapshot) { }
 

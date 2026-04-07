@@ -29,6 +29,8 @@ namespace ETL_SQL.Connectors
 
         /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => null;
+        /// <summary>The type name of the connector (AZURE_BLOB).</summary>
+        public string ConnectorType => "AZURE_BLOB";
 
         /// <summary>
         /// Initializes a new instance of the <see cref="AzureBlobConnector"/> class.

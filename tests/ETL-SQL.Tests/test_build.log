@@ -1,0 +1,13 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  ETL-SQL.Core -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\bin\Debug\net10.0\ETL-SQL.Core.dll
+  ETL-SQL.Engine -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Engine\bin\Debug\net10.0\ETL-SQL.Engine.dll
+  ETL-SQL.Connectors -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Connectors\bin\Debug\net10.0\ETL-SQL.Connectors.dll
+  ETL-SQL.App -> C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.App\bin\Debug\net10.0\ETL-SQL.dll
+  ETL-SQL.Tests -> C:\Users\chuck\scratch\ETL-SQL\tests\ETL-SQL.Tests\bin\Debug\net10.0\ETL-SQL.Tests.dll
+
+Build succeeded.
+    0 Warning(s)
+    0 Error(s)
+
+Time Elapsed 00:00:00.96

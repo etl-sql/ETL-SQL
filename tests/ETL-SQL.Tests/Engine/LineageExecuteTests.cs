@@ -49,9 +49,11 @@ namespace ETL_SQL.Tests.Engine
         private class MockDatabaseSourceWithSchema : IDatabaseSource
         {
             public string Dialect => "MSSQL";
+            public bool SupportsSqlPushdown => true;
             public string ConnectionString => "mock://local";
             public string Path => "mock://local";
             public Dictionary<string, string>? Options => null;
+            public string ConnectorType => "MOCK";
             public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?> parameters = null)
             {
                 var dt = new DataTable();

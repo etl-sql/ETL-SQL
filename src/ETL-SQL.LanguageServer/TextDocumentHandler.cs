@@ -250,6 +250,26 @@ namespace ETL_SQL.LSP
                     _metadata.RegisterTempTable(uri, tableName, columns.Distinct().ToList());
                 }
             }
+            else if (stmt is DockerStatement ds)
+            {
+                // Register Docker alias as a connection so the linter recognizes it
+                if (!string.IsNullOrEmpty(ds.Alias))
+                {
+                    _metadata.RegisterDocumentConnection(uri, ds.Alias, "DOCKER", ds.ImageName.ToSql());
+                }
+            }
+            else if (stmt is ExecuteRemoteBlockStatement erbs)
+                await DiscoverMetadataRecursiveAsync(erbs.Body, uri);
+            else if (stmt is ExecutePushdownStatement eps)
+            {
+                // For pushdown, if 'INTO' is used, we should register it at least as a 'known' table
+                if (eps.IntoTable != null && eps.IntoTable.TableName.StartsWith("#"))
+                {
+                    // We don't know the columns easily without parsing the SQLText (which is native),
+                    // but we can register it with no columns to avoid "Table not found" errors.
+                    _metadata.RegisterTempTable(uri, eps.IntoTable.TableName, new List<string>());
+                }
+            }
             else if (stmt is BlockStatement block)
                 foreach (var s in block.Statements) await DiscoverMetadataRecursiveAsync(s, uri);
             else if (stmt is IfStatement ifStmt)

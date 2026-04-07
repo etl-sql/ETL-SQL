@@ -40,9 +40,12 @@ namespace ETL_SQL.Connectors.Postgres
 
         /// <summary>Gets the database dialect name.</summary>
         public string Dialect => "POSTGRES";
+        public bool SupportsSqlPushdown => true;
 
         /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
+        /// <summary>The type name of the connector (POSTGRES).</summary>
+        public string ConnectorType => "POSTGRES";
 
         /// <summary>Returns a new instance scoped to the specified table.</summary>
         public IDataSource WithTable(string tableName) => new PostgresDataSource(_connectionString, tableName, _options);

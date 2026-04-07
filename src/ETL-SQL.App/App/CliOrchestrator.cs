@@ -80,6 +80,13 @@ namespace ETL_SQL.App
             };
             clearSubcommand.SetHandler(async (context) => await Dispatch(context, "session-clear", handler));
             sessionCommand.AddCommand(clearSubcommand);
+            
+            // 6. REPL Command
+            var replCommand = new Command("repl", "Start a persistent JSON-based background engine for IDEs")
+            {
+                BatchSizeOption, PerfOption, VerboseOption, LogOption, SessionOption, JsonOption
+            };
+            replCommand.SetHandler(async (context) => await Dispatch(context, "repl", handler));
 
             rootCommand.AddCommand(runCommand);
             rootCommand.AddCommand(uiCommand);
@@ -87,6 +94,7 @@ namespace ETL_SQL.App
             rootCommand.AddCommand(encryptCommand);
             rootCommand.AddCommand(generateCommand);
             rootCommand.AddCommand(sessionCommand);
+            rootCommand.AddCommand(replCommand);
 
             return rootCommand;
         }
@@ -154,6 +162,7 @@ namespace ETL_SQL.App
             table.AddRow($"test [blue]{Markup.Escape("<category>")}[/]", "Run unit or integration tests (e.g., unit).");
             table.AddRow($"encrypt [blue]{Markup.Escape("<string>")}[/]", "Securely encrypt connection strings.");
             table.AddRow("generate", "Generate large scale mock data for performance validation.");
+            table.AddRow("repl", "Start background execution server (JSON protocol).");
             
             AnsiConsole.Write(table);
             AnsiConsole.MarkupLine($"\nUse [cyan]ETL-SQL {Markup.Escape("<command>")} --help[/] for details on specific options.");

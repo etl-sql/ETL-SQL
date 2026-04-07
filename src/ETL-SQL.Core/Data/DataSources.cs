@@ -82,6 +82,8 @@ namespace ETL_SQL.Data
         string Path { get; }
         /// <summary>The options used to create this data source.</summary>
         Dictionary<string, string>? Options { get; }
+        /// <summary>The type name of the connector that created this data source (e.g., MSSQL, FLATFILE).</summary>
+        string ConnectorType { get; }
     }
 
     public interface IDatabaseSource : IDataSource
@@ -94,6 +96,11 @@ namespace ETL_SQL.Data
         Task<IEnumerable<string>> GetTablesAsync();
         Task<IEnumerable<string>> GetViewsAsync();
         Task<IEnumerable<string>> GetColumnsAsync(string tableName);
+        /// <summary>
+        /// True when this connector can execute arbitrary SQL natively (SQL Server, Postgres, etc.).
+        /// False for file-based connectors (FlatFile, JSON, XML) that only support full-table reads.
+        /// </summary>
+        bool SupportsSqlPushdown { get; }
     }
 
     /// <summary>
@@ -106,6 +113,7 @@ namespace ETL_SQL.Data
         private readonly SemaphoreSlim _lock = new(1, 1);
         public string Path => "";
         public Dictionary<string, string>? Options => null;
+        public string ConnectorType => "INMEMORY";
         private readonly List<string> _columnOrder = new();
         public Dictionary<string, ColumnDefinition> Schema { get; } = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Dictionary<object, List<Row>>> _indexes = new(StringComparer.OrdinalIgnoreCase);
@@ -590,6 +598,7 @@ namespace ETL_SQL.Data
 
         public IDataSource WithTable(string tableName) => this;
         public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => throw new NotSupportedException();
+        public string ConnectorType => "STREAMING";
  
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {

@@ -36,10 +36,15 @@ namespace ETL_SQL.LSP
             return await _metadataManager.GetColumnsAsync(connectionName, tableName, _documentUri);
         }
 
-        /// <summary>Returns a collection of connection names available in the current context.</summary>
         public IEnumerable<string> GetConnections()
         {
             return _metadataManager.GetConnections(_documentUri).Select(c => c.Name);
+        }
+
+        /// <summary>Returns the resolved type of a connection (e.g., MSSQL, POSTGRES, DOCKER).</summary>
+        public string? GetConnectionType(string connectionName)
+        {
+            return _metadataManager.GetConnectionType(connectionName, _documentUri);
         }
     }
 }

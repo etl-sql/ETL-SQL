@@ -103,7 +103,9 @@ namespace ETL_SQL.Engine.Services
                     var batches = await mem.ReadBatches().ToListAsync();
                     if (batches.Count > 0)
                     {
-                        info.Columns = batches[0].ColumnNames.ToList();
+                        var allColumnNames = batches.SelectMany(b => b.ColumnNames).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                        info.Columns = allColumnNames;
+                        
                         var allRows = batches.SelectMany(b => b.Rows.Select(r => r.Columns)).ToList();
                         string json = JsonSerializer.Serialize(allRows);
                         
@@ -145,15 +147,28 @@ namespace ETL_SQL.Engine.Services
         /// <summary>Loads existing session state from disk.</summary>
         public async Task<SessionState?> LoadSession(string sessionId, string? password = null)
         {
+            Console.Error.WriteLine("[SESSION_MANAGER_ENTER] LoadSession method entered.");
+            Console.Error.Flush();
+            
             string sessionFile = GetSessionFilePath(sessionId);
             if (!File.Exists(sessionFile)) return null;
 
             try
             {
+                Console.Error.WriteLine($"[SESSION_READ_FILE] Reading {sessionFile}...");
+                Console.Error.Flush();
                 string encryptedJson = File.ReadAllText(sessionFile);
+                
+                Console.Error.WriteLine("[SESSION_DERIVE_KEY] Deriving decryption key...");
+                Console.Error.Flush();
                 string masterPassword = password ?? GetMachineKey();
+                
+                Console.Error.WriteLine("[SESSION_DECRYPT] Decrypting state...");
+                Console.Error.Flush();
                 string plainJson = CryptoUtils.Decrypt(encryptedJson, masterPassword);
                 
+                Console.Error.WriteLine("[SESSION_DESERIALIZE] Deserializing JSON...");
+                Console.Error.Flush();
                 return JsonSerializer.Deserialize<SessionState>(plainJson);
             }
             catch

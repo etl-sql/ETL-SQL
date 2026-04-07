@@ -180,6 +180,8 @@ namespace ETL_SQL.Tests
                     DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
                     CREATE CONNECTION ds ON MSSQL(@conn);
                     
+                    EXECUTE ds BEGIN IF OBJECT_ID('EmployeePay', 'U') IS NOT NULL DROP TABLE EmployeePay; END;
+                    EXECUTE ds BEGIN IF OBJECT_ID('Employee', 'U') IS NOT NULL DROP TABLE Employee; END;
                     EXECUTE ds BEGIN CREATE TABLE [Employee] ([id] int, [employee_name] varchar(500)); END;
                     EXECUTE ds BEGIN CREATE TABLE [EmployeePay] ([emp_id] int, [pay_date] datetime, [amount] decimal(10,2)); END;
                     EXECUTE ds BEGIN INSERT INTO [Employee] ([id], [employee_name]) VALUES {employeeValues}; END;

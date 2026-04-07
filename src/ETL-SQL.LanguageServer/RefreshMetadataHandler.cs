@@ -17,11 +17,14 @@ namespace ETL_SQL.LSP
     [Method("etlsql/refreshMetadata", Direction.ClientToServer)]
     public interface IRefreshMetadataHandler : IJsonRpcNotificationHandler<RefreshMetadataParams> { }
 
-    public class RefreshMetadataHandler(ILogger<RefreshMetadataHandler> logger, DocumentStateStore store, TextDocumentHandler textDocumentHandler) : IRefreshMetadataHandler
+    public class RefreshMetadataHandler(ILogger<RefreshMetadataHandler> logger, DocumentStateStore store, TextDocumentHandler textDocumentHandler, MetadataManager metadata) : IRefreshMetadataHandler
     {
         public async Task<Unit> Handle(RefreshMetadataParams request, CancellationToken cancellationToken)
         {
             logger.LogInformation("LSP: RefreshMetadata requested for {Uri}", request.Uri);
+            // Clear the table/column cache for this document so new tables (created during execution)
+            // are discovered on the next sidebar expand rather than returning stale empty results.
+            metadata.ClearCacheForUri(request.Uri);
             var text = store.GetDocumentText(request.Uri);
             if (text != null)
             {

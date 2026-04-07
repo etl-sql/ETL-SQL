@@ -31,26 +31,43 @@ namespace ETL_SQL
         /// <returns>Exit code (0 for success, non-zero for failure).</returns>
         static async Task<int> Main(string[] args)
         {
-            ServiceProvider = DependencyInjectionSetup.BuildServiceProvider();
-            Logger.Factory = ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
-
-            // Start scheduler
-            var scheduler = ServiceProvider.GetRequiredService<SchedulerService>();
-            scheduler.Start();
-            AppDomain.CurrentDomain.ProcessExit += (s, e) => scheduler.Stop();
-
-            if (args.Length == 0 || (args.Length == 1 && (args[0] == "--help" || args[0] == "-h" || args[0] == "-?")))
+            try 
             {
-                CliOrchestrator.ShowAdvancedHelp();
-                return 0;
+                // Diagnostic breadcrumb for IDEs
+                Console.Error.WriteLine("[PROC_START] ETL-SQL Engine process identified.");
+                
+                ServiceProvider = DependencyInjectionSetup.BuildServiceProvider();
+                Console.Error.WriteLine("[DI_READY] Dependency injection logic completed.");
+                
+                Logger.Factory = ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
+                
+                // Start scheduler
+                var scheduler = ServiceProvider.GetRequiredService<SchedulerService>();
+                scheduler.Start();
+                Console.Error.WriteLine("[SCHEDULER_START] Background scheduler is active.");
+                
+                AppDomain.CurrentDomain.ProcessExit += (s, e) => scheduler.Stop();
+
+                if (args.Length == 0 || (args.Length == 1 && (args[0] == "--help" || args[0] == "-h" || args[0] == "-?")))
+                {
+                    CliOrchestrator.ShowAdvancedHelp();
+                    return 0;
+                }
+
+                var rootCommand = CliOrchestrator.BuildRootCommand(async (ctx) =>
+                {
+                    return await EngineRunner.Run(ctx);
+                });
+
+                return await rootCommand.InvokeAsync(args);
             }
-
-            var rootCommand = CliOrchestrator.BuildRootCommand(async (ctx) =>
+            catch (Exception ex)
             {
-                return await EngineRunner.Run(ctx);
-            });
-
-            return await rootCommand.InvokeAsync(args);
+                // Ensure any fatal startup error is visible to the IDE even before JSON protocol starts
+                Console.Error.WriteLine($"[FATAL_STARTUP_ERROR] {ex.Message}");
+                Console.Error.WriteLine(ex.ToString());
+                return 1;
+            }
         }
     }
 }

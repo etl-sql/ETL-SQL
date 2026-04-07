@@ -34,6 +34,7 @@ namespace ETL_SQL.LanguageServer.Tests
                         .WithServices(services => {
                             services.AddSingleton<ETL_SQL.Data.IConnectorRegistry>(new ETL_SQL.Data.ConnectorRegistry());
                             services.AddSingleton<IMetadataManager, MetadataManager>();
+                            services.AddSingleton<DocumentStateStore>();
                         })
                         .WithHandler<TextDocumentHandler>()
                 );

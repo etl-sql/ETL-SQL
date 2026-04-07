@@ -6,7 +6,9 @@ using System.Text.Json;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common;
 using System.IO.Compression;
+using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Connectors.Json
 {
@@ -14,13 +16,12 @@ namespace ETL_SQL.Connectors.Json
     /// Data source implementation for reading and writing JSON files.
     /// Supports JSONPath root selection, file compression (ZIP), and encryption.
     /// </summary>
-    public class JsonDataSource : IDataSource
+    public class JsonDataSource : IDatabaseSource
     {
         private readonly string _filePath;
         private readonly string? _rootPath;
         private readonly bool _compress;
-        private readonly bool _encrypt;
-        private readonly string _password;
+        private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
 
         /// <summary>Gets the physical path to the JSON file.</summary>
@@ -30,6 +31,10 @@ namespace ETL_SQL.Connectors.Json
         
         /// <summary>Returns this instance as a typed table (no-op for JSON).</summary>
         public IDataSource WithTable(string tableName) => this;
+        /// <summary>The type name of the connector that created this data source (e.g., JSON).</summary>
+        public string ConnectorType => "JSON";
+        public object? Snapshot() => null;
+        public void Restore(object? snapshot) { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="JsonDataSource"/> class.
@@ -44,14 +49,9 @@ namespace ETL_SQL.Connectors.Json
             {
                 if (options.TryGetValue("ROOT_PATH", out var rp)) _rootPath = rp;
                 if (options.TryGetValue("COMPRESS", out var comp)) _compress = comp.ToUpperInvariant() == "ON";
-                if (options.TryGetValue("ENCRYPT", out var encr)) _encrypt = encr.ToUpperInvariant() == "ON";
-                if (options.TryGetValue("PASSWORD", out var p)) _password = p;
-                else _password = "DefaultETLPass123!";
             }
-            else
-            {
-                _password = "DefaultETLPass123!";
-            }
+            
+            _encryption = new EncryptionOptions(options);
         }
 
         /// <summary>Reads data from the JSON file in batches.</summary>
@@ -64,10 +64,10 @@ namespace ETL_SQL.Connectors.Json
             string effectivePath = _filePath;
             string? tempFile = null;
 
-            if (_encrypt)
+            if (_encryption.Enabled)
             {
                 tempFile = System.IO.Path.GetTempFileName();
-                CryptoUtils.DecryptFile(_filePath, tempFile, _password);
+                _encryption.DecryptFile(_filePath, tempFile);
                 effectivePath = tempFile;
             }
             else if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
@@ -192,9 +192,9 @@ namespace ETL_SQL.Connectors.Json
                     await System.IO.File.WriteAllTextAsync(tempFile, JsonSerializer.Serialize(allRows, options));
                 }
 
-                if (_encrypt)
+                if (_encryption.Enabled)
                 {
-                    CryptoUtils.EncryptFile(tempFile, _filePath, _password);
+                    _encryption.EncryptFile(tempFile, _filePath);
                 }
                 else if (_compress)
                 {
@@ -227,10 +227,10 @@ namespace ETL_SQL.Connectors.Json
             string effectivePath = _filePath;
             string? tempFile = null;
 
-            if (_encrypt)
+            if (_encryption.Enabled)
             {
                 tempFile = System.IO.Path.GetTempFileName();
-                try { CryptoUtils.DecryptFile(_filePath, tempFile, _password); effectivePath = tempFile; }
+                try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
                 catch (Exception ex) { Logger.Verbose($"[JsonDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
             }
             else if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
@@ -273,11 +273,6 @@ namespace ETL_SQL.Connectors.Json
             }
         }
 
-        /// <summary>Captures a snapshot (no-op for JSON).</summary>
-        public object? Snapshot() => null;
-
-        /// <summary>Restores from a snapshot (no-op for JSON).</summary>
-        public void Restore(object? snapshot) { }
 
         /// <summary>Truncates the JSON file by clearing all data.</summary>
         public async Task TruncateAsync()
@@ -299,6 +294,28 @@ namespace ETL_SQL.Connectors.Json
         {
             await Task.CompletedTask;
         }
+
+        public async Task<string> GetVersionAsync() => await Task.FromResult("1.0.0");
+        public HashSet<string> GetSupportedFunctions() => new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        {
+            if (sql.Trim().ToUpperInvariant().StartsWith("SELECT * FROM FILE"))
+            {
+                await foreach (var batch in ReadBatches()) yield return batch;
+            }
+            else
+            {
+                throw new ExecutionException("Json connector only supports 'SELECT * FROM FILE' as native SQL.");
+            }
+        }
+
+        public string ConnectionString => _filePath;
+        public string Dialect => "JSON";
+        public bool SupportsSqlPushdown => false;
+        public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
+        public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
     }
 }
 

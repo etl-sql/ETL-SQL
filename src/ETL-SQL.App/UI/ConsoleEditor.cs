@@ -335,6 +335,7 @@ namespace ETL_SQL.UI
             public Task<IEnumerable<string>> GetTablesAsync(string connectionName) => _mgr.GetTablesAsync(connectionName);
             public Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName) => _mgr.GetColumnsAsync(connectionName, tableName);
             public IEnumerable<string> GetConnections() => _mgr.GetConnections();
+            public string? GetConnectionType(string connectionName) => _mgr.GetConnectionType(connectionName);
         }
 
         /// <summary>Persists the current script buffer to disk. Prompts for a path if unnamed.</summary>

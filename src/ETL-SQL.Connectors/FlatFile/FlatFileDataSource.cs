@@ -6,8 +6,9 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
-using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using System.IO.Compression;
+using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Connectors.FlatFile
 {
@@ -16,7 +17,7 @@ namespace ETL_SQL.Connectors.FlatFile
     /// Supports advanced features like custom delimiters, row delimiters, encoding, text qualifiers, 
     /// compression, encryption, and footer count validation.
     /// </summary>
-    public class FlatFileDataSource : IDataSource
+    public class FlatFileDataSource : IDatabaseSource
     {
         private readonly string _filePath;
         private readonly bool _hasHeader;
@@ -33,16 +34,18 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly string? _dateFormat;
         private readonly bool _strictSchema;
         private readonly bool _compress;
-        private readonly bool _encrypt;
-        private readonly string _password;
+        private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
 
-        /// <summary>Gets the physical path to the flat file.</summary>
+        /// <summary>The physical or logical path to the data source.</summary>
         public string Path => _filePath;
         /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
+
         /// <summary>Returns this instance as a typed table (no-op for FlatFile).</summary>
         public IDataSource WithTable(string tableName) => this;
+        /// <summary>The type name of the connector that created this data source (e.g., FLATFILE).</summary>
+        public string ConnectorType => "FLATFILE";
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FlatFileDataSource"/> class.
@@ -162,19 +165,9 @@ namespace ETL_SQL.Connectors.FlatFile
 
                 if (options.TryGetValue("COMPRESS", out var comp))
                     _compress = comp.ToUpperInvariant() == "ON" || comp.ToUpperInvariant() == "TRUE";
-
-                if (options.TryGetValue("ENCRYPT", out var encr))
-                    _encrypt = encr.ToUpperInvariant() == "ON" || encr.ToUpperInvariant() == "TRUE";
-
-                if (options.TryGetValue("PASSWORD", out var p))
-                    _password = p;
-                else
-                    _password = "DefaultETLPass123!";
             }
-            else
-            {
-                _password = "DefaultETLPass123!";
-            }
+
+            _encryption = new EncryptionOptions(options);
         }
 
         /// <summary>Captures a snapshot (no-op for FlatFile).</summary>
@@ -285,10 +278,10 @@ namespace ETL_SQL.Connectors.FlatFile
             string effectivePath = _filePath;
             string? tempFile = null;
 
-            if (_encrypt)
+            if (_encryption.Enabled)
             {
                 tempFile = System.IO.Path.GetTempFileName();
-                CryptoUtils.DecryptFile(_filePath, tempFile, _password);
+                _encryption.DecryptFile(_filePath, tempFile);
                 effectivePath = tempFile;
             }
             else if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
@@ -517,9 +510,9 @@ namespace ETL_SQL.Connectors.FlatFile
                     }
                 }
 
-                if (_encrypt)
+                if (_encryption.Enabled)
                 {
-                    CryptoUtils.EncryptFile(tempFile, _filePath, _password);
+                    _encryption.EncryptFile(tempFile, _filePath);
                 }
                 else if (_compress)
                 {
@@ -552,10 +545,10 @@ namespace ETL_SQL.Connectors.FlatFile
             string effectivePath = _filePath;
             string? tempFile = null;
 
-            if (_encrypt)
+            if (_encryption.Enabled)
             {
                 tempFile = System.IO.Path.GetTempFileName();
-                try { CryptoUtils.DecryptFile(_filePath, tempFile, _password); effectivePath = tempFile; }
+                try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
                 catch (Exception ex) { Logger.Verbose($"[FlatFileDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
             }
             else if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
@@ -601,16 +594,46 @@ namespace ETL_SQL.Connectors.FlatFile
                 TempFileHelper.SafeDelete(tempFile);
             }
         }
-        /// <summary>Truncates the file by writing an empty data set.</summary>
+        /// <summary>Removes all data from the flat file.</summary>
         public async Task TruncateAsync()
         {
-            await WriteBatches(AsyncEnumerable.Empty<DataTable>());
+            if (System.IO.File.Exists(_filePath))
+            {
+                // If we have a header, we should ideally try to keep it, but simple truncation for now 
+                // matches previous behavior and fixes tests.
+                System.IO.File.WriteAllText(_filePath, string.Empty);
+            }
+            await Task.CompletedTask;
         }
+
+
         /// <summary>Asynchronously disposes resources.</summary>
         public async ValueTask DisposeAsync()
         {
             await Task.CompletedTask;
         }
+
+        public async Task<string> GetVersionAsync() => await Task.FromResult("1.0.0");
+        public HashSet<string> GetSupportedFunctions() => new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        {
+            if (sql.Trim().ToUpperInvariant().StartsWith("SELECT * FROM FILE"))
+            {
+                await foreach (var batch in ReadBatches()) yield return batch;
+            }
+            else
+            {
+                throw new ExecutionException("FlatFile connector only supports 'SELECT * FROM FILE' as native SQL.");
+            }
+        }
+
+        public string ConnectionString => _filePath;
+        public string Dialect => "FLATFILE";
+        public bool SupportsSqlPushdown => false;
+        public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
+        public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
     }
 }
 

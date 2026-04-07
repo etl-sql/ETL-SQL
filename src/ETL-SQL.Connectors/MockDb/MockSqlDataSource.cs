@@ -15,6 +15,7 @@ namespace ETL_SQL.Connectors.MockDb
         private readonly Dictionary<string, DataTable> _mockTables = new(StringComparer.OrdinalIgnoreCase);
         public string Path => "MOCK";
         public Dictionary<string, string>? Options => null;
+        public string ConnectorType => "MOCKDB";
         public IDataSource WithTable(string tableName) 
         {
             _activeTable = tableName;
@@ -23,6 +24,7 @@ namespace ETL_SQL.Connectors.MockDb
         private string? _activeTable;
 
         public string Dialect => _dialect;
+        public bool SupportsSqlPushdown => true;
 
         public MockSqlDataSource(string connectionString, string dialect)
         {

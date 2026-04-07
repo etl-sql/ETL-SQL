@@ -26,15 +26,57 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (CreateConnectionStatement)statement;
-            Logger.Verbose($"Initializing connection {stmt.ConnectionName} of type {stmt.ConnectionType}");
+            
+            bool alreadyExists = context.Connections.TryGetValue(stmt.ConnectionName, out var existingDataSource);
 
-            if (stmt.Mode == ObjectCreationMode.Create && context.Connections.ContainsKey(stmt.ConnectionName))
+            if (stmt.Mode == ObjectCreationMode.Create && alreadyExists)
                 throw new ExecutionException($"Connection '{stmt.ConnectionName}' already exists.");
-            if (stmt.Mode == ObjectCreationMode.Alter && !context.Connections.ContainsKey(stmt.ConnectionName))
+            if (stmt.Mode == ObjectCreationMode.Alter && !alreadyExists)
                 throw new ExecutionException($"Connection '{stmt.ConnectionName}' does not exist.");
 
-            string target = (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString() ?? "";
-            if (target.StartsWith("ENC:"))
+            string? connectionType = stmt.ConnectionType;
+            string? target = null;
+            Dictionary<string, string>? options = null;
+
+            if (stmt.Mode == ObjectCreationMode.Alter || (stmt.Mode == ObjectCreationMode.CreateOrAlter && alreadyExists))
+            {
+                // Patching existing connection
+                if (existingDataSource == null) throw new ExecutionException($"Connection '{stmt.ConnectionName}' exists but its data source is null.");
+                
+                connectionType ??= existingDataSource.ConnectorType;
+                options = new Dictionary<string, string>(existingDataSource.Options ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
+                target = existingDataSource.Path;
+
+                // Merge options
+                if (stmt.Options != null)
+                {
+                    foreach (var kvp in stmt.Options) options[kvp.Key] = kvp.Value;
+                }
+
+                // Update target if provided
+                if (stmt.TargetExpression != null)
+                {
+                    target = (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString() ?? "";
+                }
+            }
+            else
+            {
+                // New connection
+                if (connectionType == null) throw new ExecutionException("Connection type must be specified for CREATE CONNECTION.");
+                if (stmt.TargetExpression != null)
+                {
+                    target = (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString() ?? "";
+                }
+                else
+                {
+                    target = "";
+                }
+                options = stmt.Options != null ? new Dictionary<string, string>(stmt.Options, StringComparer.OrdinalIgnoreCase) : null;
+            }
+
+            Logger.Verbose($"{(alreadyExists ? "Altering" : "Initializing")} connection {stmt.ConnectionName} of type {connectionType}");
+
+            if (target != null && target.StartsWith("ENC:"))
             {
                 string? decryptionKey = context.MasterPassword ?? context.ScriptPassword;
                 if (string.IsNullOrEmpty(decryptionKey))
@@ -48,7 +90,6 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 catch (Exception ex)
                 {
-                    // If MasterPassword failed, and we have a ScriptPassword, try it too (if they were different)
                     if (context.MasterPassword != null && context.ScriptPassword != null && context.MasterPassword != context.ScriptPassword)
                     {
                          try { target = CryptoUtils.Decrypt(target, context.ScriptPassword); }
@@ -60,18 +101,17 @@ namespace ETL_SQL.Engine.Handlers
                     }
                 }
             }
-            target = Interpolate(target);
+            target = Interpolate(target ?? "");
 
             IDataSource ds;
-            var connector = _connectorRegistry.GetConnector(stmt.ConnectionType);
+            var connector = _connectorRegistry.GetConnector(connectionType);
             if (connector != null && (target.Contains("Demo", StringComparison.OrdinalIgnoreCase) || target.Contains("Sample", StringComparison.OrdinalIgnoreCase)))
             {
-                // Fallback to MockDb for demo connection strings
                 var mock = _connectorRegistry.GetConnector("MOCKDB");
                 if (mock != null) connector = mock;
             }
 
-            var interpolatedOptions = stmt.Options?.ToDictionary(
+            var interpolatedOptions = options?.ToDictionary(
                 kvp => kvp.Key,
                 kvp => Interpolate(kvp.Value),
                 StringComparer.OrdinalIgnoreCase
@@ -79,7 +119,6 @@ namespace ETL_SQL.Engine.Handlers
 
             if (connector != null)
             {
-                // If a connection string target was not provided, try building it from structured options
                 if (string.IsNullOrEmpty(target) && interpolatedOptions != null)
                 {
                     try
@@ -88,7 +127,7 @@ namespace ETL_SQL.Engine.Handlers
                     }
                     catch (Exception ex)
                     {
-                        throw new ExecutionException($"Failed to build connection string for {stmt.ConnectionType}: {ex.Message}");
+                        throw new ExecutionException($"Failed to build connection string for {connectionType}: {ex.Message}");
                     }
                 }
 
@@ -96,11 +135,17 @@ namespace ETL_SQL.Engine.Handlers
             }
             else
             {
-                throw new ExecutionException($"Connection type '{stmt.ConnectionType}' is not registered or implemented.");
+                throw new ExecutionException($"Connection type '{connectionType}' is not registered or implemented.");
+            }
+
+            // Dispose existing one if we are replacing it
+            if (alreadyExists && existingDataSource != null)
+            {
+                await existingDataSource.DisposeAsync();
             }
 
             context.Connections[stmt.ConnectionName] = ds;
-            Logger.WriteLine($"Connection {stmt.ConnectionName} {(stmt.Mode == ObjectCreationMode.Alter ? "altered" : "defined")}.", ConsoleColor.Green);
+            Logger.WriteLine($"Connection {stmt.ConnectionName} {(alreadyExists ? "altered" : "created")}.", ConsoleColor.Green);
 
             // Generate a preview result for the Result Panel
             var preview = new DataTable();

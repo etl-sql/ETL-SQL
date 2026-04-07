@@ -30,6 +30,7 @@ namespace ETL_SQL.Tests
             public List<Row> Rows { get; } = new List<Row>();
             public string Path => "FAIL_MOCK";
             public Dictionary<string, string>? Options => null;
+            public string ConnectorType => "FAIL_MOCK";
 
             public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
             {

@@ -12,6 +12,7 @@ namespace ETL_SQL.Connectors.Directory
         public string Path => _directoryPath;
         public IDataSource WithTable(string tableName) => this;
         public Dictionary<string, string>? Options { get; }
+        public string ConnectorType => "DIRECTORY";
 
         public DirectoryDataSource(string path, Dictionary<string, string>? options = null)
         {

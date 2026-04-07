@@ -555,7 +555,7 @@ namespace ETL_SQL.Engine
         public object? CastToType(object? value, string dataType) => _expressionEvaluator.CastToType(value, dataType);
 
         /// <summary>Checks if a connection refers to a physical database that supports SQL pushdown.</summary>
-        public bool IsSqlPushdown(string conn) => !string.Equals(conn, "DUAL", StringComparison.OrdinalIgnoreCase) && _connections.TryGetValue(conn, out var ds) && ds is IDatabaseSource;
+        public bool IsSqlPushdown(string conn) => !string.Equals(conn, "DUAL", StringComparison.OrdinalIgnoreCase) && _connections.TryGetValue(conn, out var ds) && ds is IDatabaseSource db && db.SupportsSqlPushdown;
 
         /// <summary>Attempts to extract an INTO target from a SELECT or SET operation.</summary>
         public TableReference? GetIntoTable(Statement stmt)

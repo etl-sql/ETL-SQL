@@ -26,6 +26,7 @@ namespace ETL_SQL.Tests
                 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest');
                 DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
                 CREATE CONNECTION ds ON MSSQL(@conn);
+                EXECUTE ds BEGIN IF OBJECT_ID('DockerTest', 'U') IS NOT NULL DROP TABLE DockerTest; END;
                 CREATE TABLE ds.DockerTest (Val INT);
                 INSERT INTO ds.DockerTest (Val) VALUES (1);
                 SELECT Val FROM ds.DockerTest;
@@ -172,6 +173,7 @@ DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
 CREATE CONNECTION ds ON MSSQL(@conn);
 EXECUTE ds
 BEGIN
+  IF OBJECT_ID('Employee', 'U') IS NOT NULL DROP TABLE Employee;
   CREATE TABLE Employee (id int, employee_name varchar(500));
   INSERT INTO  Employee(id, employee_name) VALUES (1, 'New');
 END
@@ -202,7 +204,8 @@ SELECT 1";
 DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
 CREATE CONNECTION ds ON MSSQL(@conn);
 EXECUTE (
-  'CREATE TABLE Employee (id INT, employee_name NVARCHAR(MAX));
+  'IF OBJECT_ID(''Employee'', ''U'') IS NOT NULL DROP TABLE Employee;
+  CREATE TABLE Employee (id INT, employee_name NVARCHAR(MAX));
   INSERT INTO  Employee(id, employee_name) VALUES (1, ''New'');'
 ) AT ds
 

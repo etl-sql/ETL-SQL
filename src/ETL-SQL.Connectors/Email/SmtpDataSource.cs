@@ -21,6 +21,8 @@ namespace ETL_SQL.Connectors.Email
 
         /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
+        /// <summary>The type name of the connector (SMTP).</summary>
+        public string ConnectorType => "SMTP";
 
         /// <summary>
         /// Initializes a new instance of the <see cref="SmtpDataSource"/> class.
