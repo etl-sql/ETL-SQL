@@ -71,9 +71,20 @@ AT <smtp_connection>;
 
   **FW-7. Add ORDER BY <number>**
   -- Add ORDER BY <number> to the ORDER BY clause, the number corresponds to the column number in the SELECT clause. (1 based)
+  -- Make sure ASC | DESC is supported.
+  -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for ORDER BY <number>.
+  -- Add example to the ETL_SQL_LANGUAGE_REFERENCE.md file for ORDER BY column_name with ASC | DESC.
 
-  **FW-8. Add WITH TIES to TOP**
-  -- Add WITH TIES to TOP clause
+  **FW-8. Add PERCENT and WITH TIES to TOP**
+  -- Add TOP (expression) [ PERCENT ] [ WITH TIES ] 
+Explanation:
+PERCENT
+Indicates that the query returns only the first expression percent of rows from the result set. If the calculated number of rows is a fraction, it's rounded up to the next whole number.
+
+WITH TIES
+Returns two or more rows that tie for last place in the limited results set. You must use this argument with the ORDER BY clause. WITH TIES might cause more rows to be returned than the value specified in expression. For example, if expression is set to 5 but two more rows match the values of the ORDER BY columns in row 5, the result set contains seven rows.
+
+You can specify the TOP clause with the WITH TIES argument only in SELECT statements, and only if you also specify the ORDER BY clause. The returned order of tying records is arbitrary. ORDER BY doesn't affect this rule.
 
   **FW-9. Add advanced TRIM function**
   -- TRIM ( [ LEADING | TRAILING | BOTH ] [characters FROM ] string )
@@ -106,6 +117,10 @@ AT <smtp_connection>;
   -- REGR_SLOPE / REGR_INTERCEPT: Linear regression slope and y-intercept for a set of pairs.
   -- EVERY / ANY / SOME: Aggregates for boolean values (returns true if all or some values are true).
 
+  **FW-18. Examples in the documentation on AT TIME ZONE**
+  - Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for AT TIME ZONE showing the different time zones and how they work.
+  - Show an example query with AT TIME ZONE that converts a UTC timestamp to a local time zone.
+  - Be sure to list the valid time zones in the documentation.
 
 ## VS CODE Bugs/Improvements
 

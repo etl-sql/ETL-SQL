@@ -1850,6 +1850,67 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => Left.GetSourceColumns();
     }
 
+    public class SubstringExpression(Expression str, Expression start, Expression? length = null) : Expression
+    {
+        public Expression String { get; } = str;
+        public Expression Start { get; } = start;
+        public Expression? Length { get; } = length;
+
+        public override string ToSql() => $"SUBSTRING({String.ToSql()} FROM {Start.ToSql()}{(Length != null ? $" FOR {Length.ToSql()}" : "")})";
+        public override IEnumerable<string> GetSourceTables() => String.GetSourceTables();
+        public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns();
+    }
+
+    public class PositionExpression(Expression substring, Expression str) : Expression
+    {
+        public Expression Substring { get; } = substring;
+        public Expression String { get; } = str;
+
+        public override string ToSql() => $"POSITION({Substring.ToSql()} IN {String.ToSql()})";
+        public override IEnumerable<string> GetSourceTables() => String.GetSourceTables().Concat(Substring.GetSourceTables());
+        public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns().Concat(Substring.GetSourceColumns());
+    }
+
+    public class ExtractExpression(string field, Expression source) : Expression
+    {
+        public string Field { get; } = field;
+        public Expression Source { get; } = source;
+
+        public override string ToSql() => $"EXTRACT({Field} FROM {Source.ToSql()})";
+        public override IEnumerable<string> GetSourceTables() => Source.GetSourceTables();
+        public override IEnumerable<string> GetSourceColumns() => Source.GetSourceColumns();
+    }
+
+    public class OverlayExpression(Expression str, Expression overlay, Expression start, Expression? length = null) : Expression
+    {
+        public Expression String { get; } = str;
+        public Expression Overlay { get; } = overlay;
+        public Expression Start { get; } = start;
+        public Expression? Length { get; } = length;
+
+        public override string ToSql() => $"OVERLAY({String.ToSql()} PLACING {Overlay.ToSql()} FROM {Start.ToSql()}{(Length != null ? $" FOR {Length.ToSql()}" : "")})";
+        public override IEnumerable<string> GetSourceTables() => String.GetSourceTables().Concat(Overlay.GetSourceTables());
+        public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns().Concat(Overlay.GetSourceColumns());
+    }
+
+    public enum TrimType { BOTH, LEADING, TRAILING }
+
+    public class TrimExpression(TrimType type, Expression? characters, Expression str) : Expression
+    {
+        public TrimType Type { get; } = type;
+        public Expression? Characters { get; } = characters;
+        public Expression String { get; } = str;
+
+        public override string ToSql()
+        {
+            var typeStr = Type.ToString();
+            var chars = Characters != null ? $"{Characters.ToSql()} FROM " : "";
+            return $"TRIM({typeStr} {chars}{String.ToSql()})";
+        }
+        public override IEnumerable<string> GetSourceTables() => String.GetSourceTables().Concat(Characters?.GetSourceTables() ?? Enumerable.Empty<string>());
+        public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns().Concat(Characters?.GetSourceColumns() ?? Enumerable.Empty<string>());
+    }
+
     public enum WindowFrameType { ROWS, RANGE }
     public enum WindowFrameBoundType { PRECEDING, FOLLOWING, CURRENT_ROW, UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING }
 

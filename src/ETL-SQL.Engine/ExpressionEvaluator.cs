@@ -129,6 +129,11 @@ namespace ETL_SQL.Engine
                 ExistsExpression ex => await EvaluateExists(ex, context),
                 ListExpression listExpr => await EvaluateList(listExpr, context),
                 AtTimeZoneExpression atTz => await EvaluateAtTimeZone(atTz, context),
+                SubstringExpression sub => await EvaluateSubstring(sub, context),
+                PositionExpression pos => await EvaluatePosition(pos, context),
+                ExtractExpression ext => await EvaluateExtract(ext, context),
+                OverlayExpression ovl => await EvaluateOverlay(ovl, context),
+                TrimExpression trim => await EvaluateTrim(trim, context),
                 FunctionCallExpression f => await EvaluateFunction(f, context),
                 SubqueryExpression subq => await EvaluateSubquery(subq, context),
                 _ => null
@@ -199,6 +204,16 @@ namespace ETL_SQL.Engine
             if (context != null && context.Columns.TryGetValue(aggKey, out var aggVal)) return aggVal;
 
             var fn = f.FunctionName.ToUpperInvariant();
+            
+            // ANSI String length aliases
+            if (fn == "CHARACTER_LENGTH" || fn == "CHAR_LENGTH" || fn == "OCTET_LENGTH")
+            {
+                var val = await EvaluateInternal(f.Arguments.FirstOrDefault(), context ?? new Row());
+                if (val == null) return null;
+                var s = val.ToString() ?? "";
+                return fn == "OCTET_LENGTH" ? System.Text.Encoding.UTF8.GetByteCount(s) : s.Length;
+            }
+
             var args = new List<object?>();
             for (int i = 0; i < f.Arguments.Count; i++)
             {
@@ -414,6 +429,122 @@ namespace ETL_SQL.Engine
                 if (cond != null && Convert.ToBoolean(cond)) return await EvaluateInternal(clause.Result, context);
             }
             return await EvaluateInternal(c.ElseResult, context);
+        }
+
+        private async Task<object?> EvaluateSubstring(SubstringExpression sub, Row context)
+        {
+            var val = await EvaluateInternal(sub.String, context);
+            if (val == null) return null;
+            var s = val.ToString() ?? "";
+            
+            var startVal = await EvaluateInternal(sub.Start, context);
+            if (startVal == null) return null;
+            int start = Convert.ToInt32(startVal);
+            
+            // SQL SUBSTRING is 1-indexed
+            if (start < 1) start = 1;
+            int dotNetStart = start - 1;
+            if (dotNetStart >= s.Length) return "";
+            
+            if (sub.Length != null)
+            {
+                var lenVal = await EvaluateInternal(sub.Length, context);
+                if (lenVal == null) return null;
+                int len = Convert.ToInt32(lenVal);
+                if (len <= 0) return "";
+                if (dotNetStart + len > s.Length) len = s.Length - dotNetStart;
+                return s.Substring(dotNetStart, len);
+            }
+            return s.Substring(dotNetStart);
+        }
+
+        private async Task<object?> EvaluatePosition(PositionExpression pos, Row context)
+        {
+            var substrVal = await EvaluateInternal(pos.Substring, context);
+            var strVal = await EvaluateInternal(pos.String, context);
+            if (substrVal == null || strVal == null) return 0;
+            
+            var substr = substrVal.ToString() ?? "";
+            var str = strVal.ToString() ?? "";
+            
+            // SQL POSITION returns 1-based index, or 0 if not found
+            int index = str.IndexOf(substr, StringComparison.OrdinalIgnoreCase);
+            return index + 1;
+        }
+
+        private async Task<object?> EvaluateExtract(ExtractExpression ext, Row context)
+        {
+            var val = await EvaluateInternal(ext.Source, context);
+            if (val == null) return null;
+            
+            DateTime dt;
+            if (val is DateTime dateTime) dt = dateTime;
+            else if (!DateTime.TryParse(val.ToString(), out dt)) return null;
+            
+            return ext.Field.ToUpperInvariant() switch
+            {
+                "YEAR" => dt.Year,
+                "MONTH" => dt.Month,
+                "DAY" => dt.Day,
+                "HOUR" => dt.Hour,
+                "MINUTE" => dt.Minute,
+                "SECOND" => dt.Second,
+                "MILLISECOND" => dt.Millisecond,
+                "DOW" => (int)dt.DayOfWeek,
+                "DOY" => dt.DayOfYear,
+                _ => null
+            };
+        }
+
+        private async Task<object?> EvaluateOverlay(OverlayExpression ovl, Row context)
+        {
+            var strVal = await EvaluateInternal(ovl.String, context);
+            var ovlVal = await EvaluateInternal(ovl.Overlay, context);
+            var startVal = await EvaluateInternal(ovl.Start, context);
+            
+            if (strVal == null || ovlVal == null || startVal == null) return null;
+            
+            var s = strVal.ToString() ?? "";
+            var o = ovlVal.ToString() ?? "";
+            int start = Convert.ToInt32(startVal);
+            
+            if (start < 1) start = 1;
+            int dotNetStart = start - 1;
+            
+            int len = o.Length;
+            if (ovl.Length != null)
+            {
+                var lenVal = await EvaluateInternal(ovl.Length, context);
+                if (lenVal != null) len = Convert.ToInt32(lenVal);
+            }
+            
+            if (dotNetStart > s.Length) return s + o;
+            
+            var prefix = s.Substring(0, dotNetStart);
+            var replacedLen = Math.Min(len, s.Length - dotNetStart);
+            var suffix = (dotNetStart + replacedLen < s.Length) ? s.Substring(dotNetStart + replacedLen) : "";
+            return prefix + o + suffix;
+        }
+
+        private async Task<object?> EvaluateTrim(TrimExpression trim, Row context)
+        {
+            var val = await EvaluateInternal(trim.String, context);
+            if (val == null) return null;
+            var s = val.ToString() ?? "";
+            
+            char[]? chars = null;
+            if (trim.Characters != null)
+            {
+                var cVal = await EvaluateInternal(trim.Characters, context);
+                if (cVal != null) chars = cVal.ToString()?.ToCharArray();
+            }
+            
+            return trim.Type switch
+            {
+                TrimType.LEADING => chars != null ? s.TrimStart(chars) : s.TrimStart(),
+                TrimType.TRAILING => chars != null ? s.TrimEnd(chars) : s.TrimEnd(),
+                _ => chars != null ? s.Trim(chars) : s.Trim()
+            };
         }
     }
 }

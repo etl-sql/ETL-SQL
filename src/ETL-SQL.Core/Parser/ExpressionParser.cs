@@ -242,6 +242,26 @@ namespace ETL_SQL.Core.Parser
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after subquery");
                 return new ExistsExpression(subquery, false) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
+            if (_parser.Match(TokenType.TRIM))
+            {
+                return ParseTrim();
+            }
+            if (_parser.Match(TokenType.SUBSTRING))
+            {
+                return ParseSubstring();
+            }
+            if (_parser.Match(TokenType.POSITION))
+            {
+                return ParsePosition();
+            }
+            if (_parser.Match(TokenType.EXTRACT))
+            {
+                return ParseExtract();
+            }
+            if (_parser.Match(TokenType.OVERLAY))
+            {
+                return ParseOverlay();
+            }
             if (_parser.Match(TokenType.LBRACKET))
             {
                 var items = new List<Expression>();
@@ -536,6 +556,97 @@ namespace ETL_SQL.Core.Parser
             }
 
             throw new SyntaxException($"Expected expression primary but got {_parser.Current.Type} ('{_parser.Current.Value}')", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private SubstringExpression ParseSubstring()
+        {
+            var t = _parser.Previous;
+            _parser.Consume(TokenType.LPAREN, "Expected '(' after SUBSTRING");
+            var str = _parser.ParseExpression();
+            _parser.Consume(TokenType.FROM, "Expected 'FROM' in SUBSTRING");
+            var start = _parser.ParseExpression();
+            Expression? length = null;
+            if (_parser.Match(TokenType.FOR))
+            {
+                length = _parser.ParseExpression();
+            }
+            _parser.Consume(TokenType.RPAREN, "Expected ')' after SUBSTRING arguments");
+            return new SubstringExpression(str, start, length) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+        }
+
+        private PositionExpression ParsePosition()
+        {
+            var t = _parser.Previous;
+            _parser.Consume(TokenType.LPAREN, "Expected '(' after POSITION");
+            var substr = ParseTerm();
+            _parser.Consume(TokenType.IN, "Expected 'IN' in POSITION");
+            var str = _parser.ParseExpression();
+            _parser.Consume(TokenType.RPAREN, "Expected ')' after POSITION arguments");
+            return new PositionExpression(substr, str) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+        }
+
+        private ExtractExpression ParseExtract()
+        {
+            var t = _parser.Previous;
+            _parser.Consume(TokenType.LPAREN, "Expected '(' after EXTRACT");
+            var field = _parser.Advance().Value; // e.g. YEAR, MONTH
+            _parser.Consume(TokenType.FROM, "Expected 'FROM' in EXTRACT");
+            var source = _parser.ParseExpression();
+            _parser.Consume(TokenType.RPAREN, "Expected ')' after EXTRACT arguments");
+            return new ExtractExpression(field, source) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+        }
+
+        private OverlayExpression ParseOverlay()
+        {
+            var t = _parser.Previous;
+            _parser.Consume(TokenType.LPAREN, "Expected '(' after OVERLAY");
+            var str = _parser.ParseExpression();
+            _parser.Consume(TokenType.PLACING, "Expected 'PLACING' in OVERLAY");
+            var overlay = _parser.ParseExpression();
+            _parser.Consume(TokenType.FROM, "Expected 'FROM' in OVERLAY");
+            var start = _parser.ParseExpression();
+            Expression? length = null;
+            if (_parser.Match(TokenType.FOR))
+            {
+                length = _parser.ParseExpression();
+            }
+            _parser.Consume(TokenType.RPAREN, "Expected ')' after OVERLAY arguments");
+            return new OverlayExpression(str, overlay, start, length) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+        }
+
+        private TrimExpression ParseTrim()
+        {
+            var t = _parser.Previous;
+            _parser.Consume(TokenType.LPAREN, "Expected '(' after TRIM");
+            
+            TrimType type = TrimType.BOTH;
+            Expression? characters = null;
+            
+            if (_parser.Match(TokenType.LEADING)) type = TrimType.LEADING;
+            else if (_parser.Match(TokenType.TRAILING)) type = TrimType.TRAILING;
+            else if (_parser.Match(TokenType.BOTH)) type = TrimType.BOTH;
+            
+            if (type != TrimType.BOTH || _parser.Current.Type != TokenType.FROM)
+            {
+                if (_parser.Current.Type != TokenType.FROM)
+                {
+                    characters = _parser.ParseExpression();
+                }
+            }
+            
+            if (_parser.Match(TokenType.FROM))
+            {
+                var str = _parser.ParseExpression();
+                _parser.Consume(TokenType.RPAREN, "Expected ')' after TRIM arguments");
+                return new TrimExpression(type, characters, str) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
+            else
+            {
+                // Simple TRIM(expr) case
+                var str = characters ?? _parser.ParseExpression();
+                _parser.Consume(TokenType.RPAREN, "Expected ')' after TRIM");
+                return new TrimExpression(TrimType.BOTH, null, str) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
         }
 
         private WindowFrameBound ParseFrameBound()
