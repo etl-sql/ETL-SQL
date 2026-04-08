@@ -2394,18 +2394,54 @@ namespace ETL_SQL.Core.Parser
                     }
                     else if (_parser.Match(TokenType.CC))
                     {
-                        cc.Add(_parser.ParseExpression());
-                        while (_parser.Match(TokenType.COMMA)) cc.Add(_parser.ParseExpression());
+                        if (_parser.Match(TokenType.LBRACKET))
+                        {
+                            if (_parser.Current.Type != TokenType.RBRACKET)
+                            {
+                                cc.Add(_parser.ParseExpression());
+                                while (_parser.Match(TokenType.COMMA)) cc.Add(_parser.ParseExpression());
+                            }
+                            _parser.Consume(TokenType.RBRACKET, "Expected ']'");
+                        }
+                        else
+                        {
+                            cc.Add(_parser.ParseExpression());
+                            while (_parser.Match(TokenType.COMMA)) cc.Add(_parser.ParseExpression());
+                        }
                     }
                     else if (_parser.Match(TokenType.BCC))
                     {
-                        bcc.Add(_parser.ParseExpression());
-                        while (_parser.Match(TokenType.COMMA)) bcc.Add(_parser.ParseExpression());
+                        if (_parser.Match(TokenType.LBRACKET))
+                        {
+                            if (_parser.Current.Type != TokenType.RBRACKET)
+                            {
+                                bcc.Add(_parser.ParseExpression());
+                                while (_parser.Match(TokenType.COMMA)) bcc.Add(_parser.ParseExpression());
+                            }
+                            _parser.Consume(TokenType.RBRACKET, "Expected ']'");
+                        }
+                        else
+                        {
+                            bcc.Add(_parser.ParseExpression());
+                            while (_parser.Match(TokenType.COMMA)) bcc.Add(_parser.ParseExpression());
+                        }
                     }
                     else if (_parser.Match(TokenType.ATTACH))
                     {
-                        attachments.Add(_parser.ParseExpression());
-                        while (_parser.Match(TokenType.COMMA)) attachments.Add(_parser.ParseExpression());
+                        if (_parser.Match(TokenType.LBRACKET))
+                        {
+                            if (_parser.Current.Type != TokenType.RBRACKET)
+                            {
+                                attachments.Add(_parser.ParseExpression());
+                                while (_parser.Match(TokenType.COMMA)) attachments.Add(_parser.ParseExpression());
+                            }
+                            _parser.Consume(TokenType.RBRACKET, "Expected ']'");
+                        }
+                        else
+                        {
+                            attachments.Add(_parser.ParseExpression());
+                            while (_parser.Match(TokenType.COMMA)) attachments.Add(_parser.ParseExpression());
+                        }
                     }
                     else if (_parser.Match(TokenType.AT))
                     {

@@ -129,9 +129,7 @@ namespace ETL_SQL.Engine.Services
                     
                     if (rows != null && rows.Count > 0)
                     {
-                        var dt = ds.Validator != null ? new DataTable() : new DataTable(); 
-                        // Actually ds.SetSchema already set the schema of ds, but WriteBatches adds new batches.
-                        // We need a DataTable that matches ds schema.
+                        var dt = new DataTable(); 
                         dt.SetColumns(ds.Schema.Keys, info.Constraints); 
 
                         foreach (var rowDict in rows)
@@ -144,12 +142,21 @@ namespace ETL_SQL.Engine.Services
                             dt.AddRow(row);
                         }
                         await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+                        Logger.Verbose($"[SESSION] Restored {rows.Count} rows into temp table {info.Name}");
+                    }
+                    else
+                    {
+                        Logger.Verbose($"[SESSION] Data file for {info.Name} found but contained 0 rows.");
                     }
                 }
                 catch (Exception ex)
                 {
                     Logger.WriteLine($"Warning: Failed to restore temp table {info.Name}: {ex.Message}", ConsoleColor.Yellow);
                 }
+            }
+            else
+            {
+                Logger.Verbose($"[SESSION] No data file found for temp table {info.Name} at {info.DataFilePath}");
             }
             
             return ds;

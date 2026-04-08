@@ -103,17 +103,30 @@ namespace ETL_SQL.Engine.Services
                     
                     // Simple JSON serialization of the data table
                     var batches = await mem.ReadBatches().ToListAsync();
+                    int totalSavedRows = 0;
                     if (batches.Count > 0)
                     {
                         // Columns property is already set correctly on 'info' at line 100
                         
                         var allRows = batches.SelectMany(b => b.Rows.Select(r => r.Columns)).ToList();
-                        string json = JsonSerializer.Serialize(allRows);
-                        
-                        // Encrypt before saving if possible
-                        var password = evaluator.ScriptPassword ?? GetMachineKey();
-                        File.WriteAllText(dataFile, CryptoUtils.Encrypt(json, password));
+                        totalSavedRows = allRows.Count;
+
+                        if (totalSavedRows > 0)
+                        {
+                            string json = JsonSerializer.Serialize(allRows);
+                            
+                            // Encrypt before saving if possible
+                            var password = evaluator.ScriptPassword ?? GetMachineKey();
+                            File.WriteAllText(dataFile, CryptoUtils.Encrypt(json, password));
+                            Logger.Verbose($"[SESSION] Persisted {totalSavedRows} rows for temp table {conn.Key} to {Path.GetFileName(dataFile)}");
+                        }
                     }
+                    
+                    if (totalSavedRows == 0)
+                    {
+                        Logger.Verbose($"[SESSION] Temp table {conn.Key} is empty; no data file created.");
+                    }
+                    
                     state.TempTables.Add(info);
                 }
             }

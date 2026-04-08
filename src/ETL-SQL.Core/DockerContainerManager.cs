@@ -117,14 +117,40 @@ namespace ETL_SQL.Core
             return connectionString;
         }
 
+        private async Task<Uri> GetValidDockerUri()
+        {
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // Try common Windows pipes in order of prevalence
+                var pipes = new[] 
+                { 
+                    "npipe://./pipe/docker_engine", 
+                    "npipe://./pipe/docker_desktop_linux",
+                    "npipe://./pipe/docker_desktop_windows"
+                };
+
+                foreach (var pipe in pipes)
+                {
+                    try
+                    {
+                        var uri = new Uri(pipe);
+                        using var config = new DockerClientConfiguration(uri);
+                        using var client = config.CreateClient();
+                        await client.System.PingAsync(); // Reliable check
+                        return uri;
+                    }
+                    catch { /* Continue to next pipe */ }
+                }
+                return new Uri("npipe://./pipe/docker_engine"); // Fallback to default
+            }
+            return new Uri("unix:///var/run/docker.sock");
+        }
+
         private async Task<string?> GetExistingContainerConnectionString(string name, string imageName)
         {
             try
             {
-                var uri = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) 
-                    ? new Uri("npipe://./pipe/docker_engine") 
-                    : new Uri("unix:///var/run/docker.sock");
-                
+                var uri = await GetValidDockerUri();
                 using var config = new DockerClientConfiguration(uri);
                 using var client = config.CreateClient();
                 var containers = await client.Containers.ListContainersAsync(new ContainersListParameters { All = false });

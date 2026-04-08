@@ -32,7 +32,8 @@ namespace ETL_SQL.Tests
                 CREATE CONNECTION MyEmail TYPE SMTP TARGET 'localhost'
                 WITH (PORT = 25);
 
-                SEND_EMAIL TO 'test@example.com'
+                 SEND EMAIL FROM 'sender@example.com'
+                    TO 'test@example.com'
                     SUBJECT 'Test Alert'
                     BODY 'This is a test message'
                     AT MyEmail;
@@ -58,12 +59,12 @@ namespace ETL_SQL.Tests
         public async Task TestEmailStatementWithCcAndAttachments()
         {
             string script = @"
-                SEND_EMAIL TO 'a@b.com'
+                 SEND EMAIL FROM 'a@b.com' TO 'a@b.com'
                     SUBJECT 'S'
                     BODY 'B'
-                    CC 'c@d.com', 'e@f.com'
+                    CC ['c@d.com', 'e@f.com']
                     BCC 'g@h.com'
-                    ATTACH 'file1.txt', 'file2.txt';
+                    ATTACH ['file1.txt', 'file2.txt'];
             ";
 
             var tokens = new Lexer(script).Tokenize();
@@ -83,7 +84,7 @@ namespace ETL_SQL.Tests
             var mockSmtp = new MockSmtpDataSource();
             _evaluator.Connections["TestSMTP"] = mockSmtp;
 
-            string script = "SEND_EMAIL TO 't@t.com' SUBJECT 'S' BODY 'B' AT TestSMTP;";
+             string script = "SEND EMAIL FROM 'f@f.com' TO 't@t.com' SUBJECT 'S' BODY 'B' AT TestSMTP;";
             var tokens = new Lexer(script).Tokenize();
             var parser = new Parser(tokens);
             var program = parser.Parse();
