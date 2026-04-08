@@ -38,7 +38,7 @@ namespace ETL_SQL.Tests
         public void ParseFunctionCall()
         {
             var expr = Parse("SUBSTRING('Hello World', 1, 5)");
-            Assert.IsType<FunctionCallExpression>(expr);
+            Assert.IsAssignableFrom<FunctionCallExpression>(expr);
             var func = (FunctionCallExpression)expr!;
             Assert.Equal("SUBSTRING", func.FunctionName);
             Assert.Equal(3, func.Arguments.Count);

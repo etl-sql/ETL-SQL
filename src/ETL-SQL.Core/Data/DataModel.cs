@@ -5,6 +5,22 @@ using System.Linq;
 namespace ETL_SQL.Data
 {
     /// <summary>
+    /// Type of table constraint.
+    /// </summary>
+    public enum ConstraintType { PrimaryKey, Unique, Check, ForeignKey }
+
+    /// <summary>
+    /// Represents a constraint on a table.
+    /// </summary>
+    public class TableConstraintInfo
+    {
+        public string? Name { get; set; }
+        public ConstraintType Type { get; set; }
+        public List<string> Columns { get; set; } = new();
+        public string? Expression { get; set; }
+    }
+
+    /// <summary>
     /// Represents the schema of a <see cref="DataTable"/>.
     /// Maps column names to indices for fast array-based access in <see cref="Row"/>.
     /// </summary>
@@ -12,15 +28,17 @@ namespace ETL_SQL.Data
     {
         private readonly Dictionary<string, int> _columnToIndex = new(StringComparer.OrdinalIgnoreCase);
         private readonly List<string> _columnNames = new();
+        public List<TableConstraintInfo> Constraints { get; } = new();
 
-        public IReadOnlyList<string> ColumnNames => _columnNames;
+        public TableSchema(IEnumerable<string> columns, IEnumerable<TableConstraintInfo>? constraints = null)
+        {
+            foreach (var col in columns) AddColumn(col);
+            if (constraints != null) Constraints.AddRange(constraints);
+        }
 
         public TableSchema() { }
 
-        public TableSchema(IEnumerable<string> columns)
-        {
-            foreach (var col in columns) AddColumn(col);
-        }
+        public IReadOnlyList<string> ColumnNames => _columnNames;
 
         public int AddColumn(string name)
         {
@@ -112,9 +130,6 @@ namespace ETL_SQL.Data
             }
         }
 
-        /// <summary>
-        /// Gets or sets the value of a column by index (only for schema-bound rows).
-        /// </summary>
         public object? this[int index]
         {
             get => _values != null && index >= 0 && index < _values.Length ? _values[index] : null;
@@ -123,24 +138,6 @@ namespace ETL_SQL.Data
                 EnsureValuesCapacity(index + 1);
                 _values![index] = value;
             }
-        }
-
-        private void EnsureValuesCapacity(int capacity)
-        {
-            if (_values == null)
-            {
-                _values = new object?[capacity];
-            }
-            else if (capacity > _values.Length)
-            {
-                Array.Resize(ref _values, Math.Max(capacity, _values.Length * 2));
-            }
-        }
-
-        public bool HasColumn(string columnName)
-        {
-            if (_schema != null && _schema.Contains(columnName)) return true;
-            return _dynamicColumns != null && _dynamicColumns.ContainsKey(columnName);
         }
 
         public Dictionary<string, object?> Columns
@@ -163,27 +160,22 @@ namespace ETL_SQL.Data
             }
         }
 
-        public Row Clone()
+        private void EnsureValuesCapacity(int capacity)
         {
-            if (_schema != null)
+            if (_values == null)
             {
-                var newValues = _values != null ? (object?[])_values.Clone() : null;
-                var row = new Row(_schema, newValues!);
-                if (_dynamicColumns != null)
-                {
-                    foreach (var kvp in _dynamicColumns) row[kvp.Key] = kvp.Value;
-                }
-                return row;
+                _values = new object?[capacity];
             }
-            else
+            else if (capacity > _values.Length)
             {
-                var row = new Row();
-                if (_dynamicColumns != null)
-                {
-                    foreach (var kvp in _dynamicColumns) row[kvp.Key] = kvp.Value;
-                }
-                return row;
+                Array.Resize(ref _values, Math.Max(capacity, _values.Length * 2));
             }
+        }
+
+        public bool HasColumn(string columnName)
+        {
+            if (_schema != null && _schema.Contains(columnName)) return true;
+            return _dynamicColumns != null && _dynamicColumns.ContainsKey(columnName);
         }
 
         internal void SetSchema(TableSchema schema)
@@ -229,6 +221,26 @@ namespace ETL_SQL.Data
                 if (_dynamicColumns.Count == 0) _dynamicColumns = null;
             }
         }
+
+        public Row Clone()
+        {
+            Row row;
+            if (_schema != null)
+            {
+                var newValues = _values != null ? (object?[])_values.Clone() : null;
+                row = new Row(_schema, newValues!);
+            }
+            else
+            {
+                row = new Row();
+            }
+
+            if (_dynamicColumns != null)
+            {
+                foreach (var kvp in _dynamicColumns) row[kvp.Key] = kvp.Value;
+            }
+            return row;
+        }
     }
 
     /// <summary>
@@ -237,8 +249,8 @@ namespace ETL_SQL.Data
     /// </summary>
     public class DataTable
     {
+        public TableSchema Schema { get; set; } = new(Enumerable.Empty<string>());
         public List<Row> Rows { get; } = new();
-        public TableSchema Schema { get; private set; } = new();
         
         public List<string> ColumnNames => Schema.ColumnNames.ToList();
         
@@ -246,9 +258,9 @@ namespace ETL_SQL.Data
         public int TotalRowsMatched { get; set; }
         public int ResultSetIndex { get; set; }
 
-        public void SetColumns(IEnumerable<string> columns)
+        public void SetColumns(IEnumerable<string> columns, IEnumerable<TableConstraintInfo>? constraints = null)
         {
-            Schema = new TableSchema(columns);
+            Schema = new TableSchema(columns, constraints);
         }
 
         public void AddColumn(string columnName)
@@ -269,7 +281,39 @@ namespace ETL_SQL.Data
         public void AddRow(Row row)
         {
             row.SetSchema(Schema);
+
+            // Enforce constraints (Unique, Primary Key) within this batch
+            foreach (var constraint in Schema.Constraints)
+            {
+                if (constraint.Type == ConstraintType.PrimaryKey || constraint.Type == ConstraintType.Unique)
+                {
+                    if (IsDuplicate(constraint.Columns, row))
+                    {
+                        var vals = string.Join(", ", constraint.Columns.Select(c => row[c]?.ToString() ?? "NULL"));
+                        throw new Core.Common.Exceptions.ExecutionException($"Unique constraint violation: {constraint.Name ?? "unnamed"} (values: {vals})");
+                    }
+                }
+            }
+
             Rows.Add(row);
+        }
+
+        private bool IsDuplicate(List<string> columns, Row row)
+        {
+            foreach (var r in Rows)
+            {
+                bool match = true;
+                foreach (var col in columns)
+                {
+                    if (!object.Equals(r[col], row[col]))
+                    {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return true;
+            }
+            return false;
         }
 
         public Row NewRow() => new(Schema);

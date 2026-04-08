@@ -1,5 +1,6 @@
 using ETL_SQL.Common;
 using ETL_SQL.Data;
+using ETL_SQL.Core;
 using System;
 using System.Linq;
 using System.Threading.Tasks;
@@ -28,6 +29,8 @@ namespace ETL_SQL.Engine.Handlers
                 Logger.WriteLine("Available commands: CREATE CONNECTION, CREATE TABLE, SELECT, INSERT, UPDATE, DELETE, etc.");
                 Logger.WriteLine("Use HELP DIRECTORY or HELP FILE for details on file/directory operations.");
                 Logger.WriteLine("Use HELP CONNECTION <type> for details on a specific connection type (e.g. HELP CONNECTION MSSQL).");
+                Logger.WriteLine("Use HELP DOCKER for details on container operations.");
+                Logger.WriteLine("Use HELP SHOW for details on introspection commands.");
                 return;
             }
 
@@ -169,7 +172,9 @@ namespace ETL_SQL.Engine.Handlers
                 Logger.WriteLine("\n  VERBOSE:   DECRYPT FILE 'src' TO 'dest' PASSWORD('pwd') [WITH(OVERWRITE=ON|OFF)]");
                 Logger.WriteLine("  SHORTHAND: DECRYPT_FILE('src', 'dest', 'pwd', [overwrite])");
             }
-            else if (stmt.Topic.Equals("TRANSFER", StringComparison.OrdinalIgnoreCase))
+            else if (stmt.Topic.Equals("TRANSFER", StringComparison.OrdinalIgnoreCase) || 
+                     stmt.Topic.Equals("SEND", StringComparison.OrdinalIgnoreCase) || 
+                     stmt.Topic.Equals("RECEIVE", StringComparison.OrdinalIgnoreCase))
             {
                 Logger.WriteLine("File Transfer Operations:", ConsoleColor.Cyan);
                 Logger.WriteLine("\nCommands:", ConsoleColor.Yellow);
@@ -188,10 +193,41 @@ namespace ETL_SQL.Engine.Handlers
                 Logger.WriteLine("  VERBOSE:   SEND EMAIL TO 'to' FROM 'from' SUBJECT 'subj' BODY 'body' AT conn [ATTACH 'file'] [CC 'cc'] [BCC 'bcc']");
                 Logger.WriteLine("  SHORTHAND: SEND_EMAIL(conn, 'to', 'from', 'subj', 'body', [attachments], [cc], [bcc])");
             }
+            else if (stmt.Topic.Equals("SSH_KEY_PAIR", StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.WriteLine("SSH Key Pair Operations:", ConsoleColor.Cyan);
+                Logger.WriteLine("\nCommands:", ConsoleColor.Yellow);
+                Logger.WriteLine("  VERBOSE:   CREATE SSH_KEY_PAIR 'path' WITH(BITS=2048, ALGORITHM='RSA', PASSPHRASE='pwd')");
+                Logger.WriteLine("  SHORTHAND: SSH_KEY_PAIR('path', 2048, 'RSA', 'pwd')");
+            }
+            else if (stmt.Topic.Equals("DOCKER", StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.WriteLine("Docker Operations:", ConsoleColor.Cyan);
+                Logger.WriteLine("\nCommands:", ConsoleColor.Yellow);
+                Logger.WriteLine("  START_DOCKER <image> [AS <alias>]");
+                Logger.WriteLine("  STOP_DOCKER <alias>");
+                Logger.WriteLine("  PAUSE_DOCKER <alias>");
+                Logger.WriteLine("  RESUME_DOCKER <alias>");
+                Logger.WriteLine("  CLOSE_DOCKER <alias|image>");
+                Logger.WriteLine("\nNote: All commands support optional parentheses, e.g., START_DOCKER('mysql').");
+            }
+            else if (stmt.Topic.Equals("SHOW", StringComparison.OrdinalIgnoreCase))
+            {
+                Logger.WriteLine("Introspection Commands (SHOW):", ConsoleColor.Cyan);
+                Logger.WriteLine("\nCommands:", ConsoleColor.Yellow);
+                Logger.WriteLine("  SHOW JOBS [INTO #temp]");
+                Logger.WriteLine("  SHOW JOB HISTORY [<name>] [INTO #temp]");
+                Logger.WriteLine("  SHOW CONNECTIONS [INTO #temp]");
+                Logger.WriteLine("  SHOW TABLES [ON <conn>] [INTO #temp]");
+                Logger.WriteLine("  SHOW COLUMNS FOR [<table>] [INTO #temp]");
+                Logger.WriteLine("  SHOW TAGS FOR TABLE <tbl> [COLUMN <col>] [INTO #temp]");
+                Logger.WriteLine("  SHOW TAG VALUE FOR TABLE <tbl> [COLUMN <col>] WITH TAG <tag> [INTO #temp]");
+                Logger.WriteLine("  SHOW PROFILE [INTO #temp]");
+            }
             else
             {
                 Logger.WriteLine($"Help for topic '{stmt.Topic}' is not yet implemented.", ConsoleColor.Yellow);
-                Logger.WriteLine("Available topics: CONNECTION, FUNCTION, DIRECTORY, FILE, TRANSFER, EMAIL");
+                Logger.WriteLine("Available topics: CONNECTION, FUNCTION, DIRECTORY, FILE, TRANSFER, EMAIL, SSH_KEY_PAIR, DOCKER, SHOW");
             }
             await Task.CompletedTask;
         }

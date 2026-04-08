@@ -1,128 +1,65 @@
 
 ## Syntax Additions and Improvements
+- [x] W-1. Add WAITFOR TIME
+  -- Add WAITFOR TIME to the language
+  -- Add WAITFOR TIME to the ETL_SQL_LANGUAGE_REFERENCE.md file
+  -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for WAITFOR TIME.
 
-- **[x] FW-1. Fixed-Width CSV Support**
-    - **Draft Syntax**: `CREATE CONNECTION c ON FLATFILE WITH(FORMAT='FIXED', TEMPLATE=#temp);`
-    - **Mechanism**: Use the `#temp` table schema as the layout template. Field widths are extracted from standard lengths (e.g. `VARCHAR(20)`) or custom tags `/* @width: 20 */`.
-    - **Key Options**: Support `TRIM=ON|OFF` for automatic whitespace removal and `SKIP_HEADER=N` to handle metadata rows.
-    - **Gotchas**: Ensure the template offsets account for varied line endings (`\r\n` vs `\n`).
+- [x] W-2. Cast to all types
+  -- Check to make sure CAST/TRY_CAST works to cast to all available types.
+  -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for CAST to all available types.
 
-- **[x] FW-2. Add overwrite option for copy's and moves**
-   - `COPY_FILE(<source>, <destination>, [OVERWRITE=ON|OFF]);`
-   - `MOVE_FILE(<source>, <destination>, [OVERWRITE=ON|OFF]);`
-   - `COPY_DIRECTORY(<source>, <destination>, [OVERWRITE=ON|OFF]);`
-   - `MOVE_DIRECTORY(<source>, <destination>, [OVERWRITE=ON|OFF]);`
-   Add new functions that are equivalent to the above but with different names.
-   - `COPY FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to COPY_FILE
-   - `MOVE FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to MOVE_FILE
-   - `RENAME FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to RENAME_FILE
-   - `DELETE FILE '<source>';` -- equivalent to DELETE_FILE
-   - `COMPRESS FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to COMPRESS_FILE
-   - `ENCRYPT FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to ENCRYPT_FILE
-   - `DECRYPT FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to DECRYPT_FILE
-   - `CREATE DIRECTORY '<source>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to CREATE_DIRECTORY
-   - `COPY DIRECTORY '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to COPY_DIRECTORY
-   - `MOVE DIRECTORY '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to MOVE_DIRECTORY
-   - `RENAME DIRECTORY '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to RENAME_DIRECTORY
-   - `DELETE DIRECTORY '<source>';` -- equivalent to DELETE_DIRECTORY
-   - `COMPRESS DIRECTORY '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to COMPRESS_DIRECTORY
-   - `ENCRYPT DIRECTORY '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to ENCRYPT_DIRECTORY
-   - `DECRYPT DIRECTORY '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];` -- equivalent to DECRYPT_DIRECTORY
-   - `DELETE DIRECTORY_CONTENTS '<source>' [WITH(RECURSIVE=ON|OFF)];` -- equivalent to DELETE_DIRECTORY_CONTENTS
+- [x] W-3. Missing from documentation
+  -- ASIN, ACOS, ATAN, ATAN2, SIGN seem to be missing from ETL_SQL_LANGUAGE_REFERENCE.md file.
 
+- [x] W-4.Fix syntax for SSH_KEY_PAIR
+  -- CREATE_SSH_KEY_PAIR('<directory_path>' [, <bits>, '<algorithm>', '<passphrase>', '<comment>']);  This is the function style syntax.
+  -- Add SQL style syntax for SSH_KEY_PAIR.
+  CREATE SSH_KEY_PAIR '<directory_path>' [WITH([BITS=<bits>][, ALGORITHM='<algorithm>'][, PASSPHRASE='<passphrase>'][, COMMENT='<comment>'])];
+  -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for SSH_KEY_PAIR.
+  -- Add help text for SSH_KEY_PAIR.
 
-- **[x] FW-3. Redo remote sends and email to match other functions**
-   - Change SEND_FILE to SEND_FILE('C:\Exports\report.csv', my_sftp, '/uploads/report.csv', [OVERWRITE=ON|OFF]);
-   - Add equivalent to SEND_FILE as SEND FILE '<local_path>' TO '<remote_path>' AT <connection_name> [WITH(OVERWRITE=ON|OFF)];
-   
-   - Change RECEIVE_FILE to RECEIVE_FILE(my_sftp, '/data/input.csv', 'C:\Imports\input.csv', [OVERWRITE=ON|OFF]);
-   - Add equivalent to RECEIVE_FILE as RECEIVE FILE FROM '<remote_path>' TO '<local_path>' AT <connection_name> [WITH(OVERWRITE=ON|OFF)];
+- [x] W-5. Fix Docker function style syntax
+  Need to add the () around the alias.
+  -- START_DOCKER(<alias>) - Starts a Docker container for the specified connection.
+  -- STOP_DOCKER(<alias>) - Stops a running Docker container.
+  -- PAUSE_DOCKER(<alias>) - Pauses a running Docker container.
+  -- CLOSE_DOCKER(<alias>) - Stops and removes a Docker container.
+  -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for Docker operations.
+  -- Add help text for Docker operations.
 
-    - change SEND_EMAIL to SEND_EMAIL(<smtp_connection>, '<to_address>', '<from_address>', '<subject>', '<body>', ['<cc_address>, ...'], ['<bcc_address>, ...'], ['<file_path>, ...']);
-    - Add equivalent to SEND_EMAIL as 
-*Syntax:*
-```sql
-SEND EMAIL TO '<to_address>'
-FROM '<from_address>'
-SUBJECT '<subject>'
-BODY '<body>'
-[CC '<cc_address>' [, '<cc2>', ...]]
-[BCC '<bcc_address>' [, '<bcc2>', ...]]
-[ATTACH '<file_path>' [, '<file2>', ...]]
-AT <smtp_connection>;
-```
+- [x] W-6. Help in documentation
+Help current just shows: HELP CONNECTION <type>.  I think we made this much more broad than just connections.
+  -- Add help text for all functions in the ETL_SQL_LANGUAGE_REFERENCE.md file.
 
-  **[x] FW-4. Add the equivalents to the help for the function.**
-  example COPY_FILE add this to the help menu VERBOSE: 
-  COPY FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];
-  And for COPY FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)] help menu add SHORTHAND: COPY_FILE('<source>', '<destination>', [OVERWRITE=ON|OFF]);
+- [x] W-7. PRINT command
+  -- The PRINT() function is shown in the ETL_SQL_LANGUAGE_REFERENCE.md file but I don't see PRINT '<message>' in the syntax.
+  -- Make sure PRINT '<message>' is implemented.
+  -- Add PRINT '<message>' to the ETL_SQL_LANGUAGE_REFERENCE.md file.
+  -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for PRINT '<message>'.
 
-  Can you do this for all the functions above with the SQL syntax as VERBOSE and function style as SHORTHAND.
+- [x] W-8. Tag syntax
+  Need to add SQL style syntax for tags.
+  -- 'GET_TAGS(table_name [, column_name])' can be set to a list but you should also be able to do SELECT * FROM GET_TAGS(table_name [, column_name]);
+  -- SHOW TAGS FOR TABLE <table_name> [COLUMN <column_name>]; -- This is the SQL style syntax for getting tags.
+  -- 'GET_TAG_VALUE(table_name, column_name, tag_name)' The SQL style syntax for this is SHOW TAG VALUE FOR TABLE <table_name> [COLUMN <column_name>] WITH TAG <tag_name>;
+  -- Add tag syntax to the ETL_SQL_LANGUAGE_REFERENCE.md file.
+  -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for tag syntax.
 
-  This way the users can see that both do the same thing and the help menu reflects that.  Also if we haven't already all the functions should have help menus showing them the options.  Also they should all be listed in the ETL_SQL_LANGUAGE_REFERENCE.md file.
-
-  **[x] FW-5. Add SYSDATE to the language**
-  - Add SYSDATE to the language
-  - Add SYSDATE to the ETL_SQL_LANGUAGE_REFERENCE.md file
-
-  **[x] FW-6. Add date add/subtract shorthand**
-  - GETDATE() + 1 should add 1 day, GETDATE() - 1 should subtract 1 day.
-  - Same behavior for SYSDATE, CURRENT_TIMESTAMP, NOW(), etc.
-
-  - **[x] FW-7. Add ORDER BY <number>**
-  -- Add ORDER BY <number> to the ORDER BY clause, the number corresponds to the column number in the SELECT clause. (1 based)
-  -- Make sure ASC | DESC is supported.
-  -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for ORDER BY <number>.
-  -- Add example to the ETL_SQL_LANGUAGE_REFERENCE.md file for ORDER BY column_name with ASC | DESC.
-
-  - **[x] FW-8. Add PERCENT and WITH TIES to TOP**
-  -- Add TOP (expression) [ PERCENT ] [ WITH TIES ] 
-Explanation:
-PERCENT
-Indicates that the query returns only the first expression percent of rows from the result set. If the calculated number of rows is a fraction, it's rounded up to the next whole number.
-
-WITH TIES
-Returns two or more rows that tie for last place in the limited results set. You must use this argument with the ORDER BY clause. WITH TIES might cause more rows to be returned than the value specified in expression. For example, if expression is set to 5 but two more rows match the values of the ORDER BY columns in row 5, the result set contains seven rows.
-
-You can specify the TOP clause with the WITH TIES argument only in SELECT statements, and only if you also specify the ORDER BY clause. The returned order of tying records is arbitrary. ORDER BY doesn't affect this rule.
-
-- **[x] FW-9. Add advanced TRIM function**
-  -- TRIM ( [ LEADING | TRAILING | BOTH ] [characters FROM ] string )
-
-- **[x] FW-10. Add advanced SUBSTRING function**
-  -- SUBSTRING ( string FROM start [ FOR length ] )
-
-- **[x] FW-11. Position function**
-  -- POSITION ( substring IN string )
-
-- **[x] FW-12. OVERLAY function**
-  -- OVERLAY ( string PLACING overlay_string FROM start [ FOR length ] )
-
-- **[x] FW-13. EXTRACT function**
-  -- EXTRACT ( field FROM source )
-
-- **[x] FW-14. OCTET_LENGTH function**
-  -- OCTET_LENGTH ( string )
-
-- **[x] FW-15. CHARACTER_LENGTH function**
-  -- CHARACTER_LENGTH ( string )
-
-- **[x] FW-16. CHAR_LENGTH function**
-  -- CHAR_LENGTH ( string )
-
-  - **[x] FW-17. Add advanced statistical functions**
-  -- VAR_POP, VAR_SAMP, STDDEV_POP, STDDEV_SAMP, CORR, COVAR_POP, COVAR_SAMP
-  -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for the new statistical functions.
-
-  - **[x] FW-18. Add AT TIME ZONE examples**
-  -- Add examples to the ETL_SQL_LANGUAGE_REFERENCE.md file for AT TIME ZONE.
-
-- **[x] FW-19. Update Sample_Guide.md**
-- First we'll want to check the scripts in the scripts folder to make sure they still all work.
-- Then we'll want to add examples for the new functions to the Sample_Guide.md file.
-- The we'll want to see what else is missing since we added a lot of new features recently.
-- Make sure the Sample_Guide.md file is up to date with the latest features.
+- [x] W-9. Add the ability to save the SHOW commands to a #temp table
+ -- SHOW JOBS INTO #<temp_table_name>;
+ -- SHOW JOB HISTORY INTO #<temp_table_name>;
+ -- SHOW CONNECTIONS INTO #<temp_table_name>;
+ -- SHOW TABLES INTO #<temp_table_name>;
+ -- SHOW COLUMNS INTO #<temp_table_name>;
+ -- SHOW PROFILE INTO #<temp_table_name>;
+ -- SHOW TAGS FOR TABLE <table_name> [COLUMN <column_name>] INTO #<temp_table_name>;
+ -- SHOW TAG VALUE FOR TABLE <table_name> [COLUMN <column_name>] WITH TAG <tag_name> INTO #<temp_table_name>;
 
 ## VS CODE Bugs/Improvements
 
-
+## Stabilization Correctness
+- [x] W-10. Fix File Transfer Syntax (optional commas and trailing semicolon)
+- [x] W-11. Fix SEND_EMAIL Parsing (trailing semicolon and list handling)
+- [x] W-13. Implement UNIQUE constraints in DataTable.AddRow
+- [x] W-14. Resolve Session Persistence data loss (persist full schema and constraints)

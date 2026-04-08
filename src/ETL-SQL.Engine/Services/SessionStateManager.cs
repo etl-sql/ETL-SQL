@@ -96,15 +96,16 @@ namespace ETL_SQL.Engine.Services
                     var info = new TempTableInfo
                     {
                         Name = conn.Key,
-                        DataFilePath = dataFile
+                        DataFilePath = dataFile,
+                        Columns = mem.Schema.Values.ToList(),
+                        Constraints = MapConstraints(mem.TableConstraints)
                     };
                     
                     // Simple JSON serialization of the data table
                     var batches = await mem.ReadBatches().ToListAsync();
                     if (batches.Count > 0)
                     {
-                        var allColumnNames = batches.SelectMany(b => b.ColumnNames).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-                        info.Columns = allColumnNames;
+                        // Columns property is already set correctly on 'info' at line 100
                         
                         var allRows = batches.SelectMany(b => b.Rows.Select(r => r.Columns)).ToList();
                         string json = JsonSerializer.Serialize(allRows);
@@ -137,6 +138,38 @@ namespace ETL_SQL.Engine.Services
                 Variables = state.GlobalVariables.Keys.ToList()
             };
             File.WriteAllText(GetRecoveryFilePath(sessionId), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+        }
+
+        private List<TableConstraintInfo> MapConstraints(IEnumerable<TableConstraint> constraints)
+        {
+            var result = new List<TableConstraintInfo>();
+            foreach (var tc in constraints)
+            {
+                var info = new TableConstraintInfo { Name = tc.ConstraintName };
+                if (tc is TablePrimaryKeyConstraint pk)
+                {
+                    info.Type = ConstraintType.PrimaryKey;
+                    info.Columns = pk.Columns;
+                }
+                else if (tc is TableUniqueConstraint uk)
+                {
+                    info.Type = ConstraintType.Unique;
+                    info.Columns = uk.Columns;
+                }
+                else if (tc is TableCheckConstraint c)
+                {
+                    info.Type = ConstraintType.Check;
+                    info.Expression = c.Expression.ToSql();
+                }
+                else if (tc is TableForeignKeyConstraint fk)
+                {
+                    info.Type = ConstraintType.ForeignKey;
+                    info.Columns = fk.Columns;
+                    info.Expression = fk.Reference.ToSql();
+                }
+                result.Add(info);
+            }
+            return result;
         }
 
         private bool IsSerializable(object value)

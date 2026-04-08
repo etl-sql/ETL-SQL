@@ -1,0 +1,30 @@
+-- Verification Script for WAITFOR TIME and CAST/TRY_CAST
+
+PRINT '--- Testing CAST / TRY_CAST (W-2) ---';
+SELECT CAST(123 AS STRING) AS IntToStr,
+       CAST('123.45' AS DECIMAL) AS StrToDec,
+       CAST('2026-04-08' AS DATE) AS StrToDate,
+       CAST('{"id": 1}' AS JSON) AS StrToJson,
+       CAST('<xml/>' AS XML) AS StrToXml,
+       CAST('73dfc46f-712d-4584-81ae-7f1541094363' AS GUID) AS StrToGuid,
+       TRY_CAST('not a date' AS DATE) AS InvalidCast;
+
+PRINT '--- Testing WAITFOR TIME (W-1) ---';
+-- We can't easily wait for a long time in a test script, 
+-- but we can test a short delay to verify the handler executes.
+DECLARE @nowPlus2Sec = FORMAT(DATEADD(SECOND, 2, GETDATE()), 'HH:mm:ss');
+PRINT 'Current Time: ' + FORMAT(GETDATE(), 'HH:mm:ss');
+PRINT 'Waiting until: ' + @nowPlus2Sec;
+WAITFOR TIME @nowPlus2Sec;
+PRINT 'Wait finished at: ' + FORMAT(GETDATE(), 'HH:mm:ss');
+
+PRINT '--- Testing Math Extensions (W-3) ---';
+SELECT SIGN(-10) AS sign1, SIGN(0) AS sign2, SIGN(10) AS sign3,
+       ROUND(ASIN(1.0), 4) AS angle_pi_2,
+       ROUND(ACOS(0.0), 4) AS angle_pi_2_acos,
+       ROUND(ATAN(1.0), 4) AS angle_pi_4,
+       EXP(1) AS e,
+       LOG10(100) AS log10_100,
+       MOD(10, 3) AS mod10_3;
+
+PRINT '--- Verification Complete ---';

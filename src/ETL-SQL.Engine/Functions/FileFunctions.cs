@@ -70,7 +70,7 @@ namespace ETL_SQL.Engine.Functions
         private static Task<object?> FileList(List<object?> args, IExecutionContext context)
         {
             var table = new DataTable();
-            table.ColumnNames.AddRange(new[] { "Name", "Path", "Extension", "Size", "LastModified" });
+            table.SetColumns(new[] { "Name", "Path", "Extension", "Size", "LastModified" });
 
             if (args.Count < 1 || args[0] == null) return Task.FromResult<object?>(table);
             string path = context.ResolvePath(args[0]?.ToString() ?? "");

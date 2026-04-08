@@ -17,19 +17,45 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (WaitForStatement)statement;
-            var raw = (await context.EvaluateValue(stmt.DelayExpression, new Row()))?.ToString() ?? "0";
+            var raw = (await context.EvaluateValue(stmt.Expression, new Row()))?.ToString() ?? "0";
 
-            TimeSpan delay;
-            if (!TimeSpan.TryParse(raw, out delay))
-                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException(
-                    $"WAITFOR DELAY: invalid time format '{raw}'. Expected 'hh:mm:ss' or 'hh:mm:ss.fff'.");
+            if (stmt.Type == WaitType.Delay)
+            {
+                TimeSpan delay;
+                if (!TimeSpan.TryParse(raw, out delay))
+                    throw new ETL_SQL.Core.Common.Exceptions.ExecutionException(
+                        $"WAITFOR DELAY: invalid time format '{raw}'. Expected 'hh:mm:ss' or 'hh:mm:ss.fff'.");
 
-            if (delay < TimeSpan.Zero)
-                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException(
-                    "WAITFOR DELAY: delay must be non-negative.");
+                if (delay < TimeSpan.Zero)
+                    throw new ETL_SQL.Core.Common.Exceptions.ExecutionException(
+                        "WAITFOR DELAY: delay must be non-negative.");
 
-            Logger.Verbose($"[WaitFor] Pausing for {delay}");
-            await Task.Delay(delay);
+                if (context.IsVerbose) context.Log($"[WaitFor] Pausing for {delay}");
+                await Task.Delay(delay);
+            }
+            else
+            {
+                TimeSpan targetTime;
+                if (!TimeSpan.TryParse(raw, out targetTime))
+                    throw new ETL_SQL.Core.Common.Exceptions.ExecutionException(
+                        $"WAITFOR TIME: invalid time format '{raw}'. Expected 'hh:mm:ss' or 'hh:mm:ss.fff'.");
+
+                var now = DateTime.Now.TimeOfDay;
+                TimeSpan waitDuration;
+
+                if (targetTime > now)
+                {
+                    waitDuration = targetTime - now;
+                }
+                else
+                {
+                    // Target is tomorrow
+                    waitDuration = TimeSpan.FromHours(24) - now + targetTime;
+                }
+
+                if (context.IsVerbose) context.Log($"[WaitFor] Waiting until {targetTime} (duration: {waitDuration})");
+                await Task.Delay(waitDuration);
+            }
         }
     }
 }

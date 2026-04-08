@@ -39,7 +39,7 @@ namespace ETL_SQL.Engine.Handlers
                     context.Log($"Executing remote SQL on {connName}...");
                     if (context.IsWhatIf)
                     {
-                        Logger.WriteLine($"WHAT IF: Would execute remote SQL on {connName}:\n{sql}", ConsoleColor.Yellow);
+                        context.Log($"WHAT IF: Would execute remote SQL on {connName}:\n{sql}", ConsoleColor.Yellow);
                         return;
                     }
 

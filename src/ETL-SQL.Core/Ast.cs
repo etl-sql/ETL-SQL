@@ -1195,18 +1195,15 @@ namespace ETL_SQL.Core
         }
     }
 
-    /// <summary>WAITFOR DELAY '00:00:05' — pauses execution for the specified interval.</summary>
-    public class WaitForStatement : Statement
+    public enum WaitType { Delay, Time }
+
+    /// <summary>WAITFOR DELAY/TIME '...' — pauses execution.</summary>
+    public class WaitForStatement(Expression expression, WaitType type = WaitType.Delay) : Statement
     {
-        /// <summary>The delay expression — a string literal in 'hh:mm:ss[.ms]' format or a variable.</summary>
-        public Expression DelayExpression { get; }
+        public Expression Expression { get; } = expression;
+        public WaitType Type { get; } = type;
 
-        public WaitForStatement(Expression delayExpression)
-        {
-            DelayExpression = delayExpression;
-        }
-
-        public override string ToSql() => $"WAITFOR DELAY {DelayExpression.ToSql()};";
+        public override string ToSql() => $"WAITFOR {Type.ToString().ToUpper()} {Expression.ToSql()};";
     }
 
     public class RaiseErrorStatement : Statement
@@ -1858,11 +1855,19 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => Left.GetSourceColumns();
     }
 
-    public class SubstringExpression(Expression str, Expression start, Expression? length = null) : Expression
+    public class SubstringExpression : FunctionCallExpression
     {
-        public Expression String { get; } = str;
-        public Expression Start { get; } = start;
-        public Expression? Length { get; } = length;
+        public Expression String { get; }
+        public Expression Start { get; }
+        public Expression? Length { get; }
+
+        public SubstringExpression(Expression str, Expression start, Expression? length = null) 
+            : base("SUBSTRING", new List<Expression> { str, start, length ?? new LiteralExpression(null, TokenType.NULL) })
+        {
+            String = str;
+            Start = start;
+            Length = length;
+        }
 
         public override string ToSql() => $"SUBSTRING({String.ToSql()} FROM {Start.ToSql()}{(Length != null ? $" FOR {Length.ToSql()}" : "")})";
         public override IEnumerable<string> GetSourceTables() => String.GetSourceTables();
@@ -2190,13 +2195,56 @@ namespace ETL_SQL.Core
     public class ShowJobHistoryStatement : Statement
     {
         public string? JobName { get; }
+        public string? IntoTable { get; set; }
         public ShowJobHistoryStatement(string? jobName = null) { JobName = jobName; }
-        public override string ToSql() => JobName != null ? $"SHOW JOB HISTORY {JobName};" : "SHOW JOB HISTORY;";
+        public override string ToSql() => (JobName != null ? $"SHOW JOB HISTORY {JobName}" : "SHOW JOB HISTORY") + (IntoTable != null ? $" INTO {IntoTable};" : ";");
     }
 
     public class ShowJobsStatement : Statement
     {
-        public override string ToSql() => "SHOW JOBS;";
+        public string? IntoTable { get; set; }
+        public override string ToSql() => "SHOW JOBS" + (IntoTable != null ? $" INTO {IntoTable};" : ";");
+    }
+
+    public class ShowConnectionsStatement : Statement
+    {
+        public string? IntoTable { get; set; }
+        public override string ToSql() => "SHOW CONNECTIONS" + (IntoTable != null ? $" INTO {IntoTable};" : ";");
+    }
+
+    public class ShowTablesStatement : Statement
+    {
+        public string? ConnectionName { get; }
+        public string? IntoTable { get; set; }
+        public ShowTablesStatement(string? connectionName = null) { ConnectionName = connectionName; }
+        public override string ToSql() => (ConnectionName != null ? $"SHOW TABLES ON {ConnectionName}" : "SHOW TABLES") + (IntoTable != null ? $" INTO {IntoTable};" : ";");
+    }
+
+    public class ShowColumnsStatement : Statement
+    {
+        public TableReference Table { get; }
+        public string? IntoTable { get; set; }
+        public ShowColumnsStatement(TableReference table) { Table = table; }
+        public override string ToSql() => $"SHOW COLUMNS FOR {Table.ToSql()}" + (IntoTable != null ? $" INTO {IntoTable};" : ";");
+    }
+
+    public class ShowTagsStatement : Statement
+    {
+        public string TableName { get; }
+        public string? ColumnName { get; }
+        public string? IntoTable { get; set; }
+        public ShowTagsStatement(string tableName, string? columnName = null) { TableName = tableName; ColumnName = columnName; }
+        public override string ToSql() => $"SHOW TAGS FOR TABLE {TableName}" + (ColumnName != null ? $" COLUMN {ColumnName}" : "") + (IntoTable != null ? $" INTO {IntoTable};" : ";");
+    }
+
+    public class ShowTagValueStatement : Statement
+    {
+        public string TableName { get; }
+        public string? ColumnName { get; }
+        public string TagName { get; }
+        public string? IntoTable { get; set; }
+        public ShowTagValueStatement(string tableName, string tagName, string? columnName = null) { TableName = tableName; TagName = tagName; ColumnName = columnName; }
+        public override string ToSql() => $"SHOW TAG VALUE FOR TABLE {TableName}" + (ColumnName != null ? $" COLUMN {ColumnName}" : "") + $" WITH TAG {TagName}" + (IntoTable != null ? $" INTO {IntoTable};" : ";");
     }
 
     public class LintStatement : Statement

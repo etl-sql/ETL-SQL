@@ -84,6 +84,8 @@ namespace ETL_SQL.Data
         Dictionary<string, string>? Options { get; }
         /// <summary>The type name of the connector that created this data source (e.g., MSSQL, FLATFILE).</summary>
         string ConnectorType { get; }
+        /// <summary>Returns the list of tables in the data source (for multi-table sources).</summary>
+        Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult(Enumerable.Empty<string>());
     }
 
     public interface IDatabaseSource : IDataSource
@@ -93,7 +95,6 @@ namespace ETL_SQL.Data
         IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null);
         string ConnectionString { get; }
         string Dialect { get; }
-        Task<IEnumerable<string>> GetTablesAsync();
         Task<IEnumerable<string>> GetViewsAsync();
         Task<IEnumerable<string>> GetColumnsAsync(string tableName);
         /// <summary>
@@ -146,9 +147,16 @@ namespace ETL_SQL.Data
                     if (!await Validator.ValidateForeignKey(col.ForeignKey, new List<string> { col.ColumnName }, row))
                         throw new ExecutionException($"Foreign key violation on column {col.ColumnName} (value: {val})");
                 }
+
+                // 4. Column-level Unique
+                if (col.IsUnique)
+                {
+                    if (IsDuplicate(new List<string> { col.ColumnName }, row))
+                        throw new ExecutionException($"Unique constraint violation on column {col.ColumnName} (value: {val})");
+                }
             }
 
-            // 4. Table-level Constraints
+            // 5. Table-level Constraints
             foreach (var tc in TableConstraints)
             {
                 if (tc is TableCheckConstraint c && Validator != null)
@@ -172,12 +180,12 @@ namespace ETL_SQL.Data
                         if (val == null || val == DBNull.Value)
                             throw new ExecutionException($"Primary key column {colName} cannot be null.");
                     }
-                    if (pk.Columns.Count > 1 && IsDuplicate(pk.Columns, row))
+                    if (IsDuplicate(pk.Columns, row))
                         throw new ExecutionException($"Primary key violation: {tc.ConstraintName ?? "unnamed"}");
                 }
                 else if (tc is TableUniqueConstraint uk)
                 {
-                    if (uk.Columns.Count > 1 && IsDuplicate(uk.Columns, row))
+                    if (IsDuplicate(uk.Columns, row))
                         throw new ExecutionException($"Unique constraint violation: {tc.ConstraintName ?? "unnamed"}");
                 }
             }
@@ -577,7 +585,7 @@ namespace ETL_SQL.Data
             }
             while (_enumerator != null && await _enumerator.MoveNextAsync())
             {
-                if (_columns == null) _columns = _enumerator.Current.ColumnNames;
+                if (_columns == null) _columns = _enumerator.Current.ColumnNames.ToList();
                 yield return _enumerator.Current;
             }
             if (_enumerator != null)
@@ -608,7 +616,7 @@ namespace ETL_SQL.Data
                 if (await _enumerator.MoveNextAsync())
                 {
                     _firstBatch = _enumerator.Current;
-                    _columns = _firstBatch.ColumnNames;
+                    _columns = _firstBatch.ColumnNames.ToList();
                 }
             }
             return _columns ?? Enumerable.Empty<string>();

@@ -12,6 +12,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Engine.Handlers;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Core.Data;
@@ -223,6 +224,19 @@ namespace ETL_SQL.Engine
             {
                 _statementHandlers[typeof(SetOperationStatement)] = selectHandler;
             }
+
+            Logger.OnMessage += (msg, col) => 
+            {
+                if (RedirectOutput)
+                {
+                    lock (_messagesLock)
+                    {
+                        Messages.Add(msg);
+                        if (Messages.Count > MaxMessages)
+                            Messages.RemoveAt(0);
+                    }
+                }
+            };
         }
 
         /// <summary>
@@ -237,6 +251,12 @@ namespace ETL_SQL.Engine
                 // Perform static lineage analysis before execution
                 var analyzer = new LineageAnalyzer(LineageTracker);
                 analyzer.Analyze(script);
+
+                if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+                {
+                    var firstError = script.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error);
+                    throw new ExecutionException($"Syntax error: {firstError.Message} at {firstError.Line}:{firstError.Column}");
+                }
 
                 foreach (var statement in script.Statements)
                 {

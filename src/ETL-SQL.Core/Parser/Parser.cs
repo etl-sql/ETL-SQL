@@ -113,6 +113,9 @@ namespace ETL_SQL.Core.Parser
             if (token.Type >= TokenType.STAR) return false;
 
             // Keywords can be identifiers if they're not in the restricted set
+            if (token.Value.Equals("VALUE", StringComparison.OrdinalIgnoreCase)) return true;
+            if (token.Value.Equals("EMAIL", StringComparison.OrdinalIgnoreCase)) return true;
+            
             return !IsKeyword(token.Value);
         }
 

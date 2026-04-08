@@ -413,6 +413,38 @@ CREATE OR ALTER CONNECTION remote_srv ON MSSQL('Server=myserver;Database=DW;Inte
     WITH(TABLE='dbo.Employees');
 ```
 
+#### CREATE SSH_KEY_PAIR
+Generates a new SSH key pair (public and private) at the specified path. Supports both SQL-style and function-style syntax.
+
+*Syntax (SQL Style):*
+```sql
+CREATE SSH_KEY_PAIR 'path' [WITH(BITS=2048, ALGORITHM='RSA', PASSPHRASE='pwd', COMMENT='comment')];
+```
+
+*Syntax (Function Style):*
+```sql
+SSH_KEY_PAIR('path', [bits], [algorithm], [passphrase], [comment]);
+```
+
+*Options:*
+- **BITS**: Key size in bits (Default: `2048`).
+- **ALGORITHM**: Key algorithm (Default: `'RSA'`).
+- **PASSPHRASE**: Optional passphrase to encrypt the private key.
+- **COMMENT**: Optional comment embedded in the public key.
+
+*Examples:*
+```sql
+-- Standard 2048-bit RSA key
+CREATE SSH_KEY_PAIR 'C:\Keys\id_rsa';
+
+-- 4096-bit RSA key with a passphrase and comment
+CREATE SSH_KEY_PAIR 'C:\Keys\id_rsa_prod' 
+    WITH(BITS=4096, PASSPHRASE='StrongPassword123!', COMMENT='Production ETL Service Account');
+
+-- Shorthand function-style syntax
+SSH_KEY_PAIR('C:\Keys\id_rsa_temp', 2048, 'RSA');
+```
+
 ### Session Management
 
 #### CLEAR SESSION
@@ -445,6 +477,15 @@ Spins up a containerized database instance (MsSql, Postgres, or Oracle) for temp
 - `<alias> START;`: Resumes a stopped container.
 - `<alias> PAUSE;`: Pauses the container execution.
 - `DOCKER CLOSE;`: Closes all active Docker containers.
+
+- `CLOSE_DOCKER(<alias>)`: Stops and removes a Docker container.
+
+*Function Style Syntax:*
+- `START_DOCKER('<image>', ['<alias>'])`
+- `STOP_DOCKER('<alias>')`
+- `PAUSE_DOCKER('<alias>')`
+- `RESUME_DOCKER('<alias>')`
+- `CLOSE_DOCKER('<alias>')`
 
 *Example:*
 ```sql
@@ -772,6 +813,52 @@ ETL-SQL supports a wide range of data types tailored for ETL operations, variabl
     DECLARE @id = 123; -- Implicitly ANY, inferred as INT
     ```
 
+### Data Type Conversion
+
+ETL-SQL provides two primary functions for converting values between data types.
+
+#### **`CAST(expression AS type)`**
+Converts an expression to a target data type. 
+- If the conversion is impossible (e.g., casting 'ABC' to INT), the engine will throw an `ExecutionException` if the cast logic is strict, or return a best-effort `NULL`.
+- Supports all data types listed above including aliased types like `NVARCHAR` and `GUID`.
+
+#### **`TRY_CAST(expression AS type)`**
+A safe version of `CAST` that returns `NULL` if the conversion fails, rather than throwing an exception. This is ideal for cleaning messy source data where some rows may contain invalid formats.
+
+*Comprehensive Cast Examples:*
+```sql
+-- NUMERIC TYPES
+SELECT CAST('42' AS INT)           AS i;      -- Integer
+SELECT CAST('1000' AS BIGINT)      AS bi;     -- 64-bit Long
+SELECT CAST(123.456 AS DECIMAL(5,2)) AS d;     -- 123.46 (rounds)
+SELECT CAST('100.00' AS MONEY)     AS m;      -- Currency formatting
+SELECT CAST('3.14159' AS FLOAT)    AS f;      -- 64-bit Double
+SELECT CAST('2.718' AS REAL)       AS r;      -- 32-bit Single
+SELECT CAST(255 AS TINYINT)        AS t;      -- 8-bit Byte
+
+-- TEMPORAL TYPES
+SELECT CAST('2026-04-08' AS DATE)         AS dt;   -- 2026-04-08
+SELECT CAST('15:30:00' AS TIME)           AS tm;   -- 15:30:00
+SELECT CAST('2026-04-08 15:30:00 -05:00' AS DATETIMEOFFSET) AS dto;
+SELECT CAST(GETDATE() AS NVARCHAR)        AS str;  -- '2026-04-28 08:30:00'
+
+-- BINARY & HEX (Converts from Base64 if string)
+SELECT CAST('SGVsbG8=' AS VARBINARY)      AS b;    -- 0x48656C6C6F ('Hello')
+SELECT CAST(0x48656C6C6F AS STRING)       AS s;    -- 'Hello'
+
+-- LOGICAL
+SELECT CAST(1 AS BIT)                     AS b1;   -- TRUE
+SELECT CAST('FALSE' AS BOOLEAN)           AS b2;   -- FALSE
+
+-- SPECIALIZED
+SELECT CAST('C:\Temp\' AS PATH)           AS p;    -- Normalized path object
+SELECT CAST('550e8400-e29b-41d4-a716-446655440000' AS GUID) AS uid;
+SELECT CAST('{"id": 1}' AS JSON)          AS j;    -- Parsable JSON string
+SELECT CAST('<root/>' AS XML)             AS x;    -- Parsable XML string
+SELECT CAST('[0.1, 0.2, 0.3]' AS VECTOR)  AS v;    -- Numeric vector array
+```
+
+---
 
 ## Querying & Filtering
 **`SELECT`**
@@ -1217,31 +1304,6 @@ Removes a named set from the current session.
 ```sql
 DROP SETS [IF EXISTS] !<name>;
 ```
-
-### Engine Configuration
-
-#### SET WHAT_IF
-Toggles the engine's "dry-run" mode. When `ON`, all destructive operations (e.g., `INSERT`, `UPDATE`, `DELETE`, `FILE_OPERATION`, `SEND_EMAIL`) are logged to the console but not actually executed. This is useful for validating script logic, variable evaluation, and lineage tracing without modifying data or external resources.
-
-*Syntax:*
-`SET WHAT_IF { ON | OFF };`
-
-*Default:* `OFF`
-
-*Example:*
-```sql
--- Safely test a delete operation
-SET WHAT_IF ON;
-
-DELETE FROM m.dbo.ArchiveEmployees 
-WHERE TerminatedDate < '2024-01-01';
-
--- Lineage is still tracked, and logs will show which rows WOULD be deleted.
--- Set back to OFF to perform actual data modifications.
-SET WHAT_IF OFF;
-```
-
-
 *Example:*
 ```sql
 DROP SETS !DEV;
@@ -1273,6 +1335,29 @@ CREATE CONNECTION src ON MSSQL(@conn);
 -- Switch to PROD (will prompt in interactive mode)
 USE SETS !PROD;
 CREATE CONNECTION dest ON MSSQL(@conn);
+```
+
+### Engine Configuration
+
+#### SET WHAT_IF
+Toggles the engine's "dry-run" mode. When `ON`, all destructive operations (e.g., `INSERT`, `UPDATE`, `DELETE`, `FILE_OPERATION`, `SEND_EMAIL`) are logged to the console but not actually executed. This is useful for validating script logic, variable evaluation, and lineage tracing without modifying data or external resources.
+
+*Syntax:*
+`SET WHAT_IF { ON | OFF };`
+
+*Default:* `OFF`
+
+*Example:*
+```sql
+-- Safely test a delete operation
+SET WHAT_IF ON;
+
+DELETE FROM m.dbo.ArchiveEmployees 
+WHERE TerminatedDate < '2024-01-01';
+
+-- Lineage is still tracked, and logs will show which rows WOULD be deleted.
+-- Set back to OFF to perform actual data modifications.
+SET WHAT_IF OFF;
 ```
 
 ### Control Flow
@@ -1323,15 +1408,38 @@ RAISERROR('Custom error message', 16, 1);
 THROW 50000, 'Error message', 1;
 ```
 
-#### WAITFOR DELAY
-Pauses execution for a specified duration.
-```sql
-WAITFOR DELAY '00:00:05'; -- Wait 5 seconds
-WAITFOR DELAY '00:01:30'; -- Wait 1 minute 30 seconds
-```
+#### WAITFOR
+Pauses script execution until a specified delay has elapsed or a specific clock time is reached. This is essential for coordinating batch windows or introducing pauses between high-frequency API calls.
 
-> [!NOTE]
-> `WAITFOR TIME '<HH:MM:SS>'` (wait until a specific clock time) is not currently implemented. Use `WAITFOR DELAY` with a calculated duration instead.
+*Syntax:*
+- `WAITFOR DELAY '<hh:mm:ss[.fff]>';`
+- `WAITFOR TIME '<hh:mm:ss[.fff]>';`
+
+*Key Behaviors:*
+- **DELAY**: Pauses for a fixed duration. Minimum interval is 1ms. Supports milliseconds via decimal fractions (e.g. `'00:00:03.500'`).
+- **TIME**: Pauses until the system clock reaches the specified time. 
+    - **Intra-day**: If the time is later today, it waits for it.
+    - **Cross-day**: If the specified time has already passed for the current day, the engine automatically waits until that time **tomorrow**.
+
+*Examples:*
+```sql
+-- Wait for 5 seconds
+WAITFOR DELAY '00:00:05';
+
+-- Wait for 100 milliseconds
+WAITFOR DELAY '00:00:00.100';
+
+-- Pause until 11:30 PM
+WAITFOR TIME '23:30:00';
+
+-- Cross-day example: 
+-- Assume it is currently 10:00 AM. This will wait 23 hours until 9:00 AM tomorrow.
+WAITFOR TIME '09:00:00';
+
+-- Dynamic delay using a variable
+DECLARE @sleep = '00:00:02';
+WAITFOR DELAY @sleep;
+```
 
 ### Data Movement & Transformation
 
@@ -1412,7 +1520,37 @@ SET PROFILING OFF;
 #### SHOW PROFILE
 Displays the timing and resource usage for the most recently executed statements.
 ```sql
-SHOW PROFILE;
+SHOW PROFILE [INTO #temp];
+```
+
+#### SHOW CONNECTIONS
+Lists all currently active data source connections in the session.
+```sql
+SHOW CONNECTIONS [INTO #temp];
+```
+
+#### SHOW TABLES
+Lists all tables available on a specific connection or all connections if omitted.
+```sql
+SHOW TABLES [ON <connection>] [INTO #temp];
+```
+
+#### SHOW COLUMNS
+Lists columns and (where available) data types for a specific table.
+```sql
+SHOW COLUMNS FOR [connection.]table [INTO #temp];
+```
+
+#### SHOW TAGS
+Lists metadata tags associated with a table or a specific column (calculated via lineage).
+```sql
+SHOW TAGS FOR TABLE <tableName> [COLUMN <columnName>] [INTO #temp];
+```
+
+#### SHOW TAG VALUE
+Retrieves the value of a specific metadata tag for a table or column.
+```sql
+SHOW TAG VALUE FOR TABLE <tableName> [COLUMN <columnName>] WITH TAG <tagName> [INTO #temp];
 ```
 
 ## Functions
@@ -1430,53 +1568,90 @@ FROM system_table;
 ```
 
 ### String Functions
-- **`SUBSTRING(string FROM start [FOR length])`**: ANSI-standard substring extraction. Note that SQL indices are 1-based.
-- **`TRIM([LEADING | TRAILING | BOTH] [characters FROM] string)`**: Removes spaces or specified characters from the beginning, end, or both sides of a string.
-- **`POSITION(substring IN string)`**: Returns the 1-based starting position of a substring within a string. Returns 0 if not found.
-- **`OVERLAY(string PLACING overlay FROM start [FOR length])`**: Replaces a portion of a string with another string starting at the specified position.
-- **`CHARACTER_LENGTH(string)`**, **`CHAR_LENGTH(string)`**, **`OCTET_LENGTH(string)`**: Returns the length of the string in characters (or octets).
-- **`LEFT(string, n)`**, **`RIGHT(string, n)`**: Extracts `n` characters from either side.
-- **`CHARINDEX(substring, string)`** (or **`INSTR(string, substring)`**): Finds the 1-based index position of a substring. Note: `CHARINDEX` takes `(sub, str)` while `INSTR` takes `(str, sub)`.
-- **`REVERSE(string)`**: Reverses the string characters.
-- **`COALESCE(val1, val2...)`**: Returns the first non-null value in a list.
-- **`ISNULL(val1, val2)`**: Returns `val2` if `val1` is null.
-- **`NULLIF(val1, val2)`**: Returns NULL if the two values are equal, otherwise returns the first value.
-- **`CAST(expr AS type)`**: Converts an expression to a specific type (`INT`, `STRING`, `DECIMAL`, `DATE`).
-- **`TRY_CAST(expr AS type)`**: Similar to `CAST`, but returns `NULL` if the conversion fails instead of throwing an error.
-- **`STUFF(string, start, length, new_string)`**: Deletes a specified length of characters and inserts a new sequence of characters at a specified starting point.
-- **`STRING_ESCAPE(text, type)`**: Escapes special characters in a string based on the specified type (e.g., `'json'`).
-- **`STRING_SPLIT(string, separator)`**: Splits a string into a list of substrings based on a specified separator.
-- **`ASCII(string)`**, **`UNICODE(string)`**: Returns the integer ASCII or Unicode code point of the first character of the input string.
-- **`CHAR(int)`**: Converts an integer ASCII code to its character equivalent.
-- **`FORMAT(value, format)`**: Formats a value (Date or Numeric) based on a .NET format string.
-- **`PATINDEX(pattern, string)`**: Returns the starting position of the first occurrence of a pattern in a specified expression. Supports `%` and `_` wildcards.
-- **`STR(float, [length], [decimal])`**: Returns character data converted from numeric data. The `length` is the total length (including decimal point and sign), and `decimal` is the number of places to the right of the decimal point.
-- **`QUOTENAME(string, [quote_char])`**: Returns a Unicode string with the delimiters added to make the input string a valid SQL Server delimited identifier. Default is `[]`.
-- **`TRANSLATE(string, from, to)`**: Returns the string provided as a first argument after some characters specified in the second argument are translated into a destination set of characters specified in the third argument.
-- **`DATALENGTH(value)`**: Returns the number of bytes used to represent any expression.
-- **`TO_STR(value)`**: A convenience alias for `CAST(value AS STRING)`.
-- **`REPLICATE(string, count)`**: Repeats a string value a specified number of times.
-
-### List Scalars
-- **`LENGTH(list_or_string)`**: Returns the number of items in a list or the length of a string.
-- **`SORT_LIST(list[, 'ASC'|'DESC'])`**: Returns a sorted version of the list.
-- **`APPEND_TO_LIST(@list, value)`**: Adds an item to a list variable.
-- **`REMOVE_FROM_LIST(@list, value)`**: Removes an item from a list variable.
-- **`LPAD(str, len[, pad])`**, **`RPAD(str, len[, pad])`**: Pads a string to a specific length.
+- **`UPPER(str)`**: Returns the string in all-caps.
+- **`LOWER(str)`**: Returns the string in all-lowercase.
+- **`LEN(string)`** / **`LENGTH(string|list)`**: Returns the character count of a string or the number of items in a list.
+- **`TRIM(str)`**: Removes leading and trailing whitespaces.
+- **`LTRIM(str)`**, **`RTRIM(str)`**: Removes leading or trailing whitespaces.
+- **`REVERSE(str)`**: Reverses the characters in the string.
+- **`CONCAT(s1, s2, ...)`**: Concatenates multiple strings into one.
+- **`SUBSTRING(str, start, length)`** / **`SUBSTR(str, start[, length])`**: Extracts a portion of a string. Supports ANSI syntax: `SUBSTRING(str FROM start [FOR length])`.
+- **`TRIM(str)`**: Removes leading/trailing spaces. Supports ANSI syntax: `TRIM([BOTH|LEADING|TRAILING] [chars FROM] str)`.
+- **`LTRIM(str)`**, **`RTRIM(str)`**: Simple leading or trailing space removal.
+- **`POSITION(sub IN str)`** / **`INSTR(str, sub)`**: Returns the 1-based index of a substring.
+- **`OVERLAY(str PLACING overlay FROM start [FOR length])`**: Replaces a portion of a string with another string.
+- **`STRING_SPLIT(str, separator)`**: Splits a string into a list of substrings.
+- **`STRING_ESCAPE(text, type)`**: Escapes special characters (e.g. `'json'`).
+- **`ASCII(str)`**, **`UNICODE(str)`**: Returns the numeric code of the first character.
+- **`CHAR(n)`**: Converts an ASCII/Unicode code to a character.
+- **`FORMAT(val, fmt)`**: Formats a value based on a .NET format string.
+- **`PATINDEX(pattern, str)`**: Returns the 1-based start position of a pattern in a string.
+- **`STR(float[, len[, dec]])`**: Returns character data converted from numeric data.
+- **`QUOTENAME(str[, char])`**: Returns a delimited identifier (default `[]`).
+- **`TRANSLATE(str, from, to)`**: Replaces characters specified in `from` with `to`.
+- **`REPLICATE(str, n)`**: Repeats a string `n` times.
+- **`DATALENGTH(val)`**: Returns the number of bytes used to represent any expression.
+- **`TO_STR(val)`**: Converts any value to a string.
 - **`INITCAP(str)`**: Capitalizes the first letter of each word.
-- **`POSITION(sub IN str)`** or **`STRPOS(str, sub)`**: Returns the 1-based index of a substring.
-- **`LEAST(v1, v2...)`**, **`GREATEST(v1, v2...)`**: Returns the smallest or largest value from a list.
-- **`DECODE(val, search1, result1, [search2, result2, ...], default)`**: Oracle-style CASE shorthand.
+
+### Logical & System Functions
+- **`COALESCE(v1, v2, ...)`**: Returns the first non-null value in the list.
+- **`ISNULL(v1, v2)`** / **`NVL(v1, v2)`** / **`IFNULL(v1, v2)`**: Returns `v2` if `v1` is null.
+- **`NULLIF(v1, v2)`**: Returns `NULL` if `v1` equals `v2`, else returns `v1`.
+- **`IS_NULL(expr)`**: Returns `TRUE` if the expression is null.
+- **`IS_NOT_NULL(expr)`**: Returns `TRUE` if the expression is NOT null.
+- **`IIF(cond, true_val, false_val)`**: Returns one of two values depending on a condition.
+- **`DECODE(val, search1, result1, ..., default)`**: Oracle-style CASE shorthand.
+- **`CAST(expr AS type)`**: Converts an expression to a target data type (see [Data Types](#supported-data-types)).
+- **`TRY_CAST(expr AS type)`**: Similar to `CAST`, but returns `NULL` if conversion fails instead of throwing an error.
+- **`CHECKSUM(v1, v2, ...)`**: Returns a 64-bit hash of the input values.
+- **`BINARY_CHECKSUM(v1, v2, ...)`**: Returns a binary-compatible hash.
+- **`HASHBYTES('algo', val)`**: Returns a cryptographic hash (MD5, SHA1, SHA256, SHA512).
+- **`NEWID()`** / **`NEWSEQUENTIALID()`**: Returns a new time-ordered unique identifier (UUID v7).
+
+### List & Collection Functions
+- **`LENGTH(list|string)`**: Returns the number of items in a list or characters in a string.
+- **`SORT_LIST(list[, 'ASC'|'DESC'])`**: Returns a sorted version of the list.
+- **`APPEND_TO_LIST(@list, value)`** / **`ADD_TO_LIST`**: Adds an item to a list variable.
+- **`REMOVE_FROM_LIST(@list, value)`**: Removes all occurrences of a value from a list variable.
+- **`GENERATE_SERIES(start, stop[, step])`**: Generates a numeric sequence.
+- **`LEAST(v1, v2, ...)`**, **`GREATEST(v1, v2, ...)`**: Returns the smallest or largest value from a list of arguments.
 
 ### Math Scalars
-- **`ROUND(numeric, length)`**: Rounds to the specified decimal precision.
-- **`ABS(numeric)`**: Absolute value.
-- **`CEILING(numeric)`**, **`FLOOR(numeric)`**: Rounds up or down to the nearest integer.
-- **`POWER(base, exp)`**: Exponential calculation.
-- **`SQRT(float)`**: Square root.
-- **`RAND([seed])`**: Returns a random float between 0 and 1.
+- **`ROUND(numeric, decimals)`**: Rounds a numeric value to a specified number of decimal places.
+- **`ABS(numeric)`**: Returns the absolute value of a number.
+- **`CEILING(numeric)`**: Returns the smallest integer greater than or equal to the number.
+- **`FLOOR(numeric)`**: Returns the largest integer less than or equal to the number.
+- **`SQRT(float)`**: Returns the square root of a number.
+- **`POWER(base, exp)`**: Returns the result of a base raised to an exponent.
+- **`RAND([seed])`**: Returns a pseudo-random float between 0 and 1. If a seed is provided, the sequence is deterministic.
 - **`SIGN(numeric)`**: Returns the sign of a number: `1` for positive, `-1` for negative, and `0` for zero.
-- **`SIN(float)`, `COS(float)`, `TAN(float)`**: Standard trigonometric functions.
+- **`SIN(float)`, `COS(float)`, `TAN(float)`**: Standard trigonometric functions. **Requires input in radians.**
+- **`ASIN(float)`, `ACOS(float)`, `ATAN(float)`**: Inverse trigonometric functions. **Returns results in radians.**
+- **`ATAN2(y, x)`**: Returns the angle in radians between the positive x-axis and the point (x, y).
+- **`EXP(n)`**: Returns `e` raised to the power of `n`.
+- **`LOG(n)`**, **`LN(n)`**: Returns the natural logarithm (base `e`) of a number.
+- **`LOG10(n)`**: Returns the base-10 logarithm of a number.
+- **`MOD(n, d)`**: Returns the remainder (modulus) of `n` divided by `d`.
+
+*Examples:*
+```sql
+-- Trigonometry (converting degrees to radians)
+DECLARE @deg = 90.0;
+DECLARE @rad = @deg * (3.14159 / 180.0);
+SELECT SIN(@rad) AS Sine90; -- Returns ~1.0
+
+-- Inverse Trig
+SELECT ASIN(1.0) AS AngleInRadians;    -- Returns ~1.5708 (pi/2)
+SELECT ATAN2(10.0, 10.0) AS Angle45;   -- Returns ~0.785 (pi/4)
+
+-- Logarithms & Power
+SELECT POWER(2, 10) AS Kilobyte;       -- 1024
+SELECT LOG(2.71828) AS NaturalLog;     -- ~1.0
+
+-- Sign & Abs
+SELECT SIGN(-15.5) AS s1, ABS(-15.5) AS a1; -- -1, 15.5
+```
 
 ### Statistical Functions
 - **`SUM(expression)`**: Returns the sum of all values in the numeric collection.
@@ -1486,58 +1661,54 @@ FROM system_table;
 - **`STDDEV(expression)`**: Returns the statistical standard deviation of the population.
 - **`VAR(expression)`**: Returns the statistical variance of the population.
 
-### Date and Time Scalars
-- **`EXTRACT(field FROM source)`**: Extracts a component (e.g., `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `DOW`, `DOY`) from a datetime.
-- **`CURRENT_TIMESTAMP`, `GETDATE()`, `GETUTCDATE()`, `SYSDATE()`**: Functions returning current system time.
+### Date and Time Functions
+- **`GETDATE()`** / **`NOW()`**: Returns the current system date and time.
 - **`DATEADD(datepart, number, date)`**: Adds a specific interval (e.g., `DAY`, `MONTH`, `YEAR`, `HOUR`) to a date.
-- **`DATEDIFF(datepart, startdate, enddate)`**: Returns the difference between two dates.
-- **`DATEPART(datepart, date)`**, **`DATENAME(datepart, date)`**: Extracts parts of a date.
-- **`YEAR(date)`**, **`MONTH(date)`**, **`DAY(date)`**: Extract integer components from a date.
-- **`EOMONTH(date[, months_to_add])`**: Returns the last day of the month containing the specified date.
-- **`ISDATE(expr)`**: Validates if an expression can be converted to a valid date.
-- **`DATEFROMPARTS(year, month, day)`**: Constructs a new date.
-- **`DATETIMEFROMPARTS(year, month, day, hour, minute, second, ms)`**: Constructs a new datetime.
-- **`TIMEFROMPARTS(hour, minute, second, fractions, precision)`**: Constructs a new time.
-- **`DATETIMEOFFSETSFROMPARTS(...)`**: Constructs a datetime with offset.
-- **`FORMAT(value, format)`**: Formats an object based on a C# `ToString` configuration string.
-- **`TRUNC(date)`**, **`TO_DATE(date)`**: Truncates time portions from a datetime.
-- **`expr AT TIME ZONE 'timezone_id'`**: Converts a datetime to the specified timezone. Default input kind is UTC if not specified.
+- **`DATEDIFF(datepart, start, end)`**: Returns the count of specified datepart boundaries crossed between two dates.
+- **`DATEPART(datepart, date)`**: Returns an integer representing the specified date part.
+- **`DATENAME(datepart, date)`**: Returns a string representing the specified date part (e.g. `'January'`).
+- **`EXTRACT(field FROM source)`**: Extracts a component (e.g., `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE`, `SECOND`, `DOW`, `DOY`) from a datetime.
+- **`YEAR(date)`**, **`MONTH(date)`**, **`DAY(date)`**: Returns the year, month, or day part of a date as an integer.
+- **`EOMONTH(date[, months_to_add])`**: Returns the last day of the month containing the date.
+- **`ISDATE(expr)`**: Returns `1` if the expression is a valid date, `0` otherwise.
+- **`DATETIMEFROMPARTS(y, m, d, h, mi, s, ms)`**: Constructs a `DATETIME` from its parts.
+- **`TIMEFROMPARTS(h, mi, s, frac, prec)`**: Constructs a `TIME` from its parts.
+- **`DATETIMEOFFSETSFROMPARTS(y, m, d, h, mi, s, ms, off_h, off_m, prec)`**: Constructs a `DATETIMEOFFSET` from its parts.
+- **`TRUNC(date)`** / **`TO_DATE(date)`**: Truncates the time portion from a datetime.
+- **`expr AT TIME ZONE 'timezone_id'`**: Converts a datetime to the specified timezone.
 
-### Cryptography & Hashing
-- **`HASHBYTES('algorithm', value)`**: Returns a hash of the input using `MD5`, `SHA1`, `SHA2_256`, or `SHA2_512`.
-- **`CHECKSUM(val1, val2...)`**: Returns a high-uniqueness numeric hash (based on truncated SHA-256) for the combined inputs.
-- **`BINARY_CHECKSUM(val1, val2...)`**: Returns a binary-compatible hash.
-- **`NEWID()`**: Returns a new unique identifier (GUID).
-- **`NEWSEQUENTIALID()`**: Returns a new GUID optimized for sequential insertion.
 
 ### JSON Functions
-ETL-SQL provides native support for parsing, querying, and modifying JSON data.
-- **`JSON_VALUE(json, path)`**: Extracts a scalar value from a JSON string.
-- **`JSON_QUERY(json, path)`**: Extracts an object or an array from a JSON string.
-- **`JSON_MODIFY(json, path, value)`**: Updates the value of a property in a JSON string.
-- **`ISJSON(json)`**: Validates whether a string contains valid JSON.
-- **`JSON_EXISTS(json, path)`**: Tests whether a specific path exists in a JSON string.
-- **`JSON_OBJECT(key:val, ...)`**: Constructs a JSON object from key-value pairs.
-- **`JSON_ARRAY(val, ...)`**: Constructs a JSON array from a list of values.
-- **`OPENJSON(json[, path])`**: (Table-valued) Parses JSON text and returns data as a table.
+- **`JSON_VALUE(json, path)`** / **`JSON_EXTRACT`**: Extracts a scalar value from a JSON string at the given path.
+- **`JSON_QUERY(json, path)`**: Extracts an object or array fragment from a JSON string.
+- **`JSON_MODIFY(json, path, val)`**: Updates or inserts a value in a JSON string.
+- **`ISJSON(str)`**: Returns `1` if the string is valid JSON, `0` otherwise.
+- **`JSON_EXISTS(json, path)`**: Returns `1` if the path exists in the JSON string.
+- **`JSON_OBJECT(k1, v1, k2, v2, ...)`**: Constructs a JSON object from key/value pairs.
+- **`JSON_ARRAY(v1, v2, ...)`**: Constructs a JSON array from the provided values.
+- **`JSON_TABLE(json, path)`**: (Table-valued) Expands a JSON array or object into a table.
+- **`OPENJSON(json[, path])`**: (Table-valued) Expands JSON into a table (SQL Server style).
 - **`JSON_EXTRACT(json, path)`**: Returns the data at the specified path (alias for `JSON_QUERY`).
 
 ### XML Functions
-Comprehensive XML processing capabilities for structured data interchange.
-- **`XMLVALUE(xml, xpath)`**: Extracts a scalar value using XPath.
-- **`XMLEXISTS(xml, xpath)`**: Returns true if the XPath expression matches any nodes.
-- **`XMLQUERY(xml, xpath)`**: Returns an XML fragment matching the XPath.
-- **`XMLELEMENT(name, ...)`, `XMLATTRIBUTES(...)`, `XMLFOREST(...)`**: Constructs XML elements and structures.
-- **`EXTRACTVALUE(xml, xpath)`**: Traditional function for extracting text from XML nodes.
+### XML Functions
+- **`XMLVALUE(xml, xpath)`** / **`EXTRACTVALUE`**: Extracts a scalar value from an XML string using an XPath expression.
+- **`XMLEXISTS(xml, xpath)`**: Returns `1` if the XPath expression matches any node in the XML.
+- **`XMLQUERY(xml, xpath)`**: Returns an XML fragment from the string using XPath.
+- **`XMLTABLE(xml, xpath)`**: (Table-valued) Expands an XML document into a table based on the row-level XPath.
+- **`XMLELEMENT(name, contents)`**: Constructs an XML element with the given name and child content.
+- **`XMLATTRIBUTES(n1, v1, n2, v2, ...)`**: Constructs XML attributes for an element.
+- **`XMLFOREST(n1, v1, n2, v2, ...)`**: Constructs a forest of XML elements from name/value pairs.
 
 ### Regular Expressions (Regex)
-Powerful pattern matching and manipulation using standard Regex syntax.
-- **`REGEXP_LIKE(str, pattern)`**: Returns true if the string matches the pattern.
-- **`REGEXP_SUBSTR(str, pattern)`**: Returns the substring that matches the pattern.
-- **`REGEXP_REPLACE(str, pattern, replacement)`**: Replaces occurrences of the pattern.
-- **`REGEXP_INSTR(str, pattern)`**: Returns the 1-based start position of the match.
-- **`REGEXP_COUNT(str, pattern)`**: Returns the number of times the pattern occurs.
-- **`REGEXP_MATCHES(str, pattern)`**: (Table-valued) Returns all matches as a result set.
+### Regular Expression Functions
+- **`REGEXP_LIKE(str, pattern[, flags])`**: Returns `1` if the string matches the pattern.
+- **`REGEXP_SUBSTR(str, pattern[, pos[, occ[, flags]]])`**: Extracts a substring matching the pattern.
+- **`REGEXP_REPLACE(str, pattern, new_str[, pos[, occ[, flags]]])`**: Replaces matching substrings.
+- **`REGEXP_INSTR(str, pat[, pos[, occ[, option[, flags]]]])`**: Returns the 1-based position of a match.
+- **`REGEXP_COUNT(str, pattern[, pos[, flags]])`**: Returns the number of matches found.
+- **`REGEXP_MATCHES(str, pattern)`**: Returns a table of all matches found.
+- **`REGEXP_SPLIT_TO_TABLE(str, pattern)`**: (Table-valued) Splits a string into a table using regex.
 
 ### Additional Scalar & Math Functions
 - **`EXP(n)`**, **`LOG(n)`**, **`LN(n)`**: Exponential and logarithmic functions.
@@ -1574,7 +1745,7 @@ SEND FILE '<local_path>' TO '<remote_path>' AT <connection_name> [WITH(OVERWRITE
 
 *Syntax (Function Style):*
 ```sql
-SEND_FILE('<local_path>', <connection_name>, '<remote_path>' [, ON|OFF]);
+SEND_FILE('<local_path>', <connection_name>, '<remote_path>' [,OVERWRITE=ON|OFF]);
 ```
 
 *Example:*
@@ -1592,7 +1763,7 @@ RECEIVE FILE FROM '<remote_path>' TO '<local_path>' AT <connection_name> [WITH(O
 
 *Syntax (Function Style):*
 ```sql
-RECEIVE_FILE('<remote_path>', <connection_name>, '<local_path>' [, ON|OFF]);
+RECEIVE_FILE('<remote_path>', <connection_name>, '<local_path>' [, OVERWRITE=ON|OFF]);
 ```
 
 *Example:*
@@ -1647,13 +1818,14 @@ SEND EMAIL
     AT mailer;
 ```
 
-### Aggregation
-- **`COUNT([DISTINCT] col)`**: Aggregation tally. If `DISTINCT` is specified, only unique non-null values are counted.
-- **`SUM(col)`**: Aggregation total.
-- **`MIN(col)`**: Aggregation smallest value.
-- **`MAX(col)`**: Aggregation highest value.
-- **`AVG(col)`**: Aggregation mathematical mean.
-- **`STRING_AGG(col, separator) [WITHIN GROUP (ORDER BY col [ASC|DESC])]`**: Concatenates values from multiple rows into a single string, separated by the specified string. Optionally orders the values before concatenation. NULL values are ignored.
+### Aggregation Functions
+Used in `SELECT` statements with an optional `GROUP BY` clause.
+- **`COUNT([DISTINCT] col)`**: Returns the count of non-null items in a collection or group.
+- **`SUM(col)`**: Returns the total sum of numeric values.
+- **`AVG(col)`**: Returns the mathematical mean of numeric values.
+- **`MIN(col)`**, **`MAX(col)`**: Returns the smallest or largest value in a set.
+- **`STDDEV(col)`**, **`VAR(col)`**: Returns the statistical standard deviation or variance.
+- **`STRING_AGG(col, separator) [WITHIN GROUP (ORDER BY col [ASC|DESC])]`**: Concatenates values from multiple rows into a single string, separated by the specified string.
 
 ## Window Functions
 
@@ -1897,9 +2069,6 @@ BEGIN
     INSERT INTO #results (loop_val) VALUES (@val);
 END;
 ```
-
-
-
 ## Modular ETL (Procedures & Functions)
 ### `CREATE PROCEDURE`
 Defines a reusable block of ETL-SQL statements.
@@ -1994,8 +2163,11 @@ The following also support an optional 3rd parameter for `OVERWRITE` (default `O
 - `ENCRYPT_FILE('src', 'dest', [ON|OFF])`
 - `DECRYPT_FILE('src', 'dest', [ON|OFF])`
 - `CREATE_DIRECTORY('path', [ON|OFF])`
+- `COPY_DIRECTORY('src', 'dest', [ON|OFF])`
+- `MOVE_DIRECTORY('src', 'dest', [ON|OFF])`
+- `RENAME_DIRECTORY('src', 'new_name', [ON|OFF])`
 - `DELETE_DIRECTORY('path')`
-- `DELETE_DIRECTORY_CONTENTS('path', [ON|OFF])`
+- `DELETE_DIRECTORY_CONTENTS('path', [RECURSIVE=ON|OFF])`
 - `COMPRESS_DIRECTORY('src', 'dest', [ON|OFF])`
 - `ENCRYPT_DIRECTORY('src', 'dest', 'pwd', [ON|OFF])`
 - `DECRYPT_DIRECTORY('src', 'dest', 'pwd', [ON|OFF])`
@@ -2021,11 +2193,7 @@ CREATE SSH_KEY_PAIR('C:\Keys\prod_rsa', 3072, 'RSA');
 CREATE SSH_KEY_PAIR('C:\Keys\prod_ecdsa', 384, 'ECDSA', 's3cr3t_pass');
 ```
 
-### Docker Operations
-- `START_DOCKER <alias>`: Starts a Docker container for the specified connection.
-- `STOP_DOCKER <alias>`: Stops a running Docker container.
-- `PAUSE_DOCKER <alias>`: Pauses a running Docker container.
-- `CLOSE_DOCKER <alias>`: Stops and removes a Docker container.
+
 
 ## Introspection
 
@@ -2120,8 +2288,14 @@ When columns are combined or transformed (e.g., `UnitPrice * Qty AS Total`), the
 2. **Amalgamation**: The `DerivedFromDescriptions` field is populated with a structured list of all involved source descriptions (e.g., `UnitPrice: Base price per unit, Qty: Number of items sold`), ensuring no context is lost during transformations.
 3. **Global Persistence**: All tags assigned anywhere in the lineage chain are preserved and queryable at the final destination.
 
-### Lineage Transformation Functions
-- **`GET_TAGS(table_name [, column_name])`**: Returns a `LIST` of all custom metadata tag names defined for a table or specific column.
+### File System Functions
+- **`FILE_EXISTS(path)`**: Returns `TRUE` if the specified file exists.
+- **`DIRECTORY_EXISTS(path)`**: Returns `TRUE` if the specified directory exists.
+- **`FILE_LIST(path[, recursive])`** / **`DIRECTORY`**: (Table-valued) Returns a table of files in a local directory (Columns: `Name`, `Path`, `Extension`, `Size`, `LastModified`).
+- **`REMOTE_FILE_LIST(conn_name[, path])`**: (Table-valued) Returns a list of files from a remote connection (SFTP/FTP/Blob).
+
+### Lineage & Metadata Functions
+- **`GET_TAGS(target_table[, column_name])`**: Returns a `LIST` of all custom metadata tag names defined for a table or specific column.
 - **`GET_TAG_VALUE(table_name, column_name, tag_name)`**: Returns the string value of a specific metadata tag.
 
 *Example:*

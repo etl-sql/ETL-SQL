@@ -214,6 +214,10 @@ namespace ETL_SQL.Engine
                 return fn == "OCTET_LENGTH" ? System.Text.Encoding.UTF8.GetByteCount(s) : s.Length;
             }
 
+            if (fn == "SYSDATE" || fn == "GETDATE" || fn == "CURRENT_TIMESTAMP") return DateTime.Now;
+            if (fn == "CURRENT_DATE") return DateTime.Today;
+            if (fn == "CURRENT_TIME") return DateTime.Now.TimeOfDay;
+
             var args = new List<object?>();
             for (int i = 0; i < f.Arguments.Count; i++)
             {

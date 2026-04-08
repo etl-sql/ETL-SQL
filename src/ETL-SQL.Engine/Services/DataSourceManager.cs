@@ -109,6 +109,16 @@ namespace ETL_SQL.Engine.Services
             var ds = new InMemoryDataSource();
             ds.Validator = _evaluator;
             
+            // Restore schema (full ColumnDefinitions and TableConstraints)
+            if (info.Columns != null && info.Columns.Count > 0)
+            {
+                ds.SetSchema(info.Columns, MapToAst(info.Constraints));
+            }
+            else if (info.Columns != null && info.Columns.Count == 0) // Fallback for names if definitions are missing
+            {
+                // This shouldn't happen with the new logic, but handled for safety
+            }
+            
             if (File.Exists(info.DataFilePath))
             {
                 try
@@ -119,14 +129,16 @@ namespace ETL_SQL.Engine.Services
                     
                     if (rows != null && rows.Count > 0)
                     {
-                        var dt = new DataTable();
-                        dt.SetColumns(info.Columns);
+                        var dt = ds.Validator != null ? new DataTable() : new DataTable(); 
+                        // Actually ds.SetSchema already set the schema of ds, but WriteBatches adds new batches.
+                        // We need a DataTable that matches ds schema.
+                        dt.SetColumns(ds.Schema.Keys, info.Constraints); 
+
                         foreach (var rowDict in rows)
                         {
                             var row = dt.NewRow();
                             foreach (var kvp in rowDict)
                             {
-                                // Handle JSON element conversion if necessary
                                 row[kvp.Key] = JsonToClr(kvp.Value);
                             }
                             dt.AddRow(row);
@@ -141,6 +153,53 @@ namespace ETL_SQL.Engine.Services
             }
             
             return ds;
+        }
+
+        private List<TableConstraint> MapToAst(IEnumerable<TableConstraintInfo> constraints)
+        {
+            var result = new List<TableConstraint>();
+            foreach (var info in constraints)
+            {
+                TableConstraint? tc = null;
+                switch (info.Type)
+                {
+                    case ConstraintType.PrimaryKey:
+                        tc = new TablePrimaryKeyConstraint(info.Columns);
+                        break;
+                    case ConstraintType.Unique:
+                        tc = new TableUniqueConstraint(info.Columns);
+                        break;
+                    case ConstraintType.Check:
+                        tc = new TableCheckConstraint(ParseExpression(info.Expression!));
+                        break;
+                    case ConstraintType.ForeignKey:
+                        tc = new TableForeignKeyConstraint(info.Columns, ParseForeignKeyReference(info.Expression!));
+                        break;
+                }
+                if (tc != null)
+                {
+                    tc.ConstraintName = info.Name;
+                    result.Add(tc);
+                }
+            }
+            return result;
+        }
+
+        private Expression ParseExpression(string sql)
+        {
+            var tokens = new Lexer(sql).Tokenize();
+            var parser = new Parser(tokens, sql);
+            return parser.ParseExpression();
+        }
+
+        private ForeignKeyReference ParseForeignKeyReference(string sql)
+        {
+            // The info.Expression for FK was Reference.ToSql() -> "REFERENCES Table(Col)"
+            var fkSql = sql.StartsWith("REFERENCES ", StringComparison.OrdinalIgnoreCase) ? sql.Substring(11) : sql;
+            var tokens = new Lexer(fkSql).Tokenize();
+            var parser = new Parser(tokens, fkSql);
+            var stmtParser = new StatementParser(parser);
+            return stmtParser.ParseForeignKeyReference();
         }
 
         private object? JsonToClr(object? val)

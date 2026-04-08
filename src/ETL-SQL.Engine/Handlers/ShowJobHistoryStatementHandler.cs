@@ -47,9 +47,16 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             context.LastResult = table;
+
+            if (stmt.IntoTable != null)
+            {
+                if (!context.Connections.ContainsKey(stmt.IntoTable))
+                {
+                    context.Connections[stmt.IntoTable] = new InMemoryDataSource();
+                }
+                var destination = await context.ResolveDataSourceAsync(new TableReference(stmt.IntoTable));
+                await destination.WriteBatches(new[] { table }.ToAsyncEnumerable());
+            }
         }
     }
 }
-
-
-

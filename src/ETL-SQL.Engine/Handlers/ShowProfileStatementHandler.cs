@@ -2,6 +2,9 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
 using Spectre.Console;
 
 namespace ETL_SQL.Engine.Handlers
@@ -12,57 +15,87 @@ namespace ETL_SQL.Engine.Handlers
     public class ShowProfileStatementHandler : IStatementHandler
     {
         public Type SupportedStatementType => typeof(ShowProfileStatement);
+        
         /// <summary>Executes the SHOW PROFILE statement, rendering a detailed performance table.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
+            var stmt = (ShowProfileStatement)statement;
+
             if (context.ProfileMetrics.Count == 0)
             {
-                if (!context.RedirectOutput)
+                if (!context.RedirectOutput && stmt.IntoTable == null)
                 {
                     AnsiConsole.MarkupLine("[yellow]No profiling data captured. Ensure SET PROFILE ON; is called before your logic.[/]");
                 }
                 return;
             }
 
-            if (context.RedirectOutput) return; // In JSON mode, we rely on the performance telemetry summary at script end.
-
-            var table = new Table()
-                .Border(TableBorder.Rounded)
-                .Title("[bold cyan]Execution Profile[/]")
-                .AddColumn("Time")
-                .AddColumn("Statement")
-                .AddColumn("Rows", c => c.RightAligned())
-                .AddColumn("Index", c => c.Centered())
-                .AddColumn("Duration (ms)", c => c.RightAligned())
-                .AddColumn("Memory (KB)", c => c.RightAligned());
+            // Create a DataTable for potential INTO or redirect
+            var dataTable = new DataTable();
+            dataTable.AddColumn("Timestamp");
+            dataTable.AddColumn("Statement");
+            dataTable.AddColumn("RowsProcessed");
+            dataTable.AddColumn("IndexUsed");
+            dataTable.AddColumn("DurationMs");
+            dataTable.AddColumn("MemoryKB");
 
             foreach (var m in context.ProfileMetrics)
             {
-                table.AddRow(
-                    new Text(m.Timestamp.ToString("HH:mm:ss.fff")),
-                    new Text(m.Sql),
-                    new Text(m.RowsProcessed.ToString("N0")),
-                    !string.IsNullOrEmpty(m.IndexName) ? new Markup($"[green]{Markup.Escape(m.IndexName)}[/]") : new Markup("[grey]--[/]"),
-                    new Text(m.DurationMs.ToString("N0")),
-                    new Text((m.MemoryDeltaBytes / 1024.0).ToString("N2"))
-                );
+                var row = new Row();
+                row["Timestamp"] = m.Timestamp;
+                row["Statement"] = m.Sql;
+                row["RowsProcessed"] = m.RowsProcessed;
+                row["IndexUsed"] = m.IndexName ?? "--";
+                row["DurationMs"] = m.DurationMs;
+                row["MemoryKB"] = m.MemoryDeltaBytes / 1024.0;
+                dataTable.AddRow(row);
             }
 
-            long totalTime = context.ProfileMetrics.Sum(m => m.DurationMs);
-            table.Caption($"[bold green]Total Script Execution Time: {totalTime:N0}ms[/]");
+            if (stmt.IntoTable != null)
+            {
+                if (!context.Connections.ContainsKey(stmt.IntoTable))
+                {
+                    context.Connections[stmt.IntoTable] = new InMemoryDataSource();
+                }
+                var destination = await context.ResolveDataSourceAsync(new TableReference(stmt.IntoTable));
+                await destination.WriteBatches(new[] { dataTable }.ToAsyncEnumerable());
+            }
+            else if (context.RedirectOutput)
+            {
+                context.LastResult = dataTable;
+            }
+            else
+            {
+                // Console display using Spectre.Console
+                var table = new Table()
+                    .Border(TableBorder.Rounded)
+                    .Title("[bold cyan]Execution Profile[/]")
+                    .AddColumn("Time")
+                    .AddColumn("Statement")
+                    .AddColumn("Rows", c => c.RightAligned())
+                    .AddColumn("Index", c => c.Centered())
+                    .AddColumn("Duration (ms)", c => c.RightAligned())
+                    .AddColumn("Memory (KB)", c => c.RightAligned());
 
-            AnsiConsole.Write(table);
+                foreach (var row in dataTable.Rows)
+                {
+                    table.AddRow(
+                        new Text(((DateTime)row["Timestamp"]).ToString("HH:mm:ss.fff")),
+                        new Text(row["Statement"]?.ToString() ?? ""),
+                        new Text(Convert.ToInt64(row["RowsProcessed"]).ToString("N0")),
+                        row["IndexUsed"]?.ToString() != "--" ? new Markup($"[green]{Markup.Escape(row["IndexUsed"].ToString())}[/]") : new Markup("[grey]--[/]"),
+                        new Text(Convert.ToInt64(row["DurationMs"]).ToString("N0")),
+                        new Text(Convert.ToDouble(row["MemoryKB"]).ToString("N2"))
+                    );
+                }
+
+                long totalTime = context.ProfileMetrics.Sum(m => m.DurationMs);
+                table.Caption($"[bold green]Total Script Execution Time: {totalTime:N0}ms[/]");
+
+                AnsiConsole.Write(table);
+            }
+
             await Task.CompletedTask;
-        }
-
-        private string FormatBytes(long bytes)
-        {
-            string[] Suffix = { "B", "KB", "MB", "GB", "TB" };
-            int i;
-            double dblSByte = Math.Abs(bytes);
-            for (i = 0; i < Suffix.Length && dblSByte >= 1024; i++, dblSByte /= 1024) { }
-
-            return $"{(bytes < 0 ? "-" : "")}{dblSByte:0.##} {Suffix[i]}";
         }
     }
 }

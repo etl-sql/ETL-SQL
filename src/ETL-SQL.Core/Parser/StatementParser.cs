@@ -81,7 +81,11 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.USE)) return ParseUse();
             if (_parser.Match(TokenType.BULK)) return ParseBulkInsert();
             if (_parser.Match(TokenType.LINEAGE)) return ParseLineage();
-            if (_parser.Match(TokenType.SEND_EMAIL)) return ParseSendEmail(false);
+            if (_parser.Match(TokenType.SEND_EMAIL))
+            {
+                if (_parser.Current.Type == TokenType.LPAREN) return ParseSendEmail(false);
+                return ParseSendEmail(true);
+            }
             if (_parser.Match(TokenType.SEND))
             {
                 if (_parser.Current.Type == TokenType.FILE)
@@ -235,7 +239,9 @@ namespace ETL_SQL.Core.Parser
                    type == TokenType.FILE || type == TokenType.JSON || type == TokenType.XML || type == TokenType.EXCEL ||
                    type == TokenType.MSSQL || type == TokenType.ORACLE || type == TokenType.POSTGRES || type == TokenType.MOCKDB ||
                    type == TokenType.SYSDATE || type == TokenType.CURRENT_TIMESTAMP || 
-                   type == TokenType.CURRENT_DATE || type == TokenType.CURRENT_TIME;
+                   type == TokenType.CURRENT_DATE || type == TokenType.CURRENT_TIME ||
+                   type == TokenType.SEND || type == TokenType.RECEIVE || type == TokenType.EMAIL || type == TokenType.LINEAGE ||
+                   type == TokenType.SUBJECT || type == TokenType.BODY || type == TokenType.ATTACH || type == TokenType.CC || type == TokenType.BCC;
         }
 
         private Statement ParseReturn()
@@ -423,10 +429,19 @@ namespace ETL_SQL.Core.Parser
         private Statement ParseWaitFor()
         {
             var startToken = _parser.Previous;
-            _parser.Consume(TokenType.DELAY, "Expected DELAY after WAITFOR");
-            var delayExpr = _parser.ParseExpression();
+            WaitType type = WaitType.Delay;
+            if (_parser.Match(TokenType.TIME))
+            {
+                type = WaitType.Time;
+            }
+            else
+            {
+                _parser.Consume(TokenType.DELAY, "Expected DELAY or TIME after WAITFOR");
+            }
+            
+            var expr = _parser.ParseExpression();
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
-            return new WaitForStatement(delayExpr) { Line = startToken.Line, Column = startToken.Column };
+            return new WaitForStatement(expr, type) { Line = startToken.Line, Column = startToken.Column };
         }
 
         private Statement ParseRaiseError()
@@ -823,35 +838,67 @@ namespace ETL_SQL.Core.Parser
 
         private Statement ParseCreateSshKeyPair(Token startToken)
         {
-            _parser.Consume(TokenType.LPAREN, "Expected '(' after SSH_KEY_PAIR");
-            var path = _parser.ParseExpression();
-            
+            Expression? path = null;
             Expression? bits = null;
             Expression? algorithm = null;
             Expression? passphrase = null;
             Expression? comment = null;
 
-            if (_parser.Match(TokenType.COMMA))
+            if (_parser.Match(TokenType.LPAREN))
             {
-                bits = _parser.ParseExpression();
+                path = _parser.ParseExpression();
                 if (_parser.Match(TokenType.COMMA))
                 {
-                    algorithm = _parser.ParseExpression();
+                    bits = _parser.ParseExpression();
                     if (_parser.Match(TokenType.COMMA))
                     {
-                        passphrase = _parser.ParseExpression();
+                        algorithm = _parser.ParseExpression();
                         if (_parser.Match(TokenType.COMMA))
                         {
-                            comment = _parser.ParseExpression();
+                            passphrase = _parser.ParseExpression();
+                            if (_parser.Match(TokenType.COMMA))
+                            {
+                                comment = _parser.ParseExpression();
+                            }
+                        }
+                    }
+                }
+                _parser.Consume(TokenType.RPAREN, "Expected ')' after arguments");
+            }
+            else
+            {
+                path = _parser.ParseExpression();
+                if (_parser.Match(TokenType.WITH))
+                {
+                    _parser.Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                    while (!_parser.Match(TokenType.RPAREN))
+                    {
+                        var keyToken = _parser.Advance();
+                        string key = keyToken.Value.ToUpperInvariant();
+                        _parser.Consume(TokenType.EQUALS, "Expected '='");
+                        var val = _parser.ParseExpression();
+
+                        switch (key)
+                        {
+                            case "BITS": bits = val; break;
+                            case "ALGORITHM": algorithm = val; break;
+                            case "PASSPHRASE": passphrase = val; break;
+                            case "COMMENT": comment = val; break;
+                            default: throw new SyntaxException($"Unknown SSH_KEY_PAIR option: {key}", keyToken.Line, keyToken.Column);
+                        }
+
+                        if (!_parser.Match(TokenType.COMMA))
+                        {
+                            _parser.Consume(TokenType.RPAREN, "Expected ')' or ','");
+                            break;
                         }
                     }
                 }
             }
 
-            _parser.Consume(TokenType.RPAREN, "Expected ')' after arguments");
             _parser.Match(TokenType.SEMICOLON);
 
-            return new CreateSshKeyPairStatement(path, bits, algorithm, passphrase, comment)
+            return new CreateSshKeyPairStatement(path!, bits, algorithm, passphrase, comment)
             {
                 Line = startToken.Line,
                 Column = startToken.Column
@@ -1229,7 +1276,7 @@ namespace ETL_SQL.Core.Parser
             throw new SyntaxException($"Unexpected token {_parser.Current.Type} in table constraint", _parser.Current.Line, _parser.Current.Column);
         }
 
-        private ForeignKeyReference ParseForeignKeyReference()
+        public ForeignKeyReference ParseForeignKeyReference()
         {
             var table = ParseTableReference(false);
             _parser.Consume(TokenType.LPAREN, "Expected '(' after table name in REFERENCES");
@@ -1238,7 +1285,7 @@ namespace ETL_SQL.Core.Parser
             return new ForeignKeyReference(table, columns);
         }
 
-        private List<string> ParseIdentifierList()
+        public List<string> ParseIdentifierList()
         {
             var list = new List<string>();
             while (true)
@@ -1813,7 +1860,9 @@ namespace ETL_SQL.Core.Parser
                    type == TokenType.ALTER || type == TokenType.DECLARE || type == TokenType.SET ||
                    type == TokenType.IF || type == TokenType.WHILE || type == TokenType.BEGIN ||
                    type == TokenType.PRINT || type == TokenType.EXEC || type == TokenType.EXECUTE ||
-                   type == TokenType.RUN || type == TokenType.USE || type == TokenType.DOCKER || type == TokenType.HELP;
+                   type == TokenType.RUN || type == TokenType.USE || type == TokenType.DOCKER || type == TokenType.HELP ||
+                   type == TokenType.SEND_EMAIL || type == TokenType.SEND_FILE || type == TokenType.FILE_SEND ||
+                   type == TokenType.RECEIVE_FILE || type == TokenType.FILE_RECEIVE;
         }
 
         private Statement ParseSetProfiling()
@@ -1851,35 +1900,115 @@ namespace ETL_SQL.Core.Parser
 
         private Statement ParseShow()
         {
+            var startToken = _parser.Previous;
+            Statement? stmt = null;
+
             if (_parser.Match(TokenType.PROFILE) || _parser.Match(TokenType.PROFILING))
             {
-                if (_parser.Match(TokenType.SEMICOLON)) { }
-                return new ShowProfileStatement();
+                stmt = new ShowProfileStatement();
             }
-            if (_parser.Match(TokenType.JOB))
+            else if (_parser.Match(TokenType.JOB))
             {
-                _parser.Consume(TokenType.HISTORY, "Expected HISTORY after SHOW JOB");
-                string? jobName = null;
-                if (_parser.Current.Type == TokenType.IDENTIFIER)
+                if (_parser.Match(TokenType.HISTORY))
                 {
-                    jobName = _parser.Advance().Value;
+                    string? jobName = null;
+                    if (_parser.Current.Type == TokenType.IDENTIFIER || _parser.Current.Type == TokenType.STRING)
+                    {
+                        jobName = _parser.Advance().Value;
+                    }
+                    stmt = new ShowJobHistoryStatement(jobName);
                 }
-                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
-                return new ShowJobHistoryStatement(jobName);
+                else
+                {
+                    throw new SyntaxException("Expected HISTORY after SHOW JOB", _parser.Current.Line, _parser.Current.Column);
+                }
             }
-            if (_parser.Match(TokenType.JOBS))
+            else if (_parser.Match(TokenType.JOBS))
             {
-                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
-                return new ShowJobsStatement();
+                stmt = new ShowJobsStatement();
             }
-            if (_parser.Match(TokenType.LINEAGE))
+            else if (_parser.Match(TokenType.CONNECTIONS))
+            {
+                stmt = new ShowConnectionsStatement();
+            }
+            else if (_parser.Match(TokenType.TABLES))
+            {
+                string? connName = null;
+                if (_parser.Match(TokenType.ON))
+                {
+                    connName = _parser.ConsumeIdentifier("Expected connection name after ON").Value;
+                }
+                stmt = new ShowTablesStatement(connName);
+            }
+            else if (_parser.Match(TokenType.COLUMNS))
+            {
+                _parser.Consume(TokenType.FOR, "Expected FOR after SHOW COLUMNS");
+                var table = ParseTableReference();
+                stmt = new ShowColumnsStatement(table);
+            }
+            else if (_parser.Match(TokenType.TAGS))
+            {
+                _parser.Consume(TokenType.FOR, "Expected FOR after SHOW TAGS");
+                _parser.Consume(TokenType.TABLE, "Expected TABLE after FOR");
+                var tableName = _parser.ConsumeIdentifier("Expected table name").Value;
+                string? columnName = null;
+                if (_parser.Match(TokenType.COLUMN))
+                {
+                    columnName = _parser.ConsumeIdentifier("Expected column name").Value;
+                }
+                stmt = new ShowTagsStatement(tableName, columnName);
+            }
+            else if (_parser.Match(TokenType.TAG))
+            {
+                _parser.Consume(TokenType.VALUE, "Expected VALUE after SHOW TAG");
+                _parser.Consume(TokenType.FOR, "Expected FOR after SHOW TAG VALUE");
+                _parser.Consume(TokenType.TABLE, "Expected TABLE after FOR");
+                var tableName = _parser.ConsumeIdentifier("Expected table name").Value;
+                string? columnName = null;
+                if (_parser.Match(TokenType.COLUMN))
+                {
+                    columnName = _parser.ConsumeIdentifier("Expected column name").Value;
+                }
+                _parser.Consume(TokenType.WITH, "Expected WITH after table/column");
+                _parser.Consume(TokenType.TAG, "Expected TAG after WITH");
+                var tagName = _parser.ConsumeIdentifier("Expected tag name").Value;
+                stmt = new ShowTagValueStatement(tableName, tagName, columnName);
+            }
+            else if (_parser.Match(TokenType.LINEAGE))
             {
                 _parser.Match(TokenType.FOR);
                 var targetTable = _parser.ParseTableReference();
-                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
-                return new LineageStatement(targetTable);
+                stmt = new LineageStatement(targetTable);
             }
-            throw new SyntaxException($"Expected PROFILE, JOB HISTORY, JOBS or LINEAGE after SHOW", _parser.Current.Line, _parser.Current.Column);
+
+            if (stmt == null)
+            {
+                throw new SyntaxException($"Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, TAGS, or LINEAGE after SHOW", _parser.Current.Line, _parser.Current.Column);
+            }
+
+            // Optional INTO #temp
+            if (_parser.Match(TokenType.INTO))
+            {
+                var tempTable = _parser.ConsumeIdentifier("Expected temporary table name after INTO").Value;
+                if (!tempTable.StartsWith("#")) throw new SyntaxException("SHOW ... INTO target must be a temporary table starting with '#'", _parser.Current.Line, _parser.Current.Column);
+                
+                if (stmt is ShowProfileStatement sps) sps.IntoTable = tempTable;
+                else if (stmt is ShowJobHistoryStatement sjh) sjh.IntoTable = tempTable;
+                else if (stmt is ShowJobsStatement sjs) sjs.IntoTable = tempTable;
+                else if (stmt is ShowConnectionsStatement scs) scs.IntoTable = tempTable;
+                else if (stmt is ShowTablesStatement sts) sts.IntoTable = tempTable;
+                else if (stmt is ShowColumnsStatement scols) scols.IntoTable = tempTable;
+                else if (stmt is ShowTagsStatement stag) stag.IntoTable = tempTable;
+                else if (stmt is ShowTagValueStatement stv) stv.IntoTable = tempTable;
+                // LineageStatement doesn't inherit ShowStatement or have IntoTable in this design, 
+                // but we could add it if needed. For now, it has TO 'path'.
+            }
+
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+            
+            stmt.Line = startToken.Line;
+            stmt.Column = startToken.Column;
+            return stmt;
         }
 
         private Statement ParseCreateJob(Token startToken)
@@ -2046,37 +2175,79 @@ namespace ETL_SQL.Core.Parser
         private Statement ParseFileTransfer(FileTransferType type, bool isSqlStyle)
         {
             var startToken = _parser.Previous;
-            Expression localPath;
-            string connectionName;
-            Expression remotePath;
+            Expression? localPath = null;
+            string? connectionName = null;
+            Expression? remotePath = null;
             Expression? overwrite = null;
+
+            // If it's a legacy token (SEND_FILE/RECEIVE_FILE), check if it's followed by '('
+            // If not, it might be SQL-style with keywords.
+            if (!isSqlStyle && _parser.Current.Type != TokenType.LPAREN)
+            {
+                isSqlStyle = true;
+            }
 
             if (isSqlStyle)
             {
-                if (type == FileTransferType.Send)
+                while (true)
                 {
-                    localPath = _parser.ParseExpression();
-                    _parser.Consume(TokenType.TO, "Expected TO after local path");
-                    remotePath = _parser.ParseExpression();
-                    _parser.Consume(TokenType.AT, "Expected AT before connection name");
-                    connectionName = _parser.ConsumeIdentifier("Expected connection name").Value;
-                }
-                else // Receive
-                {
-                    _parser.Consume(TokenType.FROM, "Expected FROM after RECEIVE FILE");
-                    remotePath = _parser.ParseExpression();
-                    _parser.Consume(TokenType.TO, "Expected TO before local path");
-                    localPath = _parser.ParseExpression();
-                    _parser.Consume(TokenType.AT, "Expected AT before connection name");
-                    connectionName = _parser.ConsumeIdentifier("Expected connection name").Value;
+                    if (_parser.Match(TokenType.FROM))
+                    {
+                        if (type == FileTransferType.Send) throw new SyntaxException("FROM is not valid for SEND FILE. Use source path directly or TO for destination.", _parser.Current.Line, _parser.Current.Column);
+                        remotePath = _parser.ParseExpression();
+                    }
+                    else if (_parser.Match(TokenType.TO))
+                    {
+                        if (type == FileTransferType.Send) remotePath = _parser.ParseExpression();
+                        else localPath = _parser.ParseExpression();
+                    }
+                    else if (_parser.Match(TokenType.AT))
+                    {
+                        connectionName = _parser.ConsumeIdentifier("Expected connection name after AT").Value;
+                    }
+                    else if (_parser.Match(TokenType.WITH))
+                    {
+                        overwrite = ParseWithOverwrite();
+                    }
+                    else if (_parser.Match(TokenType.COMMA))
+                    {
+                        continue;
+                    }
+                    else if (localPath == null && type == FileTransferType.Send && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING))
+                    {
+                        localPath = _parser.ParseExpression();
+                    }
+                    else if (connectionName == null && _parser.Current.Type == TokenType.IDENTIFIER && !LanguageMetadata.IsKeyword(_parser.Current.Value))
+                    {
+                        connectionName = _parser.Advance().Value;
+                    }
+                    else if (remotePath == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING))
+                    {
+                        remotePath = _parser.ParseExpression();
+                    }
+                    else if (localPath == null && type == FileTransferType.Receive && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING))
+                    {
+                        localPath = _parser.ParseExpression();
+                    }
+                    else if (_parser.Match(TokenType.LF) || _parser.Match(TokenType.CR) || _parser.Match(TokenType.CRLF))
+                    {
+                        continue;
+                    }
+                    else 
+                    {
+                        break;
+                    }
                 }
 
-                if (_parser.Match(TokenType.WITH))
-                {
-                    overwrite = ParseWithOverwrite();
-                }
+                if (localPath == null && type == FileTransferType.Send) throw new SyntaxException("Local source path is mandatory for SEND FILE", _parser.Current.Line, _parser.Current.Column);
+                if (remotePath == null && type == FileTransferType.Receive) throw new SyntaxException("Remote source path is mandatory for RECEIVE FILE", _parser.Current.Line, _parser.Current.Column);
+                if (connectionName == null) throw new SyntaxException("Connection name (using AT) is mandatory", _parser.Current.Line, _parser.Current.Column);
+                if (remotePath == null && type == FileTransferType.Send) throw new SyntaxException("Remote destination path (using TO) is mandatory for SEND FILE", _parser.Current.Line, _parser.Current.Column);
+                if (localPath == null && type == FileTransferType.Receive) throw new SyntaxException("Local destination path is mandatory for RECEIVE FILE", _parser.Current.Line, _parser.Current.Column);
+                
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
             }
-            else // Function style
+            else // Function style: SEND_FILE('local', 'conn', 'remote', [overwrite])
             {
                 _parser.Consume(TokenType.LPAREN, "Expected '('");
                 
@@ -2104,18 +2275,20 @@ namespace ETL_SQL.Core.Parser
                 _parser.Consume(TokenType.RPAREN, "Expected ')'");
             }
 
-            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
-            return new FileTransferStatement
+            var stmt = new FileTransferStatement
             {
                 Type = type,
-                LocalPath = localPath,
-                ConnectionName = connectionName,
-                RemotePath = remotePath,
+                LocalPath = localPath!,
+                ConnectionName = connectionName!,
+                RemotePath = remotePath!,
                 Overwrite = overwrite,
                 IsSqlStyle = isSqlStyle,
                 Line = startToken.Line,
                 Column = startToken.Column
             };
+
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+            return stmt;
         }
         private Statement ParseDockerClose()
         {
@@ -2123,10 +2296,11 @@ namespace ETL_SQL.Core.Parser
             Expression? imageName = null;
             string? alias = null;
             
-            if (_parser.Current.Type != TokenType.SEMICOLON) 
+            bool hasParen = _parser.Match(TokenType.LPAREN);
+            
+            if (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.RPAREN) 
             {
                 // Differentiate between Identifier (Alias) and Expression (ImageName)
-                // If it's a string literal, it's definitely an Expression
                 if (_parser.Current.Type == TokenType.STRING)
                 {
                     imageName = _parser.ParseExpression();
@@ -2136,6 +2310,8 @@ namespace ETL_SQL.Core.Parser
                     alias = _parser.ConsumeIdentifier("Expected alias").Value;
                 }
             }
+
+            if (hasParen) _parser.Consume(TokenType.RPAREN, "Expected ')'");
 
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
             return new DockerCloseStatement(imageName, alias) { Line = startToken.Line, Column = startToken.Column };
@@ -2171,7 +2347,9 @@ namespace ETL_SQL.Core.Parser
         private Statement ParseDockerAction(DockerAction action)
         {
             var startToken = _parser.Previous;
+            bool hasParen = _parser.Match(TokenType.LPAREN);
             var alias = _parser.ConsumeIdentifier("Expected container alias").Value;
+            if (hasParen) _parser.Consume(TokenType.RPAREN, "Expected ')'");
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
             return new DockerActionStatement(alias, action) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -2184,33 +2362,48 @@ namespace ETL_SQL.Core.Parser
             Expression? subject = null;
             Expression? body = null;
             Expression? connectionName = null;
-            List<Expression>? attachments = null;
-            List<Expression>? cc = null;
-            List<Expression>? bcc = null;
+            List<Expression> attachments = new();
+            List<Expression> cc = new();
+            List<Expression> bcc = new();
+
+            // Support legacy SEND_EMAIL followed by keywords (SQL style)
+            if (!isSqlStyle && _parser.Current.Type != TokenType.LPAREN)
+            {
+                isSqlStyle = true;
+            }
 
             if (isSqlStyle)
             {
                 while (true)
                 {
-                    if (_parser.Match(TokenType.TO)) to = _parser.ParseExpression();
-                    else if (_parser.Match(TokenType.FROM)) from = _parser.ParseExpression();
-                    else if (_parser.Match(TokenType.SUBJECT)) subject = _parser.ParseExpression();
-                    else if (_parser.Match(TokenType.BODY)) body = _parser.ParseExpression();
+                    if (_parser.Match(TokenType.TO)) 
+                    {
+                        to = _parser.ParseExpression();
+                    }
+                    else if (_parser.Match(TokenType.FROM)) 
+                    {
+                        from = _parser.ParseExpression();
+                    }
+                    else if (_parser.Match(TokenType.SUBJECT)) 
+                    {
+                        subject = _parser.ParseExpression();
+                    }
+                    else if (_parser.Match(TokenType.BODY)) 
+                    {
+                        body = _parser.ParseExpression();
+                    }
                     else if (_parser.Match(TokenType.CC))
                     {
-                        cc ??= new List<Expression>();
                         cc.Add(_parser.ParseExpression());
                         while (_parser.Match(TokenType.COMMA)) cc.Add(_parser.ParseExpression());
                     }
                     else if (_parser.Match(TokenType.BCC))
                     {
-                        bcc ??= new List<Expression>();
                         bcc.Add(_parser.ParseExpression());
                         while (_parser.Match(TokenType.COMMA)) bcc.Add(_parser.ParseExpression());
                     }
                     else if (_parser.Match(TokenType.ATTACH))
                     {
-                        attachments ??= new List<Expression>();
                         attachments.Add(_parser.ParseExpression());
                         while (_parser.Match(TokenType.COMMA)) attachments.Add(_parser.ParseExpression());
                     }
@@ -2218,15 +2411,25 @@ namespace ETL_SQL.Core.Parser
                     {
                         connectionName = _parser.ParseExpression();
                     }
-                    else break;
+                    else if (_parser.Match(TokenType.LF) || _parser.Match(TokenType.CR) || _parser.Match(TokenType.CRLF))
+                    {
+                        continue;
+                    }
+                    else 
+                    {
+                        Logger.WriteLine($"DEBUG: ParseSendEmail breaking on {_parser.Current.Type} ('{_parser.Current.Value}')", ConsoleColor.Yellow);
+                        break;
+                    }
                 }
                 
                 if (to == null) throw new SyntaxException("Email TO is mandatory", _parser.Current.Line, _parser.Current.Column);
                 if (from == null) throw new SyntaxException("Email FROM is mandatory", _parser.Current.Line, _parser.Current.Column);
                 if (subject == null) throw new SyntaxException("Email SUBJECT is mandatory", _parser.Current.Line, _parser.Current.Column);
                 if (body == null) throw new SyntaxException("Email BODY is mandatory", _parser.Current.Line, _parser.Current.Column);
+                
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
             }
-            else // Function style
+            else // Function style: SEND_EMAIL(conn, to, from, subj, body, [cc], [bcc], [attach])
             {
                 _parser.Consume(TokenType.LPAREN, "Expected '('");
                 connectionName = _parser.ParseExpression();
@@ -2243,7 +2446,6 @@ namespace ETL_SQL.Core.Parser
                 {
                     if (_parser.Match(TokenType.LBRACKET))
                     {
-                        cc = new List<Expression>();
                         if (_parser.Current.Type != TokenType.RBRACKET)
                         {
                             cc.Add(_parser.ParseExpression());
@@ -2253,7 +2455,7 @@ namespace ETL_SQL.Core.Parser
                     }
                     else if (_parser.Current.Type != TokenType.COMMA && _parser.Current.Type != TokenType.RPAREN)
                     {
-                        cc = new List<Expression> { _parser.ParseExpression() };
+                        cc.Add(_parser.ParseExpression());
                     }
                 }
 
@@ -2261,7 +2463,6 @@ namespace ETL_SQL.Core.Parser
                 {
                     if (_parser.Match(TokenType.LBRACKET))
                     {
-                        bcc = new List<Expression>();
                         if (_parser.Current.Type != TokenType.RBRACKET)
                         {
                             bcc.Add(_parser.ParseExpression());
@@ -2271,7 +2472,7 @@ namespace ETL_SQL.Core.Parser
                     }
                     else if (_parser.Current.Type != TokenType.COMMA && _parser.Current.Type != TokenType.RPAREN)
                     {
-                        bcc = new List<Expression> { _parser.ParseExpression() };
+                        bcc.Add(_parser.ParseExpression());
                     }
                 }
 
@@ -2279,7 +2480,6 @@ namespace ETL_SQL.Core.Parser
                 {
                     if (_parser.Match(TokenType.LBRACKET))
                     {
-                        attachments = new List<Expression>();
                         if (_parser.Current.Type != TokenType.RBRACKET)
                         {
                             attachments.Add(_parser.ParseExpression());
@@ -2289,7 +2489,7 @@ namespace ETL_SQL.Core.Parser
                     }
                     else if (_parser.Current.Type != TokenType.COMMA && _parser.Current.Type != TokenType.RPAREN)
                     {
-                        attachments = new List<Expression> { _parser.ParseExpression() };
+                        attachments.Add(_parser.ParseExpression());
                     }
                 }
 

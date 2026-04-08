@@ -563,13 +563,28 @@ namespace ETL_SQL.Core.Parser
             var t = _parser.Previous;
             _parser.Consume(TokenType.LPAREN, "Expected '(' after SUBSTRING");
             var str = _parser.ParseExpression();
-            _parser.Consume(TokenType.FROM, "Expected 'FROM' in SUBSTRING");
-            var start = _parser.ParseExpression();
+            
+            Expression start;
             Expression? length = null;
-            if (_parser.Match(TokenType.FOR))
+
+            if (_parser.Match(TokenType.FROM))
             {
-                length = _parser.ParseExpression();
+                start = _parser.ParseExpression();
+                if (_parser.Match(TokenType.FOR))
+                {
+                    length = _parser.ParseExpression();
+                }
             }
+            else
+            {
+                _parser.Consume(TokenType.COMMA, "Expected ',' or 'FROM' in SUBSTRING");
+                start = _parser.ParseExpression();
+                if (_parser.Match(TokenType.COMMA))
+                {
+                    length = _parser.ParseExpression();
+                }
+            }
+
             _parser.Consume(TokenType.RPAREN, "Expected ')' after SUBSTRING arguments");
             return new SubstringExpression(str, start, length) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
         }

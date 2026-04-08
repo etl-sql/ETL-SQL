@@ -42,7 +42,8 @@ namespace ETL_SQL.Core.Data
     public class TempTableInfo
     {
         public string Name { get; set; } = string.Empty;
-        public List<string> Columns { get; set; } = new();
         public string DataFilePath { get; set; } = string.Empty;
+        public List<ColumnDefinition> Columns { get; set; } = new();
+        public List<TableConstraintInfo> Constraints { get; set; } = new();
     }
 }
