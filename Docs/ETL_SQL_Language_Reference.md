@@ -18,6 +18,9 @@ CREATE CONNECTION <name> ON <provider>('<connection_string>') [WITH(<options>)];
 CREATE CONNECTION <name> ON <provider>() WITH(<properties...>, <options...>);
 ```
 
+❓ **Why the two forms?** 
+The first form puts everything into the connection string, which is the standard way to define a connection but can sometimes be hard to read and manage. The second form puts everything into the WITH clause so you could build a connection string with the options and pass it to the engine.
+
 ### Connection Types & Options
 
 #### FLATFILE (or CSV)
@@ -89,6 +92,7 @@ SELECT * FROM employees;
 > When using `FORMAT='FIXED'`, the `TEMPLATE` option is **mandatory**. The engine will raise an error if it cannot determine the width for every column in the template.
 
 ---
+#### MSSQL (SQLSERVER)
 For Microsoft SQL Server.
 `CREATE CONNECTION <name> ON MSSQL('<connection_string>') [WITH(<options>)];`  
 -- OR --  
@@ -413,7 +417,7 @@ CREATE OR ALTER CONNECTION remote_srv ON MSSQL('Server=myserver;Database=DW;Inte
     WITH(TABLE='dbo.Employees');
 ```
 
-#### CREATE SSH_KEY_PAIR
+### CREATE SSH_KEY_PAIR
 Generates a new SSH key pair (public and private) at the specified path. Supports both SQL-style and function-style syntax.
 
 *Syntax (SQL Style):*
@@ -445,7 +449,11 @@ CREATE SSH_KEY_PAIR 'C:\Keys\id_rsa_prod'
 SSH_KEY_PAIR('C:\Keys\id_rsa_temp', 2048, 'RSA');
 ```
 
+❓ **Why the two different syntax styles?**
+The SQL style is more verbose but consistent with the rest of the ETL-SQL language.  The function style is more concise and is useful for quick ad-hoc operations.  Both are correct and will produce the same result.
+
 ### Session Management
+A session is a collection of temporary files, recovery manifests, and encrypted state that are created during the execution of a script.  They are created automatically when a script is executed and are cleaned up when the script finishes.  However, you can manually clean up a session by using the CLEAR SESSION command.  This is useful for security-critical scripts or to free up disk space after large data operations.  Sessions show up most when running ad-hoc queries in VS Code or the TUI editor.  This way you can run parts step by step to see what is happening.
 
 #### CLEAR SESSION
 Explicitly deletes all temporary files, recovery manifests, and encrypted state associated with the current session. This is recommended for security-critical scripts or to free up disk space after large data operations.
@@ -593,6 +601,24 @@ END
 ```
 You can explicitly define the columns you want to insert into the temp table.  This is a good practice because it will prevent errors if the source table changes.  You just have to make sure you have the same number of columns and the same data types or it will fail.
 
+If I want to join two connections together do I need to put each connection in a temp table?
+No if they are simple you can just join them together in the FROM/JOIN clause.
+
+```sql
+CREATE CONNECTION m ON MSSQL('localhost');
+CREATE CONNECTION s ON MSSQL('localhost');
+
+SELECT 
+     t.id
+    ,t.[name] 
+    ,s.id
+    ,s.[name]
+INTO #temp 
+FROM m.dbo.Employee AS t 
+    JOIN s.dbo.Employee AS s ON t.id = s.id WHERE t.id > 1;
+```
+In this context everything is happening in the ETL-SQL engine.  The ETL-SQL engine is connecting to both the m and s connections and pulling data from both.  It is then joining the data together and storing it in the #temp table.
+
 ### Flow Control
 **`EXECUTE` (Remote Execution)**
 Executes SQL code on a remote connection. Supports capturing results into local tables and passing parameters for secure, parameterized execution.
@@ -602,7 +628,7 @@ Executes SQL code on a remote connection. Supports capturing results into local 
 EXECUTE ds [INTO #target] [WITH (@param1, @param2, ...)]
 BEGIN
   -- Remote SQL dialect (e.g. T-SQL for MSSQL)
-  SELECT id, name FROM remote_table WHERE category_id = ?1 OR alt_id = ?1;
+  SELECT id, name FROM remote_table WHERE category_id = ?1 OR alt_id = ?2;
 END;
 ```
 

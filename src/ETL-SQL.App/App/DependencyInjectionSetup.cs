@@ -42,33 +42,27 @@ namespace ETL_SQL.App
             
             services.AddSingleton<IConfiguration>(configuration);
 
-            // ── Logging via Serilog ──────────────────────────────────────────
+            // ── Logging via LoggerService ──────────────────────────────────────
             // Read config values (fall back to sensible defaults)
             string appLogDir     = configuration["Logging:AppLog:Directory"]     ?? "logs/app";
             int    retentionDays = int.TryParse(configuration["Logging:AppLog:RetentionDays"],    out var rd) ? rd : 30;
             int    sizeLimitMb   = int.TryParse(configuration["Logging:AppLog:FileSizeLimitMb"],  out var sl) ? sl : 10;
 
-            // Root app log – always on, rolling by day and by size
-            Logger.InitializeAppLogger(appLogDir, retentionDays, sizeLimitMb);
+            var loggerService = new LoggerService();
+            loggerService.InitializeAppLogger(appLogDir, retentionDays, sizeLimitMb);
+            
+            // Set as global façade instance
+            Logger.Instance = loggerService;
 
-            // Wire Serilog as the MEL back-end so ILogger<T> injected consumers also write to file
-            var serilogLogger = new LoggerConfiguration()
-                .MinimumLevel.Debug()
-                .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
-                .WriteTo.File(
-                    path:               Path.Combine(appLogDir, "etlsql-.log"),
-                    rollingInterval:    RollingInterval.Day,
-                    fileSizeLimitBytes: sizeLimitMb > 0 ? (long?)sizeLimitMb * 1024 * 1024 : null,
-                    rollOnFileSizeLimit: true,
-                    shared:             true,   // allows Logger and ILogger<T> to share the file safely
-                    outputTemplate:     "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {SourceContext} {Message:lj}{NewLine}{Exception}")
-                .CreateLogger();
+            services.AddSingleton<LoggerService>(loggerService);
+            services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
 
+            // MEL bridge for ILogger<T> consumers
             services.AddLogging(lb =>
             {
                 lb.ClearProviders();
-                lb.AddProvider(new SerilogLoggerProvider(serilogLogger, dispose: true));
-                lb.SetMinimumLevel(LogLevel.Debug);
+                lb.AddSerilog(dispose: false); // Serilog is already configured in LoggerService
+                lb.SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Debug);
             });
 
             // Core Engine

@@ -108,7 +108,17 @@ namespace ETL_SQL.Engine.Services
                     {
                         // Columns property is already set correctly on 'info' at line 100
                         
-                        var allRows = batches.SelectMany(b => b.Rows.Select(r => r.Columns)).ToList();
+                        var schemaCols = mem.Schema.Keys.ToList();
+                        var allRows = new List<Dictionary<string, object?>>();
+                        foreach (var batch in batches)
+                        {
+                            foreach (var row in batch.Rows)
+                            {
+                                var rowDict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                                foreach (var col in schemaCols) rowDict[col] = row[col];
+                                allRows.Add(rowDict);
+                            }
+                        }
                         totalSavedRows = allRows.Count;
 
                         if (totalSavedRows > 0)

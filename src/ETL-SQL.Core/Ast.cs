@@ -9,23 +9,23 @@ using System.Text.RegularExpressions;
 namespace ETL_SQL.Core
 {
     /// <summary>Base class for all Abstract Syntax Tree nodes, tracking source locations.</summary>
-    public abstract class AstNode 
+    public abstract record AstNode 
     { 
         /// <summary>Starting line number in the source script.</summary>
-        public int Line { get; set; }
+        public int Line { get; init; }
         /// <summary>Starting column position in the source script.</summary>
-        public int Column { get; set; }
+        public int Column { get; init; }
         /// <summary>Ending line number in the source script.</summary>
-        public int EndLine { get; set; }
+        public int EndLine { get; init; }
         /// <summary>Ending column position in the source script.</summary>
-        public int EndColumn { get; set; }
+        public int EndColumn { get; init; }
     }
 
     /// <summary>Base class for all executable SQL statements.</summary>
-    public abstract class Statement : AstNode 
+    public abstract record Statement : AstNode 
     {
         /// <summary>Common Table Expressions (WITH clause) applied to this statement.</summary>
-        public List<CteDefinition>? Ctes { get; set; }
+        public List<CteDefinition>? Ctes { get; init; }
         /// <summary>Converts the statement back to its SQL representation.</summary>
         public virtual string ToSql() => "UNKNOWN STATEMENT";
         /// <summary>Identifies all tables referenced as data sources in this statement.</summary>
@@ -34,18 +34,18 @@ namespace ETL_SQL.Core
 
     public enum ObjectCreationMode { Create, Alter, CreateOrAlter }
 
-    public class Script : AstNode
+    public record Script : AstNode
     {
-        public List<Statement> Statements { get; } = new List<Statement>();
-        public List<ETL_SQL.Core.Common.Diagnostic> Diagnostics { get; } = new List<ETL_SQL.Core.Common.Diagnostic>();
+        public List<Statement> Statements { get; init; } = new();
+        public List<ETL_SQL.Core.Common.Diagnostic> Diagnostics { get; init; } = new();
     }
 
-    public class NoOpStatement : Statement
+    public record NoOpStatement : Statement
     {
         public override string ToSql() => ";";
     }
 
-    public class CreateConnectionStatement(string name, string? type = null, Expression? target = null, Dictionary<string, string>? options = null, ObjectCreationMode mode = ObjectCreationMode.Create) : Statement
+    public record CreateConnectionStatement(string name, string? type = null, Expression? target = null, Dictionary<string, string>? options = null, ObjectCreationMode mode = ObjectCreationMode.Create) : Statement
     {
         public string ConnectionName { get; } = name;
         public string? ConnectionType { get; } = type; // FILE, DATABASE, EXCEL
@@ -68,7 +68,7 @@ namespace ETL_SQL.Core
             }
             return $"{modeStr} CONNECTION {ConnectionName}{onStr}{optionsStr};";
         }
-    }    public class CreateSshKeyPairStatement(Expression path, Expression? bits = null, Expression? algorithm = null, Expression? passphrase = null, Expression? comment = null) : Statement
+    }    public record CreateSshKeyPairStatement(Expression path, Expression? bits = null, Expression? algorithm = null, Expression? passphrase = null, Expression? comment = null) : Statement
     {
         public Expression Path { get; } = path;
         public Expression? Bits { get; } = bits;
@@ -88,7 +88,7 @@ namespace ETL_SQL.Core
     }
 
 
-    public class SelectColumn(Expression expression, string? alias = null, Dictionary<string, string>? metadata = null) : AstNode
+    public record SelectColumn(Expression expression, string? alias = null, Dictionary<string, string>? metadata = null) : AstNode
     {
         public Expression Expression { get; } = expression;
         public string? Alias { get; } = alias;
@@ -99,7 +99,7 @@ namespace ETL_SQL.Core
         public string ToSql() => Alias != null ? $"{Expression.ToSql()} AS {Alias}" : Expression.ToSql();
     }
 
-    public class TableReference : AstNode
+    public record TableReference : AstNode
     {
         public string? ConnectionName { get; }
         public string? DatabaseName { get; }
@@ -166,7 +166,7 @@ namespace ETL_SQL.Core
         public override string ToString() => ToSql();
     }
 
-    public class PivotClause : AstNode
+    public record PivotClause : AstNode
     {
         public string AggregateFunction { get; }
         public string AggregateColumn { get; }
@@ -185,7 +185,7 @@ namespace ETL_SQL.Core
         public string ToSql() => $"PIVOT ({AggregateFunction}({AggregateColumn}) FOR {PivotColumn} IN ({string.Join(", ", PivotValues.Select(v => v.ToSql()))}))" + (Alias != null ? $" AS {Alias}" : "");
     }
 
-    public class OutputClause : AstNode
+    public record OutputClause : AstNode
     {
         public List<SelectColumn> Columns { get; }
         public TableReference? IntoTable { get; }
@@ -204,7 +204,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class UnpivotClause : AstNode
+    public record UnpivotClause : AstNode
     {
         public string ValueColumn { get; }
         public string NameColumn { get; }
@@ -223,7 +223,7 @@ namespace ETL_SQL.Core
 
     public enum JoinHint { None, Hash, Loop, Merge }
     
-    public class JoinClause
+    public record JoinClause
     {
         public string JoinType { get; }
         public TableReference Table { get; }
@@ -260,7 +260,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class OrderByClause
+    public record OrderByClause
     {
         public Expression Expression { get; }
         public bool Descending { get; }
@@ -273,7 +273,7 @@ namespace ETL_SQL.Core
         public string ToSql() => Expression.ToSql() + (Descending ? " DESC" : " ASC");
     }
 
-    public class CteDefinition : AstNode
+    public record CteDefinition : AstNode
     {
         public string Name { get; }
         public Statement Query { get; }
@@ -287,7 +287,7 @@ namespace ETL_SQL.Core
     public enum ForType { JSON, XML }
     public enum ForMode { PATH, AUTO, RAW, EXPLICIT }
 
-    public class ForClause : AstNode
+    public record ForClause : AstNode
     {
         public ForType Type { get; }
         public ForMode Mode { get; }
@@ -315,7 +315,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class SelectStatement : Statement
+    public record SelectStatement : Statement
     {
         public List<SelectColumn> Columns { get; }
         public TableReference? IntoTable { get; }
@@ -396,7 +396,7 @@ namespace ETL_SQL.Core
     /// Represents GROUP BY GROUPING SETS(...), ROLLUP(...), or CUBE(...).
     /// When Type == None, GroupSets contains exactly one entry (the plain GROUP BY list).
     /// </summary>
-    public class GroupingSetClause
+    public record GroupingSetClause
     {
         public GroupingSetType Type { get; }
         /// <summary>
@@ -428,7 +428,7 @@ namespace ETL_SQL.Core
 
     public enum SetOpType { UNION, UNION_ALL, EXCEPT, INTERSECT }
 
-    public class SetOperationStatement : Statement
+    public record SetOperationStatement : Statement
     {
         public Statement Left { get; }
         public SetOpType Operation { get; }
@@ -462,7 +462,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class ExecStatement : Statement
+    public record ExecStatement : Statement
     {
         public Expression SqlExpression { get; }
         public Expression? ConnectionName { get; set; }
@@ -487,7 +487,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class ExecuteRemoteBlockStatement : Statement
+    public record ExecuteRemoteBlockStatement : Statement
     {
         public Expression ConnectionName { get; }
         public BlockStatement Body { get; }
@@ -501,7 +501,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"EXECUTE ({ConnectionName.ToSql()}) BEGIN ... END";
     }
 
-    public class ExecutePushdownStatement : Statement
+    public record ExecutePushdownStatement : Statement
     {
         public Expression ConnectionName { get; }
         public string SqlText { get; }
@@ -565,7 +565,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class InsertStatement : Statement
+    public record InsertStatement : Statement
     {
         public TableReference TargetTable { get; }
         public Statement? SelectQuery { get; }
@@ -616,7 +616,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class Assignment : AstNode
+    public record Assignment : AstNode
     {
         public string ColumnName { get; }
         public Expression Value { get; }
@@ -630,7 +630,7 @@ namespace ETL_SQL.Core
         public string ToSql() => $"{ColumnName} = {Value.ToSql()}";
     }
 
-    public class UpdateStatement : Statement
+    public record UpdateStatement : Statement
     {
         public TableReference TargetTable { get; }
         public List<Assignment> Assignments { get; }
@@ -659,7 +659,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class DeleteStatement : Statement
+    public record DeleteStatement : Statement
     {
         public TableReference TargetTable { get; }
         public Expression? WhereClause { get; }
@@ -680,7 +680,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class TruncateTableStatement : Statement
+    public record TruncateTableStatement : Statement
     {
         public TableReference TargetTable { get; }
 
@@ -699,27 +699,23 @@ namespace ETL_SQL.Core
         DELETE
     }
 
-    public class MergeActionClause : AstNode
-    {
-        public MergeActionType ActionType { get; }
-        public Expression? Condition { get; }
-        public List<Assignment>? UpdateAssignments { get; }
-        public List<string>? InsertColumns { get; }
-        public List<Expression>? InsertValues { get; }
+    public enum MergeSourceOrTarget { Target, Source }
 
-        public MergeActionClause(MergeActionType actionType, Expression? condition, 
-            List<Assignment>? updateAssignments = null, 
-            List<string>? insertColumns = null, 
-            List<Expression>? insertValues = null)
+    public record MergeActionClause : AstNode
+    {
+        public MergeActionType ActionType { get; init; }
+        public Expression? Condition { get; init; }
+        public List<Assignment>? UpdateAssignments { get; init; }
+        public List<string>? InsertColumns { get; init; }
+        public List<Expression>? InsertValues { get; init; }
+
+        public MergeActionClause(MergeActionType actionType, Expression? condition)
         {
             ActionType = actionType;
             Condition = condition;
-            UpdateAssignments = updateAssignments;
-            InsertColumns = insertColumns;
-            InsertValues = insertValues;
         }
 
-        public string ToSql()
+        public virtual string ToSql()
         {
             var cond = Condition != null ? $" AND {Condition.ToSql()}" : "";
             switch (ActionType)
@@ -737,20 +733,82 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class MergeStatement : Statement
+    public record MergeMatchedClause(MergeActionType ActionType, Expression? Condition) : MergeActionClause(ActionType, Condition);
+    public record MergeUpdateClause : MergeMatchedClause
     {
-        public TableReference TargetTable { get; }
-        public TableReference SourceTable { get; } 
-        public Expression OnCondition { get; }
-        public List<MergeActionClause> MatchedClauses { get; } = new();
-        public List<MergeActionClause> NotMatchedByTargetClauses { get; } = new();
-        public List<MergeActionClause> NotMatchedBySourceClauses { get; } = new();
+        public List<Assignment> Assignments { get; init; }
+        public MergeUpdateClause(Expression? condition, List<Assignment> assignments) : base(MergeActionType.UPDATE, condition)
+        {
+            Assignments = assignments;
+            UpdateAssignments = assignments;
+        }
+        public override string ToSql() => $"THEN UPDATE SET {string.Join(", ", Assignments.Select(a => a.ToSql()))}";
+    }
+    public record MergeDeleteClause(Expression? Condition) : MergeMatchedClause(MergeActionType.DELETE, Condition)
+    {
+        public override string ToSql() => "THEN DELETE";
+    }
 
-        public MergeStatement(TableReference targetTable, TableReference sourceTable, Expression onCondition)
+    public record MergeNotMatchedClause : MergeActionClause
+    {
+        public MergeSourceOrTarget Option { get; init; }
+        public MergeNotMatchedClause(Expression? condition, MergeSourceOrTarget option = MergeSourceOrTarget.Target) 
+            : base(MergeActionType.INSERT, condition) 
+        {
+            Option = option;
+        }
+    }
+
+    public record MergeInsertClause : MergeNotMatchedClause
+    {
+        public List<string>? Columns { get; init; }
+        public List<Expression> Values { get; init; }
+
+        public MergeInsertClause(Expression? condition, List<string>? columns, List<Expression> values, MergeSourceOrTarget option = MergeSourceOrTarget.Target)
+            : base(condition, option)
+        {
+            Columns = columns;
+            Values = values;
+
+            // Initialize base class properties for engine compatibility
+            InsertColumns = columns;
+            InsertValues = values;
+        }
+
+        public override string ToSql() 
+        {
+            var cols = Columns != null && Columns.Count > 0 ? "(" + string.Join(", ", Columns) + ") " : "";
+            var vals = string.Join(", ", Values.Select(v => v.ToSql()));
+            return $"THEN INSERT {cols}VALUES ({vals})";
+        }
+    }
+
+    public record MergeStatement : Statement
+    {
+        public TableReference TargetTable { get; init; }
+        public string? TargetAlias { get; init; }
+        public TableReference SourceTable { get; init; } 
+        public string? SourceAlias { get; init; }
+        public Expression OnCondition { get; init; }
+        public List<MergeMatchedClause> MatchedClauses { get; init; }
+        public List<MergeNotMatchedClause> NotMatchedClauses { get; init; }
+
+        public MergeStatement(
+            TableReference targetTable, 
+            string? targetAlias, 
+            TableReference sourceTable, 
+            string? sourceAlias, 
+            Expression onCondition, 
+            List<MergeMatchedClause> matchedClauses, 
+            List<MergeNotMatchedClause> notMatchedClauses)
         {
             TargetTable = targetTable;
+            TargetAlias = targetAlias;
             SourceTable = sourceTable;
+            SourceAlias = sourceAlias;
             OnCondition = onCondition;
+            MatchedClauses = matchedClauses;
+            NotMatchedClauses = notMatchedClauses;
         }
 
         public override IEnumerable<string> GetSourceTables()
@@ -763,18 +821,17 @@ namespace ETL_SQL.Core
             var with = (Ctes != null && Ctes.Count > 0) ? "WITH " + string.Join(", ", Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
             var sb = new System.Text.StringBuilder();
             sb.Append(with);
-            sb.AppendLine($"MERGE INTO {TargetTable.ToSql()}");
-            sb.AppendLine($"USING {SourceTable.ToSql()}");
+            sb.AppendLine($"MERGE INTO {TargetTable.ToSql()}{(TargetAlias != null ? " AS " + TargetAlias : "")}");
+            sb.AppendLine($"USING {SourceTable.ToSql()}{(SourceAlias != null ? " AS " + SourceAlias : "")}");
             sb.AppendLine($"ON {OnCondition.ToSql()}");
-            foreach (var c in MatchedClauses) sb.AppendLine($"WHEN MATCHED {c.ToSql()}");
-            foreach (var c in NotMatchedByTargetClauses) sb.AppendLine($"WHEN NOT MATCHED {c.ToSql()}");
-            foreach (var c in NotMatchedBySourceClauses) sb.AppendLine($"WHEN NOT MATCHED BY SOURCE {c.ToSql()}");
+            foreach (var c in MatchedClauses) sb.AppendLine($"WHEN MATCHED{(c.Condition != null ? " AND " + c.Condition.ToSql() : "")} {c.ToSql()}");
+            foreach (var c in NotMatchedClauses) sb.AppendLine($"WHEN NOT MATCHED{(c.Condition != null ? " AND " + c.Condition.ToSql() : "")} {c.ToSql()}");
             sb.Append(";");
             return sb.ToString();
         }
     }
 
-    public class ForeignKeyReference : AstNode
+    public record ForeignKeyReference : AstNode
     {
         public TableReference Table { get; }
         public List<string> Columns { get; }
@@ -786,27 +843,27 @@ namespace ETL_SQL.Core
         public string ToSql() => $"REFERENCES {Table.ToSql()}({string.Join(", ", Columns)})";
     }
 
-    public abstract class TableConstraint : AstNode
+    public abstract record TableConstraint : AstNode
     {
         public string? ConstraintName { get; set; }
         public abstract string ToSql();
     }
 
-    public class TablePrimaryKeyConstraint : TableConstraint
+    public record TablePrimaryKeyConstraint : TableConstraint
     {
         public List<string> Columns { get; }
         public TablePrimaryKeyConstraint(List<string> columns) => Columns = columns;
         public override string ToSql() => $"{(ConstraintName != null ? $"CONSTRAINT {ConstraintName} " : "")}PRIMARY KEY ({string.Join(", ", Columns)})";
     }
 
-    public class TableUniqueConstraint : TableConstraint
+    public record TableUniqueConstraint : TableConstraint
     {
         public List<string> Columns { get; }
         public TableUniqueConstraint(List<string> columns) => Columns = columns;
         public override string ToSql() => $"{(ConstraintName != null ? $"CONSTRAINT {ConstraintName} " : "")}UNIQUE ({string.Join(", ", Columns)})";
     }
 
-    public class TableForeignKeyConstraint : TableConstraint
+    public record TableForeignKeyConstraint : TableConstraint
     {
         public List<string> Columns { get; }
         public ForeignKeyReference Reference { get; }
@@ -818,14 +875,14 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"{(ConstraintName != null ? $"CONSTRAINT {ConstraintName} " : "")}FOREIGN KEY ({string.Join(", ", Columns)}) {Reference.ToSql()}";
     }
 
-    public class TableCheckConstraint : TableConstraint
+    public record TableCheckConstraint : TableConstraint
     {
         public Expression Expression { get; }
         public TableCheckConstraint(Expression expression) => Expression = expression;
         public override string ToSql() => $"{(ConstraintName != null ? $"CONSTRAINT {ConstraintName} " : "")}CHECK ({Expression.ToSql()})";
     }
 
-    public class ColumnDefinition
+    public record ColumnDefinition
     {
         public string ColumnName { get; }
         public string DataType { get; }
@@ -868,7 +925,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class CreateTableStatement : Statement
+    public record CreateTableStatement : Statement
     {
         public TableReference TargetTable { get; }
         public bool IfNotExists { get; }
@@ -894,7 +951,7 @@ namespace ETL_SQL.Core
 
     public enum AlterTableActionType { ADD, DROP_COLUMN, RENAME_COLUMN }
 
-    public class AlterTableStatement : Statement
+    public record AlterTableStatement : Statement
     {
         public TableReference TargetTable { get; }
         public AlterTableActionType Action { get; }
@@ -932,7 +989,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class DropTableStatement : Statement
+    public record DropTableStatement : Statement
     {
         public TableReference TargetTable { get; }
         public bool IfExists { get; }
@@ -946,7 +1003,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"DROP TABLE {(IfExists ? "IF EXISTS " : "")}{TargetTable.ToSql()};";
     }
 
-    public class DropConnectionStatement : Statement
+    public record DropConnectionStatement : Statement
     {
         public string ConnectionName { get; }
         public bool IfExists { get; }
@@ -954,12 +1011,12 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"DROP CONNECTION {(IfExists ? "IF EXISTS " : "")}{ConnectionName};";
     }
 
-    public class ClearSessionStatement : Statement
+    public record ClearSessionStatement : Statement
     {
         public override string ToSql() => "CLEAR SESSION;";
     }
 
-    public class DropProcedureStatement : Statement
+    public record DropProcedureStatement : Statement
     {
         public string ProcedureName { get; }
         public bool IfExists { get; }
@@ -967,7 +1024,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"DROP PROCEDURE {(IfExists ? "IF EXISTS " : "")}{ProcedureName};";
     }
 
-    public class DropFunctionStatement : Statement
+    public record DropFunctionStatement : Statement
     {
         public string FunctionName { get; }
         public bool IfExists { get; }
@@ -975,7 +1032,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"DROP FUNCTION {(IfExists ? "IF EXISTS " : "")}{FunctionName};";
     }
 
-    public class DropIndexStatement : Statement
+    public record DropIndexStatement : Statement
     {
         public string IndexName { get; }
         public TableReference? Table { get; }
@@ -984,7 +1041,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"DROP INDEX {(IfExists ? "IF EXISTS " : "")}{IndexName}{(Table != null ? " ON " + Table.ToSql() : "")};";
     }
 
-    public class DeclareStatement : Statement
+    public record DeclareStatement : Statement
     {
         public string VariableName { get; }
         public string DataType { get; }
@@ -1024,7 +1081,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class DockerStatement : Statement
+    public record DockerStatement : Statement
     {
         public Expression ImageName { get; }
         public string? Alias { get; }
@@ -1036,7 +1093,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => Alias != null ? $"USE DOCKER({ImageName.ToSql()}) AS {Alias};" : $"USE DOCKER({ImageName.ToSql()});";
     }
 
-    public class RunScriptStatement : Statement
+    public record RunScriptStatement : Statement
     {
         public Expression PathExpression { get; }
         public Dictionary<string, Expression> Parameters { get; }
@@ -1054,7 +1111,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class SetVariableStatement : Statement
+    public record SetVariableStatement : Statement
     {
         public string VariableName { get; }
         public Expression Value { get; }
@@ -1068,7 +1125,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"SET {VariableName} = {Value.ToSql()};";
     }
 
-    public class BlockStatement : Statement
+    public record BlockStatement : Statement
     {
         public List<Statement> Statements { get; }
 
@@ -1080,7 +1137,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => "BEGIN ... END";
     }
 
-    public class WhileStatement : Statement
+    public record WhileStatement : Statement
     {
         public Expression Condition { get; }
         public Statement Body { get; }
@@ -1094,7 +1151,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"WHILE {Condition.ToSql()} BEGIN ... END";
     }
 
-    public class ForStatement : Statement
+    public record ForStatement : Statement
     {
         public string VariableName { get; }
         public Expression StartValue { get; }
@@ -1114,7 +1171,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"FOR {VariableName} = {StartValue.ToSql()} TO {EndValue.ToSql()} BEGIN ... END";
     }
 
-    public class ForeachStatement : Statement
+    public record ForeachStatement : Statement
     {
         public string VariableName { get; }
         public Expression ListExpression { get; }
@@ -1130,7 +1187,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"FOREACH {VariableName} IN {ListExpression.ToSql()} BEGIN ... END";
     }
 
-    public class ElseIfClause : AstNode
+    public record ElseIfClause : AstNode
     {
         public Expression Condition { get; }
         public Statement Body { get; }
@@ -1144,7 +1201,7 @@ namespace ETL_SQL.Core
         public string ToSql() => $"ELSE IF {Condition.ToSql()} BEGIN ... END";
     }
 
-    public class IfStatement : Statement
+    public record IfStatement : Statement
     {
         public Expression Condition { get; }
         public Statement IfBody { get; }
@@ -1174,7 +1231,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class PrintStatement : Statement
+    public record PrintStatement : Statement
     {
         public Expression Message { get; }
         public Expression? ShowTimestamp { get; }
@@ -1198,7 +1255,7 @@ namespace ETL_SQL.Core
     public enum WaitType { Delay, Time }
 
     /// <summary>WAITFOR DELAY/TIME '...' — pauses execution.</summary>
-    public class WaitForStatement(Expression expression, WaitType type = WaitType.Delay) : Statement
+    public record WaitForStatement(Expression expression, WaitType type = WaitType.Delay) : Statement
     {
         public Expression Expression { get; } = expression;
         public WaitType Type { get; } = type;
@@ -1206,7 +1263,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"WAITFOR {Type.ToString().ToUpper()} {Expression.ToSql()};";
     }
 
-    public class RaiseErrorStatement : Statement
+    public record RaiseErrorStatement : Statement
     {
         public Expression Message { get; }
         public Expression Severity { get; }
@@ -1229,7 +1286,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class ExecuteParameter
+    public record ExecuteParameter
     {
         public Expression Expression { get; }
         public bool IsOutput { get; }
@@ -1245,7 +1302,7 @@ namespace ETL_SQL.Core
         public string ToSql() => Expression.ToSql() + (IsOutput ? " OUTPUT" : "") + (IsInput ? " INPUT" : "");
     }
 
-    public class ExecuteStatement : Statement
+    public record ExecuteStatement : Statement
     {
         public string ProcedureName { get; }
         public List<ExecuteParameter> Parameters { get; }
@@ -1263,7 +1320,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class ParallelStatement : Statement
+    public record ParallelStatement : Statement
     {
         public BlockStatement Body { get; }
         public int ConcurrencyLimit { get; set; } = 0; // 0 means no limit (all tasks)
@@ -1277,7 +1334,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => "PARALLEL " + (ConcurrencyLimit > 0 ? $"({ConcurrencyLimit}) " : "") + Body.ToSql();
     }
 
-    public class BulkInsertStatement : Statement
+    public record BulkInsertStatement : Statement
     {
         public TableReference TargetTable { get; }
         public List<string>? Columns { get; }
@@ -1310,7 +1367,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class CreateProcedureStatement : Statement
+    public record CreateProcedureStatement : Statement
     {
         public string ProcedureName { get; }
         public List<ParameterDefinition> Parameters { get; }
@@ -1337,7 +1394,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class CreateFunctionStatement : Statement
+    public record CreateFunctionStatement : Statement
     {
         public string FunctionName { get; }
         public List<ParameterDefinition> Parameters { get; }
@@ -1366,7 +1423,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class ParameterDefinition : AstNode
+    public record ParameterDefinition : AstNode
     {
         public string Name { get; }
         public string DataType { get; }
@@ -1380,40 +1437,40 @@ namespace ETL_SQL.Core
         public string ToSql() => $"{Name} {DataType}";
     }
 
-    public class BeginTransactionStatement : Statement
+    public record BeginTransactionStatement : Statement
     {
         public string? Name { get; }
         public BeginTransactionStatement(string? name = null) => Name = name;
         public override string ToSql() => Name != null ? $"BEGIN TRANSACTION {Name};" : "BEGIN TRANSACTION;";
     }
 
-    public class CommitTransactionStatement : Statement
+    public record CommitTransactionStatement : Statement
     {
         public string? Name { get; }
         public CommitTransactionStatement(string? name = null) => Name = name;
         public override string ToSql() => Name != null ? $"COMMIT TRANSACTION {Name};" : "COMMIT TRANSACTION;";
     }
 
-    public class RollbackTransactionStatement : Statement
+    public record RollbackTransactionStatement : Statement
     {
         public string? Name { get; }
         public RollbackTransactionStatement(string? name = null) => Name = name;
         public override string ToSql() => Name != null ? $"ROLLBACK TRANSACTION {Name};" : "ROLLBACK TRANSACTION;";
     }
 
-    public class ContinueStatement : Statement
+    public record ContinueStatement : Statement
     {
         public override string ToSql() => "CONTINUE;";
     }
 
-    public class ThrowStatement : Statement
+    public record ThrowStatement : Statement
     {
         public Expression? Message { get; }
         public ThrowStatement(Expression? message = null) => Message = message;
         public override string ToSql() => Message != null ? $"THROW {Message.ToSql()};" : "THROW;";
     }
 
-    public class TryCatchStatement : Statement
+    public record TryCatchStatement : Statement
     {
         public Statement TryBody { get; }
         public Statement CatchBody { get; }
@@ -1428,7 +1485,7 @@ namespace ETL_SQL.Core
     }
 
 
-    public class ReturnStatement : Statement
+    public record ReturnStatement : Statement
     {
         public Expression? ReturnValue { get; }
 
@@ -1440,19 +1497,20 @@ namespace ETL_SQL.Core
         public override string ToSql() => ReturnValue != null ? $"RETURN {ReturnValue.ToSql()};" : "RETURN;";
     }
 
-    public class BreakStatement : Statement 
+    public record BreakStatement : Statement 
     {
         public override string ToSql() => "BREAK;";
     }
 
-    public abstract class Expression : AstNode 
-    { 
+    /// <summary>Base class for all expressions that return a value.</summary>
+    public abstract record Expression : AstNode
+    {
         public virtual string ToSql() => "UNKNOWN EXPRESSION";
         public virtual IEnumerable<string> GetSourceTables() => Enumerable.Empty<string>();
         public virtual IEnumerable<string> GetSourceColumns() => Enumerable.Empty<string>();
     }
 
-    public class UnaryExpression : Expression
+    public record UnaryExpression : Expression
     {
         public TokenType Operator { get; }
         public Expression Expression { get; }
@@ -1477,7 +1535,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class BinaryExpression : Expression
+    public record BinaryExpression : Expression
     {
         public Expression Left { get; }
         public TokenType Operator { get; }
@@ -1515,7 +1573,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class LiteralExpression : Expression
+    public record LiteralExpression : Expression
     {
         public object? Value { get; }
         public TokenType Type { get; }
@@ -1537,7 +1595,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class IdentifierExpression : Expression
+    public record IdentifierExpression : Expression
     {
         public string Name { get; }
 
@@ -1551,7 +1609,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceTables() => Name.Contains('.') ? new[] { Name.Split('.')[0] } : Enumerable.Empty<string>();
     }
 
-    public class MemberAccessExpression : Expression
+    public record MemberAccessExpression : Expression
     {
         public Expression Expression { get; }
         public string MemberName { get; }
@@ -1567,7 +1625,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => new[] { MemberName };
     }
 
-    public class SubqueryExpression : Expression
+    public record SubqueryExpression : Expression
     {
         public Statement Query { get; }
 
@@ -1579,7 +1637,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"({Query.ToSql().TrimEnd(';')})";
     }
 
-    public class VariableExpression : Expression
+    public record VariableExpression : Expression
     {
         public string Name { get; }
 
@@ -1591,7 +1649,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => Name;
     }
 
-    public class FunctionCallExpression : Expression
+    public record FunctionCallExpression : Expression
     {
         public string FunctionName { get; }
         public List<Expression> Arguments { get; }
@@ -1624,7 +1682,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class ListExpression : Expression
+    public record ListExpression : Expression
     {
         public List<Expression> Items { get; }
 
@@ -1636,7 +1694,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => "(" + string.Join(", ", Items.Select(i => i.ToSql())) + ")";
     }
 
-    public class IsNullExpression : Expression
+    public record IsNullExpression : Expression
     {
         public Expression Expression { get; }
         public bool Not { get; }
@@ -1650,7 +1708,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"{Expression.ToSql()} IS {(Not ? "NOT " : "")}NULL";
     }
 
-    public class ExportStatement : Statement
+    public record ExportStatement : Statement
     {
         public Expression Source { get; }
         public string TargetPath { get; }
@@ -1666,7 +1724,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"EXPORT {Source.ToSql()} TO '{TargetPath}'" + (Options != null ? " WITH (...)" : "");
     }
 
-    public class HelpStatement : Statement
+    public record HelpStatement : Statement
     {
         public string? Topic { get; }
         public string? SubTopic { get; }
@@ -1680,7 +1738,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"HELP {(Topic != null ? Topic + (SubTopic != null ? " " + SubTopic : "") : "")}";
     }
 
-    public class InExpression : Expression
+    public record InExpression : Expression
     {
         public Expression Left { get; }
         public Expression Right { get; }
@@ -1698,7 +1756,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"{Left.ToSql()} {(IsNot ? "NOT " : "")}IN {Right.ToSql()}";
     }
 
-    public class LineageStatement : Statement
+    public record LineageStatement : Statement
     {
         public TableReference TargetTable { get; }
         public string? ColumnName { get; }
@@ -1720,7 +1778,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class EmailStatement : Statement
+    public record EmailStatement : Statement
     {
         public Expression To { get; }
         public Expression From { get; }
@@ -1766,7 +1824,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class LikeExpression : Expression
+    public record LikeExpression : Expression
     {
         public Expression Left { get; }
         public Expression Pattern { get; }
@@ -1784,7 +1842,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"{Left.ToSql()} {(IsNot ? "NOT " : "")}LIKE {Pattern.ToSql()}{(EscapeChar != null ? " ESCAPE " + EscapeChar.ToSql() : "")}";
     }
 
-    public class ExistsExpression : Expression
+    public record ExistsExpression : Expression
     {
         public Statement Subquery { get; }
         public bool IsNot { get; }
@@ -1798,7 +1856,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"{(IsNot ? "NOT " : "")}EXISTS ({Subquery.ToSql()})";
     }
 
-    public class CaseExpression : Expression
+    public record CaseExpression : Expression
     {
         public List<(Expression Condition, Expression Result)> WhenClauses { get; }
         public Expression? ElseResult { get; }
@@ -1838,7 +1896,7 @@ namespace ETL_SQL.Core
             return sql;
         }
     }
-    public class AtTimeZoneExpression : Expression
+    public record AtTimeZoneExpression : Expression
     {
         public Expression Left { get; }
         public Expression TimeZone { get; }
@@ -1855,7 +1913,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => Left.GetSourceColumns();
     }
 
-    public class SubstringExpression : FunctionCallExpression
+    public record SubstringExpression : FunctionCallExpression
     {
         public Expression String { get; }
         public Expression Start { get; }
@@ -1874,7 +1932,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns();
     }
 
-    public class PositionExpression(Expression substring, Expression str) : Expression
+    public record PositionExpression(Expression substring, Expression str) : Expression
     {
         public Expression Substring { get; } = substring;
         public Expression String { get; } = str;
@@ -1884,7 +1942,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns().Concat(Substring.GetSourceColumns());
     }
 
-    public class ExtractExpression(string field, Expression source) : Expression
+    public record ExtractExpression(string field, Expression source) : Expression
     {
         public string Field { get; } = field;
         public Expression Source { get; } = source;
@@ -1894,7 +1952,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => Source.GetSourceColumns();
     }
 
-    public class OverlayExpression(Expression str, Expression overlay, Expression start, Expression? length = null) : Expression
+    public record OverlayExpression(Expression str, Expression overlay, Expression start, Expression? length = null) : Expression
     {
         public Expression String { get; } = str;
         public Expression Overlay { get; } = overlay;
@@ -1908,7 +1966,7 @@ namespace ETL_SQL.Core
 
     public enum TrimType { BOTH, LEADING, TRAILING }
 
-    public class TrimExpression(TrimType type, Expression? characters, Expression str) : Expression
+    public record TrimExpression(TrimType type, Expression? characters, Expression str) : Expression
     {
         public TrimType Type { get; } = type;
         public Expression? Characters { get; } = characters;
@@ -1927,7 +1985,7 @@ namespace ETL_SQL.Core
     public enum WindowFrameType { ROWS, RANGE }
     public enum WindowFrameBoundType { PRECEDING, FOLLOWING, CURRENT_ROW, UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING }
 
-    public class WindowFrame : AstNode
+    public record WindowFrame : AstNode
     {
         public WindowFrameType Type { get; }
         public WindowFrameBoundType StartBound { get; }
@@ -1966,7 +2024,7 @@ namespace ETL_SQL.Core
     }
 
 
-    public class WindowClause : AstNode
+    public record WindowClause : AstNode
     {
         public List<Expression> PartitionBy { get; }
         public List<OrderByClause> OrderBy { get; }
@@ -1998,7 +2056,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class CreateIndexStatement : Statement
+    public record CreateIndexStatement : Statement
     {
         public string IndexName { get; }
         public TableReference TargetTable { get; }
@@ -2020,7 +2078,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class ExplainStatement : Statement
+    public record ExplainStatement : Statement
     {
         public Statement Query { get; }
 
@@ -2037,7 +2095,7 @@ namespace ETL_SQL.Core
 
     public enum FileOpType { Copy, Move, Rename, Delete, Compress, Encrypt, Decrypt }
 
-    public class FileOperationStatement : Statement
+    public record FileOperationStatement : Statement
     {
         public FileOpType Type { get; }
         public Expression Source { get; }
@@ -2063,7 +2121,7 @@ namespace ETL_SQL.Core
 
     public enum DirectoryOpType { Create, Delete, Rename, Move, Copy, DeleteContents, Compress, Encrypt, Decrypt }
 
-    public class DirectoryOperationStatement : Statement
+    public record DirectoryOperationStatement : Statement
     {
         public DirectoryOpType Type { get; }
         public Expression Path { get; }
@@ -2095,7 +2153,7 @@ namespace ETL_SQL.Core
 
     public enum FileTransferType { Send, Receive }
 
-    public class FileTransferStatement : Statement
+    public record FileTransferStatement : Statement
     {
         public FileTransferType Type { get; set; }
         public Expression LocalPath { get; set; } = null!;
@@ -2129,7 +2187,7 @@ namespace ETL_SQL.Core
 
     public enum DockerAction { Start, Stop, Pause, Resume, Close }
 
-    public class DockerActionStatement : Statement
+    public record DockerActionStatement : Statement
     {
         public string Alias { get; }
         public DockerAction Action { get; }
@@ -2137,7 +2195,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"{Action.ToString().ToUpper()}_DOCKER {Alias};";
     }
 
-    public class DockerCloseStatement : Statement
+    public record DockerCloseStatement : Statement
     {
         public Expression? ImageName { get; }
         public string? Alias { get; }
@@ -2153,7 +2211,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class CreateJobStatement : Statement
+    public record CreateJobStatement : Statement
     {
         public string JobName { get; }
         public ScheduleInfo Schedule { get; }
@@ -2172,7 +2230,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class ScheduleInfo : AstNode
+    public record ScheduleInfo : AstNode
     {
         public int Interval { get; }
         public string Unit { get; } // SECOND, MINUTE, HOUR, DAY
@@ -2192,7 +2250,7 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class ShowJobHistoryStatement : Statement
+    public record ShowJobHistoryStatement : Statement
     {
         public string? JobName { get; }
         public string? IntoTable { get; set; }
@@ -2200,19 +2258,19 @@ namespace ETL_SQL.Core
         public override string ToSql() => (JobName != null ? $"SHOW JOB HISTORY {JobName}" : "SHOW JOB HISTORY") + (IntoTable != null ? $" INTO {IntoTable};" : ";");
     }
 
-    public class ShowJobsStatement : Statement
+    public record ShowJobsStatement : Statement
     {
         public string? IntoTable { get; set; }
         public override string ToSql() => "SHOW JOBS" + (IntoTable != null ? $" INTO {IntoTable};" : ";");
     }
 
-    public class ShowConnectionsStatement : Statement
+    public record ShowConnectionsStatement : Statement
     {
         public string? IntoTable { get; set; }
         public override string ToSql() => "SHOW CONNECTIONS" + (IntoTable != null ? $" INTO {IntoTable};" : ";");
     }
 
-    public class ShowTablesStatement : Statement
+    public record ShowTablesStatement : Statement
     {
         public string? ConnectionName { get; }
         public string? IntoTable { get; set; }
@@ -2220,7 +2278,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => (ConnectionName != null ? $"SHOW TABLES ON {ConnectionName}" : "SHOW TABLES") + (IntoTable != null ? $" INTO {IntoTable};" : ";");
     }
 
-    public class ShowColumnsStatement : Statement
+    public record ShowColumnsStatement : Statement
     {
         public TableReference Table { get; }
         public string? IntoTable { get; set; }
@@ -2228,7 +2286,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"SHOW COLUMNS FOR {Table.ToSql()}" + (IntoTable != null ? $" INTO {IntoTable};" : ";");
     }
 
-    public class ShowTagsStatement : Statement
+    public record ShowTagsStatement : Statement
     {
         public string TableName { get; }
         public string? ColumnName { get; }
@@ -2237,7 +2295,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"SHOW TAGS FOR TABLE {TableName}" + (ColumnName != null ? $" COLUMN {ColumnName}" : "") + (IntoTable != null ? $" INTO {IntoTable};" : ";");
     }
 
-    public class ShowTagValueStatement : Statement
+    public record ShowTagValueStatement : Statement
     {
         public string TableName { get; }
         public string? ColumnName { get; }
@@ -2247,7 +2305,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => $"SHOW TAG VALUE FOR TABLE {TableName}" + (ColumnName != null ? $" COLUMN {ColumnName}" : "") + $" WITH TAG {TagName}" + (IntoTable != null ? $" INTO {IntoTable};" : ";");
     }
 
-    public class LintStatement : Statement
+    public record LintStatement : Statement
     {
         public string? ScriptPath { get; }
 
@@ -2260,7 +2318,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>A single variable assignment inside a CREATE SETS block.</summary>
-    public class SetsAssignment
+    public record SetsAssignment
     {
         public string VariableName { get; }
         public Expression Value { get; }
@@ -2268,7 +2326,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>CREATE SETS !&lt;name&gt; BEGIN @var = val, ... [SET WITH_PROMPT ON;] END</summary>
-    public class CreateSetsStatement : Statement
+    public record CreateSetsStatement : Statement
     {
         public string Name { get; }
         public List<SetsAssignment> Assignments { get; }
@@ -2290,7 +2348,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>DROP SETS [IF EXISTS] !&lt;name&gt;</summary>
-    public class DropSetsStatement : Statement
+    public record DropSetsStatement : Statement
     {
         public string Name { get; }
         public bool IfExists { get; }
@@ -2301,7 +2359,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>USE SETS !<name></summary>
-    public class UseSetsStatement : Statement
+    public record UseSetsStatement : Statement
     {
         public string Name { get; }
         public UseSetsStatement(string name) { Name = name; }
@@ -2309,7 +2367,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>USE PASSWORD = 'password'</summary>
-    public class UsePasswordStatement : Statement
+    public record UsePasswordStatement : Statement
     {
         public string Password { get; }
         public UsePasswordStatement(string password) { Password = password; }
@@ -2323,7 +2381,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>SET SHOW_PASSWORD ON/OFF</summary>
-    public class SetShowPasswordStatement : Statement
+    public record SetShowPasswordStatement : Statement
     {
         public bool Enabled { get; }
         public SetShowPasswordStatement(bool enabled) { Enabled = enabled; }

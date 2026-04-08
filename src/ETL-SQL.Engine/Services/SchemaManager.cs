@@ -13,16 +13,10 @@ namespace ETL_SQL.Engine.Services
     /// Manages DDL operations including creating and dropping tables, indexes, procedures, and functions.
     /// Orchestrates schema changes across various data sources.
     /// </summary>
-    public class SchemaManager
+    public class SchemaManager(Evaluator evaluator, VariableScopeManager variableScopeManager)
     {
-        private readonly Evaluator _evaluator;
-        private readonly VariableScopeManager _variableScopeManager;
-
-        public SchemaManager(Evaluator evaluator, VariableScopeManager variableScopeManager)
-        {
-            _evaluator = evaluator;
-            _variableScopeManager = variableScopeManager;
-        }
+        private readonly Evaluator _evaluator = evaluator;
+        private readonly VariableScopeManager _variableScopeManager = variableScopeManager;
 
         /// <summary>Executes a CREATE TABLE statement.</summary>
         public async Task EvaluateCreateTable(CreateTableStatement stmt, IDictionary<string, IDataSource> connections)

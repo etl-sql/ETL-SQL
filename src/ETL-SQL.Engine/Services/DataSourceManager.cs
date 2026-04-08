@@ -16,16 +16,10 @@ namespace ETL_SQL.Engine.Services
     /// Handles the resolution of table references to physical or virtual data sources.
     /// Manages temporary tables, subqueries, and table-level operators (PIVOT/UNPIVOT).
     /// </summary>
-    public class DataSourceManager
+    public class DataSourceManager(Evaluator evaluator, ExpressionEvaluator expressionEvaluator)
     {
-        private readonly Evaluator _evaluator;
-        private readonly ExpressionEvaluator _expressionEvaluator;
-
-        public DataSourceManager(Evaluator evaluator, ExpressionEvaluator expressionEvaluator)
-        {
-            _evaluator = evaluator;
-            _expressionEvaluator = expressionEvaluator;
-        }
+        private readonly Evaluator _evaluator = evaluator;
+        private readonly ExpressionEvaluator _expressionEvaluator = expressionEvaluator;
 
         /// <summary>
         /// Resolves a table reference to a functional IDataSource.

@@ -1,8 +1,8 @@
 namespace ETL_SQL.Core
 {
-    public class SetWhatIfStatement : Statement
+    public record SetWhatIfStatement : Statement
     {
-        public bool Enabled { get; set; }
+        public bool Enabled { get; init; }
         public override string ToSql() => $"SET WHAT_IF {(Enabled ? "ON" : "OFF")}";
     }
 }

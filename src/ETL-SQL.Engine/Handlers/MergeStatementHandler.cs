@@ -57,7 +57,7 @@ namespace ETL_SQL.Engine.Handlers
                     }
                 }
             }
-            foreach (var clause in stmt.NotMatchedByTargetClauses)
+            foreach (var clause in stmt.NotMatchedClauses.Where(c => c.Option == MergeSourceOrTarget.Target))
             {
                 if (clause.ActionType == MergeActionType.INSERT)
                 {
@@ -160,7 +160,7 @@ namespace ETL_SQL.Engine.Handlers
                 if (!rowMatched)
                 {
                     var sEvalRow = CreateEvalRow(sRow, sAlias);
-                    foreach (var clause in stmt.NotMatchedByTargetClauses)
+                    foreach (var clause in stmt.NotMatchedClauses.Where(c => c.Option == MergeSourceOrTarget.Target))
                     {
                         if (clause.Condition == null || await context.EvaluateCondition(clause.Condition, sEvalRow))
                         {
@@ -185,7 +185,7 @@ namespace ETL_SQL.Engine.Handlers
                 if (!matchedTargetRows.Contains(tRow))
                 {
                     var tEvalRow = CreateEvalRow(null, sAlias, tRow, tAlias);
-                    foreach (var clause in stmt.NotMatchedBySourceClauses)
+                    foreach (var clause in stmt.NotMatchedClauses.Where(c => c.Option == MergeSourceOrTarget.Source))
                     {
                         if (clause.Condition == null || await context.EvaluateCondition(clause.Condition, tEvalRow))
                         {

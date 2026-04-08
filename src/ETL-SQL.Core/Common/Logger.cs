@@ -22,9 +22,23 @@ namespace ETL_SQL.Common
         public static bool SuppressConsole { get; set; } = false;
 
         /// <summary>
+        /// The active ILogger instance to which all static calls are delegated.
+        /// Defaults to a ConsoleLogger if not set.
+        /// </summary>
+        private static ILogger? _instance;
+        public static ILogger Instance 
+        { 
+            get => _instance ??= new EngineLogger("Global");
+            set => _instance = value;
+        }
+
+        /// <summary>
         /// Callback invoked for every message (e.g. UI panels that mirror log output).
         /// </summary>
         public static Action<string, ConsoleColor>? OnMessage { get; set; }
+
+        [ThreadStatic]
+        private static bool ExecutingInInstance;
 
         // ─── Internal Serilog loggers ───────────────────────────────────────
         private static Serilog.Core.Logger? _appLogger;      // application-level logger
@@ -47,97 +61,28 @@ namespace ETL_SQL.Common
             }
         }
 
-        /// <summary>
-        /// Configure the application-level rolling log.
-        /// Called once at startup from DependencyInjectionSetup.
-        /// </summary>
-        /// <param name="logDirectory">Folder for log files (e.g. "logs/app").</param>
-        /// <param name="retentionDays">Delete files older than this many days (0 = keep forever).</param>
-        /// <param name="fileSizeLimitMb">Roll to a new file when this size is exceeded.</param>
         public static void InitializeAppLogger(string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)
         {
-            logDirectory = ResolveRootPath(logDirectory);
-            Directory.CreateDirectory(logDirectory);
-            PurgeOldLogs(logDirectory, retentionDays, "*.log");
-
-            _appLogger = new LoggerConfiguration()
-                .MinimumLevel.Debug()
-                .WriteTo.File(
-                    path:                  Path.Combine(logDirectory, "etlsql-.log"),
-                    rollingInterval:       RollingInterval.Day,
-                    fileSizeLimitBytes:    fileSizeLimitMb > 0 ? (long?)fileSizeLimitMb * 1024 * 1024 : null,
-                    rollOnFileSizeLimit:   true,
-                    retainedFileCountLimit: null,   // we handle retention ourselves via PurgeOldLogs
-                    outputTemplate:        "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-                .CreateLogger();
-
-            // Wire Serilog as the MEL back-end if a factory hasn't been set externally
-            if (_msLoggerFactory == null)
+            if (Instance is LoggerService service)
             {
-                _msLoggerFactory = new SerilogLoggerFactory(_appLogger, dispose: false);
-                _msLogger = _msLoggerFactory.CreateLogger("ETL_SQL.Common.Logger");
+                service.InitializeAppLogger(logDirectory, retentionDays, fileSizeLimitMb);
             }
         }
 
-        // ─── Script logger wiring ───────────────────────────────────────────
-
-        /// <summary>
-        /// Initialize a per-script rolling log.
-        /// Replaces the old InitializeLogFile method.
-        /// </summary>
-        /// <param name="sourceScript">Script file path (name is used as log filename prefix).</param>
-        /// <param name="logDirectory">Directory for script logs (e.g. "logs/scripts").</param>
-        /// <param name="retentionDays">Delete files older than N days (0 = keep forever).</param>
-        /// <param name="fileSizeLimitMb">Roll to a new file when this size is exceeded.</param>
-        public static void InitializeScriptLogger(
-            string sourceScript,
-            string logDirectory,
-            int retentionDays = 30,
-            int fileSizeLimitMb = 10)
+        public static void InitializeScriptLogger(string sourceScript, string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)
         {
-            IsFileLogging = true;
-            logDirectory = ResolveRootPath(logDirectory);
-            Directory.CreateDirectory(logDirectory);
-            PurgeOldLogs(logDirectory, retentionDays, "*.log");
-
-            string scriptName = Path.GetFileNameWithoutExtension(sourceScript);
-            string dateStamp  = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-
-            _scriptLogger?.Dispose();
-            _scriptLogger = new LoggerConfiguration()
-                .MinimumLevel.Debug()
-                .WriteTo.File(
-                    path:               Path.Combine(logDirectory, $"{scriptName}_{dateStamp}-.log"),
-                    rollingInterval:    RollingInterval.Infinite,
-                    fileSizeLimitBytes: fileSizeLimitMb > 0 ? (long?)fileSizeLimitMb * 1024 * 1024 : null,
-                    rollOnFileSizeLimit: true,
-                    outputTemplate:     "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-                .CreateLogger();
-
-            WriteInternal(LogEventLevel.Information, "--- ETL-SQL Script Log Started ---", ConsoleColor.Cyan);
+            if (Instance is LoggerService service)
+            {
+                service.InitializeScriptLogger(sourceScript, logDirectory, retentionDays, fileSizeLimitMb);
+            }
         }
 
-        /// <summary>
-        /// Configure a dedicated logger for test sessions.
-        /// Redirects all engine output to logs/tests during test execution.
-        /// </summary>
         public static void InitializeTestLogger(string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 50)
         {
-            logDirectory = ResolveRootPath(logDirectory);
-            Directory.CreateDirectory(logDirectory);
-            
-            _testLogger?.Dispose();
-            _testLogger = new LoggerConfiguration()
-                .MinimumLevel.Debug()
-                .WriteTo.File(
-                    path:               Path.Combine(logDirectory, "test-.log"),
-                    rollingInterval:    RollingInterval.Day,
-                    fileSizeLimitBytes: fileSizeLimitMb > 0 ? (long?)fileSizeLimitMb * 1024L * 1024L : null,
-                    rollOnFileSizeLimit: true,
-                    outputTemplate:     "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
-                .CreateLogger();
-
-            WriteInternal(LogEventLevel.Information, "=== ETL-SQL Test Logger Initialized ===", ConsoleColor.Cyan);
+            if (Instance is LoggerService service)
+            {
+                service.InitializeTestLogger(logDirectory, retentionDays, fileSizeLimitMb);
+            }
         }
 
         /// <summary>
@@ -245,40 +190,21 @@ namespace ETL_SQL.Common
         /// <param name="color">The console color.</param>
         private static void WriteInternal(LogEventLevel serilogLevel, string message, ConsoleColor color)
         {
-            // 1. Serilog – application logger
-            _appLogger?.Write(serilogLevel, message);
+            if (ExecutingInInstance) return;
 
-            // 2. Serilog – script logger
-            _scriptLogger?.Write(serilogLevel, message);
-
-            // 3. Serilog – test logger
-            _testLogger?.Write(serilogLevel, message);
-
-            // 4. MEL bridge (for any ILogger<T> consumers)
-            if (_msLogger != null)
+            ExecutingInInstance = true;
+            try
             {
-                var msLevel = serilogLevel switch
+                var level = serilogLevel switch
                 {
-                    LogEventLevel.Error   => LogLevel.Error,
+                    LogEventLevel.Error => LogLevel.Error,
                     LogEventLevel.Warning => LogLevel.Warning,
-                    LogEventLevel.Debug   => LogLevel.Debug,
-                    _                     => LogLevel.Information,
+                    LogEventLevel.Debug => LogLevel.Debug,
+                    _ => LogLevel.Info
                 };
-#pragma warning disable CA2254
-                _msLogger.Log(msLevel, message);
-#pragma warning restore CA2254
+                Instance.Log(level, message);
             }
-
-            // 5. Console
-            if (!IsSilent && !SuppressConsole)
-            {
-                if (color != ConsoleColor.White) Console.ForegroundColor = color;
-                Console.WriteLine(message);
-                if (color != ConsoleColor.White) Console.ResetColor();
-            }
-
-            // 6. UI callback (e.g. console editor result panel)
-            OnMessage?.Invoke(message, color);
+            finally { ExecutingInInstance = false; }
         }
 
         /// <summary>
@@ -314,12 +240,7 @@ namespace ETL_SQL.Common
         /// <summary>Flush and close all open log files. Call on app shutdown.</summary>
         public static void CloseAndFlush()
         {
-            _testLogger?.Dispose();
-            _scriptLogger?.Dispose();
-            _appLogger?.Dispose();
-            _testLogger   = null;
-            _scriptLogger = null;
-            _appLogger    = null;
+            if (Instance is IDisposable disposable) disposable.Dispose();
         }
     }
 }

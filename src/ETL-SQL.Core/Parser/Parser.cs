@@ -457,9 +457,12 @@ namespace ETL_SQL.Core.Parser
 
             if (Match(TokenType.FOR))
             {
-                selectStmt.ForClause = ParseForClause();
-                selectStmt.EndLine = LastTokenEndLine;
-                selectStmt.EndColumn = LastTokenEndColumn;
+                selectStmt = selectStmt with 
+                { 
+                    ForClause = ParseForClause(),
+                    EndLine = LastTokenEndLine,
+                    EndColumn = LastTokenEndColumn
+                };
             }
 
             return selectStmt;
@@ -710,18 +713,24 @@ namespace ETL_SQL.Core.Parser
                 foreach (var tag in tableMetadata) tableRef.Metadata[tag.Key] = tag.Value;
             }
 
-            tableRef.Line = t.Line;
-            tableRef.Column = t.Column;
-            tableRef.EndLine = LastTokenEndLine;
-            tableRef.EndColumn = LastTokenEndColumn;
+            tableRef = tableRef with 
+            { 
+                Line = t.Line, 
+                Column = t.Column, 
+                EndLine = LastTokenEndLine, 
+                EndColumn = LastTokenEndColumn 
+            };
 
             // Handle PIVOT/UNPIVOT operators
             while (Current.Type == TokenType.PIVOT || Current.Type == TokenType.UNPIVOT)
             {
                 if (Match(TokenType.PIVOT)) tableRef.TableOperators.Add(ParsePivotClause());
                 else if (Match(TokenType.UNPIVOT)) tableRef.TableOperators.Add(ParseUnpivotClause());
-                tableRef.EndLine = LastTokenEndLine;
-                tableRef.EndColumn = LastTokenEndColumn;
+                tableRef = tableRef with 
+                { 
+                    EndLine = LastTokenEndLine, 
+                    EndColumn = LastTokenEndColumn 
+                };
             }
 
             return tableRef;
@@ -851,11 +860,13 @@ namespace ETL_SQL.Core.Parser
                 ParseMetadataTags(Previous.Value, metadata);
             }
 
-            var col = new SelectColumn(expr, alias, metadata);
-            col.Line = expr.Line;
-            col.Column = expr.Column;
-            col.EndLine = LastTokenEndLine;
-            col.EndColumn = LastTokenEndColumn;
+            var col = new SelectColumn(expr, alias, metadata)
+            {
+                Line = expr.Line,
+                Column = expr.Column,
+                EndLine = LastTokenEndLine,
+                EndColumn = LastTokenEndColumn
+            };
             return col;
         }
 

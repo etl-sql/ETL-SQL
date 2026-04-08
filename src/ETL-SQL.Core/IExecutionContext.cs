@@ -1,4 +1,5 @@
 using ETL_SQL.Data;
+using ETL_SQL.Common;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -61,6 +62,7 @@ namespace ETL_SQL.Core
 
     public interface ILoggingContext
     {
+        ETL_SQL.Common.ILogger Logger { get; }
         bool IsVerbose { get; set; }
         bool ShowPassword { get; set; }
         bool RedirectOutput { get; set; }

@@ -130,6 +130,24 @@ namespace ETL_SQL.Core
             {
                 string t = (upd.TargetTable.ConnectionName != null ? upd.TargetTable.ConnectionName + "." + upd.TargetTable.TableName : upd.TargetTable.TableName);
                 var aliases = AliasScanner.Scan(upd.ToSql());
+                
+                // Ensure target table and from/join tables are in the alias map
+                void AddToAliases(TableReference tbl)
+                {
+                    var alias = tbl.Alias ?? tbl.TableName;
+                    if (!aliases.ContainsKey(alias))
+                    {
+                        aliases[alias] = new AliasInfo(tbl.TableName, tbl.Alias);
+                    }
+                }
+
+                AddToAliases(upd.TargetTable);
+                if (upd.FromTable != null) AddToAliases(upd.FromTable);
+                if (upd.Joins != null)
+                {
+                    foreach (var join in upd.Joins) AddToAliases(join.Table);
+                }
+                
                 Tracker.Record(t, Enumerable.Empty<string>(), "UPDATE", line: upd.Line, column: upd.Column, endLine: upd.EndLine, endColumn: upd.EndColumn);
 
                 // Column-level lineage for assignments
@@ -164,15 +182,14 @@ namespace ETL_SQL.Core
                 // Static column-level lineage for MERGE actions
                 var sTable = merge.SourceTable.Alias ?? merge.SourceTable.TableName;
                 
-                var allClauses = merge.MatchedClauses
-                    .Concat(merge.NotMatchedByTargetClauses)
-                    .Concat(merge.NotMatchedBySourceClauses);
+                var allClauses = merge.MatchedClauses.Cast<MergeActionClause>()
+                    .Concat(merge.NotMatchedClauses);
 
                 foreach (var clause in allClauses)
                 {
-                    if (clause.ActionType == MergeActionType.UPDATE && clause.UpdateAssignments != null)
+                    if (clause is MergeUpdateClause mergeUpd && mergeUpd.Assignments != null)
                     {
-                        foreach (var a in clause.UpdateAssignments)
+                        foreach (var a in mergeUpd.Assignments)
                         {
                             var rawSrcTables = a.Value.GetSourceTables();
                             var srcTables = rawSrcTables.Select(s => s.Equals("S", StringComparison.OrdinalIgnoreCase) || s.Equals(merge.SourceTable.Alias, StringComparison.OrdinalIgnoreCase) ? sTable : (aliases.TryGetValue(s, out var info) ? info.TableName : s)).ToList();
@@ -182,12 +199,12 @@ namespace ETL_SQL.Core
                             Tracker.Record(t, srcTables, "MERGE UPDATE", targetColumn: a.ColumnName, sourceColumns: srcCols, metadata: inherited, derivedFromDescriptions: derivedUpdate, line: a.Line, column: a.Column);
                         }
                     }
-                    else if (clause.ActionType == MergeActionType.INSERT && clause.InsertValues != null)
+                    else if (clause is MergeInsertClause mergeIns && mergeIns.Values != null)
                     {
-                        for (int i = 0; i < (clause.InsertColumns?.Count ?? 0) && i < clause.InsertValues.Count; i++)
+                        for (int i = 0; i < (mergeIns.Columns?.Count ?? 0) && i < mergeIns.Values.Count; i++)
                         {
-                            var val = clause.InsertValues[i];
-                            var targetCol = clause.InsertColumns![i];
+                            var val = mergeIns.Values[i];
+                            var targetCol = mergeIns.Columns![i];
                             var rawSrcTables = val.GetSourceTables();
                             var srcTables = rawSrcTables.Select(s => s.Equals("S", StringComparison.OrdinalIgnoreCase) || s.Equals(merge.SourceTable.Alias, StringComparison.OrdinalIgnoreCase) ? sTable : (aliases.TryGetValue(s, out var info) ? info.TableName : s)).ToList();
                             var srcCols = val.GetSourceColumns();

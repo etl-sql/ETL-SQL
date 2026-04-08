@@ -14,13 +14,9 @@ namespace ETL_SQL.Engine.Handlers
     /// Handles the CREATE CONNECTION statement, registering new data sources in the execution context.
     /// Supports various connector types (SQL, File, specialized) and connection string interpolation.
     /// </summary>
-    public class CreateConnectionStatementHandler : IStatementHandler
+    public class CreateConnectionStatementHandler(IConnectorRegistry connectorRegistry) : IStatementHandler
     {
-        private readonly IConnectorRegistry _connectorRegistry;
-        public CreateConnectionStatementHandler(IConnectorRegistry connectorRegistry)
-        {
-            _connectorRegistry = connectorRegistry;
-        }
+        private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
 
         public Type SupportedStatementType => typeof(CreateConnectionStatement);
         /// <summary>Executes the CREATE CONNECTION statement, resolving the target string and options.</summary>

@@ -12,13 +12,9 @@ namespace ETL_SQL.Engine.Handlers
     /// Handles the BULK INSERT statement, providing high-performance data loading from flat files into target tables.
     /// Supports FIELDTERMINATOR, ROWTERMINATOR, FIRSTROW, and batching.
     /// </summary>
-    public class BulkInsertStatementHandler : IStatementHandler
+    public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry) : IStatementHandler
     {
-        private readonly IConnectorRegistry _connectorRegistry;
-        public BulkInsertStatementHandler(IConnectorRegistry connectorRegistry)
-        {
-            _connectorRegistry = connectorRegistry;
-        }
+        private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
 
         public Type SupportedStatementType => typeof(BulkInsertStatement);
         /// <summary>Executes the BULK INSERT statement, resolving the source file and streaming data to the destination.</summary>

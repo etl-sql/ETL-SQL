@@ -22,6 +22,7 @@ namespace ETL_SQL.Tests
         {
             var services = new ServiceCollection();
             services.AddLogging();
+            services.AddSingleton<ETL_SQL.Common.ILogger>(new ETL_SQL.Common.EngineLogger());
             var dbName = $"test_jobs_{Guid.NewGuid()}.db";
             services.AddSingleton<IJobHistoryStore>(new SQLiteJobHistoryStore(dbName));
             services.AddSingleton<SchedulerService>();

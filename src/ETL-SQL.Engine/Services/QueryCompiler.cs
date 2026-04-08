@@ -10,14 +10,9 @@ namespace ETL_SQL.Engine.Services
     /// Encapsulates the logic for compiling ETL-SQL AST nodes (expressions, queries) 
     /// back into provider-specific SQL strings.
     /// </summary>
-    public class QueryCompiler
+    public class QueryCompiler(Evaluator evaluator)
     {
-        private readonly Evaluator _evaluator;
-
-        public QueryCompiler(Evaluator evaluator)
-        {
-            _evaluator = evaluator;
-        }
+        private readonly Evaluator _evaluator = evaluator;
 
         /// <summary>
         /// Compiles a scalar expression back into a provider-specific SQL string.
@@ -203,14 +198,14 @@ namespace ETL_SQL.Engine.Services
                 sql += " THEN " + CompileMergeAction(clause, d);
             }
 
-            foreach (var clause in m.NotMatchedByTargetClauses)
+            foreach (var clause in m.NotMatchedClauses.Where(c => c.Option == MergeSourceOrTarget.Target))
             {
                 sql += "\n WHEN NOT MATCHED";
                 if (clause.Condition != null) sql += " AND " + CompileExpression(clause.Condition, d);
                 sql += " THEN " + CompileMergeAction(clause, d);
             }
 
-            foreach (var clause in m.NotMatchedBySourceClauses)
+            foreach (var clause in m.NotMatchedClauses.Where(c => c.Option == MergeSourceOrTarget.Source))
             {
                 sql += "\n WHEN NOT MATCHED BY SOURCE";
                 if (clause.Condition != null) sql += " AND " + CompileExpression(clause.Condition, d);

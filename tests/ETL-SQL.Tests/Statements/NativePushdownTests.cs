@@ -53,7 +53,7 @@ END;
             var script = parser.Parse();
 
             // Parser produces a syntax error when a bare END is encountered without a matching BEGIN
-            Assert.Contains(script.Diagnostics, d => d.Message.Contains("Unexpected token END") || d.Message.Contains("Expected BEGIN"));
+            Assert.Contains(script.Diagnostics, d => d.Message.Contains("Unexpected token") && d.Message.Contains("END") || d.Message.Contains("Expected BEGIN"));
         }
 
         [Fact]

@@ -4,7 +4,7 @@ using ETL_SQL.Common;
 
 namespace ETL_SQL.Core
 {
-    public class TestcontainersLogger : ILogger
+    public class TestcontainersLogger : Microsoft.Extensions.Logging.ILogger
     {
         private readonly string _categoryName;
 
@@ -15,16 +15,16 @@ namespace ETL_SQL.Core
 
         public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
 
-        public bool IsEnabled(LogLevel logLevel) => true;
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
 
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
             var message = formatter(state, exception);
             var color = logLevel switch
             {
-                LogLevel.Error or LogLevel.Critical => ConsoleColor.Red,
-                LogLevel.Warning => ConsoleColor.Yellow,
-                LogLevel.Information => ConsoleColor.Cyan,
+                Microsoft.Extensions.Logging.LogLevel.Error or Microsoft.Extensions.Logging.LogLevel.Critical => ConsoleColor.Red,
+                Microsoft.Extensions.Logging.LogLevel.Warning => ConsoleColor.Yellow,
+                Microsoft.Extensions.Logging.LogLevel.Information => ConsoleColor.Cyan,
                 _ => ConsoleColor.Gray
             };
 
@@ -33,9 +33,9 @@ namespace ETL_SQL.Core
         }
     }
 
-    public class TestcontainersLoggerProvider : ILoggerProvider
+    public class TestcontainersLoggerProvider : Microsoft.Extensions.Logging.ILoggerProvider
     {
-        public ILogger CreateLogger(string categoryName) => new TestcontainersLogger(categoryName);
+        public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName) => new TestcontainersLogger(categoryName);
         public void Dispose() { }
     }
 }

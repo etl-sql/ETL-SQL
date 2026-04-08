@@ -10,15 +10,10 @@ namespace ETL_SQL.Engine.Services
     /// Handles the collection and reporting of execution metrics and performance tips.
     /// Provides feedback to the user about query performance and resource usage.
     /// </summary>
-    public class ExecutionMetricsReporter
+    public class ExecutionMetricsReporter(Evaluator evaluator)
     {
-        private readonly Evaluator _evaluator;
+        private readonly Evaluator _evaluator = evaluator;
         private long _lastMemoryUsage;
-
-        public ExecutionMetricsReporter(Evaluator evaluator)
-        {
-            _evaluator = evaluator;
-        }
 
         /// <summary>
         /// Captures baseline metrics before a statement begins execution.

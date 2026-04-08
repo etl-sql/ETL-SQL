@@ -14,14 +14,9 @@ namespace ETL_SQL.Engine
     /// <summary>
     /// Responsible for evaluating SQL expressions (literals, identifiers, binary ops, functions) against a row context.
     /// </summary>
-    public class ExpressionEvaluator
+    public class ExpressionEvaluator(IExecutionContext context)
     {
-        private readonly IExecutionContext _context;
-
-        public ExpressionEvaluator(IExecutionContext context)
-        {
-            _context = context;
-        }
+        private readonly IExecutionContext _context = context;
 
         private object? ResolveIdentifier(string name, Row? context)
         {

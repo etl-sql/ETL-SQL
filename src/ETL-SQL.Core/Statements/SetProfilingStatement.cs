@@ -1,8 +1,8 @@
 namespace ETL_SQL.Core
 {
-    public class SetProfilingStatement : Statement
+    public record SetProfilingStatement : Statement
     {
-        public bool Enabled { get; set; }
+        public bool Enabled { get; init; }
         public override string ToSql() => $"SET PROFILING {(Enabled ? "ON" : "OFF")}";
     }
 }

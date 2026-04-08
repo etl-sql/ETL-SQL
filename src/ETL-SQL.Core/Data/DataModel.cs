@@ -80,10 +80,10 @@ namespace ETL_SQL.Data
     /// </summary>
     public class Row
     {
+        private TableSchema? _schema;
         private object?[]? _values;
         private Dictionary<string, object?>? _dynamicColumns;
-        private TableSchema? _schema;
-
+        public TableSchema? Schema => _schema;
         public Row() { }
 
         public Row(TableSchema schema)
@@ -258,9 +258,12 @@ namespace ETL_SQL.Data
         public int TotalRowsMatched { get; set; }
         public int ResultSetIndex { get; set; }
 
+        private readonly Dictionary<TableConstraintInfo, HashSet<object>> _constraintCaches = new();
+
         public void SetColumns(IEnumerable<string> columns, IEnumerable<TableConstraintInfo>? constraints = null)
         {
             Schema = new TableSchema(columns, constraints);
+            _constraintCaches.Clear();
         }
 
         public void AddColumn(string columnName)
@@ -280,14 +283,23 @@ namespace ETL_SQL.Data
 
         public void AddRow(Row row)
         {
-            row.SetSchema(Schema);
+            if (row.Schema == null) row.SetSchema(Schema);
+            else if (row.Schema != Schema) row.SetSchema(Schema);
 
-            // Enforce constraints (Unique, Primary Key) within this batch
+            // Enforce constraints (Unique, Primary Key) within this batch using HashSet for O(1) performance
             foreach (var constraint in Schema.Constraints)
             {
                 if (constraint.Type == ConstraintType.PrimaryKey || constraint.Type == ConstraintType.Unique)
                 {
-                    if (IsDuplicate(constraint.Columns, row))
+                    if (!_constraintCaches.TryGetValue(constraint, out var cache))
+                    {
+                        cache = new HashSet<object>(new RowEqualityComparer(constraint.Columns, Schema));
+                        _constraintCaches[constraint] = cache;
+                        // Backfill if Rows already exist (though AddRow is usually sequential)
+                        foreach (var r in Rows) cache.Add(r);
+                    }
+
+                    if (!cache.Add(row))
                     {
                         var vals = string.Join(", ", constraint.Columns.Select(c => row[c]?.ToString() ?? "NULL"));
                         throw new Core.Common.Exceptions.ExecutionException($"Unique constraint violation: {constraint.Name ?? "unnamed"} (values: {vals})");
@@ -298,23 +310,33 @@ namespace ETL_SQL.Data
             Rows.Add(row);
         }
 
-        private bool IsDuplicate(List<string> columns, Row row)
+        private class RowEqualityComparer : IEqualityComparer<object>
         {
-            foreach (var r in Rows)
+            private readonly List<int> _colIndices;
+            public RowEqualityComparer(List<string> columns, TableSchema schema)
             {
-                bool match = true;
-                foreach (var col in columns)
-                {
-                    if (!object.Equals(r[col], row[col]))
-                    {
-                        match = false;
-                        break;
-                    }
-                }
-                if (match) return true;
+                _colIndices = columns.Select(c => schema.GetIndex(c)).ToList();
             }
-            return false;
+
+            public new bool Equals(object? x, object? y)
+            {
+                if (x is not Row rx || y is not Row ry) return object.Equals(x, y);
+                foreach (var idx in _colIndices)
+                {
+                    if (!object.Equals(rx[idx], ry[idx])) return false;
+                }
+                return true;
+            }
+
+            public int GetHashCode(object obj)
+            {
+                if (obj is not Row r) return obj.GetHashCode();
+                var hash = new HashCode();
+                foreach (var idx in _colIndices) hash.Add(r[idx]);
+                return hash.ToHashCode();
+            }
         }
+
 
         public Row NewRow() => new(Schema);
 

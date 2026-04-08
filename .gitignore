@@ -21,9 +21,15 @@ artifacts/
 *.vspx
 *.vspscc
 .vscode/
-.claude/
-.claude/settings.json
+
+# Ignore Claude Code personal settings
 .claude/settings.local.json
+
+# Ignore local Claude context files
+CLAUDE.local.md
+
+# Optional: Ignore the entire .claude directory
+.claude/
 
 ## Rider / JetBrains
 .idea/

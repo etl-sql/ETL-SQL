@@ -80,7 +80,7 @@ namespace ETL_SQL.Engine.Handlers
                 foreach (var row in dataTable.Rows)
                 {
                     table.AddRow(
-                        new Text(((DateTime)row["Timestamp"]).ToString("HH:mm:ss.fff")),
+                        new Text(row["Timestamp"] is DateTime dt ? dt.ToString("HH:mm:ss.fff") : row["Timestamp"]?.ToString() ?? ""),
                         new Text(row["Statement"]?.ToString() ?? ""),
                         new Text(Convert.ToInt64(row["RowsProcessed"]).ToString("N0")),
                         row["IndexUsed"]?.ToString() != "--" ? new Markup($"[green]{Markup.Escape(row["IndexUsed"].ToString())}[/]") : new Markup("[grey]--[/]"),

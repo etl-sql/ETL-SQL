@@ -72,23 +72,35 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
 
-            var results = new List<DataTable>();
+            var resultMap = new Dictionary<int, DataTable>();
             await foreach (var batch in databaseSource.ExecuteRawSql(sqlToExecute, parameters))
             {
-                results.Add(batch);
+                if (!resultMap.TryGetValue(batch.ResultSetIndex, out var resultTable))
+                {
+                    resultTable = new DataTable { ResultSetIndex = batch.ResultSetIndex };
+                    resultTable.SetColumns(batch.ColumnNames);
+                    resultMap[batch.ResultSetIndex] = resultTable;
+                }
+                
+                foreach (var row in batch.Rows)
+                {
+                    resultTable.AddRow(row);
+                }
             }
 
-            if (results.Count > 0)
+            var allResultSets = resultMap.Values.OrderBy(r => r.ResultSetIndex).ToList();
+            if (allResultSets.Count > 0)
             {
-                evaluator.LastResult = results.Last();
+                evaluator.LastResult = allResultSets.Last();
                 evaluator.LastResultSets.Clear();
-                evaluator.LastResultSets.AddRange(results);
+                evaluator.LastResultSets.AddRange(allResultSets);
 
                 if (stmt.IntoTable != null)
                 {
-                    Console.Error.WriteLine($"[DIAG-PUSHDOWN] EXECUTE ... INTO {stmt.IntoTable.TableName} detected. Result batches: {results.Count}, Total rows: {results.Sum(r => r.Rows.Count)}");
-                    await LoadIntoTable(stmt.IntoTable, results, evaluator);
-                    RecordLineage(stmt, results, evaluator);
+                    var lastResult = allResultSets.Last();
+
+                    await LoadIntoTable(stmt.IntoTable, new List<DataTable> { lastResult }, evaluator);
+                    RecordLineage(stmt, new List<DataTable> { lastResult }, evaluator);
                 }
             }
             else
