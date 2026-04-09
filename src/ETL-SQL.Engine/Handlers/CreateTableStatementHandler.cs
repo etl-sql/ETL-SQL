@@ -7,19 +7,19 @@ namespace ETL_SQL.Engine.Handlers
     /// <summary>
     /// Handles the CREATE TABLE statement, delegating the operation to the target data source.
     /// </summary>
-    public class CreateTableStatementHandler : IStatementHandler
+    public class CreateTableStatementHandler(ILogger logger) : IStatementHandler
     {
+        private readonly ILogger _logger = logger;
         public Type SupportedStatementType => typeof(CreateTableStatement);
+
+
         /// <summary>Executes the CREATE TABLE statement in the current context.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (CreateTableStatement)statement;
             
-            Logger.Verbose($"Creating table {stmt.TargetTable.TableName} on {stmt.TargetTable.ConnectionName ?? "local"}");
+            _logger.Debug($"Creating table {stmt.TargetTable.TableName} on {stmt.TargetTable.ConnectionName ?? "local"}");
             await context.EvaluateCreateTable(stmt);
         }
     }
 }
-
-
-

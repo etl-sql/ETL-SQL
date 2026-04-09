@@ -36,7 +36,7 @@ namespace ETL_SQL.Tests
             {
                 var dt = new DataTable();
                 dt.SetColumns(new[] { "ID", "Name" });
-                foreach (var row in Rows) dt.AddRow(row);
+                foreach (var row in Rows) await dt.AddRowAsync(row);
                 yield return dt;
                 await Task.CompletedTask;
             }

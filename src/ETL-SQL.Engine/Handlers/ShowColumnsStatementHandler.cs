@@ -36,7 +36,7 @@ namespace ETL_SQL.Engine.Handlers
                 row["ColumnName"] = col;
                 // DataType info might not be available in all IDataSource implementations yet
                 row["DataType"] = "UNKNOWN"; 
-                table.AddRow(row);
+                await table.AddRowAsync(row);
             }
 
             if (stmt.IntoTable != null)

@@ -9,6 +9,7 @@ using ETL_SQL.App;
 using ETL_SQL.Engine.Engines;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests.Performance
 {
@@ -76,7 +77,7 @@ namespace ETL_SQL.Tests.Performance
             var e    = NewEvaluator();
             var rows = BuildRows(COUNT, reversed: true);
 
-            var engine = new ExternalSortEngine(e);
+            var engine = new ExternalSortEngine(e, NullLogger.Instance);
             var result = await engine.SortExternal(rows, OrderById());
 
             Assert.Equal(COUNT, result.Count);
@@ -93,7 +94,7 @@ namespace ETL_SQL.Tests.Performance
             var rows = BuildRows(COUNT, reversed: true);
 
             long spillBefore = e.TotalSpilledBytes;
-            var engine = new ExternalSortEngine(e);
+            var engine = new ExternalSortEngine(e, NullLogger.Instance);
             var result = await engine.SortExternal(rows, OrderById());
 
             Assert.Equal(COUNT, result.Count);
@@ -110,7 +111,7 @@ namespace ETL_SQL.Tests.Performance
             var e    = NewEvaluator();
             var rows = BuildRows(COUNT, reversed: false); // ascending input → descending output
 
-            var engine = new ExternalSortEngine(e);
+            var engine = new ExternalSortEngine(e, NullLogger.Instance);
             var result = await engine.SortExternal(rows, OrderById(descending: true));
 
             Assert.Equal(COUNT, result.Count);
@@ -125,7 +126,7 @@ namespace ETL_SQL.Tests.Performance
             var e    = NewEvaluator();
             var rows = BuildRows(COUNT, reversed: true);
 
-            var engine = new ExternalSortEngine(e);
+            var engine = new ExternalSortEngine(e, NullLogger.Instance);
             var result = await engine.SortExternal(rows, OrderById());
 
             var ids = result.Select(r => Convert.ToInt32(r["Id"])).ToHashSet();
@@ -166,7 +167,7 @@ namespace ETL_SQL.Tests.Performance
                 }
             }
 
-            var engine = new ExternalJoinEngine(e);
+            var engine = new ExternalJoinEngine(e, NullLogger.Instance);
             var result = await engine.ApplyHashJoinExternal(
                 LeftStream(), RightStream(), InnerJoinOnId(),
                 new List<string> { "Id" }, new List<string> { "Id" });
@@ -207,7 +208,7 @@ namespace ETL_SQL.Tests.Performance
                 }
             }
 
-            var engine = new ExternalJoinEngine(e);
+            var engine = new ExternalJoinEngine(e, NullLogger.Instance);
             var result = await engine.ApplyHashJoinExternal(
                 LeftStream(), RightStream(), InnerJoinOnId(),
                 new List<string> { "Id" }, new List<string> { "Id" });
@@ -240,7 +241,7 @@ namespace ETL_SQL.Tests.Performance
             }
 
             long before = e.TotalSpilledBytes;
-            var engine  = new ExternalJoinEngine(e);
+            var engine  = new ExternalJoinEngine(e, NullLogger.Instance);
             await engine.ApplyHashJoinExternal(
                 LeftStream(), RightStream(), InnerJoinOnId(),
                 new List<string> { "Id" }, new List<string> { "Id" });
@@ -273,9 +274,9 @@ namespace ETL_SQL.Tests.Performance
             {
                 if (i < LEFT_SIDE)
                 {
-                    var lr = new Row(leftSchema); lr["Id"] = i; lr["LeftV"] = i * 2; leftTable.AddRow(lr);
+                    var lr = new Row(leftSchema); lr["Id"] = i; lr["LeftV"] = i * 2; await leftTable.AddRowAsync(lr);
                 }
-                var rr = new Row(rightSchema); rr["Id"] = i; rr["RightV"] = i * 3; rightTable.AddRow(rr);
+                var rr = new Row(rightSchema); rr["Id"] = i; rr["RightV"] = i * 3; await rightTable.AddRowAsync(rr);
             }
 
             var leftMem = new InMemoryDataSource();

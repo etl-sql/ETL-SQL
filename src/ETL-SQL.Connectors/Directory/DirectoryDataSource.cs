@@ -2,23 +2,27 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using ETL_SQL.Data;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Connectors.Directory
 {
     public class DirectoryDataSource : IDataSource
     {
         private readonly string _directoryPath;
+        private readonly ILogger _logger;
         public string Path => _directoryPath;
         public IDataSource WithTable(string tableName) => this;
         public Dictionary<string, string>? Options { get; }
         public string ConnectorType => "DIRECTORY";
 
-        public DirectoryDataSource(string path, Dictionary<string, string>? options = null)
+        public DirectoryDataSource(string path, Dictionary<string, string>? options = null, ILogger? logger = null)
         {
             if (string.IsNullOrEmpty(path)) throw new ArgumentException("Directory path cannot be empty.");
             _directoryPath = path;
             Options = options;
+            _logger = logger ?? Logger.Instance;
         }
 
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "FilePath", "FileName", "Extension", "Size", "CreationTime", "LastWriteTime" });
@@ -69,4 +73,3 @@ namespace ETL_SQL.Connectors.Directory
         }
     }
 }
-

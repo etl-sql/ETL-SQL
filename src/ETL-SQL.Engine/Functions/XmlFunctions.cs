@@ -136,7 +136,7 @@ namespace ETL_SQL.Engine.Functions
         /// Each matched element's child elements become columns; text content goes into VALUE.
         /// Example: SELECT * FROM XMLTABLE('&lt;catalog&gt;&lt;book id="1"&gt;&lt;title&gt;T&lt;/title&gt;&lt;/book&gt;&lt;/catalog&gt;', '/catalog/book')
         /// </summary>
-        private static object? XmlTable(List<object?> args, IExecutionContext ctx)
+        private static async Task<object?> XmlTable(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 1) return new DataTable();
             string? xml = args[0]?.ToString();
@@ -183,7 +183,7 @@ namespace ETL_SQL.Engine.Functions
                     var dt2 = new DataTable();
                     dt2.SetColumns(new[] { "VALUE" });
                     foreach (var row in rows)
-                        dt2.AddRow(new Row { ["VALUE"] = row.Value });
+                        await dt2.AddRowAsync(new Row { ["VALUE"] = row.Value });
                     return dt2;
                 }
 
@@ -196,7 +196,7 @@ namespace ETL_SQL.Engine.Functions
                         r[attr.Name.LocalName] = attr.Value;
                     foreach (var child in row.Elements())
                         r[child.Name.LocalName] = child.Value;
-                    dt.AddRow(r);
+                    await dt.AddRowAsync(r);
                 }
                 return dt;
             }

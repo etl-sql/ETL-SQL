@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Core
 {
@@ -40,9 +41,15 @@ namespace ETL_SQL.Core
     {
         private readonly List<LineageEntry> _entries = new();
         private readonly object _lock = new object();
+        private readonly ILogger _logger;
         private readonly Dictionary<(string table, string op, string? col, int l, int c, string? f), LineageEntry> _lookup = new();
         private readonly Dictionary<string, Dictionary<string, string>> _latestTableMetadata = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Dictionary<string, Dictionary<string, string>>> _latestColumnMetadata = new(StringComparer.OrdinalIgnoreCase);
+ 
+        public LineageTracker(ILogger logger)
+        {
+            _logger = logger;
+        }
 
         public void Record(string target, IEnumerable<string> sources, string operation, string? targetColumn = null, IEnumerable<string>? sourceColumns = null, Dictionary<string, string>? metadata = null, string? derivedFromDescriptions = null, int line = 0, int column = 0, int endLine = 0, int endColumn = 0, string? sourceFile = null)
         {

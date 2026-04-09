@@ -5,17 +5,32 @@ using System.Text.RegularExpressions;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Core.Data
 {
     public static class EvaluationUtils
     {
-        public static bool IsSoftEqual(object? a, object? b)
+        public static bool IsSoftEqual(object? a, object? b, ILogger? logger = null)
         {
             if ((a == null || a == DBNull.Value) && (b == null || b == DBNull.Value)) return true;
             if (a == null || a == DBNull.Value || b == null || b == DBNull.Value) return false;
             
             try {
+                if (a is Row ra && b is Row rb)
+                {
+                    if (ra.Columns.Count != rb.Columns.Count) return false;
+                    foreach (var kvp in ra.Columns)
+                    {
+                        if (!rb.Columns.TryGetValue(kvp.Key, out var bVal)) return false;
+                        if (!IsSoftEqual(kvp.Value, bVal, logger)) return false;
+                    }
+                    return true;
+                }
+
+                if (a == null || a == DBNull.Value || b == null || b == DBNull.Value) 
+                    return (a == null || a == DBNull.Value) && (b == null || b == DBNull.Value);
+
                 if (a is decimal da && b is decimal db) return da == db;
                 if (a is int ia && b is int ib) return ia == ib;
                 if (a is long la && b is long lb) return la == lb;
@@ -27,7 +42,11 @@ namespace ETL_SQL.Core.Data
                 
                 if (DateTime.TryParse(a.ToString(), out var dt1) && DateTime.TryParse(b.ToString(), out var dt2)) return dt1.Year == dt2.Year && dt1.Month == dt2.Month && dt1.Day == dt2.Day && dt1.Hour == dt2.Hour && dt1.Minute == dt2.Minute && dt1.Second == dt2.Second;
             }
-            catch (Exception ex) { Logger.Verbose($"[EvaluationUtils.EqualsConstants] Type coercion failed, falling back to string compare: {ex.Message}"); }
+            catch (Exception ex) 
+            { 
+                if (logger != null) logger.Debug($"[EvaluationUtils.IsSoftEqual] Type coercion failed, falling back to string compare: {ex.Message}");
+                else Logger.Verbose($"[EvaluationUtils.IsSoftEqual] Type coercion failed, falling back to string compare: {ex.Message}");
+            }
 
             return a.ToString()?.Equals(b.ToString(), StringComparison.OrdinalIgnoreCase) ?? false;
         }
@@ -39,7 +58,7 @@ namespace ETL_SQL.Core.Data
             if (b == null) return 1;
 
             if (decimal.TryParse(a.ToString(), out var da) && decimal.TryParse(b.ToString(), out var db)) return da.CompareTo(db);
-            if (DateTime.TryParse(a.ToString(), out var dta) && DateTime.TryParse(b.ToString(), out var dtb)) return dta.CompareTo(dtb);
+            if (DateTime.TryParse(a.ToString(), out var dta) && DateTime.TryParse(b.ToString(), out var dta2)) return dta.CompareTo(dta2);
 
             return string.Compare(a.ToString(), b.ToString(), StringComparison.OrdinalIgnoreCase);
         }

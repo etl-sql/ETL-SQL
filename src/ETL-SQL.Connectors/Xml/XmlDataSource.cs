@@ -23,26 +23,19 @@ namespace ETL_SQL.Connectors.Xml
         private readonly bool _compress;
         private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
+        private readonly ILogger _logger;
 
-        /// <summary>Gets the physical path to the XML file.</summary>
         public string Path => _filePath;
-        /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
         
-        /// <summary>Returns this instance as a typed table (no-op for XML).</summary>
         public IDataSource WithTable(string tableName) => this;
-        /// <summary>The type name of the connector that created this data source (e.g., XML).</summary>
         public string ConnectorType => "XML";
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="XmlDataSource"/> class.
-        /// </summary>
-        /// <param name="filePath">The path to the XML file.</param>
-        /// <param name="options">Optional configuration params (ROOT_PATH, COMPRESS, etc.).</param>
-        public XmlDataSource(string filePath, Dictionary<string, string>? options = null)
+        public XmlDataSource(string filePath, Dictionary<string, string>? options = null, ILogger? logger = null)
         {
             _filePath = filePath;
             _options = options;
+            _logger = logger ?? Logger.Instance;
             if (options != null)
             {
                 _rootPath = options.TryGetValue("ROOT_PATH", out var rp) ? rp : null;
@@ -52,16 +45,11 @@ namespace ETL_SQL.Connectors.Xml
             _encryption = new EncryptionOptions(options);
         }
 
-        /// <summary>Reads data from the XML file in batches.</summary>
-        /// <param name="batchSize">The number of rows per batch.</param>
-        /// <returns>An async enumerable of DataTables.</returns>
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
 
             string effectivePath = await GetEffectivePathAsync();
-            
-            // We need to track if we created a temp file to delete it later
             bool isTemp = effectivePath != _filePath;
 
             try
@@ -130,7 +118,7 @@ namespace ETL_SQL.Connectors.Xml
             }
             finally
             {
-                if (isTemp) TempFileHelper.SafeDelete(effectivePath);
+                if (isTemp) TempFileHelper.SafeDelete(effectivePath, _logger);
             }
         }
 
@@ -176,14 +164,11 @@ namespace ETL_SQL.Connectors.Xml
             return current?.Elements() ?? Enumerable.Empty<XElement>();
         }
 
-        /// <summary>Writes batches of data to the XML file.</summary>
-        /// <param name="batches">An async enumerable of DataTables.</param>
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
         {
             bool alreadyXml = false;
             string? singleXml = null;
 
-            // Check if first batch is a passthrough XML result
             await foreach (var b in batches)
             {
                 if (b.ColumnNames.Count == 1 && b.ColumnNames[0] == "XML_F52E2B61")
@@ -194,7 +179,6 @@ namespace ETL_SQL.Connectors.Xml
                 }
                 else
                 {
-                    // If not XML result, we need to process all batches as rows
                     break; 
                 }
             }
@@ -264,12 +248,10 @@ namespace ETL_SQL.Connectors.Xml
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
 
-        /// <summary>Asynchronously retrieves the column names from the XML element structure.</summary>
-        /// <returns>A collection of attribute and element names from the first repeating element.</returns>
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
@@ -282,21 +264,17 @@ namespace ETL_SQL.Connectors.Xml
                 }
                 return Enumerable.Empty<string>();
             }
-            catch (Exception ex) { Logger.Verbose($"[XmlDataSource.GetColumnsAsync] Failed to read columns from '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+            catch (Exception ex) { _logger.Debug($"[XmlDataSource.GetColumnsAsync] Failed to read columns from '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
         }
 
-        /// <summary>Captures a snapshot (no-op for XML).</summary>
         public object? Snapshot() => null;
-
-        /// <summary>Restores from a snapshot (no-op for XML).</summary>
         public void Restore(object? snapshot) { }
 
-        /// <summary>Truncates the XML file by clearing all data.</summary>
         public async Task TruncateAsync()
         {
             await WriteBatches(AsyncEnumerable.Empty<DataTable>());
         }
-        /// <summary>Asynchronously disposes resources.</summary>
+
         public async ValueTask DisposeAsync()
         {
             await Task.CompletedTask;
@@ -325,4 +303,3 @@ namespace ETL_SQL.Connectors.Xml
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
     }
 }
-

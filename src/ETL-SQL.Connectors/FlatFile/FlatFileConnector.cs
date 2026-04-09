@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Data;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Connectors.Json;
 using ETL_SQL.Connectors.Xml;
@@ -14,22 +15,14 @@ namespace ETL_SQL.Connectors.FlatFile
     /// </summary>
     public class FlatFileConnector : IConnector
     {
-        /// <summary>Returns the canonical name of the connector.</summary>
         public string Name => "FLATFILE";
-        
-        /// <summary>Returns synonymous names for this connector (CSV, FILE).</summary>
         public IReadOnlyList<string> Aliases => new[] { "CSV", "FILE" };
 
-        /// <summary>Retrieves the version information for the FlatFile connector.</summary>
-        public Task<string> GetVersionAsync(string connectionString) => Task.FromResult("FlatFile Connector 1.0");
+        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null) => Task.FromResult("FlatFile Connector 1.0");
 
-        /// <summary>Returns supported SQL functions (none for FlatFile).</summary>
         public HashSet<string> GetSupportedFunctions() => new(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>Returns supported SQL keywords (none for FlatFile).</summary>
         public HashSet<string> GetSupportedKeywords() => new(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>Returns supported connection string options (DELIMITER, HEADER, ENCODING, etc.).</summary>
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
             { "HEADER", new[] { "ON", "OFF" } },
@@ -49,7 +42,6 @@ namespace ETL_SQL.Connectors.FlatFile
             { "PASSWORD", Array.Empty<string>() }
         };
 
-        /// <summary>Returns a map of option keys to their current selected values from the UI/prompt.</summary>
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase)
         {
             { "HEADER", new[] { "ON", "OFF" } },
@@ -61,7 +53,6 @@ namespace ETL_SQL.Connectors.FlatFile
             { "STRICT_SCHEMA", new[] { "ON", "OFF" } }
         };
 
-        /// <summary>Returns a human-readable help string for the FlatFile connector.</summary>
         public string GetHelp() =>
             "FLATFILE Connector: High-performance delimited text processing.\n" +
             "Options:\n" +
@@ -81,22 +72,19 @@ namespace ETL_SQL.Connectors.FlatFile
             "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption";
 
-        /// <summary>Creates a new FlatFile, JSON, or XML data source based on the file extension.</summary>
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null)
-             => CreateDataSource(connectionString, options, null);
+        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null)
+             => CreateDataSource(connectionString, options, null, logger);
 
-        /// <summary>Creates a new FlatFile, JSON, or XML data source with an optional template schema.</summary>
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options, IEnumerable<ColumnDefinition>? templateSchema)
+        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options, IEnumerable<ColumnDefinition>? templateSchema, ILogger? logger = null)
         {
             if (connectionString.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                return new JsonDataSource(connectionString, options);
+                return new JsonDataSource(connectionString, options, logger);
             if (connectionString.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
-                return new XmlDataSource(connectionString, options);
-            return new FlatFileDataSource(connectionString, options, templateSchema);
+                return new XmlDataSource(connectionString, options, logger);
+            return new FlatFileDataSource(connectionString, options, templateSchema, logger);
         }
 
-        /// <summary>Returns the logical table name from the file system path.</summary>
-        public Task<IEnumerable<string>> GetTablesAsync(string connectionString)
+        public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null)
         {
             var path = connectionString.Trim('\'', '\"', ' ', '(', ')');
             var fileName = System.IO.Path.GetFileNameWithoutExtension(path);
@@ -104,20 +92,16 @@ namespace ETL_SQL.Connectors.FlatFile
             return Task.FromResult<IEnumerable<string>>(new[] { fileName });
         }
 
-        /// <summary>Returns a list of logical views (none for FlatFile).</summary>
-        public Task<IEnumerable<string>> GetViewsAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
         
-        /// <summary>Discovers columns for the specified file.</summary>
-        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName)
+        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null)
         {
-            var ds = new FlatFileDataSource(connectionString);
+            var ds = new FlatFileDataSource(connectionString, null, null, logger);
             return await ds.GetColumnsAsync();
         }
 
-        /// <summary>Returns a list of procedures/functions (none for FlatFile).</summary>
-        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
 
-        /// <summary>Builds a flat file path from named properties.</summary>
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
     }

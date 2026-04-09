@@ -10,6 +10,7 @@ export class ReplManager {
     private _currentHandler: ((msg: any) => void) | undefined;
     private _outputChannel: vscode.OutputChannel | undefined;
     private _currentSessionId: string | undefined;
+    private _debugMode: boolean = false;
 
     public static getInstance(): ReplManager {
         if (!ReplManager._instance) {
@@ -20,6 +21,10 @@ export class ReplManager {
 
     public setOutputChannel(channel: vscode.OutputChannel) {
         this._outputChannel = channel;
+    }
+
+    public setDebugMode(debug: boolean) {
+        this._debugMode = debug;
     }
 
     public async execute(script: string, exePath: string, args: string[]): Promise<void> {
@@ -73,8 +78,10 @@ export class ReplManager {
                             resolve();
                         }
                     } catch {
-                        // Non-JSON line from engine (startup noise etc.) — log for diagnostics only.
-                        this._outputChannel?.appendLine(`[Engine] ${trimmed}`);
+                        // Non-JSON line from engine (startup noise etc.)
+                        if (this._debugMode) {
+                            this._outputChannel?.appendLine(`[Engine] ${trimmed}`);
+                        }
                     }
                 }
             });

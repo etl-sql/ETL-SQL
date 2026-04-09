@@ -16,8 +16,9 @@ namespace ETL_SQL.Engine.Services
     /// Handles the resolution of table references to physical or virtual data sources.
     /// Manages temporary tables, subqueries, and table-level operators (PIVOT/UNPIVOT).
     /// </summary>
-    public class DataSourceManager(Evaluator evaluator, ExpressionEvaluator expressionEvaluator)
+    public class DataSourceManager(ILogger logger, Evaluator evaluator, ExpressionEvaluator expressionEvaluator)
     {
+        private readonly ILogger _logger = logger;
         private readonly Evaluator _evaluator = evaluator;
         private readonly ExpressionEvaluator _expressionEvaluator = expressionEvaluator;
 
@@ -30,9 +31,13 @@ namespace ETL_SQL.Engine.Services
             string name = table.ConnectionName ?? table.TableName;
             IDataSource? source = null;
 
-            if (connections.TryGetValue(name, out source))
+            if (_evaluator.LocalSources.TryGetValue(name, out source))
             {
-                // Found in connections
+                // Found in local CTE scope
+            }
+            else if (connections.TryGetValue(name, out source))
+            {
+                // Found in global connections
             }
             else if (name.StartsWith("#") && table.ConnectionName == null)
             {
@@ -70,7 +75,7 @@ namespace ETL_SQL.Engine.Services
                     var dual = new InMemoryDataSource();
                     var dualTable = new DataTable();
                     dualTable.SetColumns(new[] { "DUMMY" });
-                    dualTable.AddRow(new Row { ["DUMMY"] = "X" });
+                    await dualTable.AddRowAsync(new Row { ["DUMMY"] = "X" });
                     await dual.WriteBatches(new[] { dualTable }.ToAsyncEnumerable());
                     connections["DUAL"] = dual;
                 }
@@ -81,7 +86,7 @@ namespace ETL_SQL.Engine.Services
                 var mem = new InMemoryDataSource();
                 var dt = new DataTable();
                 dt.SetColumns(new[] { "Val" });
-                foreach (var item in list) dt.AddRow(new Row { ["Val"] = item });
+                foreach (var item in list) await dt.AddRowAsync(new Row { ["Val"] = item });
                 await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
                 return mem;
             }
@@ -133,24 +138,24 @@ namespace ETL_SQL.Engine.Services
                             {
                                 row[kvp.Key] = JsonToClr(kvp.Value);
                             }
-                            dt.AddRow(row);
+                            await dt.AddRowAsync(row);
                         }
                         await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
-                        Logger.Verbose($"[SESSION] Restored {rows.Count} rows into temp table {info.Name}");
+                        _logger.Debug($"[SESSION] Restored {rows.Count} rows into temp table {info.Name}");
                     }
                     else
                     {
-                        Logger.Verbose($"[SESSION] Data file for {info.Name} found but contained 0 rows.");
+                        _logger.Debug($"[SESSION] Data file for {info.Name} found but contained 0 rows.");
                     }
                 }
                 catch (Exception ex)
                 {
-                    Logger.WriteLine($"Warning: Failed to restore temp table {info.Name}: {ex.Message}", ConsoleColor.Yellow);
+                    _logger.WriteLine($"Warning: Failed to restore temp table {info.Name}: {ex.Message}", ConsoleColor.Yellow);
                 }
             }
             else
             {
-                Logger.Verbose($"[SESSION] No data file found for temp table {info.Name} at {info.DataFilePath}");
+                _logger.Debug($"[SESSION] No data file found for temp table {info.Name} at {info.DataFilePath}");
             }
             
             return ds;
@@ -171,10 +176,10 @@ namespace ETL_SQL.Engine.Services
                         tc = new TableUniqueConstraint(info.Columns);
                         break;
                     case ConstraintType.Check:
-                        tc = new TableCheckConstraint(ParseExpression(info.Expression!));
+                        tc = new TableCheckConstraint(info.Expression!);
                         break;
                     case ConstraintType.ForeignKey:
-                        tc = new TableForeignKeyConstraint(info.Columns, ParseForeignKeyReference(info.Expression!));
+                        tc = new TableForeignKeyConstraint(info.Columns, info.ForeignKey!);
                         break;
                 }
                 if (tc != null)
@@ -254,7 +259,7 @@ namespace ETL_SQL.Engine.Services
                 }
             }
 
-            var pivotEngine = new Engines.PivotEngine(_evaluator);
+            var pivotEngine = new Engines.PivotEngine(_evaluator, _logger);
             foreach (var op in table.TableOperators)
             {
                 if (op is PivotClause pivot) allRows = await pivotEngine.ApplyPivot(allRows, pivot);
@@ -263,7 +268,7 @@ namespace ETL_SQL.Engine.Services
 
             var resultTable = new DataTable();
             if (allRows.Count > 0) resultTable.SetColumns(allRows[0].Columns.Keys);
-            foreach (var r in allRows) resultTable.AddRow(r);
+            foreach (var r in allRows) await resultTable.AddRowAsync(r);
             
             yield return resultTable;
         }

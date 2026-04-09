@@ -11,28 +11,30 @@ namespace ETL_SQL.Engine.Handlers
     /// <summary>
     /// Handles the execution of UPDATE statements, supporting both remote SQL pushdown and in-memory updates with OUTPUT clause support.
     /// </summary>
-    public class UpdateStatementHandler : IStatementHandler
+    public class UpdateStatementHandler(ILogger logger) : IStatementHandler
     {
+        private readonly ILogger _logger = logger;
         public Type SupportedStatementType => typeof(UpdateStatement);
+ 
         /// <summary>Executes the UPDATE statement against the target data source.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (UpdateStatement)statement;
 
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
-            Logger.Verbose($"Updating {connName}");
+            _logger.Debug($"Updating {connName}");
             if (!context.Connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown connection: {connName}");
-            Logger.Verbose($"Connection resolved as {connection.GetType().Name}");
+            _logger.Debug($"Connection resolved as {connection.GetType().Name}");
             if (connection is IDatabaseSource sqlConn)
             {
-                Logger.Verbose("Strategy: Remote SQL UPDATE");
+                _logger.Debug("Strategy: Remote SQL UPDATE");
                 var assignments = stmt.Assignments.Select(a => $"{a.ColumnName} = {context.CompileExpression(a.Value, sqlConn.Dialect)}");
                 var sql = $"UPDATE {context.GetSqlTableName(stmt.TargetTable)} SET {string.Join(", ", assignments)}";
                 if (stmt.WhereClause != null) sql += $"\nWHERE {context.CompileExpression(stmt.WhereClause, sqlConn.Dialect)}";
                 
                 if (context.IsWhatIf)
                 {
-                    Logger.WriteLine($"WHAT IF: Would execute remote SQL update on {connName}:\n{sql}", ConsoleColor.Yellow);
+                    _logger.WriteLine($"WHAT IF: Would execute remote SQL update on {connName}:\n{sql}", ConsoleColor.Yellow);
                 }
                 else
                 {
@@ -45,7 +47,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 if (context.IsWhatIf)
                 {
-                    Logger.WriteLine($"WHAT IF: Would update rows in in-memory table {connName}.", ConsoleColor.Yellow);
+                    _logger.WriteLine($"WHAT IF: Would update rows in in-memory table {connName}.", ConsoleColor.Yellow);
                     // For in-memory what-if, we don't even call UpdateRows to avoid any side effects in the handler
                     // but we could call it if we wanted to show the count.
                     // For now, let's keep it simple.
@@ -83,7 +85,7 @@ namespace ETL_SQL.Engine.Handlers
                         {
                             var outputTable = new DataTable();
                             outputTable.SetColumns(outputRows[0].Columns.Keys);
-                            foreach (var r in outputRows) outputTable.AddRow(r);
+                            foreach (var r in outputRows) await outputTable.AddRowAsync(r);
 
                             if (stmt.Output.IntoTable != null)
                             {

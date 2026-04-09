@@ -10,7 +10,14 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class DockerStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(DockerStatement);
+
+        public DockerStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the DOCKER RUN statement, resolving the image and starting the container.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
@@ -25,17 +32,17 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // Start the container and track it in the evaluator's manager
-            Logger.WriteLine($"Initializing Docker container: {imageName} with alias {dockerStmt.Alias ?? "none"}...", ConsoleColor.Cyan);
+            _logger.WriteLine($"Initializing Docker container: {imageName} with alias {dockerStmt.Alias ?? "none"}...", ConsoleColor.Cyan);
             
             if (context.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would start Docker container: {imageName}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would start Docker container: {imageName}", ConsoleColor.Yellow);
                 return;
             }
 
             await context.DockerManager.StartContainer(imageName, dockerStmt.Alias);
             
-            Logger.WriteLine($"Docker container started: {imageName}", ConsoleColor.Green);
+            _logger.WriteLine($"Docker container started: {imageName}", ConsoleColor.Green);
         }
     }
 }

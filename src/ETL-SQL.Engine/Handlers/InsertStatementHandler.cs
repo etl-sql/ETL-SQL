@@ -13,14 +13,11 @@ namespace ETL_SQL.Engine.Handlers
     /// Handles the execution of INSERT statements, including INSERT INTO SELECT, INSERT VALUES, and OUTPUT clauses.
     /// Supports remote pushdown for SQL sources and buffered batch transfers.
     /// </summary>
-    public class InsertStatementHandler : IStatementHandler
+    public class InsertStatementHandler(ILogger logger, ExecutePushdownStatementHandler pushdownHandler) : IStatementHandler
     {
-        private readonly ExecutePushdownStatementHandler _pushdownHandler;
+        private readonly ILogger _logger = logger;
+        private readonly ExecutePushdownStatementHandler _pushdownHandler = pushdownHandler;
 
-        public InsertStatementHandler(ExecutePushdownStatementHandler pushdownHandler)
-        {
-            _pushdownHandler = pushdownHandler;
-        }
 
         public Type SupportedStatementType => typeof(InsertStatement);
 
@@ -36,7 +33,7 @@ namespace ETL_SQL.Engine.Handlers
                 context.Connections[connName] = new InMemoryDataSource();
             }
 
-            Logger.Verbose($"Inserting into {connName}");
+            _logger.Debug($"Inserting into {connName}");
             
             if (stmt.SelectQuery != null && stmt.SelectQuery is SelectStatement select)
             {
@@ -85,17 +82,17 @@ namespace ETL_SQL.Engine.Handlers
             var destination = await context.ResolveDataSourceAsync(stmt.TargetTable);
             if (destination == null)
                  throw new ExecutionException($"Unknown connection: {connName} at Line {stmt.Line}");
-            Logger.Verbose($"Destination resolved as {destination.GetType().Name}");
+            _logger.Debug($"Destination resolved as {destination.GetType().Name}");
 
             if (destination is IDatabaseSource sqlDest)
             {
                 if (stmt.SelectQuery != null && stmt.SelectQuery is SelectStatement sel && (sel.FromTable.ConnectionName ?? sel.FromTable.TableName).Equals(connName, StringComparison.OrdinalIgnoreCase))
                 {
-                    Logger.Verbose("Strategy: Remote SQL Pushdown (Insert from Select)");
+                    _logger.Debug("Strategy: Remote SQL Pushdown (Insert from Select)");
                     var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable)}\n{context.CompileQuery(stmt.SelectQuery, sqlDest.Dialect)}";
                     if (context.IsWhatIf)
                     {
-                        Logger.WriteLine($"WHAT IF: Would execute remote SQL pushdown insert on {connName}:\n{sql}", ConsoleColor.Yellow);
+                        _logger.WriteLine($"WHAT IF: Would execute remote SQL pushdown insert on {connName}:\n{sql}", ConsoleColor.Yellow);
                     }
                     else
                     {
@@ -104,20 +101,20 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 else if (stmt.SelectQuery != null && stmt.SelectQuery is ExecutePushdownStatement pushdown)
                 {
-                    Logger.Verbose("Strategy: Remote SQL Pushdown (Insert from EXECUTE)");
+                    _logger.Debug("Strategy: Remote SQL Pushdown (Insert from EXECUTE)");
                     // Handle as a batch transfer since the source is native SQL on potentially different connection
                     await PerformBatchTransfer(stmt, destination, context);
                 }
                 else if (stmt.Values != null)
                 {
-                    Logger.Verbose($"Strategy: Remote SQL Values ({stmt.Values.Count} rows)");
+                    _logger.Debug($"Strategy: Remote SQL Values ({stmt.Values.Count} rows)");
                     var rowStrings = stmt.Values.Select(row => "(" + string.Join(", ", row.Select(v => context.CompileExpression(v, sqlDest.Dialect))) + ")");
                     var colList = stmt.Columns != null ? "(" + string.Join(", ", stmt.Columns) + ") " : "";
                     var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable)} {colList}VALUES {string.Join(", ", rowStrings)}";
                     
                     if (context.IsWhatIf)
                     {
-                        Logger.WriteLine($"WHAT IF: Would insert {stmt.Values.Count} rows into {connName} using raw SQL.", ConsoleColor.Yellow);
+                        _logger.WriteLine($"WHAT IF: Would insert {stmt.Values.Count} rows into {connName} using raw SQL.", ConsoleColor.Yellow);
                     }
                     else
                     {
@@ -141,7 +138,7 @@ namespace ETL_SQL.Engine.Handlers
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
             if (stmt.SelectQuery != null)
             {
-                Logger.Verbose("Strategy: Batch Transfer from SELECT/EXECUTE");
+                _logger.Debug("Strategy: Batch Transfer from SELECT/EXECUTE");
                 IAsyncEnumerable<DataTable> batches;
                 
                 if (stmt.SelectQuery is ExecutePushdownStatement pushdown)
@@ -183,7 +180,7 @@ namespace ETL_SQL.Engine.Handlers
                 
                 if (context.IsWhatIf)
                 {
-                    Logger.WriteLine($"WHAT IF: Would insert {count} rows into {connName} via batch transfer.", ConsoleColor.Yellow);
+                    _logger.WriteLine($"WHAT IF: Would insert {count} rows into {connName} via batch transfer.", ConsoleColor.Yellow);
                 }
                 context.RowsProcessed += count;
 
@@ -192,7 +189,7 @@ namespace ETL_SQL.Engine.Handlers
                     await ProcessOutputClause(stmt.Output, allInsertedRows, context);
                 }
 
-                if (context.IsVerbose) Logger.WriteLine($"Finished inserting {count} rows into {connName}");
+                if (context.IsVerbose) _logger.WriteLine($"Finished inserting {count} rows into {connName}");
             }
             else if (stmt.Values != null)
             {
@@ -242,12 +239,12 @@ namespace ETL_SQL.Engine.Handlers
                         }
                     }
 
-                    batch.AddRow(row);
+                    await batch.AddRowAsync(row);
                 }
 
                 if (context.IsWhatIf)
                 {
-                    Logger.WriteLine($"WHAT IF: Would insert {stmt.Values.Count} rows into {connName} via memory batch.", ConsoleColor.Yellow);
+                    _logger.WriteLine($"WHAT IF: Would insert {stmt.Values.Count} rows into {connName} via memory batch.", ConsoleColor.Yellow);
                 }
                 else
                 {
@@ -260,7 +257,7 @@ namespace ETL_SQL.Engine.Handlers
                     await ProcessOutputClause(stmt.Output, batch.Rows, context);
                 }
 
-                if (context.IsVerbose) Logger.WriteLine($"Finished inserting {stmt.Values.Count} rows into {connName}");
+                if (context.IsVerbose) _logger.WriteLine($"Finished inserting {stmt.Values.Count} rows into {connName}");
             }
         }
 
@@ -291,7 +288,7 @@ namespace ETL_SQL.Engine.Handlers
             if (outputRows.Count > 0)
             {
                 outputTable.SetColumns(outputRows[0].Columns.Keys);
-                foreach (var r in outputRows) outputTable.AddRow(r);
+                foreach (var r in outputRows) await outputTable.AddRowAsync(r);
 
                 if (output.IntoTable != null)
                 {

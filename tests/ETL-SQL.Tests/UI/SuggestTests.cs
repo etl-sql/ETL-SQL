@@ -8,6 +8,7 @@ using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Data;
 using ETL_SQL.Connectors.MockDb;
+using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Common;
 using ETL_SQL.UI;
 using Spectre.Console;
@@ -16,6 +17,17 @@ namespace ETL_SQL.Tests
 {
     public class SuggestTests
     {
+        public SuggestTests()
+        {
+            // Initialize ConnectorRegistry with mock connectors for suggestion tests
+            var registry = new ConnectorRegistry(new List<IConnector> { 
+                new MockDbConnector(),
+                new FlatFileConnector()
+            });
+            // We ensure Instance is set (although the constructor above already does it)
+            ConnectorRegistry.Instance = registry;
+        }
+
         [Fact]
         public void TestAliasParsing()
         {
@@ -134,7 +146,7 @@ namespace ETL_SQL.Tests
             var ast = parser.Parse();
             
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            await evaluator.Evaluate(ast); // We can still .Wait() in tests if we want to be lazy, but it's better to await
+            await evaluator.Evaluate(ast); 
             
             var result = evaluator.Variables["@testVal"];
             Assert.Equal(42m, result);

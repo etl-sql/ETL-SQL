@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests.Lineage
 {
@@ -21,7 +22,7 @@ namespace ETL_SQL.Tests.Lineage
         public void Analyze_SimpleSelectInto_RecordsLineage()
         {
             // Arrange
-            var tracker = new LineageTracker();
+            var tracker = new LineageTracker(NullLogger.Instance);
             var analyzer = new LineageAnalyzer(tracker);
             var script = Parse("SELECT col1 /* @d: Source column; */ INTO #Target FROM SourceTable /* @owner: TeamA; */;");
 
@@ -44,7 +45,7 @@ namespace ETL_SQL.Tests.Lineage
         public void Analyze_JoinWithAliases_ResolvesSourceTables()
         {
             // Arrange
-            var tracker = new LineageTracker();
+            var tracker = new LineageTracker(NullLogger.Instance);
             var analyzer = new LineageAnalyzer(tracker);
             var sql = @"
                 SELECT 
@@ -73,7 +74,7 @@ namespace ETL_SQL.Tests.Lineage
         public void Analyze_ExpressionLineage_InheritsMetadata()
         {
             // Arrange
-            var tracker = new LineageTracker();
+            var tracker = new LineageTracker(NullLogger.Instance);
             // Pre-seed tracker with source metadata
             tracker.Record("TableA", Enumerable.Empty<string>(), "SEED", "Col1", metadata: new Dictionary<string, string> { ["d"] = "Description1", ["sensitive"] = "true" });
             
@@ -94,7 +95,7 @@ namespace ETL_SQL.Tests.Lineage
         public void Analyze_MultipleStatements_AccumulatesLineage()
         {
             // Arrange
-            var tracker = new LineageTracker();
+            var tracker = new LineageTracker(NullLogger.Instance);
             var analyzer = new LineageAnalyzer(tracker);
             var sql = @"
                 SELECT id, name INTO #Temp1 FROM SourceTable;
@@ -129,7 +130,7 @@ namespace ETL_SQL.Tests.Lineage
         public void Analyze_UpdateStatement_RecordsColumnLineage()
         {
             // Arrange
-            var tracker = new LineageTracker();
+            var tracker = new LineageTracker(NullLogger.Instance);
             tracker.Record("SourceTbl", Enumerable.Empty<string>(), "SEED", "Price", metadata: new Dictionary<string, string> { ["d"] = "Unit Price" });
             
             var analyzer = new LineageAnalyzer(tracker);
@@ -152,7 +153,7 @@ namespace ETL_SQL.Tests.Lineage
         public void Analyze_MergeStatement_RecordsColumnLineage()
         {
             // Arrange
-            var tracker = new LineageTracker();
+            var tracker = new LineageTracker(NullLogger.Instance);
             tracker.Record("S", Enumerable.Empty<string>(), "SEED", "X", metadata: new Dictionary<string, string> { ["d"] = "Val X" });
             
             var analyzer = new LineageAnalyzer(tracker);

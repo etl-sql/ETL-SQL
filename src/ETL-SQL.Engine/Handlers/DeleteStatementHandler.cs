@@ -11,27 +11,29 @@ namespace ETL_SQL.Engine.Handlers
     /// <summary>
     /// Handles the execution of DELETE statements, supporting both remote SQL pushdown and in-memory deletions with OUTPUT clause support.
     /// </summary>
-    public class DeleteStatementHandler : IStatementHandler
+    public class DeleteStatementHandler(ILogger logger) : IStatementHandler
     {
+        private readonly ILogger _logger = logger;
         public Type SupportedStatementType => typeof(DeleteStatement);
+ 
         /// <summary>Executes the DELETE statement against the target data source.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (DeleteStatement)statement;
 
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
-            Logger.Verbose($"Deleting from {connName}");
+            _logger.Debug($"Deleting from {connName}");
             if (!context.Connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown: {connName}");
-            Logger.Verbose($"Connection resolved as {connection.GetType().Name}");
+            _logger.Debug($"Connection resolved as {connection.GetType().Name}");
             if (connection is IDatabaseSource sqlConn)
             {
-                Logger.Verbose("Strategy: Remote SQL DELETE");
+                _logger.Debug("Strategy: Remote SQL DELETE");
                 var sql = $"DELETE FROM {context.GetSqlTableName(stmt.TargetTable)}";
                 if (stmt.WhereClause != null) sql += $"\nWHERE {context.CompileExpression(stmt.WhereClause, sqlConn.Dialect)}";
                 
                 if (context.IsWhatIf)
                 {
-                    Logger.WriteLine($"WHAT IF: Would execute remote SQL delete on {connName}:\n{sql}", ConsoleColor.Yellow);
+                    _logger.WriteLine($"WHAT IF: Would execute remote SQL delete on {connName}:\n{sql}", ConsoleColor.Yellow);
                 }
                 else
                 {
@@ -43,7 +45,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 if (context.IsWhatIf)
                 {
-                    Logger.WriteLine($"WHAT IF: Would delete rows from in-memory table {connName}.", ConsoleColor.Yellow);
+                    _logger.WriteLine($"WHAT IF: Would delete rows from in-memory table {connName}.", ConsoleColor.Yellow);
                     context.RowsProcessed = 0;
                 }
                 else
@@ -76,7 +78,7 @@ namespace ETL_SQL.Engine.Handlers
                         {
                             var outputTable = new DataTable();
                             outputTable.SetColumns(outputRows[0].Columns.Keys);
-                            foreach (var r in outputRows) outputTable.AddRow(r);
+                            foreach (var r in outputRows) await outputTable.AddRowAsync(r);
 
                             if (stmt.Output.IntoTable != null)
                             {

@@ -17,6 +17,7 @@ namespace ETL_SQL.Connectors.SqlServer
         private readonly string _connectionString;
         private readonly string? _tableName;
         private readonly Dictionary<string, string>? _options;
+        private readonly ILogger _logger;
         private SqlConnection? _transactionalConnection;
         private SqlTransaction? _activeTransaction;
 
@@ -26,31 +27,24 @@ namespace ETL_SQL.Connectors.SqlServer
         /// <param name="connectionString">The SQL Server connection string.</param>
         /// <param name="tableName">The target table name (optional for raw SQL).</param>
         /// <param name="options">The options used to create this data source.</param>
-        public SqlServerDataSource(string connectionString, string? tableName = null, Dictionary<string, string>? options = null)
+        /// <param name="logger">The logger instance.</param>
+        public SqlServerDataSource(string connectionString, string? tableName = null, Dictionary<string, string>? options = null, ILogger? logger = null)
         {
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
+            _logger = logger ?? Logger.Instance;
         }
 
-        /// <summary>Gets the connection string for this data source.</summary>
         public string ConnectionString => _connectionString;
-        
-        /// <summary>Gets the placeholder path for SQL Server.</summary>
         public string Path => "MSSQL";
-
-        /// <summary>Gets the database dialect name.</summary>
         public string Dialect => "MSSQL";
         public bool SupportsSqlPushdown => true;
         public string ConnectorType => "MSSQL";
-
-        /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
 
-        /// <summary>Returns a new instance scoped to the specified table.</summary>
-        public IDataSource WithTable(string tableName) => new SqlServerDataSource(_connectionString, tableName, _options);
+        public IDataSource WithTable(string tableName) => new SqlServerDataSource(_connectionString, tableName, _options, _logger);
 
-        /// <summary>Retrieves the SQL Server version information (@@VERSION).</summary>
         public async Task<string> GetVersionAsync()
         {
             if (string.IsNullOrWhiteSpace(_connectionString)) return "MSSQL (Offline)";
@@ -65,11 +59,8 @@ namespace ETL_SQL.Connectors.SqlServer
             }
         }
 
-        /// <summary>Returns SQL Server-specific SQL functions.</summary>
         public HashSet<string> GetSupportedFunctions() => SqlServerSyntax.Functions;
 
-        /// <summary>Reads data from the specified SQL Server table in batches.</summary>
-        /// <param name="batchSize">The number of rows per batch.</param>
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
             if (string.IsNullOrEmpty(_tableName))
@@ -116,8 +107,6 @@ namespace ETL_SQL.Connectors.SqlServer
             }
         }
 
-        /// <summary>Writes batches of data to the SQL Server table using high-performance <see cref="SqlBulkCopy"/>.</summary>
-        /// <param name="batches">An async enumerable of DataTables.</param>
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
         {
             if (string.IsNullOrEmpty(_tableName))
@@ -166,20 +155,16 @@ namespace ETL_SQL.Connectors.SqlServer
             }
         }
 
-        /// <summary>Executes a raw SQL query and returns the results as a stream of batches.</summary>
-        /// <param name="sql">The SQL query to execute.</param>
         public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
         {
             var (conn, isShared) = await GetConnectionAsync();
 
-            // Wire up InfoMessage so PRINT statements and server messages (e.g. "Table created.",
-            // "N row(s) affected.") are surfaced to the user via the logger.
             SqlInfoMessageEventHandler infoHandler = (_, e) =>
             {
                 foreach (SqlError msg in e.Errors)
                 {
                     var color = msg.Class > 10 ? ConsoleColor.Red : ConsoleColor.Cyan;
-                    Logger.WriteLine(msg.Message, color);
+                    _logger.WriteLine(msg.Message, color);
                 }
             };
             conn.InfoMessage += infoHandler;
@@ -191,7 +176,7 @@ namespace ETL_SQL.Connectors.SqlServer
                 cmd.StatementCompleted += (_, e) =>
                 {
                     if (e.RecordCount > 0)
-                        Logger.WriteLine($"{e.RecordCount} row(s) affected.", ConsoleColor.Cyan);
+                        _logger.WriteLine($"{e.RecordCount} row(s) affected.", ConsoleColor.Cyan);
                 };
 
                 int paramCount = 0;
@@ -251,14 +236,12 @@ namespace ETL_SQL.Connectors.SqlServer
             }
         }
 
-        /// <summary>Discovers column names for the current table.</summary>
         public Task<IEnumerable<string>> GetColumnsAsync()
         {
             if (string.IsNullOrEmpty(_tableName)) return Task.FromResult(Enumerable.Empty<string>());
             return GetColumnsAsync(_tableName);
         }
 
-        /// <summary>Returns a list of all user-accessible base tables.</summary>
         public async Task<IEnumerable<string>> GetTablesAsync()
         {
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
@@ -276,7 +259,6 @@ namespace ETL_SQL.Connectors.SqlServer
             return tables.Distinct();
         }
 
-        /// <summary>Returns a list of all user-accessible views.</summary>
         public async Task<IEnumerable<string>> GetViewsAsync()
         {
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
@@ -294,7 +276,6 @@ namespace ETL_SQL.Connectors.SqlServer
             return views.Distinct();
         }
 
-        /// <summary>Discovers column names for a specific table.</summary>
         public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
         {
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
@@ -310,13 +291,9 @@ namespace ETL_SQL.Connectors.SqlServer
             return columns;
         }
 
-        /// <summary>Captures a snapshot (no-op for SQL Server).</summary>
         public object? Snapshot() => null;
-
-        /// <summary>Restores from a snapshot (no-op for SQL Server).</summary>
         public void Restore(object? snapshot) { }
 
-        /// <summary>Begins a new SQL Server transaction.</summary>
         public async Task BeginTransactionAsync()
         {
             if (_activeTransaction != null) return;
@@ -325,7 +302,6 @@ namespace ETL_SQL.Connectors.SqlServer
             _activeTransaction = (SqlTransaction)await _transactionalConnection.BeginTransactionAsync();
         }
 
-        /// <summary>Commits the active transaction.</summary>
         public async Task CommitAsync()
         {
             if (_activeTransaction == null) return;
@@ -336,7 +312,6 @@ namespace ETL_SQL.Connectors.SqlServer
             _transactionalConnection = null;
         }
 
-        /// <summary>Rolls back the active transaction.</summary>
         public async Task RollbackAsync()
         {
             if (_activeTransaction == null) return;
@@ -351,13 +326,12 @@ namespace ETL_SQL.Connectors.SqlServer
         {
             if (_transactionalConnection != null) return (_transactionalConnection, true);
             if (string.IsNullOrWhiteSpace(_connectionString))
-                throw new ExecutionException("Connection string is missing for SQL Server data source. Please ensure the connection is properly defined with a valid connection string.");
+                throw new ExecutionException("Connection string is missing for SQL Server data source.");
             var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync();
             return (conn, false);
         }
 
-        /// <summary>Truncates the target SQL Server table.</summary>
         public async Task TruncateAsync()
         {
             if (string.IsNullOrEmpty(_tableName))
@@ -366,7 +340,6 @@ namespace ETL_SQL.Connectors.SqlServer
             await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {_tableName}")) { }
         }
 
-        /// <summary>Asynchronously disposes resources and rolls back active transactions.</summary>
         public async ValueTask DisposeAsync()
         {
             if (_activeTransaction != null) await RollbackAsync();

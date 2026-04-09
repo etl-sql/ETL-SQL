@@ -17,6 +17,7 @@ namespace ETL_SQL.Common
         void Info(string message) => Log(LogLevel.Info, message);
         void Warning(string message) => Log(LogLevel.Warning, message);
         void Error(string message, Exception? ex = null) => Log(LogLevel.Error, message, ex);
+        void WriteLine(string message, ConsoleColor color = ConsoleColor.White) => Log(LogLevel.Info, message);
         
         bool IsDebugEnabled { get; }
         bool IsVerboseEnabled { get; }

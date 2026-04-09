@@ -9,9 +9,9 @@ namespace ETL_SQL.Common
     public static class TempFileHelper
     {
         /// <summary>
-        /// Deletes a temporary file if it exists. Logs at Verbose on failure instead of silently swallowing.
+        /// Deletes a temporary file if it exists. Logs diagnostic messages on failure.
         /// </summary>
-        public static void SafeDelete(string? path)
+        public static void SafeDelete(string? path, ILogger? logger = null)
         {
             if (string.IsNullOrEmpty(path)) return;
             try
@@ -21,7 +21,8 @@ namespace ETL_SQL.Common
             }
             catch (Exception ex)
             {
-                Logger.Verbose($"[TempFileHelper] Could not delete temp file '{path}': {ex.Message}");
+                if (logger != null) logger.Debug($"[TempFileHelper] Could not delete temp file '{path}': {ex.Message}");
+                else Logger.Verbose($"[TempFileHelper] Could not delete temp file '{path}': {ex.Message}");
             }
         }
     }

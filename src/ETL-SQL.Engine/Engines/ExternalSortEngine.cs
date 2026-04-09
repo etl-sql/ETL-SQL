@@ -15,12 +15,14 @@ namespace ETL_SQL.Engine.Engines
     public class ExternalSortEngine
     {
         private readonly IExecutionContext _context;
+        private readonly ILogger _logger;
         private readonly string _tempDir;
         private const int CHUNK_SIZE = 100_000;
 
-        public ExternalSortEngine(IExecutionContext context)
+        public ExternalSortEngine(IExecutionContext context, ILogger logger)
         {
             _context = context;
+            _logger = logger;
             _tempDir = Path.Combine(Path.GetTempPath(), "ETL-SQL", "SortSpill", Guid.NewGuid().ToString());
             Directory.CreateDirectory(_tempDir);
         }
@@ -34,7 +36,7 @@ namespace ETL_SQL.Engine.Engines
         {
             try
             {
-                Logger.WriteLine($"[yellow]HYPER-SCALE: ORDER BY has {rows.Count:N0} rows — switching to external merge sort (spill-to-disk).[/]");
+                _logger.WriteLine($"[yellow]HYPER-SCALE: ORDER BY has {rows.Count:N0} rows — switching to external merge sort (spill-to-disk).[/]");
 
                 // 1. Pre-evaluate all sort keys (async, must be done before sort)
                 var keyed = new List<(Row Row, object?[] Keys)>(rows.Count);

@@ -38,7 +38,7 @@ namespace ETL_SQL.Engine.Handlers
                 var row = new Row();
                 row["TagName"] = stmt.TagName;
                 row["TagValue"] = value;
-                table.AddRow(row);
+                await table.AddRowAsync(row);
             }
 
             if (stmt.IntoTable != null)

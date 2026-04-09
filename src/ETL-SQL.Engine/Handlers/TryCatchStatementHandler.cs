@@ -10,20 +10,27 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class TryCatchStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(TryCatchStatement);
+
+        public TryCatchStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the TRY block and branches to CATCH on any exception, setting @ERROR_MESSAGE.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (TryCatchStatement)statement;
             
-            Logger.Verbose($"Entering TRY block");
+            _logger.Debug($"Entering TRY block");
             try
             {
                 await context.EvaluateStatement(stmt.TryBody);
             }
             catch (Exception ex)
             {
-                Logger.Verbose($"Exception caught in TRY block: {ex.Message}");
+                _logger.Debug($"Exception caught in TRY block: {ex.Message}");
                 if (!context.ContainsVariable("@ERROR_MESSAGE"))
                 {
                     context.DeclareVariable("@ERROR_MESSAGE", ex.Message);

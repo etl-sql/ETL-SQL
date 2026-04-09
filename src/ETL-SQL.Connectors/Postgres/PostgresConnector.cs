@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Npgsql;
 using ETL_SQL.Data;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Connectors.Postgres
 {
@@ -10,77 +12,54 @@ namespace ETL_SQL.Connectors.Postgres
     /// </summary>
     public class PostgresConnector : IConnector
     {
-        /// <summary>Returns the canonical name of the connector.</summary>
         public string Name => "POSTGRES";
-        
-        /// <summary>Returns synonymous names for this connector.</summary>
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
         
-        /// <summary>Retrieves the database version information.</summary>
-        public async Task<string> GetVersionAsync(string connectionString)
+        public async Task<string> GetVersionAsync(string connectionString, ILogger? logger = null)
         {
-            var ds = new PostgresDataSource(connectionString);
+            var ds = new PostgresDataSource(connectionString, null, null, logger);
             return await ds.GetVersionAsync();
         }
         
-        /// <summary>Returns PostgreSQL-specific SQL functions.</summary>
         public HashSet<string> GetSupportedFunctions() => PostgresSyntax.GetSupportedFunctions();
-
-        /// <summary>Returns PostgreSQL-specific SQL keywords.</summary>
         public HashSet<string> GetSupportedKeywords() => PostgresSyntax.GetSupportedKeywords();
-
-        /// <summary>Returns baseline keywords not supported in PostgreSQL pushdown queries.</summary>
         public HashSet<string> GetExcludedKeywords() => PostgresSyntax.Exclusions;
         
-        /// <summary>Returns supported connection string options.</summary>
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
             { "TABLE", Array.Empty<string>() }
         };
 
-        /// <summary>Returns allowed option values.</summary>
         public Dictionary<string, string[]> GetOptionValues() => new();
 
-        /// <summary>Returns a human-readable help string for the Postgres connector.</summary>
-        /// <summary>Returns a human-readable help string for the PostgreSQL connector.</summary>
-        public string GetHelp() => 
-            "POSTGRES Connector: Used for PostgreSQL database connections.\n" +
-            "Supports native SQL pushdown, schema discovery, and bulk copy operations.\n\n" +
-            "Options:\n" +
-            "  TABLE: Pre-selects a default table context for simple SELECT queries.";
+        public string GetHelp() => "POSTGRES Connector: Used for PostgreSQL database connections.";
 
-        
-        /// <summary>Creates a new PostgreSQL data source instance.</summary>
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null) 
+        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null) 
         {
             string? table = null;
             options?.TryGetValue("TABLE", out table);
-            return new PostgresDataSource(connectionString, table, options);
+            return new PostgresDataSource(connectionString, table, options, logger);
         }
 
-        /// <summary>Returns a list of logical tables from the connection source.</summary>
-        public async Task<IEnumerable<string>> GetTablesAsync(string connectionString)
+        public async Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null)
         {
-            var ds = new PostgresDataSource(connectionString);
+            var ds = new PostgresDataSource(connectionString, null, null, logger);
             return await ds.GetTablesAsync();
         }
 
-        /// <summary>Returns a list of logical views from the connection source.</summary>
-        public async Task<IEnumerable<string>> GetViewsAsync(string connectionString)
+        public async Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null)
         {
-            var ds = new PostgresDataSource(connectionString);
+            var ds = new PostgresDataSource(connectionString, null, null, logger);
             return await ds.GetViewsAsync();
         }
 
-        /// <summary>Returns a list of columns for the specified table.</summary>
-        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName)
+        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null)
         {
-            var ds = new PostgresDataSource(connectionString, tableName);
+            var ds = new PostgresDataSource(connectionString, tableName, null, logger);
             return await ds.GetColumnsAsync();
         }
 
-        /// <summary>Returns a list of procedures/functions from the connection source.</summary>
-        public async Task<IEnumerable<string>> GetProceduresAsync(string connectionString)
+        public async Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null)
         {
             var procs = new List<string>();
             await using var conn = new NpgsqlConnection(connectionString);
@@ -91,9 +70,7 @@ namespace ETL_SQL.Connectors.Postgres
             return procs;
         }
 
-        /// <summary>Builds a PostgreSQL connection string from named properties.</summary>
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
     }
 }
-

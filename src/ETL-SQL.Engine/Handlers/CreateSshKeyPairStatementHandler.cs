@@ -15,7 +15,13 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class CreateSshKeyPairStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(CreateSshKeyPairStatement);
+
+        public CreateSshKeyPairStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
 
         /// <summary>
         /// Executes the key generation logic.
@@ -31,7 +37,7 @@ namespace ETL_SQL.Engine.Handlers
 
             if (context.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would generate SSH key pair at {path}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would generate SSH key pair at {path}", ConsoleColor.Yellow);
                 return;
             }
 
@@ -62,7 +68,7 @@ namespace ETL_SQL.Engine.Handlers
                 comment = (await context.EvaluateValue(stmt.Comment, new Row()))?.ToString();
             }
 
-            Logger.WriteLine($"Generating SSH key pair ({algorithm}) at {path}...");
+            _logger.WriteLine($"Generating SSH key pair ({algorithm}) at {path}...");
 
             string privateKeyFile;
             string publicKeyFile;
@@ -120,9 +126,9 @@ namespace ETL_SQL.Engine.Handlers
             await File.WriteAllTextAsync(privateKeyFile, privateKeyPem);
             await File.WriteAllTextAsync(publicKeyFile, publicKeyPem);
 
-            Logger.WriteLine($"SSH key pair generated successfully.");
-            Logger.Verbose($"Private key saved to: {privateKeyFile}");
-            Logger.Verbose($"Public key saved to: {publicKeyFile}");
+            _logger.WriteLine($"SSH key pair generated successfully.");
+            _logger.Debug($"Private key saved to: {privateKeyFile}");
+            _logger.Debug($"Public key saved to: {publicKeyFile}");
         }
     }
 }

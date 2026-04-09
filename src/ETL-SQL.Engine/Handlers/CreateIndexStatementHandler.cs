@@ -9,17 +9,21 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class CreateIndexStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(CreateIndexStatement);
+
+        public CreateIndexStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the CREATE INDEX statement in the current context.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (CreateIndexStatement)statement;
             
-            Logger.Verbose($"Creating index {stmt.IndexName} on {stmt.TargetTable.TableName}");
+            _logger.Debug($"Creating index {stmt.IndexName} on {stmt.TargetTable.TableName}");
             await context.EvaluateCreateIndex(stmt);
         }
     }
 }
-
-
-

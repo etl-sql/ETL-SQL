@@ -24,16 +24,22 @@ namespace ETL_SQL.Core.Common.Exceptions
     public class ExecutionException : ETLException
     {
         public string? StatementContext { get; }
+        public int Line { get; }
+        public int Column { get; }
 
-        public ExecutionException(string message, string? statementContext = null) : base(message)
+        public ExecutionException(string message, string? statementContext = null, int line = 0, int column = 0) : base(message)
         {
             StatementContext = statementContext;
+            Line = line;
+            Column = column;
         }
 
-        public ExecutionException(string message, Exception innerException, string? statementContext = null) 
+        public ExecutionException(string message, Exception innerException, string? statementContext = null, int line = 0, int column = 0) 
             : base(message, innerException)
         {
             StatementContext = statementContext;
+            Line = line;
+            Column = column;
         }
     }
 

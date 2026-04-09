@@ -70,7 +70,7 @@ namespace ETL_SQL.Engine.Handlers
                 row["Rule"] = res.RuleName;
                 row["Line"] = res.LineNumber;
                 row["Message"] = res.Message;
-                table.AddRow(row);
+                await table.AddRowAsync(row);
             }
 
             context.LastResult = table;

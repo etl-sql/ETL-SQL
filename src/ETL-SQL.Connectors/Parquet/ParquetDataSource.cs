@@ -23,33 +23,23 @@ namespace ETL_SQL.Connectors.Parquet
         private readonly string _compression;
         private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
+        private readonly ILogger _logger;
 
-        /// <summary>Gets the physical path to the Parquet file.</summary>
         public string Path => _filePath;
-        /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
         
-        /// <summary>Returns this instance as a typed table (no-op for Parquet).</summary>
         public IDataSource WithTable(string tableName) => this;
-        /// <summary>The type name of the connector that created this data source (e.g., PARQUET).</summary>
         public string ConnectorType => "PARQUET";
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ParquetDataSource"/> class.
-        /// </summary>
-        /// <param name="filePath">The path to the Parquet file.</param>
-        /// <param name="options">Optional configuration params (e.g. COMPRESSION).</param>
-        public ParquetDataSource(string filePath, Dictionary<string, string>? options = null)
+        public ParquetDataSource(string filePath, Dictionary<string, string>? options = null, ILogger? logger = null)
         {
             _filePath = filePath;
             _options = options;
+            _logger = logger ?? Logger.Instance;
             _compression = options != null && options.TryGetValue("COMPRESSION", out var c) ? c.ToUpperInvariant() : "SNAPPY";
             _encryption = new EncryptionOptions(options);
         }
 
-        /// <summary>Reads data from the Parquet file in batches.</summary>
-        /// <param name="batchSize">The maximum number of rows per batch.</param>
-        /// <returns>An async enumerable of DataTables.</returns>
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
@@ -72,54 +62,52 @@ namespace ETL_SQL.Connectors.Parquet
                 var colNames = dataFields.Select(f => f.Name).ToList();
 
                 for (int i = 0; i < reader.RowGroupCount; i++)
-            {
-                using var rgReader = reader.OpenRowGroupReader(i);
-                int rowCount = (int)rgReader.RowCount;
-                
-                var columns = new Array[dataFields.Length];
-                for (int j = 0; j < dataFields.Length; j++)
                 {
-                    columns[j] = (await rgReader.ReadColumnAsync(dataFields[j])).Data;
-                }
-
-                DataTable? currentBatch = null;
-
-                for (int r = 0; r < rowCount; r++)
-                {
-                    if (currentBatch == null)
+                    using var rgReader = reader.OpenRowGroupReader(i);
+                    int rowCount = (int)rgReader.RowCount;
+                    
+                    var columns = new Array[dataFields.Length];
+                    for (int j = 0; j < dataFields.Length; j++)
                     {
-                        currentBatch = new DataTable();
-                        currentBatch.SetColumns(colNames);
+                        columns[j] = (await rgReader.ReadColumnAsync(dataFields[j])).Data;
                     }
 
-                    var etlRow = new ETL_SQL.Data.Row();
-                    for (int c = 0; c < dataFields.Length; c++)
-                    {
-                        etlRow[colNames[c]] = columns[c].GetValue(r);
-                    }
-                    currentBatch.AddRow(etlRow);
+                    DataTable? currentBatch = null;
 
-                    if (currentBatch.Rows.Count >= batchSize)
+                    for (int r = 0; r < rowCount; r++)
+                    {
+                        if (currentBatch == null)
+                        {
+                            currentBatch = new DataTable();
+                            currentBatch.SetColumns(colNames);
+                        }
+
+                        var etlRow = new ETL_SQL.Data.Row();
+                        for (int c = 0; c < dataFields.Length; c++)
+                        {
+                            etlRow[colNames[c]] = columns[c].GetValue(r);
+                        }
+                        currentBatch.AddRow(etlRow);
+
+                        if (currentBatch.Rows.Count >= batchSize)
+                        {
+                            yield return currentBatch;
+                            currentBatch = null;
+                        }
+                    }
+
+                    if (currentBatch != null && currentBatch.Rows.Count > 0)
                     {
                         yield return currentBatch;
-                        currentBatch = null;
                     }
                 }
-
-                if (currentBatch != null && currentBatch.Rows.Count > 0)
-                {
-                    yield return currentBatch;
-                }
-            }
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
 
-        /// <summary>Writes batches of data to the Parquet file.</summary>
-        /// <param name="batches">An async enumerable of DataTables.</param>
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
         {
             var enumerator = batches.GetAsyncEnumerator();
@@ -167,7 +155,6 @@ namespace ETL_SQL.Connectors.Parquet
                         writer.CompressionMethod = comp;
                     }
 
-                    // We need to write in row groups. For simplicity, we'll write each batch as a row group.
                     bool hasMore = true;
                     DataTable batch = firstBatch;
 
@@ -200,7 +187,7 @@ namespace ETL_SQL.Connectors.Parquet
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
 
@@ -219,8 +206,6 @@ namespace ETL_SQL.Connectors.Parquet
             catch { return null; }
         }
 
-        /// <summary>Asynchronously retrieves the column names from the Parquet schema.</summary>
-        /// <returns>A collection of field names.</returns>
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
@@ -232,7 +217,7 @@ namespace ETL_SQL.Connectors.Parquet
             {
                 tempFile = System.IO.Path.GetTempFileName();
                 try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch (Exception ex) { Logger.Verbose($"[ParquetDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+                catch (Exception ex) { _logger.Debug($"[ParquetDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
             }
 
             try
@@ -242,20 +227,15 @@ namespace ETL_SQL.Connectors.Parquet
                 return reader.Schema.Fields.Select(f => f.Name).ToList();
             }
             catch { return Enumerable.Empty<string>(); }
-            finally { TempFileHelper.SafeDelete(tempFile); }
+            finally { TempFileHelper.SafeDelete(tempFile, _logger); }
         }
 
-        /// <summary>Captures a snapshot (no-op for Parquet).</summary>
         public object? Snapshot() => null;
-
-        /// <summary>Restores from a snapshot (no-op for Parquet).</summary>
         public void Restore(object? snapshot) { }
 
-        /// <summary>Asynchronously disposes resources.</summary>
         public async ValueTask DisposeAsync()
         {
             await Task.CompletedTask;
         }
     }
 }
-

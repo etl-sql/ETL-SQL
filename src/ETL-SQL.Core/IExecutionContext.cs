@@ -83,12 +83,15 @@ namespace ETL_SQL.Core
         Task<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context);
         object? ResolveIdentifier(string name, Row? row);
         int CompareConstants(object? a, object? b);
+        bool IsSoftEqual(object? a, object? b);
         object? CastToType(object? value, string dataType);
     }
 
     public interface IDataContext
     {
         IDictionary<string, IDataSource> Connections { get; }
+        /// <summary>Statement-local data source overrides (used for CTEs).</summary>
+        IDictionary<string, IDataSource> LocalSources { get; }
         string? MasterPassword { get; }
         string? ScriptPassword { get; set; }
         DataTable? LastResult { get; set; }
@@ -118,6 +121,7 @@ namespace ETL_SQL.Core
         Task EvaluateProcedure(string name, List<object?> args);
         string ResolvePath(string path);
         int MaxRecursiveDepth { get; set; }
+        int CurrentRecursiveDepth { get; set; }
         int BatchSize { get; set; }
         int? PreviewLimit { get; set; }
         bool FunctionExists(string name);

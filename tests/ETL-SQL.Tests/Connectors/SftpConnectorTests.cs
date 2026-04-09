@@ -4,6 +4,7 @@ using Xunit;
 using Moq;
 using Renci.SshNet;
 using ETL_SQL.Connectors;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests.Connectors
 {
@@ -44,7 +45,7 @@ namespace ETL_SQL.Tests.Connectors
             string capturedKeyFile = null;
             string capturedPassphrase = null;
 
-            var connector = new SftpConnector(host, user, null, keyFile, passphrase, (h, u, p, k, pp) => {
+            var connector = new SftpConnector(host, user, null, keyFile, passphrase, NullLogger.Instance, (h, u, p, k, pp) => {
                 factoryCalled = true;
                 capturedKeyFile = k;
                 capturedPassphrase = pp;
@@ -69,7 +70,7 @@ namespace ETL_SQL.Tests.Connectors
             bool factoryCalled = false;
             string capturedPass = null;
 
-            var connector = new SftpConnector(host, user, pass, null, null, (h, u, p, k, pp) => {
+            var connector = new SftpConnector(host, user, pass, null, null, NullLogger.Instance, (h, u, p, k, pp) => {
                 factoryCalled = true;
                 capturedPass = p;
                 return null; // Don't actually create a client

@@ -12,13 +12,20 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class DeclareStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(DeclareStatement);
+
+        public DeclareStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the DECLARE statement, initializing the variable and its metadata.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (DeclareStatement)statement;
             
-            Logger.Verbose($"Declaring variable {stmt.VariableName} as {stmt.DataType}");
+            _logger.Debug($"Declaring variable {stmt.VariableName} as {stmt.DataType}");
 
             var variables = (IVariableContext)context;
             var evaluator = (IEvaluationContext)context;

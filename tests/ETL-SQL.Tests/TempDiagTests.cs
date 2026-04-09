@@ -17,7 +17,7 @@ namespace ETL_SQL.Tests
         }
 
         [Fact]
-        public void PrintDiagnostics()
+        public async Task PrintDiagnostics()
         {
             string sql = "DECLARE @id int;\n         ,@name varchar(100);";
             var tokens = new Lexer(sql).Tokenize();
@@ -35,9 +35,7 @@ namespace ETL_SQL.Tests
             
             // Dummy context
             var ctx = new DefaultLintContext { DocumentUri = "test.sql" };
-            var lintTask = linter.AnalyzeAsync(script, ctx);
-            lintTask.Wait();
-            var lintResults = lintTask.Result;
+            var lintResults = await linter.AnalyzeAsync(script, ctx);
 
             _output.WriteLine("Linter Diagnostics:");
             foreach (var res in lintResults)

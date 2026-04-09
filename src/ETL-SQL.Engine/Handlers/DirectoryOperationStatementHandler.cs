@@ -13,7 +13,14 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class DirectoryOperationStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(DirectoryOperationStatement);
+
+        public DirectoryOperationStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the directory operation, resolving paths and performing filesystem actions.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
@@ -52,11 +59,11 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
 
-            Logger.Verbose($"Directory Operation: {stmt.Type} on {path}{(dest != null ? $" -> {dest}" : "")}");
+            _logger.Debug($"Directory Operation: {stmt.Type} on {path}{(dest != null ? $" -> {dest}" : "")}");
 
             if (context.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_DIRECTORY on {path}{(dest != null ? $" to {dest}" : "")}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_DIRECTORY on {path}{(dest != null ? $" to {dest}" : "")}", ConsoleColor.Yellow);
                 return;
             }
 
@@ -64,13 +71,13 @@ namespace ETL_SQL.Engine.Handlers
             {
                 case DirectoryOpType.Create:
                     Directory.CreateDirectory(path);
-                    Logger.WriteLine($"Directory created: {path}", ConsoleColor.Green);
+                    _logger.WriteLine($"Directory created: {path}", ConsoleColor.Green);
                     break;
                 case DirectoryOpType.Delete:
                     if (Directory.Exists(path))
                     {
                         Directory.Delete(path, true);
-                        Logger.WriteLine($"Directory deleted: {path}", ConsoleColor.Green);
+                        _logger.WriteLine($"Directory deleted: {path}", ConsoleColor.Green);
                     }
                     break;
                 case DirectoryOpType.Rename:
@@ -95,12 +102,12 @@ namespace ETL_SQL.Engine.Handlers
                     if (dest != null)
                     {
                         CopyDirectory(path, dest, overwrite);
-                        Logger.WriteLine($"Directory copied: {path} -> {dest}", ConsoleColor.Green);
+                        _logger.WriteLine($"Directory copied: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
                 case DirectoryOpType.DeleteContents:
                     DeleteDirectoryContents(path, recursive);
-                    Logger.WriteLine($"Directory contents deleted: {path}", ConsoleColor.Green);
+                    _logger.WriteLine($"Directory contents deleted: {path}", ConsoleColor.Green);
                     break;
                 case DirectoryOpType.Compress:
                     if (dest != null)
@@ -111,21 +118,21 @@ namespace ETL_SQL.Engine.Handlers
                             else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
                         }
                         System.IO.Compression.ZipFile.CreateFromDirectory(path, dest);
-                        Logger.WriteLine($"Directory compressed: {path} -> {dest}", ConsoleColor.Green);
+                        _logger.WriteLine($"Directory compressed: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
                 case DirectoryOpType.Encrypt:
                     if (dest != null)
                     {
                         EncryptDirectory(path, dest, "DefaultETLPass123!", overwrite);
-                        Logger.WriteLine($"Directory encrypted: {path} -> {dest}", ConsoleColor.Green);
+                        _logger.WriteLine($"Directory encrypted: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
                 case DirectoryOpType.Decrypt:
                     if (dest != null)
                     {
                         DecryptDirectory(path, dest, "DefaultETLPass123!", overwrite);
-                        Logger.WriteLine($"Directory decrypted: {path} -> {dest}", ConsoleColor.Green);
+                        _logger.WriteLine($"Directory decrypted: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
             }

@@ -30,7 +30,7 @@ namespace ETL_SQL.Engine.Handlers
                 row["Name"] = conn.Key;
                 row["Type"] = conn.Value.GetType().Name;
                 row["Details"] = conn.Value.ToString();
-                table.AddRow(row);
+                await table.AddRowAsync(row);
             }
 
             if (stmt.IntoTable != null)

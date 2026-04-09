@@ -23,28 +23,21 @@ namespace ETL_SQL.Connectors.Json
         private readonly bool _compress;
         private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
+        private readonly ILogger _logger;
 
-        /// <summary>Gets the physical path to the JSON file.</summary>
         public string Path => _filePath;
-        /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
         
-        /// <summary>Returns this instance as a typed table (no-op for JSON).</summary>
         public IDataSource WithTable(string tableName) => this;
-        /// <summary>The type name of the connector that created this data source (e.g., JSON).</summary>
         public string ConnectorType => "JSON";
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="JsonDataSource"/> class.
-        /// </summary>
-        /// <param name="filePath">The path to the JSON file.</param>
-        /// <param name="options">Optional configuration params (ROOT_PATH, COMPRESS, etc.).</param>
-        public JsonDataSource(string filePath, Dictionary<string, string>? options = null)
+        public JsonDataSource(string filePath, Dictionary<string, string>? options = null, ILogger? logger = null)
         {
             _filePath = filePath;
             _options = options;
+            _logger = logger ?? Logger.Instance;
             if (options != null)
             {
                 if (options.TryGetValue("ROOT_PATH", out var rp)) _rootPath = rp;
@@ -54,9 +47,6 @@ namespace ETL_SQL.Connectors.Json
             _encryption = new EncryptionOptions(options);
         }
 
-        /// <summary>Reads data from the JSON file in batches.</summary>
-        /// <param name="batchSize">The number of rows per batch.</param>
-        /// <returns>An async enumerable of DataTables.</returns>
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
             if (!System.IO.File.Exists(_filePath)) yield break;
@@ -89,7 +79,7 @@ namespace ETL_SQL.Connectors.Json
                 using var stream = System.IO.File.OpenRead(effectivePath);
                 JsonDocument doc;
                 try { doc = await JsonDocument.ParseAsync(stream); }
-                catch (Exception ex) { Logger.Verbose($"[JsonDataSource.ReadBatches] Failed to parse JSON '{effectivePath}': {ex.Message}"); yield break; }
+                catch (Exception ex) { _logger.Debug($"[JsonDataSource.ReadBatches] Failed to parse JSON '{effectivePath}': {ex.Message}"); yield break; }
 
                 using (doc)
                 {
@@ -114,7 +104,6 @@ namespace ETL_SQL.Connectors.Json
                     {
                         if (element.ValueKind != JsonValueKind.Object) continue;
 
-                        // Start with a dynamic row since we don't know the schema yet
                         var row = new Row();
                         foreach (var property in element.EnumerateObject())
                         {
@@ -140,7 +129,7 @@ namespace ETL_SQL.Connectors.Json
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
 
@@ -154,8 +143,6 @@ namespace ETL_SQL.Connectors.Json
             _ => element.GetRawText()
         };
 
-        /// <summary>Writes batches of data to the JSON file.</summary>
-        /// <param name="batches">An async enumerable of DataTables.</param>
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
         {
             var allRows = new List<IDictionary<string, object?>>();
@@ -214,12 +201,10 @@ namespace ETL_SQL.Connectors.Json
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
 
-        /// <summary>Asynchronously retrieves the column names from the JSON object structure.</summary>
-        /// <returns>A collection of property names from the first object in the array.</returns>
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
@@ -231,7 +216,7 @@ namespace ETL_SQL.Connectors.Json
             {
                 tempFile = System.IO.Path.GetTempFileName();
                 try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch (Exception ex) { Logger.Verbose($"[JsonDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+                catch (Exception ex) { _logger.Debug($"[JsonDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
             }
             else if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
@@ -245,7 +230,7 @@ namespace ETL_SQL.Connectors.Json
                         else return Enumerable.Empty<string>();
                     }
                 }
-                catch (Exception ex) { Logger.Verbose($"[JsonDataSource.GetColumnsAsync] Failed to decompress '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+                catch (Exception ex) { _logger.Debug($"[JsonDataSource.GetColumnsAsync] Failed to decompress '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
             }
 
             try
@@ -266,30 +251,18 @@ namespace ETL_SQL.Connectors.Json
                 if (first.ValueKind == JsonValueKind.Object) return first.EnumerateObject().Select(p => p.Name).ToList();
                 return Enumerable.Empty<string>();
             }
-            catch (Exception ex) { Logger.Verbose($"[JsonDataSource.GetColumnsAsync] Failed to read columns from '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+            catch (Exception ex) { _logger.Debug($"[JsonDataSource.GetColumnsAsync] Failed to read columns from '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
 
-
-        /// <summary>Truncates the JSON file by clearing all data.</summary>
         public async Task TruncateAsync()
         {
-            if (_rootPath != null)
-            {
-                // If a root path is specified, we should probably only clear that specific part,
-                // but for now, we'll follow the same logic as others: clearing the whole source or throwing.
-                // However, WriteBatches with empty list will clear the file.
-                await WriteBatches(AsyncEnumerable.Empty<DataTable>());
-            }
-            else
-            {
-                await WriteBatches(AsyncEnumerable.Empty<DataTable>());
-            }
+            await WriteBatches(AsyncEnumerable.Empty<DataTable>());
         }
-        /// <summary>Asynchronously disposes resources.</summary>
+
         public async ValueTask DisposeAsync()
         {
             await Task.CompletedTask;
@@ -318,4 +291,3 @@ namespace ETL_SQL.Connectors.Json
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
     }
 }
-

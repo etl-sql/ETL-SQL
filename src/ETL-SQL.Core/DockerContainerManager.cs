@@ -12,6 +12,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using Docker.DotNet;
 using Docker.DotNet.Models;
 using System.Runtime.InteropServices;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Core
 {
@@ -21,7 +22,16 @@ namespace ETL_SQL.Core
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _connectionStrings = new(StringComparer.OrdinalIgnoreCase);
         public string? LastConnectionString { get; private set; }
         public bool HasActiveContainers => !_activeContainers.IsEmpty;
-        private static readonly ILoggerFactory _loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder => builder.AddProvider(new TestcontainersLoggerProvider()));
+        
+        private readonly ILoggerFactory _loggerFactory;
+        private readonly ETL_SQL.Common.ILogger _logger;
+
+        public DockerContainerManager(ETL_SQL.Common.ILogger logger)
+        {
+            _logger = logger;
+            _loggerFactory = Microsoft.Extensions.Logging.LoggerFactory.Create(builder => 
+                builder.AddProvider(new TestcontainersLoggerProvider(_logger)));
+        }
 
         /// <summary>
         /// Retrieves the connection string for a given container alias or image name.
@@ -47,7 +57,7 @@ namespace ETL_SQL.Core
             string key = alias ?? imageName;
             if (_activeContainers.TryGetValue(key, out var activeContainer) && activeContainer.State.ToString() == "Running")
             {
-                ETL_SQL.Common.Logger.WriteLine($"Using existing session Docker container for {key}...", ConsoleColor.Cyan);
+                _logger.WriteLine($"Using existing session Docker container for {key}...", ConsoleColor.Cyan);
                 string activeConnStr = GetConnectionString(activeContainer, imageName);
                 _connectionStrings[key] = activeConnStr;
                 LastConnectionString = activeConnStr;
@@ -59,7 +69,7 @@ namespace ETL_SQL.Core
             var existingConnStr = await GetExistingContainerConnectionString(containerName, imageName);
             if (existingConnStr != null)
             {
-                ETL_SQL.Common.Logger.WriteLine($"Re-attached to existing Docker container: {containerName}", ConsoleColor.Cyan);
+                _logger.WriteLine($"Re-attached to existing Docker container: {containerName}", ConsoleColor.Cyan);
                 _connectionStrings[key] = existingConnStr;
                 LastConnectionString = existingConnStr;
                 return existingConnStr;
@@ -190,7 +200,7 @@ namespace ETL_SQL.Core
         {
             if (_activeContainers.TryGetValue(alias, out var container))
             {
-                ETL_SQL.Common.Logger.WriteLine($"Stopping Docker container {alias}...", ConsoleColor.Yellow);
+                _logger.WriteLine($"Stopping Docker container {alias}...", ConsoleColor.Yellow);
                 await container.StopAsync();
             }
         }
@@ -199,7 +209,7 @@ namespace ETL_SQL.Core
         {
             if (_activeContainers.TryGetValue(alias, out var container))
             {
-                ETL_SQL.Common.Logger.WriteLine($"Pausing Docker container {alias}...", ConsoleColor.Yellow);
+                _logger.WriteLine($"Pausing Docker container {alias}...", ConsoleColor.Yellow);
                 // Testcontainers doesn't have a direct PauseAsync in basic IContainer, 
                 // but some implementations might. We'll stick to Stop if Pause is not available,
                 // or just log it for now if we want to add full docker exec support later.
@@ -213,7 +223,7 @@ namespace ETL_SQL.Core
         {
             if (_activeContainers.TryGetValue(alias, out var container))
             {
-                ETL_SQL.Common.Logger.WriteLine($"Resuming Docker container {alias}...", ConsoleColor.Green);
+                _logger.WriteLine($"Resuming Docker container {alias}...", ConsoleColor.Green);
                 await container.StartAsync();
             }
         }
@@ -230,9 +240,9 @@ namespace ETL_SQL.Core
 
             foreach (var kvp in targets)
             {
-                ETL_SQL.Common.Logger.WriteLine($"Closing Docker container for {kvp.Key}...", ConsoleColor.Yellow);
+                _logger.WriteLine($"Closing Docker container for {kvp.Key}...", ConsoleColor.Yellow);
                 try { await kvp.Value.StopAsync(); await kvp.Value.DisposeAsync(); }
-                catch (Exception ex) { ETL_SQL.Common.Logger.Verbose($"[DockerContainerManager] Container cleanup error for '{kvp.Key}': {ex.Message}"); }
+                catch (Exception ex) { _logger.Debug($"[DockerContainerManager] Container cleanup error for '{kvp.Key}': {ex.Message}"); }
                 _activeContainers.TryRemove(kvp.Key, out _);
                 _connectionStrings.TryRemove(kvp.Key, out _);
             }

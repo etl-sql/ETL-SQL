@@ -14,8 +14,6 @@ namespace ETL_SQL.Connectors.FlatFile
 {
     /// <summary>
     /// Data source implementation for reading and writing delimited text files (CSV, TSV, etc.).
-    /// Supports advanced features like custom delimiters, row delimiters, encoding, text qualifiers, 
-    /// compression, encryption, and footer count validation.
     /// </summary>
     public class FlatFileDataSource : IDatabaseSource
     {
@@ -38,6 +36,7 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly Dictionary<string, string>? _options;
         private readonly List<FixedWidthColumn>? _fixedColumns;
         private readonly bool _trim = true;
+        private readonly ILogger _logger;
 
         private class FixedWidthColumn
         {
@@ -46,26 +45,16 @@ namespace ETL_SQL.Connectors.FlatFile
             public int Length { get; set; }
         }
 
-        /// <summary>The physical or logical path to the data source.</summary>
         public string Path => _filePath;
-        /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
-
-        /// <summary>Returns this instance as a typed table (no-op for FlatFile).</summary>
         public IDataSource WithTable(string tableName) => this;
-        /// <summary>The type name of the connector that created this data source (e.g., FLATFILE).</summary>
         public string ConnectorType => "FLATFILE";
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="FlatFileDataSource"/> class.
-        /// </summary>
-        /// <param name="filePath">The path to the delimited file.</param>
-        /// <param name="options">Optional configuration parameters.</param>
-        /// <param name="templateSchema">Optional schema template for fixed-width or validation.</param>
-        public FlatFileDataSource(string filePath, Dictionary<string, string>? options = null, IEnumerable<ColumnDefinition>? templateSchema = null)
+        public FlatFileDataSource(string filePath, Dictionary<string, string>? options = null, IEnumerable<ColumnDefinition>? templateSchema = null, ILogger? logger = null)
         {
             _filePath = filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n');
             _options = options;
+            _logger = logger ?? Logger.Instance; // Fallback to global for backward compatibility during transition
             _hasHeader = true;
             _delimiter = ',';
             _encoding = Encoding.UTF8;
@@ -237,10 +226,7 @@ namespace ETL_SQL.Connectors.FlatFile
             return result;
         }
 
-        /// <summary>Captures a snapshot (no-op for FlatFile).</summary>
         public object? Snapshot() => null;
-
-        /// <summary>Restores from a snapshot (no-op for FlatFile).</summary>
         public void Restore(object? snapshot) { }
 
         private string[] SplitLine(string line)
@@ -334,9 +320,6 @@ namespace ETL_SQL.Connectors.FlatFile
             return $"{q}{escaped}{q}";
         }
 
-        /// <summary>Reads data from the flat file in batches.</summary>
-        /// <param name="batchSize">The number of rows per batch.</param>
-        /// <returns>An async enumerable of DataTables.</returns>
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
             if (!System.IO.File.Exists(_filePath))
@@ -443,7 +426,7 @@ namespace ETL_SQL.Connectors.FlatFile
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
 
@@ -500,14 +483,12 @@ namespace ETL_SQL.Connectors.FlatFile
             {
                 string val = _textQualifier == null ? values[i].Trim() : values[i];
                 
-                // Handle NULL_AS
                 if (_nullAs != null && (val.Equals(_nullAs, StringComparison.OrdinalIgnoreCase) || (string.IsNullOrEmpty(val) && _nullAs == "")))
                 {
                     row[i] = null;
                 }
                 else
                 {
-                    // Handle DATE_FORMAT
                     if (_dateFormat != null && DateTime.TryParseExact(val, _dateFormat, null, System.Globalization.DateTimeStyles.None, out var dt))
                     {
                         row[i] = dt;
@@ -530,13 +511,11 @@ namespace ETL_SQL.Connectors.FlatFile
             {
                 if (int.TryParse(match.Groups[1].Value, out var expected) && expected != actualCount)
                 {
-                    Logger.WriteLine($"[WARNING] CSV Count Mismatch! Expected: {expected}, Actual: {actualCount}");
+                    _logger.WriteLine($"[WARNING] CSV Count Mismatch! Expected: {expected}, Actual: {actualCount}", ConsoleColor.Yellow);
                 }
             }
         }
 
-        /// <summary>Writes batches of data to the flat file.</summary>
-        /// <param name="batches">An async enumerable of DataTables to write.</param>
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
         {
             string tempFile = System.IO.Path.GetTempFileName();
@@ -601,12 +580,10 @@ namespace ETL_SQL.Connectors.FlatFile
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
 
-        /// <summary>Asynchronously retrieves the column names from the file.</summary>
-        /// <returns>A collection of column names.</returns>
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
@@ -618,7 +595,7 @@ namespace ETL_SQL.Connectors.FlatFile
             {
                 tempFile = System.IO.Path.GetTempFileName();
                 try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch (Exception ex) { Logger.Verbose($"[FlatFileDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+                catch (Exception ex) { _logger.Debug($"[FlatFileDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
             }
             else if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
@@ -632,7 +609,7 @@ namespace ETL_SQL.Connectors.FlatFile
                         else return Enumerable.Empty<string>();
                     }
                 }
-                catch (Exception ex) { Logger.Verbose($"[FlatFileDataSource.GetColumnsAsync] Failed to decompress '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+                catch (Exception ex) { _logger.Debug($"[FlatFileDataSource.GetColumnsAsync] Failed to decompress '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
             }
 
             try
@@ -657,26 +634,22 @@ namespace ETL_SQL.Connectors.FlatFile
                 if (_hasHeader) return headers.Select(h => h.Trim());
                 return headers.Select((h, i) => $"Col{i + 1}");
             }
-            catch (Exception ex) { Logger.Verbose($"[FlatFileDataSource.GetColumnsAsync] Failed to read headers from '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+            catch (Exception ex) { _logger.Debug($"[FlatFileDataSource.GetColumnsAsync] Failed to read headers from '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
-        /// <summary>Removes all data from the flat file.</summary>
+
         public async Task TruncateAsync()
         {
             if (System.IO.File.Exists(_filePath))
             {
-                // If we have a header, we should ideally try to keep it, but simple truncation for now 
-                // matches previous behavior and fixes tests.
                 System.IO.File.WriteAllText(_filePath, string.Empty);
             }
             await Task.CompletedTask;
         }
 
-
-        /// <summary>Asynchronously disposes resources.</summary>
         public async ValueTask DisposeAsync()
         {
             await Task.CompletedTask;
@@ -705,4 +678,3 @@ namespace ETL_SQL.Connectors.FlatFile
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
     }
 }
-

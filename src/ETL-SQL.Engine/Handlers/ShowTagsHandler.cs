@@ -43,7 +43,7 @@ namespace ETL_SQL.Engine.Handlers
                     var row = new Row();
                     row["TagName"] = kv.Key;
                     row["TagValue"] = kv.Value;
-                    table.AddRow(row);
+                    await table.AddRowAsync(row);
                 }
             }
 

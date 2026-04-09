@@ -48,7 +48,7 @@ namespace ETL_SQL.Engine.Handlers
                 row["IndexUsed"] = m.IndexName ?? "--";
                 row["DurationMs"] = m.DurationMs;
                 row["MemoryKB"] = m.MemoryDeltaBytes / 1024.0;
-                dataTable.AddRow(row);
+                await dataTable.AddRowAsync(row);
             }
 
             if (stmt.IntoTable != null)
@@ -83,7 +83,7 @@ namespace ETL_SQL.Engine.Handlers
                         new Text(row["Timestamp"] is DateTime dt ? dt.ToString("HH:mm:ss.fff") : row["Timestamp"]?.ToString() ?? ""),
                         new Text(row["Statement"]?.ToString() ?? ""),
                         new Text(Convert.ToInt64(row["RowsProcessed"]).ToString("N0")),
-                        row["IndexUsed"]?.ToString() != "--" ? new Markup($"[green]{Markup.Escape(row["IndexUsed"].ToString())}[/]") : new Markup("[grey]--[/]"),
+                        row["IndexUsed"]?.ToString() != "--" ? new Markup($"[green]{Markup.Escape(row["IndexUsed"]?.ToString() ?? "")}[/]") : new Markup("[grey]--[/]"),
                         new Text(Convert.ToInt64(row["DurationMs"]).ToString("N0")),
                         new Text(Convert.ToDouble(row["MemoryKB"]).ToString("N2"))
                     );

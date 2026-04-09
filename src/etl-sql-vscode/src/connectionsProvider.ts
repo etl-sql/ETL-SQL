@@ -135,16 +135,22 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
         if (element instanceof TableItem) {
             if (this.client) {
                 try {
-                    this.outputChannel?.appendLine(`[ConnectionsProvider] getColumns requested for ${element.connectionName}.${element.label} (URI: ${element.uri})`);
+                    this.outputChannel?.appendLine(`[ConnectionsProvider] Fetching columns for table: ${element.connectionName}.${element.label}`);
                     const response = await this.client.sendRequest('etlsql/getColumns', {
                         connectionName: element.connectionName,
                         tableName: element.label,
                         uri: element.uri
                     });
-                    this.outputChannel?.appendLine(`[ConnectionsProvider] getColumns returned ${response.columns.length} columns.`);
+                    
+                    if (!response || !response.columns) {
+                        this.outputChannel?.appendLine(`[ConnectionsProvider] WARNING: getColumns returned empty response for ${element.label}`);
+                        return [new TreeItem("No columns found", vscode.TreeItemCollapsibleState.None)];
+                    }
+
+                    this.outputChannel?.appendLine(`[ConnectionsProvider] Successfully loaded ${response.columns.length} columns for ${element.label}`);
                     return response.columns.map((c: string) => new TreeItem(c, vscode.TreeItemCollapsibleState.None, 'column'));
                 } catch (e: any) {
-                    this.outputChannel?.appendLine(`[ConnectionsProvider] getColumns FAILED: ${e.message || e}`);
+                    this.outputChannel?.appendLine(`[ConnectionsProvider] ERROR in getColumns: ${e.message || e}`);
                     return [new TreeItem("Error loading columns", vscode.TreeItemCollapsibleState.None)];
                 }
             }

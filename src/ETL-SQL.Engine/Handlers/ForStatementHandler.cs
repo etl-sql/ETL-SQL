@@ -10,7 +10,14 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class ForStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(ForStatement);
+
+        public ForStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the FOR statement, managing the loop variable and body execution.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
@@ -20,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
             var end = Convert.ToInt32(await context.EvaluateValue(stmt.EndValue, new Row()));
             var step = stmt.StepValue != null ? Convert.ToInt32(await context.EvaluateValue(stmt.StepValue, new Row())) : 1;
             
-            Logger.Verbose($"Starting FOR loop for {stmt.VariableName} from {start} to {end} step {step}");
+            _logger.Debug($"Starting FOR loop for {stmt.VariableName} from {start} to {end} step {step}");
 
             if (!context.ContainsVariable(stmt.VariableName))
             {

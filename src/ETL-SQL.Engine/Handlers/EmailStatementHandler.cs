@@ -12,9 +12,11 @@ namespace ETL_SQL.Engine.Handlers
     /// <summary>
     /// Handles the SEND EMAIL statement, resolving recipients, content, and attachments, and sending via an SMTP datasource.
     /// </summary>
-    public class EmailStatementHandler : IStatementHandler
+    public class EmailStatementHandler(ILogger logger) : IStatementHandler
     {
+        private readonly ILogger _logger = logger;
         public Type SupportedStatementType => typeof(EmailStatement);
+
 
         /// <summary>Executes the SEND EMAIL statement, resolving all fields and invoking the SMTP provider.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
@@ -92,17 +94,17 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // 3. Send via WriteBatches
-            Logger.Verbose($"Sending email to {row["To"]} via {connName ?? "default SMTP"}");
+            _logger.Debug($"Sending email to {row["To"]} via {connName ?? "default SMTP"}");
             
             if (context.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would send email to {row["To"]} with subject '{row["Subject"]}'", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would send email to {row["To"]} with subject '{row["Subject"]}'", ConsoleColor.Yellow);
                 return;
             }
 
             var dt = new DataTable();
             dt.ColumnNames.AddRange(row.Columns.Keys);
-            dt.AddRow(row);
+            await dt.AddRowAsync(row);
             await dataSource.WriteBatches(new[] { dt }.ToAsyncEnumerable());
         }
     }

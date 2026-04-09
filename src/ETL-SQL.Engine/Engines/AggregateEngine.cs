@@ -13,10 +13,12 @@ namespace ETL_SQL.Engine.Engines
     public class AggregateEngine
     {
         private readonly IExecutionContext _context;
+        private readonly ILogger _logger;
 
-        public AggregateEngine(IExecutionContext context)
+        public AggregateEngine(IExecutionContext context, ILogger logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         /// <summary>Applies aggregation logic to a buffer of rows, grouping them and calculating aggregate functions.</summary>

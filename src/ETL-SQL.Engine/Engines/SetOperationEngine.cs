@@ -13,10 +13,12 @@ namespace ETL_SQL.Engine.Engines
     public class SetOperationEngine
     {
         private readonly IExecutionContext _context;
+        private readonly ILogger _logger;
 
-        public SetOperationEngine(IExecutionContext context)
+        public SetOperationEngine(IExecutionContext context, ILogger logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         /// <summary>Executes a set operation by buffering both sides and performing set logic.</summary>
@@ -34,8 +36,8 @@ namespace ETL_SQL.Engine.Engines
             switch (setOp.Operation)
             {
                 case SetOpType.UNION_ALL:
-                    foreach (var r in leftRows) resultBatch.AddRow(Normalize(r, targetColumns));
-                    foreach (var r in rightRows) resultBatch.AddRow(Normalize(r, targetColumns));
+                    foreach (var r in leftRows) await resultBatch.AddRowAsync(Normalize(r, targetColumns));
+                    foreach (var r in rightRows) await resultBatch.AddRowAsync(Normalize(r, targetColumns));
                     yield return resultBatch;
                     break;
 
@@ -50,11 +52,11 @@ namespace ETL_SQL.Engine.Engines
 
                     if (setOp.Operation == SetOpType.UNION)
                     {
-                        foreach (var r in normalizedLeft) resultBatch.AddRow(r);
+                        foreach (var r in normalizedLeft) await resultBatch.AddRowAsync(r);
                         foreach (var r in normalizedRight)
                         {
                             var hash = GetRowHash(r);
-                            if (!leftHashes.Contains(hash)) resultBatch.AddRow(r);
+                            if (!leftHashes.Contains(hash)) await resultBatch.AddRowAsync(r);
                         }
                     }
                     else if (setOp.Operation == SetOpType.EXCEPT)
@@ -62,7 +64,7 @@ namespace ETL_SQL.Engine.Engines
                         foreach (var r in normalizedLeft)
                         {
                             var hash = GetRowHash(r);
-                            if (!rightHashes.Contains(hash)) resultBatch.AddRow(r);
+                            if (!rightHashes.Contains(hash)) await resultBatch.AddRowAsync(r);
                         }
                     }
                     else if (setOp.Operation == SetOpType.INTERSECT)
@@ -70,7 +72,7 @@ namespace ETL_SQL.Engine.Engines
                         foreach (var r in normalizedLeft)
                         {
                             var hash = GetRowHash(r);
-                            if (rightHashes.Contains(hash)) resultBatch.AddRow(r);
+                            if (rightHashes.Contains(hash)) await resultBatch.AddRowAsync(r);
                         }
                     }
 
@@ -85,7 +87,7 @@ namespace ETL_SQL.Engine.Engines
                             if (seen.Add(h)) finalRows.Add(r);
                         }
                         resultBatch.Rows.Clear();
-                        foreach (var r in finalRows) resultBatch.AddRow(r);
+                        foreach (var r in finalRows) await resultBatch.AddRowAsync(r);
                     }
                     
                     yield return resultBatch;

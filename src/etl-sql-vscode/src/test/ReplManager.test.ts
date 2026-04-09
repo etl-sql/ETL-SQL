@@ -259,7 +259,8 @@ describe('ReplManager', () => {
     });
 
     it('ignores non-JSON lines on stdout and routes them to the output channel', async () => {
-        const { execPromise, outputChannel } = await startRepl();
+        const { execPromise, outputChannel, mgr } = await startRepl();
+        mgr.setDebugMode(true);
         fakeProcess.stdout.emit('data', 'Build info: debug\n');
         fakeProcess.emitLine({ type: 'done', exitCode: 0 });
         await execPromise;

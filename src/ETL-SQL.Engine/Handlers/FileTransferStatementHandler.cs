@@ -13,7 +13,14 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class FileTransferStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(FileTransferStatement);
+
+        public FileTransferStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the file transfer, resolving paths and invoking the remote filesystem provider.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
@@ -38,32 +45,32 @@ namespace ETL_SQL.Engine.Handlers
 
             if (stmt.Type == FileTransferType.Send)
             {
-                Logger.WriteLine($"SENDING: {localPath} -> {stmt.ConnectionName}:{remotePath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
+                _logger.WriteLine($"SENDING: {localPath} -> {stmt.ConnectionName}:{remotePath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
                 
                 if (context.IsWhatIf)
                 {
-                    Logger.WriteLine($"WHAT IF: Would send local file {localPath} to {stmt.ConnectionName}:{remotePath}", ConsoleColor.Yellow);
+                    _logger.WriteLine($"WHAT IF: Would send local file {localPath} to {stmt.ConnectionName}:{remotePath}", ConsoleColor.Yellow);
                     return;
                 }
 
                 if (!File.Exists(localPath)) throw new ExecutionException($"Local file not found: {localPath}");
                 await remoteFs.UploadFileAsync(localPath, remotePath, overwrite);
-                Logger.WriteLine("Upload complete.", ConsoleColor.Green);
+                _logger.WriteLine("Upload complete.", ConsoleColor.Green);
             }
             else // Receive
             {
-                Logger.WriteLine($"RECEIVING: {stmt.ConnectionName}:{remotePath} -> {localPath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
+                _logger.WriteLine($"RECEIVING: {stmt.ConnectionName}:{remotePath} -> {localPath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
                 
                 if (context.IsWhatIf)
                 {
-                    Logger.WriteLine($"WHAT IF: Would receive {stmt.ConnectionName}:{remotePath} to local file {localPath}", ConsoleColor.Yellow);
+                    _logger.WriteLine($"WHAT IF: Would receive {stmt.ConnectionName}:{remotePath} to local file {localPath}", ConsoleColor.Yellow);
                     return;
                 }
 
                 var dir = Path.GetDirectoryName(localPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
                 await remoteFs.DownloadFileAsync(remotePath, localPath, overwrite);
-                Logger.WriteLine("Download complete.", ConsoleColor.Green);
+                _logger.WriteLine("Download complete.", ConsoleColor.Green);
             }
         }
     }

@@ -14,9 +14,16 @@ namespace ETL_SQL.Engine
     /// <summary>
     /// Responsible for evaluating SQL expressions (literals, identifiers, binary ops, functions) against a row context.
     /// </summary>
-    public class ExpressionEvaluator(IExecutionContext context)
+    public class ExpressionEvaluator
     {
-        private readonly IExecutionContext _context = context;
+        private readonly IExecutionContext _context;
+        private readonly ILogger _logger;
+
+        public ExpressionEvaluator(IExecutionContext context)
+        {
+            _context = context;
+            _logger = context.Logger;
+        }
 
         private object? ResolveIdentifier(string name, Row? context)
         {
@@ -275,7 +282,7 @@ namespace ETL_SQL.Engine
         }
 
         /// <summary>Checks for soft equality between two objects.</summary>
-        public bool IsSoftEqual(object? a, object? b) => EvaluationUtils.IsSoftEqual(a, b);
+        public bool IsSoftEqual(object? a, object? b) => EvaluationUtils.IsSoftEqual(a, b, _logger);
         
         /// <summary>Compares two values for ordering.</summary>
         public int CompareConstants(object? a, object? b) => EvaluationUtils.CompareConstants(a, b);

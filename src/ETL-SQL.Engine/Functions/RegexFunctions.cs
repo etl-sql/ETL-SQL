@@ -198,7 +198,7 @@ namespace ETL_SQL.Engine.Functions
         }
 
         /// <summary>Splits the input into a table based on the pattern.</summary>
-        private static object? RegexpSplitToTable(List<object?> args, IExecutionContext ctx)
+        private static async Task<object?> RegexpSplitToTable(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 2) return new DataTable();
             string input = args[0]?.ToString() ?? "";
@@ -211,7 +211,7 @@ namespace ETL_SQL.Engine.Functions
                 dt.SetColumns(new[] { "VALUE" });
                 foreach (var part in parts)
                 {
-                    dt.AddRow(new Row { ["VALUE"] = part });
+                    await dt.AddRowAsync(new Row { ["VALUE"] = part });
                 }
                 return dt;
             }

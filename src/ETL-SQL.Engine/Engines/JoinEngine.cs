@@ -13,10 +13,12 @@ namespace ETL_SQL.Engine.Engines
     public class JoinEngine
     {
         private readonly IExecutionContext _context;
+        private readonly ILogger _logger;
 
-        public JoinEngine(IExecutionContext context)
+        public JoinEngine(IExecutionContext context, ILogger logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         /// <summary>Applies multiple joins to a set of buffered rows, choosing the best algorithm for each join.</summary>
@@ -30,7 +32,7 @@ namespace ETL_SQL.Engine.Engines
                     continue;
                 }
 
-                Logger.Verbose($"Joining table {join.Table.TableName}{(join.Table.Alias != null ? $" AS {join.Table.Alias}" : "")} ({join.JoinType})");
+                _logger.Debug($"Joining table {join.Table.TableName}{(join.Table.Alias != null ? $" AS {join.Table.Alias}" : "")} ({join.JoinType})");
                 var joinRows = await GetJoinRows(join);
 
                 if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase))
@@ -53,8 +55,8 @@ namespace ETL_SQL.Engine.Engines
                     const int SPILL_THRESHOLD = 100000;
                     if (hasEquality && (allBufferedRows.Count > SPILL_THRESHOLD || joinRows.Count > SPILL_THRESHOLD))
                     {
-                        Logger.WriteLine($"[yellow]HYPER-SCALE: Memory threshold exceeded ({Math.Max(allBufferedRows.Count, joinRows.Count)} rows). Triggering External Disk-Spilling Join.[/]");
-                        var externalEngine = new ExternalJoinEngine(_context);
+                        _logger.WriteLine($"[yellow]HYPER-SCALE: Memory threshold exceeded ({Math.Max(allBufferedRows.Count, joinRows.Count)} rows). Triggering External Disk-Spilling Join.[/]");
+                        var externalEngine = new ExternalJoinEngine(_context, _logger);
                         allBufferedRows = await externalEngine.ApplyHashJoinExternal(allBufferedRows.ToAsyncEnumerable(), joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight);
                     }
                     else
@@ -130,7 +132,7 @@ namespace ETL_SQL.Engine.Engines
 
             JoinHint algorithm = GetBestAlgorithm(join, -1, joinRows.Count, hasEquality); // -1 means unknown (stream)
             
-            Logger.Verbose($"Join Strategy (Streaming): {algorithm} Join between {leftAlias} and {rightAlias}");
+            _logger.Debug($"Join Strategy (Streaming): {algorithm} Join between {leftAlias} and {rightAlias}");
 
             if (algorithm == JoinHint.Hash)
             {
@@ -157,7 +159,7 @@ namespace ETL_SQL.Engine.Engines
             {
                 if (join.Hint != JoinHint.Loop && !hasEquality)
                 {
-                    Logger.WriteLine($"[yellow]WARNING: {join.Hint} JOIN requested but no equality condition found. Falling back to LOOP JOIN.[/]");
+                    _logger.WriteLine($"[yellow]WARNING: {join.Hint} JOIN requested but no equality condition found. Falling back to LOOP JOIN.[/]");
                     return JoinHint.Loop;
                 }
                 return join.Hint;
@@ -342,7 +344,7 @@ namespace ETL_SQL.Engine.Engines
 
         private async Task<List<Row>> PerformMergeJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join, List<string> leftKeys, List<string> rightKeys)
         {
-            Logger.Verbose($"  Performing Merge Join (Sorting {leftRows.Count} and {rightRows.Count} rows)");
+            _logger.Debug($"  Performing Merge Join (Sorting {leftRows.Count} and {rightRows.Count} rows)");
             var sortedLeft = leftRows.OrderBy(r => GetHashKey(r, leftKeys)).ToList();
             var sortedRight = rightRows.OrderBy(r => GetHashKey(r, rightKeys)).ToList();
 

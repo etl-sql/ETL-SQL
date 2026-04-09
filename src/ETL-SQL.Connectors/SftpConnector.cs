@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Renci.SshNet;
 using ETL_SQL.Data;
+using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Connectors
@@ -17,6 +18,7 @@ namespace ETL_SQL.Connectors
         private readonly string? _password;
         private readonly string? _keyFilePath;
         private readonly string? _passphrase;
+        private readonly ILogger _logger;
         private readonly Func<string, string, string?, string?, string?, SftpClient>? _clientFactory;
 
         public string Name => "SFTP";
@@ -24,15 +26,16 @@ namespace ETL_SQL.Connectors
 
         public SftpConnector()
         {
+            _logger = Logger.Instance;
         }
 
-        public SftpConnector(string host, string username, string? password = null, string? keyFilePath = null, string? passphrase = null)
-            : this(host, username, password, keyFilePath, passphrase, 
+        public SftpConnector(string host, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, ILogger? logger = null)
+            : this(host, username, password, keyFilePath, passphrase, logger,
                   (h, u, p, k, pp) => !string.IsNullOrEmpty(k) ? new SftpClient(h, u, new PrivateKeyFile(k, pp)) : new SftpClient(h, u, p ?? ""))
         {
         }
 
-        internal SftpConnector(string host, string username, string? password, string? keyFilePath, string? passphrase, 
+        internal SftpConnector(string host, string username, string? password, string? keyFilePath, string? passphrase, ILogger? logger,
             Func<string, string, string?, string?, string?, SftpClient> clientFactory)
         {
             _host = host;
@@ -40,6 +43,7 @@ namespace ETL_SQL.Connectors
             _password = password;
             _keyFilePath = keyFilePath;
             _passphrase = passphrase;
+            _logger = logger ?? Logger.Instance;
             _clientFactory = clientFactory;
         }
 
@@ -58,11 +62,10 @@ namespace ETL_SQL.Connectors
         }
 
         public string Path => $"sftp://{_host}";
-
         public Dictionary<string, string>? Options => null;
         public string ConnectorType => "SFTP";
 
-        public async Task<string> GetVersionAsync(string connectionString) => "SFTP Server";
+        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null) => Task.FromResult("SFTP Server");
         public HashSet<string> GetSupportedFunctions() => new();
         public HashSet<string> GetSupportedKeywords() => new();
         public Dictionary<string, string[]> GetSupportedOptions() => new() 
@@ -73,23 +76,22 @@ namespace ETL_SQL.Connectors
             ["PASSPHRASE"] = new[] { "Passphrase for the private key" }
         };
         public Dictionary<string, string[]> GetOptionValues() => new();
-        public string GetHelp() => "SFTP Connector for remote file operations over SSH.\nOptions:\n  USER: The username for the SSH connection.\n  PASSWORD: The password for the SSH connection.\n  KEYFILE: Path to the private key file for authentication.\n  PASSPHRASE: The passphrase for the private key file.\nMethods: GET_FILE, PUT_FILE, REMOTE_FILE_LIST.";
+        public string GetHelp() => "SFTP Connector for remote file operations over SSH.";
 
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null)
+        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null)
         {
             string user = options?.GetValueOrDefault("USER") ?? "";
             string pass = options?.GetValueOrDefault("PASSWORD");
             string keyFile = options?.GetValueOrDefault("KEYFILE");
             string passphrase = options?.GetValueOrDefault("PASSPHRASE");
-            return new SftpConnector(connectionString, user, pass, keyFile, passphrase);
+            return new SftpConnector(connectionString, user, pass, keyFile, passphrase, logger);
         }
 
-        public Task<IEnumerable<string>> GetTablesAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetViewsAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
 
-        /// <summary>Builds an SFTP host address from named properties.</summary>
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
 
@@ -143,7 +145,6 @@ namespace ETL_SQL.Connectors
             await Task.Run(() => Client.DeleteFile(remotePath));
         }
 
-        // IDataSource Implementation
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
             var files = await ListFilesAsync("");

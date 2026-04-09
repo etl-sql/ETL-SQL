@@ -11,13 +11,20 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class SetVariableStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(SetVariableStatement);
+
+        public SetVariableStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the SET statement, evaluating the expression and updating the variable value.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (SetVariableStatement)statement;
             
-            Logger.Verbose($"Setting variable {stmt.VariableName}");
+            _logger.Debug($"Setting variable {stmt.VariableName}");
 
             var variables = (IVariableContext)context;
             var evaluator = (IEvaluationContext)context;

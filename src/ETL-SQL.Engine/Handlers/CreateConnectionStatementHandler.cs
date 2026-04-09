@@ -14,9 +14,11 @@ namespace ETL_SQL.Engine.Handlers
     /// Handles the CREATE CONNECTION statement, registering new data sources in the execution context.
     /// Supports various connector types (SQL, File, specialized) and connection string interpolation.
     /// </summary>
-    public class CreateConnectionStatementHandler(IConnectorRegistry connectorRegistry) : IStatementHandler
+    public class CreateConnectionStatementHandler(IConnectorRegistry connectorRegistry, ILogger logger) : IStatementHandler
     {
         private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
+        private readonly ILogger _logger = logger;
+
 
         public Type SupportedStatementType => typeof(CreateConnectionStatement);
         /// <summary>Executes the CREATE CONNECTION statement, resolving the target string and options.</summary>
@@ -71,7 +73,7 @@ namespace ETL_SQL.Engine.Handlers
                 options = stmt.Options != null ? new Dictionary<string, string>(stmt.Options, StringComparer.OrdinalIgnoreCase) : null;
             }
 
-            Logger.Verbose($"{(alreadyExists ? "Altering" : "Initializing")} connection {stmt.ConnectionName} of type {connectionType}");
+            _logger.Debug($"{(alreadyExists ? "Altering" : "Initializing")} connection {stmt.ConnectionName} of type {connectionType}");
 
             if (target != null && target.StartsWith("ENC:"))
             {
@@ -150,7 +152,7 @@ namespace ETL_SQL.Engine.Handlers
 
             if (context.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would {(alreadyExists ? "alter" : "create")} connection {stmt.ConnectionName}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would {(alreadyExists ? "alter" : "create")} connection {stmt.ConnectionName}", ConsoleColor.Yellow);
                 return;
             }
 
@@ -161,7 +163,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             context.Connections[stmt.ConnectionName] = ds;
-            Logger.WriteLine($"Connection {stmt.ConnectionName} {(alreadyExists ? "altered" : "created")}.", ConsoleColor.Green);
+            _logger.WriteLine($"Connection {stmt.ConnectionName} {(alreadyExists ? "altered" : "created")}.", ConsoleColor.Green);
 
             // Generate a preview result for the Result Panel
             var preview = new DataTable();
@@ -174,12 +176,12 @@ namespace ETL_SQL.Engine.Handlers
                     var sampleBatches = ds.ReadBatches(10).Take(1);
                     await foreach (var b in sampleBatches)
                     {
-                        foreach (var r in b.Rows.Take(10)) preview.AddRow(r);
+                        foreach (var r in b.Rows.Take(10)) await preview.AddRowAsync(r);
                     }
                 }
                 catch (Exception ex)
                 {
-                    Logger.Verbose($"Preview data not available for {stmt.ConnectionName}: {ex.Message}");
+                    _logger.Debug($"Preview data not available for {stmt.ConnectionName}: {ex.Message}");
                 }
             }
             preview.TotalRowsMatched = preview.Rows.Count;

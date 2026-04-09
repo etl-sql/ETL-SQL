@@ -15,11 +15,13 @@ namespace ETL_SQL.Engine.Engines
     {
         private readonly IExecutionContext _context;
         private readonly AggregateEngine _aggregateEngine;
+        private readonly ILogger _logger;
 
-        public WindowEngine(IExecutionContext context, AggregateEngine aggregateEngine)
+        public WindowEngine(IExecutionContext context, AggregateEngine aggregateEngine, ILogger logger)
         {
             _context = context;
             _aggregateEngine = aggregateEngine;
+            _logger = logger;
         }
 
         /// <summary>Calculates and appends window function results to the result set based on partitioning and ordering.</summary>

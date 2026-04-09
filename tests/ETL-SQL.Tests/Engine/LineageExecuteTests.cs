@@ -7,6 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Engine;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -18,7 +19,7 @@ namespace ETL_SQL.Tests.Engine
             var sql = "EXECUTE m INTO #emp BEGIN SELECT * FROM dbo.Employee END";
             var script = TestHelpers.Parse(sql);
             
-            var tracker = new LineageTracker();
+            var tracker = new LineageTracker(NullLogger.Instance);
             var analyzer = new LineageAnalyzer(tracker);
             analyzer.Analyze(script);
             

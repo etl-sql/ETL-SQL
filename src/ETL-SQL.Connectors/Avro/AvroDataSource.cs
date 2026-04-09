@@ -21,32 +21,24 @@ namespace ETL_SQL.Connectors.Avro
         private readonly string? _schemaFile;
         private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
+        private readonly ILogger _logger;
 
-        /// <summary>Gets the physical path to the Avro file.</summary>
         public string Path => _filePath;
-        /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
-        /// <summary>Returns this instance as a typed table (no-op for Avro).</summary>
         public IDataSource WithTable(string tableName) => this;
-        /// <summary>The type name of the connector that created this data source (e.g., AVRO).</summary>
         public string ConnectorType => "AVRO";
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="AvroDataSource"/> class.
-        /// </summary>
-        /// <param name="filePath">The path to the Avro file.</param>
-        /// <param name="options">Optional configuration (e.g., SCHEMA_FILE).</param>
-        public AvroDataSource(string filePath, Dictionary<string, string>? options = null)
+        public AvroDataSource(string filePath, Dictionary<string, string>? options = null, ILogger? logger = null)
         {
             _filePath = filePath;
             _options = options;
+            _logger = logger ?? Logger.Instance;
             if (options != null && options.TryGetValue("SCHEMA_FILE", out var sf)) _schemaFile = sf;
             _encryption = new EncryptionOptions(options);
         }
 
-        /// <summary>Reads data from the Avro file in batches.</summary>
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
             string effectivePath = _filePath;
@@ -67,39 +59,38 @@ namespace ETL_SQL.Connectors.Avro
                 var schema = (RecordSchema)reader.GetSchema();
                 var colNames = schema.Fields.Select(f => f.Name).ToList();
 
-            var currentBatch = new DataTable();
-            currentBatch.SetColumns(colNames);
+                var currentBatch = new DataTable();
+                currentBatch.SetColumns(colNames);
 
-            while (await Task.Run(() => reader.HasNext()))
-            {
-                var record = await Task.Run(() => reader.Next());
-                var row = new Row();
-                foreach (var field in schema.Fields)
+                while (await Task.Run(() => reader.HasNext()))
                 {
-                    row[field.Name] = record[field.Name];
-                }
-                currentBatch.AddRow(row);
+                    var record = await Task.Run(() => reader.Next());
+                    var row = new Row();
+                    foreach (var field in schema.Fields)
+                    {
+                        row[field.Name] = record[field.Name];
+                    }
+                    currentBatch.AddRow(row);
 
-                if (currentBatch.Rows.Count >= batchSize)
+                    if (currentBatch.Rows.Count >= batchSize)
+                    {
+                        yield return currentBatch;
+                        currentBatch = new DataTable();
+                        currentBatch.SetColumns(colNames);
+                    }
+                }
+
+                if (currentBatch.Rows.Count > 0)
                 {
                     yield return currentBatch;
-                    currentBatch = new DataTable();
-                    currentBatch.SetColumns(colNames);
                 }
-            }
-
-            if (currentBatch.Rows.Count > 0)
-            {
-                yield return currentBatch;
-            }
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
 
-        /// <summary>Writes batches of data to the Avro file.</summary>
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
         {
             var enumerator = batches.GetAsyncEnumerator();
@@ -155,7 +146,7 @@ namespace ETL_SQL.Connectors.Avro
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
 
@@ -171,7 +162,6 @@ namespace ETL_SQL.Connectors.Avro
                     bool => "boolean",
                     _ => "string"
                 };
-                // Avro Union with null for optionality
                 fields.Add($"{{\"name\": \"{col}\", \"type\": [\"null\", \"{type}\"], \"default\": null}}");
             }
             return $@"{{""type"": ""record"", ""name"": ""ETLRow"", ""namespace"": ""etl.sql"", ""fields"": [{string.Join(",", fields)}]}}";
@@ -181,7 +171,6 @@ namespace ETL_SQL.Connectors.Avro
         {
             if (val == null) return null;
             
-            // Handle Unions (["null", "type"])
             Schema actualSchema = schema;
             if (schema is UnionSchema us)
             {
@@ -204,7 +193,6 @@ namespace ETL_SQL.Connectors.Avro
             catch { return val; }
         }
 
-        /// <summary>Discovers the column names from the Avro file schema.</summary>
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
@@ -216,7 +204,7 @@ namespace ETL_SQL.Connectors.Avro
             {
                 tempFile = System.IO.Path.GetTempFileName();
                 try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch (Exception ex) { Logger.Verbose($"[AvroDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+                catch (Exception ex) { _logger.Debug($"[AvroDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
             }
 
             try
@@ -226,7 +214,7 @@ namespace ETL_SQL.Connectors.Avro
                 return ((RecordSchema)reader.GetSchema()).Fields.Select(f => f.Name).ToList();
             }
             catch { return Enumerable.Empty<string>(); }
-            finally { TempFileHelper.SafeDelete(tempFile); }
+            finally { TempFileHelper.SafeDelete(tempFile, _logger); }
         }
 
         public async ValueTask DisposeAsync()
@@ -235,4 +223,3 @@ namespace ETL_SQL.Connectors.Avro
         }
     }
 }
-

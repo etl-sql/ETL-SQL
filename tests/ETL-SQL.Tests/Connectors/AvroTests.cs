@@ -38,8 +38,8 @@ namespace ETL_SQL.Tests
             
             var r1 = new Row(); r1["ID"] = 101; r1["Name"] = "X"; r1["Active"] = true;
             var r2 = new Row(); r2["ID"] = 102; r2["Name"] = "Y"; r2["Active"] = false;
-            batch.AddRow(r1);
-            batch.AddRow(r2);
+            await batch.AddRowAsync(r1);
+            await batch.AddRowAsync(r2);
 
             await ds.WriteBatches(ArrayToAsyncEnumerable(new[] { batch }));
 

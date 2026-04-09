@@ -12,9 +12,11 @@ namespace ETL_SQL.Engine.Handlers
     /// Handles the BULK INSERT statement, providing high-performance data loading from flat files into target tables.
     /// Supports FIELDTERMINATOR, ROWTERMINATOR, FIRSTROW, and batching.
     /// </summary>
-    public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry) : IStatementHandler
+    public class BulkInsertStatementHandler(IConnectorRegistry connectorRegistry, ILogger logger) : IStatementHandler
     {
         private readonly IConnectorRegistry _connectorRegistry = connectorRegistry;
+        private readonly ILogger _logger = logger;
+
 
         public Type SupportedStatementType => typeof(BulkInsertStatement);
         /// <summary>Executes the BULK INSERT statement, resolving the source file and streaming data to the destination.</summary>
@@ -98,7 +100,7 @@ namespace ETL_SQL.Engine.Handlers
 
             try
             {
-                Logger.Verbose($"Bulk loading from {stmt.FilePath} into {stmt.TargetTable.TableName}");
+                _logger.Debug($"Bulk loading from {stmt.FilePath} into {stmt.TargetTable.TableName}");
                 
                 int batchSize = 10000;
                 if (options.TryGetValue("BATCHSIZE", out var bs) && int.TryParse(bs, out var bsv))
@@ -136,7 +138,7 @@ namespace ETL_SQL.Engine.Handlers
                         {
                             mappedRow[mapping[i]] = sourceRow[batch.ColumnNames[i]];
                         }
-                        mappedBatch.AddRow(mappedRow);
+                        await mappedBatch.AddRowAsync(mappedRow);
                     }
 
                     try
@@ -156,7 +158,7 @@ namespace ETL_SQL.Engine.Handlers
                         if (context.IsWhatIf) throw; // Should not happen in dry run really, but keep consistency
                         if (maxErrors > 0 || errorCount < maxErrors)
                         {
-                            Logger.WriteLine($"[WARNING] Batch write failed: {ex.Message}. Retrying row-by-row up to MAXERRORS={maxErrors}.");
+                            _logger.WriteLine($"[WARNING] Batch write failed: {ex.Message}. Retrying row-by-row up to MAXERRORS={maxErrors}.");
                             
                             // Fallback: Try writing each row individually
                             foreach (var row in mappedBatch.Rows)
@@ -165,14 +167,14 @@ namespace ETL_SQL.Engine.Handlers
                                 {
                                     var singleRowBatch = new DataTable();
                                     singleRowBatch.SetColumns(destColumns);
-                                    singleRowBatch.AddRow(row);
+                                    await singleRowBatch.AddRowAsync(row);
                                     await destination.WriteBatches(new[] { singleRowBatch }.ToAsyncEnumerable());
                                     count++;
                                 }
                                 catch (Exception rowEx)
                                 {
                                     errorCount++;
-                                    Logger.WriteLine($"[ERROR] Row failed: {rowEx.Message}");
+                                    _logger.WriteLine($"[ERROR] Row failed: {rowEx.Message}");
                                     if (errorCount > maxErrors)
                                     {
                                         throw new ExecutionException($"Max errors ({maxErrors}) exceeded during bulk insert. Last error: {rowEx.Message}", rowEx);
@@ -188,7 +190,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 
                 context.RowsProcessed += count;
-                Logger.WriteLine($"Bulk insert completed. {count} rows loaded. {errorCount} errors skipped.");
+                _logger.WriteLine($"Bulk insert completed. {count} rows loaded. {errorCount} errors skipped.");
             }
             finally
             {

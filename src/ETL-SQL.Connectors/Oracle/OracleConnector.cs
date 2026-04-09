@@ -10,18 +10,13 @@ namespace ETL_SQL.Connectors.Oracle
 {
     /// <summary>
     /// Connector for Oracle Database using the Managed Data Access client.
-    /// Supports deep metadata discovery (tables, views, procedures) and PL/SQL-style syntax.
     /// </summary>
     public class OracleConnector : IConnector
     {
-        /// <summary>Returns the canonical name of the connector.</summary>
         public string Name => "ORACLE";
-        
-        /// <summary>Returns synonymous names for this connector.</summary>
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
         
-        /// <summary>Retrieves the database version from v$instance.</summary>
-        public async Task<string> GetVersionAsync(string connectionString)
+        public async Task<string> GetVersionAsync(string connectionString, ILogger? logger = null)
         {
             using var conn = new OracleConnection(connectionString);
             await conn.OpenAsync();
@@ -30,43 +25,27 @@ namespace ETL_SQL.Connectors.Oracle
             return result?.ToString() ?? "Unknown Oracle Version";
         }
         
-        /// <summary>Returns Oracle-specific SQL functions.</summary>
         public HashSet<string> GetSupportedFunctions() => OracleSyntax.GetSupportedFunctions();
-
-        /// <summary>Returns Oracle dialect keyword additions (baseline keywords are in LanguageMetadata).</summary>
         public HashSet<string> GetSupportedKeywords() => OracleSyntax.GetSupportedKeywords();
-
-        /// <summary>Returns baseline keywords not supported in Oracle pushdown queries.</summary>
         public HashSet<string> GetExcludedKeywords() => OracleSyntax.Exclusions;
         
-        /// <summary>Returns supported connection string options.</summary>
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
             { "TABLE", Array.Empty<string>() }
         };
 
-        /// <summary>Returns allowed option values.</summary>
         public Dictionary<string, string[]> GetOptionValues() => new();
 
-        /// <summary>Returns a human-readable help string for the Oracle connector.</summary>
-        /// <summary>Returns a human-readable help string for the Oracle connector.</summary>
-        public string GetHelp() => 
-            "ORACLE Connector: Connects to Oracle Database instances.\n" +
-            "Supports PL/SQL pushdown and deep schema discovery.\n\n" +
-            "Options:\n" +
-            "  TABLE: Pre-selects a default table context for simple SELECT queries.";
+        public string GetHelp() => "ORACLE Connector: Connects to Oracle Database instances.";
 
-        
-        /// <summary>Creates a new Oracle data source instance.</summary>
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null) 
+        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null) 
         {
             string? table = null;
             options?.TryGetValue("TABLE", out table);
-            return new OracleDataSource(connectionString, table, options);
+            return new OracleDataSource(connectionString, table, options, logger);
         }
 
-        /// <summary>Returns a list of logical tables from the connection source.</summary>
-        public async Task<IEnumerable<string>> GetTablesAsync(string connectionString)
+        public async Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null)
         {
             var tables = new List<string>();
             try {
@@ -78,13 +57,12 @@ namespace ETL_SQL.Connectors.Oracle
             }
             catch (Exception ex)
             {
-                Logger.Verbose($"[OracleConnector.GetTablesAsync] Failed to retrieve tables: {ex.Message}");
+                (logger ?? Logger.Instance).Debug($"[OracleConnector.GetTablesAsync] Failed to retrieve tables: {ex.Message}");
             }
             return tables;
         }
 
-        /// <summary>Returns a list of logical views from the connection source.</summary>
-        public async Task<IEnumerable<string>> GetViewsAsync(string connectionString)
+        public async Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null)
         {
             var views = new List<string>();
             using var conn = new OracleConnection(connectionString);
@@ -95,15 +73,13 @@ namespace ETL_SQL.Connectors.Oracle
             return views;
         }
 
-        /// <summary>Returns a list of columns for the specified table.</summary>
-        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName)
+        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null)
         {
-            var ds = new OracleDataSource(connectionString, tableName);
+            var ds = new OracleDataSource(connectionString, tableName, null, logger);
             return await ds.GetColumnsAsync();
         }
 
-        /// <summary>Returns a list of procedures/functions from the connection source.</summary>
-        public async Task<IEnumerable<string>> GetProceduresAsync(string connectionString)
+        public async Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null)
         {
             var procs = new List<string>();
             using var conn = new OracleConnection(connectionString);
@@ -114,9 +90,7 @@ namespace ETL_SQL.Connectors.Oracle
             return procs;
         }
 
-        /// <summary>Builds an Oracle connection string from named properties.</summary>
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
     }
 }
-

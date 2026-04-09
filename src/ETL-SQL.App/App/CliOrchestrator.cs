@@ -22,6 +22,7 @@ namespace ETL_SQL.App
         private static readonly Option<bool> JsonOption = new(new[] { "--json" }, "Output results and messages in structured JSON format.");
         private static readonly Option<bool> PageOption = new(new[] { "--page", "-pa" }, "Pause and page between multiple result sets in the console.");
         private static readonly Option<string?> SessionOption = new(new[] { "--session" }, "Enable session persistence with the specified session ID.");
+        private static readonly Option<string[]> VarOption = new(new[] { "--var", "-d" }, "Inject a variable into the script (e.g. @Name=Value).") { AllowMultipleArgumentsPerToken = true };
         
         private static readonly Argument<string> RunScriptArg = new("script", "The ETL-SQL script to execute.");
         private static readonly Argument<string> UiModeArg = new("mode", () => "edit", "UI mode: edit, simple, silent, or verbose");
@@ -37,7 +38,7 @@ namespace ETL_SQL.App
             var runCommand = new Command("run", "Execute an ETL-SQL script")
             {
                 RunScriptArg,
-                BatchSizeOption, PerfOption, VerboseOption, LogOption, SilentOption, PreviewOption, JsonOption, PageOption, SessionOption
+                BatchSizeOption, PerfOption, VerboseOption, LogOption, SilentOption, PreviewOption, JsonOption, PageOption, SessionOption, VarOption
             };
             runCommand.SetHandler(async (context) => await Dispatch(context, "run", handler));
 
@@ -84,7 +85,7 @@ namespace ETL_SQL.App
             // 6. REPL Command
             var replCommand = new Command("repl", "Start a persistent JSON-based background engine for IDEs")
             {
-                BatchSizeOption, PerfOption, VerboseOption, LogOption, SessionOption, JsonOption
+                BatchSizeOption, PerfOption, VerboseOption, LogOption, SessionOption, JsonOption, VarOption
             };
             replCommand.SetHandler(async (context) => await Dispatch(context, "repl", handler));
 
@@ -145,7 +146,30 @@ namespace ETL_SQL.App
 
             cliContext.SessionId ??= res.FindResultFor(SessionOption) != null ? res.GetValueForOption(SessionOption) : null;
 
+            if (res.FindResultFor(VarOption) != null)
+            {
+                var varArgs = res.GetValueForOption(VarOption);
+                foreach (var arg in varArgs ?? Array.Empty<string>())
+                {
+                    var parts = arg.Split('=', 2);
+                    if (parts.Length == 2)
+                    {
+                        var key = parts[0].StartsWith("@") ? parts[0] : "@" + parts[0];
+                        cliContext.Variables[key] = ParseValue(parts[1]);
+                    }
+                }
+            }
+
             context.ExitCode = await handler(cliContext);
+        }
+
+        private static object? ParseValue(string raw)
+        {
+            if (int.TryParse(raw, out var i)) return i;
+            if (double.TryParse(raw, out var d)) return d;
+            if (bool.TryParse(raw, out var b)) return b;
+            if (DateTime.TryParse(raw, out var dt)) return dt;
+            return raw.Trim('\'', '\"');
         }
 
         public static void ShowAdvancedHelp()
@@ -191,5 +215,6 @@ namespace ETL_SQL.App
         public bool IsJsonMode { get; set; }
         public bool EnablePaging { get; set; }
         public string? SessionId { get; set; }
+        public Dictionary<string, object?> Variables { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 }

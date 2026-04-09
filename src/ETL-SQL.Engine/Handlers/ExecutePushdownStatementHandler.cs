@@ -13,9 +13,11 @@ namespace ETL_SQL.Engine.Handlers
     /// Handles native SQL pushdown execution.
     /// Captures raw SQL between BEGIN and END and executes it directly on the remote system.
     /// </summary>
-    public class ExecutePushdownStatementHandler : IStatementHandler
+    public class ExecutePushdownStatementHandler(ILogger logger) : IStatementHandler
     {
+        private readonly ILogger _logger = logger;
         public Type SupportedStatementType => typeof(ExecutePushdownStatement);
+
 
         public async Task Execute(Statement statement, IExecutionContext context)
         {
@@ -24,7 +26,7 @@ namespace ETL_SQL.Engine.Handlers
 
             if (string.IsNullOrWhiteSpace(stmt.SqlText))
             {
-                Logger.WriteLine("Pushdown SQL text is empty, skipping execution.", ConsoleColor.Yellow);
+                _logger.WriteLine("Pushdown SQL text is empty, skipping execution.", ConsoleColor.Yellow);
                 evaluator.LastResult = null;
                 evaluator.LastResultSets.Clear();
                 return;
@@ -48,7 +50,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
 
-            Logger.WriteLine($"Pushing down native SQL to {connectionName}...", ConsoleColor.Cyan);
+            _logger.WriteLine($"Pushing down native SQL to {connectionName}...", ConsoleColor.Cyan);
 
             string sqlToExecute = stmt.SqlText;
             
@@ -68,7 +70,7 @@ namespace ETL_SQL.Engine.Handlers
 
             if (context.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would execute native SQL on {connectionName}:\n{sqlToExecute}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would execute native SQL on {connectionName}:\n{sqlToExecute}", ConsoleColor.Yellow);
                 return;
             }
 
@@ -84,7 +86,7 @@ namespace ETL_SQL.Engine.Handlers
                 
                 foreach (var row in batch.Rows)
                 {
-                    resultTable.AddRow(row);
+                    await resultTable.AddRowAsync(row);
                 }
             }
 
@@ -141,7 +143,7 @@ namespace ETL_SQL.Engine.Handlers
                 await targetSource.WriteBatches(GetBatches());
                 
                 int totalRows = results.Sum(r => r.Rows.Count);
-                Logger.WriteLine($"Loaded {totalRows} rows into {tableName}.", ConsoleColor.Green);
+                _logger.WriteLine($"Loaded {totalRows} rows into {tableName}.", ConsoleColor.Green);
                 context.RowsProcessed += totalRows;
             }
             else

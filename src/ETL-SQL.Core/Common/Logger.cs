@@ -26,6 +26,7 @@ namespace ETL_SQL.Common
         /// Defaults to a ConsoleLogger if not set.
         /// </summary>
         private static ILogger? _instance;
+        [Obsolete("Use dependency-injected ILogger from the execution context or service container instead.")]
         public static ILogger Instance 
         { 
             get => _instance ??= new EngineLogger("Global");
@@ -61,6 +62,7 @@ namespace ETL_SQL.Common
             }
         }
 
+        [Obsolete("Use dependency-injected ILogger. Initialize settings via ILoggerService.")]
         public static void InitializeAppLogger(string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)
         {
             if (Instance is LoggerService service)
@@ -69,6 +71,7 @@ namespace ETL_SQL.Common
             }
         }
 
+        [Obsolete("Use dependency-injected ILogger. Initialize settings via ILoggerService.")]
         public static void InitializeScriptLogger(string sourceScript, string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)
         {
             if (Instance is LoggerService service)
@@ -156,6 +159,7 @@ namespace ETL_SQL.Common
         /// <summary>
         /// Legacy compatibility shim. Prefer InitializeScriptLogger.
         /// </summary>
+        [Obsolete("Prefer ResolveRootPath and path relative to the engine base.")]
         public static void InitializeLogFile(string sourceScript, string overridePath)
             => InitializeScriptLogger(sourceScript, string.IsNullOrWhiteSpace(overridePath) ? "logs/scripts" : overridePath);
 
@@ -166,6 +170,7 @@ namespace ETL_SQL.Common
         /// </summary>
         /// <param name="message">The message to log.</param>
         /// <param name="color">The console color to use.</param>
+        [Obsolete("Use dependency-injected ILogger.Debug() or ILogger.Info() instead.")]
         public static void Verbose(string message, ConsoleColor color = ConsoleColor.DarkGray)
         {
             if (IsVerbose)
@@ -177,6 +182,7 @@ namespace ETL_SQL.Common
         /// </summary>
         /// <param name="message">The message to log.</param>
         /// <param name="color">The console color to use.</param>
+        [Obsolete("Use dependency-injected ILogger.Log() or specialized level methods instead.")]
         public static void WriteLine(string message, ConsoleColor color = ConsoleColor.White)
             => WriteInternal(MapLevel(color), message, color);
 

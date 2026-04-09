@@ -2,10 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>ETL_SQL</RootNamespace>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
     <AssemblyName>ETL-SQL</AssemblyName>
   </PropertyGroup>
 

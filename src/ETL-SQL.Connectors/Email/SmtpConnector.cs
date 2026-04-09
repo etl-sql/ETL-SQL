@@ -12,22 +12,14 @@ namespace ETL_SQL.Connectors.Email
     /// </summary>
     public class SmtpConnector : IConnector
     {
-        /// <summary>Returns the canonical name of the connector.</summary>
         public string Name => "SMTP";
-        
-        /// <summary>Returns synonymous names for this connector.</summary>
         public IReadOnlyList<string> Aliases => new[] { "EMAIL" };
 
-        /// <summary>Retrieves the version of the underlying MailKit library.</summary>
-        public Task<string> GetVersionAsync(string connectionString) => Task.FromResult("MailKit 4.15.1");
+        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null) => Task.FromResult("MailKit 4.15.1");
 
-        /// <summary>Returns supported SQL functions (none for SMTP).</summary>
         public HashSet<string> GetSupportedFunctions() => new();
-
-        /// <summary>Returns supported SQL keywords (none for SMTP).</summary>
         public HashSet<string> GetSupportedKeywords() => new();
 
-        /// <summary>Returns supported connection string options for SMTP.</summary>
         public Dictionary<string, string[]> GetSupportedOptions() => new()
         {
             { "HOST", Array.Empty<string>() },
@@ -38,43 +30,26 @@ namespace ETL_SQL.Connectors.Email
             { "DEFAULT_FROM", Array.Empty<string>() }
         };
 
-        /// <summary>Returns a map of option keys to their available values.</summary>
         public Dictionary<string, string[]> GetOptionValues() => new()
         {
             { "USE_SSL", new[] { "TRUE", "FALSE" } }
         };
 
-        public string GetHelp()
+        public string GetHelp() => "SMTP Connector: Integrated email notification service.";
+
+        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null)
         {
-            return @"SMTP Connector: Integrated email notification service.
-Options:
-  HOST: SMTP server hostname (e.g. smtp.gmail.com)
-  PORT: SMTP server port (default: 25 | 587 | 465)
-  USERNAME: The SMTP authentication username.
-  PASSWORD: The SMTP authentication password.
-  USE_SSL: TRUE | FALSE (default: FALSE)
-  DEFAULT_FROM: Default sender address if unspecified in SEND_EMAIL.";
+            return new SmtpDataSource(options ?? new Dictionary<string, string>(), logger);
         }
 
-        /// <summary>Creates a new instance of the SMTP data source.</summary>
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null)
-        {
-            return new SmtpDataSource(options ?? new Dictionary<string, string>());
-        }
+        public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
 
-        /// <summary>Returns a list of logical tables (none for SMTP).</summary>
-        public Task<IEnumerable<string>> GetTablesAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null) => 
+            Task.FromResult(new[] { "To", "Cc", "Bcc", "Subject", "Body", "Attachments" }.AsEnumerable());
 
-        /// <summary>Returns a list of logical views (none for SMTP).</summary>
-        public Task<IEnumerable<string>> GetViewsAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
 
-        /// <summary>Returns the virtual column names recognized for email sending.</summary>
-        public Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName) => Task.FromResult(new[] { "To", "Cc", "Bcc", "Subject", "Body", "Attachments" }.AsEnumerable());
-
-        /// <summary>Returns a list of procedures/functions (none for SMTP).</summary>
-        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
-
-        /// <summary>Builds an SMTP host address from named properties.</summary>
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
     }

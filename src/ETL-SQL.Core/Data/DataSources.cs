@@ -86,6 +86,8 @@ namespace ETL_SQL.Data
         string ConnectorType { get; }
         /// <summary>Returns the list of tables in the data source (for multi-table sources).</summary>
         Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult(Enumerable.Empty<string>());
+        /// <summary>Checks if a row with matching column values exists in the data source.</summary>
+        Task<bool> ExistsAsync(List<string> columns, List<object?> values) => Task.FromResult(false);
     }
 
     public interface IDatabaseSource : IDataSource
@@ -471,6 +473,45 @@ namespace ETL_SQL.Data
                     _lock.Release();
                 }
             }
+        }
+
+        public async Task<bool> ExistsAsync(List<string> columns, List<object?> values)
+        {
+            var key = new CompositeKey(values.ToArray());
+            var indexName = string.Join(",", columns);
+
+            await _lock.WaitAsync();
+            try
+            {
+                if (_indexes.TryGetValue(indexName, out var index))
+                {
+                    return index.ContainsKey(key);
+                }
+
+                // If no index, fallback to linear scan
+                foreach (var b in _batches)
+                {
+                    foreach (var r in b.Rows)
+                    {
+                        bool match = true;
+                        for (int i = 0; i < columns.Count; i++)
+                        {
+                            if (!IsSoftEqual(r[columns[i]], values[i])) { match = false; break; }
+                        }
+                        if (match) return true;
+                    }
+                }
+                return false;
+            }
+            finally { _lock.Release(); }
+        }
+
+        private bool IsSoftEqual(object? a, object? b)
+        {
+            if (a == null || a == DBNull.Value) return b == null || b == DBNull.Value;
+            if (b == null || b == DBNull.Value) return false;
+            if (a.Equals(b)) return true;
+            return a.ToString() == b.ToString();
         }
 
         public async Task<List<Row>> DeleteRows(Func<Row, Task<bool>> predicate)

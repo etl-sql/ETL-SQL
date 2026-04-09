@@ -14,12 +14,14 @@ namespace ETL_SQL.Engine.Engines
     public class ExternalJoinEngine
     {
         private readonly IExecutionContext _context;
+        private readonly ILogger _logger;
         private readonly string _tempDir;
         private const int PARTITION_COUNT = 32;
 
-        public ExternalJoinEngine(IExecutionContext context)
+        public ExternalJoinEngine(IExecutionContext context, ILogger logger)
         {
             _context = context;
+            _logger = logger;
             _tempDir = Path.Combine(Path.GetTempPath(), "ETL-SQL", "JoinSpill", Guid.NewGuid().ToString());
             Directory.CreateDirectory(_tempDir);
         }
@@ -83,7 +85,7 @@ namespace ETL_SQL.Engine.Engines
                     var json = System.Text.Json.JsonSerializer.Serialize(row.Columns);
                     var bytes = System.Text.Encoding.UTF8.GetByteCount(json) + 2; // + newline
                     _context.TotalSpilledBytes += bytes;
-                    if (prefix == "left" && bytes > 0 && Math.Abs(hash % 20000) == 0) Logger.WriteLine($"[DIAG] Spilled {bytes} bytes to partition {pIdx}. Total bytes spilled: {_context.TotalSpilledBytes}");
+                    if (prefix == "left" && bytes > 0 && Math.Abs(hash % 20000) == 0) _logger.Debug($"[DIAG] Spilled {bytes} bytes to partition {pIdx}. Total bytes spilled: {_context.TotalSpilledBytes}");
                     await writers[pIdx].WriteLineAsync(json);
                 }
             }
@@ -96,7 +98,7 @@ namespace ETL_SQL.Engine.Engines
                     w.Flush(); w.Close(); 
                 }
                 _context.PartitionsCount += usedPartitions;
-                Logger.Verbose($"Finished partitioning {prefix}. Used {usedPartitions} partitions. Context PartitionsCount: {_context.PartitionsCount}");
+                _logger.Debug($"Finished partitioning {prefix}. Used {usedPartitions} partitions. Context PartitionsCount: {_context.PartitionsCount}");
             }
 
             return paths;

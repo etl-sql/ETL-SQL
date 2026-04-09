@@ -34,8 +34,8 @@ namespace ETL_SQL.Tests
             
             var r1 = new Row(); r1["ID"] = 1L; r1["Name"] = "Alice"; r1["Score"] = 95.5;
             var r2 = new Row(); r2["ID"] = 2L; r2["Name"] = "Bob"; r2["Score"] = 88.0;
-            batch.AddRow(r1);
-            batch.AddRow(r2);
+            await batch.AddRowAsync(r1);
+            await batch.AddRowAsync(r2);
 
             await ds.WriteBatches(ArrayToAsyncEnumerable(new[] { batch }));
 

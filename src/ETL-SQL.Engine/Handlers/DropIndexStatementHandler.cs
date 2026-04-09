@@ -9,17 +9,21 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class DropIndexStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(DropIndexStatement);
+
+        public DropIndexStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the DROP INDEX statement in the current context.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (DropIndexStatement)statement;
             
-            Logger.Verbose($"Dropping index {stmt.IndexName} from {stmt.Table?.TableName ?? "unknown table"}");
+            _logger.Debug($"Dropping index {stmt.IndexName} from {stmt.Table?.TableName ?? "unknown table"}");
             await context.EvaluateDropIndex(stmt);
         }
     }
 }
-
-
-

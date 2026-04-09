@@ -15,7 +15,13 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class ExecuteStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(ExecuteStatement);
+
+        public ExecuteStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
 
         /// <summary>Executes the procedure or sub-script, managing its execution scope.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
@@ -31,7 +37,7 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
 
-            Logger.Verbose($"Executing procedure {stmt.ProcedureName}");
+            _logger.Debug($"Executing procedure {stmt.ProcedureName}");
             var args = new List<object?>();
             foreach (var param in stmt.Parameters)
             {
@@ -43,7 +49,7 @@ namespace ETL_SQL.Engine.Handlers
 
         private async Task ExecuteScript(ExecuteStatement stmt, IExecutionContext context)
         {
-            Logger.Verbose($"Running sub-script: {stmt.ProcedureName}");
+            _logger.Debug($"Running sub-script: {stmt.ProcedureName}");
 
             if (!File.Exists(stmt.ProcedureName))
                 throw new ExecutionException($"Script file not found: {stmt.ProcedureName}");

@@ -15,11 +15,13 @@ namespace ETL_SQL.Engine.Engines
     {
         private readonly IExecutionContext _context;
         private readonly AggregateEngine _aggregateEngine;
+        private readonly ILogger _logger;
 
-        public PivotEngine(IExecutionContext context)
+        public PivotEngine(IExecutionContext context, ILogger logger)
         {
             _context = context;
-            _aggregateEngine = new AggregateEngine(context);
+            _logger = logger;
+            _aggregateEngine = new AggregateEngine(context, logger);
         }
 
         /// <summary>Transforms a list of rows into a pivoted format based on the specified pivot clause.</summary>

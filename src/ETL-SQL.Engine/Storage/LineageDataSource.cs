@@ -69,7 +69,7 @@ namespace ETL_SQL.Engine.Storage
                 {
                     var dt = new DataTable();
                     dt.SetColumns(_columns);
-                    foreach (var r in rows) dt.AddRow(r);
+                    foreach (var r in rows) await dt.AddRowAsync(r);
                     yield return dt;
                     rows = new List<Row>();
                 }
@@ -79,7 +79,7 @@ namespace ETL_SQL.Engine.Storage
             {
                 var dt = new DataTable();
                 dt.SetColumns(_columns);
-                foreach (var r in rows) dt.AddRow(r);
+                foreach (var r in rows) await dt.AddRowAsync(r);
                 yield return dt;
             }
             

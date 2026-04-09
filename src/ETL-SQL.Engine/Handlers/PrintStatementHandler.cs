@@ -10,18 +10,21 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class PrintStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(PrintStatement);
+
+        public PrintStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the PRINT statement, evaluating the message expression and logging it.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (PrintStatement)statement;
             
-            
             var val = await context.EvaluateValue(stmt.Message, new Row());
-            Logger.WriteLine(val?.ToString() ?? "NULL", ConsoleColor.White);
+            _logger.WriteLine(val?.ToString() ?? "NULL", ConsoleColor.White);
         }
     }
 }
-
-
-

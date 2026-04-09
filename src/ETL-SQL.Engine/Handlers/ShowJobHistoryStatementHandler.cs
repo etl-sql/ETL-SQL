@@ -43,7 +43,7 @@ namespace ETL_SQL.Engine.Handlers
                 row["Status"] = entry.Status;
                 row["RowsProcessed"] = entry.RowsProcessed;
                 row["ErrorMessage"] = entry.ErrorMessage;
-                table.AddRow(row);
+                await table.AddRowAsync(row);
             }
 
             context.LastResult = table;

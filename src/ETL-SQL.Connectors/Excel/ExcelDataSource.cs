@@ -20,20 +20,20 @@ namespace ETL_SQL.Connectors.Excel
         private readonly EncryptionOptions _encryption;
         private readonly string? _range;
         private readonly Dictionary<string, string>? _options;
+        private readonly ILogger _logger;
 
         public string Path => _filePath;
-        /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
         public IDataSource WithTable(string tableName) => this;
-        /// <summary>The type name of the connector that created this data source (e.g., EXCEL).</summary>
         public string ConnectorType => "EXCEL";
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
 
-        public ExcelDataSource(string filePath, Dictionary<string, string>? options = null)
+        public ExcelDataSource(string filePath, Dictionary<string, string>? options = null, ILogger? logger = null)
         {
             _filePath = filePath;
             _options = options;
+            _logger = logger ?? Logger.Instance;
             _hasHeader = true; // Default
 
             if (options != null)
@@ -69,12 +69,11 @@ namespace ETL_SQL.Connectors.Excel
                 using var stream = System.IO.File.OpenRead(effectivePath);
                 using var reader = ExcelReaderFactory.CreateReader(stream);
                 
-                // Read without headers first to handle custom ranges
                 var result = reader.AsDataSet(new ExcelDataSetConfiguration()
                 {
                     ConfigureDataTable = (_) => new ExcelDataTableConfiguration()
                     {
-                        UseHeaderRow = false // Handle headers manually based on range
+                        UseHeaderRow = false
                     }
                 });
 
@@ -84,7 +83,6 @@ namespace ETL_SQL.Connectors.Excel
 
                 if (sheet == null) yield break;
 
-                // Parse and apply range
                 var range = ExcelRange.Parse(_range, sheet.Rows.Count, sheet.Columns.Count);
                 
                 int startRow = Math.Min(range.StartRow, sheet.Rows.Count - 1);
@@ -94,7 +92,6 @@ namespace ETL_SQL.Connectors.Excel
 
                 if (startRow < 0 || startRow > endRow || startCol < 0 || startCol > endCol) yield break;
 
-                // Determine headers within range
                 var columnNames = new List<string>();
                 int dataStartRow = startRow;
                 
@@ -141,7 +138,7 @@ namespace ETL_SQL.Connectors.Excel
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile);
+                TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
 
@@ -161,7 +158,7 @@ namespace ETL_SQL.Connectors.Excel
             {
                 tempFile = System.IO.Path.GetTempFileName();
                 try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch (Exception ex) { Logger.Verbose($"[ExcelDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+                catch (Exception ex) { _logger.Debug($"[ExcelDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
             }
 
             try
@@ -200,8 +197,8 @@ namespace ETL_SQL.Connectors.Excel
                     return names;
                 }
             }
-            catch (Exception ex) { Logger.Verbose($"[ExcelDataSource.GetColumnsAsync] Failed to read columns from '{_filePath}': {ex.Message}"); }
-            finally { TempFileHelper.SafeDelete(tempFile); }
+            catch (Exception ex) { _logger.Debug($"[ExcelDataSource.GetColumnsAsync] Failed to read columns from '{_filePath}': {ex.Message}"); }
+            finally { TempFileHelper.SafeDelete(tempFile, _logger); }
             return Enumerable.Empty<string>();
         }
 

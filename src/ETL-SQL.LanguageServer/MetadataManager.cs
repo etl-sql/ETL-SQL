@@ -30,9 +30,21 @@ namespace ETL_SQL.LSP
         private string NormalizeUri(string? uri)
         {
             if (string.IsNullOrEmpty(uri)) return "";
-            var result = Uri.UnescapeDataString(uri).ToLowerInvariant();
-            if (DebugMode) logger.LogInformation("LSP: Normalized URI: Input='{Input}', Output='{Output}'", uri, result);
-            return result;
+            try
+            {
+                var decoded = Uri.UnescapeDataString(uri);
+                // Ensure file:/// is preserved but normalized
+                if (decoded.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+                {
+                    var uriObj = new Uri(decoded);
+                    return uriObj.ToString().ToLowerInvariant();
+                }
+                return decoded.ToLowerInvariant();
+            }
+            catch
+            {
+                return (uri ?? "").ToLowerInvariant();
+            }
         }
         // Riverside: added NormalizeUri helper.
 
@@ -134,13 +146,11 @@ namespace ETL_SQL.LSP
         {
             try
             {
-                if (DebugMode) logger.LogInformation("LSP: GetTablesAsync called for {Conn} (URI: {Uri})", connectionName, uri ?? "null");
-                var key = GetCacheKey(connectionName, uri);
-                
-                if (_tables.TryGetValue(key, out var cached)) return cached;
-
                 var conn = GetConnection(connectionName, uri);
                 if (conn == null) return Enumerable.Empty<string>();
+
+                var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
+                if (_tables.TryGetValue(key, out var cached)) return cached;
 
                 var connector = connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
@@ -168,13 +178,11 @@ namespace ETL_SQL.LSP
         {
             try
             {
-                if (DebugMode) logger.LogInformation("LSP: GetViewsAsync called for {Conn} (URI: {Uri})", connectionName, uri ?? "null");
-                var key = GetCacheKey(connectionName, uri);
-                
-                if (_views.TryGetValue(key, out var cached)) return cached;
-
                 var conn = GetConnection(connectionName, uri);
                 if (conn == null) return Enumerable.Empty<string>();
+
+                var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
+                if (_views.TryGetValue(key, out var cached)) return cached;
 
                 var connector = connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
@@ -240,8 +248,6 @@ namespace ETL_SQL.LSP
         {
             try
             {
-                if (DebugMode) logger.LogInformation("LSP: GetColumnsAsync called for {Conn}.{Table} (URI: {Uri})", connectionName, tableName, uri ?? "null");
-                
                 var normalizedUri = NormalizeUri(uri);
                 
                 // 1. Check if it's a temp table in the document
@@ -251,17 +257,15 @@ namespace ETL_SQL.LSP
                     if (_columns.TryGetValue(tempKey, out var tempCols)) return tempCols;
                 }
 
-                var key = GetCacheKey(connectionName, uri) + ":" + tableName.ToUpperInvariant();
-                if (DebugMode) logger.LogInformation("GetColumnsAsync: Connection='{Connection}', Table='{Table}', Uri='{Uri}', CacheKey='{Key}'", connectionName, tableName, uri, key);
-
-                if (_columns.TryGetValue(key, out var cached)) return cached;
-
                 var conn = GetConnection(connectionName, uri);
                 if (conn == null) 
                 {
                     logger.LogWarning("GetColumnsAsync: Connection '{Connection}' not found for URI '{Uri}'", connectionName, uri);
                     return Enumerable.Empty<string>();
                 }
+
+                var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null) + ":" + tableName.ToUpperInvariant();
+                if (_columns.TryGetValue(key, out var cached)) return cached;
 
                 var connector = connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();

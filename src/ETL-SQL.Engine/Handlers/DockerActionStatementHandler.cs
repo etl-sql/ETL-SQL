@@ -10,17 +10,24 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class DockerActionStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(DockerActionStatement);
+
+        public DockerActionStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the specified Docker action on the targeted container.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             if (statement is not DockerActionStatement actionStmt) return;
 
-            Logger.Verbose($"Docker Action: {actionStmt.Action} on {actionStmt.Alias}");
+            _logger.Debug($"Docker Action: {actionStmt.Action} on {actionStmt.Alias}");
 
             if (context.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would execute Docker {actionStmt.Action} on {actionStmt.Alias}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would execute Docker {actionStmt.Action} on {actionStmt.Alias}", ConsoleColor.Yellow);
                 return;
             }
 

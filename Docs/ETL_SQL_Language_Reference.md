@@ -703,6 +703,36 @@ Assigns a value to an existing variable.
 SET @name = 'Charles';
 ```
 
+#### INPUT and OUTPUT Variables
+Variables can be marked with metadata to control how they interact with external callers (like the CLI) or nested scripts.
+
+- **INPUT**: Marks a variable as a parameter. Its value can be provided by the CLI using `--var` or by a parent script using `RUN SCRIPT ... WITH`. If a value is provided, it replaces the default initializer.
+- **OUTPUT**: Marks a variable to be returned to the caller. When a sub-script finishes, any variables marked `OUTPUT` are mapped back to the parent scope.
+
+*Syntax:*
+```sql
+DECLARE @BatchId INT INPUT = 0;
+DECLARE @Status STRING OUTPUT = 'Pending';
+```
+
+*CLI Usage:*
+```bash
+ETL-SQL run my_script.etlsql --var @BatchId=101 --var @User='Chuck'
+```
+
+*Script Orchestration:*
+```sql
+-- Parent Script
+DECLARE @SubStatus STRING;
+RUN SCRIPT 'sub.etlsql' WITH (@InParam = 1, @SubStatus = @SubStatus);
+PRINT 'Sub-script finished with status: ' + @SubStatus;
+
+-- sub.etlsql
+DECLARE @InParam INT INPUT;
+DECLARE @SubStatus STRING OUTPUT = 'Complete';
+...
+```
+
 #### USE PASSWORD
 Sets the master password for the current session. This password is used to encrypt and decrypt sensitive data within the script (e.g., connection strings marked with `ENC:`). It is **not** the password for individual file connectors (SFTP, FLATFILE, etc.).
 
@@ -747,7 +777,7 @@ Enables or disables "dry-run" mode. When `ON`, the engine will suppress all side
 `SET WHAT_IF OFF;`
 
 *Behavior:*
-- **Suppressed**: `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, `BULK INSERT`, `FILE` operations, `DIRECTORY` operations, `SEND_EMAIL`, `DOCKER` actions, and DDL (`CREATE/DROP TABLE/INDEX/PROCEDURE/FUNCTION/CONNECTION`).
+- **Suppressed**: `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, `BULK INSERT`, `FILE` operations, `DIRECTORY` operations, `SEND EMAIL`, `DOCKER` actions, and DDL (`CREATE/DROP TABLE/INDEX/PROCEDURE/FUNCTION/CONNECTION`).
 - **Allowed**: `SELECT`, `DECLARE`, `SET` (variables), `CREATE CONNECTION`, `PRINT`, `EXECUTE` (local), `IF/WHILE` logic.
 - **Logging**: Intended side effects are printed as `WHAT IF: Would [action]...` in yellow.
 
@@ -762,20 +792,33 @@ SET WHAT_IF OFF;
 ETL-SQL supports a wide range of data types tailored for ETL operations, variable declarations, and table schemas. Below is a detailed breakdown of the supported types, their default formats, and cast behavior.
 
 #### 1. Numeric Types
-*   **Types**: `INT`, `INTEGER`, `BIGINT`, `SMALLINT`, `TINYINT`, `DECIMAL`, `NUMERIC`, `MONEY`, `FLOAT`, `REAL`, `DOUBLE`
+*   **Types & Ranges**:
+    - `TINYINT`: 1 byte, `0` to `255`.
+    - `SMALLINT`: 2 bytes, `-32,768` to `32,767`.
+    - `INT` / `INTEGER`: 4 bytes, `-2,147,483,648` to `2,147,483,647`.
+    - `BIGINT`: 8 bytes, `-9.22e18` to `9.22e18`.
+    - `DECIMAL` / `NUMERIC`: 16 bytes, fixed precision up to 28-29 significant digits.
+    - `FLOAT` / `DOUBLE`: 8 bytes, approximate precision (~15-17 digits).
+    - `REAL`: 4 bytes, approximate precision (~6-9 digits).
+    - `MONEY`: 8-byte fixed precision decimal (optimized for currency).
+*   **Precision and Scale**: `DECIMAL` and `NUMERIC` types support precise definition using `(precision, scale)` syntax (e.g., `DECIMAL(18,2)`).
+    - **Precision**: The maximum total number of decimal digits that can be stored (default is 18).
+    - **Scale**: The number of decimal digits that are stored to the right of the decimal point (default is 0).
 *   **Accepted Literals**: `123`, `-45`, `3.14`
 *   **Default Behavior**: Inferred from literals automatically. Computations on integers yield integers unless a decimal/float is involved.
-*   **Cast Behavior**: `CAST('12.5' AS INT)` rounds or truncates depending on context. `CAST('3.14' AS DECIMAL)` converts accurately to a high-precision decimal.
+*   **Cast Behavior**: `CAST('12.5' AS INT)` rounds or truncates depending on context. `CAST('3.14' AS DECIMAL(10,2))` converts accurately to a high-precision decimal.
 
 #### 2. Temporal (Date & Time) Types
 *   **Types**: `DATE`, `DATETIME`, `DATETIME2`, `TIMESTAMP`, `TIME`, `DATETIMEOFFSET`
+*   **Range**: `0001-01-01` to `9999-12-31`.
+*   **Precision**: High-resolution tracking down to **100 nanoseconds** (0.0001 ms).
 *   **Accepted Literals**: `'2023-10-31'`, `'2023-10-31 15:30:00'`, `'15:30:00'`
 *   **Default Behavior**: Parsed automatically if the string matches common ISO 8601 formatting, or by using explicit functions like `DATETIMEFROMPARTS`.
 *   **Cast Behavior**: `CAST('2024-01-01' AS DATE)` parses the string into a `DateTime` struct. Casting a date back to a string uses the standard `yyyy-MM-dd HH:mm:ss` format unless otherwise specified via `FORMAT()`.
 *   **System Constants**: `SYSDATE`, `CURRENT_TIMESTAMP`, `GETDATE()`, `NOW()` return the current system date/time. 
     - **Identifiers**: `SYSDATE` and `CURRENT_TIMESTAMP` are bare identifiers (no parentheses).
     - **Functions**: `GETDATE()` and `NOW()` MUST include parentheses.
-*   **Date Arithmetic**: (FW-6) Supports shorthand arithmetic for days. `SYSDATE + 1` returns tomorrow. `GETDATE() - 7` returns a date from one week ago. `date1 - date2` returns the difference in days as a decimal.
+*   **Date Arithmetic**: Supports shorthand arithmetic for days. `SYSDATE + 1` returns tomorrow. `GETDATE() - 7` returns a date from one week ago. `date1 - date2` returns the difference in days as a decimal.
 *   **Time Zone Conversion**: Use the `AT TIME ZONE` expression to convert a date-time value between time zones.
     - *Syntax*: `<expression> AT TIME ZONE '<timezone_id>'`
     - *Common Windows Time Zone IDs*:
@@ -800,8 +843,10 @@ ETL-SQL supports a wide range of data types tailored for ETL operations, variabl
   
 
 #### 3. Character & String Types
-*   **Types**: `STRING`, `VARCHAR`, `NVARCHAR`, `TEXT`, `CHAR`
-*   **Accepted Literals**: `'Hello World'`, `"ColumnName"` (for identifiers, though some engines permit double quotes for strings depending on dialect config)
+*   **Types**: `STRING`, `VARCHAR(N)`, `NVARCHAR(N)`, `TEXT`, `CHAR(N)`
+*   **Length (N)**: You can specify the maximum number of characters using `(N)` (e.g., `VARCHAR(50)`). 
+    - **Fixed-Width Processing**: When using `FORMAT='FIXED'` on a `FLATFILE` connection, the engine uses these lengths to determine the starting positions and widths of fields in the source file.
+*   **Accepted Literals**: `'Hello World'`, `"ColumnName"` (for identifiers)
 *   **Default Behavior**: Uses Unicode by default (equivalent to `NVARCHAR` in MSSQL).
 *   **Cast Behavior**: Any value can be cast to `STRING`. Nulls cast to `NULL`.
 

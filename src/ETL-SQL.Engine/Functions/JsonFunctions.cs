@@ -178,7 +178,7 @@ namespace ETL_SQL.Engine.Functions
         /// Each element becomes a row. Object elements are serialised as JSON strings.
         /// Example: SELECT * FROM JSON_TABLE('{"items":[1,2,3]}', '$.items')
         /// </summary>
-        private static object? JsonTable(List<object?> args, IExecutionContext ctx)
+        private static async Task<object?> JsonTable(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 1) return new DataTable();
             string? json = args[0]?.ToString();
@@ -193,17 +193,17 @@ namespace ETL_SQL.Engine.Functions
 
                 if (element.Value.ValueKind == JsonValueKind.Array)
                 {
-                    return BuildTableFromArray(element.Value);
+                    return await BuildTableFromArray(element.Value);
                 }
                 else if (element.Value.ValueKind == JsonValueKind.Object)
                 {
-                    return BuildTableFromObject(element.Value);
+                    return await BuildTableFromObject(element.Value);
                 }
 
                 // Scalar — wrap single value
                 var dt = new DataTable();
                 dt.SetColumns(new[] { "VALUE" });
-                dt.AddRow(new Row { ["VALUE"] = ScalarFromElement(element.Value) });
+                await dt.AddRowAsync(new Row { ["VALUE"] = ScalarFromElement(element.Value) });
                 return dt;
             }
             catch { return new DataTable(); }
@@ -213,7 +213,7 @@ namespace ETL_SQL.Engine.Functions
         /// SQL Server-compatible OPENJSON — expands a JSON string into key/value/type rows,
         /// or (when the JSON is an array of objects) into a multi-column table.
         /// </summary>
-        private static object? OpenJson(List<object?> args, IExecutionContext ctx)
+        private static async Task<object?> OpenJson(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 1) return new DataTable();
             string? json = args[0]?.ToString();
@@ -232,15 +232,15 @@ namespace ETL_SQL.Engine.Functions
                     var firstObj = element.Value.EnumerateArray()
                         .FirstOrDefault(e => e.ValueKind == JsonValueKind.Object);
                     if (firstObj.ValueKind == JsonValueKind.Object)
-                        return BuildTableFromArray(element.Value);
+                        return await BuildTableFromArray(element.Value);
 
                     // Array of scalars → key/value/type
-                    return BuildKeyValueTypeTable(element.Value);
+                    return await BuildKeyValueTypeTable(element.Value);
                 }
                 else if (element.Value.ValueKind == JsonValueKind.Object)
                 {
                     // Object → key/value/type rows
-                    return BuildKeyValueTypeTable(element.Value);
+                    return await BuildKeyValueTypeTable(element.Value);
                 }
 
                 return new DataTable();
@@ -250,7 +250,7 @@ namespace ETL_SQL.Engine.Functions
 
         // ── Table-building helpers ────────────────────────────────────────────
 
-        private static DataTable BuildTableFromArray(JsonElement array)
+        private static async Task<DataTable> BuildTableFromArray(JsonElement array)
         {
             var rows = new List<JsonElement>(array.GetArrayLength());
             foreach (var item in array.EnumerateArray()) rows.Add(item);
@@ -273,7 +273,7 @@ namespace ETL_SQL.Engine.Functions
                     var r = new Row();
                     foreach (var prop in row.EnumerateObject())
                         r[prop.Name] = ScalarFromElement(prop.Value);
-                    dt.AddRow(r);
+                    await dt.AddRowAsync(r);
                 }
                 return dt;
             }
@@ -283,21 +283,21 @@ namespace ETL_SQL.Engine.Functions
                 var dt = new DataTable();
                 dt.SetColumns(new[] { "VALUE" });
                 foreach (var item in rows)
-                    dt.AddRow(new Row { ["VALUE"] = ScalarFromElement(item) });
+                    await dt.AddRowAsync(new Row { ["VALUE"] = ScalarFromElement(item) });
                 return dt;
             }
         }
 
-        private static DataTable BuildTableFromObject(JsonElement obj)
+        private static async Task<DataTable> BuildTableFromObject(JsonElement obj)
         {
             var dt = new DataTable();
             dt.SetColumns(new[] { "KEY", "VALUE" });
             foreach (var prop in obj.EnumerateObject())
-                dt.AddRow(new Row { ["KEY"] = prop.Name, ["VALUE"] = ScalarFromElement(prop.Value) });
+                await dt.AddRowAsync(new Row { ["KEY"] = prop.Name, ["VALUE"] = ScalarFromElement(prop.Value) });
             return dt;
         }
 
-        private static DataTable BuildKeyValueTypeTable(JsonElement element)
+        private static async Task<DataTable> BuildKeyValueTypeTable(JsonElement element)
         {
             var dt = new DataTable();
             dt.SetColumns(new[] { "KEY", "VALUE", "TYPE" });
@@ -305,13 +305,13 @@ namespace ETL_SQL.Engine.Functions
             if (element.ValueKind == JsonValueKind.Object)
             {
                 foreach (var prop in element.EnumerateObject())
-                    dt.AddRow(new Row { ["KEY"] = prop.Name, ["VALUE"] = prop.Value.GetRawText().Trim('"'), ["TYPE"] = (decimal)JsonTypeId(prop.Value) });
+                    await dt.AddRowAsync(new Row { ["KEY"] = prop.Name, ["VALUE"] = prop.Value.GetRawText().Trim('"'), ["TYPE"] = (decimal)JsonTypeId(prop.Value) });
             }
             else if (element.ValueKind == JsonValueKind.Array)
             {
                 int idx = 0;
                 foreach (var item in element.EnumerateArray())
-                    dt.AddRow(new Row { ["KEY"] = idx++.ToString(), ["VALUE"] = item.GetRawText().Trim('"'), ["TYPE"] = (decimal)JsonTypeId(item) });
+                    await dt.AddRowAsync(new Row { ["KEY"] = idx++.ToString(), ["VALUE"] = item.GetRawText().Trim('"'), ["TYPE"] = (decimal)JsonTypeId(item) });
             }
             return dt;
         }

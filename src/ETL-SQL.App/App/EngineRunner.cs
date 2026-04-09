@@ -201,6 +201,12 @@ namespace ETL_SQL.App
                     evaluator.MasterPassword = ctx.Password;
                     evaluator.SessionId = ctx.SessionId;
 
+                    // Inject CLI variables as input parameters
+                    foreach (var v in ctx.Variables)
+                    {
+                        evaluator.DeclareVariable(v.Key, v.Value, new VariableMetadata { IsInput = true, IsDeclared = false });
+                    }
+
                     var sessionManager = Program.ServiceProvider.GetRequiredService<ETL_SQL.Engine.Services.SessionStateManager>();
                     if (!string.IsNullOrEmpty(ctx.SessionId))
                     {

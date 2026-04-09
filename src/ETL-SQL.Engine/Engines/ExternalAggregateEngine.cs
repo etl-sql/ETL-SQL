@@ -15,13 +15,15 @@ namespace ETL_SQL.Engine.Engines
     {
         private readonly IExecutionContext _context;
         private readonly AggregateEngine _inMemoryEngine;
+        private readonly ILogger _logger;
         private readonly string _tempDir;
         private const int PARTITION_COUNT = 32;
 
-        public ExternalAggregateEngine(IExecutionContext context)
+        public ExternalAggregateEngine(IExecutionContext context, ILogger logger)
         {
             _context = context;
-            _inMemoryEngine = new AggregateEngine(context);
+            _logger = logger;
+            _inMemoryEngine = new AggregateEngine(context, logger);
             _tempDir = Path.Combine(Path.GetTempPath(), "ETL-SQL", "AggSpill", Guid.NewGuid().ToString());
             Directory.CreateDirectory(_tempDir);
         }

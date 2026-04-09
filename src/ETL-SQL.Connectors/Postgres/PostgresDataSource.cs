@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Npgsql;
 using ETL_SQL.Data;
+using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Connectors.Postgres
@@ -16,6 +17,7 @@ namespace ETL_SQL.Connectors.Postgres
         private readonly string _connectionString;
         private readonly string? _tableName;
         private readonly Dictionary<string, string>? _options;
+        private readonly ILogger _logger;
         private NpgsqlConnection? _transactionalConnection;
         private NpgsqlTransaction? _activeTransaction;
 
@@ -25,32 +27,24 @@ namespace ETL_SQL.Connectors.Postgres
         /// <param name="connectionString">The PostgreSQL connection string.</param>
         /// <param name="tableName">The target table name (optional for raw SQL).</param>
         /// <param name="options">The options used to create this data source.</param>
-        public PostgresDataSource(string connectionString, string? tableName = null, Dictionary<string, string>? options = null)
+        /// <param name="logger">The logger instance.</param>
+        public PostgresDataSource(string connectionString, string? tableName = null, Dictionary<string, string>? options = null, ILogger? logger = null)
         {
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
+            _logger = logger ?? Logger.Instance;
         }
 
-        /// <summary>Gets the connection string for this data source.</summary>
         public string ConnectionString => _connectionString;
-        
-        /// <summary>Gets the placeholder path for PostgreSQL.</summary>
         public string Path => "POSTGRES";
-
-        /// <summary>Gets the database dialect name.</summary>
         public string Dialect => "POSTGRES";
         public bool SupportsSqlPushdown => true;
-
-        /// <summary>The options used to create this data source.</summary>
         public Dictionary<string, string>? Options => _options;
-        /// <summary>The type name of the connector (POSTGRES).</summary>
         public string ConnectorType => "POSTGRES";
 
-        /// <summary>Returns a new instance scoped to the specified table.</summary>
-        public IDataSource WithTable(string tableName) => new PostgresDataSource(_connectionString, tableName, _options);
+        public IDataSource WithTable(string tableName) => new PostgresDataSource(_connectionString, tableName, _options, _logger);
 
-        /// <summary>Retrieves the PostgreSQL version information.</summary>
         public async Task<string> GetVersionAsync()
         {
             var (conn, isShared) = await GetConnectionAsync();
@@ -64,11 +58,8 @@ namespace ETL_SQL.Connectors.Postgres
             }
         }
 
-        /// <summary>Returns PostgreSQL-specific SQL functions.</summary>
         public HashSet<string> GetSupportedFunctions() => PostgresSyntax.Functions;
 
-        /// <summary>Reads data from the specified PostgreSQL table in batches.</summary>
-        /// <param name="batchSize">The number of rows per batch.</param>
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
             if (string.IsNullOrEmpty(_tableName))
@@ -115,8 +106,6 @@ namespace ETL_SQL.Connectors.Postgres
             }
         }
 
-        /// <summary>Writes batches of data to the PostgreSQL table using high-performance COPY.</summary>
-        /// <param name="batches">An async enumerable of DataTables.</param>
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
         {
             if (string.IsNullOrEmpty(_tableName))
@@ -156,11 +145,16 @@ namespace ETL_SQL.Connectors.Postgres
             }
         }
 
-        /// <summary>Executes a raw SQL query and returns the results as a stream of batches.</summary>
-        /// <param name="sql">The SQL query to execute.</param>
         public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
         {
             var (conn, isShared) = await GetConnectionAsync();
+            
+            // Wire up Notice event for Postgres diagnostic messages
+            conn.Notice += (_, e) =>
+            {
+                _logger.WriteLine(e.Notice.MessageText, ConsoleColor.Cyan);
+            };
+
             try {
                 await using var cmd = new NpgsqlCommand(sql, conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
@@ -221,7 +215,6 @@ namespace ETL_SQL.Connectors.Postgres
             }
         }
 
-        /// <summary>Discovers column names for the current table.</summary>
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             if (string.IsNullOrEmpty(_tableName)) return Enumerable.Empty<string>();
@@ -238,7 +231,6 @@ namespace ETL_SQL.Connectors.Postgres
             return columns;
         }
 
-        /// <summary>Returns a list of all user-accessible base tables.</summary>
         public async Task<IEnumerable<string>> GetTablesAsync()
         {
             await using var conn = new NpgsqlConnection(_connectionString);
@@ -255,7 +247,6 @@ namespace ETL_SQL.Connectors.Postgres
             return tables.Distinct();
         }
 
-        /// <summary>Returns a list of all user-accessible views.</summary>
         public async Task<IEnumerable<string>> GetViewsAsync()
         {
             await using var conn = new NpgsqlConnection(_connectionString);
@@ -272,7 +263,6 @@ namespace ETL_SQL.Connectors.Postgres
             return views.Distinct();
         }
 
-        /// <summary>Discovers column names for a specific table.</summary>
         public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
         {
             await using var conn = new NpgsqlConnection(_connectionString);
@@ -287,13 +277,9 @@ namespace ETL_SQL.Connectors.Postgres
             return columns;
         }
 
-        /// <summary>Captures a snapshot (no-op for Postgres).</summary>
         public object? Snapshot() => null;
-
-        /// <summary>Restores from a snapshot (no-op for Postgres).</summary>
         public void Restore(object? snapshot) { }
 
-        /// <summary>Begins a new PostgreSQL transaction.</summary>
         public async Task BeginTransactionAsync()
         {
             if (_activeTransaction != null) return;
@@ -302,7 +288,6 @@ namespace ETL_SQL.Connectors.Postgres
             _activeTransaction = await _transactionalConnection.BeginTransactionAsync();
         }
 
-        /// <summary>Commits the active transaction.</summary>
         public async Task CommitAsync()
         {
             if (_activeTransaction == null) return;
@@ -313,7 +298,6 @@ namespace ETL_SQL.Connectors.Postgres
             _transactionalConnection = null;
         }
 
-        /// <summary>Rolls back the active transaction.</summary>
         public async Task RollbackAsync()
         {
             if (_activeTransaction == null) return;
@@ -332,7 +316,6 @@ namespace ETL_SQL.Connectors.Postgres
             return (conn, false);
         }
 
-        /// <summary>Truncates the target table.</summary>
         public async Task TruncateAsync()
         {
             if (string.IsNullOrEmpty(_tableName))
@@ -341,7 +324,6 @@ namespace ETL_SQL.Connectors.Postgres
             await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {_tableName}")) { }
         }
 
-        /// <summary>Asynchronously disposes resources and rolls back active transactions.</summary>
         public async ValueTask DisposeAsync()
         {
             if (_activeTransaction != null) await RollbackAsync();

@@ -9,9 +9,12 @@ namespace ETL_SQL.Engine.Handlers
     /// <summary>
     /// Handles the TRUNCATE TABLE statement, efficiently removing all rows from a target table.
     /// </summary>
-    public class TruncateTableStatementHandler : IStatementHandler
+    public class TruncateTableStatementHandler(ILogger logger) : IStatementHandler
     {
+        private readonly ILogger _logger = logger;
         public Type SupportedStatementType => typeof(TruncateTableStatement);
+
+
         /// <summary>Executes the TRUNCATE TABLE statement on the resolved datasource.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
@@ -24,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
 
             if (context.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would truncate table {truncateStmt.TargetTable.TableName}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would truncate table {truncateStmt.TargetTable.TableName}", ConsoleColor.Yellow);
                 return;
             }
 

@@ -13,8 +13,9 @@ namespace ETL_SQL.Engine.Services
     /// Manages DDL operations including creating and dropping tables, indexes, procedures, and functions.
     /// Orchestrates schema changes across various data sources.
     /// </summary>
-    public class SchemaManager(Evaluator evaluator, VariableScopeManager variableScopeManager)
+    public class SchemaManager(ILogger logger, Evaluator evaluator, VariableScopeManager variableScopeManager)
     {
+        private readonly ILogger _logger = logger;
         private readonly Evaluator _evaluator = evaluator;
         private readonly VariableScopeManager _variableScopeManager = variableScopeManager;
 
@@ -26,7 +27,7 @@ namespace ETL_SQL.Engine.Services
 
             if (_evaluator.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would create table {connName}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would create table {connName}", ConsoleColor.Yellow);
                 return;
             }
 
@@ -54,7 +55,7 @@ namespace ETL_SQL.Engine.Services
 
             if (_evaluator.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would drop table {connName} (IfExists: {stmt.IfExists})", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would drop table {connName} (IfExists: {stmt.IfExists})", ConsoleColor.Yellow);
                 return;
             }
 
@@ -78,7 +79,7 @@ namespace ETL_SQL.Engine.Services
         {
             if (_evaluator.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would drop connection {stmt.ConnectionName}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would drop connection {stmt.ConnectionName}", ConsoleColor.Yellow);
                 return Task.CompletedTask;
             }
 
@@ -92,7 +93,7 @@ namespace ETL_SQL.Engine.Services
         {
             if (_evaluator.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would drop procedure {stmt.ProcedureName}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would drop procedure {stmt.ProcedureName}", ConsoleColor.Yellow);
                 return;
             }
 
@@ -105,7 +106,7 @@ namespace ETL_SQL.Engine.Services
         {
             if (_evaluator.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would drop function {stmt.FunctionName}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would drop function {stmt.FunctionName}", ConsoleColor.Yellow);
                 return;
             }
 
@@ -121,13 +122,13 @@ namespace ETL_SQL.Engine.Services
                 string connName = stmt.Table.ConnectionName ?? stmt.Table.TableName;
                 if (_evaluator.IsWhatIf)
                 {
-                    Logger.WriteLine($"WHAT IF: Would drop index {stmt.IndexName} from {connName}", ConsoleColor.Yellow);
+                    _logger.WriteLine($"WHAT IF: Would drop index {stmt.IndexName} from {connName}", ConsoleColor.Yellow);
                     return;
                 }
                 if (connections.TryGetValue(connName, out var connection) && connection is InMemoryDataSource mem)
                 {
                     // InMemory index removal
-                    Logger.WriteLine($"Index {stmt.IndexName} dropped from {connName}", ConsoleColor.Yellow);
+                    _logger.WriteLine($"Index {stmt.IndexName} dropped from {connName}", ConsoleColor.Yellow);
                 }
                 else if (connection is IDatabaseSource sqlConn)
                 {
@@ -146,18 +147,18 @@ namespace ETL_SQL.Engine.Services
             
             if (_evaluator.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would create index {stmt.IndexName} on {connName} ({string.Join(", ", stmt.Columns)})", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would create index {stmt.IndexName} on {connName} ({string.Join(", ", stmt.Columns)})", ConsoleColor.Yellow);
                 return;
             }
 
             if (connection is InMemoryDataSource mem)
             {
                 foreach (var col in stmt.Columns) mem.CreateIndex(col, stmt.IsUnique);
-                Logger.WriteLine($"Index {stmt.IndexName} created on {connName} ({string.Join(", ", stmt.Columns)})", ConsoleColor.Green);
+                _logger.WriteLine($"Index {stmt.IndexName} created on {connName} ({string.Join(", ", stmt.Columns)})", ConsoleColor.Green);
             }
             else
             {
-                Logger.WriteLine($"Warning: Indexing not natively supported for {connection.GetType().Name}. Skipping.", ConsoleColor.Yellow);
+                _logger.WriteLine($"Warning: Indexing not natively supported for {connection.GetType().Name}. Skipping.", ConsoleColor.Yellow);
             }
         }
     }

@@ -1,3 +1,0 @@
-   1:7>C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\Statements\SetWhatIfStatement.cs(3,39): error CS8865: Only records may inherit from records. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\ETL-SQL.Core.csproj]
-   1:7>C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\Statements\ShowProfileStatement.cs(3,41): error CS8865: Only records may inherit from records. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\ETL-SQL.Core.csproj]
-   1:7>C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\Statements\SetProfilingStatement.cs(3,42): error CS8865: Only records may inherit from records. [C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\ETL-SQL.Core.csproj]

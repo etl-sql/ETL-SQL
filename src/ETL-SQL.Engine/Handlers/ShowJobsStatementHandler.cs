@@ -39,7 +39,7 @@ namespace ETL_SQL.Engine.Handlers
                 row["LastRun"] = job.LastRun;
                 row["NextRun"] = job.NextRun;
                 row["Script"] = job.Script;
-                table.AddRow(row);
+                await table.AddRowAsync(row);
             }
 
             context.LastResult = table;

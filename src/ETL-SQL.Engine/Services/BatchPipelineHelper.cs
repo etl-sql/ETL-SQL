@@ -39,7 +39,7 @@ namespace ETL_SQL.Engine.Services
             [EnumeratorCancellation] CancellationToken ct = default)
         {
             await foreach (var batch in batches.WithCancellation(ct))
-                yield return AlignBatch(batch, targetCols);
+                yield return await AlignBatch(batch, targetCols);
         }
 
         /// <summary>
@@ -63,7 +63,7 @@ namespace ETL_SQL.Engine.Services
                 result.SetColumns(new[] { "JSON_F52E2B61" });
                 var row = result.NewRow();
                 row[0] = json;
-                result.AddRow(row);
+                await result.AddRowAsync(row);
                 yield return result;
             }
             else if (forClause.Type == ForType.XML)
@@ -75,19 +75,19 @@ namespace ETL_SQL.Engine.Services
                 result.SetColumns(new[] { "XML_F52E2B61" });
                 var row = result.NewRow();
                 row[0] = xml;
-                result.AddRow(row);
+                await result.AddRowAsync(row);
                 yield return result;
             }
         }
 
         // ── Private helpers ──────────────────────────────────────────────────
 
-        private static DataTable AlignBatch(DataTable batch, List<string> targetCols)
+        private static async Task<DataTable> AlignBatch(DataTable batch, List<string> targetCols)
         {
             var newBatch = new DataTable();
             newBatch.SetColumns(targetCols);
             foreach (Row oldRow in batch.Rows)
-                newBatch.AddRow(MapRow(oldRow, batch.ColumnNames, newBatch));
+                await newBatch.AddRowAsync(MapRow(oldRow, batch.ColumnNames, newBatch));
             return newBatch;
         }
 

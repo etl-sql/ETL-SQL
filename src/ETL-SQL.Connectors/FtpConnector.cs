@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using FluentFTP;
 using ETL_SQL.Data;
+using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Connectors
@@ -14,6 +15,7 @@ namespace ETL_SQL.Connectors
         private readonly string _host;
         private readonly string _username;
         private readonly string _password;
+        private readonly ILogger _logger;
 
         public string Name => "FTP_CONN";
         public IReadOnlyList<string> Aliases => new[] { "FTP" };
@@ -21,34 +23,34 @@ namespace ETL_SQL.Connectors
         public Dictionary<string, string>? Options => null;
         public string ConnectorType => "FTP";
 
-        public FtpConnector(string host, string username, string password)
+        public FtpConnector(string host, string username, string password, ILogger? logger = null)
         {
             _host = host;
             _username = username;
             _password = password;
+            _logger = logger ?? Logger.Instance;
             _client = new FtpClient(host, username, password);
         }
 
-        public async Task<string> GetVersionAsync(string connectionString) => "FTP Server";
+        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null) => Task.FromResult("FTP Server");
         public HashSet<string> GetSupportedFunctions() => new();
         public HashSet<string> GetSupportedKeywords() => new();
         public Dictionary<string, string[]> GetSupportedOptions() => new() { ["USER"] = new[] { "Username for FTP server" }, ["PASSWORD"] = new[] { "Password for FTP server" } };
         public Dictionary<string, string[]> GetOptionValues() => new();
         public string GetHelp() => "FTP Connector for remote file operations.\nOptions:\n  USER: The username for the FTP connection.\n  PASSWORD: The password for the FTP connection.\nMethods: GET_FILE, PUT_FILE, REMOTE_FILE_LIST.";
 
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null)
+        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null)
         {
             string user = options?.GetValueOrDefault("USER") ?? "";
             string pass = options?.GetValueOrDefault("PASSWORD") ?? "";
-            return new FtpConnector(connectionString, user, pass);
+            return new FtpConnector(connectionString, user, pass, logger);
         }
 
-        public Task<IEnumerable<string>> GetTablesAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetViewsAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
 
-        /// <summary>Builds an FTP host address from named properties.</summary>
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
 
@@ -101,7 +103,6 @@ namespace ETL_SQL.Connectors
             return Task.CompletedTask;
         }
 
-        // IDataSource Implementation
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
             var files = await ListFilesAsync("");

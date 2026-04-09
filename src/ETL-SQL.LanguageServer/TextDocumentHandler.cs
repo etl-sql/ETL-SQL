@@ -16,6 +16,8 @@ using OmniSharp.Extensions.JsonRpc;
 using ETL_SQL.Core.Linting;
 using ETL_SQL.Core.Linting.Rules;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Common;
+using ETL_SQL.Data;
 using LSPRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using TextDocumentSelector = OmniSharp.Extensions.LanguageServer.Protocol.Models.TextDocumentSelector;
 using TextDocumentSyncKind = OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities.TextDocumentSyncKind;
@@ -130,7 +132,7 @@ namespace ETL_SQL.LSP
                 });
 
                 // Lineage analysis — store result in DocumentStateStore
-                var tracker  = new LineageTracker();
+                var tracker  = new LineageTracker(NullLogger.Instance);
                 var analyzer = new LineageAnalyzer(tracker);
                 analyzer.Analyze(script);
                 _store.SetState(uri, text, script, analyzer.Tracker);
@@ -222,7 +224,7 @@ namespace ETL_SQL.LSP
             {
                 var connStr = ccs.TargetExpression?.ToSql() ?? "";
                 connStr = connStr.Trim('\'', '\"', '(', ')', ' ');
-                _metadata.RegisterDocumentConnection(uri, ccs.ConnectionName, ccs.ConnectionType, connStr);
+                _metadata.RegisterDocumentConnection(uri, ccs.ConnectionName, ccs.ConnectionType ?? "UNKNOWN", connStr);
             }
             else if (stmt is CreateTableStatement cts)
             {

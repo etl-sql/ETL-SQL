@@ -13,7 +13,14 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class AlterTableStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(AlterTableStatement);
+
+        public AlterTableStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the ALTER TABLE statement, applying schema modifications.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
@@ -25,7 +32,7 @@ namespace ETL_SQL.Engine.Handlers
 
             if (context.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would execute ALTER TABLE {stmt.TargetTable.TableName} ({stmt.Action})", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would execute ALTER TABLE {stmt.TargetTable.TableName} ({stmt.Action})", ConsoleColor.Yellow);
                 return;
             }
 

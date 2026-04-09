@@ -11,7 +11,14 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class ExecuteRemoteBlockStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(ExecuteRemoteBlockStatement);
+
+        public ExecuteRemoteBlockStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the remote block, translating each inner statement to the target dialect.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
@@ -20,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
 
             var connNameObj = await context.EvaluateValue(stmt.ConnectionName, new Row());
             string connName = connNameObj?.ToString() ?? "";
-            Logger.Verbose($"Executing remote block on {connName}");
+            _logger.Debug($"Executing remote block on {connName}");
 
             if (context.Connections.TryGetValue(connName, out var source) && source is IDatabaseSource db)
             {
@@ -34,7 +41,7 @@ namespace ETL_SQL.Engine.Handlers
                     context.Log($"Remote SQL: {sql}");
                     if (context.IsWhatIf)
                     {
-                        Logger.WriteLine($"WHAT IF: Would execute remote block SQL on {connName}:\n{sql}", ConsoleColor.Yellow);
+                        _logger.WriteLine($"WHAT IF: Would execute remote block SQL on {connName}:\n{sql}", ConsoleColor.Yellow);
                         continue;
                     }
 
@@ -55,7 +62,7 @@ namespace ETL_SQL.Engine.Handlers
                         }
                         
                         if (currentSet!.ColumnNames.Count == 0) currentSet.SetColumns(batch.ColumnNames);
-                        foreach (var row in batch.Rows) currentSet.AddRow(row);
+                        foreach (var row in batch.Rows) await currentSet.AddRowAsync(row);
                     }
                     if (currentSet != null) context.LastResultSets.Add(currentSet);
 

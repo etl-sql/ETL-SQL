@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using ETL_SQL.Data;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Connectors.Avro
 {
@@ -9,57 +12,41 @@ namespace ETL_SQL.Connectors.Avro
     /// </summary>
     public class AvroConnector : IConnector
     {
-        /// <summary>Returns the canonical name of the connector.</summary>
         public string Name => "AVRO";
-        
-        /// <summary>Returns synonymous names for this connector.</summary>
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
 
-        /// <summary>Retrieves the version information for the connector.</summary>
-        public Task<string> GetVersionAsync(string connectionString) => Task.FromResult("Avro Data Connector v1.0 (Apache.Avro)");
+        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null) => Task.FromResult("Avro Data Connector v1.0 (Apache.Avro)");
 
-        /// <summary>Returns a list of supported SQL functions for this connector.</summary>
         public HashSet<string> GetSupportedFunctions() => new(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>Returns a list of supported SQL keywords for this connector.</summary>
         public HashSet<string> GetSupportedKeywords() => new(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>Returns supported connection string options and their available values (if any).</summary>
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
             { "SCHEMA_FILE", Array.Empty<string>() }
         };
 
-        /// <summary>Returns a map of option keys to their current selected values from the UI/prompt.</summary>
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>Returns a human-readable help string for the connector.</summary>
         public string GetHelp() => 
             "Avro Connector: Connects to Apache Avro files.\n" +
             "Options:\n" +
             "  SCHEMA_FILE: Optional path to an Avro schema (.avsc) file.";
 
-        /// <summary>Creates a new data source instance for this connector.</summary>
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null) 
-            => new AvroDataSource(connectionString);
+        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null) 
+            => new AvroDataSource(connectionString, options, logger);
 
-        /// <summary>Returns a list of logical tables from the connection source.</summary>
-        public Task<IEnumerable<string>> GetTablesAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
         
-        /// <summary>Returns a list of logical views from the connection source.</summary>
-        public Task<IEnumerable<string>> GetViewsAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
         
-        /// <summary>Returns a list of columns for the specified table.</summary>
-        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName)
+        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null)
         {
-            var ds = new AvroDataSource(connectionString);
+            var ds = new AvroDataSource(connectionString, null, logger);
             return await ds.GetColumnsAsync();
         }
 
-        /// <summary>Returns a list of procedures/functions from the connection source.</summary>
-        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
 
-        /// <summary>Builds an Avro file path from named properties.</summary>
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
     }

@@ -18,16 +18,18 @@ namespace ETL_SQL.Engine.Services
     /// Manages saving and loading of session state to allow ad-hoc development (Run Selection)
     /// to maintain state across multiple process runs.
     /// </summary>
-    public class SessionStateManager
+    public class SessionStateManager(ILogger logger, string? customSessionDir = null)
     {
-        private readonly string _sessionRoot;
+        private readonly string _sessionRoot = InitializeSessionRoot(customSessionDir);
+        private readonly ILogger _logger = logger;
         private const string SessionFileExtension = ".etlsession";
         private const string RecoveryManifestExtension = ".recovery.json";
 
-        public SessionStateManager(string? customSessionDir = null)
+        private static string InitializeSessionRoot(string? customDir)
         {
-            _sessionRoot = customSessionDir ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions");
-            if (!Directory.Exists(_sessionRoot)) Directory.CreateDirectory(_sessionRoot);
+            var root = customDir ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions");
+            if (!Directory.Exists(root)) Directory.CreateDirectory(root);
+            return root;
         }
 
         private string GetSessionFilePath(string sessionId) => Path.Combine(_sessionRoot, sessionId + SessionFileExtension);
@@ -128,13 +130,13 @@ namespace ETL_SQL.Engine.Services
                             // Encrypt before saving if possible
                             var password = evaluator.ScriptPassword ?? GetMachineKey();
                             File.WriteAllText(dataFile, CryptoUtils.Encrypt(json, password));
-                            Logger.Verbose($"[SESSION] Persisted {totalSavedRows} rows for temp table {conn.Key} to {Path.GetFileName(dataFile)}");
+                            _logger.Debug($"[SESSION] Persisted {totalSavedRows} rows for temp table {conn.Key} to {Path.GetFileName(dataFile)}");
                         }
                     }
                     
                     if (totalSavedRows == 0)
                     {
-                        Logger.Verbose($"[SESSION] Temp table {conn.Key} is empty; no data file created.");
+                        _logger.Debug($"[SESSION] Temp table {conn.Key} is empty; no data file created.");
                     }
                     
                     state.TempTables.Add(info);
@@ -182,13 +184,13 @@ namespace ETL_SQL.Engine.Services
                 else if (tc is TableCheckConstraint c)
                 {
                     info.Type = ConstraintType.Check;
-                    info.Expression = c.Expression.ToSql();
+                    info.Expression = c.Expression;
                 }
                 else if (tc is TableForeignKeyConstraint fk)
                 {
                     info.Type = ConstraintType.ForeignKey;
                     info.Columns = fk.Columns;
-                    info.Expression = fk.Reference.ToSql();
+                    info.ForeignKey = fk.Reference;
                 }
                 result.Add(info);
             }
@@ -203,28 +205,23 @@ namespace ETL_SQL.Engine.Services
         /// <summary>Loads existing session state from disk.</summary>
         public async Task<SessionState?> LoadSession(string sessionId, string? password = null)
         {
-            Console.Error.WriteLine("[SESSION_MANAGER_ENTER] LoadSession method entered.");
-            Console.Error.Flush();
+            _logger.Debug("[SESSION_MANAGER_ENTER] LoadSession method entered.");
             
             string sessionFile = GetSessionFilePath(sessionId);
             if (!File.Exists(sessionFile)) return null;
 
             try
             {
-                Console.Error.WriteLine($"[SESSION_READ_FILE] Reading {sessionFile}...");
-                Console.Error.Flush();
+                _logger.Debug($"[SESSION_READ_FILE] Reading {sessionFile}...");
                 string encryptedJson = File.ReadAllText(sessionFile);
                 
-                Console.Error.WriteLine("[SESSION_DERIVE_KEY] Deriving decryption key...");
-                Console.Error.Flush();
+                _logger.Debug("[SESSION_DERIVE_KEY] Deriving decryption key...");
                 string masterPassword = password ?? GetMachineKey();
                 
-                Console.Error.WriteLine("[SESSION_DECRYPT] Decrypting state...");
-                Console.Error.Flush();
+                _logger.Debug("[SESSION_DECRYPT] Decrypting state...");
                 string plainJson = CryptoUtils.Decrypt(encryptedJson, masterPassword);
                 
-                Console.Error.WriteLine("[SESSION_DESERIALIZE] Deserializing JSON...");
-                Console.Error.Flush();
+                _logger.Debug("[SESSION_DESERIALIZE] Deserializing JSON...");
                 return JsonSerializer.Deserialize<SessionState>(plainJson);
             }
             catch

@@ -14,7 +14,14 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class FileOperationStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(FileOperationStatement);
+
+        public FileOperationStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the file operation, resolving paths and performing the requested action.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
@@ -38,11 +45,11 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
 
-            Logger.Verbose($"File Operation: {stmt.Type} on {source}{(dest != null ? $" -> {dest}" : "")}");
+            _logger.Debug($"File Operation: {stmt.Type} on {source}{(dest != null ? $" -> {dest}" : "")}");
 
             if (context.IsWhatIf)
             {
-                Logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_FILE on {source}{(dest != null ? $" to {dest}" : "")}", ConsoleColor.Yellow);
+                _logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_FILE on {source}{(dest != null ? $" to {dest}" : "")}", ConsoleColor.Yellow);
                 return;
             }
 
@@ -52,7 +59,7 @@ namespace ETL_SQL.Engine.Handlers
                     if (File.Exists(source)) 
                     {
                         File.Delete(source);
-                        Logger.WriteLine($"File deleted: {source}", ConsoleColor.Green);
+                        _logger.WriteLine($"File deleted: {source}", ConsoleColor.Green);
                     }
                     break;
                 case FileOpType.Copy:

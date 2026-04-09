@@ -15,7 +15,14 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class RunScriptStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(RunScriptStatement);
+
+        public RunScriptStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
+
         /// <summary>Executes the specified script, resolving parameters and managing the script's scope.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
@@ -27,7 +34,7 @@ namespace ETL_SQL.Engine.Handlers
             
             string scriptPath = pathObj.ToString()!;
 
-            Logger.Verbose($"Running sub-script: {scriptPath}");
+            _logger.Debug($"Running sub-script: {scriptPath}");
 
             if (!File.Exists(scriptPath))
                 throw new ExecutionException($"Script file not found: {scriptPath}");

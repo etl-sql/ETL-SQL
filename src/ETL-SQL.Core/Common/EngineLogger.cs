@@ -29,8 +29,17 @@ namespace ETL_SQL.Common
                 LogLevel.Debug => ConsoleColor.DarkGray,
                 _ => ConsoleColor.White
             };
+            WriteToConsole(level.ToString().ToUpper(), message, color, ex);
+        }
 
-            string formattedMessage = $"[{level.ToString().ToUpper()}] [{_category}] {message}";
+        public void WriteLine(string message, ConsoleColor color = ConsoleColor.White)
+        {
+            WriteToConsole("INFO", message, color);
+        }
+
+        private void WriteToConsole(string level, string message, ConsoleColor color, Exception? ex = null)
+        {
+            string formattedMessage = $"[{level}] [{_category}] {message}";
             if (ex != null) formattedMessage += $"{Environment.NewLine}Exception: {ex.Message}";
 
             if (color != ConsoleColor.White) Console.ForegroundColor = color;

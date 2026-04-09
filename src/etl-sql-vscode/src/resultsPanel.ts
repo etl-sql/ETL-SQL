@@ -3,13 +3,15 @@ import * as vscode from 'vscode';
 export class ResultsPanel {
     public static currentPanel: ResultsPanel | undefined;
     private readonly _panel: vscode.WebviewPanel;
+    private readonly _extensionUri: vscode.Uri;
     private _isReady: boolean = false;
     private _messageQueue: any[] = [];
     private _disposables: vscode.Disposable[] = [];
     private _onMessageReceived?: (message: any) => void;
 
-    private constructor(panel: vscode.WebviewPanel, onMessageReceived?: (message: any) => void) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, onMessageReceived?: (message: any) => void) {
         this._panel = panel;
+        this._extensionUri = extensionUri;
         this._onMessageReceived = onMessageReceived;
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
         
@@ -47,7 +49,7 @@ export class ResultsPanel {
             }
         );
 
-        ResultsPanel.currentPanel = new ResultsPanel(panel, onMessageReceived);
+        ResultsPanel.currentPanel = new ResultsPanel(panel, extensionUri, onMessageReceived);
     }
 
     public static postMessage(message: any) {
@@ -79,14 +81,30 @@ export class ResultsPanel {
     }
 
     private _getHtmlForWebview() {
+        const webview = this._panel.webview;
+
+        const scriptPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'tabulator.min.js');
+        const scriptUri = webview.asWebviewUri(scriptPath);
+
+        const stylePath = vscode.Uri.joinPath(this._extensionUri, 'media', 'tabulator.min.css');
+        const styleUri = webview.asWebviewUri(stylePath);
+
+        const chartPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'chart.min.js');
+        const chartUri = webview.asWebviewUri(chartPath);
+
+        const xlsxPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'xlsx.full.min.js');
+        const xlsxUri = webview.asWebviewUri(xlsxPath);
+
+        const nonce = getNonce();
+
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; connect-src https://cdn.jsdelivr.net https://unpkg.com; img-src 'self' data: https:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'nonce-${nonce}' 'unsafe-inline' ${webview.cspSource}; connect-src ${webview.cspSource}; img-src ${webview.cspSource} data: https:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link href="https://unpkg.com/tabulator-tables/dist/css/tabulator.min.css" rel="stylesheet">
+    <link href="${styleUri}" rel="stylesheet">
     <title>ETL-SQL Results</title>
     <style>
         :root {
@@ -382,30 +400,51 @@ export class ResultsPanel {
         </details>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://unpkg.com/tabulator-tables/dist/js/tabulator.min.js"></script>
-    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <script nonce="${nonce}" src="${chartUri}"></script>
+    <script nonce="${nonce}" src="${scriptUri}"></script>
+    <script nonce="${nonce}" src="${xlsxUri}"></script>
     
-    <script>
+    <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
         const resultsContent = document.getElementById('content-results');
         const messagesLog = document.getElementById('messages-log');
-        let resultsLog = [];
+        
+        // State variables
+        let state = vscode.getState() || {
+            results: [],      // Array of result packets
+            messages: [],     // Array of message packets
+            metrics: null,    // Last metrics packet
+            resultSetCount: 0
+        };
+
         let tablesPerResultSet = {}; // Map of index -> Tabulator
         let runningIndicator = document.getElementById('running-indicator');
-        let lastResultSetIndex = -1;
-        let resultSetCount = 0;
         let tables = [];
 
-        console.log("ETL-SQL Results Webview Initialized");
+        console.log("ETL-SQL Results Webview Initialized. Active State Results:", state.results.length);
+
+        // Restore state on load
+        if (state.results.length > 0) {
+            console.log("Restoring previous results...");
+            const oldResults = [...state.results];
+            state.results = []; // Clear for re-rendering
+            state.resultSetCount = 0;
+            oldResults.forEach(r => renderResults(r, false));
+        }
+        if (state.messages.length > 0) {
+            state.messages.forEach(m => appendMessage(m, false));
+        }
+        if (state.metrics) {
+            renderPerformance(state.metrics, false);
+        }
 
         window.addEventListener('message', event => {
             const message = event.data;
             console.log("Webview received message:", message.type);
             switch (message.type) {
-                case 'results': renderResults(message); break;
-                case 'performance': renderPerformance(message.metrics); break;
-                case 'message': appendMessage(message); break;
+                case 'results': renderResults(message, true); break;
+                case 'performance': renderPerformance(message.metrics, true); break;
+                case 'message': appendMessage(message, true); break;
                 case 'clear': clearAll(); break;
                 case 'done': onExecutionDone(message.exitCode); break;
             }
@@ -418,30 +457,35 @@ export class ResultsPanel {
             document.getElementById('content-' + tab).classList.remove('hidden');
         }
 
-        function renderResults(data) {
-            console.log("renderResults: isFirst =", data.isFirst, "rows =", data.rows?.length);
-            if (data.isFirst) {
-                resultSetCount++;
-                console.log("Creating new result set container for result set #", resultSetCount);
-                
+        function renderResults(data, saveToState = true) {
+            if (saveToState) {
+                state.results.push(data);
+                vscode.setState(state);
+            }
+
+            // AUTO-INIT Table if it doesn't exist for the current stream
+            if (data.isFirst || tables.length === 0) {
+                if (data.isFirst) state.resultSetCount++;
+                else if (tables.length === 0) state.resultSetCount = 1;
+
                 const container = document.createElement('div');
                 container.className = 'results-container';
                 
                 const header = document.createElement('div');
                 header.className = 'result-set-header';
-                header.innerHTML = \`<span class="result-set-label">RESULT SET \${resultSetCount}</span>
-                                   <span id="row-count-\${resultSetCount}" style="font-size:11px; margin-left:12px; opacity:0.75; font-family: monospace;">0 rows</span>
-                                   <span style="font-size:11px; opacity:0.5; font-family: monospace; margin-left:8px;">\${data.columns.length} columns</span>\`;
+                header.innerHTML = `<span class="result-set-label">RESULT SET ${state.resultSetCount}</span>
+                                   <span id="row-count-${state.resultSetCount}" style="font-size:11px; margin-left:12px; opacity:0.75; font-family: monospace;">0 rows</span>
+                                   <span style="font-size:11px; opacity:0.5; font-family: monospace; margin-left:8px;">${data.columns ? data.columns.length : 0} columns</span>`;
                 container.appendChild(header);
                 
                 const gridDiv = document.createElement('div');
-                gridDiv.id = 'grid-' + resultSetCount;
+                gridDiv.id = 'grid-' + state.resultSetCount;
                 container.appendChild(gridDiv);
                 resultsContent.appendChild(container);
                 
                 const table = new Tabulator('#' + gridDiv.id, {
                     data: data.rows,
-                    columns: data.columns.map(c => ({
+                    columns: (data.columns || []).map(c => ({
                         title: c, 
                         field: c, 
                         headerFilter: "input", 
@@ -460,27 +504,39 @@ export class ResultsPanel {
                 });
                 
                 table.on("dataLoaded", function(data) {
-                    console.log("Tabulator dataLoaded for set #", resultSetCount, "Count:", data.length);
-                    const countEl = document.getElementById('row-count-' + resultSetCount);
+                    const countEl = document.getElementById('row-count-' + state.resultSetCount);
                     if (countEl) countEl.textContent = data.length.toLocaleString() + ' rows';
                 });
                 
                 table.on("rowAdded", function(row) {
-                     const countEl = document.getElementById('row-count-' + resultSetCount);
+                     const countEl = document.getElementById('row-count-' + state.resultSetCount);
                      if (countEl) countEl.textContent = table.getDataCount().toLocaleString() + ' rows';
                 });
                 
                 tables.push(table);
             } else {
-                // Subsequent updates for the same result set
                 if (tables.length > 0) {
-                    console.log("Adding data to table #", tables.length, "Rows:", data.rows.length);
-                    tables[tables.length - 1].addData(data.rows);
+                    const table = tables[tables.length - 1];
+                    // Safeguard: Limit in-browser rows for huge result sets
+                    if (table.getDataCount() < 100000) {
+                        table.addData(data.rows);
+                    } else if (!document.getElementById('row-limit-warn')) {
+                        const warn = document.createElement('div');
+                        warn.id = 'row-limit-warn';
+                        warn.style = "padding:10px; color:#f97316; font-size:11px; text-align:center;";
+                        warn.textContent = "Row limit (100k) reached for display. Use EXPORT for full dataset.";
+                        resultsContent.appendChild(warn);
+                    }
                 }
             }
         }
 
-        function appendMessage(msg) {
+        function appendMessage(msg, saveToState = true) {
+            if (saveToState) {
+                state.messages.push(msg);
+                vscode.setState(state);
+            }
+
             const div = document.createElement('div');
             div.className = 'msg-entry message-' + (msg.level || 'info');
             div.innerHTML = \`<span style="opacity:0.4; margin-right:8px">\${new Date().toLocaleTimeString()}</span> \${msg.text}\`;
@@ -503,9 +559,13 @@ export class ResultsPanel {
         function clearAll() {
             resultsContent.innerHTML = '';
             messagesLog.innerHTML = '';
-            tablesPerResultSet = {};
-            lastResultSetIndex = -1;
-            resultSetCount = 0;
+            state = {
+                results: [],
+                messages: [],
+                metrics: null,
+                resultSetCount: 0
+            };
+            vscode.setState(state);
             tables = [];
             runningIndicator.classList.add('active');
         }
@@ -523,9 +583,8 @@ export class ResultsPanel {
         }
 
         function exportData(format) {
-            const keys = Object.keys(tablesPerResultSet);
-            if (keys.length === 0) return;
-            const activeTable = tablesPerResultSet[keys[keys.length - 1]]; // Export only last result set for now
+            if (tables.length === 0) return;
+            const activeTable = tables[tables.length - 1]; // Export only last result set for now
             const filename = "ETLSQL_Results_" + new Date().toISOString().split('T')[0];
             
             if (format === 'csv') activeTable.download("csv", filename + ".csv");
@@ -533,7 +592,12 @@ export class ResultsPanel {
             if (format === 'xlsx') activeTable.download("xlsx", filename + ".xlsx", {sheetName:"Results"});
         }
 
-        function renderPerformance(metrics) {
+        function renderPerformance(metrics, saveToState = true) {
+            if (saveToState) {
+                state.metrics = metrics;
+                vscode.setState(state);
+            }
+
             runningIndicator.classList.remove('active');
             document.getElementById('raw-telemetry-data').textContent = JSON.stringify(metrics, null, 2);
             try {
@@ -544,7 +608,6 @@ export class ResultsPanel {
                 document.getElementById('lbl-rows').textContent = (metrics.rowsProcessed || 0).toLocaleString();
                 document.getElementById('lbl-rps').textContent = (metrics.rowsPerSecond || 0).toLocaleString() + ' R/S';
 
-                // Item 4: Hide Statement Breakdown if empty
                 const breakdownCard = document.getElementById('statement-breakdown-card');
                 if (!metrics.statements || metrics.statements.length === 0) {
                     breakdownCard.classList.add('hidden');
@@ -594,4 +657,12 @@ export class ResultsPanel {
 </body>
 </html>`;
     }
+}
+function getNonce() {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
 }

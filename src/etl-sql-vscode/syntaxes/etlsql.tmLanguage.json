@@ -4,6 +4,9 @@
     "scopeName": "source.etlsql",
     "patterns": [
         {
+            "include": "#native-sql-pushdown"
+        },
+        {
             "include": "#tags"
         },
         {
@@ -26,6 +29,31 @@
         }
     ],
     "repository": {
+        "native-sql-pushdown": {
+            "begin": "(?i)\\b(EXECUTE|EXEC)\\s+([a-zA-Z0-9_#@]+|'[^']+')\\s+(BEGIN)\\b",
+            "beginCaptures": {
+                "1": {
+                    "name": "keyword.control.etlsql"
+                },
+                "2": {
+                    "name": "variable.other.etlsql"
+                },
+                "3": {
+                    "name": "keyword.control.etlsql"
+                }
+            },
+            "end": "(?i)\\b(END)\\b",
+            "endCaptures": {
+                "0": {
+                    "name": "keyword.control.etlsql"
+                }
+            },
+            "patterns": [
+                {
+                    "include": "source.sql"
+                }
+            ]
+        },
         "tags": {
             "patterns": [
                 {

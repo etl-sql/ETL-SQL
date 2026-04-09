@@ -44,7 +44,7 @@ namespace ETL_SQL.Engine.Handlers
                     var row = new Row();
                     row["TableName"] = t;
                     row["Type"] = source.GetType().Name;
-                    table.AddRow(row);
+                    await table.AddRowAsync(row);
                 }
             }
 

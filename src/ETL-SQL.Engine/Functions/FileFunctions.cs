@@ -43,7 +43,7 @@ namespace ETL_SQL.Engine.Functions
             table.SetColumns(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
             foreach (var fileMeta in files)
             {
-                table.AddRow(new Row
+                await table.AddRowAsync(new Row
                 {
                     ["Name"] = fileMeta.Name,
                     ["FullPath"] = fileMeta.FullPath,
@@ -67,22 +67,22 @@ namespace ETL_SQL.Engine.Functions
             return Task.FromResult<object?>(res);
         }
 
-        private static Task<object?> FileList(List<object?> args, IExecutionContext context)
+        private static async Task<object?> FileList(List<object?> args, IExecutionContext context)
         {
             var table = new DataTable();
             table.SetColumns(new[] { "Name", "Path", "Extension", "Size", "LastModified" });
 
-            if (args.Count < 1 || args[0] == null) return Task.FromResult<object?>(table);
+            if (args.Count < 1 || args[0] == null) return table;
             string path = context.ResolvePath(args[0]?.ToString() ?? "");
             bool recursive = args.Count >= 2 && args[1] != null && (args[1] is bool b ? b : (args[1] is string s ? s.Equals("TRUE", StringComparison.OrdinalIgnoreCase) : Convert.ToBoolean(args[1])));
             
-            if (!Directory.Exists(path)) return Task.FromResult<object?>(table);
+            if (!Directory.Exists(path)) return table;
             
             var files = Directory.GetFiles(path, "*", (recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly));
             foreach (var fPath in files)
             {
                 var fi = new FileInfo(fPath);
-                table.AddRow(new Row
+                await table.AddRowAsync(new Row
                 {
                     ["Name"] = fi.Name,
                     ["Path"] = fi.FullName,
@@ -91,7 +91,7 @@ namespace ETL_SQL.Engine.Functions
                     ["LastModified"] = fi.LastWriteTime
                 });
             }
-            return Task.FromResult<object?>(table);
+            return table;
         }
     }
 }

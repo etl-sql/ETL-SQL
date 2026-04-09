@@ -37,7 +37,7 @@ namespace ETL_SQL.Engine.Handlers
             }
             else if (stmt.Query is SetOperationStatement setOp)
             {
-                plan.AddRow(new Row { 
+                await plan.AddRowAsync(new Row { 
                     ["ID"] = id.Value++, 
                     ["Operation"] = $"Set Operation ({setOp.Operation.ToString().Replace("_"," ")})", 
                     ["Details"] = "", 
@@ -97,7 +97,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
             
-            plan.AddRow(new Row { ["ID"] = id.Value++, ["Operation"] = op, ["Details"] = details, ["Cost"] = op == "Index Seek" ? 1 : 2 });
+            await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = op, ["Details"] = details, ["Cost"] = op == "Index Seek" ? 1 : 2 });
             metrics.PartitionsCount++;
 
             // Joins
@@ -134,7 +134,7 @@ namespace ETL_SQL.Engine.Handlers
 
                     if (isHash && joinOp != "Index Join") joinDetails += $", Hash Keys: {string.Join(", ", hashKeysLeft)}";
                     
-                    plan.AddRow(new Row { ["ID"] = id.Value++, ["Operation"] = joinOp, ["Details"] = joinDetails, ["Cost"] = joinOp == "Index Join" ? 3 : (isHash ? 5 : 10) });
+                    await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = joinOp, ["Details"] = joinDetails, ["Cost"] = joinOp == "Index Join" ? 3 : (isHash ? 5 : 10) });
                 }
             }
             
@@ -143,7 +143,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 var detailsWhere = select.WhereClause.ToSql();
                 if (detailsWhere.Contains("SELECT")) detailsWhere += " [Subquery]";
-                plan.AddRow(new Row { ["ID"] = id.Value++, ["Operation"] = "Filter", ["Details"] = detailsWhere, ["Cost"] = 2 });
+                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Filter", ["Details"] = detailsWhere, ["Cost"] = 2 });
             }
             
             // Aggregate
@@ -153,32 +153,32 @@ namespace ETL_SQL.Engine.Handlers
                 var detailsAgg = select.GroupBy != null && select.GroupBy.Count > 0 
                     ? "Group By: " + string.Join(", ", select.GroupBy.Select(g => g.ToSql())) 
                     : "Global Aggregate";
-                plan.AddRow(new Row { ["ID"] = id.Value++, ["Operation"] = "Aggregate", ["Details"] = detailsAgg, ["Cost"] = 5 });
+                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Aggregate", ["Details"] = detailsAgg, ["Cost"] = 5 });
             }
             
             // Distinct
             if (select.ToSql().Contains("DISTINCT", StringComparison.OrdinalIgnoreCase))
             {
-                 plan.AddRow(new Row { ["ID"] = id.Value++, ["Operation"] = "Distinct", ["Details"] = "", ["Cost"] = 3 });
+                 await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Distinct", ["Details"] = "", ["Cost"] = 3 });
             }
 
             // Window Functions
             if (select.Columns.Any(c => c.Expression is FunctionCallExpression f && f.Window != null))
             {
-                 plan.AddRow(new Row { ["ID"] = id.Value++, ["Operation"] = "Window Calculation", ["Details"] = "", ["Cost"] = 4 });
+                 await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Window Calculation", ["Details"] = "", ["Cost"] = 4 });
             }
 
             // Sort (Order By)
             if (select.OrderBy != null && select.OrderBy.Count > 0)
             {
                 var detailsSort = string.Join(", ", select.OrderBy.Select(o => o.ToSql()));
-                plan.AddRow(new Row { ["ID"] = id.Value++, ["Operation"] = "Sort", ["Details"] = detailsSort, ["Cost"] = 10 });
+                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Sort", ["Details"] = detailsSort, ["Cost"] = 10 });
             }
 
             // Limit
             if (select.ToSql().Contains("LIMIT", StringComparison.OrdinalIgnoreCase) || select.ToSql().Contains("TOP", StringComparison.OrdinalIgnoreCase))
             {
-                plan.AddRow(new Row { ["ID"] = id.Value++, ["Operation"] = "Top/Limit", ["Details"] = "", ["Cost"] = 1 });
+                await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Top/Limit", ["Details"] = "", ["Cost"] = 1 });
             }
 
             if (select.IsRecursive) metrics.RecursiveDepth = Math.Max(metrics.RecursiveDepth, context.MaxRecursiveDepth > 0 ? context.MaxRecursiveDepth : 1);

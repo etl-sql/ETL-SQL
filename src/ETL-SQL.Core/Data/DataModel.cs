@@ -17,7 +17,8 @@ namespace ETL_SQL.Data
         public string? Name { get; set; }
         public ConstraintType Type { get; set; }
         public List<string> Columns { get; set; } = new();
-        public string? Expression { get; set; }
+        public ETL_SQL.Core.Expression? Expression { get; set; }
+        public ETL_SQL.Core.ForeignKeyReference? ForeignKey { get; set; }
     }
 
     /// <summary>
@@ -241,6 +242,11 @@ namespace ETL_SQL.Data
             }
             return row;
         }
+
+        public override string ToString()
+        {
+            return string.Join(", ", Columns.Select(kv => $"{kv.Key}: {kv.Value ?? "NULL"}"));
+        }
     }
 
     /// <summary>
@@ -257,6 +263,8 @@ namespace ETL_SQL.Data
         public long ExecutionTimeMs { get; set; }
         public int TotalRowsMatched { get; set; }
         public int ResultSetIndex { get; set; }
+
+        public IDataValidator? Validator { get; set; }
 
         private readonly Dictionary<TableConstraintInfo, HashSet<object>> _constraintCaches = new();
 
@@ -281,12 +289,12 @@ namespace ETL_SQL.Data
             Schema.RenameColumn(oldName, newName);
         }
 
-        public void AddRow(Row row)
+        public async System.Threading.Tasks.Task AddRowAsync(Row row)
         {
             if (row.Schema == null) row.SetSchema(Schema);
             else if (row.Schema != Schema) row.SetSchema(Schema);
 
-            // Enforce constraints (Unique, Primary Key) within this batch using HashSet for O(1) performance
+            // Enforce constraints (Unique, Primary Key, Check, Foreign Key)
             foreach (var constraint in Schema.Constraints)
             {
                 if (constraint.Type == ConstraintType.PrimaryKey || constraint.Type == ConstraintType.Unique)
@@ -295,7 +303,6 @@ namespace ETL_SQL.Data
                     {
                         cache = new HashSet<object>(new RowEqualityComparer(constraint.Columns, Schema));
                         _constraintCaches[constraint] = cache;
-                        // Backfill if Rows already exist (though AddRow is usually sequential)
                         foreach (var r in Rows) cache.Add(r);
                     }
 
@@ -305,9 +312,30 @@ namespace ETL_SQL.Data
                         throw new Core.Common.Exceptions.ExecutionException($"Unique constraint violation: {constraint.Name ?? "unnamed"} (values: {vals})");
                     }
                 }
+                else if (constraint.Type == ConstraintType.Check && Validator != null && constraint.Expression != null)
+                {
+                    if (!await Validator.ValidateCheckConstraint(constraint.Expression, row))
+                    {
+                        throw new Core.Common.Exceptions.ExecutionException($"Check constraint violation: {constraint.Name ?? "unnamed"}");
+                    }
+                }
+                else if (constraint.Type == ConstraintType.ForeignKey && Validator != null && constraint.ForeignKey != null)
+                {
+                    if (!await Validator.ValidateForeignKey(constraint.ForeignKey, constraint.Columns, row))
+                    {
+                        var vals = string.Join(", ", constraint.Columns.Select(c => row[c]?.ToString() ?? "NULL"));
+                        throw new Core.Common.Exceptions.ExecutionException($"Foreign key violation: {constraint.Name ?? "unnamed"} (values: {vals})");
+                    }
+                }
             }
 
             Rows.Add(row);
+        }
+
+        [Obsolete("Use AddRowAsync to ensure all constraints (CHECK, FOREIGN KEY) are validated.")]
+        public void AddRow(Row row)
+        {
+            AddRowAsync(row).GetAwaiter().GetResult();
         }
 
         private class RowEqualityComparer : IEqualityComparer<object>

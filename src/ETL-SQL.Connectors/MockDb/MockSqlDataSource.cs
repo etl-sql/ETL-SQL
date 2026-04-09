@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Data;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Connectors.MockDb
@@ -13,6 +14,7 @@ namespace ETL_SQL.Connectors.MockDb
         public string ConnectionString => _connectionString;
         private readonly string _dialect; 
         private readonly Dictionary<string, DataTable> _mockTables = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ILogger _logger;
         public string Path => "MOCK";
         public Dictionary<string, string>? Options => null;
         public string ConnectorType => "MOCKDB";
@@ -26,10 +28,11 @@ namespace ETL_SQL.Connectors.MockDb
         public string Dialect => _dialect;
         public bool SupportsSqlPushdown => true;
 
-        public MockSqlDataSource(string connectionString, string dialect)
+        public MockSqlDataSource(string connectionString, string dialect, ILogger? logger = null)
         {
             _connectionString = connectionString;
             _dialect = dialect;
+            _logger = logger ?? Logger.Instance;
             InitializeMockData();
         }
 
@@ -115,7 +118,7 @@ namespace ETL_SQL.Connectors.MockDb
                  yield return dt;
                  yield break;
              }
-             // More robust normalized SQL for simple mock filtering
+             
              var normSql = sql.Replace("[", "").Replace("]", "").Replace("\r", " ").Replace("\n", " ");
              DataTable? source = null;
              
@@ -135,7 +138,6 @@ namespace ETL_SQL.Connectors.MockDb
                         var columnNames = colsPart.Split(',')
                            .Select(c => {
                                var trimmed = c.Trim();
-                               // Take part after last space (if any, e.g. "u.Name as UserName" -> "UserName")
                                var lastWord = trimmed.Split(' ').Last();
                                return lastWord.Split('.').Last();
                            })
@@ -149,7 +151,6 @@ namespace ETL_SQL.Connectors.MockDb
                             var newRow = new Row();
                             foreach (var colName in columnNames) 
                             {
-                                // Look for column name specifically, stripping any prefix if the row key is just the field name
                                 var sourceColName = colName.Split('.').Last();
                                 if (row.Columns.ContainsKey(sourceColName)) 
                                 {
@@ -200,4 +201,3 @@ namespace ETL_SQL.Connectors.MockDb
         }
     }
 }
-

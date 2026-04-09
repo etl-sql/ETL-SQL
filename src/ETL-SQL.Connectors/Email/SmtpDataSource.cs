@@ -15,6 +15,7 @@ namespace ETL_SQL.Connectors.Email
     public class SmtpDataSource : IDataSource
     {
         private readonly Dictionary<string, string> _options;
+        private readonly ILogger _logger;
 
         /// <summary>Gets the SMTP host from the connection options.</summary>
         public string Path => _options.TryGetValue("HOST", out var h) ? h : "localhost";
@@ -28,9 +29,11 @@ namespace ETL_SQL.Connectors.Email
         /// Initializes a new instance of the <see cref="SmtpDataSource"/> class.
         /// </summary>
         /// <param name="options">SMTP configuration options (HOST, PORT, USERNAME, etc.).</param>
-        public SmtpDataSource(Dictionary<string, string> options)
+        /// <param name="logger">The logger instance.</param>
+        public SmtpDataSource(Dictionary<string, string> options, ILogger? logger = null)
         {
             _options = options;
+            _logger = logger ?? Logger.Instance;
         }
 
         /// <summary>Reading batches is not supported for SMTP.</summary>
@@ -135,19 +138,13 @@ namespace ETL_SQL.Connectors.Email
             await client.DisconnectAsync(true);
         }
 
-        /// <summary>Trunction is not applicable for SMTP.</summary>
         public Task TruncateAsync() => Task.CompletedTask;
 
-        /// <summary>Returns the virtual column names recognized for email sending.</summary>
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(new[] { "To", "From", "Cc", "Bcc", "Subject", "Body", "Attachments" }.AsEnumerable());
 
-        /// <summary>Captures a snapshot (no-op for SMTP).</summary>
         public object? Snapshot() => null;
-
-        /// <summary>Restores from a snapshot (no-op for SMTP).</summary>
         public void Restore(object? snapshot) { }
 
-        /// <summary>Returns this instance as a typed table.</summary>
         public IDataSource WithTable(string tableName) => this;
 
         public async ValueTask DisposeAsync()
