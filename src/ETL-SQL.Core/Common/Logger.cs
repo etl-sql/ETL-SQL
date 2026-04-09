@@ -19,7 +19,11 @@ namespace ETL_SQL.Common
         public static bool IsSilent       { get; set; } = false;
         public static bool IsVerbose      { get; set; } = false;
         public static bool IsFileLogging  { get; set; } = false;
-        public static bool SuppressConsole { get; set; } = false;
+        public static bool SuppressConsole 
+        { 
+            get => Instance.SuppressConsole; 
+            set => Instance.SuppressConsole = value;
+        }
 
         /// <summary>
         /// The active ILogger instance to which all static calls are delegated.

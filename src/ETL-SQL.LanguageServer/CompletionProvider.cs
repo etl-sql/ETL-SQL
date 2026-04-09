@@ -37,7 +37,7 @@ namespace ETL_SQL.LSP
             "LINEAGE", "DOCKER", "START", "STOP", "PAUSE", "CLOSE", "PARALLEL", "RUN", "SCRIPT", "USE", "LINT",
             "OUTPUT", "INPUT", "WITH", "WITHIN", "OVER", "PARTITION", "RANGE", "BETWEEN", "PRECEDING", "FOLLOWING", "UNBOUNDED", "CURRENT",
             "PROFILE", "PROFILING", "ON", "OFF", "EXPLAIN", "RECURSIVE", "PATH", "AUTO", "RAW", "EXPLICIT", "ROOT", "ELEMENTS",
-            "INCLUDE_NULL_VALUES", "WITHOUT_ARRAY_WRAPPER"
+            "INCLUDE_NULL_VALUES", "WITHOUT_ARRAY_WRAPPER", "WAITFOR", "DELAY", "TIME"
         };
 
         private static readonly string[] _functions = new[]

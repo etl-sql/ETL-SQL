@@ -170,7 +170,10 @@ export class ResultsPanel {
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
-        .tab:hover { color: var(--vscode-tab-activeForeground, var(--text-main)); }
+        .tab:hover { 
+            color: var(--vscode-tab-activeForeground, var(--text-main)); 
+            background: rgba(127, 127, 127, 0.05);
+        }
         .tab.active { color: var(--vscode-tab-activeForeground, var(--accent-primary)); font-weight: 600; }
         .tab.active::after {
             content: '';
@@ -178,9 +181,10 @@ export class ResultsPanel {
             bottom: 0;
             left: 0;
             right: 0;
-            height: 2px;
-            background: var(--vscode-tab-activeBorder, var(--accent-primary));
-            border-radius: 2px 2px 0 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            border-radius: 3px 3px 0 0;
+            box-shadow: 0 -2px 10px var(--accent-primary);
         }
         
         .toolbar {
@@ -290,7 +294,6 @@ export class ResultsPanel {
         }
         .tabulator-col { background: transparent !important; border-right: 1px solid var(--glass-border) !important; }
         .tabulator-row { background: var(--vscode-editor-background, transparent) !important; color: var(--vscode-editor-foreground, inherit) !important; }
-        .tabulator-row.tabulator-row-even { background: var(--vscode-editor-lineHighlightBackground, rgba(127, 127, 127, 0.07)) !important; }
         .tabulator-row:hover { background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12)) !important; }
         .tabulator-cell { 
             border-right: 1px solid var(--glass-border) !important; 
@@ -324,23 +327,42 @@ export class ResultsPanel {
         .msg-entry { margin-bottom: 6px; border-left: 3px solid transparent; padding-left: 12px; }
         .message-info { border-color: var(--accent-secondary); color: var(--text-dim); }
         .message-error { border-color: #ef4444; color: #ef4444; background: rgba(239, 68, 68, 0.05); }
-        .active-row { background: var(--vscode-editor-lineHighlightBackground) !important; }
         
-        .raw-telemetry { margin-top: 30px; padding: 15px; background: rgba(127, 127, 127, 0.05); border-radius: 8px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-dim); border: 1px solid var(--glass-border); }
-        .raw-telemetry summary { cursor: pointer; padding: 8px; color: var(--accent-secondary); }
-        .perf-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--glass-border); }
-        .perf-label { font-size: 13px; color: var(--text-dim); }
-        .perf-val { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--accent-secondary); }
+        /* Pipeline Styles */
+        .pipeline-container { display: flex; flex-direction: column; gap: 8px; font-family: 'JetBrains Mono', monospace; }
+        .node-row { 
+            display: flex; align-items: center; padding: 6px 12px; 
+            border: 1px solid var(--glass-border); border-radius: 6px; 
+            background: rgba(127, 127, 127, 0.03);
+            gap: 12px;
+            transition: all 0.2s ease;
+        }
+        .node-row:hover { background: rgba(127, 127, 127, 0.07); }
+        .node-status { width: 20px; text-align: center; }
+        .node-name { flex: 1; font-weight: 500; }
+        .node-metrics { display: flex; gap: 20px; font-size: 11px; color: var(--text-dim); }
+        .metric-val { color: var(--accent-secondary); font-weight: 600; width: 80px; text-align: right; }
+        .node-children { margin-left: 24px; border-left: 1px solid var(--glass-border); padding-left: 12px; display: flex; flex-direction: column; gap: 4px; }
         
+        .badge {
+            background: var(--accent-primary);
+            width: 8px; height: 8px; border-radius: 50%;
+            display: none;
+            position: absolute; top: 10px; right: -4px;
+            box-shadow: 0 0 8px var(--accent-primary);
+        }
+        .badge.active { display: block; }
+
         h3 { margin-top: 0; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 10px; color: var(--text-main); }
         h3::before { content: ''; width: 3px; height: 16px; background: var(--accent-primary); border-radius: 2px; }
     </style>
 </head>
 <body>
     <div class="tabs">
-        <div id="tab-results" class="tab active" onclick="showTab('results')">Results</div>
-        <div id="tab-messages" class="tab" onclick="showTab('messages')">Messages</div>
-        <div id="tab-performance" class="tab" onclick="showTab('performance')">Performance</div>
+        <div id="tab-results" class="tab active">Results</div>
+        <div id="tab-pipeline" class="tab">Pipeline<span id="pipeline-badge" class="badge"></span></div>
+        <div id="tab-messages" class="tab">Messages</div>
+        <div id="tab-performance" class="tab">Performance</div>
     </div>
 
     <div id="running-indicator" class="running-indicator">
@@ -363,6 +385,11 @@ export class ResultsPanel {
     </div>
 
     <div id="content-results" class="content"></div>
+    <div id="content-pipeline" class="content hidden">
+        <div id="pipeline-tree" class="pipeline-container">
+            <div style="opacity:0.5; font-size:12px; text-align:center; padding:40px;">No active pipeline nodes. Run a script to see progress.</div>
+        </div>
+    </div>
 
     <div id="content-messages" class="content hidden">
         <div id="messages-log" class="message-log"></div>
@@ -414,6 +441,7 @@ export class ResultsPanel {
             results: [],      // Array of result packets
             messages: [],     // Array of message packets
             metrics: null,    // Last metrics packet
+            progress: null,   // Last progress packet
             resultSetCount: 0
         };
 
@@ -437,6 +465,9 @@ export class ResultsPanel {
         if (state.metrics) {
             renderPerformance(state.metrics, false);
         }
+        if (state.progress) {
+            renderProgress(state.progress, false);
+        }
 
         window.addEventListener('message', event => {
             const message = event.data;
@@ -444,6 +475,7 @@ export class ResultsPanel {
             switch (message.type) {
                 case 'results': renderResults(message, true); break;
                 case 'performance': renderPerformance(message.metrics, true); break;
+                case 'progress': renderProgress(message.data, true); break;
                 case 'message': appendMessage(message, true); break;
                 case 'clear': clearAll(); break;
                 case 'done': onExecutionDone(message.exitCode); break;
@@ -455,6 +487,9 @@ export class ResultsPanel {
             document.querySelectorAll('.content').forEach(c => c.classList.add('hidden'));
             document.getElementById('tab-' + tab).classList.add('active');
             document.getElementById('content-' + tab).classList.remove('hidden');
+            if (tab === 'pipeline') {
+                document.getElementById('pipeline-badge').classList.remove('active');
+            }
         }
 
         function renderResults(data, saveToState = true) {
@@ -473,9 +508,9 @@ export class ResultsPanel {
                 
                 const header = document.createElement('div');
                 header.className = 'result-set-header';
-                header.innerHTML = `<span class="result-set-label">RESULT SET ${state.resultSetCount}</span>
-                                   <span id="row-count-${state.resultSetCount}" style="font-size:11px; margin-left:12px; opacity:0.75; font-family: monospace;">0 rows</span>
-                                   <span style="font-size:11px; opacity:0.5; font-family: monospace; margin-left:8px;">${data.columns ? data.columns.length : 0} columns</span>`;
+                header.innerHTML = \`<span class="result-set-label">RESULT SET \${state.resultSetCount}</span>
+                                   <span id="row-count-\${state.resultSetCount}" style="font-size:11px; margin-left:12px; opacity:0.75; font-family: monospace;">0 rows</span>
+                                   <span style="font-size:11px; opacity:0.5; font-family: monospace; margin-left:8px;">\${data.columns ? data.columns.length : 0} columns</span>\`;
                 container.appendChild(header);
                 
                 const gridDiv = document.createElement('div');
@@ -559,15 +594,18 @@ export class ResultsPanel {
         function clearAll() {
             resultsContent.innerHTML = '';
             messagesLog.innerHTML = '';
+            document.getElementById('pipeline-tree').innerHTML = '';
             state = {
                 results: [],
                 messages: [],
                 metrics: null,
+                progress: null,
                 resultSetCount: 0
             };
             vscode.setState(state);
             tables = [];
             runningIndicator.classList.add('active');
+            document.getElementById('pipeline-badge').classList.remove('active');
         }
 
         function cancelScript() {
@@ -577,6 +615,7 @@ export class ResultsPanel {
 
         function onExecutionDone(exitCode) {
             runningIndicator.classList.remove('active');
+            document.getElementById('pipeline-badge').classList.remove('active');
             if (exitCode !== 0 && exitCode !== null) {
                 showTab('messages');
             }
@@ -590,6 +629,68 @@ export class ResultsPanel {
             if (format === 'csv') activeTable.download("csv", filename + ".csv");
             if (format === 'json') activeTable.download("json", filename + ".json");
             if (format === 'xlsx') activeTable.download("xlsx", filename + ".xlsx", {sheetName:"Results"});
+        }
+
+        // Initialize Tab Event Listeners (Fix for CSP Nonce blocking inline onclick)
+        function initTabs() {
+            const tabs = ['results', 'pipeline', 'messages', 'performance'];
+            tabs.forEach(tabId => {
+                const el = document.getElementById('tab-' + tabId);
+                if (el) {
+                    el.addEventListener('click', () => showTab(tabId));
+                }
+            });
+        }
+        initTabs();
+
+        function renderProgress(data, saveToState = true) {
+            if (!data) return;
+            if (saveToState) {
+                state.progress = data;
+                vscode.setState(state);
+                if (!document.getElementById('tab-pipeline').classList.contains('active')) {
+                    document.getElementById('pipeline-badge').classList.add('active');
+                }
+            }
+
+            const treeContainer = document.getElementById('pipeline-tree');
+            treeContainer.innerHTML = '';
+            
+            data.forEach(node => {
+                treeContainer.appendChild(createNodeEl(node));
+            });
+        }
+
+        function createNodeEl(node) {
+            const container = document.createElement('div');
+            
+            const row = document.createElement('div');
+            row.className = 'node-row';
+            
+            const statusIcon = node.status === 'Running' ? '▶️' : (node.status === 'Completed' ? '✅' : (node.status === 'Faulted' ? '❌' : '⏳'));
+            
+            row.innerHTML = \`
+                <div class="node-status">\${statusIcon}</div>
+                <div class="node-name">\${node.name}</div>
+                <div class="node-metrics">
+                    <div>Rows: <span class="metric-val">\${(node.rows || 0).toLocaleString()}</span></div>
+                    <div>Time: <span class="metric-val">\${node.durationMs}ms</span></div>
+                    <div>Rate: <span class="metric-val">\${(node.velocity || 0).toLocaleString()} R/S</span></div>
+                </div>
+            \`;
+            
+            container.appendChild(row);
+            
+            if (node.children && node.children.length > 0) {
+                const childrenContainer = document.createElement('div');
+                childrenContainer.className = 'node-children';
+                node.children.forEach(child => {
+                    childrenContainer.appendChild(createNodeEl(child));
+                });
+                container.appendChild(childrenContainer);
+            }
+            
+            return container;
         }
 
         function renderPerformance(metrics, saveToState = true) {
@@ -624,17 +725,35 @@ export class ResultsPanel {
         function renderTimingChart(m) {
             const ctx = document.getElementById('timingChart').getContext('2d');
             if (timingChartInstance) timingChartInstance.destroy();
+            
+            // Adjust segment values to be at least 1 for visibility if they are sub-millisecond
+            const lex = Math.max(0.1, m.lexerMs || 0);
+            const parse = Math.max(0.1, m.parserMs || 0);
+            const exec = Math.max(0.1, m.executionMs || 0);
+
             timingChartInstance = new Chart(ctx, {
                 type: 'doughnut',
                 data: {
                     labels: ['Lexer', 'Parser', 'Execution'],
                     datasets: [{
-                        data: [m.lexerMs, m.parserMs, m.executionMs],
+                        data: [lex, parse, exec],
                         backgroundColor: ['#8b5cf6', '#06b6d4', '#f97316'],
-                        borderColor: 'rgba(0,0,0,0.2)', borderWidth: 2
+                        hoverOffset: 12,
+                        borderRadius: 4,
+                        borderColor: 'rgba(255,255,255,0.05)', 
+                        borderWidth: 2
                     }]
                 },
-                options: { cutout: '75%', responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#e2e8f0' } } } }
+                options: { 
+                    cutout: '78%', 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    animation: { animateRotate: true, animateScale: true, duration: 800 },
+                    plugins: { 
+                        legend: { position: 'bottom', labels: { color: '#94a3b8', font: { family: "'Outfit', sans-serif", size: 11 }, padding: 15 } },
+                        tooltip: { backgroundColor: 'rgba(15, 23, 42, 0.95)', titleColor: '#fff', bodyColor: '#cbd5e1', padding: 12, cornerRadius: 8 }
+                    } 
+                }
             });
         }
 

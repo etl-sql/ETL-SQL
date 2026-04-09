@@ -141,7 +141,11 @@ namespace ETL_SQL.Core
         
         bool IsProfiling { get; set; }
         bool IsWhatIf { get; set; }
+        bool DisplayExecuteTree { get; set; }
         List<ExecutionMetrics> ProfileMetrics { get; }
+        Common.ExecutionTree ExecutionTree { get; }
+        /// <summary>The ID of the currently executing node in this task/context.</summary>
+        Guid? CurrentNodeId { get; set; }
 
         List<string> GetIndexedColumns(Expression? cond, string alias);
 

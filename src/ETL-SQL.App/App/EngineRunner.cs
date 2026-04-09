@@ -66,6 +66,12 @@ namespace ETL_SQL.App
                 return 0;
             }
 
+            if (ctx.Command == "test-tree")
+            {
+                await ExecuteTreeDemoRunner.RunDemoAsync();
+                return 0;
+            }
+
             if (ctx.Command == "ui")
             {
                 if (ctx.UiMode == "simple")
@@ -227,9 +233,69 @@ namespace ETL_SQL.App
                         ResultFormatter.IsJsonMode = true;
                     }
 
+                    // 4. Graphical Execution Tree (TUI)
+                    CancellationTokenSource? treeCts = null;
+                    Task? treeRenderTask = null;
+                    if (ctx.DisplayProgress && !ctx.IsJsonMode && !ctx.IsSilentMode)
+                    {
+                        var tree = evaluator.ExecutionTree;
+                        var visualizer = new ExecuteTreeVisualizer(tree);
+                        treeCts = new CancellationTokenSource();
+                        treeRenderTask = visualizer.RenderLiveAsync(treeCts.Token);
+                        
+                        // If we are showing the tree, we might want to suppress some logs to avoid flickering
+                        // but let's keep it simple for now as requested.
+                    }
+                    else if (ctx.IsJsonMode)
+                    {
+                        // In JSON mode, we emit "progress" packets for the VS Code extension
+                        var tree = evaluator.ExecutionTree;
+                        treeCts = new CancellationTokenSource();
+                        
+                        evaluator.IsProfiling = true; 
+                        evaluator.DisplayExecuteTree = true;
+
+                        // Initial flush to ensure the root node is visible immediately
+                        var initialSnapshot = new {
+                            type = "progress",
+                            data = tree.ToSnapshot()
+                        };
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(initialSnapshot));
+
+                        treeRenderTask = Task.Run(async () => {
+                            while (!treeCts.Token.IsCancellationRequested)
+                            {
+                                var snapshot = new {
+                                    type = "progress",
+                                    data = tree.ToSnapshot()
+                                };
+                                var json = System.Text.Json.JsonSerializer.Serialize(snapshot);
+                                Console.WriteLine(json);
+                                if (evaluator.IsVerbose) evaluator.Log($"[TELEMETRY] {json}", ConsoleColor.DarkGray);
+                                await Task.Delay(500, treeCts.Token); // 2Hz for JSON streaming
+                            }
+                        }, treeCts.Token);
+                    }
+
                     var execTime = Stopwatch.StartNew();
                     await evaluator.Evaluate(script);
                     execTime.Stop();
+
+                    if (treeCts != null)
+                    {
+                        treeCts.Cancel();
+                        if (treeRenderTask != null) await treeRenderTask;
+
+                        // Final flush for fast scripts in JSON mode
+                        if (ctx.IsJsonMode && !ctx.IsSilentMode)
+                        {
+                            var snapshot = new {
+                                type = "progress",
+                                data = evaluator.ExecutionTree.ToSnapshot()
+                            };
+                            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(snapshot));
+                        }
+                    }
 
                     if (!string.IsNullOrEmpty(ctx.SessionId))
                     {
@@ -265,7 +331,9 @@ namespace ETL_SQL.App
                                     }).ToList()
                                 }
                             };
-                            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(perfPacket));
+                            var json = System.Text.Json.JsonSerializer.Serialize(perfPacket);
+                            Console.WriteLine(json);
+                            if (evaluator.IsVerbose) evaluator.Log($"[TELEMETRY] {json}", ConsoleColor.DarkGray);
                         }
                         else
                         {

@@ -23,4 +23,36 @@ Calculate 'Velocity' (Rows per second) as a derived metric to identify bottlenec
 4. The VS Code Translation:
 "The VS Code UI should mimic the TUI's 'Terminal-Chic' aesthetic. Describe how to translate the Spectre Tree-Table into a CSS Grid-based Webview using a monospaced font, maintaining the same vertical hierarchy and minimalist row/time badges."
 
-"Based on this brief, can you write the C# class for the ExecutionNode and a basic Spectre.Console loop that renders a dummy version of this tree-table with two parallel branches?”
+## Implementation Roadmap
+
+### Phase 1: Core Foundation (Data Model) [COMPLETED]
+- [x] **Data Model**: Defined `ExecutionStatus.cs` and `ExecutionNode.cs` in `ETL-SQL.Core`.
+- [x] **Thread-Safety**: Used `Interlocked` for row processing and `AsyncLocal` for task tracking.
+- [x] **Tree Structure**: Implemented `ExecutionTree` with parent/child linking.
+
+### Phase 2: TUI Orchestration (Spectre.Console) [COMPLETED]
+- [x] **Tree-Table Renderer**: Created `ExecuteTreeVisualizer` transforming tree to `Spectre.Console.Table`.
+- [x] **Live Display**: Implemented `AnsiConsole.Live` with a 10Hz refresh.
+- [x] **Aesthetics**: Integrated modern emojis and color themes for a "Terminal-Chic" dashboard.
+- [x] **Metrics**: Implemented duration and velocity (rows/sec) calculations.
+
+### Phase 3: Engine Instrumentation [COMPLETED]
+- [x] **Context Integration**: Integrated `ExecutionTree` into `Evaluator`.
+- [x] **Statement Hooking**: Modified `Evaluator.EvaluateStatement` to automate node lifecycle management.
+- [x] **Progress Tracking**: Hooked `DataTable.AddRowAsync` to the `AsyncLocal` current node for automated metrics.
+- [x] **Parallel Support**: Verified support for nested and parallel pipeline branches via `ExecutionNode.Current`.
+
+### Phase 4: VS Code Integration (JSON/Webview) [COMPLETED]
+- [x] **Serialization**: Implemented `ToSnapshot()` for hierarchical JSON export.
+- [x] **Webview UI**: Emitted real-time `progress` JSON packets via `EngineRunner`.
+- [x] **Live Refresh**: Established a 2Hz streaming pipe for VS Code integration.
+
+---
+
+## Final Design Notes
+1.  **Implicit Tracking**: The use of `AsyncLocal<ExecutionNode>` allows row counts to be reported from deep within the engine (e.g., `DataTable`) without passing context objects through every function.
+2.  **Performance Priority**: Visual updates are throttled to 10Hz in the TUI and 2Hz for JSON streaming to ensure zero impact on script throughput.
+3.  **Terminal-Chic**: The design prioritizes high-contrast colors and minimalist symbols to provide a premium monitoring experience.
+
+> [!TIP]
+> **Aesthetic Goal Achieved**: The TUI feels like a high-end dashboard. Muted greys are used for waiting tasks, vibrant cyan for active tasks, and bold green for success.

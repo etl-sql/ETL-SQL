@@ -294,6 +294,9 @@ namespace ETL_SQL.Data
             if (row.Schema == null) row.SetSchema(Schema);
             else if (row.Schema != Schema) row.SetSchema(Schema);
 
+            // Graphical Progress Hook
+            ETL_SQL.Core.Common.ExecutionNode.Current.Value?.IncrementRows();
+
             // Enforce constraints (Unique, Primary Key, Check, Foreign Key)
             foreach (var constraint in Schema.Constraints)
             {

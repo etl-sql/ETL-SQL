@@ -157,6 +157,8 @@ namespace ETL_SQL.Core.Linting.Rules
                 var parts = id.Name.Split('.');
                 if (parts.Length == 1)
                 {
+                    if (parts[0] == "*") return; // Asterisk is a meta-column, skip physical validation
+                    
                     // Unqualified column - check all tables in scope
                     bool found = false;
                     foreach (var scope in tablesInScope)

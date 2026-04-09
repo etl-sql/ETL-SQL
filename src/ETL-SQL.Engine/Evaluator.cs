@@ -136,6 +136,19 @@ namespace ETL_SQL.Engine
         
         /// <summary>Whether to run in dry-run mode (no side effects).</summary>
         public bool IsWhatIf { get; set; }
+
+        /// <summary>Whether to display a graphical execution tree during the script run.</summary>
+        public bool DisplayExecuteTree { get; set; } = true;
+
+        /// <summary>The high-level execution tree for visual progress tracking.</summary>
+        public ExecutionTree ExecutionTree { get; } = new();
+
+        /// <summary>The ID of the currently executing node in this task/context.</summary>
+        public Guid? CurrentNodeId
+        {
+            get => ExecutionNode.Current.Value?.Id;
+            set => ExecutionNode.Current.Value = value.HasValue ? ExecutionTree.GetNode(value.Value) : null;
+        }
         
         /// <summary>Execution metrics for all statements run since profiling was enabled.</summary>
         public List<ExecutionMetrics> ProfileMetrics { get; } = new();
@@ -202,11 +215,11 @@ namespace ETL_SQL.Engine
             IConnectorRegistry connectorRegistry,
             SessionStateManager sessionStateManager,
             ILogger logger)
-            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, connectorRegistry, sessionStateManager, logger, null, null)
+            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, connectorRegistry, sessionStateManager, logger, null, null, null)
         {
         }
 
-        private Evaluator(
+        public Evaluator(
             IEnumerable<IStatementHandler> handlers,
             IServiceProvider serviceProvider,
             Core.Functions.IFunctionRegistry functionRegistry,
@@ -216,7 +229,8 @@ namespace ETL_SQL.Engine
             SessionStateManager sessionStateManager,
             ILogger logger,
             ConcurrentDictionary<string, IDataSource>? connections,
-            VariableScopeManager? variableScopeManager)
+            VariableScopeManager? variableScopeManager,
+            ExecutionTree? executionTree)
         {
             _handlers = handlers;
             _serviceProvider = serviceProvider;
@@ -226,6 +240,7 @@ namespace ETL_SQL.Engine
             _connectorRegistry = connectorRegistry;
             _sessionStateManager = sessionStateManager;
             _logger = logger;
+            ExecutionTree = executionTree ?? new ExecutionTree();
             _connections = connections ?? new ConcurrentDictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
             _variableScopeManager = variableScopeManager ?? new VariableScopeManager();
             _queryCompiler = new QueryCompiler(this);
@@ -283,10 +298,21 @@ namespace ETL_SQL.Engine
                     throw new ExecutionException($"Syntax error: {firstError.Message} at {firstError.Line}:{firstError.Column}");
                 }
 
+                var scriptNode = new ExecutionNode { 
+                    Name = "Script Execution", 
+                    Status = ExecutionStatus.Running,
+                    StartTicks = Stopwatch.GetTimestamp()
+                };
+                ExecutionTree.AddNode(scriptNode);
+                CurrentNodeId = scriptNode.Id;
+
                 foreach (var statement in script.Statements)
                 {
                     await EvaluateStatement(statement);
                 }
+                
+                scriptNode.Status = ExecutionStatus.Completed;
+                scriptNode.EndTicks = Stopwatch.GetTimestamp();
             }
             catch (ReturnException ex)
             {
@@ -328,6 +354,24 @@ namespace ETL_SQL.Engine
 
         public async Task EvaluateStatement(Statement statement)
         {
+            var parentId = CurrentNodeId;
+            var nodeName = statement.GetType().Name.Replace("Statement", "");
+            
+            // Refine node name for readability
+            if (statement is UsePasswordStatement) nodeName = "USE PASSWORD";
+            else if (statement is UseSetsStatement us) nodeName = $"USE SETS {us.Name}";
+            else if (statement is CreateTableStatement cts) nodeName = $"CREATE TABLE {cts.TargetTable.TableName}";
+            else if (statement is InsertStatement inst) nodeName = $"INSERT INTO {inst.TargetTable.TableName}";
+            
+            var node = new ExecutionNode { 
+                Name = nodeName,
+                Status = ExecutionStatus.Running,
+                StartTicks = Stopwatch.GetTimestamp()
+            };
+            
+            ExecutionTree.AddNode(node, parentId);
+            CurrentNodeId = node.Id;
+
             Stopwatch? sw = null;
             long startRows = RowsProcessed;
             if (IsVerbose || IsProfiling)
@@ -346,9 +390,19 @@ namespace ETL_SQL.Engine
                 try
                 {
                     await handler.Execute(statement, this);
+                    node.Status = ExecutionStatus.Completed;
+                }
+                catch (Exception ex)
+                {
+                    node.Status = ExecutionStatus.Faulted;
+                    node.ErrorMessage = ex.Message;
+                    throw;
                 }
                 finally
                 {
+                    node.EndTicks = Stopwatch.GetTimestamp();
+                    CurrentNodeId = parentId;
+                    
                     _localSources.Clear();
                     CurrentRecursiveDepth = 0;
                 }
@@ -566,7 +620,7 @@ namespace ETL_SQL.Engine
         public IExecutionContext Fork()
         {
             var freshHandlers = _serviceProvider.GetServices<IStatementHandler>();
-            var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _logger, _connections, _variableScopeManager.Fork())
+            var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _logger, _connections, _variableScopeManager.Fork(), ExecutionTree)
             {
                 IsVerbose = IsVerbose,
                 RedirectOutput = RedirectOutput,
@@ -576,8 +630,12 @@ namespace ETL_SQL.Engine
                 BatchSize = BatchSize,
                 PreviewLimit = PreviewLimit,
                 ScriptPassword = ScriptPassword,
-                SessionId = SessionId
+                SessionId = SessionId,
+                DisplayExecuteTree = DisplayExecuteTree
             };
+            // Note: CurrentNodeId is AsyncLocal and will automatically flow to the new thread if Task.Run is used,
+            // but for a manual Fork we set it explicitly.
+            fork.CurrentNodeId = CurrentNodeId;
             return fork;
         }
 

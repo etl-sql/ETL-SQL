@@ -18,6 +18,7 @@ namespace ETL_SQL.Common
         public bool IsDebugEnabled => true; // Fallback assumes enabled or handled by global flags
         public bool IsVerboseEnabled => true;
         public bool IsVerbose { get; set; }
+        public bool SuppressConsole { get; set; }
         public event Action<string, ConsoleColor>? OnMessage;
 
         public void Log(LogLevel level, string message, Exception? ex = null)
@@ -41,6 +42,12 @@ namespace ETL_SQL.Common
         {
             string formattedMessage = $"[{level}] [{_category}] {message}";
             if (ex != null) formattedMessage += $"{Environment.NewLine}Exception: {ex.Message}";
+            
+            if (SuppressConsole)
+            {
+                OnMessage?.Invoke(formattedMessage, color);
+                return;
+            }
 
             if (color != ConsoleColor.White) Console.ForegroundColor = color;
             Console.WriteLine(formattedMessage);

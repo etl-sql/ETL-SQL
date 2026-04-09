@@ -23,6 +23,7 @@ namespace ETL_SQL.App
         private static readonly Option<bool> PageOption = new(new[] { "--page", "-pa" }, "Pause and page between multiple result sets in the console.");
         private static readonly Option<string?> SessionOption = new(new[] { "--session" }, "Enable session persistence with the specified session ID.");
         private static readonly Option<string[]> VarOption = new(new[] { "--var", "-d" }, "Inject a variable into the script (e.g. @Name=Value).") { AllowMultipleArgumentsPerToken = true };
+        private static readonly Option<bool> ProgressOption = new(new[] { "--progress", "-g" }, "Display real-time graphical execution progress.");
         
         private static readonly Argument<string> RunScriptArg = new("script", "The ETL-SQL script to execute.");
         private static readonly Argument<string> UiModeArg = new("mode", () => "edit", "UI mode: edit, simple, silent, or verbose");
@@ -38,7 +39,7 @@ namespace ETL_SQL.App
             var runCommand = new Command("run", "Execute an ETL-SQL script")
             {
                 RunScriptArg,
-                BatchSizeOption, PerfOption, VerboseOption, LogOption, SilentOption, PreviewOption, JsonOption, PageOption, SessionOption, VarOption
+                BatchSizeOption, PerfOption, VerboseOption, LogOption, SilentOption, PreviewOption, JsonOption, PageOption, SessionOption, VarOption, ProgressOption
             };
             runCommand.SetHandler(async (context) => await Dispatch(context, "run", handler));
 
@@ -85,9 +86,12 @@ namespace ETL_SQL.App
             // 6. REPL Command
             var replCommand = new Command("repl", "Start a persistent JSON-based background engine for IDEs")
             {
-                BatchSizeOption, PerfOption, VerboseOption, LogOption, SessionOption, JsonOption, VarOption
+                BatchSizeOption, PerfOption, VerboseOption, LogOption, SessionOption, JsonOption, VarOption, ProgressOption
             };
             replCommand.SetHandler(async (context) => await Dispatch(context, "repl", handler));
+
+            var testTreeCommand = new Command("test-tree", "Internal: Run graphical execution tree demo");
+            testTreeCommand.SetHandler(async (context) => await Dispatch(context, "test-tree", handler));
 
             rootCommand.AddCommand(runCommand);
             rootCommand.AddCommand(uiCommand);
@@ -96,6 +100,7 @@ namespace ETL_SQL.App
             rootCommand.AddCommand(generateCommand);
             rootCommand.AddCommand(sessionCommand);
             rootCommand.AddCommand(replCommand);
+            rootCommand.AddCommand(testTreeCommand);
 
             return rootCommand;
         }
@@ -116,7 +121,8 @@ namespace ETL_SQL.App
                 LogPath = res.FindResultFor(LogOption)?.GetValueOrDefault<string?>() ?? "logs/",
                 IsLogMode = res.FindResultFor(LogOption) != null,
                 IsJsonMode = res.FindResultFor(JsonOption) != null && res.GetValueForOption(JsonOption),
-                EnablePaging = res.FindResultFor(PageOption) != null && res.GetValueForOption(PageOption)
+                EnablePaging = res.FindResultFor(PageOption) != null && res.GetValueForOption(PageOption),
+                DisplayProgress = res.FindResultFor(ProgressOption) != null && res.GetValueForOption(ProgressOption)
             };
 
             if (commandName == "run")
@@ -214,6 +220,7 @@ namespace ETL_SQL.App
         public string? EncryptValue { get; set; }
         public bool IsJsonMode { get; set; }
         public bool EnablePaging { get; set; }
+        public bool DisplayProgress { get; set; }
         public string? SessionId { get; set; }
         public Dictionary<string, object?> Variables { get; } = new(StringComparer.OrdinalIgnoreCase);
     }

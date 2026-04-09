@@ -504,6 +504,21 @@ describe('ReplManager', () => {
         spy.mockRestore();
     });
 
+    it('forwards progress packets to ResultsPanel', async () => {
+        const spy = vi.spyOn(ResultsPanel, 'postMessage').mockImplementation(() => {});
+
+        const { execPromise } = await startRepl();
+        
+        // Progress packet arrives mid-execution
+        fakeProcess.emitLine({ type: 'progress', data: [{ id: '1', name: 'Task', status: 'Running', rows: 10 }] });
+        fakeProcess.emitLine({ type: 'done', exitCode: 0 });
+        await execPromise;
+
+        expect(spy).toHaveBeenCalledWith(expect.objectContaining({ type: 'progress' }));
+        expect(spy).toHaveBeenCalledWith(expect.objectContaining({ data: expect.arrayContaining([expect.objectContaining({ name: 'Task' })]) }));
+        spy.mockRestore();
+    });
+
     // ── Process crash recovery ─────────────────────────────────────────────────
 
     it('rejects in-flight execute() promise when process closes unexpectedly', async () => {
@@ -552,5 +567,41 @@ describe('ReplManager', () => {
         await exec2;
 
         expect(cp.spawn).toHaveBeenCalledTimes(2);
+    });
+
+    // ── Telemetry & Performance ────────────────────────────────────────────────
+    
+    describe('Telemetry Delivery', () => {
+        it('forwards performance packets to the ResultsPanel', async () => {
+            const spy = vi.spyOn(ResultsPanel, 'postMessage').mockImplementation(() => {});
+            const { execPromise } = await startRepl();
+            
+            const metrics = { lexerMs: 5, parserMs: 10, executionMs: 50 };
+            fakeProcess.emitLine({ type: 'performance', metrics });
+            fakeProcess.emitLine({ type: 'done', exitCode: 0 });
+            await execPromise;
+
+            expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+                type: 'performance',
+                metrics
+            }));
+            spy.mockRestore();
+        });
+
+        it('forwards progress snapshots to the ResultsPanel', async () => {
+            const spy = vi.spyOn(ResultsPanel, 'postMessage').mockImplementation(() => {});
+            const { execPromise } = await startRepl();
+            
+            const data = [{ id: '1', name: 'Node', status: 'Running' }];
+            fakeProcess.emitLine({ type: 'progress', data });
+            fakeProcess.emitLine({ type: 'done', exitCode: 0 });
+            await execPromise;
+
+            expect(spy).toHaveBeenCalledWith(expect.objectContaining({
+                type: 'progress',
+                data
+            }));
+            spy.mockRestore();
+        });
     });
 });

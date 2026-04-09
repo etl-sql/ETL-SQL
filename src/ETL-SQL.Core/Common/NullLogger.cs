@@ -14,6 +14,7 @@ namespace ETL_SQL.Common
         public bool IsDebugEnabled => false;
         public bool IsVerboseEnabled => false;
         public bool IsVerbose { get; set; } = false;
+        public bool SuppressConsole { get; set; } = false;
         public event Action<string, ConsoleColor>? OnMessage;
     }
 }

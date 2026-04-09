@@ -89,7 +89,7 @@ namespace ETL_SQL.Connectors.FlatFile
             var path = connectionString.Trim('\'', '\"', ' ', '(', ')');
             var fileName = System.IO.Path.GetFileNameWithoutExtension(path);
             if (string.IsNullOrEmpty(fileName)) fileName = "Table";
-            return Task.FromResult<IEnumerable<string>>(new[] { fileName });
+            return Task.FromResult<IEnumerable<string>>(new[] { fileName, "FILE" });
         }
 
         public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
