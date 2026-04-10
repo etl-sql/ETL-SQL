@@ -53,9 +53,9 @@ namespace ETL_SQL.UI
                 _evaluator.IsProfiling = true;
 
                 // Route engine log messages to the IDE as JSON on stdout.
-                // Suppress the raw Console.WriteLine path so only JSON appears on stdout.
-                ETL_SQL.Common.Logger.SuppressConsole = true;
-                ETL_SQL.Common.Logger.OnMessage = (msg, color) =>
+                // We subscribe to the DI-injected ILogger which handles all modernized handlers.
+                var logger = Program.ServiceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
+                logger.OnMessage += (msg, color) =>
                 {
                     var level = color == ConsoleColor.Red ? "error"
                               : color == ConsoleColor.Yellow ? "warning"
@@ -64,7 +64,7 @@ namespace ETL_SQL.UI
                 };
 
                 // Signal ready — the IDE will now send run commands on stdin.
-                WriteJson(new { type = "status", status = "ready" });
+                WriteJson(new { type = "status", status = "ready", buildId = "DIAGNOSTIC-2026-04-10-02-00" });
 
                 while (true)
                 {
@@ -206,6 +206,7 @@ namespace ETL_SQL.UI
                     }
                 });
 
+                WriteJson(new { type = "message", level = "info", text = "Finalizing execution..." });
                 WriteJson(new { type = "done", exitCode = 0 });
             }
             catch (Exception ex)

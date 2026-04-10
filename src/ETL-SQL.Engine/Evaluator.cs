@@ -132,6 +132,7 @@ namespace ETL_SQL.Engine
         public Func<string, Task<bool>>? OnPrompt { get; set; }
 
         /// <summary>Whether to capture execution metrics for profiling.</summary>
+        public bool IsJsonMode { get; set; }
         public bool IsProfiling { get; set; }
         
         /// <summary>Whether to run in dry-run mode (no side effects).</summary>

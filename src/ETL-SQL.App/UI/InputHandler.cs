@@ -114,11 +114,21 @@ namespace ETL_SQL.UI
                 return;
             }
 
-            // F4 - Performance Toggle
+            // F4 - View Toggle (Results -> Perf -> Tree)
             if (key.Key == ConsoleKey.F4)
             {
-                _renderer.PerformanceVisible = !_renderer.PerformanceVisible;
-                _renderer.ShowStatus(_renderer.PerformanceVisible ? "View: Performance Metrics" : "View: Query Results");
+                if (!_renderer.PerformanceVisible && !_renderer.TreeVisible) { _renderer.PerformanceVisible = true; _renderer.ShowStatus("View: Performance Metrics"); }
+                else if (_renderer.PerformanceVisible) { _renderer.PerformanceVisible = false; _renderer.TreeVisible = true; _renderer.ShowStatus("View: Execution Tree"); }
+                else { _renderer.TreeVisible = false; _renderer.ShowStatus("View: Query Results"); }
+                return;
+            }
+
+            // F6 - Tree Toggle
+            if (key.Key == ConsoleKey.F6)
+            {
+                _renderer.TreeVisible = !_renderer.TreeVisible;
+                _renderer.PerformanceVisible = false;
+                _renderer.ShowStatus(_renderer.TreeVisible ? "View: Execution Tree" : "View: Query Results");
                 return;
             }
 

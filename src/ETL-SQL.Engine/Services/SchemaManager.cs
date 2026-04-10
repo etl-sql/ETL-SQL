@@ -75,17 +75,24 @@ namespace ETL_SQL.Engine.Services
         }
 
         /// <summary>Executes a DROP CONNECTION statement.</summary>
-        public Task EvaluateDropConnection(DropConnectionStatement stmt, IDictionary<string, IDataSource> connections)
+        public async Task EvaluateDropConnection(DropConnectionStatement stmt, IDictionary<string, IDataSource> connections)
         {
             if (_evaluator.IsWhatIf)
             {
                 _logger.WriteLine($"WHAT IF: Would drop connection {stmt.ConnectionName}", ConsoleColor.Yellow);
-                return Task.CompletedTask;
+                return;
             }
 
-            if (!connections.Remove(stmt.ConnectionName) && !stmt.IfExists)
+            if (connections.TryGetValue(stmt.ConnectionName, out var ds))
+            {
+                await ds.DisposeAsync();
+                connections.Remove(stmt.ConnectionName);
+                _logger.WriteLine($"Connection {stmt.ConnectionName} dropped.", ConsoleColor.Yellow);
+            }
+            else if (!stmt.IfExists)
+            {
                 throw new ExecutionException($"Connection not found: {stmt.ConnectionName}");
-            return Task.CompletedTask;
+            }
         }
 
         /// <summary>Executes a DROP PROCEDURE statement.</summary>

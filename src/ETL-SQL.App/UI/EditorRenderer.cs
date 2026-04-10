@@ -34,6 +34,7 @@ namespace ETL_SQL.UI
         public bool PromptIsSecret { get; set; } = false;
         public bool HelpVisible { get; set; } = false;
         public bool PerformanceVisible { get; set; } = false;
+        public bool TreeVisible { get; set; } = false;
         public bool PromptVisible => !string.IsNullOrEmpty(PromptTitle);
 
         private readonly IConsoleInterface _console;
@@ -41,6 +42,7 @@ namespace ETL_SQL.UI
         private readonly MessagePanel _messagePanel;
         private readonly ResultsPanel _resultsPanel;
         private readonly PerformancePanel _performancePanel;
+        private readonly TreePanel _treePanel;
 
         /// <summary>Initializes a new instance of the <see cref="EditorRenderer"/> class.</summary>
         /// <param name="buffer">The editor text buffer.</param>
@@ -53,6 +55,7 @@ namespace ETL_SQL.UI
             _messagePanel = new MessagePanel(evaluator);
             _resultsPanel = new ResultsPanel(evaluator, this);
             _performancePanel = new PerformancePanel(evaluator);
+            _treePanel = new TreePanel(evaluator);
         }
 
         /// <summary>Renders the entire editor UI to the console.</summary>
@@ -110,7 +113,9 @@ namespace ETL_SQL.UI
                 _editorPanel.Render(_console, 0, editorAreaTop, totalWidth, editorAreaHeight);
                 _messagePanel.Render(_console, 0, editorAreaTop + editorAreaHeight, totalWidth, messageAreaHeight);
                 
-                if (PerformanceVisible)
+                if (TreeVisible)
+                    _treePanel.Render(_console, 0, editorAreaTop + editorAreaHeight + messageAreaHeight, totalWidth, resultAreaHeight);
+                else if (PerformanceVisible)
                     _performancePanel.Render(_console, 0, editorAreaTop + editorAreaHeight + messageAreaHeight, totalWidth, resultAreaHeight);
                 else
                     _resultsPanel.Render(_console, 0, editorAreaTop + editorAreaHeight + messageAreaHeight, totalWidth, resultAreaHeight);
@@ -127,10 +132,10 @@ namespace ETL_SQL.UI
                 var debugInfo2 = $"Ln {buffer.CursorLine + 1}, Col {buffer.CursorColumn + 1}";
                 var status2 = (DateTime.Now < StatusMessageExpiry) ? $" | {Markup.Escape(StatusMessage ?? "")}" : "";
                 var focusInfo2 = ResultsFocus ? " FOCUS: RESULTS" : " FOCUS: EDITOR";
-                var perfLabel = PerformanceVisible ? " F4:Results " : " F4:Perf ";
+                var perfLabel = TreeVisible ? " F4:Results " : (PerformanceVisible ? " F4:Tree    " : " F4:Perf    ");
                 
                 // Build status text components
-                string shortcuts = " F1:Help ^S:Save ^O:Open ^F:Find F5:Run | F3:Focus |" + perfLabel + "|" + focusInfo2;
+                string shortcuts = " F1:Help ^S:Save ^O:Open ^F:Find F5:Run | F3:Focus |" + perfLabel + "| F6:Tree |" + focusInfo2;
                 string cursor = " | " + debugInfo2 + status2;
                 
                 // Combine and ensure it fits the width

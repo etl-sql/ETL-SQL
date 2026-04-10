@@ -6,6 +6,7 @@ export default defineConfig({
         globals: true,
         environment: 'node',
         include: ['src/test/**/*.test.ts'],
+        exclude: ['src/test/**/*.integration.test.ts', 'node_modules', 'dist', '.idea', '.git', '.cache'],
         coverage: {
             provider: 'v8',
             reporter: ['text', 'html'],

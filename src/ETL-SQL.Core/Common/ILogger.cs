@@ -23,6 +23,7 @@ namespace ETL_SQL.Common
         bool IsVerboseEnabled { get; }
         bool IsVerbose { get; set; }
         bool SuppressConsole { get; set; }
+        bool IsJsonMode { get; set; }
         event Action<string, ConsoleColor>? OnMessage;
     }
 }

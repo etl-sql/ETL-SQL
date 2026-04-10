@@ -50,13 +50,13 @@ export class ReplManager {
             this._processNext();
         });
     }
-
     private async _start(exePath: string, args: string[]): Promise<void> {
         return new Promise((resolve, reject) => {
-            const startMsg = `Starting ETL-SQL REPL: ${exePath} repl ${args.join(' ')}`;
+            const absoluteExePath = require('path').resolve(exePath);
+            const startMsg = `Starting ETL-SQL REPL: "${absoluteExePath}" repl ${args.join(' ')}`;
             this._outputChannel?.appendLine(startMsg);
 
-            this._process = cp.spawn(exePath, ["repl", ...args], {
+            this._process = cp.spawn(absoluteExePath, ["repl", ...args], {
                 env: { ...process.env, "FORCE_COLOR": "0" }
             });
 
@@ -74,8 +74,10 @@ export class ReplManager {
                         const msg = JSON.parse(trimmed);
                         this._handleMessage(msg);
                         if (msg.type === 'status' && msg.status === 'ready') {
+                            this._outputChannel?.appendLine(`[ENGINE] Ready. Build: ${msg.buildId || 'v1.0'}`);
                             this._isReady = true;
                             resolve();
+                            this._processNext();
                         }
                     } catch {
                         // Non-JSON line from engine (startup noise etc.)
@@ -116,11 +118,20 @@ export class ReplManager {
 
         const cmd = this._commandQueue.shift()!;
 
+        const timeout = setTimeout(() => {
+            if (this._currentHandler) {
+                this._outputChannel?.appendLine(`[WARN] Command timed out after 60s. Forcing queue reset.`);
+                this._currentHandler({ type: 'done', exitCode: 1 });
+            }
+        }, 60000);
+
         this._currentHandler = (msg) => {
             if (msg.type === 'done') {
+                clearTimeout(timeout);
                 this._currentHandler = undefined;
                 // Forward done to webview so the spinner stops.
                 ResultsPanel.postMessage(msg);
+                this._outputChannel?.appendLine(`[PROCESS] Command finished with code ${msg.exitCode}`);
                 if (msg.exitCode === 0) cmd.resolve(0);
                 else cmd.reject(new Error("Execution failed"));
                 this._processNext();
@@ -130,6 +141,7 @@ export class ReplManager {
             }
         };
 
+        this._outputChannel?.appendLine(`[PROCESS] Running script (${cmd.script.length} bytes)...`);
         this._process?.stdin?.write(JSON.stringify({ action: "run", script: cmd.script }) + "\n");
     }
 

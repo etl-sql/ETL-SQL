@@ -30,6 +30,12 @@ export function activate(context: vscode.ExtensionContext) {
     connectionsProvider.outputChannel = outputChannel;
     vscode.window.registerTreeDataProvider('etlsql-connections', connectionsProvider);
 
+    // Register Results Panel (Bottom Panel)
+    const resultsProvider = ResultsPanel.register(context);
+    ResultsPanel.setOnMessageReceived((msg) => {
+        if (msg.type === 'cancel') ReplManager.getInstance().stop();
+    });
+
     let serverPath = (config.get<string>('server.path') || '').trim();
 
     if (!serverPath) {
@@ -215,9 +221,6 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     const fileName = path.basename(document.fileName);
 
     if (runMethod === 'Webview (Grid)') {
-        ResultsPanel.createOrShow(context.extensionUri, (msg) => {
-            if (msg.type === 'cancel') ReplManager.getInstance().stop();
-        });
         ResultsPanel.postMessage({ type: 'clear' });
         ResultsPanel.postMessage({ type: 'message', text: `Executing: ${fileName}` });
 

@@ -279,6 +279,9 @@ namespace ETL_SQL.UI
         {
             try 
             { 
+                _renderer.TreeVisible = true;
+                _renderer.PerformanceVisible = false;
+                
                 var tokens = new Lexer(source).Tokenize();
                 var script = new Parser(tokens).Parse();
                 

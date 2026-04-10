@@ -230,6 +230,8 @@ namespace ETL_SQL.App
                     if (ctx.IsJsonMode)
                     {
                         Logger.SuppressConsole = true;
+                        evaluator.IsJsonMode = true; // Propagate to logger via evaluator if needed
+                        Logger.Instance.IsJsonMode = true;
                         ResultFormatter.IsJsonMode = true;
                     }
 
@@ -294,6 +296,24 @@ namespace ETL_SQL.App
                                 data = evaluator.ExecutionTree.ToSnapshot()
                             };
                             Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(snapshot));
+
+                            // Emit performance telemetry
+                            if (evaluator.IsProfiling)
+                            {
+                                var perf = new {
+                                    type = "performance",
+                                    data = new {
+                                        totalDurationMs = execTime.ElapsedMilliseconds,
+                                        statements = evaluator.ProfileMetrics.Select(m => new {
+                                            statementType = m.Sql.Split(' ')[0], // Simple type extraction
+                                            durationMs = m.DurationMs,
+                                            memoryUsageBytes = Math.Max(0, m.MemoryDeltaBytes),
+                                            sourceText = m.Sql
+                                        }).ToList()
+                                    }
+                                };
+                                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(perf));
+                            }
                         }
                     }
 

@@ -24,6 +24,7 @@ namespace ETL_SQL.Common
         public bool IsVerbose { get; set; }
         public bool IsFileLogging { get; set; }
         public bool SuppressConsole { get; set; }
+        public bool IsJsonMode { get; set; }
         public event Action<string, ConsoleColor>? OnMessage;
 
         public bool IsDebugEnabled => IsVerbose;
@@ -81,6 +82,9 @@ namespace ETL_SQL.Common
 
             // 4. UI Callback
             OnMessage?.Invoke(formattedMessage, color);
+            
+            // 5. Legacy Bridge - Ensure static Logger.OnMessage is also called
+            Logger.OnMessage?.Invoke(formattedMessage, color);
         }
 
         public void InitializeAppLogger(string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)
