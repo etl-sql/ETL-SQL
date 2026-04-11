@@ -503,9 +503,11 @@ Target: 519 pass, 1 fail (Docker). This is the acceptance gate for Phases 0-4.
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
 | New Report-SQL tokens conflict with existing ETL-SQL column/alias names in existing scripts | Medium | High | All new tokens are non-reserved — only keywords inside a `CREATE VISUAL`/`CREATE PAGE`/`CREATE DATASET` context; add a linter rule that warns if a column alias shadows a Report-SQL keyword |
-| `DashboardService` holds a stale `Evaluator` reference after a session timeout | Medium | High | Scope `DashboardService` as `Scoped` in Blazor DI (one per circuit/connection), not `Singleton`; dispose the Evaluator when the circuit closes |
+| `DashboardService` singleton holds stale state if the served script is changed between requests | Low | Medium | `etl-sql-report serve` is a single-script, single-user local process; document that changing the script requires restarting the server; future multi-script hosting can introduce per-script keyed services |
+| `report-runtime.js` fetches `/api/visual/{name}/data` for all visuals on every parameter change, even visuals not affected by that parameter | Medium | Medium | Track which `@params` appear in each visual's `SourceSql`; only re-fetch visuals whose source references the changed parameter |
 | Parquet snapshot file corrupted mid-write (process crash during refresh) | Low | High | Write to a `.tmp` file, then atomically rename to the final path on success; on startup check for orphaned `.tmp` files and delete them |
 | `CREATE DATASET` refresh job and a live dashboard session read/write the snapshot simultaneously | Medium | High | Use a `ReaderWriterLockSlim` in `SnapshotStore`: multiple readers allowed; writer takes exclusive lock; dashboard reads the old snapshot until the new one is fully written and renamed |
+| VS Code WebviewPanel CSP blocks CDN-hosted Chart.js | Medium | Medium | Bundle `chart.js` as a static asset inside the extension rather than using a CDN reference; VS Code webviews require local resource URIs or explicit CSP exceptions |
 | CSS grid `STRUCTURE` string with invalid cell letters silently produces broken layout | Low | Medium | Validate the structure string in `CreatePageStatementHandler` and in the linter — every letter in the map must appear in the structure string and vice versa |
 
 ---
@@ -560,12 +562,25 @@ Target: 519 pass, 1 fail (Docker). This is the acceptance gate for Phases 0-4.
 - [ ] `etl-sql-report build --format json` produces a valid `ReportManifest` JSON file
 - [ ] `etl-sql-report refresh <script.rptsql>` re-snapshots all `CREATE DATASET` tables and updates `LastRefresh`
 
-**After Phase 9C (Blazor Player):**
-- [ ] `etl-sql-report serve <script.rptsql>` starts Kestrel and opens the dashboard in a browser
-- [ ] Slicer parameter change causes all dependent visuals to re-query and re-render
+**After Phase 9B (Research Paper):**
+- [ ] `etl-sql-report build <script>` produces a valid `.md` file with embedded `<!-- CHART:{...} -->` comments for each visual
+- [ ] `etl-sql-report build --format json` produces a valid `ReportManifest` JSON file
+- [ ] `ChartJsRenderer` produces correct Chart.js config for all seven visual types (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER)
+- [ ] All pre-existing tests still pass — no regressions from the new projects
+
+**After Phase 9C (VS Code Preview):**
+- [ ] "Preview Report" command opens a WebviewPanel showing all visuals for the active `.rptsql` file
+- [ ] Charts render correctly using the embedded `window.__MANIFEST__` path (no server required)
+- [ ] Saving the `.rptsql` file refreshes the WebviewPanel automatically
+- [ ] Chart.js is bundled as a local asset — no CDN dependency in the webview
+
+**After Phase 9D (Web Dashboard):**
+- [ ] `etl-sql-report serve <script>` starts Kestrel and opens the dashboard in a browser
+- [ ] Slicer parameter change causes only affected visuals to re-query and re-render
 - [ ] Drill-down navigates to the target visual; "Back" restores the previous state and parameters
 - [ ] Stale snapshot (beyond TTL) shows a staleness warning banner without blocking render
-- [ ] `DashboardService` is registered as `Scoped` — confirmed by checking DI registration, not just behavior
+- [ ] `etl-sql-report refresh <script>` re-snapshots all `CREATE DATASET` tables
+- [ ] `DashboardService` is registered as a singleton — confirmed by checking DI registration
 
 ---
 
@@ -737,13 +752,13 @@ Orchestrator tracks system resource utilization (CPU/RAM) and enforces a configu
 **Prerequisites:**
 - Phases 1–4 (architecture separation) — hard required
 - Phase 5 Steps 5.1 and 5.2 (Ast.cs + Parser split) — hard required; new statement families cannot be added cleanly to the monolithic files
-- Phase 5 Steps 5.3 and 5.4 (structured logging + session IDs) — strongly recommended; each Blazor dashboard session needs a correlation ID
+- Phase 5 Steps 5.3 and 5.4 (structured logging + session IDs) — strongly recommended; each dashboard session needs a correlation ID
 
 ---
 
 ### 9.1 Vision and Goals
 
-A data professional writes a single `.rptsql` script that handles both ETL and visualization in the same file, using the same SQL-like language they already know. The script runs on a CLI for quick data science work (markdown output), or is deployed to a Blazor web application for interactive dashboards shared with stakeholders.
+A data professional writes a single `.rptsql` script that handles both ETL and visualization in the same file, using the same SQL-like language they already know. The script runs on a CLI for quick data science work (markdown output), previewed live in VS Code as you write it, or deployed as an interactive web dashboard shared with stakeholders.
 
 **Core value props:**
 - Source-control friendly — a `.rptsql` file diffs cleanly; a drag-and-drop dashboard does not
@@ -983,9 +998,9 @@ SetParameterAction : VisualAction   // parameter name, value expression (column 
 ### 9.6 Projects to Create
 
 ```
-ETL-SQL.ReportBuilder          (class lib)   — ReportManifest POCOs, ManifestBuilder, MarkdownRenderer, SnapshotStore
-ETL-SQL.ReportBuilder.CLI      (exe)         — `etl-sql-report build/serve` entry point
-ETL-SQL.ReportPlayer           (Blazor Server exe) — DashboardService, ReportViewer, chart components
+ETL-SQL.ReportBuilder          (class lib)   — ReportManifest POCOs, ManifestBuilder, MarkdownRenderer, ChartJsRenderer, SnapshotStore
+ETL-SQL.ReportBuilder.CLI      (exe)         — `etl-sql-report build/serve/refresh` entry point
+ETL-SQL.ReportPlayer           (ASP.NET Core exe) — DashboardService, minimal API controllers, HTML/Chart.js dashboard host
 ```
 
 **Dependency graph:**
@@ -995,7 +1010,9 @@ ReportBuilder.CLI     → ReportBuilder, Core, Engine, Connectors, Orchestrator
 ReportPlayer          → ReportBuilder, Core, Engine, Connectors, Orchestrator
 ```
 
-ReportPlayer does NOT reference ReportBuilder.CLI. The CLI and the Blazor player are separate hosts that both use the ReportBuilder library.
+ReportPlayer does NOT reference ReportBuilder.CLI. The CLI and the web player are separate hosts that both use the ReportBuilder library.
+
+**Chart.js is not a NuGet package.** It is a JavaScript library referenced in the shared HTML template (CDN or bundled static asset). No framework-specific dependency. No C# charting component library required. The same HTML template renders identically in a VS Code WebviewPanel and in a browser served by Kestrel.
 
 ---
 
@@ -1064,6 +1081,32 @@ Takes a `ReportManifest` and the actual data rows from each visual's source (fet
 - Page layout rendered as a markdown section per page with a comment showing the grid structure.
 - Parameters documented as a markdown table at the top of the file.
 
+#### ChartJsRenderer
+Takes a `VisualDefinition` and the data rows for that visual, and produces a Chart.js configuration object (serialized to JSON). This is the universal pivot that powers all three rendering surfaces — markdown, VS Code, and web — without any surface knowing how the other two work.
+
+```csharp
+public class ChartJsRenderer
+{
+    // Returns a Chart.js config object (as a JsonDocument or serialized string).
+    // The caller embeds this in an HTML template, an HTML comment, or a JSON API response.
+    public string RenderConfig(VisualDefinition visual, IEnumerable<IDataRecord> rows);
+}
+```
+
+Supported visual types and their Chart.js equivalents:
+
+| Report-SQL type | Chart.js type | Notes |
+|---|---|---|
+| `BAR` | `bar` | `x` mapping → labels; `height` mapping → data |
+| `LINE` | `line` | `x` → labels; `y` → data; `series` → multiple datasets |
+| `SCATTER` | `scatter` | `x`/`y` → point coords; `size`/`color` as point styling |
+| `PIE` | `pie` or `doughnut` | `column` mapping → labels; `value` → data |
+| `TABLE` | n/a — rendered as an HTML `<table>` | All columns rendered; `page_size` option controls pagination |
+| `CARD` | n/a — rendered as a KPI tile | Single value, optional label and trend indicator |
+| `SLICER` | n/a — rendered as `<select>` or checkbox group | `type = 'MultiSelect'` uses checkboxes; default is dropdown |
+
+`ChartJsRenderer` is the only place in the codebase that knows about Chart.js config shape. All three rendering surfaces call it and embed the result — they never construct Chart.js config themselves.
+
 #### SnapshotStore
 Handles Parquet read/write for `CREATE DATASET` snapshots. Responsibilities:
 - Derive a stable snapshot file path from dataset name + script path hash.
@@ -1096,15 +1139,15 @@ DI setup mirrors `ETL-SQL.App/DependencyInjectionSetup.cs`. All connectors, Eval
 
 ---
 
-### 9.9 ETL-SQL.ReportPlayer (Blazor Server)
+### 9.9 ETL-SQL.ReportPlayer (ASP.NET Core)
 
-**Why Blazor Server, not WASM:** The ETL-SQL engine runs server-side. Data stays server-side. Real-time reactivity is handled by SignalR (built into Blazor Server) without shipping the engine to the browser. WASM would require an entirely different execution model.
+**Why ASP.NET Core minimal API, not a framework-specific UI:** The ETL-SQL engine runs server-side. The charting layer is Chart.js (JavaScript), which runs in any browser or VS Code WebviewPanel. A minimal API serves JSON data to the client; Chart.js handles rendering. This means the same HTML template and the same JavaScript work in all three rendering surfaces — markdown, VS Code, and the web player — without any surface-specific C# UI code.
 
-**Charting library: Radzen Blazor Charts** (free, MIT-licensed subset). Do not use LiveCharts2 — it has commercial licensing requirements. Radzen supports all required chart types: bar, line, scatter, pie, and data grid.
+**Charting library: Chart.js** (MIT-licensed, JavaScript). Referenced in the shared HTML template via CDN or bundled as a static asset. No NuGet package required. Supports all required chart types: bar, line, scatter, pie. Tables, slicers, and cards are rendered as plain HTML.
 
 #### DashboardService
 
-This is the core of the player. It must hold live references to `Evaluator` and `ISessionState` — not a serialized copy of data. This is the critical architectural constraint.
+This is the core of the web player. It holds live references to `Evaluator` and `ISessionState` — not a serialized copy of data. This is the critical architectural constraint.
 
 ```csharp
 public class DashboardService
@@ -1121,146 +1164,102 @@ public class DashboardService
 
     public string CurrentPageId { get; private set; }
 
-    // Called by chart components when they need their data.
+    // Called by API endpoints when they need data for a visual.
     // This is NOT a cache — it re-evaluates the SOURCE expression with current Parameters.
-    // If SourceIsTemp = true and no params affect the #temp table, returns the existing DataTable fast.
-    // If SourceIsTemp = false (inline SELECT with @params), re-runs the SELECT via Evaluator with injected params.
+    // If SourceIsTemp = true and no @params affect the query, returns the DataTable fast (no re-query).
+    // If SourceIsTemp = false (inline SELECT with @params), re-runs the SELECT via Evaluator.
     public Task<IEnumerable<IDataRecord>> GetDataForVisualAsync(string visualName);
 
-    // Called by SLICER ON_CHANGE and other SET_PARAMETER actions
+    // Called by POST /api/parameter/{name}
     public void SetParameter(string name, object value);
 
-    // Called by DRILL_DOWN action
+    // Called by POST /api/drilldown
     public void ExecuteDrillDown(string targetVisualId, string key, object clickedValue);
 
-    // Called by "Back" button in the UI
+    // Called by POST /api/drill-back
     public void DrillBack();
-
-    // All chart components subscribe to this event and re-request their data when it fires
-    public event Action OnStateChanged;
-
-    private void NotifyStateChanged() => OnStateChanged?.Invoke();
 }
 ```
+
+`DashboardService` is registered as a **singleton per server instance** (one per `etl-sql-report serve` process). It is not scoped to an HTTP request. Since a `serve` process serves a single analyst at a time (local use), this is the correct lifetime. If multi-user deployments are added in the future, promote to a keyed/scoped service per session token.
 
 **Data access contract:** When `GetDataForVisualAsync` is called:
 1. Look up the `VisualDefinition` by name.
-2. If `SourceIsTemp = true`: retrieve the `DataTable` directly from `ISessionState.TempTables[SourceTempName]`. No query re-execution. Return it filtered in memory by LINQ only if the temp table is small (under ~100K rows) and no `@param` appears in any `WHERE` clause that references it. Otherwise, the parameterized `SourceSql` path below handles it.
-3. If `SourceIsTemp = false` (inline `SELECT` with `@params`): inject current `Parameters` into the Evaluator's session parameter store, then call `_evaluator.EvaluateSelectAsync(SourceSql)`. The Evaluator's normal pushdown logic applies — if the source tables behind the SELECT are on a live database, the query is pushed down. If they are `#temp` tables, in-process execution applies.
+2. If `SourceIsTemp = true`: retrieve the `DataTable` directly from `ISessionState.TempTables[SourceTempName]`. No query re-execution. Return it filtered in memory by LINQ only if the temp table is small (under ~100K rows) and no `@param` appears in a `WHERE` clause that references it. Otherwise, the parameterized `SourceSql` path handles it.
+3. If `SourceIsTemp = false` (inline `SELECT` with `@params`): inject current `Parameters` into the Evaluator's session parameter store, then call `_evaluator.EvaluateSelectAsync(SourceSql)`. The Evaluator's normal pushdown logic applies — if the source tables are on a live database, the query is pushed down; if they are `#temp` tables, in-process execution applies.
 
-This design means drill-down filtering always goes back to the engine. The `WHERE DeptID = @DeptID` clause in `DetailTable`'s source is re-evaluated with the current `@DeptID` value each time — not filtered from a stale in-memory cache.
+This means drill-down filtering always goes back to the engine. The `WHERE DeptID = @DeptID` clause in `DetailTable`'s source is re-evaluated with the current `@DeptID` value each time — never filtered from a stale in-memory copy.
 
-#### ReportViewer.razor
+#### Minimal API Endpoints
 
-Main component. Receives a `ReportManifest` (either from a `.md` file's embedded JSON comment or from a live script run). Instantiates `DashboardService`. Renders the active page's grid layout and injects chart components.
+```csharp
+// GET /api/page/{pageName}
+// Returns PageDefinition + current parameter values. Client uses this to build the grid layout.
 
-```razor
-@inject DashboardService DashboardService
+// GET /api/visual/{visualName}/data
+// Returns ChartJsRenderer.RenderConfig(visual, rows) — the Chart.js config JSON for this visual
+// given the current parameter state. Client replaces the chart canvas with the new config.
 
-<div class="report-grid" style="@GridStyle">
-    @foreach (var slot in ActivePage.SlotMap)
-    {
-        var visual = Manifest.Visuals.First(v => v.Name == slot.Value);
-        <div style="grid-area: @slot.Key">
-            <DynamicComponent Type="@GetComponentType(visual.Type)"
-                              Parameters="@GetComponentParams(visual)" />
-        </div>
-    }
-</div>
+// POST /api/parameter/{paramName}   body: { "value": ... }
+// Sets a parameter in DashboardService, returns 204. Client then re-fetches affected visuals.
 
-@code {
-    private string GridStyle => BuildCssGridStyle(ActivePage.Structure);
+// POST /api/drill-down   body: { "targetVisual": "...", "key": "...", "value": ... }
+// Executes drill-down, returns new CurrentPageId and updated parameter state.
 
-    // 'A A / B C' → grid-template-areas: "A A" "B C"; grid-template-columns: 1fr 1fr;
-    private static string BuildCssGridStyle(string structure)
-    {
-        var rows = structure.Split('/').Select(r => $"\"{r.Trim()}\"");
-        return $"display:grid; grid-template-areas: {string.Join(" ", rows)}; gap: 1rem;";
-    }
+// POST /api/drill-back
+// Pops the navigation stack, returns restored page and parameter state.
 
-    private Type GetComponentType(VisualType t) => t switch
-    {
-        VisualType.Bar     => typeof(BarChartVisual),
-        VisualType.Line    => typeof(LineChartVisual),
-        VisualType.Scatter => typeof(ScatterVisual),
-        VisualType.Pie     => typeof(PieChartVisual),
-        VisualType.Slicer  => typeof(SlicerVisual),
-        VisualType.Table   => typeof(TableVisual),
-        VisualType.Card    => typeof(CardVisual),
-        _                  => typeof(UnknownVisual)
-    };
-}
+// GET /api/manifest
+// Returns the full ReportManifest JSON. Used by the client on initial load to build the page.
 ```
 
-#### Chart Components
+The client (HTML + JavaScript) fetches `/api/manifest` on load, renders the grid, then fetches each visual's `/api/visual/{name}/data` to populate Chart.js instances. When a user interacts (slicer change, bar click), the JS calls the relevant POST endpoint, then re-fetches only the affected visuals' data. No full page reload.
 
-One Blazor component per visual type. Each component:
-1. Receives `VisualDefinition` as a `[Parameter]`.
-2. On `OnInitializedAsync` and whenever `DashboardService.OnStateChanged` fires: calls `DashboardService.GetDataForVisualAsync(Visual.Name)` and stores the result.
-3. Calls `StateHasChanged()` to trigger re-render.
-4. For components with actions: calls `DashboardService.SetParameter(...)` or `DashboardService.ExecuteDrillDown(...)` from click/change event handlers.
+#### Shared HTML Template
 
-```razor
-@* BarChartVisual.razor — representative example *@
-@inject DashboardService DashboardService
-@implements IDisposable
+A single `dashboard.html` template (embedded as a resource in `ETL-SQL.ReportBuilder`) is used by all three rendering surfaces:
 
-<RadzenChart>
-    <RadzenColumnSeries Data="@_data"
-                        CategoryProperty="@Visual.Mappings["x"]"
-                        ValueProperty="@Visual.Mappings["height"]"
-                        ItemClick="@OnBarClicked" />
-</RadzenChart>
+- **Markdown:** `ChartJsRenderer.RenderConfig(...)` output is embedded as an `<!-- CHART:{...} -->` HTML comment. A lightweight JS snippet in the markdown viewer reads these comments and instantiates Chart.js canvases from them.
+- **VS Code WebviewPanel:** The template is loaded directly into the webview. Data is injected as an inline `<script>window.__MANIFEST__ = {...}</script>` block — no HTTP server required for static preview.
+- **Web player:** The template is served as a static file by Kestrel. It bootstraps by calling `/api/manifest` then `/api/visual/{name}/data` for each visual.
 
-@code {
-    [Parameter] public VisualDefinition Visual { get; set; } = default!;
-    private IEnumerable<IDataRecord> _data = Enumerable.Empty<IDataRecord>();
+The template has no server-side rendering directives. It is plain HTML + Chart.js JavaScript. The only difference between surfaces is how the initial data arrives (inline script block vs. fetch call).
 
-    protected override async Task OnInitializedAsync()
-    {
-        DashboardService.OnStateChanged += OnStateChanged;
-        await RefreshDataAsync();
-    }
-
-    private void OnStateChanged() => InvokeAsync(async () =>
-    {
-        await RefreshDataAsync();
-        StateHasChanged();
-    });
-
-    private async Task RefreshDataAsync()
-        => _data = await DashboardService.GetDataForVisualAsync(Visual.Name);
-
-    private void OnBarClicked(SeriesClickEventArgs args)
-    {
-        foreach (var action in Visual.Actions.Where(a => a.Trigger == "ON_CLICK"))
-        {
-            if (action.ActionType == "SET_PARAMETER")
-                DashboardService.SetParameter(action.Target, GetColumnValue(args.Data, action.Key));
-            else if (action.ActionType == "DRILL_DOWN")
-                DashboardService.ExecuteDrillDown(action.Target, action.Key, GetColumnValue(args.Data, action.Key));
-        }
-    }
-
-    private static object GetColumnValue(object row, string column)
-        => row.GetType().GetProperty(column)?.GetValue(row) ?? DBNull.Value;
-
-    public void Dispose()
-        => DashboardService.OnStateChanged -= OnStateChanged;
-}
+```html
+<!-- dashboard.html — shared across all three surfaces -->
+<!DOCTYPE html>
+<html>
+<head>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .report-grid { display: grid; gap: 1rem; }
+    .visual-card { border: 1px solid #ddd; border-radius: 4px; padding: 1rem; }
+    .staleness-banner { background: #fff3cd; padding: 0.5rem; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="report-runtime.js"></script>
+</body>
+</html>
 ```
+
+`report-runtime.js` is the client-side controller. It reads `window.__MANIFEST__` (VS Code / static mode) or fetches `/api/manifest` (web mode), builds the CSS grid, and instantiates a Chart.js canvas for each visual. Parameter changes call the API and call `chart.data = newData; chart.update()` on the affected charts.
 
 ---
 
 ### 9.10 Execution Modes
 
-| Mode | When used | Data source | Who executes parameterized queries |
-|---|---|---|---|
-| **Dev/local CLI** | `etl-sql-report build` | Live database → `#temp` tables | Evaluator, on demand |
-| **Local serve** | `etl-sql-report serve` | Live database → `#temp` tables | Evaluator via DashboardService, on every param change |
-| **Deployed (fresh)** | First load, no snapshot | Live database | Evaluator runs full ETL prep |
-| **Deployed (cached)** | Snapshot within TTL | `SnapshotStore` → `#temp` tables | Evaluator for parameterized visuals only; raw `#temp` visuals served from snapshot |
-| **Deployed (stale)** | Snapshot beyond TTL | Stale snapshot + staleness warning | Same as cached; banner shown; Orchestrator refresh job queued |
+| Mode | Surface | Data source | Interactivity | Parameters |
+|---|---|---|---|---|
+| **Research paper** | `etl-sql-report build` → `.md` file | Live database, baked in at build time | None (static) | Rendered with default values only |
+| **VS Code preview** | WebviewPanel, inline `window.__MANIFEST__` | Live database, re-fetched on save | None (read-only render) | Not yet interactive; shows defaults |
+| **Local serve** | Browser via Kestrel | Live database → `#temp` tables | Full (slicers, drill-down) | Dynamic via `/api/parameter` |
+| **Deployed (fresh)** | Browser via Kestrel | Live database — no snapshot exists | Full | Dynamic |
+| **Deployed (cached)** | Browser via Kestrel | `SnapshotStore` → `#temp` tables | Full | Dynamic; parameterized visuals re-query against snapshot |
+| **Deployed (stale)** | Browser via Kestrel | Stale snapshot + staleness banner | Full | Dynamic; banner shown; Orchestrator refresh queued |
+
+**The `ReportManifest` is the universal pivot.** All six modes are driven by the same manifest structure. The only difference is where the data comes from and whether parameter changes trigger re-queries.
 
 In deployed cached mode, the script's Layer 1 (`CREATE DATASET` statements) is bypassed — the snapshot is loaded instead. The script's Layer 2 (`CREATE VISUAL`, `CREATE PAGE`) is always evaluated to build the manifest. Parameterized visual sources (inline `SELECT` with `@params`) still re-execute via the Evaluator against the `#temp` tables loaded from the snapshot — they do not hit the live database unless the snapshot is missing.
 
@@ -1270,24 +1269,45 @@ In deployed cached mode, the script's Layer 1 (`CREATE DATASET` statements) is b
 
 #### Phase 9A — Language Extension
 1. Add new tokens to Lexer
-2. Add new AST nodes to Core
-3. Add `ParseCreateVisualStatement`, `ParseCreatePageStatement`, `ParseCreateDatasetStatement` to StatementParser
+2. Add new AST nodes to Core (or `ReportAst.cs` if CQ-3 is complete)
+3. Add `ParseCreateVisualStatement`, `ParseCreatePageStatement`, `ParseCreateDatasetStatement` to `StatementParser.Report.cs` (partial class)
 4. Add `CreateVisualStatementHandler`, `CreatePageStatementHandler`, `CreateDatasetStatementHandler` to Engine
 5. Add linter rules (see 9.5)
-6. Add unit tests: parse round-trip for each visual type; integration tests: full script → assert session state contains correct definitions
+6. Add unit tests: parse round-trip for each visual type; integration tests: full script → assert session state contains correct `VisualDefinition` and `PageDefinition` entries
 
-#### Phase 9B — ReportBuilder Class Library + CLI
-1. Create `ETL-SQL.ReportBuilder` project: `ReportManifest` POCOs, `ManifestBuilder`, `MarkdownRenderer`, `SnapshotStore`
-2. Create `ETL-SQL.ReportBuilder.CLI` project: `build`, `serve`, `refresh` commands
-3. Wire up DI — mirror `DependencyInjectionSetup.cs` from App, add ReportBuilder services
-4. Add VS Code extension command: "Preview Report" — runs `etl-sql-report build` on the active `.rptsql` file, opens markdown preview
+#### Phase 9B — Research Paper (ReportBuilder + CLI `build` command)
+**Goal:** A data professional can write a `.rptsql` script and produce a shareable `.md` document with embedded charts — the R Markdown experience.
 
-#### Phase 9C — Blazor Report Player
-1. Create `ETL-SQL.ReportPlayer` project (Blazor Server)
-2. Add `Radzen.Blazor` NuGet package — do NOT use LiveCharts2
-3. Implement `DashboardService` (see 9.9) — hold live `Evaluator` + `ISessionState` references
-4. Implement `ReportViewer.razor` with CSS grid layout engine
-5. Implement chart components: `BarChartVisual`, `LineChartVisual`, `ScatterVisual`, `PieChartVisual`, `SlicerVisual`, `TableVisual`, `CardVisual`
-6. Wire `etl-sql-report serve` to host `ReportPlayer` on Kestrel
-7. Implement drill-down navigation stack in `DashboardService`
-8. Implement staleness banner in `ReportViewer` for expired snapshots
+1. Create `ETL-SQL.ReportBuilder` project: `ReportManifest` POCOs, `ManifestBuilder`, `ChartJsRenderer`, `MarkdownRenderer`, `SnapshotStore`
+2. `ManifestBuilder`: walks `ISessionState` after script evaluation, collects all `VisualDefinition`/`PageDefinition`/`DatasetDefinition` entries into a `ReportManifest`
+3. `ChartJsRenderer`: converts `VisualDefinition` + data rows → Chart.js config JSON (see 9.7); all chart-shape logic lives here
+4. `MarkdownRenderer`: runs each visual's SOURCE query once, calls `ChartJsRenderer`, embeds config in `<!-- CHART:{...} -->` comments alongside markdown tables
+5. Create `ETL-SQL.ReportBuilder.CLI` project; implement `etl-sql-report build <script.rptsql> [--output <file.md>] [--format md|json]`
+6. Wire up DI — mirror `DependencyInjectionSetup.cs` from App, add ReportBuilder services
+7. Add unit tests: `MarkdownRenderer` output contains expected `<!-- CHART:{...} -->` comments; `ChartJsRenderer` produces valid Chart.js config for each visual type
+
+#### Phase 9C — VS Code Live Preview
+**Goal:** Left side: `.rptsql` code. Right side: live Chart.js charts rendered in a WebviewPanel. No browser, no server.
+
+1. Build `dashboard.html` + `report-runtime.js` shared template (embedded resource in `ETL-SQL.ReportBuilder`)
+2. `report-runtime.js` dual-mode bootstrap: reads `window.__MANIFEST__` if present (VS Code mode), otherwise calls `/api/manifest` (web mode)
+3. Add VS Code extension command: "Preview Report"
+   - On activation: run `etl-sql-report build --format json` on the active `.rptsql` file → get `ReportManifest` JSON
+   - Open a `WebviewPanel`; inject `<script>window.__MANIFEST__ = {...};</script>` + load `dashboard.html`
+   - Chart.js renders all visuals inline — no Kestrel process, no browser launch
+4. Add file-save watcher: when the `.rptsql` file is saved, re-run build and refresh the webview content
+5. No parameter interactivity in this phase — VS Code preview is read-only (default parameter values only)
+
+#### Phase 9D — Web Dashboard (ReportPlayer + `serve` command + CREATE DATASET)
+**Goal:** Interactive dashboard accessible in a browser; other users can change parameters, filter with slicers, and drill down. CREATE DATASET provides scheduled refresh for deployed scenarios.
+
+1. Create `ETL-SQL.ReportPlayer` project (ASP.NET Core minimal API)
+2. Implement `DashboardService` (see 9.9) — singleton per process, holds live `Evaluator` + `ISessionState`
+3. Implement minimal API endpoints: `/api/manifest`, `/api/visual/{name}/data`, `/api/parameter/{name}`, `/api/drill-down`, `/api/drill-back` (see 9.9)
+4. Serve `dashboard.html` + `report-runtime.js` as static files from Kestrel
+5. Implement `report-runtime.js` parameter-change flow: POST to `/api/parameter`, then re-fetch and update only affected Chart.js instances
+6. Implement drill-down navigation stack in `DashboardService`; wire to `/api/drill-down` and `/api/drill-back`
+7. Implement staleness banner: when a `DatasetDefinition.LastRefresh` is beyond TTL, inject a banner element into the page without blocking chart render
+8. Wire `etl-sql-report serve <script.rptsql> [--port 5000] [--open]` command to start Kestrel hosting `ReportPlayer`
+9. Implement `etl-sql-report refresh <script.rptsql>` — re-runs all `CREATE DATASET` statements, updates snapshots; this is the payload the Orchestrator executes on the refresh schedule
+10. Add integration tests: parameter change via POST → assert `GetDataForVisualAsync` returns filtered rows; drill-down → assert navigation stack state

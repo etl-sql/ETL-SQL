@@ -16,6 +16,7 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Engine
 {
@@ -43,6 +44,7 @@ namespace ETL_SQL.Engine
         private readonly IDockerManager _dockerManager;
         private readonly IConnectorRegistry _connectorRegistry;
         private readonly SessionStateManager _sessionStateManager;
+        private readonly SecurityService _securityService;
         private readonly ETL_SQL.Common.ILogger _logger;
         private static readonly Random _random = new Random();
 
@@ -144,6 +146,12 @@ namespace ETL_SQL.Engine
         /// <summary>The high-level execution tree for visual progress tracking.</summary>
         public ExecutionTree ExecutionTree { get; } = new();
 
+        public SecurityService SecurityService => _securityService;
+
+        public bool AllowUnknownFileTypes { get; set; }
+        public bool AllowLargeFileOperationCount { get; set; }
+        public bool AllowDeepRecursion { get; set; }
+
         /// <summary>The ID of the currently executing node in this task/context.</summary>
         public Guid? CurrentNodeId
         {
@@ -215,8 +223,9 @@ namespace ETL_SQL.Engine
             IDockerManager dockerManager,
             IConnectorRegistry connectorRegistry,
             SessionStateManager sessionStateManager,
+            SecurityService securityService,
             ILogger logger)
-            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, connectorRegistry, sessionStateManager, logger, null, null, null)
+            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, connectorRegistry, sessionStateManager, securityService, logger, null, null, null)
         {
         }
 
@@ -228,6 +237,7 @@ namespace ETL_SQL.Engine
             IDockerManager dockerManager,
             IConnectorRegistry connectorRegistry,
             SessionStateManager sessionStateManager,
+            SecurityService securityService,
             ILogger logger,
             ConcurrentDictionary<string, IDataSource>? connections,
             VariableScopeManager? variableScopeManager,
@@ -241,6 +251,7 @@ namespace ETL_SQL.Engine
             _connectorRegistry = connectorRegistry;
             _sessionStateManager = sessionStateManager;
             _logger = logger;
+            _securityService = securityService;
             ExecutionTree = executionTree ?? new ExecutionTree();
             _connections = connections ?? new ConcurrentDictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
             _variableScopeManager = variableScopeManager ?? new VariableScopeManager();
@@ -288,6 +299,8 @@ namespace ETL_SQL.Engine
         public async Task Evaluate(Script script)
         {
             LastResultSets.Clear();
+            _operationCount = 0;
+            CurrentRecursiveDepth = 0;
             try
             {
                 var analyzer = new LineageAnalyzer(LineageTracker);
@@ -405,7 +418,6 @@ namespace ETL_SQL.Engine
                     CurrentNodeId = parentId;
                     
                     _localSources.Clear();
-                    CurrentRecursiveDepth = 0;
                 }
             }
             else
@@ -580,6 +592,8 @@ namespace ETL_SQL.Engine
         public string ResolvePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return path;
+
+            string resolved = path;
             var parts = path.Split(new[] { '/', '\\' }, 2);
             var connName = parts[0];
             if (_connections.TryGetValue(connName, out var ds))
@@ -587,11 +601,17 @@ namespace ETL_SQL.Engine
                 var baseUri = ds.Path;
                 if (!string.IsNullOrEmpty(baseUri) && baseUri != "MSSQL" && baseUri != "POSTGRES" && baseUri != "MYSQL" && baseUri != "SQLITE" && baseUri != "ORACLE")
                 {
-                    if (parts.Length > 1) return Path.Combine(baseUri, parts[1]);
-                    return baseUri;
+                    if (parts.Length > 1) resolved = Path.Combine(baseUri, parts[1]);
+                    else resolved = baseUri;
                 }
             }
-            return path;
+
+            // Security Hardening: Always return full paths and validate
+            var fullPath = Path.GetFullPath(resolved);
+            _securityService.ValidatePath(fullPath);
+            _securityService.ValidateFileType(fullPath, AllowUnknownFileTypes);
+            
+            return fullPath;
         }
 
         public object? ResolveIdentifier(string name, Row? row) => _variableScopeManager.ResolveIdentifier(name, row);
@@ -621,7 +641,7 @@ namespace ETL_SQL.Engine
         public IExecutionContext Fork()
         {
             var freshHandlers = _serviceProvider.GetServices<IStatementHandler>();
-            var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _logger, _connections, _variableScopeManager.Fork(), ExecutionTree)
+            var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _securityService, _logger, _connections, _variableScopeManager.Fork(), ExecutionTree)
             {
                 IsVerbose = IsVerbose,
                 RedirectOutput = RedirectOutput,
@@ -660,5 +680,12 @@ namespace ETL_SQL.Engine
             set => System.Threading.Interlocked.Exchange(ref _rowsProcessed, value); 
         }
         public long LastStatementRowsProcessed { get; set; }
+
+        private int _operationCount = 0;
+        public void IncrementOperationCount()
+        {
+            _operationCount++;
+            _securityService.CheckRunawayProtection(_operationCount, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion);
+        }
     }
 }

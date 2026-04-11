@@ -103,6 +103,11 @@ namespace ETL_SQL.Core
         bool IsSqlPushdown(string connName);
         /// <summary>Named environment sets created by CREATE SETS.</summary>
         IDictionary<string, NamedSet> NamedSets { get; }
+        
+        // Security override flags (granted via ### flags in script)
+        bool AllowUnknownFileTypes { get; set; }
+        bool AllowLargeFileOperationCount { get; set; }
+        bool AllowDeepRecursion { get; set; }
     }
 
     /// <summary>A stored collection of variable assignments created by CREATE SETS.</summary>
@@ -146,6 +151,10 @@ namespace ETL_SQL.Core
         Common.ExecutionTree ExecutionTree { get; }
         /// <summary>The ID of the currently executing node in this task/context.</summary>
         Guid? CurrentNodeId { get; set; }
+
+        /// <summary>Standardizer for file/path security and runaway protection.</summary>
+        ETL_SQL.Services.SecurityService SecurityService { get; }
+        void IncrementOperationCount();
 
         List<string> GetIndexedColumns(Expression? cond, string alias);
 

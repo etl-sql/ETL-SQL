@@ -41,6 +41,7 @@ namespace ETL_SQL.App
             var services = new ServiceCollection();
             
             services.AddSingleton<IConfiguration>(configuration);
+            services.AddSingleton<CliContext>(new CliContext());
 
             // ── Logging via LoggerService ──────────────────────────────────────
             // Read config values (fall back to sensible defaults)
@@ -76,6 +77,7 @@ namespace ETL_SQL.App
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
             services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>();
+            services.AddSingleton<ETL_SQL.Services.SecurityService>();
             
             // Connectors
             services.AddSingleton<IConnector, MockDbConnector>();
@@ -108,6 +110,7 @@ namespace ETL_SQL.App
             services.AddSingleton<IConnector>(new AzureBlobConnector(azureConn, azureContainer));
 
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
+            services.AddTransient<ExecutionSession>();
             services.AddTransient<Evaluator>();
             services.AddTransient<IExecutionContext>(sp => sp.GetRequiredService<Evaluator>());
             services.AddTransient<IVariableContext>(sp => sp.GetRequiredService<Evaluator>());

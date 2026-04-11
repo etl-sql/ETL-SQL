@@ -53,6 +53,9 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
 
+            // Security Hardening: Count this as a file operation for runaway protection
+            context.IncrementOperationCount();
+
             switch (stmt.Type)
             {
                 case FileOpType.Delete:

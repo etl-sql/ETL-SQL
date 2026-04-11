@@ -28,6 +28,20 @@ namespace ETL_SQL.Engine.Services
         private static string InitializeSessionRoot(string? customDir)
         {
             var root = customDir ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions");
+            
+            // Security Hardening: Validate the session root if it's custom
+            if (customDir != null)
+            {
+                var fullPath = Path.GetFullPath(root);
+                var pathRoot = Path.GetPathRoot(fullPath);
+                if (string.Equals(fullPath, pathRoot, StringComparison.OrdinalIgnoreCase))
+                    throw new UnauthorizedAccessException("Session storage cannot be placed at the root directory.");
+
+                string[] blocked = { ".git", ".vscode", "Windows", "System32" };
+                if (blocked.Any(b => fullPath.Contains(Path.DirectorySeparatorChar + b + Path.DirectorySeparatorChar) || fullPath.EndsWith(Path.DirectorySeparatorChar + b)))
+                    throw new UnauthorizedAccessException($"Session storage cannot be placed in protected directory: {fullPath}");
+            }
+
             if (!Directory.Exists(root)) Directory.CreateDirectory(root);
             return root;
         }

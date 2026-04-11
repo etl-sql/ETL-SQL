@@ -101,12 +101,12 @@ namespace ETL_SQL.Engine.Handlers
                 case DirectoryOpType.Copy:
                     if (dest != null)
                     {
-                        CopyDirectory(path, dest, overwrite);
+                        CopyDirectory(path, dest, overwrite, context);
                         _logger.WriteLine($"Directory copied: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
                 case DirectoryOpType.DeleteContents:
-                    DeleteDirectoryContents(path, recursive);
+                    DeleteDirectoryContents(path, recursive, context);
                     _logger.WriteLine($"Directory contents deleted: {path}", ConsoleColor.Green);
                     break;
                 case DirectoryOpType.Compress:
@@ -124,14 +124,14 @@ namespace ETL_SQL.Engine.Handlers
                 case DirectoryOpType.Encrypt:
                     if (dest != null)
                     {
-                        EncryptDirectory(path, dest, "DefaultETLPass123!", overwrite);
+                        EncryptDirectory(path, dest, "DefaultETLPass123!", overwrite, context);
                         _logger.WriteLine($"Directory encrypted: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
                 case DirectoryOpType.Decrypt:
                     if (dest != null)
                     {
-                        DecryptDirectory(path, dest, "DefaultETLPass123!", overwrite);
+                        DecryptDirectory(path, dest, "DefaultETLPass123!", overwrite, context);
                         _logger.WriteLine($"Directory decrypted: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
@@ -139,37 +139,46 @@ namespace ETL_SQL.Engine.Handlers
             await Task.CompletedTask;
         }
 
-        private void EncryptDirectory(string sourceDir, string destDir, string password, bool overwrite)
+        private void EncryptDirectory(string sourceDir, string destDir, string password, bool overwrite, IExecutionContext context)
         {
+            context.IncrementOperationCount();
             if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
             foreach (string file in Directory.GetFiles(sourceDir))
             {
+                context.IncrementOperationCount();
                 string destFile = Path.Combine(destDir, Path.GetFileName(file) + ".enc");
                 CryptoUtils.EncryptFile(file, destFile, password, overwrite);
             }
             foreach (string subDir in Directory.GetDirectories(sourceDir))
             {
-                EncryptDirectory(subDir, Path.Combine(destDir, Path.GetFileName(subDir)), password, overwrite);
+                context.CurrentRecursiveDepth++;
+                EncryptDirectory(subDir, Path.Combine(destDir, Path.GetFileName(subDir)), password, overwrite, context);
+                context.CurrentRecursiveDepth--;
             }
         }
 
-        private void DecryptDirectory(string sourceDir, string destDir, string password, bool overwrite)
+        private void DecryptDirectory(string sourceDir, string destDir, string password, bool overwrite, IExecutionContext context)
         {
+            context.IncrementOperationCount();
             if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
             foreach (string file in Directory.GetFiles(sourceDir))
             {
                 if (!file.EndsWith(".enc")) continue;
+                context.IncrementOperationCount();
                 string destFile = Path.Combine(destDir, Path.GetFileNameWithoutExtension(file));
                 CryptoUtils.DecryptFile(file, destFile, password, overwrite);
             }
             foreach (string subDir in Directory.GetDirectories(sourceDir))
             {
-                DecryptDirectory(subDir, Path.Combine(destDir, Path.GetFileName(subDir)), password, overwrite);
+                context.CurrentRecursiveDepth++;
+                DecryptDirectory(subDir, Path.Combine(destDir, Path.GetFileName(subDir)), password, overwrite, context);
+                context.CurrentRecursiveDepth--;
             }
         }
 
-        private void CopyDirectory(string sourceDir, string destinationDir, bool overwrite)
+        private void CopyDirectory(string sourceDir, string destinationDir, bool overwrite, IExecutionContext context)
         {
+            context.IncrementOperationCount();
             var dir = new DirectoryInfo(sourceDir);
             if (!dir.Exists) throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
 
@@ -178,24 +187,43 @@ namespace ETL_SQL.Engine.Handlers
 
             foreach (FileInfo file in dir.GetFiles())
             {
+                context.IncrementOperationCount();
                 string targetFilePath = Path.Combine(destinationDir, file.Name);
                 file.CopyTo(targetFilePath, overwrite);
             }
 
             foreach (DirectoryInfo subDir in dirs)
             {
+                context.CurrentRecursiveDepth++;
                 string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
-                CopyDirectory(subDir.FullName, newDestinationDir, overwrite);
+                CopyDirectory(subDir.FullName, newDestinationDir, overwrite, context);
+                context.CurrentRecursiveDepth--;
             }
         }
 
-        private void DeleteDirectoryContents(string path, bool recursive)
+        private void DeleteDirectoryContents(string path, bool recursive, IExecutionContext context)
         {
+            context.IncrementOperationCount();
             var dir = new DirectoryInfo(path);
             if (!dir.Exists) return;
 
-            foreach (FileInfo file in dir.GetFiles()) file.Delete();
-            foreach (DirectoryInfo subDir in dir.GetDirectories()) subDir.Delete(recursive);
+            foreach (FileInfo file in dir.GetFiles()) 
+            {
+                context.IncrementOperationCount();
+                file.Delete();
+            }
+            
+            foreach (DirectoryInfo subDir in dir.GetDirectories()) 
+            {
+                if (recursive)
+                {
+                    context.CurrentRecursiveDepth++;
+                    DeleteDirectoryContents(subDir.FullName, true, context);
+                    context.CurrentRecursiveDepth--;
+                }
+                context.IncrementOperationCount();
+                subDir.Delete(recursive);
+            }
         }
     }
 }

@@ -102,6 +102,13 @@ namespace ETL_SQL.Engine.Handlers
             }
             target = Interpolate(target ?? "");
 
+            // Security Hardening: Validate path for file-based connectors
+            var fileConnectors = new[] { "FLATFILE", "CSV", "JSON", "XML", "EXCEL", "PARQUET", "AVRO", "DIRECTORY", "SQLITE" };
+            if (fileConnectors.Contains(connectionType?.ToUpperInvariant()))
+            {
+                target = context.ResolvePath(target);
+            }
+
             IDataSource ds;
             var connector = _connectorRegistry.GetConnector(connectionType);
             if (connector != null && (target.Contains("Demo", StringComparison.OrdinalIgnoreCase) || target.Contains("Sample", StringComparison.OrdinalIgnoreCase)))
