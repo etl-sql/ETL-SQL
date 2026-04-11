@@ -1,9 +1,11 @@
 using Xunit;
 using System;
 using System.Threading.Tasks;
+using System.Security.Cryptography;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.App;
+using ETL_SQL.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 
@@ -109,6 +111,112 @@ namespace ETL_SQL.Tests
                 }
             }
             return content;
+        }
+        [Fact]
+        public void TestSafeZoneRunawayProtection()
+        {
+            var security = new ETL_SQL.Services.SecurityService();
+            var safePath = "C:\\MyProject";
+            var neutralPath = "C:\\Data";
+            
+            security.ApprovedSafeZones.Add(safePath);
+            
+            // Should allow override in safe zone
+            security.CheckRunawayProtection(101, 1, allowLargeCount: true, allowDeepRecursion: false, path: safePath + "\\file.csv");
+            
+            // Should FAIL override in neutral zone
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() => 
+                security.CheckRunawayProtection(101, 1, allowLargeCount: true, allowDeepRecursion: false, path: neutralPath + "\\file.csv")
+            );
+        }
+
+        [Fact]
+        public void TestLinuxPathBlocking()
+        {
+            var security = new ETL_SQL.Services.SecurityService();
+            
+            // Should block Linux system paths even on Windows
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("/etc/passwd"));
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("/usr/bin/bash"));
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("/var/log/syslog"));
+        }
+
+        [Fact]
+        public void TestExtensionBlacklistStrictness()
+        {
+            var security = new ETL_SQL.Services.SecurityService();
+            
+            // Should block .exe even if allowUnknown (override flag) is TRUE
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidateFileType("C:\\Safe\\tool.exe", allowUnknown: true));
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidateFileType("C:\\Safe\\driver.sys", allowUnknown: true));
+        }
+
+        [Fact]
+        public void TestEnvironmentFolderProtection()
+        {
+            var security = new ETL_SQL.Services.SecurityService();
+            
+            // Should block sensitive environment folders
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("C:\\Users\\chuck\\.ssh\\id_rsa"));
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("C:\\Users\\chuck\\.aws\\credentials"));
+        }
+
+        [Fact]
+        public void TestInternalBypass()
+        {
+            var security = new ETL_SQL.Services.SecurityService();
+            
+            // Enable internal bypass
+            security.IsInternalOperation = true;
+            
+            // Should now allow restricted files (even in bin or restricted extensions)
+            security.ValidatePath("C:\\Safe\\test.etlsession");
+            security.ValidatePath("C:\\Safe\\recovery.recovery.json");
+            security.ValidatePath("C:\\Safe\\sess_temp\\data.json");
+            security.ValidatePath("C:\\Windows\\System32\\kernel32.dll"); // egregious case that bypasses all
+        }
+
+        [Fact]
+        public void TestHardwareLockedEncryption()
+        {
+            var plainText = "Sensitive Session State Data";
+            var entropy = "Session-123-Unique-Entropy";
+            
+            // 1. Protect data
+            var protectedData = ETL_SQL.Common.CryptoUtils.Protect(plainText, entropy);
+            Assert.StartsWith("DPAPI:", protectedData);
+            
+            // 2. Unprotect data (should work for same user/machine)
+            var decryptedData = ETL_SQL.Common.CryptoUtils.Unprotect(protectedData, entropy);
+            Assert.Equal(plainText, decryptedData);
+            
+            // 3. Fail with wrong entropy
+            Assert.Throws<CryptographicException>(() => 
+                ETL_SQL.Common.CryptoUtils.Unprotect(protectedData, "Wrong-Entropy")
+            );
+        }
+
+        [Fact]
+        public void TestScriptImmutability()
+        {
+            var security = new ETL_SQL.Services.SecurityService();
+            
+            // Should block writing to native script types
+            Assert.Throws<SecurityException>(() => security.ValidateWriteAccess("test.etlsql"));
+            Assert.Throws<SecurityException>(() => security.ValidateWriteAccess("report.rptsql"));
+            Assert.Throws<SecurityException>(() => security.ValidateWriteAccess("db_setup.sql"));
+            Assert.Throws<SecurityException>(() => security.ValidateWriteAccess("run.sh"));
+            
+            // Should allow reading/general access (ValidatePath doesn't block extensions, only ValidateWriteAccess does)
+            security.ValidatePath("C:\\Safe\\test.etlsql"); 
+            
+            // Should allow writing to data assets
+            security.ValidateWriteAccess("C:\\Safe\\data.csv");
+            security.ValidateWriteAccess("C:\\Safe\\results.json");
+            
+            // Internal bypass should allow even scripts (for session logic)
+            security.IsInternalOperation = true;
+            security.ValidateWriteAccess("internal.etlsql");
         }
     }
 }

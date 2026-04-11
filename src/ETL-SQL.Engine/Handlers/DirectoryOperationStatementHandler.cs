@@ -67,6 +67,9 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
 
+            // Security Hardening: Count this as a directory operation
+            context.IncrementOperationCount(path);
+
             switch (stmt.Type)
             {
                 case DirectoryOpType.Create:
@@ -90,6 +93,11 @@ namespace ETL_SQL.Engine.Handlers
                             var parent = System.IO.Path.GetDirectoryName(path.TrimEnd('/', '\\')) ?? "";
                             target = System.IO.Path.Combine(parent, dest);
                         }
+                        
+                        // Security Hardening: Validate the target path
+                        context.SecurityService.ValidatePath(target);
+                        context.SecurityService.ValidateWriteAccess(target);
+                        
                         if (Directory.Exists(target))
                         {
                             if (overwrite) Directory.Delete(target, true);
@@ -124,14 +132,16 @@ namespace ETL_SQL.Engine.Handlers
                 case DirectoryOpType.Encrypt:
                     if (dest != null)
                     {
-                        EncryptDirectory(path, dest, "DefaultETLPass123!", overwrite, context);
+                        var pwd = context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
+                        EncryptDirectory(path, dest, pwd, overwrite, context);
                         _logger.WriteLine($"Directory encrypted: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
                 case DirectoryOpType.Decrypt:
                     if (dest != null)
                     {
-                        DecryptDirectory(path, dest, "DefaultETLPass123!", overwrite, context);
+                        var pwd = context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
+                        DecryptDirectory(path, dest, pwd, overwrite, context);
                         _logger.WriteLine($"Directory decrypted: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
@@ -141,11 +151,11 @@ namespace ETL_SQL.Engine.Handlers
 
         private void EncryptDirectory(string sourceDir, string destDir, string password, bool overwrite, IExecutionContext context)
         {
-            context.IncrementOperationCount();
+            context.IncrementOperationCount(sourceDir);
             if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
             foreach (string file in Directory.GetFiles(sourceDir))
             {
-                context.IncrementOperationCount();
+                context.IncrementOperationCount(file);
                 string destFile = Path.Combine(destDir, Path.GetFileName(file) + ".enc");
                 CryptoUtils.EncryptFile(file, destFile, password, overwrite);
             }
@@ -159,12 +169,12 @@ namespace ETL_SQL.Engine.Handlers
 
         private void DecryptDirectory(string sourceDir, string destDir, string password, bool overwrite, IExecutionContext context)
         {
-            context.IncrementOperationCount();
+            context.IncrementOperationCount(sourceDir);
             if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
             foreach (string file in Directory.GetFiles(sourceDir))
             {
                 if (!file.EndsWith(".enc")) continue;
-                context.IncrementOperationCount();
+                context.IncrementOperationCount(file);
                 string destFile = Path.Combine(destDir, Path.GetFileNameWithoutExtension(file));
                 CryptoUtils.DecryptFile(file, destFile, password, overwrite);
             }
@@ -178,7 +188,7 @@ namespace ETL_SQL.Engine.Handlers
 
         private void CopyDirectory(string sourceDir, string destinationDir, bool overwrite, IExecutionContext context)
         {
-            context.IncrementOperationCount();
+            context.IncrementOperationCount(sourceDir);
             var dir = new DirectoryInfo(sourceDir);
             if (!dir.Exists) throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
 
@@ -187,7 +197,7 @@ namespace ETL_SQL.Engine.Handlers
 
             foreach (FileInfo file in dir.GetFiles())
             {
-                context.IncrementOperationCount();
+                context.IncrementOperationCount(file.FullName);
                 string targetFilePath = Path.Combine(destinationDir, file.Name);
                 file.CopyTo(targetFilePath, overwrite);
             }
@@ -203,13 +213,13 @@ namespace ETL_SQL.Engine.Handlers
 
         private void DeleteDirectoryContents(string path, bool recursive, IExecutionContext context)
         {
-            context.IncrementOperationCount();
+            context.IncrementOperationCount(path);
             var dir = new DirectoryInfo(path);
             if (!dir.Exists) return;
 
             foreach (FileInfo file in dir.GetFiles()) 
             {
-                context.IncrementOperationCount();
+                context.IncrementOperationCount(file.FullName);
                 file.Delete();
             }
             
@@ -221,7 +231,7 @@ namespace ETL_SQL.Engine.Handlers
                     DeleteDirectoryContents(subDir.FullName, true, context);
                     context.CurrentRecursiveDepth--;
                 }
-                context.IncrementOperationCount();
+                context.IncrementOperationCount(subDir.FullName);
                 subDir.Delete(recursive);
             }
         }

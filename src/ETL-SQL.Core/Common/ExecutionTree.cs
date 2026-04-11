@@ -14,6 +14,9 @@ namespace ETL_SQL.Core.Common
         /// <summary>The root nodes of the execution tree (usually one for the main script).</summary>
         public List<Guid> RootNodeIds { get; } = new();
 
+        /// <summary>Optional callback fired each time a node is added to the tree.</summary>
+        public Action<ExecutionNode>? OnNodeAdded { get; set; }
+
         /// <summary>Adds a node to the tree and optionally attaches it to a parent.</summary>
         public void AddNode(ExecutionNode node, Guid? parentId = null)
         {
@@ -32,6 +35,7 @@ namespace ETL_SQL.Core.Common
                     RootNodeIds.Add(node.Id);
                 }
             }
+            OnNodeAdded?.Invoke(node);
         }
 
         /// <summary>Retrieves a node by its unique ID.</summary>

@@ -4,11 +4,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Spectre.Console;
-using ETL_SQL.UI;
+using ETL_SQL.TUI.UI;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests
 {
@@ -22,7 +23,7 @@ namespace ETL_SQL.Tests
             var renderer = new EditorRenderer(buffer, evaluator);
             var connections = new Dictionary<string, IDataSource>();
             var metadata = new MetadataManager(connections);
-            var controller = new AutocompleteController(buffer, renderer, metadata, connections);
+            var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
             
             buffer.Load(new[] { "SEL" });
             buffer.CursorLine = 0;
@@ -42,7 +43,7 @@ namespace ETL_SQL.Tests
             var renderer = new EditorRenderer(buffer, evaluator);
             var connections = new Dictionary<string, IDataSource>();
             var metadata = new MetadataManager(connections);
-            var controller = new AutocompleteController(buffer, renderer, metadata, connections);
+            var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
             
             buffer.Load(new[] { "S" });
             buffer.CursorLine = 0;
@@ -67,8 +68,10 @@ namespace ETL_SQL.Tests
             var renderer = new EditorRenderer(buffer, evaluator);
             var connections = new Dictionary<string, IDataSource>();
             var metadata = new MetadataManager(connections);
-            var controller = new AutocompleteController(buffer, renderer, metadata, connections);
-            ETL_SQL.Program.ServiceProvider = DependencyInjectionSetup.BuildServiceProvider();
+            var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
+            var sp = DependencyInjectionSetup.BuildServiceProvider();
+            ETL_SQL.Program.ServiceProvider = sp;
+            ETL_SQL.TUI.Program.ServiceProvider = sp;
             var editor = new ConsoleEditor("test.etlsql", connections);
             var handler = new InputHandler(editor, buffer, renderer, controller);
             

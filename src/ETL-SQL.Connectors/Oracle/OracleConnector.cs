@@ -57,7 +57,7 @@ namespace ETL_SQL.Connectors.Oracle
             }
             catch (Exception ex)
             {
-                (logger ?? Logger.Instance).Debug($"[OracleConnector.GetTablesAsync] Failed to retrieve tables: {ex.Message}");
+                (logger ?? NullLogger.Instance).Debug($"[OracleConnector.GetTablesAsync] Failed to retrieve tables: {ex.Message}");
             }
             return tables;
         }

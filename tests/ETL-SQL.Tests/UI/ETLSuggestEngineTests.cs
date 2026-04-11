@@ -3,11 +3,12 @@ using System.Collections.Generic;
 using Microsoft.Extensions.DependencyInjection;
 using System.Threading.Tasks;
 using Xunit;
-using ETL_SQL.UI;
+using ETL_SQL.TUI.UI;
 using ETL_SQL.Data;
 using Moq;
 using ETL_SQL.Tests;
 using ETL_SQL.App;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests.UI
 {
@@ -52,7 +53,7 @@ namespace ETL_SQL.Tests.UI
             var metadata = new MetadataManager(connections);
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var renderer = new EditorRenderer(buffer, evaluator);
-            var controller = new AutocompleteController(buffer, renderer, metadata, connections);
+            var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
 
             await controller.TrySuggestAsync();
 
@@ -74,7 +75,7 @@ namespace ETL_SQL.Tests.UI
             var metadata = new MetadataManager(connections);
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var renderer = new EditorRenderer(buffer, evaluator);
-            var controller = new AutocompleteController(buffer, renderer, metadata, connections);
+            var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
 
             await controller.TrySuggestAsync();
 
@@ -96,7 +97,7 @@ namespace ETL_SQL.Tests.UI
             var metadata = new MetadataManager(connections);
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var renderer = new EditorRenderer(buffer, evaluator);
-            var controller = new AutocompleteController(buffer, renderer, metadata, connections);
+            var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
 
             await controller.TrySuggestAsync();
 
@@ -117,7 +118,7 @@ namespace ETL_SQL.Tests.UI
             var metadata = new MetadataManager(connections);
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var renderer = new EditorRenderer(buffer, evaluator);
-            var controller = new AutocompleteController(buffer, renderer, metadata, connections);
+            var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
 
             await controller.TrySuggestAsync();
 

@@ -110,7 +110,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             IDataSource ds;
-            var connector = _connectorRegistry.GetConnector(connectionType);
+            var connector = _connectorRegistry.GetConnector(connectionType ?? string.Empty);
             if (connector != null && (target.Contains("Demo", StringComparison.OrdinalIgnoreCase) || target.Contains("Sample", StringComparison.OrdinalIgnoreCase)))
             {
                 var mock = _connectorRegistry.GetConnector("MOCKDB");

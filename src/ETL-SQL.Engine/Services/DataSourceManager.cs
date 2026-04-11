@@ -123,7 +123,7 @@ namespace ETL_SQL.Engine.Services
                 try
                 {
                     string encryptedJson = await File.ReadAllTextAsync(info.DataFilePath);
-                    string plainJson = CryptoUtils.Decrypt(encryptedJson, password);
+                    string plainJson = CryptoUtils.Unprotect(encryptedJson, password);
                     var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(plainJson);
                     
                     if (rows != null && rows.Count > 0)

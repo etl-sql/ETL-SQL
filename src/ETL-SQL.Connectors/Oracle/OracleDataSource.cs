@@ -32,7 +32,7 @@ namespace ETL_SQL.Connectors.Oracle
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
         }
 
         public IDataSource WithTable(string tableName) => new OracleDataSource(_connectionString, tableName, _options, _logger);
@@ -74,7 +74,7 @@ namespace ETL_SQL.Connectors.Oracle
                 {
                     row[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
                 }
-                currentBatch.Rows.Add(row);
+                await currentBatch.AddRowAsync(row);
 
                 if (currentBatch.Rows.Count >= batchSize)
                 {
@@ -176,7 +176,7 @@ namespace ETL_SQL.Connectors.Oracle
                 {
                     row[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
                 }
-                resultBatch.AddRow(row);
+                await resultBatch.AddRowAsync(row);
             }
             yield return resultBatch;
         }

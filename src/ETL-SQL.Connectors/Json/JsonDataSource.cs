@@ -37,7 +37,7 @@ namespace ETL_SQL.Connectors.Json
         {
             _filePath = filePath;
             _options = options;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
             if (options != null)
             {
                 if (options.TryGetValue("ROOT_PATH", out var rp)) _rootPath = rp;
@@ -110,7 +110,7 @@ namespace ETL_SQL.Connectors.Json
                             row[property.Name] = GetJsonValue(property.Value);
                             allColumns.Add(property.Name);
                         }
-                        currentBatch.AddRow(row);
+                        await currentBatch.AddRowAsync(row);
 
                         if (currentBatch.Rows.Count >= batchSize)
                         {

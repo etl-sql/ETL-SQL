@@ -50,7 +50,8 @@ namespace ETL_SQL.Core.Linting.Rules
         {
             if (stmt is CreateConnectionStatement conn)
             {
-                map[conn.ConnectionName] = conn.ConnectionType;
+                if (conn.ConnectionName != null && conn.ConnectionType != null)
+                    map[conn.ConnectionName] = conn.ConnectionType;
                 return;
             }
 

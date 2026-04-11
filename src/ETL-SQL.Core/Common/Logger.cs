@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
 using Serilog.Extensions.Logging;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Common
 {
@@ -21,8 +22,10 @@ namespace ETL_SQL.Common
         public static bool IsFileLogging  { get; set; } = false;
         public static bool SuppressConsole 
         { 
+#pragma warning disable CS0618
             get => Instance.SuppressConsole; 
             set => Instance.SuppressConsole = value;
+#pragma warning restore CS0618
         }
 
         /// <summary>
@@ -30,6 +33,7 @@ namespace ETL_SQL.Common
         /// Defaults to a ConsoleLogger if not set.
         /// </summary>
         private static ILogger? _instance;
+        private static readonly object _lock = new object();
         [Obsolete("Use dependency-injected ILogger from the execution context or service container instead.")]
         public static ILogger Instance 
         { 
@@ -44,11 +48,6 @@ namespace ETL_SQL.Common
 
         [ThreadStatic]
         private static bool ExecutingInInstance;
-
-        // ─── Internal Serilog loggers ───────────────────────────────────────
-        private static Serilog.Core.Logger? _appLogger;      // application-level logger
-        private static Serilog.Core.Logger? _scriptLogger;   // per-script-run logger
-        private static Serilog.Core.Logger? _testLogger;     // unit/integration test logger
 
         // MEL bridge kept for injected ILogger<T> consumers
         private static ILoggerFactory? _msLoggerFactory;
@@ -69,27 +68,33 @@ namespace ETL_SQL.Common
         [Obsolete("Use dependency-injected ILogger. Initialize settings via ILoggerService.")]
         public static void InitializeAppLogger(string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)
         {
+#pragma warning disable CS0618
             if (Instance is LoggerService service)
             {
                 service.InitializeAppLogger(logDirectory, retentionDays, fileSizeLimitMb);
             }
+#pragma warning restore CS0618
         }
 
         [Obsolete("Use dependency-injected ILogger. Initialize settings via ILoggerService.")]
         public static void InitializeScriptLogger(string sourceScript, string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)
         {
+#pragma warning disable CS0618
             if (Instance is LoggerService service)
             {
                 service.InitializeScriptLogger(sourceScript, logDirectory, retentionDays, fileSizeLimitMb);
             }
+#pragma warning restore CS0618
         }
 
         public static void InitializeTestLogger(string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 50)
         {
+#pragma warning disable CS0618
             if (Instance is LoggerService service)
             {
                 service.InitializeTestLogger(logDirectory, retentionDays, fileSizeLimitMb);
             }
+#pragma warning restore CS0618
         }
 
         /// <summary>
@@ -178,7 +183,9 @@ namespace ETL_SQL.Common
         public static void Verbose(string message, ConsoleColor color = ConsoleColor.DarkGray)
         {
             if (IsVerbose)
+#pragma warning disable CS0618
                 WriteInternal(LogEventLevel.Debug, $"[VERBOSE] {message}", color);
+#pragma warning restore CS0618
         }
 
         /// <summary>
@@ -212,7 +219,9 @@ namespace ETL_SQL.Common
                     LogEventLevel.Debug => LogLevel.Debug,
                     _ => LogLevel.Info
                 };
+#pragma warning disable CS0618
                 Instance.Log(level, message);
+#pragma warning restore CS0618
             }
             finally { ExecutingInInstance = false; }
         }
@@ -250,7 +259,9 @@ namespace ETL_SQL.Common
         /// <summary>Flush and close all open log files. Call on app shutdown.</summary>
         public static void CloseAndFlush()
         {
+#pragma warning disable CS0618
             if (Instance is IDisposable disposable) disposable.Dispose();
+#pragma warning restore CS0618
         }
     }
 }

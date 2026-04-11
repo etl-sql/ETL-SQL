@@ -5,6 +5,7 @@ using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
 using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.App
 {
@@ -26,8 +27,6 @@ namespace ETL_SQL.App
         private static readonly Option<bool> ProgressOption = new(new[] { "--progress", "-g" }, "Display real-time graphical execution progress.");
         
         private static readonly Argument<string> RunScriptArg = new("script", "The ETL-SQL script to execute.");
-        private static readonly Argument<string> UiModeArg = new("mode", () => "edit", "UI mode: edit, simple, silent, or verbose");
-        private static readonly Argument<string?> UiScriptArg = new("script", () => null, "Optional script to load initially.");
         private static readonly Argument<string> EncryptValueArg = new("value", "The string to encrypt.");
         private static readonly Argument<string> TestValArg = new("testVal", () => "unit", "Test category: unit, integration, etc.");
 
@@ -43,17 +42,7 @@ namespace ETL_SQL.App
             };
             runCommand.SetHandler(async (context) => await Dispatch(context, "run", handler));
 
-            // 2. UI Command
-            var uiCommand = new Command("ui", "Launch the advanced console UI")
-            {
-                UiModeArg,
-                UiScriptArg,
-                EstimateOption,
-                LogOption
-            };
-            uiCommand.SetHandler(async (context) => await Dispatch(context, "ui", handler));
-
-            // 3. TEST Command
+            // 2. TEST Command
             var testCommand = new Command("test", "Run internal diagnostics or unit tests")
             {
                 TestValArg
@@ -82,25 +71,22 @@ namespace ETL_SQL.App
             };
             clearSubcommand.SetHandler(async (context) => await Dispatch(context, "session-clear", handler));
             sessionCommand.AddCommand(clearSubcommand);
-            
-            // 6. REPL Command
-            var replCommand = new Command("repl", "Start a persistent JSON-based background engine for IDEs")
+
+            // 6. UI Command (for REPL and windowed mode)
+            var uiCommand = new Command("ui", "Interactive user interface commands");
+            var replSubcommand = new Command("repl", "Start the JSON-based REPL protocol for IDE integration")
             {
-                BatchSizeOption, PerfOption, VerboseOption, LogOption, SessionOption, JsonOption, VarOption, ProgressOption
+                BatchSizeOption, PerfOption, VerboseOption, LogOption, SessionOption, VarOption
             };
-            replCommand.SetHandler(async (context) => await Dispatch(context, "repl", handler));
-
-            var testTreeCommand = new Command("test-tree", "Internal: Run graphical execution tree demo");
-            testTreeCommand.SetHandler(async (context) => await Dispatch(context, "test-tree", handler));
-
+            replSubcommand.SetHandler(async (context) => await Dispatch(context, "ui-repl", handler));
+            uiCommand.AddCommand(replSubcommand);
+            
             rootCommand.AddCommand(runCommand);
-            rootCommand.AddCommand(uiCommand);
             rootCommand.AddCommand(testCommand);
             rootCommand.AddCommand(encryptCommand);
             rootCommand.AddCommand(generateCommand);
             rootCommand.AddCommand(sessionCommand);
-            rootCommand.AddCommand(replCommand);
-            rootCommand.AddCommand(testTreeCommand);
+            rootCommand.AddCommand(uiCommand);
 
             return rootCommand;
         }
@@ -128,12 +114,6 @@ namespace ETL_SQL.App
             if (commandName == "run")
             {
                 var input = res.GetValueForArgument(RunScriptArg);
-                cliContext.ScriptFile = string.IsNullOrWhiteSpace(input) ? null : new FileInfo(input.Trim('"', '\'', ' '));
-            }
-            else if (commandName == "ui")
-            {
-                cliContext.UiMode = res.GetValueForArgument(UiModeArg);
-                var input = res.GetValueForArgument(UiScriptArg);
                 cliContext.ScriptFile = string.IsNullOrWhiteSpace(input) ? null : new FileInfo(input.Trim('"', '\'', ' '));
             }
             else if (commandName == "encrypt")
@@ -188,40 +168,14 @@ namespace ETL_SQL.App
             table.AddColumn("[bold yellow]Command[/]");
             table.AddColumn("[bold white]Description[/]");
             table.AddRow($"run [blue]{Markup.Escape("<script>")}[/]", "Execute an ETL script with options like --perf, --log, --batch-size.");
-            table.AddRow($"ui [blue]{Markup.Escape("edit|simple|silent|verbose")}[/] [blue]{Markup.Escape("[script]")}[/]", "Launch interactive editor, simple REPL, or headless logging modes.");
             table.AddRow($"test [blue]{Markup.Escape("<category>")}[/]", "Run unit or integration tests (e.g., unit).");
             table.AddRow($"encrypt [blue]{Markup.Escape("<string>")}[/]", "Securely encrypt connection strings.");
             table.AddRow("generate", "Generate large scale mock data for performance validation.");
-            table.AddRow("repl", "Start background execution server (JSON protocol).");
-            
+            table.AddRow("ui repl", "Start the JSON-based REPL protocol.");
             AnsiConsole.Write(table);
             AnsiConsole.MarkupLine($"\nUse [cyan]ETL-SQL {Markup.Escape("<command>")} --help[/] for details on specific options.");
         }
     }
 
-    public class CliContext
-    {
-        public string Command { get; set; } = "run";
-        public FileInfo? ScriptFile { get; set; }
-        public bool IsPerfMode { get; set; }
-        public int BatchSize { get; set; }
-        public bool IsGenerateMode => Command == "generate";
-        public bool IsLogMode { get; set; }
-        public string? LogPath { get; set; }
-        public bool IsSilentMode { get; set; }
-        public string? UiMode { get; set; }
-        public int EstimatedRows { get; set; }
-        public bool IsVerbose { get; set; }
-        public string? TestVal { get; set; }
-        public bool IsTestMode => Command == "test";
-        public string? PreviewVal { get; set; }
-        public string? DocsVal { get; set; }
-        public string? Password { get; set; }
-        public string? EncryptValue { get; set; }
-        public bool IsJsonMode { get; set; }
-        public bool EnablePaging { get; set; }
-        public bool DisplayProgress { get; set; }
-        public string? SessionId { get; set; }
-        public Dictionary<string, object?> Variables { get; } = new(StringComparer.OrdinalIgnoreCase);
-    }
+    // CliContext moved to ETL-SQL.Core/CliContext.cs — available via global using ETL_SQL.Core
 }

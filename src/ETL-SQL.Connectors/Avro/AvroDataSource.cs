@@ -34,7 +34,7 @@ namespace ETL_SQL.Connectors.Avro
         {
             _filePath = filePath;
             _options = options;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
             if (options != null && options.TryGetValue("SCHEMA_FILE", out var sf)) _schemaFile = sf;
             _encryption = new EncryptionOptions(options);
         }
@@ -70,7 +70,7 @@ namespace ETL_SQL.Connectors.Avro
                     {
                         row[field.Name] = record[field.Name];
                     }
-                    currentBatch.AddRow(row);
+                    await currentBatch.AddRowAsync(row);
 
                     if (currentBatch.Rows.Count >= batchSize)
                     {

@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ETL_SQL.Orchestrator</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+    <PackageReference Include="Spectre.Console" Version="0.54.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="ETL_SQL.Core" />
+    <Using Include="ETL_SQL.Core.Data" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ETL-SQL.Tests" />
+  </ItemGroup>
+</Project>

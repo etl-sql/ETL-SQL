@@ -5,6 +5,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Parser;
 using System.Text.RegularExpressions;
+using ETL_SQL.Core.Formatting;
 
 namespace ETL_SQL.Core
 {
@@ -42,7 +43,7 @@ namespace ETL_SQL.Core
 
     public record NoOpStatement : Statement
     {
-        public override string ToSql() => ";";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record CreateConnectionStatement(string name, string? type = null, Expression? target = null, Dictionary<string, string>? options = null, ObjectCreationMode mode = ObjectCreationMode.Create) : Statement
@@ -53,21 +54,7 @@ namespace ETL_SQL.Core
         public Dictionary<string, string>? Options { get; } = options;
         public ObjectCreationMode Mode { get; } = mode;
 
-        public override string ToSql()
-        {
-            var modeStr = Mode switch {
-                ObjectCreationMode.Alter => "ALTER",
-                ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
-                _ => "CREATE"
-            };
-            var onStr = (ConnectionType != null && TargetExpression != null) ? $" ON {ConnectionType}({TargetExpression.ToSql()})" : "";
-            var optionsStr = "";
-            if (Options != null && Options.Count > 0)
-            {
-                optionsStr = " WITH (" + string.Join(", ", Options.Select(o => $"{o.Key}='{o.Value}'")) + ")";
-            }
-            return $"{modeStr} CONNECTION {ConnectionName}{onStr}{optionsStr};";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }    public record CreateSshKeyPairStatement(Expression path, Expression? bits = null, Expression? algorithm = null, Expression? passphrase = null, Expression? comment = null) : Statement
     {
         public Expression Path { get; } = path;
@@ -76,15 +63,7 @@ namespace ETL_SQL.Core
         public Expression? Passphrase { get; } = passphrase;
         public Expression? Comment { get; } = comment;
 
-        public override string ToSql()
-        {
-            var args = new List<string> { Path.ToSql() };
-            if (Bits != null) args.Add(Bits.ToSql());
-            if (Algorithm != null) args.Add(Algorithm.ToSql());
-            if (Passphrase != null) args.Add(Passphrase.ToSql());
-            if (Comment != null) args.Add(Comment.ToSql());
-            return $"CREATE SSH_KEY_PAIR({string.Join(", ", args)});";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
 
@@ -96,7 +75,7 @@ namespace ETL_SQL.Core
         public string? Description => Metadata.TryGetValue("d", out var d) ? d : null;
         public string? DerivedFromDescriptions { get; set; }
 
-        public string ToSql() => Alias != null ? $"{Expression.ToSql()} AS {Alias}" : Expression.ToSql();
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record TableReference : AstNode
@@ -122,34 +101,7 @@ namespace ETL_SQL.Core
             FunctionCall = functionCall;
         }
 
-        public string ToSql()
-        {
-            var sql = "";
-            if (Subquery != null)
-            {
-                sql = $"({Subquery.ToSql().TrimEnd(';')})";
-            }
-            else if (FunctionCall != null)
-            {
-                sql = FunctionCall.ToSql();
-            }
-            else
-            {
-                var parts = new List<string>();
-                if (ConnectionName != null) parts.Add(ConnectionName);
-                if (DatabaseName != null) parts.Add(DatabaseName);
-                if (SchemaName != null) parts.Add(SchemaName);
-                parts.Add(TableName);
-                sql = string.Join(".", parts);
-            }
-            if (Alias != null) sql += " AS " + Alias;
-            foreach (var op in TableOperators)
-            {
-                if (op is PivotClause p) sql += " " + p.ToSql();
-                else if (op is UnpivotClause u) sql += " " + u.ToSql();
-            }
-            return sql;
-        }
+        public string ToSql() => AstSerializer.Format(this);
 
         public virtual IEnumerable<string> GetSourceTables()
         {
@@ -182,7 +134,7 @@ namespace ETL_SQL.Core
             PivotValues = pivotValues;
         }
 
-        public string ToSql() => $"PIVOT ({AggregateFunction}({AggregateColumn}) FOR {PivotColumn} IN ({string.Join(", ", PivotValues.Select(v => v.ToSql()))}))" + (Alias != null ? $" AS {Alias}" : "");
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record OutputClause : AstNode
@@ -196,12 +148,7 @@ namespace ETL_SQL.Core
             IntoTable = intoTable;
         }
 
-        public string ToSql()
-        {
-            var cols = string.Join(", ", Columns.Select(c => c.ToSql()));
-            var into = IntoTable != null ? $" INTO {IntoTable.ToSql()}" : "";
-            return $"OUTPUT {cols}{into}";
-        }
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record UnpivotClause : AstNode
@@ -218,7 +165,7 @@ namespace ETL_SQL.Core
             UnpivotColumns = unpivotColumns;
         }
 
-        public string ToSql() => $"UNPIVOT ({ValueColumn} FOR {NameColumn} IN ({string.Join(", ", UnpivotColumns.Select(c => c))}))" + (Alias != null ? $" AS {Alias}" : "");
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public enum JoinHint { None, Hash, Loop, Merge }
@@ -239,25 +186,7 @@ namespace ETL_SQL.Core
             Hint = hint;
         }
 
-        public string ToSql() 
-        {
-            var hintStr = Hint switch {
-                JoinHint.Hash => "HASH ",
-                JoinHint.Loop => "LOOP ",
-                JoinHint.Merge => "MERGE ",
-                _ => ""
-            };
-            var typeParts = JoinType.Split(' ');
-            var typeWithHint = typeParts.Length > 1 ? $"{typeParts[0]} {hintStr}{string.Join(" ", typeParts.Skip(1))}" : $"{hintStr}{JoinType}";
-            
-            // Fix for cases like INNER JOIN -> INNER HASH JOIN
-            if (JoinType == "INNER" && Hint != JoinHint.None) return $"INNER {hintStr}JOIN {Table.ToSql()} ON {Condition.ToSql()}";
-            if (JoinType == "LEFT" && Hint != JoinHint.None) return $"LEFT {hintStr}OUTER JOIN {Table.ToSql()} ON {Condition.ToSql()}";
-            if (JoinType == "RIGHT" && Hint != JoinHint.None) return $"RIGHT {hintStr}OUTER JOIN {Table.ToSql()} ON {Condition.ToSql()}";
-            if (JoinType == "FULL" && Hint != JoinHint.None) return $"FULL {hintStr}OUTER JOIN {Table.ToSql()} ON {Condition.ToSql()}";
-
-            return IsApply ? $"{JoinType} {Table.ToSql()}" : $"{JoinType} JOIN {Table.ToSql()} ON {Condition.ToSql()}";
-        }
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record OrderByClause
@@ -270,7 +199,7 @@ namespace ETL_SQL.Core
             Descending = descending;
         }
 
-        public string ToSql() => Expression.ToSql() + (Descending ? " DESC" : " ASC");
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record CteDefinition : AstNode
@@ -303,16 +232,7 @@ namespace ETL_SQL.Core
             RootName = rootName;
         }
 
-        public string ToSql()
-        {
-            var options = new List<string>();
-            if (RootName != null) options.Add($"ROOT('{RootName}')");
-            if (IncludeNullValues) options.Add("INCLUDE_NULL_VALUES");
-            if (WithoutArrayWrapper) options.Add("WITHOUT_ARRAY_WRAPPER");
-            
-            var optStr = options.Count > 0 ? (Type == ForType.JSON ? ", " : " ") + string.Join(", ", options) : "";
-            return $"FOR {Type} {Mode}{optStr}";
-        }
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record SelectStatement : Statement
@@ -361,33 +281,7 @@ namespace ETL_SQL.Core
             return sources.Distinct(StringComparer.OrdinalIgnoreCase);
         }
 
-        public override string ToSql()
-        {
-            var recursive = IsRecursive ? "RECURSIVE " : "";
-            var with = (Ctes != null && Ctes.Count > 0) ? $"WITH {recursive}" + string.Join(", ", Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
-            var distinct = IsDistinct ? "DISTINCT " : "";
-            var top = "";
-            if (TopCount != null)
-            {
-                var percent = IsTopPercent ? " PERCENT" : "";
-                var ties = WithTies ? " WITH TIES" : "";
-                top = $"TOP ({TopCount.ToSql()}){percent}{ties} ";
-            }
-            var cols = string.Join(", ", Columns.Select(c => c.ToSql()));
-            var into = IntoTable != null ? $" INTO {IntoTable.ToSql()}" : "";
-            var from = $" FROM {FromTable.ToSql()}";
-            var joins = Joins.Count > 0 ? " " + string.Join(" ", Joins.Select(j => j.ToSql())) : "";
-            var where = WhereClause != null ? $" WHERE {WhereClause.ToSql()}" : "";
-            var group = GroupingSet != null ? $" GROUP BY {GroupingSet.ToSql()}" :
-                        GroupBy != null && GroupBy.Count > 0 ? $" GROUP BY {string.Join(", ", GroupBy.Select(g => g.ToSql()))}" : "";
-            var having = HavingClause != null ? $" HAVING {HavingClause.ToSql()}" : "";
-            var order = OrderBy != null && OrderBy.Count > 0 ? $" ORDER BY {string.Join(", ", OrderBy.Select(o => o.ToSql()))}" : "";
-            var limit = LimitCount != null ? $" LIMIT {LimitCount.ToSql()}" : "";
-            var offset = Offset != null ? $" OFFSET {Offset.ToSql()} ROWS" : "";
-            var forClause = ForClause != null ? $" {ForClause.ToSql()}" : "";
-
-            return $"{with}SELECT {distinct}{top}{cols}{into}{from}{joins}{where}{group}{having}{order}{limit}{offset}{forClause};";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public enum GroupingSetType { None, GroupingSets, Rollup, Cube }
@@ -411,19 +305,7 @@ namespace ETL_SQL.Core
             GroupSets = groupSets;
         }
 
-        public string ToSql()
-        {
-            string FmtSet(List<Expression> set) =>
-                set.Count == 0 ? "()" : $"({string.Join(", ", set.Select(e => e.ToSql()))})";
-
-            return Type switch
-            {
-                GroupingSetType.Rollup       => $"ROLLUP({string.Join(", ", GroupSets[0].Select(e => e.ToSql()))})",
-                GroupingSetType.Cube         => $"CUBE({string.Join(", ", GroupSets[0].Select(e => e.ToSql()))})",
-                GroupingSetType.GroupingSets => $"GROUPING SETS({string.Join(", ", GroupSets.Select(FmtSet))})",
-                _                            => string.Join(", ", GroupSets[0].Select(e => e.ToSql()))
-            };
-        }
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public enum SetOpType { UNION, UNION_ALL, EXCEPT, INTERSECT }
@@ -449,17 +331,7 @@ namespace ETL_SQL.Core
             return sources.Distinct(StringComparer.OrdinalIgnoreCase);
         }
 
-        public override string ToSql()
-        {
-            string op = Operation switch {
-                SetOpType.UNION => "UNION",
-                SetOpType.UNION_ALL => "UNION ALL",
-                SetOpType.EXCEPT => "EXCEPT",
-                SetOpType.INTERSECT => "INTERSECT",
-                _ => "UNION"
-            };
-            return $"({Left.ToSql().TrimEnd(';')}) {op} ({Right.ToSql().TrimEnd(';')});";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ExecStatement : Statement
@@ -477,14 +349,7 @@ namespace ETL_SQL.Core
             if (parameters != null) Parameters.AddRange(parameters);
         }
         
-        public override string ToSql() 
-        {
-            var sql = $"EXEC ({SqlExpression.ToSql()})";
-            if (ConnectionName != null) sql += $" AT {ConnectionName.ToSql()}";
-            if (IntoTable != null) sql += $" INTO {IntoTable.ToSql()}";
-            if (Parameters.Count > 0) sql += $" WITH (" + string.Join(", ", Parameters.Select(p => p.ToSql())) + ")";
-            return sql + ";";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ExecuteRemoteBlockStatement : Statement
@@ -498,7 +363,7 @@ namespace ETL_SQL.Core
             Body = body;
         }
 
-        public override string ToSql() => $"EXECUTE ({ConnectionName.ToSql()}) BEGIN ... END";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ExecutePushdownStatement : Statement
@@ -517,12 +382,7 @@ namespace ETL_SQL.Core
             if (parameters != null) Parameters.AddRange(parameters);
         }
 
-        public override string ToSql() 
-        {
-            var into = IntoTable != null ? $" INTO {IntoTable.ToSql()}" : "";
-            var parameters = Parameters.Count > 0 ? " WITH (" + string.Join(", ", Parameters.Select(p => p.ToSql())) + ")" : "";
-            return $"EXECUTE {ConnectionName.ToSql()}{into}{parameters} BEGIN\n{SqlText}\nEND;";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
 
         public override IEnumerable<string> GetSourceTables()
         {
@@ -599,21 +459,7 @@ namespace ETL_SQL.Core
             return Enumerable.Empty<string>();
         }
 
-        public override string ToSql()
-        {
-            var with = (Ctes != null && Ctes.Count > 0) ? "WITH " + string.Join(", ", Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
-            var cols = Columns != null && Columns.Count > 0 ? "(" + string.Join(", ", Columns) + ") " : "";
-            var output = Output != null ? " " + Output.ToSql() : "";
-            if (SelectQuery != null)
-            {
-                return $"{with}INSERT INTO {TargetTable.ToSql()} {cols}{output}{SelectQuery.ToSql()}";
-            }
-            else
-            {
-                var vals = Values != null ? string.Join(", ", Values.Select(row => "(" + string.Join(", ", row.Select(v => v.ToSql())) + ")")) : "";
-                return $"{with}INSERT INTO {TargetTable.ToSql()} {cols}{output}VALUES {vals};";
-            }
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record Assignment : AstNode
@@ -627,7 +473,7 @@ namespace ETL_SQL.Core
             Value = value;
         }
 
-        public string ToSql() => $"{ColumnName} = {Value.ToSql()}";
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record UpdateStatement : Statement
@@ -647,16 +493,7 @@ namespace ETL_SQL.Core
             WhereClause = whereClause;
         }
 
-        public override string ToSql()
-        {
-            var with = (Ctes != null && Ctes.Count > 0) ? "WITH " + string.Join(", ", Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
-            var sets = string.Join(", ", Assignments.Select(a => a.ToSql()));
-            var from = FromTable != null ? $" FROM {FromTable.ToSql()}" : "";
-            var joins = Joins != null && Joins.Count > 0 ? " " + string.Join(" ", Joins.Select(j => j.ToSql())) : "";
-            var output = Output != null ? " " + Output.ToSql() : "";
-            var where = WhereClause != null ? $" WHERE {WhereClause.ToSql()}" : "";
-            return $"{with}UPDATE {TargetTable.ToSql()} SET {sets}{from}{joins}{output}{where};";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record DeleteStatement : Statement
@@ -671,13 +508,7 @@ namespace ETL_SQL.Core
             WhereClause = whereClause;
         }
 
-        public override string ToSql()
-        {
-            var with = (Ctes != null && Ctes.Count > 0) ? "WITH " + string.Join(", ", Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
-            var output = Output != null ? " " + Output.ToSql() : "";
-            var where = WhereClause != null ? $" WHERE {WhereClause.ToSql()}" : "";
-            return $"{with}DELETE FROM {TargetTable.ToSql()}{output}{where};";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record TruncateTableStatement : Statement
@@ -689,7 +520,7 @@ namespace ETL_SQL.Core
             TargetTable = targetTable;
         }
 
-        public override string ToSql() => $"TRUNCATE TABLE {TargetTable.ToSql()};";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public enum MergeActionType
@@ -715,22 +546,7 @@ namespace ETL_SQL.Core
             Condition = condition;
         }
 
-        public virtual string ToSql()
-        {
-            var cond = Condition != null ? $" AND {Condition.ToSql()}" : "";
-            switch (ActionType)
-            {
-                case MergeActionType.UPDATE:
-                    return $"THEN UPDATE SET {string.Join(", ", UpdateAssignments!.Select(a => a.ToSql()))}";
-                case MergeActionType.INSERT:
-                    var cols = InsertColumns != null && InsertColumns.Count > 0 ? "(" + string.Join(", ", InsertColumns) + ") " : "";
-                    var vals = string.Join(", ", InsertValues!.Select(v => v.ToSql()));
-                    return $"THEN INSERT {cols}VALUES ({vals})";
-                case MergeActionType.DELETE:
-                    return "THEN DELETE";
-                default: return "";
-            }
-        }
+        public virtual string ToSql() => AstSerializer.Format(this);
     }
 
     public record MergeMatchedClause(MergeActionType ActionType, Expression? Condition) : MergeActionClause(ActionType, Condition);
@@ -742,11 +558,11 @@ namespace ETL_SQL.Core
             Assignments = assignments;
             UpdateAssignments = assignments;
         }
-        public override string ToSql() => $"THEN UPDATE SET {string.Join(", ", Assignments.Select(a => a.ToSql()))}";
+        public override string ToSql() => AstSerializer.Format(this);
     }
     public record MergeDeleteClause(Expression? Condition) : MergeMatchedClause(MergeActionType.DELETE, Condition)
     {
-        public override string ToSql() => "THEN DELETE";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record MergeNotMatchedClause : MergeActionClause
@@ -775,12 +591,7 @@ namespace ETL_SQL.Core
             InsertValues = values;
         }
 
-        public override string ToSql() 
-        {
-            var cols = Columns != null && Columns.Count > 0 ? "(" + string.Join(", ", Columns) + ") " : "";
-            var vals = string.Join(", ", Values.Select(v => v.ToSql()));
-            return $"THEN INSERT {cols}VALUES ({vals})";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record MergeStatement : Statement
@@ -816,19 +627,7 @@ namespace ETL_SQL.Core
             return SourceTable.GetSourceTables();
         }
 
-        public override string ToSql()
-        {
-            var with = (Ctes != null && Ctes.Count > 0) ? "WITH " + string.Join(", ", Ctes.Select(c => $"{c.Name} AS ({c.Query.ToSql().TrimEnd(';')})")) + " " : "";
-            var sb = new System.Text.StringBuilder();
-            sb.Append(with);
-            sb.AppendLine($"MERGE INTO {TargetTable.ToSql()}{(TargetAlias != null ? " AS " + TargetAlias : "")}");
-            sb.AppendLine($"USING {SourceTable.ToSql()}{(SourceAlias != null ? " AS " + SourceAlias : "")}");
-            sb.AppendLine($"ON {OnCondition.ToSql()}");
-            foreach (var c in MatchedClauses) sb.AppendLine($"WHEN MATCHED{(c.Condition != null ? " AND " + c.Condition.ToSql() : "")} {c.ToSql()}");
-            foreach (var c in NotMatchedClauses) sb.AppendLine($"WHEN NOT MATCHED{(c.Condition != null ? " AND " + c.Condition.ToSql() : "")} {c.ToSql()}");
-            sb.Append(";");
-            return sb.ToString();
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ForeignKeyReference : AstNode
@@ -840,7 +639,7 @@ namespace ETL_SQL.Core
             Table = table;
             Columns = columns;
         }
-        public string ToSql() => $"REFERENCES {Table.ToSql()}({string.Join(", ", Columns)})";
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public abstract record TableConstraint : AstNode
@@ -853,14 +652,14 @@ namespace ETL_SQL.Core
     {
         public List<string> Columns { get; }
         public TablePrimaryKeyConstraint(List<string> columns) => Columns = columns;
-        public override string ToSql() => $"{(ConstraintName != null ? $"CONSTRAINT {ConstraintName} " : "")}PRIMARY KEY ({string.Join(", ", Columns)})";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record TableUniqueConstraint : TableConstraint
     {
         public List<string> Columns { get; }
         public TableUniqueConstraint(List<string> columns) => Columns = columns;
-        public override string ToSql() => $"{(ConstraintName != null ? $"CONSTRAINT {ConstraintName} " : "")}UNIQUE ({string.Join(", ", Columns)})";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record TableForeignKeyConstraint : TableConstraint
@@ -872,14 +671,14 @@ namespace ETL_SQL.Core
             Columns = columns;
             Reference = reference;
         }
-        public override string ToSql() => $"{(ConstraintName != null ? $"CONSTRAINT {ConstraintName} " : "")}FOREIGN KEY ({string.Join(", ", Columns)}) {Reference.ToSql()}";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record TableCheckConstraint : TableConstraint
     {
         public Expression Expression { get; }
         public TableCheckConstraint(Expression expression) => Expression = expression;
-        public override string ToSql() => $"{(ConstraintName != null ? $"CONSTRAINT {ConstraintName} " : "")}CHECK ({Expression.ToSql()})";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ColumnDefinition
@@ -905,24 +704,7 @@ namespace ETL_SQL.Core
             Metadata = metadata ?? new(StringComparer.OrdinalIgnoreCase);
         }
 
-        public string ToSql()
-        {
-            var pk = IsPrimaryKey ? " PRIMARY KEY" : "";
-            var unq = IsUnique ? " UNIQUE" : "";
-            var nullable = !IsNullable ? " NOT NULL" : "";
-            var identity = IsIdentity ? " IDENTITY" : "";
-            var def = DefaultExpression != null ? $" DEFAULT {DefaultExpression.ToSql()}" : "";
-            var check = CheckConstraint != null ? $" CHECK ({CheckConstraint.ToSql()})" : "";
-            var fk = ForeignKey != null ? $" {ForeignKey.ToSql()}" : "";
-            
-            var tags = "";
-            if (Metadata.Count > 0)
-            {
-                tags = " /* " + string.Join(" ", Metadata.Select(kv => $"@{kv.Key}: {kv.Value}")) + " */";
-            }
-            
-            return $"{ColumnName} {DataType}{pk}{unq}{nullable}{identity}{def}{check}{fk}{tags}";
-        }
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record CreateTableStatement : Statement
@@ -939,14 +721,7 @@ namespace ETL_SQL.Core
             Columns = columns;
         }
 
-        public override string ToSql()
-        {
-            var ifNot = IfNotExists ? "IF NOT EXISTS " : "";
-            var items = new List<string>(Columns.Select(c => c.ToSql()));
-            items.AddRange(TableConstraints.Select(tc => tc.ToSql()));
-            
-            return $"{ifNot}CREATE TABLE {TargetTable.ToSql()} ({string.Join(", ", items)});";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public enum AlterTableActionType { ADD, DROP_COLUMN, RENAME_COLUMN }
@@ -970,23 +745,7 @@ namespace ETL_SQL.Core
             NewColumnName = newColumnName;
         }
 
-        public override string ToSql()
-        {
-            var sql = $"ALTER TABLE {TargetTable.ToSql()} ";
-            switch (Action)
-            {
-                case AlterTableActionType.ADD:
-                    sql += $"ADD {NewColumn!.ToSql()}";
-                    break;
-                case AlterTableActionType.DROP_COLUMN:
-                    sql += $"DROP COLUMN {ColumnToDelete}";
-                    break;
-                case AlterTableActionType.RENAME_COLUMN:
-                    sql += $"RENAME COLUMN {OldColumnName} TO {NewColumnName}";
-                    break;
-            }
-            return sql + ";";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record DropTableStatement : Statement
@@ -1000,7 +759,7 @@ namespace ETL_SQL.Core
             IfExists = ifExists;
         }
 
-        public override string ToSql() => $"DROP TABLE {(IfExists ? "IF EXISTS " : "")}{TargetTable.ToSql()};";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record DropConnectionStatement : Statement
@@ -1008,12 +767,12 @@ namespace ETL_SQL.Core
         public string ConnectionName { get; }
         public bool IfExists { get; }
         public DropConnectionStatement(string name, bool ifExists) { ConnectionName = name; IfExists = ifExists; }
-        public override string ToSql() => $"DROP CONNECTION {(IfExists ? "IF EXISTS " : "")}{ConnectionName};";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ClearSessionStatement : Statement
     {
-        public override string ToSql() => "CLEAR SESSION;";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record DropProcedureStatement : Statement
@@ -1021,7 +780,7 @@ namespace ETL_SQL.Core
         public string ProcedureName { get; }
         public bool IfExists { get; }
         public DropProcedureStatement(string name, bool ifExists) { ProcedureName = name; IfExists = ifExists; }
-        public override string ToSql() => $"DROP PROCEDURE {(IfExists ? "IF EXISTS " : "")}{ProcedureName};";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record DropFunctionStatement : Statement
@@ -1029,7 +788,7 @@ namespace ETL_SQL.Core
         public string FunctionName { get; }
         public bool IfExists { get; }
         public DropFunctionStatement(string name, bool ifExists) { FunctionName = name; IfExists = ifExists; }
-        public override string ToSql() => $"DROP FUNCTION {(IfExists ? "IF EXISTS " : "")}{FunctionName};";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record DropIndexStatement : Statement
@@ -1038,7 +797,7 @@ namespace ETL_SQL.Core
         public TableReference? Table { get; }
         public bool IfExists { get; }
         public DropIndexStatement(string name, TableReference? table, bool ifExists) { IndexName = name; Table = table; IfExists = ifExists; }
-        public override string ToSql() => $"DROP INDEX {(IfExists ? "IF EXISTS " : "")}{IndexName}{(Table != null ? " ON " + Table.ToSql() : "")};";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record DeclareStatement : Statement
@@ -1071,14 +830,7 @@ namespace ETL_SQL.Core
             Metadata = metadata ?? new(StringComparer.OrdinalIgnoreCase);
         }
 
-        public override string ToSql()
-        {
-            var init = InitialValue != null ? $" = {InitialValue.ToSql()}" : "";
-            var pass = IsSensitive ? " PASSWORD" : "";
-            var input = IsInput ? " INPUT" : "";
-            var output = IsOutput ? " OUTPUT" : "";
-            return $"DECLARE {VariableName} {DataType}{init}{pass}{input}{output};";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record DockerStatement : Statement
@@ -1090,7 +842,7 @@ namespace ETL_SQL.Core
             ImageName = imageName;
             Alias = alias;
         }
-        public override string ToSql() => Alias != null ? $"USE DOCKER({ImageName.ToSql()}) AS {Alias};" : $"USE DOCKER({ImageName.ToSql()});";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record RunScriptStatement : Statement
@@ -1104,11 +856,7 @@ namespace ETL_SQL.Core
             Parameters = parameters;
         }
 
-        public override string ToSql()
-        {
-            var paramsStr = Parameters.Count > 0 ? " WITH (" + string.Join(", ", Parameters.Select(p => $"{p.Key} = {p.Value.ToSql()}")) + ")" : "";
-            return $"RUN SCRIPT {PathExpression.ToSql()}{paramsStr};";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record SetVariableStatement : Statement
@@ -1122,7 +870,7 @@ namespace ETL_SQL.Core
             Value = value;
         }
 
-        public override string ToSql() => $"SET {VariableName} = {Value.ToSql()};";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record BlockStatement : Statement
@@ -1134,7 +882,7 @@ namespace ETL_SQL.Core
             Statements = statements;
         }
 
-        public override string ToSql() => "BEGIN ... END";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record WhileStatement : Statement
@@ -1148,7 +896,7 @@ namespace ETL_SQL.Core
             Body = body;
         }
 
-        public override string ToSql() => $"WHILE {Condition.ToSql()} BEGIN ... END";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ForStatement : Statement
@@ -1168,7 +916,7 @@ namespace ETL_SQL.Core
             Body = body;
         }
 
-        public override string ToSql() => $"FOR {VariableName} = {StartValue.ToSql()} TO {EndValue.ToSql()} BEGIN ... END";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ForeachStatement : Statement
@@ -1184,7 +932,7 @@ namespace ETL_SQL.Core
             Body = body;
         }
 
-        public override string ToSql() => $"FOREACH {VariableName} IN {ListExpression.ToSql()} BEGIN ... END";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ElseIfClause : AstNode
@@ -1198,7 +946,7 @@ namespace ETL_SQL.Core
             Body = body;
         }
 
-        public string ToSql() => $"ELSE IF {Condition.ToSql()} BEGIN ... END";
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record IfStatement : Statement
@@ -1216,19 +964,7 @@ namespace ETL_SQL.Core
             ElseBody = elseBody;
         }
 
-        public override string ToSql()
-        {
-            var sql = $"IF {Condition.ToSql()} BEGIN ... END";
-            if (ElseIfClauses != null)
-            {
-                foreach (var ei in ElseIfClauses) sql += " " + ei.ToSql();
-            }
-            if (ElseBody != null)
-            {
-                sql += " ELSE BEGIN ... END";
-            }
-            return sql;
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record PrintStatement : Statement
@@ -1244,12 +980,7 @@ namespace ETL_SQL.Core
             TimestampFormat = timestampFormat;
         }
 
-        public override string ToSql()
-        {
-            var ts = ShowTimestamp != null ? $", {ShowTimestamp.ToSql()}" : "";
-            var fmt = TimestampFormat != null ? $", {TimestampFormat.ToSql()}" : "";
-            return $"PRINT({Message.ToSql()}{ts}{fmt});";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public enum WaitType { Delay, Time }
@@ -1260,7 +991,7 @@ namespace ETL_SQL.Core
         public Expression Expression { get; } = expression;
         public WaitType Type { get; } = type;
 
-        public override string ToSql() => $"WAITFOR {Type.ToString().ToUpper()} {Expression.ToSql()};";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record RaiseErrorStatement : Statement
@@ -1278,12 +1009,7 @@ namespace ETL_SQL.Core
             Parameters = parameters ?? new List<Expression>();
         }
 
-        public override string ToSql()
-        {
-            var loc = CodeLocation != null ? $", {CodeLocation.ToSql()}" : "";
-            var paramsStr = Parameters.Count > 0 ? ", " + string.Join(", ", Parameters.Select(p => p.ToSql())) : "";
-            return $"RAISEERROR({Message.ToSql()}, {Severity.ToSql()}{loc}{paramsStr});";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ExecuteParameter
@@ -1299,7 +1025,7 @@ namespace ETL_SQL.Core
             IsInput = isInput;
         }
 
-        public string ToSql() => Expression.ToSql() + (IsOutput ? " OUTPUT" : "") + (IsInput ? " INPUT" : "");
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record ExecuteStatement : Statement
@@ -1313,11 +1039,7 @@ namespace ETL_SQL.Core
             Parameters = parameters;
         }
 
-        public override string ToSql()
-        {
-            var paramsStr = Parameters.Count > 0 ? " " + string.Join(", ", Parameters.Select(p => p.ToSql())) : "";
-            return $"EXECUTE {ProcedureName}{paramsStr};";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ParallelStatement : Statement
@@ -1331,7 +1053,7 @@ namespace ETL_SQL.Core
             ConcurrencyLimit = concurrencyLimit;
         }
 
-        public override string ToSql() => "PARALLEL " + (ConcurrencyLimit > 0 ? $"({ConcurrencyLimit}) " : "") + Body.ToSql();
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record BulkInsertStatement : Statement
@@ -1357,14 +1079,7 @@ namespace ETL_SQL.Core
             return new[] { FilePath };
         }
 
-        public override string ToSql()
-        {
-            var cols = Columns != null && Columns.Count > 0 ? "(" + string.Join(", ", Columns) + ") " : "";
-            var optionsStr = Options.Count > 0 
-                ? $" WITH ({string.Join(", ", Options.Select(o => $"{o.Key} = {o.Value.ToSql()}"))})" 
-                : "";
-            return $"BULK INSERT {TargetTable.ToSql()} {cols}FROM '{FilePath}'{optionsStr};";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record CreateProcedureStatement : Statement
@@ -1382,16 +1097,7 @@ namespace ETL_SQL.Core
             Mode = mode;
         }
 
-        public override string ToSql()
-        {
-            var modeStr = Mode switch {
-                ObjectCreationMode.Alter => "ALTER",
-                ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
-                _ => "CREATE"
-            };
-            var paramsStr = string.Join(", ", Parameters.Select(p => p.ToSql()));
-            return $"{modeStr} PROCEDURE {ProcedureName} ({paramsStr}) AS BEGIN ... END;";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record CreateFunctionStatement : Statement
@@ -1411,16 +1117,7 @@ namespace ETL_SQL.Core
             Mode = mode;
         }
 
-        public override string ToSql()
-        {
-            var modeStr = Mode switch {
-                ObjectCreationMode.Alter => "ALTER",
-                ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
-                _ => "CREATE"
-            };
-            var paramsStr = string.Join(", ", Parameters.Select(p => p.ToSql()));
-            return $"{modeStr} FUNCTION {FunctionName} ({paramsStr}) RETURNS {ReturnType} AS BEGIN ... END;";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ParameterDefinition : AstNode
@@ -1434,40 +1131,40 @@ namespace ETL_SQL.Core
             DataType = dataType;
         }
 
-        public string ToSql() => $"{Name} {DataType}";
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record BeginTransactionStatement : Statement
     {
         public string? Name { get; }
         public BeginTransactionStatement(string? name = null) => Name = name;
-        public override string ToSql() => Name != null ? $"BEGIN TRANSACTION {Name};" : "BEGIN TRANSACTION;";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record CommitTransactionStatement : Statement
     {
         public string? Name { get; }
         public CommitTransactionStatement(string? name = null) => Name = name;
-        public override string ToSql() => Name != null ? $"COMMIT TRANSACTION {Name};" : "COMMIT TRANSACTION;";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record RollbackTransactionStatement : Statement
     {
         public string? Name { get; }
         public RollbackTransactionStatement(string? name = null) => Name = name;
-        public override string ToSql() => Name != null ? $"ROLLBACK TRANSACTION {Name};" : "ROLLBACK TRANSACTION;";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ContinueStatement : Statement
     {
-        public override string ToSql() => "CONTINUE;";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ThrowStatement : Statement
     {
         public Expression? Message { get; }
         public ThrowStatement(Expression? message = null) => Message = message;
-        public override string ToSql() => Message != null ? $"THROW {Message.ToSql()};" : "THROW;";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record TryCatchStatement : Statement
@@ -1481,7 +1178,7 @@ namespace ETL_SQL.Core
             CatchBody = catchBody;
         }
 
-        public override string ToSql() => "TRY ... CATCH ... END";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
 
@@ -1494,12 +1191,12 @@ namespace ETL_SQL.Core
             ReturnValue = returnValue;
         }
 
-        public override string ToSql() => ReturnValue != null ? $"RETURN {ReturnValue.ToSql()};" : "RETURN;";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record BreakStatement : Statement 
     {
-        public override string ToSql() => "BREAK;";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     /// <summary>Base class for all expressions that return a value.</summary>
@@ -1523,16 +1220,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceTables() => Expression.GetSourceTables();
         public override IEnumerable<string> GetSourceColumns() => Expression.GetSourceColumns();
 
-        public override string ToSql()
-        {
-            string op = Operator switch {
-                TokenType.NOT => "NOT ",
-                TokenType.MINUS => "-",
-                TokenType.PLUS => "+",
-                _ => Operator.ToString()
-            };
-            return $"{op}{Expression.ToSql()}";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record BinaryExpression : Expression
@@ -1550,27 +1238,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceTables() => Left.GetSourceTables().Concat(Right.GetSourceTables()).Distinct(StringComparer.OrdinalIgnoreCase);
         public override IEnumerable<string> GetSourceColumns() => Left.GetSourceColumns().Concat(Right.GetSourceColumns()).Distinct(StringComparer.OrdinalIgnoreCase);
 
-        public override string ToSql()
-        {
-            string op = Operator switch
-            {
-                TokenType.PLUS => "+",
-                TokenType.MINUS => "-",
-                TokenType.STAR => "*",
-                TokenType.SLASH => "/",
-                TokenType.MODULO => "%",
-                TokenType.EQUALS => "=",
-                TokenType.NOT_EQUALS => "<>",
-                TokenType.LESS_THAN => "<",
-                TokenType.LESS_EQUALS => "<=",
-                TokenType.GREATER_THAN => ">",
-                TokenType.GREATER_EQUALS => ">=",
-                TokenType.AND => "AND",
-                TokenType.OR => "OR",
-                _ => Operator.ToString()
-            };
-            return $"({Left.ToSql()} {op} {Right.ToSql()})";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record LiteralExpression : Expression
@@ -1584,15 +1252,7 @@ namespace ETL_SQL.Core
             Type = type;
         }
 
-        public override string ToSql()
-        {
-            if (Value == null) return "NULL";
-            string valStr = Value.ToString() ?? "";
-            if (Type == TokenType.TRUE) return "TRUE";
-            if (Type == TokenType.FALSE) return "FALSE";
-            if (Type == TokenType.STRING) return $"'{valStr.Replace("'", "''")}'";
-            return valStr;
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record IdentifierExpression : Expression
@@ -1604,7 +1264,7 @@ namespace ETL_SQL.Core
             Name = name;
         }
 
-        public override string ToSql() => Name;
+        public override string ToSql() => AstSerializer.Format(this);
         public override IEnumerable<string> GetSourceColumns() => new[] { Name.Split('.').Last() };
         public override IEnumerable<string> GetSourceTables() => Name.Contains('.') ? new[] { Name.Split('.')[0] } : Enumerable.Empty<string>();
     }
@@ -1620,7 +1280,7 @@ namespace ETL_SQL.Core
             MemberName = memberName;
         }
 
-        public override string ToSql() => $"{Expression.ToSql()}.{MemberName}";
+        public override string ToSql() => AstSerializer.Format(this);
         public override IEnumerable<string> GetSourceTables() => Expression.GetSourceTables();
         public override IEnumerable<string> GetSourceColumns() => new[] { MemberName };
     }
@@ -1634,7 +1294,7 @@ namespace ETL_SQL.Core
             Query = query;
         }
 
-        public override string ToSql() => $"({Query.ToSql().TrimEnd(';')})";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record VariableExpression : Expression
@@ -1646,7 +1306,7 @@ namespace ETL_SQL.Core
             Name = name;
         }
 
-        public override string ToSql() => Name;
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record FunctionCallExpression : Expression
@@ -1665,21 +1325,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceTables() => Arguments.SelectMany(a => a.GetSourceTables()).Distinct(StringComparer.OrdinalIgnoreCase);
         public override IEnumerable<string> GetSourceColumns() => Arguments.SelectMany(a => a.GetSourceColumns()).Distinct(StringComparer.OrdinalIgnoreCase);
 
-        public override string ToSql()
-        {
-            var distinct = IsDistinct ? "DISTINCT " : "";
-            var args = string.Join(", ", Arguments.Select(a => a.ToSql()));
-            var sql = $"{FunctionName}({distinct}{args})";
-            if (WithinGroupOrderBy != null)
-            {
-                sql += $" WITHIN GROUP (ORDER BY {string.Join(", ", WithinGroupOrderBy.Select(o => o.ToSql()))})";
-            }
-            if (Window != null)
-            {
-                sql += $" OVER ({Window.ToSql()})";
-            }
-            return sql;
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ListExpression : Expression
@@ -1691,7 +1337,7 @@ namespace ETL_SQL.Core
             Items = items;
         }
 
-        public override string ToSql() => "(" + string.Join(", ", Items.Select(i => i.ToSql())) + ")";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record IsNullExpression : Expression
@@ -1705,7 +1351,7 @@ namespace ETL_SQL.Core
             Not = isNot;
         }
 
-        public override string ToSql() => $"{Expression.ToSql()} IS {(Not ? "NOT " : "")}NULL";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ExportStatement : Statement
@@ -1721,7 +1367,7 @@ namespace ETL_SQL.Core
             Options = options;
         }
 
-        public override string ToSql() => $"EXPORT {Source.ToSql()} TO '{TargetPath}'" + (Options != null ? " WITH (...)" : "");
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record HelpStatement : Statement
@@ -1735,7 +1381,7 @@ namespace ETL_SQL.Core
             SubTopic = subTopic;
         }
 
-        public override string ToSql() => $"HELP {(Topic != null ? Topic + (SubTopic != null ? " " + SubTopic : "") : "")}";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record InExpression : Expression
@@ -1753,7 +1399,7 @@ namespace ETL_SQL.Core
             Subquery = subquery;
         }
 
-        public override string ToSql() => $"{Left.ToSql()} {(IsNot ? "NOT " : "")}IN {Right.ToSql()}";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record LineageStatement : Statement
@@ -1769,13 +1415,7 @@ namespace ETL_SQL.Core
             ExportPath = exportPath;
         }
 
-        public override string ToSql() 
-        {
-            var sql = $"LINEAGE {TargetTable.ToSql()}";
-            if (ColumnName != null) sql += $", {ColumnName}";
-            if (ExportPath != null) sql += $" TO '{ExportPath}'";
-            return sql;
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record EmailStatement : Statement
@@ -1799,29 +1439,7 @@ namespace ETL_SQL.Core
             ConnectionName = connectionName;
         }
 
-        public override string ToSql()
-        {
-            if (IsSqlStyle)
-            {
-                var sql = $"SEND EMAIL TO {To.ToSql()}\nFROM {From.ToSql()}\nSUBJECT {Subject.ToSql()}\nBODY {Body.ToSql()}";
-                if (Cc != null && Cc.Count > 0) sql += "\nCC " + string.Join(", ", Cc.Select(e => e.ToSql()));
-                if (Bcc != null && Bcc.Count > 0) sql += "\nBCC " + string.Join(", ", Bcc.Select(e => e.ToSql()));
-                if (Attachments != null && Attachments.Count > 0) sql += "\nATTACH " + string.Join(", ", Attachments.Select(e => e.ToSql()));
-                if (ConnectionName != null) sql += $"\nAT {ConnectionName.ToSql()}";
-                return sql + ";";
-            }
-            else
-            {
-                var args = new List<string> { ConnectionName?.ToSql() ?? "NULL", To.ToSql(), From.ToSql(), Subject.ToSql(), Body.ToSql() };
-                if (Cc != null || Bcc != null || Attachments != null)
-                {
-                    args.Add(Cc != null ? "[" + string.Join(", ", Cc.Select(e => e.ToSql())) + "]" : "NULL");
-                    args.Add(Bcc != null ? "[" + string.Join(", ", Bcc.Select(e => e.ToSql())) + "]" : "NULL");
-                    args.Add(Attachments != null ? "[" + string.Join(", ", Attachments.Select(e => e.ToSql())) + "]" : "NULL");
-                }
-                return $"SEND_EMAIL({string.Join(", ", args)});";
-            }
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record LikeExpression : Expression
@@ -1839,7 +1457,7 @@ namespace ETL_SQL.Core
             EscapeChar = escapeChar;
         }
 
-        public override string ToSql() => $"{Left.ToSql()} {(IsNot ? "NOT " : "")}LIKE {Pattern.ToSql()}{(EscapeChar != null ? " ESCAPE " + EscapeChar.ToSql() : "")}";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ExistsExpression : Expression
@@ -1853,7 +1471,7 @@ namespace ETL_SQL.Core
             IsNot = isNot;
         }
 
-        public override string ToSql() => $"{(IsNot ? "NOT " : "")}EXISTS ({Subquery.ToSql()})";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record CaseExpression : Expression
@@ -1881,20 +1499,7 @@ namespace ETL_SQL.Core
             return columns.Distinct(StringComparer.OrdinalIgnoreCase);
         }
 
-        public override string ToSql()
-        {
-            var sql = "CASE ";
-            foreach (var clause in WhenClauses)
-            {
-                sql += $"WHEN {clause.Condition.ToSql()} THEN {clause.Result.ToSql()} ";
-            }
-            if (ElseResult != null)
-            {
-                sql += $"ELSE {ElseResult.ToSql()} ";
-            }
-            sql += "END";
-            return sql;
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
     public record AtTimeZoneExpression : Expression
     {
@@ -1907,7 +1512,7 @@ namespace ETL_SQL.Core
             TimeZone = timeZone;
         }
 
-        public override string ToSql() => $"{Left.ToSql()} AT TIME ZONE {TimeZone.ToSql()}";
+        public override string ToSql() => AstSerializer.Format(this);
 
         public override IEnumerable<string> GetSourceTables() => Left.GetSourceTables();
         public override IEnumerable<string> GetSourceColumns() => Left.GetSourceColumns();
@@ -1927,7 +1532,7 @@ namespace ETL_SQL.Core
             Length = length;
         }
 
-        public override string ToSql() => $"SUBSTRING({String.ToSql()} FROM {Start.ToSql()}{(Length != null ? $" FOR {Length.ToSql()}" : "")})";
+        public override string ToSql() => AstSerializer.Format(this);
         public override IEnumerable<string> GetSourceTables() => String.GetSourceTables();
         public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns();
     }
@@ -1937,7 +1542,7 @@ namespace ETL_SQL.Core
         public Expression Substring { get; } = substring;
         public Expression String { get; } = str;
 
-        public override string ToSql() => $"POSITION({Substring.ToSql()} IN {String.ToSql()})";
+        public override string ToSql() => AstSerializer.Format(this);
         public override IEnumerable<string> GetSourceTables() => String.GetSourceTables().Concat(Substring.GetSourceTables());
         public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns().Concat(Substring.GetSourceColumns());
     }
@@ -1947,7 +1552,7 @@ namespace ETL_SQL.Core
         public string Field { get; } = field;
         public Expression Source { get; } = source;
 
-        public override string ToSql() => $"EXTRACT({Field} FROM {Source.ToSql()})";
+        public override string ToSql() => AstSerializer.Format(this);
         public override IEnumerable<string> GetSourceTables() => Source.GetSourceTables();
         public override IEnumerable<string> GetSourceColumns() => Source.GetSourceColumns();
     }
@@ -1959,7 +1564,7 @@ namespace ETL_SQL.Core
         public Expression Start { get; } = start;
         public Expression? Length { get; } = length;
 
-        public override string ToSql() => $"OVERLAY({String.ToSql()} PLACING {Overlay.ToSql()} FROM {Start.ToSql()}{(Length != null ? $" FOR {Length.ToSql()}" : "")})";
+        public override string ToSql() => AstSerializer.Format(this);
         public override IEnumerable<string> GetSourceTables() => String.GetSourceTables().Concat(Overlay.GetSourceTables());
         public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns().Concat(Overlay.GetSourceColumns());
     }
@@ -1972,12 +1577,7 @@ namespace ETL_SQL.Core
         public Expression? Characters { get; } = characters;
         public Expression String { get; } = str;
 
-        public override string ToSql()
-        {
-            var typeStr = Type.ToString();
-            var chars = Characters != null ? $"{Characters.ToSql()} FROM " : "";
-            return $"TRIM({typeStr} {chars}{String.ToSql()})";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
         public override IEnumerable<string> GetSourceTables() => String.GetSourceTables().Concat(Characters?.GetSourceTables() ?? Enumerable.Empty<string>());
         public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns().Concat(Characters?.GetSourceColumns() ?? Enumerable.Empty<string>());
     }
@@ -2002,25 +1602,7 @@ namespace ETL_SQL.Core
             EndValue = endValue;
         }
 
-        public string ToSql()
-        {
-            string start = BoundToSql(StartBound, StartValue);
-            if (EndBound == null) return $"{Type} {start}";
-            return $"{Type} BETWEEN {start} AND {BoundToSql(EndBound.Value, EndValue)}";
-        }
-
-        private string BoundToSql(WindowFrameBoundType bound, Expression? value)
-        {
-            return bound switch
-            {
-                WindowFrameBoundType.PRECEDING => $"{value?.ToSql()} PRECEDING",
-                WindowFrameBoundType.FOLLOWING => $"{value?.ToSql()} FOLLOWING",
-                WindowFrameBoundType.CURRENT_ROW => "CURRENT ROW",
-                WindowFrameBoundType.UNBOUNDED_PRECEDING => "UNBOUNDED PRECEDING",
-                WindowFrameBoundType.UNBOUNDED_FOLLOWING => "UNBOUNDED FOLLOWING",
-                _ => ""
-            };
-        }
+        public string ToSql() => AstSerializer.Format(this);
     }
 
 
@@ -2037,23 +1619,7 @@ namespace ETL_SQL.Core
             Frame = frame;
         }
 
-        public string ToSql()
-        {
-            var parts = new List<string>();
-            if (PartitionBy.Count > 0)
-            {
-                parts.Add("PARTITION BY " + string.Join(", ", PartitionBy.Select(p => p.ToSql())));
-            }
-            if (OrderBy.Count > 0)
-            {
-                parts.Add("ORDER BY " + string.Join(", ", OrderBy.Select(o => o.ToSql())));
-            }
-            if (Frame != null)
-            {
-                parts.Add(Frame.ToSql());
-            }
-            return string.Join(" ", parts);
-        }
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record CreateIndexStatement : Statement
@@ -2071,11 +1637,7 @@ namespace ETL_SQL.Core
             IsUnique = isUnique;
         }
 
-        public override string ToSql()
-        {
-            var unique = IsUnique ? "UNIQUE " : "";
-            return $"CREATE {unique}INDEX {IndexName} ON {TargetTable.ToSql()} ({string.Join(", ", Columns)});";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ExplainStatement : Statement
@@ -2087,10 +1649,7 @@ namespace ETL_SQL.Core
             Query = query;
         }
 
-        public override string ToSql()
-        {
-            return $"EXPLAIN {Query.ToSql()}";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public enum FileOpType { Copy, Move, Rename, Delete, Compress, Encrypt, Decrypt }
@@ -2110,13 +1669,7 @@ namespace ETL_SQL.Core
             Overwrite = overwrite;
         }
 
-        public override string ToSql()
-        {
-            var op = Type.ToString().ToUpper() + " FILE";
-            var dest = Destination != null ? " TO " + Destination.ToSql() : "";
-            var options = Overwrite != null ? $" WITH(OVERWRITE={Overwrite.ToSql()})" : "";
-            return $"{op} {Source.ToSql()}{dest}{options};";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public enum DirectoryOpType { Create, Delete, Rename, Move, Copy, DeleteContents, Compress, Encrypt, Decrypt }
@@ -2138,17 +1691,7 @@ namespace ETL_SQL.Core
             Recursive = recursive;
         }
 
-        public override string ToSql()
-        {
-            var op = Type.ToString().ToUpper() + " DIRECTORY" + (Type == DirectoryOpType.DeleteContents ? "_CONTENTS" : "");
-            var extra = NewNameOrDest != null ? " TO " + NewNameOrDest.ToSql() : "";
-            var options = new List<string>();
-            if (Overwrite != null) options.Add($"OVERWRITE={Overwrite.ToSql()}");
-            if (Recursive != null) options.Add($"RECURSIVE={Recursive.ToSql()}");
-            
-            var with = options.Count > 0 ? " WITH(" + string.Join(", ", options) + ")" : "";
-            return $"{op} {Path.ToSql()}{extra}{with};";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public enum FileTransferType { Send, Receive }
@@ -2162,27 +1705,7 @@ namespace ETL_SQL.Core
         public Expression? Overwrite { get; set; }
         public bool IsSqlStyle { get; set; }
 
-        public override string ToSql()
-        {
-            if (IsSqlStyle)
-            {
-                var op = Type == FileTransferType.Send ? "SEND FILE" : "RECEIVE FILE";
-                var fromTo = Type == FileTransferType.Send ? $"{LocalPath.ToSql()} TO {RemotePath.ToSql()}" : $"FROM {RemotePath.ToSql()} TO {LocalPath.ToSql()}";
-                var options = Overwrite != null ? $" WITH(OVERWRITE={Overwrite.ToSql()})" : "";
-                return $"{op} {fromTo} AT {ConnectionName}{options};";
-            }
-            else
-            {
-                var op = Type == FileTransferType.Send ? "SEND_FILE" : "RECEIVE_FILE";
-                var args = Type == FileTransferType.Send 
-                    ? new List<string> { LocalPath.ToSql(), ConnectionName, RemotePath.ToSql() }
-                    : new List<string> { ConnectionName, RemotePath.ToSql(), LocalPath.ToSql() };
-                
-                if (Overwrite != null) args.Add(Overwrite.ToSql());
-                
-                return $"{op}({string.Join(", ", args)});";
-            }
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public enum DockerAction { Start, Stop, Pause, Resume, Close }
@@ -2192,7 +1715,7 @@ namespace ETL_SQL.Core
         public string Alias { get; }
         public DockerAction Action { get; }
         public DockerActionStatement(string alias, DockerAction action) { Alias = alias; Action = action; }
-        public override string ToSql() => $"{Action.ToString().ToUpper()}_DOCKER {Alias};";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record DockerCloseStatement : Statement
@@ -2204,11 +1727,7 @@ namespace ETL_SQL.Core
             ImageName = imageName; 
             Alias = alias;
         }
-        public override string ToSql() 
-        {
-            if (Alias != null) return $"CLOSE_DOCKER {Alias};";
-            return ImageName != null ? $"CLOSE_DOCKER {ImageName.ToSql()};" : "CLOSE_DOCKER;";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record CreateJobStatement : Statement
@@ -2224,10 +1743,7 @@ namespace ETL_SQL.Core
             Script = script;
         }
 
-        public override string ToSql()
-        {
-            return $"CREATE JOB {JobName} ON SCHEDULE {Schedule.ToSql()} AS {Script.ToSql()}";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ScheduleInfo : AstNode
@@ -2243,11 +1759,7 @@ namespace ETL_SQL.Core
             AtTime = atTime;
         }
 
-        public string ToSql()
-        {
-            var at = AtTime != null ? $" AT '{AtTime}'" : "";
-            return $"EVERY {Interval} {Unit}{at}";
-        }
+        public string ToSql() => AstSerializer.Format(this);
     }
 
     public record ShowJobHistoryStatement : Statement
@@ -2255,19 +1767,19 @@ namespace ETL_SQL.Core
         public string? JobName { get; }
         public string? IntoTable { get; set; }
         public ShowJobHistoryStatement(string? jobName = null) { JobName = jobName; }
-        public override string ToSql() => (JobName != null ? $"SHOW JOB HISTORY {JobName}" : "SHOW JOB HISTORY") + (IntoTable != null ? $" INTO {IntoTable};" : ";");
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ShowJobsStatement : Statement
     {
         public string? IntoTable { get; set; }
-        public override string ToSql() => "SHOW JOBS" + (IntoTable != null ? $" INTO {IntoTable};" : ";");
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ShowConnectionsStatement : Statement
     {
         public string? IntoTable { get; set; }
-        public override string ToSql() => "SHOW CONNECTIONS" + (IntoTable != null ? $" INTO {IntoTable};" : ";");
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ShowTablesStatement : Statement
@@ -2275,7 +1787,7 @@ namespace ETL_SQL.Core
         public string? ConnectionName { get; }
         public string? IntoTable { get; set; }
         public ShowTablesStatement(string? connectionName = null) { ConnectionName = connectionName; }
-        public override string ToSql() => (ConnectionName != null ? $"SHOW TABLES ON {ConnectionName}" : "SHOW TABLES") + (IntoTable != null ? $" INTO {IntoTable};" : ";");
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ShowColumnsStatement : Statement
@@ -2283,7 +1795,7 @@ namespace ETL_SQL.Core
         public TableReference Table { get; }
         public string? IntoTable { get; set; }
         public ShowColumnsStatement(TableReference table) { Table = table; }
-        public override string ToSql() => $"SHOW COLUMNS FOR {Table.ToSql()}" + (IntoTable != null ? $" INTO {IntoTable};" : ";");
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ShowTagsStatement : Statement
@@ -2292,7 +1804,7 @@ namespace ETL_SQL.Core
         public string? ColumnName { get; }
         public string? IntoTable { get; set; }
         public ShowTagsStatement(string tableName, string? columnName = null) { TableName = tableName; ColumnName = columnName; }
-        public override string ToSql() => $"SHOW TAGS FOR TABLE {TableName}" + (ColumnName != null ? $" COLUMN {ColumnName}" : "") + (IntoTable != null ? $" INTO {IntoTable};" : ";");
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record ShowTagValueStatement : Statement
@@ -2302,7 +1814,7 @@ namespace ETL_SQL.Core
         public string TagName { get; }
         public string? IntoTable { get; set; }
         public ShowTagValueStatement(string tableName, string tagName, string? columnName = null) { TableName = tableName; TagName = tagName; ColumnName = columnName; }
-        public override string ToSql() => $"SHOW TAG VALUE FOR TABLE {TableName}" + (ColumnName != null ? $" COLUMN {ColumnName}" : "") + $" WITH TAG {TagName}" + (IntoTable != null ? $" INTO {IntoTable};" : ";");
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record LintStatement : Statement
@@ -2314,7 +1826,7 @@ namespace ETL_SQL.Core
             ScriptPath = scriptPath;
         }
 
-        public override string ToSql() => ScriptPath != null ? $"LINT '{ScriptPath}';" : "LINT;";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     /// <summary>A single variable assignment inside a CREATE SETS block.</summary>
@@ -2339,12 +1851,7 @@ namespace ETL_SQL.Core
             WithPrompt = withPrompt;
         }
 
-        public override string ToSql()
-        {
-            var assignments = string.Join(",\n    ", Assignments.Select(a => $"@{a.VariableName} = {a.Value.ToSql()}"));
-            var prompt = WithPrompt ? "\n    SET WITH_PROMPT ON;" : "";
-            return $"CREATE SETS !{Name}\nBEGIN\n    {assignments};{prompt}\nEND";
-        }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     /// <summary>DROP SETS [IF EXISTS] !&lt;name&gt;</summary>
@@ -2355,7 +1862,7 @@ namespace ETL_SQL.Core
 
         public DropSetsStatement(string name, bool ifExists) { Name = name; IfExists = ifExists; }
 
-        public override string ToSql() => IfExists ? $"DROP SETS IF EXISTS !{Name};" : $"DROP SETS !{Name};";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     /// <summary>USE SETS !<name></summary>
@@ -2363,7 +1870,7 @@ namespace ETL_SQL.Core
     {
         public string Name { get; }
         public UseSetsStatement(string name) { Name = name; }
-        public override string ToSql() => $"USE SETS !{Name};";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     /// <summary>USE PASSWORD = 'password'</summary>
@@ -2377,7 +1884,7 @@ namespace ETL_SQL.Core
         /// When masked, results in: USE PASSWORD = '********';
         /// </summary>
         public string ToSql(bool mask) => $"USE PASSWORD = '{(mask ? "********" : Password.Replace("'", "''"))}';";
-        public override string ToSql() => ToSql(true); // Default to masked for safety in serialization
+        public override string ToSql() => AstSerializer.Format(this); // Always masked in serialization
     }
 
     /// <summary>SET SHOW_PASSWORD ON/OFF</summary>
@@ -2385,7 +1892,7 @@ namespace ETL_SQL.Core
     {
         public bool Enabled { get; }
         public SetShowPasswordStatement(bool enabled) { Enabled = enabled; }
-        public override string ToSql() => $"SET SHOW_PASSWORD {(Enabled ? "ON" : "OFF")};";
+        public override string ToSql() => AstSerializer.Format(this);
     }
 }
 

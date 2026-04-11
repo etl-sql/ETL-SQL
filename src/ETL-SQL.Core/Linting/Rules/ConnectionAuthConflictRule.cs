@@ -78,7 +78,7 @@ namespace ETL_SQL.Core.Linting.Rules
         private void CheckConnection(CreateConnectionStatement conn, List<LintResult> results)
         {
             // Only applies to database-type connectors
-            if (!DatabaseConnectors.Contains(conn.ConnectionType))
+            if (conn.ConnectionType == null || !DatabaseConnectors.Contains(conn.ConnectionType))
                 return;
 
             if (conn.Options == null || conn.Options.Count == 0)

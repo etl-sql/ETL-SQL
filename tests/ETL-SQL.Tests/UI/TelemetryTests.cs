@@ -4,8 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
-using ETL_SQL.App;
-using ETL_SQL.UI;
+using ETL_SQL.TUI.UI;
 using Xunit;
 
 namespace ETL_SQL.Tests.UI
@@ -13,7 +12,6 @@ namespace ETL_SQL.Tests.UI
     public class TelemetryTests : IDisposable
     {
         private readonly StringWriter _outWriter;
-        private readonly StringReader _inReader;
         private readonly TextWriter _originalOut;
         private readonly TextReader _originalIn;
 
@@ -37,7 +35,7 @@ namespace ETL_SQL.Tests.UI
         {
             // Arrange
             var ctx = new CliContext { IsJsonMode = true };
-            var repl = new ReplUi(ctx);
+            var repl = new ReplUi(ctx, ETL_SQL.TUI.Program.ServiceProvider);
 
             // Act - Start and immediately exit
             var input = new StringReader("{\"action\":\"exit\"}\n");
@@ -60,7 +58,7 @@ namespace ETL_SQL.Tests.UI
         {
             // Arrange
             var ctx = new CliContext { IsJsonMode = true };
-            var repl = new ReplUi(ctx);
+            var repl = new ReplUi(ctx, ETL_SQL.TUI.Program.ServiceProvider);
             var script = "SELECT 1 as ID, 'Test' as Name;";
             var input = new StringReader($"{{\"action\":\"run\", \"script\":\"{script}\"}}\n{{\"action\":\"exit\"}}\n");
             Console.SetIn(input);
@@ -95,7 +93,7 @@ namespace ETL_SQL.Tests.UI
         {
             // Arrange
             var ctx = new CliContext { IsJsonMode = true };
-            var repl = new ReplUi(ctx);
+            var repl = new ReplUi(ctx, ETL_SQL.TUI.Program.ServiceProvider);
             var script = "WAITFOR DELAY '00:00:01';"; // Ensure at least one heartbeat
             var input = new StringReader($"{{\"action\":\"run\", \"script\":\"{script}\"}}\n{{\"action\":\"exit\"}}\n");
             Console.SetIn(input);
@@ -123,7 +121,7 @@ namespace ETL_SQL.Tests.UI
         {
             // Arrange
             var ctx = new CliContext { IsJsonMode = true };
-            var repl = new ReplUi(ctx);
+            var repl = new ReplUi(ctx, ETL_SQL.TUI.Program.ServiceProvider);
             var script = "SELECT 1;"; 
             var input = new StringReader($"{{\"action\":\"run\", \"script\":\"{script}\"}}\n{{\"action\":\"exit\"}}\n");
             Console.SetIn(input);
@@ -153,7 +151,7 @@ namespace ETL_SQL.Tests.UI
         {
             // Arrange
             var ctx = new CliContext { IsJsonMode = true };
-            var repl = new ReplUi(ctx);
+            var repl = new ReplUi(ctx, ETL_SQL.TUI.Program.ServiceProvider);
             
             // A script that creates and drops a connection
             var script = "DROP CONNECTION IF EXISTS m; CREATE CONNECTION m ON MOCKDB(); SELECT 1;";

@@ -7,7 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Data;
 using Spectre.Console;
 using ETL_SQL.Common;
-using ETL_SQL.UI;
+using ETL_SQL.TUI.UI;
 
 namespace ETL_SQL.Tests
 {

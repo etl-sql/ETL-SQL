@@ -6,13 +6,15 @@ using Xunit;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Engine;
-using ETL_SQL.Engine.Scheduling;
-using ETL_SQL.Engine.Storage;
+using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Data;
 
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Engine.Functions;
+using ETL_SQL.Services;
+using ETL_SQL.Orchestrator.Execution;
 
 namespace ETL_SQL.Tests
 {
@@ -35,6 +37,10 @@ namespace ETL_SQL.Tests
             services.AddSingleton<IDockerManager, DockerContainerManager>();
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
             services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>();
+            
+            services.AddSingleton(new CliContext());
+            services.AddSingleton<SecurityService>();
+            services.AddSingleton<IScriptExecutor, ScriptExecutorAdapter>();
             
             services.AddTransient<Evaluator>();
             

@@ -8,7 +8,6 @@ using Spectre.Console;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
-using ETL_SQL.UI;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -22,21 +21,24 @@ namespace ETL_SQL.App
     {
         public static async Task<int> Run(CliContext ctx)
         {
+            var logger = Program.ServiceProvider.GetRequiredService<ILogger>();
+            var loggerService = Program.ServiceProvider.GetRequiredService<ILoggerService>();
+
             // 1. Handle non-script commands first
             if (ctx.Command == "encrypt")
             {
                 if (string.IsNullOrEmpty(ctx.EncryptValue))
                 {
-                    Logger.WriteLine("Value is required for encryption.", ConsoleColor.Red);
+                    logger.WriteLine("Value is required for encryption.", ConsoleColor.Red);
                     return 1;
                 }
                 if (string.IsNullOrEmpty(ctx.Password))
                 {
-                    Logger.WriteLine("Master password (--pass) is required for encryption.", ConsoleColor.Red);
+                    logger.WriteLine("Master password (--pass) is required for encryption.", ConsoleColor.Red);
                     return 1;
                 }
                 var encrypted = CryptoUtils.Encrypt(ctx.EncryptValue, ctx.Password);
-                Logger.WriteLine($"Encrypted: {encrypted}");
+                logger.WriteLine($"Encrypted: {encrypted}");
                 return 0;
             }
 
@@ -50,56 +52,25 @@ namespace ETL_SQL.App
             {
                 if (string.IsNullOrEmpty(ctx.SessionId))
                 {
-                    Logger.WriteLine("Session ID is required for clear command.", ConsoleColor.Red);
+                    logger.WriteLine("Session ID is required for clear command.", ConsoleColor.Red);
                     return 1;
                 }
                 var sessionManager = Program.ServiceProvider.GetRequiredService<ETL_SQL.Engine.Services.SessionStateManager>();
                 sessionManager.ClearSession(ctx.SessionId);
-                Logger.WriteLine($"Session {ctx.SessionId} cleared.", ConsoleColor.Green);
+                logger.WriteLine($"Session {ctx.SessionId} cleared.", ConsoleColor.Green);
                 return 0;
             }
 
             if (ctx.Command == "test")
             {
                 // Placeholder for internal test runner if needed
-                Logger.WriteLine($"Running {ctx.TestVal} tests...", ConsoleColor.Yellow);
+                logger.WriteLine($"Running {ctx.TestVal} tests...", ConsoleColor.Yellow);
                 return 0;
             }
 
-            if (ctx.Command == "test-tree")
+            if (ctx.Command == "ui-repl")
             {
-                await ExecuteTreeDemoRunner.RunDemoAsync();
-                return 0;
-            }
-
-            if (ctx.Command == "ui")
-            {
-                if (ctx.UiMode == "simple")
-                {
-                    var simpleUi = new ETL_SQL.UI.SimpleUi(ctx);
-                    await simpleUi.RunAsync();
-                    return 0;
-                }
-                else if (ctx.UiMode == "verbose" || ctx.UiMode == "silent")
-                {
-                    ctx.Command = "run";
-                    ctx.IsVerbose = ctx.UiMode == "verbose";
-                    ctx.IsSilentMode = ctx.UiMode == "silent";
-                    // Fall through to RUN command below
-                }
-                else
-                {
-                    // UI mode: edit (default)
-                    var editor = new ConsoleEditor(ctx.ScriptFile?.FullName ?? "", new Dictionary<string, IDataSource>());
-                    await editor.InitializeAsync();
-                    await editor.Run();
-                    return 0;
-                }
-            }
-
-            if (ctx.Command == "repl")
-            {
-                var repl = new ETL_SQL.UI.ReplUi(ctx);
+                var repl = new ETL_SQL.TUI.UI.ReplUi(ctx, Program.ServiceProvider);
                 await repl.RunAsync();
                 return 0;
             }
@@ -109,7 +80,7 @@ namespace ETL_SQL.App
             {
                 if (ctx.ScriptFile == null || !ctx.ScriptFile.Exists)
                 {
-                    Logger.WriteLine($"File not found: {ctx.ScriptFile?.FullName}", ConsoleColor.Red);
+                    logger.WriteLine($"File not found: {ctx.ScriptFile?.FullName}", ConsoleColor.Red);
                     return 1;
                 }
 
@@ -125,8 +96,8 @@ namespace ETL_SQL.App
                     if (!string.IsNullOrWhiteSpace(ctx.LogPath))
                         scriptLogDir = ctx.LogPath;
 
-                    Logger.InitializeScriptLogger(ctx.ScriptFile.Name, scriptLogDir, scriptRetention, scriptSizeLimitMb);
-                    Logger.WriteLine($"Logs are being saved to: {Path.GetFullPath(scriptLogDir)}", ConsoleColor.Gray);
+                    loggerService.InitializeScriptLogger(ctx.ScriptFile.Name, scriptLogDir, scriptRetention, scriptSizeLimitMb);
+                    logger.WriteLine($"Logs are being saved to: {Path.GetFullPath(scriptLogDir)}", ConsoleColor.Gray);
                 }
 
                 string source = File.ReadAllText(ctx.ScriptFile.FullName);
@@ -134,13 +105,13 @@ namespace ETL_SQL.App
                 long startMem = GC.GetTotalMemory(true);
 
                 var lexTime = Stopwatch.StartNew();
-                Logger.WriteLine("Lexer phase...");
+                logger.WriteLine("Lexer phase...");
                 var lexer = new Lexer(source);
                 var tokens = lexer.Tokenize();
                 lexTime.Stop();
                 
                 var parseTime = Stopwatch.StartNew();
-                Logger.WriteLine("Parser phase...");
+                logger.WriteLine("Parser phase...");
                 var parser = new Parser(tokens, source);
                 var script = parser.Parse();
                 parseTime.Stop();
@@ -157,9 +128,9 @@ namespace ETL_SQL.App
                     } 
                     else 
                     {
-                        Logger.WriteLine("Parsing failed:", ConsoleColor.Red);
+                        logger.WriteLine("Parsing failed:", ConsoleColor.Red);
                         foreach (var err in errors) {
-                            Logger.WriteLine($"  - Line {err.Line}, Col {err.Column}: {err.Message}", ConsoleColor.Yellow);
+                            logger.WriteLine($"  - Line {err.Line}, Col {err.Column}: {err.Message}", ConsoleColor.Yellow);
                         }
                     }
                     return 1;
@@ -167,7 +138,7 @@ namespace ETL_SQL.App
 
                 // 3. Linting Phase
                 var lintTime = Stopwatch.StartNew();
-                Logger.WriteLine("Linter phase...");
+                logger.WriteLine("Linter phase...");
                 var linter = new Linter();
                 foreach (var type in typeof(ILintRule).Assembly.GetTypes()
                     .Where(t => typeof(ILintRule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract))
@@ -190,9 +161,9 @@ namespace ETL_SQL.App
                     } 
                     else 
                     {
-                        Logger.WriteLine("Linting failed:", ConsoleColor.Red);
+                        logger.WriteLine("Linting failed:", ConsoleColor.Red);
                         foreach (var err in lintErrors) {
-                            Logger.WriteLine($"  - Line {err.LineNumber}, Col {err.ColumnNumber}: {err.Message}", ConsoleColor.Yellow);
+                            logger.WriteLine($"  - Line {err.LineNumber}, Col {err.ColumnNumber}: {err.Message}", ConsoleColor.Yellow);
                         }
                     }
                     return 1;
@@ -200,12 +171,19 @@ namespace ETL_SQL.App
                 
                 try
                 {
-                    Logger.WriteLine("Execution phase...");
+                    logger.WriteLine("Execution phase...");
                     await using var evaluator = Program.ServiceProvider.GetRequiredService<Evaluator>();
                     evaluator.BatchSize = ctx.BatchSize;
                     evaluator.IsVerbose = ctx.IsVerbose;
                     evaluator.MasterPassword = ctx.Password;
                     evaluator.SessionId = ctx.SessionId;
+
+                    // Security Hardening: Register the script directory as an approved safe zone for overrides
+                    var scriptDir = Path.GetDirectoryName(ctx.ScriptFile.FullName);
+                    if (!string.IsNullOrEmpty(scriptDir))
+                    {
+                        evaluator.SecurityService.ApprovedSafeZones.Add(scriptDir);
+                    }
 
                     // Inject CLI variables as input parameters
                     foreach (var v in ctx.Variables)
@@ -219,7 +197,7 @@ namespace ETL_SQL.App
                         var state = await sessionManager.LoadSession(ctx.SessionId, ctx.Password);
                         if (state != null)
                         {
-                            Logger.WriteLine($"Restoring session {ctx.SessionId}...", ConsoleColor.Cyan);
+                            logger.WriteLine($"Restoring session {ctx.SessionId}...", ConsoleColor.Cyan);
                             await evaluator.LoadSessionState(state);
                         }
                     }
@@ -231,7 +209,7 @@ namespace ETL_SQL.App
                     {
                         Logger.SuppressConsole = true;
                         evaluator.IsJsonMode = true; // Propagate to logger via evaluator if needed
-                        Logger.Instance.IsJsonMode = true;
+                        logger.IsJsonMode = true;
                         ResultFormatter.IsJsonMode = true;
                     }
 
@@ -319,7 +297,7 @@ namespace ETL_SQL.App
 
                     if (!string.IsNullOrEmpty(ctx.SessionId))
                     {
-                        Logger.WriteLine($"Saving session {ctx.SessionId}...", ConsoleColor.Cyan);
+                        logger.WriteLine($"Saving session {ctx.SessionId}...", ConsoleColor.Cyan);
                         await sessionManager.SaveSession(ctx.SessionId, evaluator, source);
                     }
 
@@ -389,8 +367,8 @@ namespace ETL_SQL.App
                     }
                     else if (!ctx.IsJsonMode)
                     {
-                        Logger.WriteLine($"Execution finished in {execTime.ElapsedMilliseconds}ms.", ConsoleColor.Green);
-                        Logger.WriteLine($"Rows affected: {evaluator.RowsProcessed}");
+                        logger.WriteLine($"Execution finished in {execTime.ElapsedMilliseconds}ms.", ConsoleColor.Green);
+                        logger.WriteLine($"Rows affected: {evaluator.RowsProcessed}");
                     }
 
                     if (evaluator.DockerManager.HasActiveContainers)
@@ -405,7 +383,7 @@ namespace ETL_SQL.App
                         }
                         else
                         {
-                            Logger.WriteLine("Note: Docker containers are still running. Use 'DOCKER CLOSE;' to terminate them when finished.", ConsoleColor.Yellow);
+                            logger.WriteLine("Note: Docker containers are still running. Use 'DOCKER CLOSE;' to terminate them when finished.", ConsoleColor.Yellow);
                         }
                     }
 
@@ -413,13 +391,13 @@ namespace ETL_SQL.App
                 }
                 catch (Exception ex)
                 {
-                    Logger.WriteLine($"Error: {ex.Message}", ConsoleColor.Red);
-                    if (ctx.IsVerbose) Logger.WriteLine(ex.StackTrace ?? "", ConsoleColor.DarkGray);
+                    logger.WriteLine($"Error: {ex.Message}", ConsoleColor.Red);
+                    if (ctx.IsVerbose) logger.WriteLine(ex.StackTrace ?? "", ConsoleColor.DarkGray);
                     return 1;
                 }
             }
 
-            Logger.WriteLine($"Unknown command: {ctx.Command}", ConsoleColor.Red);
+            logger.WriteLine($"Unknown command: {ctx.Command}", ConsoleColor.Red);
             return 1;
         }
     }

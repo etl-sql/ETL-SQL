@@ -1,230 +1,254 @@
 # ETL-SQL Development Roadmap
-## VS Code Extension Bugs
-- [ ] Messages: Ensure connection lifecycle and row-count telemetry (Dropped, Created, Row Counts) appear as distinct lines in the Messages tab.
+**Phase 0 (Baseline):** Complete. Baseline: 553 pass / 78 fail (78 pre-existing, unrelated to separation).
 
-## Upcoming REPL Enhancements
-- [ ] **Variable Explorer**: Add to the sidebar tab to inspect engine variables (`@var`) and session state after a script run.
-- [ ] **Data Export**: Add 'Export to CSV' and 'Export to Excel' buttons to the Results panel toolbar.
-- [ ] **Session Verification**: Regression test 'SET SESSION_PERSISTENCE = ON' to confirm state sharing works across independent REPL executions.
+**Phase 1 (ETL-SQL.Orchestrator):** COMPLETE
+- `ETL-SQL.Orchestrator` class library created in `src/ETL-SQL.Orchestrator/`
+- `SchedulerService` moved to `ETL_SQL.Orchestrator.Scheduling`
+- `SQLiteJobHistoryStore` moved to `ETL_SQL.Orchestrator.Storage`
+- `IScriptExecutor` interface created in `ETL-SQL.Core/Interfaces/IScriptExecutor.cs`
+- `ScriptExecutorAdapter` implements `IScriptExecutor` in App, registered in DI
+- `SchedulerService` now injects `IScriptExecutor` instead of concrete `Evaluator`
+- All `using ETL_SQL.Engine.Scheduling/Storage` references updated to Orchestrator
+- Solution file updated, test count unchanged (553 pass)
 
-## Terminal IDE Architecture (Next Phase)
+**Phase 2 (ETL-SQL.TUI):** COMPLETE
+- `ETL-SQL.TUI` executable created in `src/ETL-SQL.TUI/`
+- All 24 UI source files moved from `App/UI/` to `TUI/UI/` under `ETL_SQL.TUI.UI` namespace
+- `TuiDependencyInjectionSetup.cs`, `TuiRunner.cs`, `Program.cs` created
+- `TerminalIdeWindow`, `ReplUi`, `SimpleUi`, `ConsoleEditor` and all providers live in TUI
+- App's `ui`, `repl`, `test-tree` commands removed; App is now a pure headless executor
+- Test project updated to reference TUI; `TestSetup.cs` initializes both `Program.ServiceProvider` instances
 
-### Step 0 — Automated Test Infrastructure (PREREQUISITE — do this before any other step)
-**No feature work proceeds without tests in place. Every step below requires that its behavior is covered by a test before moving on. Manual testing of the TUI has already proven wasteful — a single regression has cost more time than writing the tests would have.**
+**Phase 3 (Slim App):** COMPLETE
+- App file inventory verified: `Program.cs`, `App/{CliOrchestrator,DependencyInjectionSetup,EngineRunner}.cs`, `appsettings.json`
+- Stale `Terminal.Gui` package reference removed from App.csproj
+- `ExecutionSession.cs` re-export shim removed; `DependencyInjectionSetup.cs` uses explicit Orchestrator.Execution import
+- `AssemblyName = ETL-SQL` confirmed
+- Build: 0 errors. Tests: 554 pass / 77 fail (net +1 vs Phase 0 baseline of 553/78)
 
-#### Test project setup
-- Add a new test class file `tests/ETL-SQL.Tests/UI/TerminalIdeTests.cs` (or a dedicated `TerminalIdeWindow.Tests` project if isolation is preferred).
-- Terminal.Gui applications require an `Application.Top`. Construct your views in headless mode where possible or use the `Application.Init` / `Application.Run` patterns in test stubs to assert state. The logic doesn't need to render to be testable.
-- Inject a mock `IServiceProvider` (use `Moq` or a hand-rolled stub) so `TerminalIdeWindow` and `ExecutionSession` can be constructed in tests without a real DI container.
+**Phase 4 (Solution + Docs):** COMPLETE
+- Solution file (`ETL-SQL.slnx`) verified — all 7 src projects and 5 test projects present
+- README.md `## Executables` section present (ETL-SQL.exe headless + ETL-SQL-TUI.exe IDE)
+- Architecture separation (Phases 1–4) accepted as Engine Enhancement Item 1 complete
+- Orchestrator remains a class library hosted in-process; promotion to standalone service is Phase 6
 
-#### Tests to write for `EtlSqlHighlighter` (pure logic — no console required)
-These are the easiest tests and should be written first to establish confidence.
-- `Tokenize_SelectKeyword_ReturnsBlueToken` — `"SELECT"` → token at index 0, length 6, color Blue
-- `Tokenize_Comment_ReturnsGreyToken` — `"-- this is a comment"` → grey token spanning full string
-- `Tokenize_StringLiteral_ReturnsYellowToken` — `"'hello world'"` → yellow token
-- `Tokenize_Variable_ReturnsGreenToken` — `"@MyVar"` → green token
-- `Tokenize_MixedLine_NoOverlappingTokens` — a line with keyword + string + comment produces non-overlapping tokens
-- `Tokenize_UnknownWord_NoToken` — `"MyColumn"` (not a keyword) produces no token for that word
-
-#### Tests to write for `ExecutionSession`
-- `ExecuteAsync_ValidScript_ReturnsSuccess` — simple `SELECT 1` returns `Success = true`
-- `ExecuteAsync_SyntaxError_ReturnsDiagnosticError` — malformed SQL returns `Success = false` with at least one error diagnostic
-- `ExecuteAsync_MultipleResultSets_AccumulatesAll` — script with two SELECT statements produces two entries in `ResultsTable` (after Step 3 changes the type to `List<IRenderable>`)
-- `ExecuteAsync_LintError_StopsBeforeExecution` — script that fails a linter rule returns `Success = false` without calling the evaluator
-- `ExecuteAsync_CapturesExecutionTime` — `ExecutionTimeMs > 0` after any execution
-
-#### Tests to write for `TerminalIdeWindow` state (headless, no rendering)
-Construct `TerminalIdeWindow` with a headless `ConsoleWindowSystem` and a stub `CliContext`. Do not call `.Render()` or `.Run()`. Test only state and method behavior.
-
-**Tab switching:**
-- `SwitchTab_Results_SetsActiveTabAndVisibility` — after `SwitchTab("results")`: `_activeTab == "results"`, `_resultsView.Visible == true`, `_messagesView.Visible == false`, `_treeViewTab.Visible == false`
-- `SwitchTab_Messages_SetsActiveTabAndVisibility` — same pattern for messages
-- `SwitchTab_Tree_SetsActiveTabAndVisibility` — same pattern for tree
-- `SwitchTab_SameTab_NoChange` — calling `SwitchTab("results")` twice does not throw and state is stable
-- `SwitchTab_Perf_SetsActiveTabAndVisibility` — (write this test before implementing Step 5; it will fail until the tab exists — that is intentional TDD)
-
-**Status bar:**
-- `UpdateStatusBar_NoFile_ShowsNewScript` — before loading a file, status bar text contains "New Script"
-- `UpdateStatusBar_WithFile_ShowsFileName` — after `LoadScriptAsync("my_query.sql")`, status bar contains "my_query.sql"
-- `UpdateStatusBar_ModifiedContent_ShowsAsterisk` — after editing content, status bar contains `*`
-- `UpdateStatusBar_AfterSave_NoAsterisk` — after `SaveScriptAsync()`, `*` is gone
-
-**Suggestion visibility:**
-- `ShowSuggestions_PrefixUnder2Chars_SuggestionListHidden` — `prefix.Length < 2` results in `_suggestionList.Height == 0`
-- `HideSuggestions_CollapsesOverlay` — `HideSuggestions()` sets `_suggestionList.Height == 0`
-
-**Exit behavior:**
-- `HandleExit_ContentUnmodified_ExitsImmediately` — when `_editor.IsModified == false`, exit proceeds without showing a dialog
-- `HandleExit_ContentModified_ShowsSaveDialog` — when `_editor.IsModified == true`, `SaveConfirmationDialog` is added to the window system
-
-#### Tests to write for format shortcut (write before implementing Step 6)
-- `FormatShortcut_ValidSql_ProducesFormattedOutput` — given unformatted SQL, after format is triggered, `_editor.GetContent()` matches the expected formatted string
-- `FormatShortcut_EmptyEditor_NoThrow` — formatting an empty editor does not throw
-
-#### Tests to write for run-selected (write before implementing Step 7)
-- `RunSelected_WithSelection_ExecutesOnlySelection` — given a multi-statement script with a selection covering only one statement, `ExecutionSession` receives only the selected text
-- `RunSelected_NoSelection_ExecutesFullScript` — with no selection, F6 falls back to full-script execution
-
-#### Regression gate
-After any change to `TerminalIdeWindow`, `EtlSqlHighlighter`, `SuggestionPortal`, or `ExecutionSession`, the full Terminal IDE test suite must pass before the change is considered done. A passing build with failing UI tests is not acceptable. This is the rule that replaces manual testing.
+**Phase 5 (Code Quality):** Pending — AST split, parser partial classes, structured logging.
 
 ---
 
-### What has been scaffolded (do not rebuild from scratch)
-The following files exist and represent real progress. Read them before touching anything.
-- `UI/TerminalIdeWindow.cs` — (To be implemented/migrated) main window: editor + tabbed output pane (Results/Messages/Tree) + status bar + suggestion overlay.
-- `UI/EtlSqlHighlighter.cs` — `ISyntaxHighlighter` implementation for `MultilineEditControl`. Works correctly. Do not replace.
-- `UI/SuggestionPortal.cs` — (To be implemented/migrated) wrapping a list for the autocomplete overlay.
-- `App/ExecutionSession.cs` — clean execution pipeline (lex → parse → lint → evaluate → return `ExecutionResult`). Works. Used by `TerminalIdeWindow`. Do not change its contract.
+## For Claude (Next Session — Hard Tasks)
 
-The old Spectre-only UI (`ui old`) still works as a reference. The new Terminal.Gui editor launches as `ui edit`.
+These require deep understanding of the codebase and significant implementation work.
 
-### Goal
-Replicate everything the old UI did well, fix everything it did poorly:
-
-| Feature | Old UI | New UI Goal |
-|---|---|---|
-| Syntax highlighting | ✅ | ✅ Already implemented in `EtlSqlHighlighter` |
-| Autocomplete (Tab/Arrow/Esc) | ✅ | Wired in `TerminalIdeWindow` — needs key handling fixes |
-| Shift-select, copy, paste, undo, redo | ✅ | Built into `MultilineEditControl` — verify works |
-| Format (Shift+Alt+F) | ✅ | ❌ Not yet wired — call existing SQL formatter |
-| Run selected text | ✅ | ❌ Not yet wired — F6 shortcut |
-| Results (multiple result sets, scrollable) | ⚠️ cramped | Fix accumulation and scrolling in Results tab |
-| Messages (rows affected, errors) | ✅ | Logger subscription wired — verify output |
-| Execution tree (live during run) | ✅ | Wired in `RunScriptAsync` — verify tree rendering |
-| Save on exit (with file path suggestions) | ✅ | `SaveConfirmationDialog` wired — verify path completion |
-| Session / ad-hoc runs | ✅ | Via `ExecutionSession` — works |
-| Tabbed output (Results/Messages/Tree/Perf) | ❌ cramped | Tab bar implemented — add 4th Performance tab |
-| Mouse support (Run button, tab clicks) | ❌ | Tab buttons are click-wired — verify mouse events fire |
-| Export CSV / Export Excel buttons | ❌ | Add to toolbar after core is stable |
+### Phase 5 — Code Quality (prerequisite for Phase 9)
+- Step 5.1 — COMPLETE: All 117 `ToSql()` implementations extracted from `Ast.cs` into `ETL-SQL.Core/Formatting/AstSerializer.cs`. Each node now delegates: `public override string ToSql() => AstSerializer.Format(this);`. Build: 0 errors. Tests: 554 pass / 77 fail (baseline unchanged).
+- Step 5.2 — COMPLETE: `StatementParser.cs` already split into partial class files (Data, Extensions, Flow, System); main file 217 LOC.
+- Step 5.3 — Pending: Structured logging: replace `$"..."` Logger interpolations with structured templates; add `SessionId` to all Evaluator log lines
 
 ---
 
-### Step 1 — Fix Compilation Errors in TerminalIdeWindow.cs
-These are blocking. Fix these before anything else.
+## For Gemini (Mechanical Tasks)
 
-- **Duplicate `topHeight` declaration** (lines 88 and 92): remove the first `var topHeight = ...` at line 88; keep the one at line 92.
-- **`_treeViewTab` vs `_treeView` mismatch**: the field declared at line 28 is `_treeView` (ListControl) but the layout code references `_treeViewTab`. Rename the field to `_treeViewTab` throughout.
-- **`_outputView` type mismatch**: Ensure `_outputView` and the tab views (Results/Messages/Tree) share a compatible base class (e.g. `View` in Terminal.Gui) so all three tab targets can be assigned and switched correctly.
-- **`ListControl` constructor with `List<string>`**: `ListControl` takes `List<ListItem>`, not `List<string>`. Fix the two `_treeViewTab` initialization calls to wrap strings in `new ListItem(...)`.
-- Confirm the build is clean after these four fixes before proceeding.
+These are precise, low-risk, mechanical tasks. No deep engine knowledge required.
+**Build after each task. Do not proceed if build fails.**
+
+### G-1: Clean up empty Engine Scheduling folder
+**What:** Check if `src/ETL-SQL.Engine/Scheduling/` still exists. If so, delete it.
+The only file it held (`SchedulerService.cs`) was moved to Orchestrator in Phase 1.
+```
+# Check
+ls src/ETL-SQL.Engine/
+# Delete if present
+rm -rf src/ETL-SQL.Engine/Scheduling/
+dotnet build ETL-SQL.slnx
+```
+**Done when:** `src/ETL-SQL.Engine/` has no `Scheduling/` folder and build is clean. [x]
+
+### G-2: Verify solution file completeness
+**What:** Open `ETL-SQL.slnx`. Confirm these entries exist under `/src/`:
+- `src/ETL-SQL.App/ETL-SQL.App.csproj`
+- `src/ETL-SQL.Core/ETL-SQL.Core.csproj`
+- `src/ETL-SQL.Engine/ETL-SQL.Engine.csproj`
+- `src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj`
+- `src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj`
+- `src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj`
+
+Add any missing entries. Remove any orphaned entries (where the .csproj file does not exist).
+**Done when:** `dotnet build ETL-SQL.slnx` succeeds with 0 errors. [x]
+
+### G-3: Update README.md executables section
+**What:** Add or update a section in `README.md` (repo root) titled `## Executables`:
+```markdown
+## Executables
+
+- **ETL-SQL.exe** — Headless Script Executor. Use in pipelines, CI/CD, cron, and server deployments. Built from `src/ETL-SQL.App/`.
+- **ETL-SQL-TUI.exe** — Interactive console editor for development, debugging, and ad-hoc queries. Built from `src/ETL-SQL.TUI/` (in progress).
+```
+Do not remove or rewrite other README sections. [x]
+
+### G-4: Create Docs/Architecture/Engine.md
+**What:** Create `Docs/Architecture/Engine.md`. Use only facts verifiable from the codebase.
+Use `[TODO]` for anything that requires reading large files like Evaluator.cs.
+
+Required sections:
+
+```markdown
+# ETL-SQL Engine Architecture
+
+## Project Dependency Graph
+[Copy the target reference graph from Engine_Upgrade_Strategy.md Section 2]
+
+## Project Responsibilities
+
+**ETL-SQL.Core** — AST node types, Lexer, Parser, interfaces (IDataSource, IConnector,
+IJobHistoryStore, IScriptExecutor), data models (JobDefinition, JobHistoryEntry),
+LanguageMetadata, linting rules interface.
+
+**ETL-SQL.Engine** — Evaluator (statement dispatch loop), all StatementHandlers,
+SessionStateManager, FunctionRegistry, LineageTracker, DockerManager,
+DataSourceManager, LineageDataSource. Depends on Core and Connectors (via DI).
+
+**ETL-SQL.Connectors** — All IConnector/IDataSource implementations:
+MockDb, SqlServer, Oracle, Postgres, FlatFile/CSV, Json, Xml, Excel, Parquet,
+Avro, Directory, Smtp, Ftp, Sftp, AzureBlob.
+
+**ETL-SQL.Orchestrator** — SchedulerService (background job loop),
+SQLiteJobHistoryStore (IJobHistoryStore implementation).
+Depends on Core and Engine. Engine does NOT depend on Orchestrator.
+
+**ETL-SQL.App** — CLI entry point (Program.cs), command orchestration (CliOrchestrator),
+EngineRunner (run/encrypt/generate/test), DependencyInjectionSetup,
+ExecutionSession (lex→parse→lint→evaluate pipeline), ScriptExecutorAdapter.
+
+**ETL-SQL.TUI** — (In progress) Interactive console editor, SimpleUi, ConsoleEditor,
+all UI panels. Separate executable from App.
+
+**ETL-SQL.LanguageServer** — LSP server for VS Code extension. Provides
+completions, diagnostics, hover. Depends on Engine and Connectors.
+
+## Evaluator Statement Dispatch
+[TODO: requires reading src/ETL-SQL.Engine/Evaluator.cs]
+
+## Temp Table Scoping
+[TODO: requires reading SessionStateManager and #temp handling in handlers]
+
+## Pushdown Decisions
+[TODO: requires reading SqlServerConnector and SelectStatementHandler]
+
+## Orchestrator Job Scheduling
+
+SchedulerService polls IJobHistoryStore every 30 seconds for active jobs.
+For each job whose NextRun <= now, it calls IScriptExecutor.ExecuteTextAsync(job.Script).
+The IScriptExecutor implementation (ScriptExecutorAdapter in App) wraps ExecutionSession.
+Job start/end are logged to IJobHistoryStore (SQLiteJobHistoryStore).
+NextRun is recalculated via CalculateNextRun() after each execution.
+
+## Connector Contract
+
+Every connector implements IConnector (src/ETL-SQL.Core/Data/DatabaseConnectors.cs):
+- Name: string — unique identifier (e.g., "MSSQL", "CSV")
+- Aliases: IReadOnlyList<string> — alternative names
+- GetTablesAsync(connectionString) — list available tables
+- GetColumnsAsync(connectionString, tableName) — list columns for a table
+- GetViewsAsync / GetProceduresAsync — metadata
+- CreateDataSource(connectionString, options) — returns IDataSource for query execution
+- GetSupportedOptions() — connection options for WITH() clause autocomplete
+
+## Linting Pipeline
+[TODO: requires reading src/ETL-SQL.Core/Linting/ and rule classes]
+```
+
+**Done when:** The file exists and is non-empty with all sections present.
+
+### G-5: Add global using to Orchestrator csproj
+**What:** Open `src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj`.
+Add a global using for `ETL_SQL.Core` so `IScriptExecutor` is available
+without explicit using statements in Orchestrator files:
+```xml
+  <ItemGroup>
+    <Using Include="ETL_SQL.Core" />
+    <Using Include="ETL_SQL.Core.Data" />
+  </ItemGroup>
+```
+**Done when:** `dotnet build src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj` succeeds.
+
+### G-6: Verify JobTests still pass after Phase 1
+**What:** Run:
+```
+dotnet test tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj --filter "FullyQualifiedName~JobTests"
+```
+If any test fails with a namespace or compile error (not a pre-existing logic failure),
+fix the `using` directives in `tests/ETL-SQL.Tests/Misc/JobTests.cs`.
+Only fix compile errors — do not change test logic.
 
 ---
 
-### Step 2 — Autocomplete Key Handling
-The suggestion list appears (`SuggestionPortal` / `_suggestionList`) but key routing to it is incomplete.
+## Pre-existing Failing Tests (78 — do not fix as part of Phases 1–4)
 
-- When suggestions are visible, route `ConsoleKey.Tab` and `ConsoleKey.Enter` to accept the selected suggestion: replace the current word prefix in the editor with the selected item's full text.
-- Route `ConsoleKey.UpArrow` / `ConsoleKey.DownArrow` to move selection in `_suggestionList` without moving the editor cursor.
-- Route `ConsoleKey.Escape` to call `HideSuggestions()` and return focus to the editor.
-- Dismiss suggestions automatically when the user types a space or a non-word character (already partially handled by the `prefix.Length < 2` guard — extend this).
-- Fix suggestion overlay position: the current code sets `Margin` twice with conflicting values (lines 257 and 285). Keep only the second assignment and ensure `X = cursorColumn`, `Y = cursorRow + 1` (one row below the cursor).
+These were failing before the separation work began. Do not attempt to fix them.
+- `JoinTests` (4 fails)
+- `OrchestrationEnhancementTests` (2 fails)
+- `MixedSourceIntegrationTests` (2 fails)
+- `AdvancedFileTests`, `FileConnectionTests`, `EnvironmentVariableTests`, others
 
----
+## The on-going presentation layer problem (do not fix until after Phases 1-9 have been completed)
+The documents \Docs\Architecture\Presentation_Architecture.md and \Docs\Standards\Presentation_Standards.md are top notch and lay out exactly what expectation are expected.  And oddly I feel they are being followed but for some reason we are not making any progress.  I have spent hours working with agents on trying to fix the same problem over and over again with no change to the UI at all.  That's a huge waste of resources that could be used elsewhere so a new strategy is needed.  
 
-### Step 3 — Results Tab: Multiple Result Sets and Scrolling
-Currently `RunScriptAsync` captures only the last result set and renders it as a markup string via AnsiConsole capture. This is fragile and loses multiple result sets.
+### Brainstorm
+- Place your ideas here on how to solve the problem statement
 
-- Change `ExecutionResult.ResultsTable` from `IRenderable?` to `List<IRenderable>` so `ExecutionSession` can accumulate one entry per result set.
-- In `TerminalIdeWindow.RunScriptAsync`, concatenate all result set renderables with a separator line between them.
-- Ensure the results view is scrollable (verify the framework's ListView or TextView supports large result sets).
-- After a successful run, append to `_resultsContent` rather than replacing it — keep a configurable history (last 3 result sets or configurable row cap).
+### TUI on-going issues
+- [ ] When I type any of the Keywords SELECT, FROM, WHERE, etc. the background changes from the standard grey to blue which I'm guessing is the color underneth the grey text the absolute background color as it were.  The text should be the only thing that changes color not the background.
+- [ ] If I start typing CRE -> suggestion pops up for CREATE -> I hit tab -> I hit space -> it prints out CREATE sometimes with a space after it and sometimes without.  It's not consistent.  Then if I have or do not have the space I add it and move on to CON -> suggestion pops up for CONNECTION -> I hit tab -> I hit space -> it prints out CONNECTION sometimes with a space after it and sometimes without.  It's not consistent.  This happens all over as I'm typing the code and using suggestions.  It should preserve what has been typed CRE -> tab -> CREATE is written -> space -> CON -> tab -> CONNECTION is written -> space -> m alias should not have any suggestions -> ON with a space -> MOC -> tab -> MOCKDB is written -> (); <Enter>
+- [ ] Tables are not suggested and they should be.  Continuing on with the previous example CREATE CONNECTION m ON MOCKDB (); <Enter> -> SELECT * FROM m. -> all tables from the connection with the alisas m should be suggested.  I should be able to use the up/down arrows to select the table or I keep typing for example u -> Users should be suggested.  This is not happening.
+- [ ] * is not being suggested for expand when ctrl+space is used.  Here is the example:
+CREATE CONNECTION m ON MOCKDB();
+SELECT * FROM m.Users; -> arrow over to the right side of * -> ctrl+space -> Should see expand columns suggestion -> hit tab -> it should write out all the column names in the table Users.
+Here is another variation
+CREATE CONNECTION m ON MOCKDB();
+SELECT * FROM m.Users AS u; -> arrow over to the right side of * -> ctrl+space -> Should see expand columns suggestion -> hit tab -> it should write out all the column names in the table Users and each of them should be prefixed with u.<column_name>.
+Here is another variation  
+CREATE CONNECTION m ON MOCKDB();
+SELECT u.* FROM m.Users AS u; -> arrow over to the right side of * -> ctrl+space -> Should see expand columns suggestion -> hit tab -> it should write out all the column names in the table Users and each of them should be prefixed with u.<column_name>.
+Here is another variation  
+CREATE CONNECTION m ON MOCKDB();
+SELECT * FROM m.Users AS u JOIN Orders AS o ON 1=1; -> arrow over to the right side of * -> ctrl+space -> Should see expand columns suggestion -> hit tab -> it should write out all the column names in the table Users and each of them should be prefixed with u.<column_name> and then write out all the column names from Orders prefixed with o.<column_name>.
+Here is another variation  
+CREATE CONNECTION m ON MOCKDB();
+SELECT u.* FROM m.Users AS u JOIN Orders AS o ON 1=1; -> arrow over to the right side of * -> ctrl+space -> Should see expand columns suggestion -> hit tab -> it should write out all the column names in the table Users and each of them should be prefixed with u.<column_name> but should not show any columns from the Orders table.
+-[ ] When I execute a script or click F5 the Execute tree view should be visible and should show in real time as the script is being execute.  Currently the top level has the total time, but each node below it should show it being executed, when it was completed, number of rows and time.  Ideally it should turn green when completed, red if there was an error and yellow if it was cancelled.  But that's a nice to have at this point getting working is priority.  The user should easily be able to identify that the script is working and where it is, and when it has completed.  Currently the tree view is in another tab not visible without selecting it.  Without that I can't tell if its doing the rest of what it should be but I want to list it out if it needs to be tested.
+- [ ] Security concern, I was running dotnet test and I opened up the UI edit console at the same time and my suggest window starting intercepting messages from dotnet test.
 
----
+### VS Code Extension on-going issues
+- [ ] Each time I execute either all or selected the execute tree should be cleared an should start over.  Currently it just keeps adding to the tree view.
+- [ ] Variable values should not display on the sidebar, that was added recently.  I think the code is in place but they are not displayed.
+- [ ] Export to csv should be added to the results grid context menu. It was but at some point it seems to have disappeared.
+- [ ] Setting is really messy, it should just need a pointer to where the exe files are and do you want to show debugging or not.  I don't know of any other options needed at this time. 
 
-### Step 4 — Execution Tree Tab: Live Updates During Run
-The tree tab currently receives the final `IRenderable` after execution completes. The old UI showed the tree updating as statements executed.
+### Prevent Regressions
+I can't tell you the number of time ctrl+space has broke and I have to go through multiple interations to get it fixed.  Same with table aliases.  Both have been highly problematic.  We need to make sure that we don't break things that are already working. 
 
-- Add an `Action<string>` callback to `ExecutionSession` (`OnTreeNodeAdded`) that fires each time the Evaluator appends a node to its execution tree.
-- In `TerminalIdeWindow`, subscribe to this callback and append lines to `_treeViewTab` in real time.
-- Switch to the Tree tab automatically when execution starts so the user can watch progress.
-- Switch to Results tab automatically when execution completes successfully (current behavior is correct — keep it).
+Returning results of a script, especially when there are multiple result sets, is problematic.  It seems to be working now but it breaks after every change.
 
----
+Messages appearing/not appearing works now but has been a real big issue to get working.  It breaks, it works, it breaks, etc.
 
-### Step 5 — Performance Tab (4th Tab)
-The old UI mixed performance metrics into Messages. Add a dedicated tab.
-
-- Add `_performanceView` (`MarkupControl`) with the same layout as the other tab views, `Visible = false` initially.
-- Add a `[ Perf ]` button (F4) to `_tabGrid` alongside Results/Messages/Tree.
-- After execution completes, populate `_performanceView` with: total execution time, rows processed, per-statement timing from `evaluator.ExecutionTree` (the profiling data already collected by `ExecutionSession` since `IsProfiling = true`).
-- Update `SwitchTab` to handle `"perf"`.
-
----
-
-### Step 6 — Format Shortcut (Shift+Alt+F)
-- In `SetupEvents`, add a handler for `Shift+Alt+F`.
-- Get the current editor content, pass it through the existing `SqlFormatter` (in `ETL-SQL.Core`), and call `_editor.SetContent(formatted)`.
-- Preserve cursor position as best as possible (move to end if position is ambiguous after formatting).
-
----
-
-### Step 7 — Run Selected (F6)
-- Add `ConsoleKey.F6` handler in `SetupEvents`.
-- Call `_editor.GetSelectedText()` (verify this method exists on `MultilineEditControl`; if not, use `_editor.GetSelection()` or equivalent).
-- If selection is non-empty, pass it to `ExecutionSession.ExecuteAsync`. If empty, fall back to running the full script (same as F5).
+Debugging messages is all over the place.  This needs to be worked out of how to show them and where they display to.
 
 ---
 
-### Step 8 — Save Dialog File Path Completion
-The `SaveConfirmationDialog` exists. The `PasswordPromptDialog` exists. File path completion on save is not yet wired.
+## Connector Modernization & Expansion
 
-- When the save dialog prompts for a file path, wire the path input field to the same `_suggestionEngine` using a `FileSystemSuggestionProvider` — suggest directory entries as the user types, Tab-completable.
-- This mirrors what the old UI did and uses the same suggestion infrastructure already in place.
+Refer to the **[Connector_Upgrade_Strategy.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connector_Upgrade_Strategy.md)** for the exhaustive technical specs, implementation archetypes, and roadmap for the items below.
 
----
+### [ ] Current Connector Technical Debt
+- [ ] Implement missing production options (Failover, Pooling, Security, Culture-aware parsing) for existing SQL and FlatFile providers.
 
-### Step 9 — Export Buttons (After Core is Stable)
-Do not implement until Steps 1–7 are verified working.
-
-- Add `[ Export CSV ]` and `[ Export Excel ]` buttons to the toolbar (alongside or below the tab bar).
-- These are only enabled when the Results tab has content.
-- Export logic: serialize `ExecutionResult.ResultsTable` rows to CSV/Excel using the same export code planned for the VS Code Results panel (see REPL Enhancements section above — implement once, use in both places).
-
-
----
-
-## Security Hardening Implementation Roadmap
-
-This roadmap defines the technical steps to move from direct system access to a secured, audited execution environment.
-
-### Step 1 — Security Service Foundation (Core)
-- [x] **Path Safety Engine**: Implement `SecurityService.ValidatePath`. It must enforce absolute paths, block access to root (`C:\`, `/`), and forbid entry into protected folders (`.git`, `.vscode`, etc.).
-- [x] **Type & Extension Guard**: Implement `SecurityService.ValidateFileType`. Implement the whitelist for data types (`.csv`, `.json`, `.parquet`, `.txt`, `.sql`, `.log`, `.xlsx`, `.xml`) and block system types (`.dll`, `.exe`, `.bat`).
-- [x] **Runaway Counter**: Implement logic to count and cap file operations (100) and track recursive depth (limit 5).
-
-### Step 2 — Permission Flag Pre-parsing
-- [x] **Linter Integration**: Update the script pre-processor to identify permission overrides (e.g., `### ALLOW_GREATER_THAN_100_FILE`).
-- [x] **State Injection**: Pass these permission states into the `IExecutionContext` so handlers can query them during execution.
-
-### Step 3 — Handler Enforcement (Engine)
-- [x] **File Operations Interception**: Update `FileOperationStatementHandler` to call `SecurityService` before any native `File` calls.
-- [x] **Directory Protection**: Update `DirectoryOperationStatementHandler` with recursion depth checks and root-protection.
-- [x] **Connection Guard**: Update `CreateConnectionStatementHandler` to restrict file-based connections to safe directories and types.
-
-### Step 4 — Session & Path standard
-- [x] **Path Normalization**: Update `IExecutionContext.ResolvePath` to always return absolute paths and immediately trigger a security validation.
-- [x] **Session Root Enforcement**: Restrict session storage to `%Appdata%`, `%UserProfile%`, or `%Temp%`.
-
-### Step 5 — Audit & Verification
-- [x] **Security Unit Tests**: Create `SecurityTests.cs` to verify that every block listed above correctly triggers an `ExecutionException`.
-- [x] **Audit Log**: Ensure all blocked actions and permission overrides are logged to the session audit trail.
+### [ ] Future Connector Roadmap
+- [ ] **ODBC Bridge**: Universal legacy connectivity.
+- [ ] **Cloud Lakehouse**: Snowflake, Databricks, Delta Sharing, Synapse.
+- [ ] **Enterprise SaaS**: ServiceNow, Dynamics 365, SharePoint.
+- [ ] **Enterprise ERP**: SAP HANA, SAP BW.
+- [ ] **Object Storage**: AWS S3.
+- [ ] **Marketing & Finance**: Google Analytics, Quickbooks Online.
 
 ---
-
-## Security Hardening Checklist
-- [x] COPY/MOVE/DELETE operations can only delete known connector file types (txt, csv, json, parquet, etc.)  Limit file deletion to only those file types.
-- [x] COPY/MOVE/DELETE operations should not be allowed on the root directory or other protected directories   (e.g. .git, .vscode, etc.)
-- [x] COPY/MOVE/DELETE operations should not be allowed on files with unknown file types or DLL, EXE, etc.
-- [x] CREATE CONNECTION should not be allowed on the root directory or other protected directories   (e.g. .git, .vscode, etc.)
-- [x] CREATE CONNECTION should not be allowed on files with unknown file types or DLL, EXE, etc.
-- [x] CREATE CONNECTION for file based connections should only allow known file types (txt, csv, json, parquet, etc.)  They should be defined by connector.
-- [x] If a CREATE CONNECTION needs to operate on an file type that is not in the know file types list an explicit ### ALLOW_FILE_TYPE_ACCESS permission should be required.  This permission should be granted by the user and should be logged in the audit log.
-- [x] The c# code should always use full paths to files and directories.  No relative paths should be used.  This is especially true for file based connections and file based operations.
-- [x] Put in a runaway file COPY/MOVE/DELETE protection mechanism.  The file delete should be capped at 100 files.  If the user needs to delete more than that it will require an explicit ### ALLOW_GREATER_THAN_100_FILE permission and will be logged in the audit log.
-- [x] Put in a runaway file COPY/MOVE/DELETE protection for recursive operations.  If the recursive operations is going more than 5 layers deep it requires an explicit ### ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS permission and will be logged in the audit log.
-** Note if any of the above seem like more than the standard then please update them to an appropriate amount.  100 files, 5 layers deep, etc.  The point is to have a runaway protection mechanism in place.  
-- [ ] Sessions are cleaned up by our cleaning logic or the CLEAR SESSION command.  DELETE, DIRECTORY, or any other command should not be able to operate on the session other than read and write.
-- [ ] Sessions should only exist in approved folders: %Appdata%, %UserProfile%, %Temp%, or a folder explicitly created by the user.  Sessions should not be allowed to be created in the root directory or other protected directories   (e.g. .git, .vscode, etc.) 
-- [ ] Perform and independent security audit of ETL-SQL.  We will use the results to improve the security of ETL-SQL.  Write out the results to this TODO.md file so they can be tracked and addressed.  This should be done after the above changes have been made.  
-- [ ] We need to create a security whitepaper listing all the security features of ETL-SQL.  This will be SECURITY.md in the root directory.  This should be done after the security audit has been completed and any open items have been addressed.

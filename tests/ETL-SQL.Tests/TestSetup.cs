@@ -26,10 +26,13 @@ namespace ETL_SQL.Tests
                 Logger.InitializeTestLogger("logs/tests");
 
                 // ── DI container shared across tests ─────────────────────────────
-                ETL_SQL.Program.ServiceProvider = DependencyInjectionSetup.BuildServiceProvider();
-                
+                var sp = DependencyInjectionSetup.BuildServiceProvider();
+                ETL_SQL.Program.ServiceProvider = sp;
+                // TUI types (ConsoleEditor, ReplUi) resolve Program → ETL_SQL.TUI.Program
+                ETL_SQL.TUI.Program.ServiceProvider = sp;
+
                 // Force initialization of ConnectorRegistry.Instance
-                ETL_SQL.Program.ServiceProvider.GetService<IConnectorRegistry>();
+                sp.GetService<IConnectorRegistry>();
 
                 // Suppress console noise (ETL-SQL.Common.Logger)
                 Logger.SuppressConsole = true;

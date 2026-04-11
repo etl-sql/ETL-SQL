@@ -30,7 +30,7 @@ namespace ETL_SQL.Connectors
         {
             _client = new BlobServiceClient(connectionString);
             _containerName = containerName;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
         }
 
         public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null) => Task.FromResult("Azure Blob Storage");
@@ -119,7 +119,7 @@ namespace ETL_SQL.Connectors
             table.ColumnNames.AddRange(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
             foreach (var f in files)
             {
-                table.AddRow(new Row
+                await table.AddRowAsync(new Row
                 {
                     ["Name"] = f.Name,
                     ["FullPath"] = f.FullPath,

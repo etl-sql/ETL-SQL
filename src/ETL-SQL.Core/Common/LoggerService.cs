@@ -12,7 +12,7 @@ namespace ETL_SQL.Common
     /// Default implementation of ILogger that handles multiple Serilog sinks (App, Script, Test),
     /// Console output, and UI callbacks.
     /// </summary>
-    public class LoggerService : ILogger, IDisposable
+    public class LoggerService : ILogger, ILoggerService, IDisposable
     {
         private Serilog.Core.Logger? _appLogger;
         private Serilog.Core.Logger? _scriptLogger;

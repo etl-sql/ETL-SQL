@@ -3,6 +3,8 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Common
@@ -208,6 +210,126 @@ namespace ETL_SQL.Common
                     cs.CopyTo(fsOut);
                 }
             }
+        }
+
+        /// <summary>
+        /// Highly secure, zero-password encryption bound to the current OS user and machine (DPAPI).
+        /// Used primarily for session state and metadata hardening.
+        /// </summary>
+        public static string Protect(string plainText, string? optionalEntropy = null)
+        {
+            if (string.IsNullOrEmpty(plainText)) return plainText;
+            byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
+            
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                return "DPAPI:" + Convert.ToBase64String(ProtectWindows(plainBytes, optionalEntropy));
+            }
+
+            return "MACHINE:" + Convert.ToBase64String(ProtectGeneric(plainBytes, optionalEntropy));
+        }
+
+        /// <summary>
+        /// Decrypts data that was protected using <see cref="Protect"/>.
+        /// Throws if attempted on a different machine or by a different OS user.
+        /// </summary>
+        public static string Unprotect(string cipherText, string? optionalEntropy = null)
+        {
+            if (string.IsNullOrEmpty(cipherText)) return cipherText;
+
+            if (cipherText.StartsWith("DPAPI:"))
+            {
+                if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                    throw new ExecutionException("DPAPI encrypted data can only be decrypted on Windows.");
+
+                byte[] cipherBytes = Convert.FromBase64String(cipherText.Substring(6));
+                return Encoding.UTF8.GetString(UnprotectWindows(cipherBytes, optionalEntropy));
+            }
+
+            if (cipherText.StartsWith("MACHINE:"))
+            {
+                byte[] cipherBytes = Convert.FromBase64String(cipherText.Substring(8));
+                return Encoding.UTF8.GetString(UnprotectGeneric(cipherBytes, optionalEntropy));
+            }
+
+            return cipherText;
+        }
+
+        [SupportedOSPlatform("windows")]
+        private static byte[] ProtectWindows(byte[] plainBytes, string? entropy)
+        {
+            byte[]? entropyBytes = entropy != null ? Encoding.UTF8.GetBytes(entropy) : null;
+            return ProtectedData.Protect(plainBytes, entropyBytes, DataProtectionScope.CurrentUser);
+        }
+
+        [SupportedOSPlatform("windows")]
+        private static byte[] UnprotectWindows(byte[] cipherBytes, string? entropy)
+        {
+            byte[]? entropyBytes = entropy != null ? Encoding.UTF8.GetBytes(entropy) : null;
+            return ProtectedData.Unprotect(cipherBytes, entropyBytes, DataProtectionScope.CurrentUser);
+        }
+
+        private static byte[] ProtectGeneric(byte[] plainBytes, string? entropy)
+        {
+            byte[] key = GetMachineKey(entropy);
+            using var aes = Aes.Create();
+            aes.Key = key;
+            aes.GenerateIV();
+            
+            using var encryptor = aes.CreateEncryptor();
+            using var ms = new MemoryStream();
+            ms.Write(aes.IV, 0, aes.IV.Length); // Prepend IV
+            
+            using (var cs = new CryptoStream(ms, encryptor, CryptoStreamMode.Write))
+            {
+                cs.Write(plainBytes, 0, plainBytes.Length);
+            }
+            return ms.ToArray();
+        }
+
+        private static byte[] UnprotectGeneric(byte[] cipherBytes, string? entropy)
+        {
+            byte[] key = GetMachineKey(entropy);
+            using var aes = Aes.Create();
+            aes.Key = key;
+            
+            byte[] iv = new byte[aes.BlockSize / 8];
+            Buffer.BlockCopy(cipherBytes, 0, iv, 0, iv.Length);
+            aes.IV = iv;
+
+            using var decryptor = aes.CreateDecryptor();
+            using var msOut = new MemoryStream();
+            using (var msIn = new MemoryStream(cipherBytes, iv.Length, cipherBytes.Length - iv.Length))
+            using (var cs = new CryptoStream(msIn, decryptor, CryptoStreamMode.Read))
+            {
+                cs.CopyTo(msOut);
+            }
+            return msOut.ToArray();
+        }
+
+        private static byte[] GetMachineKey(string? entropy)
+        {
+            string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            string etlSqlDir = Path.Combine(appData, "etl-sql");
+            if (!Directory.Exists(etlSqlDir)) Directory.CreateDirectory(etlSqlDir);
+            
+            string keyPath = Path.Combine(etlSqlDir, "machine.key");
+            byte[] baseKey;
+
+            if (File.Exists(keyPath))
+            {
+                baseKey = File.ReadAllBytes(keyPath);
+            }
+            else
+            {
+                baseKey = RandomNumberGenerator.GetBytes(32);
+                File.WriteAllBytes(keyPath, baseKey);
+            }
+
+            if (entropy == null) return baseKey;
+
+            // Mix entropy into the key to make it user-bound if entropy is provided
+            return Rfc2898DeriveBytes.Pbkdf2(baseKey, Encoding.UTF8.GetBytes(entropy), 1000, HashAlgorithmName.SHA256, 32);
         }
     }
 }

@@ -54,7 +54,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // Security Hardening: Count this as a file operation for runaway protection
-            context.IncrementOperationCount();
+            context.IncrementOperationCount(source);
 
             switch (stmt.Type)
             {
@@ -68,6 +68,9 @@ namespace ETL_SQL.Engine.Handlers
                 case FileOpType.Copy:
                     if (dest != null)
                     {
+                        // Security Hardening: Block writing to script files
+                        context.SecurityService.ValidateWriteAccess(dest);
+
                         if (File.Exists(dest) && !overwrite)
                              throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
                         File.Copy(source, dest, overwrite);
@@ -76,6 +79,9 @@ namespace ETL_SQL.Engine.Handlers
                 case FileOpType.Move:
                     if (dest != null)
                     {
+                         // Security Hardening: Block writing to script files
+                         context.SecurityService.ValidateWriteAccess(dest);
+
                          if (File.Exists(dest))
                          {
                              if (overwrite) File.Delete(dest);
@@ -90,6 +96,11 @@ namespace ETL_SQL.Engine.Handlers
                         var fileName = Path.GetFileName(source);
                         var dir = Path.GetDirectoryName(source) ?? "";
                         var newPath = Path.Combine(dir, dest);
+                        
+                        // Security Hardening: Validate the constructed rename path
+                        context.SecurityService.ValidatePath(newPath);
+                        context.SecurityService.ValidateWriteAccess(newPath);
+                        
                         if (File.Exists(newPath))
                         {
                             if (overwrite) File.Delete(newPath);
@@ -126,10 +137,18 @@ namespace ETL_SQL.Engine.Handlers
                     }
                     break;
                 case FileOpType.Encrypt:
-                    if (dest != null) CryptoUtils.EncryptFile(source, dest, "DefaultETLPass123!", overwrite);
+                    if (dest != null)
+                    {
+                        var pwd = context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
+                        CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
+                    }
                     break;
                 case FileOpType.Decrypt:
-                    if (dest != null) CryptoUtils.DecryptFile(source, dest, "DefaultETLPass123!", overwrite);
+                    if (dest != null)
+                    {
+                        var pwd = context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
+                        CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
+                    }
                     break;
             }
             await Task.CompletedTask;

@@ -10,10 +10,9 @@ using ETL_SQL.Core;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Engine.Handlers;
-using ETL_SQL.UI;
 using ETL_SQL.Common;
 using ETL_SQL.App;
-using ETL_SQL.Engine.Scheduling;
+using ETL_SQL.Orchestrator.Scheduling;
 
 namespace ETL_SQL
 {

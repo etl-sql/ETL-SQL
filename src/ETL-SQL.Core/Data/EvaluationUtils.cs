@@ -45,7 +45,9 @@ namespace ETL_SQL.Core.Data
             catch (Exception ex) 
             { 
                 if (logger != null) logger.Debug($"[EvaluationUtils.IsSoftEqual] Type coercion failed, falling back to string compare: {ex.Message}");
+#pragma warning disable CS0618
                 else Logger.Verbose($"[EvaluationUtils.IsSoftEqual] Type coercion failed, falling back to string compare: {ex.Message}");
+#pragma warning restore CS0618
             }
 
             return a.ToString()?.Equals(b.ToString(), StringComparison.OrdinalIgnoreCase) ?? false;

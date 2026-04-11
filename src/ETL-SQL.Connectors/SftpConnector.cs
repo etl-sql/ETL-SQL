@@ -26,7 +26,7 @@ namespace ETL_SQL.Connectors
 
         public SftpConnector()
         {
-            _logger = Logger.Instance;
+            _logger = NullLogger.Instance;
         }
 
         public SftpConnector(string host, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, ILogger? logger = null)
@@ -43,7 +43,7 @@ namespace ETL_SQL.Connectors
             _password = password;
             _keyFilePath = keyFilePath;
             _passphrase = passphrase;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
             _clientFactory = clientFactory;
         }
 
@@ -81,9 +81,9 @@ namespace ETL_SQL.Connectors
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null)
         {
             string user = options?.GetValueOrDefault("USER") ?? "";
-            string pass = options?.GetValueOrDefault("PASSWORD");
-            string keyFile = options?.GetValueOrDefault("KEYFILE");
-            string passphrase = options?.GetValueOrDefault("PASSPHRASE");
+            string? pass = options?.GetValueOrDefault("PASSWORD");
+            string? keyFile = options?.GetValueOrDefault("KEYFILE");
+            string? passphrase = options?.GetValueOrDefault("PASSPHRASE");
             return new SftpConnector(connectionString, user, pass, keyFile, passphrase, logger);
         }
 
@@ -152,7 +152,7 @@ namespace ETL_SQL.Connectors
             table.ColumnNames.AddRange(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
             foreach (var f in files)
             {
-                table.AddRow(new Row
+                await table.AddRowAsync(new Row
                 {
                     ["Name"] = f.Name,
                     ["FullPath"] = f.FullPath,

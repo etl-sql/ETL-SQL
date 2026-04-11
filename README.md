@@ -56,6 +56,9 @@ We adhere to a strict `VERB_NOUN` convention for all automation commands, ensuri
 
 ---
 
+
+---
+
 ## 🏗️ Technical Architecture
 
 ```mermaid
@@ -76,6 +79,15 @@ graph TD
     G --> K[SFTP / Azure Blob]
     G --> L[SMTP / Email]
 ```
+
+---
+
+## Executables
+
+- **ETL-SQL.exe** — Headless Script Executor. Use in pipelines, CI/CD, cron, and server deployments. Built from `src/ETL-SQL.App/`.
+- **ETL-SQL-TUI.exe** — Interactive console editor for development, debugging, and ad-hoc queries. Built from `src/ETL-SQL.TUI/` (in progress).
+
+---
 
 ---
 
@@ -117,8 +129,28 @@ AT my_smtp;
 
 ---
 
-## 📄 Documentation
-For a complete list of commands, functions, and connector options, refer to the [Language Reference](docs/ETL_SQL_Language_Reference.md).
+## 📚 Documentation Library
+
+Explore the high-fidelity documentation library for deep technical insights and practical guides.
+
+### 📖 Getting Started & Guides
+- **[User Manual](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/User_Manual.md)**: Narrative guide to the ETL-SQL "Mental Model" and first pipelines.
+- **[Pattern Cookbook](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)**: Ready-to-use recipes for SFTP, Incremental Loads, and Automation.
+
+### 📜 Language Reference
+- **[Language Grammar](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md)**: Total syntax reference, procedural logic, and variable management.
+- **[Standard Library](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md)**: Exhaustive built-in function catalog, windowing, and types.
+- **[Data Connectors](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Data_Connectors.md)**: Comprehensive spec for SQL, Cloud, and FlatFile producers.
+
+### 🏛️ Engineering & Architecture
+- **[Connector Engineering](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Engineering.md)**: Architecture deep-dive, batching protocols, and data flow.
+- **[Presentation Architecture](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Presentation_Architecture.md)**: UI/UX infrastructure and the terminal rendering engine.
+- **[Security Whitepaper](file:///c:/Users/chuck/scratch/ETL-SQL/SECURITY.md)**: Zero-Trust protocols and the Script Immutability guardrail.
+
+### 📏 Governance & Standards
+- **[Connector Standards](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md)**: Inviolable rules for data access development.
+- **[Presentation Standards](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Presentation_Standards.md)**: UI consistency and error sanitization rules.
+- **[AI Agent Manual](file:///c:/Users/chuck/scratch/ETL-SQL/AGENTS.md)**: Mandatory instruction set for AI-assisted development.
 
 ---
 

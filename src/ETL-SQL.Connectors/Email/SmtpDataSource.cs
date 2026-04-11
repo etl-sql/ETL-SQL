@@ -33,7 +33,7 @@ namespace ETL_SQL.Connectors.Email
         public SmtpDataSource(Dictionary<string, string> options, ILogger? logger = null)
         {
             _options = options;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
         }
 
         /// <summary>Reading batches is not supported for SMTP.</summary>

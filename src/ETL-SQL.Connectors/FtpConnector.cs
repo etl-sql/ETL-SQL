@@ -28,7 +28,7 @@ namespace ETL_SQL.Connectors
             _host = host;
             _username = username;
             _password = password;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
             _client = new FtpClient(host, username, password);
         }
 
@@ -110,7 +110,7 @@ namespace ETL_SQL.Connectors
             table.ColumnNames.AddRange(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
             foreach (var f in files)
             {
-                table.AddRow(new Row
+                await table.AddRowAsync(new Row
                 {
                     ["Name"] = f.Name,
                     ["FullPath"] = f.FullPath,

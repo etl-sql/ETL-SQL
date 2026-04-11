@@ -22,7 +22,7 @@ namespace ETL_SQL.Connectors.Directory
             if (string.IsNullOrEmpty(path)) throw new ArgumentException("Directory path cannot be empty.");
             _directoryPath = path;
             Options = options;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
         }
 
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "FilePath", "FileName", "Extension", "Size", "CreationTime", "LastWriteTime" });
@@ -46,7 +46,7 @@ namespace ETL_SQL.Connectors.Directory
                 row["LastModified"] = info.LastWriteTime;
                 row["IsReadOnly"] = info.IsReadOnly;
                 
-                currentBatch.AddRow(row);
+                await currentBatch.AddRowAsync(row);
                 count++;
 
                 if (count >= batchSize)

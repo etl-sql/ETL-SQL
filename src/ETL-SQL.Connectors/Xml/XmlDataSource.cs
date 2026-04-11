@@ -35,7 +35,7 @@ namespace ETL_SQL.Connectors.Xml
         {
             _filePath = filePath;
             _options = options;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
             if (options != null)
             {
                 _rootPath = options.TryGetValue("ROOT_PATH", out var rp) ? rp : null;
@@ -102,7 +102,7 @@ namespace ETL_SQL.Connectors.Xml
                         }
                     }
 
-                    currentBatch.AddRow(row);
+                    await currentBatch.AddRowAsync(row);
                     if (currentBatch.Rows.Count >= batchSize)
                     {
                         yield return currentBatch;

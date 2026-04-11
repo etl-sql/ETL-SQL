@@ -35,7 +35,7 @@ namespace ETL_SQL.Connectors.Parquet
         {
             _filePath = filePath;
             _options = options;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
             _compression = options != null && options.TryGetValue("COMPRESSION", out var c) ? c.ToUpperInvariant() : "SNAPPY";
             _encryption = new EncryptionOptions(options);
         }
@@ -87,7 +87,7 @@ namespace ETL_SQL.Connectors.Parquet
                         {
                             etlRow[colNames[c]] = columns[c].GetValue(r);
                         }
-                        currentBatch.AddRow(etlRow);
+                        await currentBatch.AddRowAsync(etlRow);
 
                         if (currentBatch.Rows.Count >= batchSize)
                         {

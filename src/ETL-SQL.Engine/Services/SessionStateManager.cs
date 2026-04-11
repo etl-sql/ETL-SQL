@@ -141,10 +141,10 @@ namespace ETL_SQL.Engine.Services
                         {
                             string json = JsonSerializer.Serialize(allRows);
                             
-                            // Encrypt before saving if possible
-                            var password = evaluator.ScriptPassword ?? GetMachineKey();
-                            File.WriteAllText(dataFile, CryptoUtils.Encrypt(json, password));
-                            _logger.Debug($"[SESSION] Persisted {totalSavedRows} rows for temp table {conn.Key} to {Path.GetFileName(dataFile)}");
+                            // Hardware-bound encryption for temp data
+                            var entropy = GetMachineKey();
+                            File.WriteAllText(dataFile, CryptoUtils.Protect(json, entropy));
+                            _logger.Debug($"[SESSION] Persisted {totalSavedRows} rows for temp table {conn.Key} to {Path.GetFileName(dataFile)} (Machine-Locked)");
                         }
                     }
                     
@@ -160,12 +160,12 @@ namespace ETL_SQL.Engine.Services
             // 5. Capture Lineage
             state.LineageEntries = evaluator.LineageTracker.GetFullLineage().ToList();
             
-            // 6. Encrypt and save full state
+            // 6. Protect and save full state (Zero-password, Machine-Bound)
             string fullJson = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
             string sessionFile = GetSessionFilePath(sessionId);
-            string masterPassword = evaluator.ScriptPassword ?? GetMachineKey();
+            string entropyKey = GetMachineKey();
             
-            File.WriteAllText(sessionFile, CryptoUtils.Encrypt(fullJson, masterPassword));
+            File.WriteAllText(sessionFile, CryptoUtils.Protect(fullJson, entropyKey));
 
             // 6. Save unencrypted recovery manifest (Bug # recovery focus)
             var manifest = new
@@ -216,8 +216,8 @@ namespace ETL_SQL.Engine.Services
             return value is string or int or long or decimal or double or bool or DateTime;
         }
 
-        /// <summary>Loads existing session state from disk.</summary>
-        public async Task<SessionState?> LoadSession(string sessionId, string? password = null)
+        /// <summary>Loads existing session state from disk using machine-bound decryption.</summary>
+        public async Task<SessionState?> LoadSession(string sessionId, string? legacyPassword = null)
         {
             _logger.Debug("[SESSION_MANAGER_ENTER] LoadSession method entered.");
             
@@ -227,20 +227,24 @@ namespace ETL_SQL.Engine.Services
             try
             {
                 _logger.Debug($"[SESSION_READ_FILE] Reading {sessionFile}...");
-                string encryptedJson = File.ReadAllText(sessionFile);
+                string protectedJson = File.ReadAllText(sessionFile);
                 
-                _logger.Debug("[SESSION_DERIVE_KEY] Deriving decryption key...");
-                string masterPassword = password ?? GetMachineKey();
+                _logger.Debug("[SESSION_UNPROTECT] Unprotecting state using OS context...");
+                string entropy = GetMachineKey();
                 
-                _logger.Debug("[SESSION_DECRYPT] Decrypting state...");
-                string plainJson = CryptoUtils.Decrypt(encryptedJson, masterPassword);
+                string plainJson = CryptoUtils.Unprotect(protectedJson, entropy);
                 
                 _logger.Debug("[SESSION_DESERIALIZE] Deserializing JSON...");
                 return JsonSerializer.Deserialize<SessionState>(plainJson);
             }
-            catch
+            catch (CryptographicException)
             {
-                // Decryption failure (wrong password or machine key changed)
+                _logger.Warning($"[SESSION_SECURITY] Failed to resume session {sessionId}. The session file is locked to a different machine or user account.");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.Error($"[SESSION_ERROR] Unexpected error loading session: {ex.Message}");
                 return null;
             }
         }

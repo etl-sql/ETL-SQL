@@ -10,7 +10,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Common;
-using ETL_SQL.UI;
+using ETL_SQL.TUI.UI;
 using Spectre.Console;
 
 namespace ETL_SQL.Tests

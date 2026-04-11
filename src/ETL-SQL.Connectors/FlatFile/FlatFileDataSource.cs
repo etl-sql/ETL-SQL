@@ -54,7 +54,7 @@ namespace ETL_SQL.Connectors.FlatFile
         {
             _filePath = filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n');
             _options = options;
-            _logger = logger ?? Logger.Instance; // Fallback to global for backward compatibility during transition
+            _logger = logger ?? NullLogger.Instance; // Fallback to global for backward compatibility during transition
             _hasHeader = true;
             _delimiter = ',';
             _encoding = Encoding.UTF8;
@@ -389,7 +389,7 @@ namespace ETL_SQL.Connectors.FlatFile
                     ? _fixedColumns.Select(c => c.Name).ToList() 
                     : Enumerable.Range(1, headers.Length).Select(i => $"Col{i}").ToList();
                 currentBatch.SetColumns(colNames);
-                currentBatch.AddRow(CreateRow(headers, currentBatch));
+                await currentBatch.AddRowAsync(CreateRow(headers, currentBatch));
             }
 
             var actualHeaders = new List<string>(currentBatch.ColumnNames);
@@ -403,7 +403,7 @@ namespace ETL_SQL.Connectors.FlatFile
                 if (lineQueue.Count > _endAtRows + (_countAtEndPattern != null ? 1 : 0))
                 {
                     var dataLine = lineQueue.Dequeue();
-                    ProcessDataLine(dataLine, currentBatch, actualHeaders);
+                    await ProcessDataLine(dataLine, currentBatch, actualHeaders);
                     totalRowsRead++;
 
                     if (currentBatch.Rows.Count >= batchSize)
@@ -469,10 +469,10 @@ namespace ETL_SQL.Connectors.FlatFile
             return sb.Length > 0 ? sb.ToString() : null;
         }
 
-        private void ProcessDataLine(string line, DataTable batch, List<string> actualHeaders)
+        private async Task ProcessDataLine(string line, DataTable batch, List<string> actualHeaders)
         {
             var values = _fixedColumns != null ? SplitFixedWidthLine(line) : SplitLine(line);
-            batch.AddRow(CreateRow(values, batch));
+            await batch.AddRowAsync(CreateRow(values, batch));
         }
 
         private Row CreateRow(string[] values, DataTable batch)

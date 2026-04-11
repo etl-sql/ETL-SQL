@@ -70,7 +70,7 @@ namespace ETL_SQL.Tests.Engine
         public async Task TestPermissionOverride_AllowsLargeCount()
         {
             // We need to use ExecutionSession to test ### flags
-            var session = Program.ServiceProvider.GetRequiredService<ETL_SQL.App.ExecutionSession>();
+            var session = Program.ServiceProvider.GetRequiredService<ETL_SQL.Orchestrator.Execution.ExecutionSession>();
             
             var scriptSql = "DELETE FILE 'test.csv';\n";
             var fullSql = "### ALLOW_GREATER_THAN_100_FILE\n" + string.Concat(Enumerable.Repeat(scriptSql, 101));

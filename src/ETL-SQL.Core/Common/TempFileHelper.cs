@@ -22,7 +22,9 @@ namespace ETL_SQL.Common
             catch (Exception ex)
             {
                 if (logger != null) logger.Debug($"[TempFileHelper] Could not delete temp file '{path}': {ex.Message}");
+#pragma warning disable CS0618
                 else Logger.Verbose($"[TempFileHelper] Could not delete temp file '{path}': {ex.Message}");
+#pragma warning restore CS0618
             }
         }
     }

@@ -33,7 +33,7 @@ namespace ETL_SQL.Connectors.Excel
         {
             _filePath = filePath;
             _options = options;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
             _hasHeader = true; // Default
 
             if (options != null)
@@ -124,7 +124,7 @@ namespace ETL_SQL.Connectors.Excel
                         string colName = columnNames[c - startCol];
                         etlRow[colName] = row[c] == DBNull.Value ? null : row[c];
                     }
-                    etlBatch.AddRow(etlRow);
+                    await etlBatch.AddRowAsync(etlRow);
 
                     if (etlBatch.Rows.Count >= batchSize)
                     {

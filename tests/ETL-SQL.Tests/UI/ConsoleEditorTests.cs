@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Spectre.Console;
-using ETL_SQL.UI;
+using ETL_SQL.TUI.UI;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Connectors.MockDb;

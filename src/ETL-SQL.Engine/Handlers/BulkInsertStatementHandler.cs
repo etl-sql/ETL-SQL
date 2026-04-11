@@ -149,6 +149,12 @@ namespace ETL_SQL.Engine.Handlers
                         }
                         else
                         {
+                            // Security Hardening: Block writing data into script files
+                            if (!string.IsNullOrEmpty(destination.Path))
+                            {
+                                context.SecurityService.ValidateWriteAccess(destination.Path);
+                            }
+                            
                             await destination.WriteBatches(new[] { mappedBatch }.ToAsyncEnumerable());
                         }
                         count += mappedBatch.Rows.Count;

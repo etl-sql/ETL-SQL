@@ -5,6 +5,8 @@
     <Project Path="src/ETL-SQL.Engine/ETL-SQL.Engine.csproj" />
     <Project Path="src/ETL-SQL.Connectors/ETL-SQL.Connectors.csproj" />
     <Project Path="src/ETL-SQL.LanguageServer/ETL-SQL.LanguageServer.csproj" />
+    <Project Path="src/ETL-SQL.Orchestrator/ETL-SQL.Orchestrator.csproj" />
+    <Project Path="src/ETL-SQL.TUI/ETL-SQL.TUI.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ETL-SQL.Tests/ETL-SQL.Tests.csproj" />

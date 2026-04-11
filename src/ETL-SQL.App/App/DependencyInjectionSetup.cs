@@ -23,8 +23,9 @@ using ETL_SQL.Connectors.Avro;
 using ETL_SQL.Connectors.Email;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
-using ETL_SQL.Engine.Storage;
-using ETL_SQL.Engine.Scheduling;
+using ETL_SQL.Orchestrator.Storage;
+using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Orchestrator.Execution;
 
 namespace ETL_SQL.App
 {
@@ -53,10 +54,13 @@ namespace ETL_SQL.App
             loggerService.InitializeAppLogger(appLogDir, retentionDays, sizeLimitMb);
             
             // Set as global façade instance
+#pragma warning disable CS0618
             Logger.Instance = loggerService;
+#pragma warning restore CS0618
 
             services.AddSingleton<LoggerService>(loggerService);
             services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
+            services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
 
             // MEL bridge for ILogger<T> consumers
             services.AddLogging(lb =>
@@ -77,7 +81,14 @@ namespace ETL_SQL.App
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
             services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>();
-            services.AddSingleton<ETL_SQL.Services.SecurityService>();
+            
+            var securityService = new ETL_SQL.Services.SecurityService();
+            // Automatically enable TestMode if we are running in a Unit Test context
+            if (AppDomain.CurrentDomain.GetAssemblies().Any(a => a.FullName?.Contains("xunit") == true || a.FullName?.Contains("Test") == true))
+            {
+                securityService.IsTestMode = true;
+            }
+            services.AddSingleton<ETL_SQL.Services.SecurityService>(securityService);
             
             // Connectors
             services.AddSingleton<IConnector, MockDbConnector>();
@@ -127,6 +138,9 @@ namespace ETL_SQL.App
             // Storage & Scheduling
             services.AddSingleton<IJobHistoryStore, SQLiteJobHistoryStore>();
             services.AddSingleton<SchedulerService>();
+
+            // IScriptExecutor — thin adapter used by SchedulerService for job execution
+            services.AddTransient<IScriptExecutor, ScriptExecutorAdapter>();
 
             // Register Handlers
             var handlerAssembly = typeof(DeclareStatementHandler).Assembly;

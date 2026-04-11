@@ -154,7 +154,7 @@ namespace ETL_SQL.Core
 
         /// <summary>Standardizer for file/path security and runaway protection.</summary>
         ETL_SQL.Services.SecurityService SecurityService { get; }
-        void IncrementOperationCount();
+        void IncrementOperationCount(string? path = null);
 
         List<string> GetIndexedColumns(Expression? cond, string alias);
 

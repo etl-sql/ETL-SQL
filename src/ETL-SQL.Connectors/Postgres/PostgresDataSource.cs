@@ -33,7 +33,7 @@ namespace ETL_SQL.Connectors.Postgres
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
         }
 
         public string ConnectionString => _connectionString;
@@ -87,7 +87,7 @@ namespace ETL_SQL.Connectors.Postgres
                 {
                     row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
                 }
-                currentBatch.Rows.Add(row);
+                    await currentBatch.AddRowAsync(row);
 
                 if (currentBatch.Rows.Count >= batchSize)
                 {
@@ -194,7 +194,7 @@ namespace ETL_SQL.Connectors.Postgres
                     {
                         row[i] = await reader.IsDBNullAsync(i) ? null : reader.GetValue(i);
                     }
-                    currentBatch.Rows.Add(row);
+                        await currentBatch.AddRowAsync(row);
 
                     if (currentBatch.Rows.Count >= 10000)
                     {

@@ -32,7 +32,7 @@ namespace ETL_SQL.Connectors.MockDb
         {
             _connectionString = connectionString;
             _dialect = dialect;
-            _logger = logger ?? Logger.Instance;
+            _logger = logger ?? NullLogger.Instance;
             InitializeMockData();
         }
 
@@ -40,25 +40,25 @@ namespace ETL_SQL.Connectors.MockDb
         {
             var users = new DataTable();
             users.SetColumns(new[] { "UserID", "UserName", "Email" });
-            users.AddRow(new Row { ["UserID"] = 1, ["UserName"] = "Alice", ["Email"] = "alice@example.com" });
-            users.AddRow(new Row { ["UserID"] = 2, ["UserName"] = "Bob", ["Email"] = "bob@example.com" });
+            users.AddRowAsync(new Row { ["UserID"] = 1, ["UserName"] = "Alice", ["Email"] = "alice@example.com" }).GetAwaiter().GetResult();
+            users.AddRowAsync(new Row { ["UserID"] = 2, ["UserName"] = "Bob", ["Email"] = "bob@example.com" }).GetAwaiter().GetResult();
             _mockTables["Users"] = users;
 
             var products = new DataTable();
             products.SetColumns(new[] { "ProductID", "ProductName", "Price" });
-            products.AddRow(new Row { ["ProductID"] = 101, ["ProductName"] = "Widget", ["Price"] = 19.99m });
-            products.AddRow(new Row { ["ProductID"] = 102, ["ProductName"] = "Gadget", ["Price"] = 29.99m });
+            products.AddRowAsync(new Row { ["ProductID"] = 101, ["ProductName"] = "Widget", ["Price"] = 19.99m }).GetAwaiter().GetResult();
+            products.AddRowAsync(new Row { ["ProductID"] = 102, ["ProductName"] = "Gadget", ["Price"] = 29.99m }).GetAwaiter().GetResult();
             _mockTables["Products"] = products;
             
             var orders = new DataTable();
             orders.SetColumns(new[] { "OrderID", "OrderDate", "TotalAmount" });
-            orders.AddRow(new Row { ["OrderID"] = 1, ["OrderDate"] = DateTime.Now, ["TotalAmount"] = 150.0m });
+            orders.AddRowAsync(new Row { ["OrderID"] = 1, ["OrderDate"] = DateTime.Now, ["TotalAmount"] = 150.0m }).GetAwaiter().GetResult();
             _mockTables["Orders"] = orders;
 
             var employees = new DataTable();
             employees.SetColumns(new[] { "ID", "Name", "column1", "column2", "Status", "Active", "first_name", "last_name" });
-            employees.AddRow(new Row { ["ID"] = 1, ["Name"] = "Alice Boss", ["column1"] = "Test", ["column2"] = "Initial", ["Status"] = 0, ["Active"] = 1, ["first_name"] = "Alice", ["last_name"] = "Boss" });
-            employees.AddRow(new Row { ["ID"] = 2, ["Name"] = "Bob Worker", ["column1"] = "Other", ["column2"] = "Changed", ["Status"] = 1, ["Active"] = 1, ["first_name"] = "Bob", ["last_name"] = "Worker" });
+            employees.AddRowAsync(new Row { ["ID"] = 1, ["Name"] = "Alice Boss", ["column1"] = "Test", ["column2"] = "Initial", ["Status"] = 0, ["Active"] = 1, ["first_name"] = "Alice", ["last_name"] = "Boss" }).GetAwaiter().GetResult();
+            employees.AddRowAsync(new Row { ["ID"] = 2, ["Name"] = "Bob Worker", ["column1"] = "Other", ["column2"] = "Changed", ["Status"] = 1, ["Active"] = 1, ["first_name"] = "Bob", ["last_name"] = "Worker" }).GetAwaiter().GetResult();
             _mockTables["Employee"] = employees;
             _mockTables["Employee_Log"] = employees.Clone();
             _mockTables["DemoDb.dbo.Employee"] = employees;
@@ -66,8 +66,8 @@ namespace ETL_SQL.Connectors.MockDb
 
             var depts = new DataTable();
             depts.SetColumns(new[] { "column1", "column2", "column3" });
-            depts.AddRow(new Row { ["column1"] = "Test", ["column2"] = "HR", ["column3"] = 100 });
-            depts.AddRow(new Row { ["column1"] = "Other", ["column2"] = "IT", ["column3"] = 50 });
+            depts.AddRowAsync(new Row { ["column1"] = "Test", ["column2"] = "HR", ["column3"] = 100 }).GetAwaiter().GetResult();
+            depts.AddRowAsync(new Row { ["column1"] = "Other", ["column2"] = "IT", ["column3"] = 50 }).GetAwaiter().GetResult();
             _mockTables["departments"] = depts;
             _mockTables["hr.departments"] = depts;
         }
@@ -114,7 +114,7 @@ namespace ETL_SQL.Connectors.MockDb
              {
                  processedSql = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(sql);
                  var dt = new DataTable { ColumnNames = { "ParameterValue", "ProcessedSql" } };
-                 foreach (var p in parameters) dt.AddRow(new Row { ["ParameterValue"] = p, ["ProcessedSql"] = processedSql });
+                 foreach (var p in parameters) await dt.AddRowAsync(new Row { ["ParameterValue"] = p, ["ProcessedSql"] = processedSql });
                  yield return dt;
                  yield break;
              }
@@ -161,7 +161,7 @@ namespace ETL_SQL.Connectors.MockDb
                                     newRow[colName] = row[colName];
                                 }
                             }
-                            filtered.AddRow(newRow);
+                            await filtered.AddRowAsync(newRow);
                         }
                         yield return filtered;
                         yield break;
