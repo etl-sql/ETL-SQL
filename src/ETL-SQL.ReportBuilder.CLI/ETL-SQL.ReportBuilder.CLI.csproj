@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>etl-sql-report</AssemblyName>
+    <RootNamespace>ETL_SQL.ReportBuilder.CLI</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ETL-SQL.ReportBuilder\ETL-SQL.ReportBuilder.csproj" />
+    <ProjectReference Include="..\ETL-SQL.App\ETL-SQL.App.csproj" />
+  </ItemGroup>
+
+
+</Project>

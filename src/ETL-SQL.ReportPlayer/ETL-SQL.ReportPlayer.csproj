@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>ETL_SQL.ReportPlayer</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ETL-SQL.ReportBuilder\ETL-SQL.ReportBuilder.csproj" />
+    <ProjectReference Include="..\ETL-SQL.App\ETL-SQL.App.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -130,6 +130,12 @@ namespace ETL_SQL.Engine
         /// <summary>Named environment sets created by CREATE SETS.</summary>
         public IDictionary<string, NamedSet> NamedSets { get; } = new Dictionary<string, NamedSet>(StringComparer.OrdinalIgnoreCase);
 
+        // ── IReportContext ──────────────────────────────────────────────────
+        /// <inheritdoc />
+        public IDictionary<string, CreateVisualStatement> VisualDefinitions { get; } = new Dictionary<string, CreateVisualStatement>(StringComparer.OrdinalIgnoreCase);
+        /// <inheritdoc />
+        public IDictionary<string, CreatePageStatement> PageDefinitions { get; } = new Dictionary<string, CreatePageStatement>(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>Optional prompt callback for interactive USE SETS WITH_PROMPT. Null = non-interactive (auto-proceed).</summary>
         public Func<string, Task<bool>>? OnPrompt { get; set; }
 
@@ -179,8 +185,21 @@ namespace ETL_SQL.Engine
 
         public ILogger Logger => _logger;
 
-        /// <summary>Unique identifier for the current session.</summary>
-        public string? SessionId { get; set; }
+        /// <summary>
+        /// Unique identifier for the current session.
+        /// Setting this also stamps all subsequent log output from this Evaluator
+        /// with the session ID for correlation across concurrent sessions.
+        /// </summary>
+        public string? SessionId
+        {
+            get => _sessionId;
+            set
+            {
+                _sessionId = value;
+                _logger.SessionId = value;
+            }
+        }
+        private string? _sessionId;
 
         
         /// <summary>Cache for scalar subquery results to avoid redundant execution.</summary>
@@ -214,7 +233,6 @@ namespace ETL_SQL.Engine
         public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null) => _variableScopeManager.PushScope(vars, metadata);
         public void PopScope() => _variableScopeManager.PopScope();
 
-        [ActivatorUtilitiesConstructor]
         public Evaluator(
             IEnumerable<IStatementHandler> handlers,
             IServiceProvider serviceProvider,
@@ -229,6 +247,7 @@ namespace ETL_SQL.Engine
         {
         }
 
+        [ActivatorUtilitiesConstructor]
         public Evaluator(
             IEnumerable<IStatementHandler> handlers,
             IServiceProvider serviceProvider,
@@ -394,7 +413,7 @@ namespace ETL_SQL.Engine
                 if (IsVerbose)
                 {
                     string sql = (statement is UsePasswordStatement ups) ? ups.ToSql(!ShowPassword) : statement.ToSql();
-                    _logger.Debug($"EXECUTING: {sql}");
+                    _logger.Debug("Executing {Sql}", sql);
                 }
                 _metricsReporter.ReportPreExecutionMetrics(statement);
             }
@@ -623,7 +642,7 @@ namespace ETL_SQL.Engine
             else
             {
                 // Internal test fallback: Log a warning if the service is missing
-                _logger.Debug($"Security validation skipped for path '{fullPath}' as SecurityService is not initialized.");
+                _logger.Debug("Security validation skipped for path {Path}; SecurityService not initialized", fullPath);
             }
             
             return fullPath;

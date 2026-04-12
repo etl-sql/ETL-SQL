@@ -1,0 +1,68 @@
+using System;
+using System.IO;
+using System.Text.Json;
+using System.Threading.Tasks;
+
+namespace ETL_SQL.ReportBuilder
+{
+    /// <summary>
+    /// Persists and loads a <see cref="ReportManifest"/> snapshot to/from disk.
+    ///
+    /// Snapshot files are plain JSON, stored alongside the .rptsql script as
+    /// <c>&lt;scriptName&gt;.snapshot.json</c> by default.
+    ///
+    /// Used by <c>etl-sql-report refresh</c> to determine staleness and update
+    /// the <see cref="DatasetManifest.LastRefresh"/> timestamps.
+    /// </summary>
+    public class SnapshotStore
+    {
+        private static readonly JsonSerializerOptions _opts = new()
+        {
+            WriteIndented        = true,
+            PropertyNamingPolicy = null
+        };
+
+        /// <summary>Derives the default snapshot path from a script path.</summary>
+        public static string DefaultPath(string scriptPath) =>
+            Path.ChangeExtension(scriptPath, null) + ".snapshot.json";
+
+        /// <summary>Serialises the manifest to a JSON file.</summary>
+        public async Task SaveAsync(ReportManifest manifest, string outputPath)
+        {
+            var dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                Directory.CreateDirectory(dir);
+
+            var json = JsonSerializer.Serialize(manifest, _opts);
+            await File.WriteAllTextAsync(outputPath, json);
+        }
+
+        /// <summary>
+        /// Deserialises a previously saved manifest. Returns null if the file does not exist.
+        /// </summary>
+        public async Task<ReportManifest?> LoadAsync(string snapshotPath)
+        {
+            if (!File.Exists(snapshotPath)) return null;
+            var json = await File.ReadAllTextAsync(snapshotPath);
+            return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
+        }
+
+        /// <summary>
+        /// Checks whether the snapshot is stale relative to the script's last-write time.
+        /// Returns true if the snapshot is older than the script file or the TTL has elapsed.
+        /// </summary>
+        public bool IsStale(ReportManifest manifest, string scriptPath, TimeSpan? ttl = null)
+        {
+            if (File.Exists(scriptPath))
+            {
+                var scriptWrite = File.GetLastWriteTimeUtc(scriptPath);
+                if (manifest.BuiltAt < scriptWrite) return true;
+            }
+
+            if (ttl.HasValue && (DateTime.UtcNow - manifest.BuiltAt) > ttl.Value)
+                return true;
+
+            return false;
+        }
+    }
+}

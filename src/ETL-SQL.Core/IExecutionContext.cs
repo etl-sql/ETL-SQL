@@ -133,13 +133,23 @@ namespace ETL_SQL.Core
         bool ProcedureExists(string name);
     }
 
+    /// <summary>Stores Report-SQL visual and page definitions registered during script execution.</summary>
+    public interface IReportContext
+    {
+        /// <summary>Named visual definitions registered by CREATE VISUAL.</summary>
+        IDictionary<string, CreateVisualStatement> VisualDefinitions { get; }
+        /// <summary>Named page definitions registered by CREATE PAGE.</summary>
+        IDictionary<string, CreatePageStatement> PageDefinitions { get; }
+    }
+
     /// <summary>
-    /// The primary interface for script execution state, providing access to variables, connections, 
+    /// The primary interface for script execution state, providing access to variables, connections,
     /// expression evaluation, and system services (Docker, Lineage, Transactions).
     /// </summary>
-    public interface IExecutionContext : IVariableContext, IQueryContext, ISqlCompilerContext, 
+    public interface IExecutionContext : IVariableContext, IQueryContext, ISqlCompilerContext,
                                         ITransactionContext, ILineageContext, IDockerContext,
-                                        ILoggingContext, IEvaluationContext, IDataContext, IEngineContext
+                                        ILoggingContext, IEvaluationContext, IDataContext, IEngineContext,
+                                        IReportContext
     {
         Stack<Row> OuterRowStack { get; }
         Dictionary<Statement, object?> SubqueryCache { get; }

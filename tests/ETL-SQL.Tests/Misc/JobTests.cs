@@ -41,7 +41,9 @@ namespace ETL_SQL.Tests
             services.AddSingleton(new CliContext());
             services.AddSingleton<SecurityService>();
             services.AddSingleton<IScriptExecutor, ScriptExecutorAdapter>();
-            
+            services.AddSingleton(new ETL_SQL.Orchestrator.Execution.JobThrottleOptions());
+            services.AddSingleton<ETL_SQL.Orchestrator.Execution.JobThrottle>();
+
             services.AddTransient<Evaluator>();
             
             // Register Handlers using reflection

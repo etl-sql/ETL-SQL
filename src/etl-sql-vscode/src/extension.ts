@@ -12,6 +12,7 @@ import * as cp from 'child_process';
 import { ResultsPanel } from './resultsPanel';
 import { ReplManager } from './ReplManager';
 import { ConnectionsProvider, Connection } from './connectionsProvider';
+import { ReportPreviewPanel } from './reportPreviewPanel';
 import * as crypto from 'crypto';
 
 let client: LanguageClient;
@@ -176,6 +177,20 @@ export function activate(context: vscode.ExtensionContext) {
         if (doc.languageId === 'etlsql') {
             connectionsProvider.removeScriptConnections(doc.uri.toString());
         }
+    }));
+
+    // Phase 9C: Preview Report command
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.previewReport', () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showErrorMessage('ETL-SQL: Open a .rptsql file first.');
+            return;
+        }
+        const scriptPath = editor.document.uri.fsPath;
+        if (!scriptPath.endsWith('.rptsql') && !scriptPath.endsWith('.etlsql')) {
+            vscode.window.showWarningMessage('ETL-SQL: Preview Report is intended for .rptsql files.');
+        }
+        ReportPreviewPanel.open(context.extensionUri, scriptPath);
     }));
 }
 

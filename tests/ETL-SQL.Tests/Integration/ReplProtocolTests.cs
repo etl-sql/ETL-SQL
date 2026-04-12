@@ -24,6 +24,7 @@ namespace ETL_SQL.Tests.Integration
         }
 
         [Fact]
+        [Trait("Category", "Integration")]
         public async Task REPL_Should_Emit_Variables_And_Export_CSV()
         {
             // Start the engine in REPL mode

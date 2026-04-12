@@ -119,10 +119,20 @@
           "type": "string",
           "default": ".etlsql_logs",
           "description": "Directory where engine logs will be stored."
+        },
+        "etlsql.reportCliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Full path to the etl-sql-report CLI executable. Leave empty to use dotnet run (development mode)."
         }
       }
     },
     "commands": [
+      {
+        "command": "etlsql.previewReport",
+        "title": "ETL-SQL: Preview Report",
+        "icon": "$(graph)"
+      },
       {
         "command": "etlsql.runScript",
         "title": "ETL-SQL: Run Script",
