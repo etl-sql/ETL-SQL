@@ -2183,7 +2183,9 @@ Supports atomic operations via a transaction stack.
 - `BEGIN TRANSACTION` (or `BEGIN TRAN`)
 - `COMMIT` (or `COMMIT TRAN`)
 - `ROLLBACK` (or `ROLLBACK TRAN`)
-- `@@TRANCOUNT`: Built-in variable returning the current nesting level.
+- `@@TRANCOUNT`: Built-in variable returning the current transaction nesting level.
+- `@@VERSION`: Built-in variable returning the full engine version and metadata string (e.g., 'ETL-SQL 0.5.0 (.NET 10.0)').
+- `@@RESULTSETS`: Number of result sets produced by the last statement execution.
 
 ### Error Handling
 - `TRY...CATCH`: Standard block for capturing runtime exceptions.

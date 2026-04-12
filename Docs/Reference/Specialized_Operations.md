@@ -258,7 +258,22 @@ CREATE TABLE #Layout (
 
 `@d:` is the reserved description tag, displayed in IDE hover and lineage reports.
 
-### 4.2 Querying Tags
+### 4.2 Script Metadata Headers
+Scripts can define global metadata in a comment block at the very top of the file. This metadata is captured by the engine and automatically recorded in every lineage entry produced by the script.
+
+```sql
+/* 
+   @author: Chuck 
+   @version: 1.0.1 
+   @description: Quarterly cleanup and archival
+*/
+```
+
+- **@author**: Defaults to the current OS user if omitted.
+- **@engine_version**: Automatically captured from the running engine.
+- **Custom Tags**: Any `@key: value` pair can be added and queried via `LINEAGE`.
+
+### 4.3 Querying Tags
 
 ```sql
 -- Return all tag names on a column
@@ -514,7 +529,15 @@ LINT 'scripts/nightly_load.etlsql';   -- Analyze a file
 LINT;                                  -- Analyze the current interactive buffer
 ```
 
-### 8.4 `SHOW PROFILE`
+### 8.4 `SHOW VERSION`
+Displays the current engine version, build metadata, and environment info.
+
+```sql
+SHOW VERSION;
+SHOW VERSION INTO #version_info;
+```
+
+### 8.5 `SHOW PROFILE`
 Displays timing and resource usage for the most recently profiled execution.
 
 ```sql

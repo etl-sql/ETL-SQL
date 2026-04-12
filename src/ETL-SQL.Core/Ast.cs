@@ -39,6 +39,7 @@ namespace ETL_SQL.Core
     {
         public List<Statement> Statements { get; init; } = new();
         public List<ETL_SQL.Core.Common.Diagnostic> Diagnostics { get; init; } = new();
+        public Dictionary<string, string> Metadata { get; init; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     public record NoOpStatement : Statement
@@ -1802,6 +1803,12 @@ namespace ETL_SQL.Core
     public record ShowJobsStatement : Statement
     {
         public string? IntoTable { get; set; }
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
+    public record ShowVersionStatement : Statement
+    {
+        public string? IntoTable { get; init; }
         public override string ToSql() => AstSerializer.Format(this);
     }
 

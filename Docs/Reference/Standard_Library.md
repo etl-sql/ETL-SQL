@@ -359,6 +359,8 @@ SELECT IIF(Score >= 90, 'Pass', 'Fail') AS Result FROM #tests;
 | `SYSDATE` / `CURRENT_TIMESTAMP` | Current date/time (bare identifiers — no parentheses) |
 | `ERROR_MESSAGE()` | Error message inside `CATCH` block |
 | `@@TRANCOUNT` | Current transaction nesting level |
+| `@@VERSION` | Full engine version and metadata string |
+| `@@RESULTSETS` | Number of result sets produced by the last statement |
 | `FILE_EXISTS(path)` | `TRUE` if the specified file exists on disk |
 | `DIRECTORY_EXISTS(path)` | `TRUE` if the directory exists on disk |
 

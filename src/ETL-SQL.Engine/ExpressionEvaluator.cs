@@ -299,8 +299,9 @@ namespace ETL_SQL.Engine
         /// <summary>Evaluates a variable reference (@var or #temp).</summary>
         private object? EvaluateVariable(VariableExpression v)
         {
-            if (v.Name.Equals("@@TRANCOUNT", StringComparison.OrdinalIgnoreCase)) return _context.GetVariable("@@TRANCOUNT");
-            if (v.Name.Equals("@@RESULTSETS", StringComparison.OrdinalIgnoreCase)) return _context.LastResultSets;
+            if (v.Name.Equals("@@TRANCOUNT", StringComparison.OrdinalIgnoreCase)) return _context.TranCount;
+            if (v.Name.Equals("@@RESULTSETS", StringComparison.OrdinalIgnoreCase)) return _context.LastResultSets.Count;
+            if (v.Name.Equals("@@VERSION", StringComparison.OrdinalIgnoreCase)) return LanguageMetadata.GetFullVersionString();
             
             if (!_context.ContainsVariable(v.Name))
                 throw new ExecutionException($"Undeclared: {v.Name}");

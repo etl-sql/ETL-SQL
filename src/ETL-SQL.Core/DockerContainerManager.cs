@@ -242,7 +242,7 @@ namespace ETL_SQL.Core
             {
                 _logger.WriteLine($"Closing Docker container for {kvp.Key}...", ConsoleColor.Yellow);
                 try { await kvp.Value.StopAsync(); await kvp.Value.DisposeAsync(); }
-                catch (Exception ex) { _logger.Debug($"[DockerContainerManager] Container cleanup error for '{kvp.Key}': {ex.Message}"); }
+                catch (Exception ex) { _logger.Debug("[DockerContainerManager] Container cleanup error for '{ContainerKey}': {Message}", kvp.Key, ex.Message); }
                 _activeContainers.TryRemove(kvp.Key, out _);
                 _connectionStrings.TryRemove(kvp.Key, out _);
             }

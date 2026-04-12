@@ -93,9 +93,8 @@ Identified during 2026-04-12 documentation review. Each item was verified agains
   Scripts cannot read OS environment variables. This is critical for CI/CD and containerized deployments where secrets are injected as env vars. Add an `ENV('VAR_NAME')` function. Consider an allow-list in `SecurityService` to prevent wholesale credential harvesting.
   - Files: `StandardFunctions.cs` (add `ENV` function), `SecurityService.cs` (allow-list consideration).
 
-- [ ] **ENG-7** — **CLI headless mode does not return a meaningful exit code.**
-  Running `ETL-SQL.exe --run script.etlsql` in a CI pipeline always exits `0` even on failure. Return `0` on success and `1` on script failure, unhandled exception, or lint error. Essential for GitHub Actions, Azure DevOps, and cron-based pipelines.
-  - Files: `ETL-SQL.App/Program.cs`, run-mode path in `SimpleUi.cs`.
+- [x] **ENG-7** — **CLI headless mode does not return a meaningful exit code.**
+  Already implemented: `EngineRunner.Run` returns `1` on parse errors, lint errors, and execution exceptions; `0` on success. `Program.Main` propagates the value through `System.CommandLine`'s `InvokeAsync`.
 
 ### Nice-to-Have / Quality of Life
 

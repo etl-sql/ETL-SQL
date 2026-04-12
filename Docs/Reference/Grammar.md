@@ -32,7 +32,16 @@ SET @count = @count + 1;
 SET @label = UPPER(@name) + '_PROCESSED';
 ```
 
-### 1.3 `INPUT` and `OUTPUT` Variables
+### 1.3 System Variables
+The engine provides built-in variables for session-level state.
+
+| Variable | Description |
+| :--- | :--- |
+| `@@VERSION` | Full engine version and build metadata string. |
+| `@@TRANCOUNT` | Current transaction nesting level (0 = no active transaction). |
+| `@@RESULTSETS` | Number of result sets produced by the last executed statement. |
+
+### 1.4 `INPUT` and `OUTPUT` Variables
 Control how variables interact with the CLI or parent scripts via `RUN SCRIPT`.
 
 - **`INPUT`**: Value can be overridden by `--var` on the CLI or by `RUN SCRIPT ... WITH(...)`. If not provided by the caller, the declared default applies.
@@ -735,6 +744,7 @@ KILL JOB 'job_id_123';              -- Halt a running job
 
 ```sql
 SHOW CONNECTIONS [INTO #temp];                   -- Active connections
+SHOW VERSION [INTO #temp];                       -- Engine version and metadata
 SHOW TABLES [ON conn] [INTO #temp];              -- Tables in a connection
 SHOW COLUMNS FOR conn.TableName [INTO #temp];    -- Columns for a table
 SHOW PROFILE [INTO #benchmarks];                 -- Last profiling results
@@ -744,6 +754,23 @@ LINT 'scripts/nightly_load.etlsql';                        -- Static analysis
 
 HELP CONNECTION MSSQL;    -- Connector-specific option help
 ```
+
+### 14.1 Script Metadata Headers
+Scripts can include metadata in a special comment block at the very top of the file. This metadata is automatically captured by the engine and recorded in data lineage logs.
+
+```sql
+/* 
+   @author: Chuck 
+   @version: 1.2.3 
+   @description: Nightly cleanup of staging tables 
+*/
+
+DECLARE @BatchId INT;
+...
+```
+
+Supported tags: `@author`, `@version`, `@description`, or any custom `@key: value` pair.
+If `@author` is omitted, it defaults to the current system user.
 
 ---
 

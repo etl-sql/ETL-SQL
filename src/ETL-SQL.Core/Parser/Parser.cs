@@ -137,12 +137,33 @@ namespace ETL_SQL.Core.Parser
         public Script Parse()
         {
             var script = new Script();
+            
+            // Capture script metadata from header comments
+            while (Current.Type == TokenType.COLUMN_TAG)
+            {
+                var comment = Advance().Value;
+                var lines = comment.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+                foreach (var line in lines)
+                {
+                    var trimmedLine = line.Trim();
+                    if (trimmedLine.StartsWith("@"))
+                    {
+                        var parts = trimmedLine.Substring(1).Split(':', 2);
+                        if (parts.Length == 2)
+                        {
+                            script.Metadata[parts[0].Trim()] = parts[1].Trim();
+                        }
+                    }
+                }
+            }
+
             while (Current.Type != TokenType.EOF)
             {
-                // Console.WriteLine($"Parsing statement starting with {Current.Type}");
                 try
                 {
                     if (Match(TokenType.SEMICOLON)) continue;
+                    if (Current.Type == TokenType.COLUMN_TAG) { Advance(); continue; } // Skip inline tags
+
                     script.Statements.Add(ParseStatement());
                 }
                 catch (SyntaxException ex)

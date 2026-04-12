@@ -282,10 +282,14 @@ namespace ETL_SQL.Core.Parser
                 var targetTable = _parser.ParseTableReference();
                 stmt = new LineageStatement(targetTable);
             }
+            else if (_parser.Match(TokenType.VERSION))
+            {
+                stmt = new ShowVersionStatement();
+            }
 
             if (stmt == null)
             {
-                throw new SyntaxException($"Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, TAGS, or LINEAGE after SHOW", _parser.Current.Line, _parser.Current.Column);
+                throw new SyntaxException($"Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, TAGS, VERSION or LINEAGE after SHOW", _parser.Current.Line, _parser.Current.Column);
             }
 
             if (_parser.Match(TokenType.INTO))
@@ -299,6 +303,7 @@ namespace ETL_SQL.Core.Parser
                     ShowJobHistoryStatement sjh => sjh with { IntoTable = tempTable },
                     ShowJobsStatement sjs => sjs with { IntoTable = tempTable },
                     ShowConnectionsStatement scs => scs with { IntoTable = tempTable },
+                    ShowVersionStatement svs => svs with { IntoTable = tempTable },
                     ShowTablesStatement sts => sts with { IntoTable = tempTable },
                     ShowColumnsStatement scols => scols with { IntoTable = tempTable },
                     ShowTagsStatement stag => stag with { IntoTable = tempTable },

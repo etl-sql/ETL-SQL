@@ -1,15 +1,14 @@
 <Project>
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <Version>0.5.0</Version>
+    <Authors>Charles Clemens</Authors>
+    <Company>ETL-SQL</Company>
+    <Product>ETL-SQL Engine</Product>
+    <Description>A hybrid ETL engine for SQL, NoSQL, and FlatFiles.</Description>
+    <Copyright>Copyright © 2026 Charles Clemens</Copyright>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AnalysisLevel>latest</AnalysisLevel>
-    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-  </PropertyGroup>
-
-  <!-- Common Package Versions (optional, but good for centralizing) -->
-  <PropertyGroup>
-    <MicrosoftExtensionsVersion>10.0.5</MicrosoftExtensionsVersion>
   </PropertyGroup>
 </Project>

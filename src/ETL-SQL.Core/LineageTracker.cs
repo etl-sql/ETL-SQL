@@ -45,6 +45,7 @@ namespace ETL_SQL.Core
         private readonly Dictionary<(string table, string op, string? col, int l, int c, string? f), LineageEntry> _lookup = new();
         private readonly Dictionary<string, Dictionary<string, string>> _latestTableMetadata = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Dictionary<string, Dictionary<string, string>>> _latestColumnMetadata = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> GlobalMetadata { get; } = new(StringComparer.OrdinalIgnoreCase);
  
         public LineageTracker(ILogger logger)
         {
@@ -78,9 +79,16 @@ namespace ETL_SQL.Core
                     Line = line,
                     Column = column,
                     EndLine = endLine,
-                    EndColumn = endColumn,
                     SourceFile = sourceFile
                 };
+
+                // Merge global metadata
+                foreach (var kv in GlobalMetadata)
+                {
+                    if (!entry.Metadata.ContainsKey(kv.Key))
+                        entry.Metadata[kv.Key] = kv.Value;
+                }
+
                 _entries.Add(entry);
                 _lookup[key] = entry;
 

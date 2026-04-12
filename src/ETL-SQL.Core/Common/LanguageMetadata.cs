@@ -70,7 +70,7 @@ namespace ETL_SQL.Common
             "START_DOCKER", "STOP_DOCKER", "PAUSE_DOCKER", "CLOSE_DOCKER",
             "BULK", "LOAD", "BATCHSIZE", "MAXERRORS", "FIELDTERMINATOR", "ROWTERMINATOR", "FIRSTROW", "DATA_SOURCE",
             "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND", "INCLUDE_NULL_VALUES", "WITHOUT_ARRAY_WRAPPER",
-            "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT",
+            "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT", "VERSION",
             "SETS", "SESSION", "CONNECTIONS", "TABLES", "COLUMNS", "TAGS", "TAG", "VALUE", "BITS", "ALGORITHM", "PASSPHRASE", "COMMENT",
             "SUBSTRING", "POSITION", "OVERLAY", "EXTRACT", "TRIM", "PLACING", "LEADING", "TRAILING", "BOTH",
             "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH"
@@ -108,6 +108,9 @@ namespace ETL_SQL.Common
             // XML functions
             "XMLVALUE", "XMLEXISTS", "XMLQUERY", "XMLTABLE", "XMLELEMENT", "XMLATTRIBUTES", "XMLFOREST", "EXTRACTVALUE"
         };
+
+        public static string EngineVersion => typeof(LanguageMetadata).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+        public static string GetFullVersionString() => $"ETL-SQL {EngineVersion} (.NET 10.0)";
 
         public static bool IsKeyword(string word) => DmlKeywords.Contains(word) || DdlKeywords.Contains(word) || ControlFlowKeywords.Contains(word) || JoinKeywords.Contains(word) || OperatorKeywords.Contains(word) || Keywords.Contains(word) || ConnectorTypes.Contains(word) || Functions.Contains(word);
         public static bool IsFunction(string word) => Functions.Contains(word);

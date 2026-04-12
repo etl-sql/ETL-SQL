@@ -118,6 +118,7 @@ namespace ETL_SQL.Core.Formatting
             SetProfilingStatement          s => $"SET PROFILING {(s.Enabled ? "ON" : "OFF")}",
             SetWhatIfStatement             s => $"SET WHAT_IF {(s.Enabled ? "ON" : "OFF")}",
             ShowProfileStatement           s => "SHOW PROFILE" + (s.IntoTable != null ? $" INTO {s.IntoTable}" : ""),
+            ShowVersionStatement           s => "SHOW VERSION" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
 
             // ── Expressions — more-derived before less-derived ──
             SubstringExpression    e => $"SUBSTRING({e.String.ToSql()} FROM {e.Start.ToSql()}{(e.Length != null ? $" FOR {e.Length.ToSql()}" : "")})",
