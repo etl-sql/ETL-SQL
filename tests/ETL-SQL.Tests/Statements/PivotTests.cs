@@ -119,5 +119,59 @@ namespace ETL_SQL.Tests
             Assert.NotNull(nElec["2021"]);
             Assert.Equal(30m, Convert.ToDecimal(nElec["2021"])); // 10 + 20
         }
+
+        [Fact]
+        public async Task Pivot_Chaining()
+        {
+            var eval = _serviceProvider.GetRequiredService<Evaluator>();
+            
+            // Source: Region, Year, SaleType, Amount
+            await eval.Evaluate(new Parser(new Lexer("CREATE TABLE #Chained (Region NVARCHAR(50), Year INT, SaleType NVARCHAR(10), Amount DECIMAL(18,2));").Tokenize()).Parse());
+            await eval.Evaluate(new Parser(new Lexer("INSERT INTO #Chained VALUES ('North', 2021, 'A', 10), ('North', 2021, 'B', 20), ('North', 2022, 'A', 30), ('North', 2022, 'B', 20);").Tokenize()).Parse());
+
+            // 1. Pivot by SaleType then Pivot by Year
+            var sql = @"
+                SELECT * 
+                FROM #Chained 
+                PIVOT (SUM(Amount) FOR SaleType IN ('A', 'B')) AS P1
+                PIVOT (SUM(A) FOR Year IN (2021, 2022)) AS P2;
+            ";
+            await eval.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
+            var result = eval.LastResult;
+
+            // Header should have: Region, B (from P1), 2021 (from P2), 2022 (from P2)
+            Assert.NotNull(result);
+            Assert.Contains("Region", result.ColumnNames);
+            Assert.Contains("B", result.ColumnNames);
+            Assert.Contains("2021", result.ColumnNames);
+            Assert.Contains("2022", result.ColumnNames);
+            
+            // Now there should be ONE row for North because B is consistently 20
+            var north = result.Rows.First(r => r["Region"]?.ToString() == "North");
+            Assert.Equal(10m, Convert.ToDecimal(north["2021"])); // A (2021) 
+            Assert.Equal(30m, Convert.ToDecimal(north["2022"])); // A (2022)
+            Assert.Equal(20m, Convert.ToDecimal(north["B"])); 
+        }
+
+        [Fact]
+        public async Task Pivot_Subquery()
+        {
+            var eval = _serviceProvider.GetRequiredService<Evaluator>();
+            
+            await eval.Evaluate(new Parser(new Lexer("CREATE TABLE #SubSrc (ID INT, Val DECIMAL, Category NVARCHAR(10));").Tokenize()).Parse());
+            await eval.Evaluate(new Parser(new Lexer("INSERT INTO #SubSrc VALUES (1, 10, 'A'), (2, 20, 'B');").Tokenize()).Parse());
+
+            var sql = @"
+                SELECT * 
+                FROM (SELECT Category, Val FROM #SubSrc) AS src
+                PIVOT (MAX(Val) FOR Category IN ('A', 'B')) AS pvt;
+            ";
+            await eval.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
+            var result = eval.LastResult;
+
+            Assert.Single(result.Rows);
+            Assert.Equal(10m, Convert.ToDecimal(result.Rows[0]["A"]));
+            Assert.Equal(20m, Convert.ToDecimal(result.Rows[0]["B"]));
+        }
     }
 }

@@ -32,13 +32,27 @@ namespace ETL_SQL.Engine.Engines
             
             
             // 1. Identify grouping columns (all columns except AggregateColumn and PivotColumn)
-            var allCols = rows[0].Columns.Keys.ToList();
-            var groupingCols = allCols.Where(c => 
+            var rawGroupingCols = rows[0].Columns.Keys.Where(c => 
                 !c.Equals(pivot.PivotColumn, StringComparison.OrdinalIgnoreCase) && 
                 !c.Equals(pivot.AggregateColumn, StringComparison.OrdinalIgnoreCase) &&
                 !IsMatch(c, pivot.PivotColumn) &&
                 !IsMatch(c, pivot.AggregateColumn)
             ).ToList();
+
+            // Deduplicate: if we have both "Col" and "Table.Col", only keep one (preferring the unprefixed short name for the final result set if possible, or just consistency)
+            var groupingCols = new List<string>();
+            var seenBaseNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            
+            // Sort by length so we see short names first or long names first? 
+            // If we keep short names, it looks cleaner.
+            foreach (var col in rawGroupingCols.OrderBy(c => c.Contains(".") ? 1 : 0))
+            {
+                var baseName = col.Contains(".") ? col.Split('.').Last() : col;
+                if (seenBaseNames.Add(baseName))
+                {
+                    groupingCols.Add(col);
+                }
+            }
 
             // 2. Group by grouping columns
             var groups = new Dictionary<string, List<Row>>();

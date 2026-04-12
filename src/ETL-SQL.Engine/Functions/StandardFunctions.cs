@@ -211,6 +211,7 @@ namespace ETL_SQL.Engine.Functions
                 "MONTH" or "MM" or "M" => dt.ToString("MMMM"),
                 "WEEKDAY" or "DW" or "W" => dt.ToString("dddd"),
                 "YEAR" or "YY" or "YYYY" => dt.Year.ToString(),
+                "QUARTER" or "QQ" or "Q" => "Q" + ((dt.Month - 1) / 3 + 1),
                 _ => dt.ToString()
             };
         }
@@ -223,6 +224,7 @@ namespace ETL_SQL.Engine.Functions
             if (!DateTime.TryParse(args[1]?.ToString(), out var dt)) throw new ExecutionException($"Invalid date format for DATEPART: {args[1]}");
             return part switch {
                 "YEAR" or "YY" or "YYYY" => (decimal)dt.Year,
+                "QUARTER" or "QQ" or "Q" => (decimal)((dt.Month - 1) / 3 + 1),
                 "MONTH" or "MM" or "M" => (decimal)dt.Month,
                 "DAY" or "DD" or "D" => (decimal)dt.Day,
                 "HOUR" or "HH" => (decimal)dt.Hour,
@@ -242,6 +244,7 @@ namespace ETL_SQL.Engine.Functions
             var diff = dt2 - dt1;
             return part switch {
                 "YEAR" or "YY" or "YYYY" => (decimal)(dt2.Year - dt1.Year),
+                "QUARTER" or "QQ" or "Q" => (decimal)((dt2.Year - dt1.Year) * 4 + ((dt2.Month - 1) / 3) - ((dt1.Month - 1) / 3)),
                 "MONTH" or "MM" or "M" => (decimal)((dt2.Year - dt1.Year) * 12 + dt2.Month - dt1.Month),
                 "DAY" or "DD" or "D" => (decimal)diff.TotalDays,
                 "HOUR" or "HH" => (decimal)diff.TotalHours,

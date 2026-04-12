@@ -621,6 +621,8 @@ namespace ETL_SQL.Core.Parser
         {
             var t = Current;
             
+            TableReference tableRef;
+            
             // Subquery Support: (SELECT ...) [AS] Alias
             if (Match(TokenType.LPAREN))
             {
@@ -643,95 +645,96 @@ namespace ETL_SQL.Core.Parser
                         alias = "Sub_" + new Random().Next(1000, 9999);
                     }
                     
-                    return new TableReference("SUBQUERY", null, null, null, alias, subquery) { Line = t.Line, Column = t.Column, EndLine = LastTokenEndLine, EndColumn = LastTokenEndColumn };
+                    tableRef = new TableReference("SUBQUERY", null, null, null, alias, subquery);
                 }
                 else
                 {
                     throw new SyntaxException("Expected SELECT after '(' in FROM/JOIN table reference", Current.Line, Current.Column);
                 }
             }
-
-            var parts = new List<string>();
-            
-            if (Current.Type == TokenType.VARIABLE)
-            {
-                parts.Add(Consume(TokenType.VARIABLE, "Expected variable table reference").Value);
-            }
-            else if (Current.Type == TokenType.STRING)
-            {
-                parts.Add(Consume(TokenType.STRING, "Expected string for table reference").Value);
-            }
             else
             {
-                parts.Add(ConsumeIdentifier("Expected identifier for table reference").Value);
-            }
-
-            while (Match(TokenType.DOT))
-            {
-                // After a dot in a table reference (schema.table, conn.table), any word token is valid —
-                // keywords like TABLE, INDEX, etc. are commonly used as table names.
-                if (Current.Type < TokenType.STAR)
-                    parts.Add(Advance().Value);
-                else
-                    break;
-            }
-
-            // Capture table-level metadata if available before alias
-            var tableMetadata = _expressionParser.ParseMetadataTags();
-
-            TableReference tableRef;
-            if (allowFunction && Match(TokenType.LPAREN))
-            {
-                var args = new List<Expression>();
-                if (!Match(TokenType.RPAREN))
+                var parts = new List<string>();
+                
+                if (Current.Type == TokenType.VARIABLE)
                 {
-                    args.Add(_expressionParser.ParseExpression());
-                    while (Match(TokenType.COMMA))
+                    parts.Add(Consume(TokenType.VARIABLE, "Expected variable table reference").Value);
+                }
+                else if (Current.Type == TokenType.STRING)
+                {
+                    parts.Add(Consume(TokenType.STRING, "Expected string for table reference").Value);
+                }
+                else
+                {
+                    parts.Add(ConsumeIdentifier("Expected identifier for table reference").Value);
+                }
+
+                while (Match(TokenType.DOT))
+                {
+                    // After a dot in a table reference (schema.table, conn.table), any word token is valid —
+                    // keywords like TABLE, INDEX, etc. are commonly used as table names.
+                    if (Current.Type < TokenType.STAR)
+                        parts.Add(Advance().Value);
+                    else
+                        break;
+                }
+
+                // Capture table-level metadata if available before alias
+                var tableMetadata = _expressionParser.ParseMetadataTags();
+
+                if (allowFunction && Match(TokenType.LPAREN))
+                {
+                    var args = new List<Expression>();
+                    if (!Match(TokenType.RPAREN))
                     {
                         args.Add(_expressionParser.ParseExpression());
+                        while (Match(TokenType.COMMA))
+                        {
+                            args.Add(_expressionParser.ParseExpression());
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' after function arguments");
                     }
-                    Consume(TokenType.RPAREN, "Expected ')' after function arguments");
+                    var funcName = parts[^1];
+                    tableRef = new TableReference(funcName, functionCall: new FunctionCallExpression(funcName, args));
                 }
-                var funcName = parts[^1];
-                tableRef = new TableReference(funcName, functionCall: new FunctionCallExpression(funcName, args));
-            }
-            else if (parts.Count == 4)
-            {
-                tableRef = new TableReference(parts[3], parts[2], parts[1], parts[0]);
-            }
-            else if (parts.Count == 3)
-            {
-                tableRef = new TableReference(parts[2], parts[1], null, parts[0]);
-            }
-            else if (parts.Count == 2)
-            {
-                tableRef = new TableReference(parts[1], null, null, parts[0]);
-            }
-            else
-            {
-                tableRef = new TableReference(parts[0]);
-            }
+                else if (parts.Count == 4)
+                {
+                    tableRef = new TableReference(parts[3], parts[2], parts[1], parts[0]);
+                }
+                else if (parts.Count == 3)
+                {
+                    tableRef = new TableReference(parts[2], parts[1], null, parts[0]);
+                }
+                else if (parts.Count == 2)
+                {
+                    tableRef = new TableReference(parts[1], null, null, parts[0]);
+                }
+                else
+                {
+                    tableRef = new TableReference(parts[0]);
+                }
 
-            // Optional Alias
-            if (Match(TokenType.AS))
-            {
-                tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, ConsumeIdentifier("Expected alias after AS").Value);
-                // Tags after alias: mytable AS c /* @tag: val */
-                var aliasMetadata = _expressionParser.ParseMetadataTags();
-                foreach (var tag in aliasMetadata) tableRef.Metadata[tag.Key] = tag.Value;
-            }
-            else if (IsIdentifier(Current))
-            {
-                // Implicit alias
-                tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, Advance().Value);
-                var aliasMetadata = _expressionParser.ParseMetadataTags();
-                foreach (var tag in aliasMetadata) tableRef.Metadata[tag.Key] = tag.Value;
-            }
+                // Optional Alias
+                if (Match(TokenType.AS))
+                {
+                    tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, ConsumeIdentifier("Expected alias after AS").Value);
+                    // Tags after alias: mytable AS c /* @tag: val */
+                    var aliasMetadata = _expressionParser.ParseMetadataTags();
+                    foreach (var tag in aliasMetadata) tableRef.Metadata[tag.Key] = tag.Value;
+                }
+                else if (IsIdentifier(Current))
+                {
+                    // Implicit alias
+                    tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, Advance().Value);
+                    var aliasMetadata = _expressionParser.ParseMetadataTags();
+                    foreach (var tag in aliasMetadata) tableRef.Metadata[tag.Key] = tag.Value;
+                }
 
-            // Merge table-level metadata
-            if (tableMetadata != null)
-            {
-                foreach (var tag in tableMetadata) tableRef.Metadata[tag.Key] = tag.Value;
+                // Merge table-level metadata
+                if (tableMetadata != null)
+                {
+                    foreach (var tag in tableMetadata) tableRef.Metadata[tag.Key] = tag.Value;
+                }
             }
 
             tableRef = tableRef with 

@@ -76,9 +76,10 @@ Identified during 2026-04-12 documentation review. Each item was verified agains
   - Files: `ETL-SQL.Core/Common/LanguageMetadata.cs`, `Evaluator.cs` (resolve `@@VERSION`).
   - Doc: Add to `Standard_Library.md` §8 System Functions.
 
-- [ ] **ENG-3** — **`PIVOT` / `UNPIVOT` is used in the Cookbook and Sample_Guide but is NOT implemented.**
-  No `PivotStatement`, `ParsePivot()`, or pivot handler exists in `src/`. It appears in Cookbook Recipe 11 and `realworld_08_aggregation_pivot.etlsql`. Either implement it or remove it from all docs and samples until it is ready — presenting it as a working example when it isn't is a trust issue.
-  - Files: `ETL-SQL.Core/Parser/`, `ETL-SQL.Core/Ast.cs`, new `PivotStatementHandler.cs`, or remove from `Docs/Cookbook.md` Recipe 11 and `scripts/realworld_08`.
+- [x] **ENG-3** — **`PIVOT` / `UNPIVOT` implementation.**
+  The `PIVOT` and `UNPIVOT` operators are fully implemented in the engine. Supports grouped aggregation rotation, operator chaining, and pivoting on subqueries. deduplication logic ensures clean headers.
+  - Files: `ETL_SQL.Engine.Engines.PivotEngine.cs`, `Parser.cs` (table operator loop), `DataSourceManager.cs`.
+  - Tests: `PivotTests.cs` (5 tests covering all scenarios).
 
 - [ ] **ENG-4** — **`THROW` only supports bare re-throw — no error number or custom severity.**
   `ThrowStatementHandler` only emits an `ExecutionException` with a message string. T-SQL `THROW 50001, 'message', 1` (error number, message, state) is not supported. Add optional `number, message, state` arguments to enable typed, catchable errors with specific codes.
