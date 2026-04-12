@@ -56,10 +56,6 @@ namespace ETL_SQL.App
             loggerService.InitializeAppLogger(appLogDir, retentionDays, sizeLimitMb);
             
             // Set as global façade instance
-#pragma warning disable CS0618
-            Logger.Instance = loggerService;
-#pragma warning restore CS0618
-
             services.AddSingleton<LoggerService>(loggerService);
             services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
             services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);

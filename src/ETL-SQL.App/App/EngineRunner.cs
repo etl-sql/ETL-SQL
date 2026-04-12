@@ -205,7 +205,7 @@ namespace ETL_SQL.App
 
                     if (ctx.IsJsonMode)
                     {
-                        Logger.SuppressConsole = true;
+                        if (logger is LoggerService ls) ls.SuppressConsole = true;
                         evaluator.IsJsonMode = true; // Propagate to logger via evaluator if needed
                         logger.IsJsonMode = true;
                         ResultFormatter.IsJsonMode = true;

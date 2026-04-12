@@ -138,8 +138,6 @@ namespace ETL_SQL.Common
             // 4. UI Callback
             OnMessage?.Invoke(consoleMessage, color);
 
-            // 5. Legacy Bridge
-            Logger.OnMessage?.Invoke(consoleMessage, color);
         }
 
         public void InitializeAppLogger(string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)

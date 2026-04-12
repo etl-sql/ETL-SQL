@@ -204,9 +204,9 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Returns a string representation of a specific date part (e.g., month name).</summary>
         private static object? DateName(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 2) return null;
+            if (args.Count < 2 || args[1] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
-            if (!DateTime.TryParse(args[1]?.ToString(), out var dt)) return null;
+            if (!DateTime.TryParse(args[1]?.ToString(), out var dt)) throw new ExecutionException($"Invalid date format for DATENAME: {args[1]}");
             return part switch {
                 "MONTH" or "MM" or "M" => dt.ToString("MMMM"),
                 "WEEKDAY" or "DW" or "W" => dt.ToString("dddd"),
@@ -218,9 +218,9 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Returns an integer representing a specific date part (e.g., year, hour).</summary>
         private static object? DatePart(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 2) return null;
+            if (args.Count < 2 || args[1] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
-            if (!DateTime.TryParse(args[1]?.ToString(), out var dt)) return null;
+            if (!DateTime.TryParse(args[1]?.ToString(), out var dt)) throw new ExecutionException($"Invalid date format for DATEPART: {args[1]}");
             return part switch {
                 "YEAR" or "YY" or "YYYY" => (decimal)dt.Year,
                 "MONTH" or "MM" or "M" => (decimal)dt.Month,
@@ -235,10 +235,10 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Returns the difference between two dates in the specified units.</summary>
         private static object? DateDiff(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 3) return null;
+            if (args.Count < 3 || args[1] == null || args[2] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
-            if (!DateTime.TryParse(args[1]?.ToString(), out var dt1)) return null;
-            if (!DateTime.TryParse(args[2]?.ToString(), out var dt2)) return null;
+            if (!DateTime.TryParse(args[1]?.ToString(), out var dt1)) throw new ExecutionException($"Invalid start date format for DATEDIFF: {args[1]}");
+            if (!DateTime.TryParse(args[2]?.ToString(), out var dt2)) throw new ExecutionException($"Invalid end date format for DATEDIFF: {args[2]}");
             var diff = dt2 - dt1;
             return part switch {
                 "YEAR" or "YY" or "YYYY" => (decimal)(dt2.Year - dt1.Year),
@@ -254,7 +254,8 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Returns the last day of the month that contains the specified date.</summary>
         private static object? EoMonth(List<object?> args, IExecutionContext ctx)
         {
-            if (args[0] == null || !DateTime.TryParse(args[0]?.ToString(), out var dt)) return null;
+            if (args[0] == null) return null;
+            if (!DateTime.TryParse(args[0]?.ToString(), out var dt)) throw new ExecutionException($"Invalid date format for EOMONTH: {args[0]}");
             var firstOfNextMonth = new DateTime(dt.Year, dt.Month, 1).AddMonths(1);
             return firstOfNextMonth.AddDays(-1);
         }
@@ -465,10 +466,10 @@ namespace ETL_SQL.Engine.Functions
 
         private static object? DateAdd(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 3) return null;
+            if (args.Count < 3 || args[2] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
             double val = Convert.ToDouble(args[1]);
-            if (!DateTime.TryParse(args[2]?.ToString(), out var dt)) return null;
+            if (!DateTime.TryParse(args[2]?.ToString(), out var dt)) throw new ExecutionException($"Invalid date format for DATEADD: {args[2]}");
 
             return part switch {
                 "YEAR" or "YY" or "YYYY" => dt.AddYears((int)val),

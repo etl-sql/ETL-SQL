@@ -53,10 +53,6 @@ namespace ETL_SQL.TUI
             var loggerService = new LoggerService();
             loggerService.InitializeAppLogger(appLogDir, retentionDays, sizeLimitMb);
 
-#pragma warning disable CS0618
-            Logger.Instance = loggerService;
-#pragma warning restore CS0618
-
             services.AddSingleton<LoggerService>(loggerService);
             services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
 

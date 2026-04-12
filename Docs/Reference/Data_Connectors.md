@@ -1,364 +1,728 @@
 # ETL-SQL Data Connectors: Reference & Guide
 
-Connectors define how the ETL-SQL engine interacts with external data sources, such as databases, files, and remote systems. This document provides instructional examples and property references for every supported connector.
+Connectors define how the ETL-SQL engine interacts with external data sources. This document provides complete option references and instructional examples for every supported connector type.
 
 ---
 
-## 1. Syntax Overview
+## 1. Connection Syntax
 
-Before working with any connector, you must understand the two ways to define connection statements in ETL-SQL:
+Every connector supports two equivalent syntaxes. Use whichever is easiest to read, version-control, or encrypt.
 
-### 1.1 Property Mode (Structured Syntax)
-Recommended for readability and AI agent configuration. All parameters are passed explicitly as properties inside the `WITH()` clause.
-
+### 1.1 Traditional (String-based)
+The connection string is the primary argument. Ideal for native driver DSNs or encrypted (`ENC:…`) secrets.
 ```sql
-CREATE CONNECTION my_db ON MSSQL() WITH(SERVER='prod-db', DATABASE='ERP', USER='admin', PASS='secret');
+CREATE CONNECTION <name> ON <type>('<connection_string>') [WITH(<options>)];
 ```
 
-### 1.2 Traditional Mode (String-based Syntax)
-Standard approach. The connection string is provided as the primary argument. This is especially useful for native driver strings or encrypted (`ENC:...`) values.
-
+### 1.2 Structured (Property-based)
+All parameters are passed explicitly inside `WITH()`. Recommended for readability and AI-assisted authoring.
 ```sql
-CREATE CONNECTION legacy_db ON MSSQL('Server=prod-db;Database=ERP;User Id=admin;Password=secret;');
+CREATE CONNECTION <name> ON <type>() WITH(<properties>, <options>);
 ```
 
 > [!TIP]
-> Both formats achieve the exact same result. Use the one that is easiest to read or matches your source control policies.
+> Both forms produce identical results. Mix them on a per-connection basis; there is no performance difference.
+
+### 1.3 Encrypted Connection Strings (`ENC:`)
+Sensitive connection strings can be encrypted using the engine's master password. The engine detects the `ENC:` prefix automatically and decrypts the string before connecting.
+
+```sql
+-- Set the session master password first
+USE PASSWORD = 'myMasterSecret';
+
+-- The engine will decrypt this at connection time
+CREATE CONNECTION secure_db ON MSSQL('ENC:U2FsdGVkX1+...');
+```
+
+> [!IMPORTANT]
+> The `ENC:` prefix is handled entirely by the engine — connectors never see the encrypted string. Use the **ETL-SQL Encryptor** tool to encrypt strings using your master password.
 
 ---
 
 ## 2. Relational Database Connectors
 
-Database connections support SQL pushdown, meaning ETL-SQL will execute operations natively on the server whenever possible.
+SQL-capable connectors support pushdown: ETL-SQL executes operations natively on the remote server whenever possible, avoiding unnecessary data movement.
 
-### 2.1 Oracle (`ORACLE`)
-Oracle supports two distinct connection patterns.
+### 2.1 Microsoft SQL Server (`MSSQL`)
+Aliases: `SQL`, `SQLSERVER`
 
-| Property | Description | Mandatory |
+| Option | Description | Mandatory |
 | :--- | :--- | :---: |
-| `HOST` | Server name or IP | Yes (Service Pattern) |
-| `PORT` | Listening port (Default: 1521) | No |
-| `SERVICE_NAME` | The Oracle Service Name | Yes (Service Pattern) |
-| `TNS_NAME` | The Oracle TNS alias | Yes (TNS Pattern) |
-| `USER` | Login username | Yes |
-| `PASSWORD` | Login password | Yes |
-| `POOLING` | Enable connection pooling (`TRUE`/`FALSE`) | No |
-| `MIN_POOL_SIZE` | Minimum number of connections in the pool | No |
-| `MAX_POOL_SIZE` | Maximum number of connections in the pool | No |
-| `CONNECTION_LIFETIME` | Maximum time (sec) a connection stays alive | No |
+| `SERVER` | Server name or IP address | Yes (structured) |
+| `DATABASE` | Target database name | Yes (structured) |
+| `USER` | SQL authentication username | No |
+| `PASSWORD` | SQL authentication password | No |
+| `TRUSTED_CONNECTION` | Use Windows Integrated Security (`TRUE`/`FALSE`) | No |
+| `USE_SSL` | Enable SSL encryption for the connection (`TRUE`/`FALSE`) | No |
+| `TRUST_SERVER_CERTIFICATE` | Bypass SSL certificate validation (`TRUE`/`FALSE`) | No |
+| `APPLICATION_INTENT` | `READWRITE` or `READONLY` (for AG replicas) | No |
+| `MULTI_SUBNET_FAILOVER` | Optimize failover for multi-subnet clusters (`TRUE`/`FALSE`) | No |
+| `CONNECT_TIMEOUT` | Seconds to wait for a connection (Default: `15`) | No |
+| `MIN_POOL_SIZE` | Minimum connections kept in the pool | No |
+| `MAX_POOL_SIZE` | Maximum connections allowed in the pool | No |
+| `POOL_LIFETIME` | Seconds before a pooled connection is recycled | No |
+| `TABLE` | Default table context (e.g. `dbo.Employees`) | No |
 
-> [!CAUTION]
-> **Mutual Exclusivity**: You cannot use `TNS_NAME` and `SERVICE_NAME` in the same connection block.
+> [!NOTE]
+> Do not set `USER`/`PASSWORD` when using `TRUSTED_CONNECTION=TRUE`. They are mutually exclusive authentication methods.
 
 *Examples:*
 ```sql
--- Service Pattern (Structured)
-CREATE CONNECTION o_dev ON ORACLE() 
+-- Standard SQL authentication
+CREATE CONNECTION m_sales ON MSSQL()
+    WITH(SERVER='sql01', DATABASE='SalesDB', USER='etl_worker', PASSWORD='s3cr3t');
+
+-- Windows Integrated Security (traditional string)
+CREATE CONNECTION m_hr ON MSSQL('Server=sql01;Database=HR;Trusted_Connection=True;');
+
+-- Read-only replica with SSL
+CREATE CONNECTION m_ro ON MSSQL()
+    WITH(SERVER='sql01', DATABASE='DW', TRUSTED_CONNECTION=TRUE,
+         APPLICATION_INTENT=READONLY, USE_SSL=TRUE, TRUST_SERVER_CERTIFICATE=TRUE);
+```
+
+---
+
+### 2.2 PostgreSQL (`POSTGRES`)
+Aliases: `NPSQL`, `PG`
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `HOST` | Server name or IP address | Yes (structured) |
+| `DATABASE` | Target database name | Yes (structured) |
+| `USER` | Login username | Yes |
+| `PASSWORD` | Login password | Yes |
+| `PORT` | Listening port (Default: `5432`) | No |
+| `TABLE` | Default table context | No |
+| `POOLING` | Enable connection pooling (`TRUE`/`FALSE`) | No |
+| `MIN_POOL_SIZE` | Minimum pool size | No |
+| `MAX_POOL_SIZE` | Maximum pool size | No |
+| `CONNECTION_IDLE_LIFETIME` | Seconds before an idle connection is pruned | No |
+| `SSL_MODE` | `DISABLE`, `PREFER`, `REQUIRE`, `VERIFY_CA`, `VERIFY_FULL` | No |
+| `TRUST_SERVER_CERTIFICATE` | Bypass certificate validation (`TRUE`/`FALSE`) | No |
+
+*Examples:*
+```sql
+-- Structured
+CREATE CONNECTION pg_db ON POSTGRES()
+    WITH(HOST='10.0.0.5', PORT=5432, DATABASE='inventory', USER='admin', PASSWORD='s3cr3t');
+
+-- Traditional string
+CREATE CONNECTION pg_legacy ON POSTGRES('Host=localhost;Database=mydb;Username=etl;Password=pass');
+```
+
+---
+
+### 2.3 Oracle (`ORACLE`)
+Oracle supports two patterns: **Service Name** (for direct connection) and **TNS** (for pre-configured aliases). They are mutually exclusive.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `HOST` | Server name or IP | Yes (Service pattern) |
+| `PORT` | Listening port (Default: `1521`) | No |
+| `SERVICE_NAME` | Oracle service name | Yes (Service pattern) |
+| `TNS_NAME` | Oracle TNS alias | Yes (TNS pattern) |
+| `USER` | Login username | Yes |
+| `PASSWORD` | Login password | Yes |
+| `TABLE` | Default table context (e.g. `SCHEMA.TABLE`) | No |
+| `POOLING` | Enable connection pooling (`TRUE`/`FALSE`) | No |
+| `MIN_POOL_SIZE` | Minimum connections in the pool | No |
+| `MAX_POOL_SIZE` | Maximum connections in the pool | No |
+| `CONNECTION_LIFETIME` | Seconds a connection stays alive in the pool | No |
+
+> [!CAUTION]
+> `TNS_NAME` and `SERVICE_NAME` are **mutually exclusive**. Using both in the same connection will raise a parse error.
+
+*Examples:*
+```sql
+-- Service Name pattern (structured)
+CREATE CONNECTION o_dev ON ORACLE()
     WITH(HOST='oradb.local', PORT=1521, SERVICE_NAME='ORCL', USER='app_user', PASSWORD='pwd');
 
--- TNS Pattern (Traditional)
+-- TNS Name pattern (traditional)
 CREATE CONNECTION o_prod ON ORACLE('Data Source=MyTNS;User Id=app_user;Password=pwd;');
 ```
 
-### 2.2 Microsoft SQL Server (`MSSQL`)
-Supports standard authentication and Windows Integrated Security.
-
-| Property | Description | Mandatory |
-| :--- | :--- | :---: |
-| `SERVER` | Server name or IP | Yes |
-| `DATABASE` | Target database name | Yes |
-| `USER` | SQL username | No (if Trusted) |
-| `PASSWORD` | SQL password | No (if Trusted) |
-| `TRUSTED_CONNECTION` | Use Windows Auth (`TRUE`/`FALSE`) | No |
-| `APPLICATION_INTENT`| `READWRITE` or `READONLY` | No |
-| `MULTI_SUBNET_FAILOVER`| Optimized failover for multi-subnet clusters | No |
-| `MIN_POOL_SIZE` | Minimum connections in pool | No |
-| `MAX_POOL_SIZE` | Maximum connections in pool | No |
-| `POOL_LIFETIME` | Time (sec) for load balancing timeout | No |
-| `CONNECT_TIMEOUT` | Time (sec) to wait for a connection | No |
-| `TABLE` | Set a default table context | No |
-
-*Examples:*
-```sql
--- Standard Authentication (Structured)
-CREATE CONNECTION m_sales ON MSSQL() 
-    WITH(SERVER='sql01', DATABASE='SalesDB', USER='etl_worker', PASSWORD='pwd');
-
--- Windows Authentication (Traditional)
-CREATE CONNECTION m_hr ON MSSQL('Server=sql01;Database=HR;Trusted_Connection=True;');
-```
-
-### 2.3 PostgreSQL (`POSTGRES`)
-| Property | Description | Mandatory |
-| :--- | :--- | :---: |
-| `HOST` | Server name or IP | Yes |
-| `DATABASE` | Target database name | Yes |
-| `USER` | Login username | Yes |
-| `PASSWORD` | Login password | Yes |
-| `PORT` | Listening port (Default: 5432) | No |
-| `POOLING` | Enable pooling (`TRUE`/`FALSE`) | No |
-| `MIN_POOL_SIZE` | Minimum pool size | No |
-| `MAX_POOL_SIZE` | Maximum pool size | No |
-| `CONNECTION_IDLE_LIFETIME` | Idle timeout for connections | No |
-| `SSL_MODE` | `DISABLE`, `REQUIRE`, `VERIFYFULL`, etc. | No |
-| `TRUST_SERVER_CERTIFICATE` | Bypass certificate validation | No |
-
-*Examples:*
-```sql
--- Structured Syntax
-CREATE CONNECTION pg_db ON POSTGRES() 
-    WITH(HOST='10.0.0.5', PORT=5432, DATABASE='inventory', USER='admin', PASSWORD='pwd');
-```
+---
 
 ### 2.4 ODBC Bridge (`ODBC`)
-Universal bridge for any source with a local ODBC driver. Supports DSN-based and DSN-less connections.
+Universal bridge for any source with a local ODBC driver. Supports both DSN-based and DSN-less connections. SQL pushdown depends on the underlying provider.
 
-| Property | Description | Mandatory |
+| Option | Description | Mandatory |
 | :--- | :--- | :---: |
 | `DSN` | Pre-configured Data Source Name | No |
-| `DRIVER` | Name of driver in `{}` | No |
+| `DRIVER` | ODBC driver name in curly braces (e.g. `{SQLite3 ODBC Driver}`) | No |
 | `SERVER` | Server name or IP | No |
 | `PORT` | Listening port | No |
 | `DATABASE` | Database name or file path | No |
 | `UID` | Login username | No |
 | `PWD` | Login password | No |
-| `CONNECT_TIMEOUT` | Login timeout (sec) | No |
+| `CONNECT_TIMEOUT` | Login timeout in seconds | No |
 
 > [!NOTE]
-> For **DSN-less** connections, you must provide the `DRIVER` and at least one identifying property like `SERVER` or `DATABASE`.
+> For DSN-less connections you must provide `DRIVER` and at least one identifying property (`SERVER` or `DATABASE`).
 
 *Examples:*
 ```sql
--- DSN Pattern
-CREATE CONNECTION my_dsn ON ODBC() WITH(DSN='ProdSales', UID='etl', PWD='pwd');
+-- DSN pattern
+CREATE CONNECTION odbc_prod ON ODBC() WITH(DSN='ProdSales', UID='etl', PWD='pwd');
 
--- DSN-less Pattern (e.g. SQLite)
-CREATE CONNECTION my_sqlite ON ODBC() 
+-- DSN-less SQLite
+CREATE CONNECTION my_sqlite ON ODBC()
     WITH(DRIVER='{SQLite3 ODBC Driver}', DATABASE='C:\Data\local.db');
-```
-
-### 2.5 REST API Connector (`API`)
-Universal connector for web services and cloud APIs returning JSON data.
-
-| Property | Description | Mandatory |
-| :--- | :--- | :---: |
-| `URL` | The endpoint URL | Yes |
-| `METHOD` | HTTP Method (GET, POST, etc.) | No |
-| `AUTH_TYPE` | NONE, BASIC, BEARER, APIKEY | No |
-| `USER` | Username (for BASIC) | No |
-| `PASSWORD` | Password (for BASIC) | No |
-| `TOKEN` | Secret (for BEARER/APIKEY) | No |
-| `HEADER_NAME`| Header for APIKEY (e.g. X-API-Key) | No |
-| `ROOT_PATH` | JSONPath to the data array | No |
-| `BODY` | Request body for POST/PUT | No |
-
-*Examples:*
-```sql
--- Fetch GitHub Issues (Public)
-CREATE CONNECTION github ON API() 
-    WITH(URL='https://api.github.com/repos/microsoft/terminal/issues', ROOT_PATH='$');
-
--- Authenticated Private API
-CREATE CONNECTION my_service ON API() 
-    WITH(URL='https://api.internal.com/v1/customers', 
-         AUTH_TYPE='BEARER', 
-         TOKEN='sk_live_12345');
 ```
 
 ---
 
 ## 3. Flat File & Document Connectors
 
-### 3.1 Flat Files (`FLATFILE` / `CSV`)
-Used for reading delimited or fixed-width text files.
+### 3.1 Flat Files (`FLATFILE`)
+Aliases: `CSV`, `TSV`
 
-| Property | Description | Mandatory |
+General-purpose connector for delimited and fixed-width text files.
+
+| Option | Description | Mandatory |
 | :--- | :--- | :---: |
-| `PATH` | Absolute path to the file | Yes |
-| `DELIMITER` | `COMMA`, `PIPE`, `TAB`, or a literal `<char>` | No |
-| `HEADER` | `ON`, `OFF` (Default: ON) | No |
+| `PATH` | Absolute path to the file | Yes (structured) |
+| `DELIMITER` | Column separator: `COMMA`, `PIPE`, `TAB`, `SEMICOLON`, `COLON`, `TILDE`, or a literal char (Default: `COMMA`) | No |
+| `ROW_DELIMITER` | Row separator: `LF`, `CR`, `CRLF`, or a literal char (Default: `CRLF`) | No |
+| `HEADER` | `ON`/`OFF` — treat first row as column names (Default: `ON`) | No |
+| `TEXT_QUALIFIER` | Quote character: `DOUBLEQUOTE`, `SINGLEQUOTE`, or a literal char | No |
+| `ESCAPE_CHAR` | Character used to escape delimiters within fields (e.g. `'\\'`) | No |
+| `ENCODING` | `UTF8`, `ANSI`, `UTF16`, `LATIN1`, `UNICODE` (Default: `UTF8`) | No |
+| `CULTURE` | Locale for date/number parsing (e.g. `en-US`, `de-DE`) | No |
+| `NULL_AS` | How nulls are represented: `NULL`, `EMPTY`, `BACKSLASH_N` | No |
+| `DATE_FORMAT` | Custom date parsing pattern (e.g. `'yyyy-MM-dd'`) | No |
+| `START_AT` | 1-based line number to start reading | No |
+| `END_AT` | 1-based line number to stop reading | No |
+| `TRIM` | `ON`/`OFF` — remove leading/trailing whitespace from fields | No |
+| `COUNT_AT_END` | `ON`/`OFF` — validate row count against a trailer record (Default: `OFF`) | No |
+| `STRICT_SCHEMA` | `ON`/`OFF` — enforce column count matching (Default: `OFF`) | No |
 | `FORMAT` | `DELIMITED` (Default) or `FIXED` | No |
-| `TEMPLATE` | Table name defining fixed widths (e.g., `#tmp`) | Yes (if FIXED) |
-| `COMPRESS` | Transparent GZip support `ON`/`OFF` | No |
-| `ENCRYPT` | AES encryption `ON`/`OFF` | No |
-| `ENCODING` | `UTF8`, `ANSI`, `UTF16`, `LATIN1`, etc. | No |
-| `CULTURE` | Locale for parsing (e.g., `en-US`, `de-DE`) | No |
-| `TRIM` | `ON`/`OFF` (Manage whitespace) | No |
+| `TEMPLATE` | Name of a `#temp` table defining fixed-width offsets (Required if `FORMAT=FIXED`) | Conditional |
+| `COMPRESS` | `ON`/`OFF` — transparent GZip read/write (Default: `OFF`) | No |
+| `ENCRYPT` | `ON`/`OFF` — AES file encryption (Default: `OFF`) | No |
+| `PASSWORD` | Password for encryption/decryption (Required if `ENCRYPT=ON`) | Conditional |
+| `ALGORITHM` | Hash algorithm: `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (Default: `SHA2_256`) | No |
+| `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
+| `PASSPHRASE` | Passphrase for the key file | Conditional |
 
 *Examples:*
 ```sql
--- Delimited File
-CREATE CONNECTION csv_in ON FLATFILE() 
-    WITH(PATH='C:\Data\employees.csv', HEADER=ON, DELIMITER=COMMA);
+-- Pipe-delimited with explicit encoding
+CREATE CONNECTION csv_in ON FLATFILE()
+    WITH(PATH='C:\Data\employees.csv', HEADER=ON, DELIMITER=PIPE, ENCODING=UTF8);
 
--- Encrypted and Compressed
-CREATE CONNECTION secure_file ON FLATFILE('C:\Data\payroll.csv.gz') 
+-- Encrypted and GZip-compressed
+CREATE CONNECTION secure_file ON FLATFILE('C:\Data\payroll.csv.gz')
     WITH(COMPRESS=ON, ENCRYPT=ON, PASSWORD='s3cr3t');
+
+-- European locale with semicolon delimiter and custom date format
+CREATE CONNECTION eu_data ON FLATFILE('C:\Data\german_sales.csv')
+    WITH(DELIMITER=SEMICOLON, CULTURE='de-DE', DATE_FORMAT='dd.MM.yyyy');
+
+-- Skip header and first 2 data rows, stop at row 1000
+CREATE CONNECTION paged ON FLATFILE('C:\Data\big.csv')
+    WITH(HEADER=ON, START_AT=3, END_AT=1000);
 ```
 
-#### Working with Fixed-Width Files
-To read a fixed-width file, you must first define a "Template" table so the engine knows how to slice the text. Use the `/* @width: N */` metadata tag to set boundaries.
+#### Fixed-Width Files
+
+To read a fixed-width file, define a template table that specifies the width of each field. The engine slices each line using the declared widths.
+
+**Width rules:**
+- `VARCHAR(N)` / `CHAR(N)` / `NVARCHAR(N)` — engine uses their `N` as the field width automatically.
+- `/* @width: N */` metadata comment — explicitly overrides the data type width.
 
 ```sql
--- 1. Define the width layout
-CREATE TABLE #EmployeeLayout (
-    ID INT /* @width: 5 */,
-    Name VARCHAR(20) /* @width: 20 */,
-    DeptCode CHAR(3) /* @width: 3 */
+-- 1. Define the layout
+CREATE TABLE #EmpLayout (
+    ID      INT          /* @width: 5 */,
+    Name    VARCHAR(20),          -- width = 20 from VARCHAR length
+    Dept    CHAR(3),              -- width = 3 from CHAR length
+    Active  BIT          /* @width: 1 */
 );
 
--- 2. Pass the template to the connection
+-- 2. Create the connection
 CREATE CONNECTION fixed_emp ON FLATFILE('employees.dat')
-    WITH(FORMAT='FIXED', TEMPLATE=#EmployeeLayout, HEADER=OFF);
+    WITH(FORMAT='FIXED', TEMPLATE=#EmpLayout, HEADER=OFF, TRIM=ON);
+
+-- 3. Query as normal
+SELECT * FROM fixed_emp;
 ```
+
+> [!IMPORTANT]
+> When `FORMAT='FIXED'`, the `TEMPLATE` option is mandatory. The engine raises an error if any column width cannot be determined.
+
+---
 
 ### 3.2 Excel (`EXCEL`)
-Reads data from `.xlsx`, `.xls`, or `.xlsb` files.
+Aliases: `XLSX`, `XLS`
 
-| Property | Description | Mandatory |
+Reads and writes Microsoft Excel workbooks (`.xlsx`, `.xls`, `.xlsb`).
+
+| Option | Description | Mandatory |
 | :--- | :--- | :---: |
-| `PATH` | Absolute path to the file | Yes |
-| `SHEET` | Target sheet name (Def: first sheet) | No |
-| `HEADER` | `ON`/`OFF` (Def: ON) | No |
-| `RANGE` | Explicit cell range (e.g., 'A1:D100') | No |
+| `PATH` | Absolute path to the workbook | Yes (structured) |
+| `SHEET` | Target sheet name (Default: first sheet) | No |
+| `HEADER` | `ON`/`OFF` — treat first row as column names (Default: `ON`) | No |
+| `RANGE` | Explicit cell range to read (e.g. `'A1:F500'`) | No |
+| `COMPRESS` | `ON`/`OFF` — GZip the output file after writing | No |
+| `ENCRYPT` | `ON`/`OFF` — AES file encryption (Default: `OFF`) | No |
+| `PASSWORD` | Password for encryption/decryption (Required if `ENCRYPT=ON`) | Conditional |
+| `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (Default: `SHA2_256`) | No |
+| `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
+| `PASSPHRASE` | Passphrase for the key file | Conditional |
 
 *Examples:*
 ```sql
-CREATE CONNECTION xl_src ON EXCEL('C:\Reports\Q4.xlsx') 
+-- Specific sheet and range
+CREATE CONNECTION xl_src ON EXCEL('C:\Reports\Q4.xlsx')
     WITH(SHEET='Summary', HEADER=ON, RANGE='A1:F500');
+
+-- Write an encrypted workbook
+CREATE CONNECTION xl_out ON EXCEL()
+    WITH(PATH='C:\Secure\payroll.xlsx', ENCRYPT=ON, PASSWORD='safe_pass');
 ```
 
-### 3.3 Parquet & Avro (`PARQUET` / `AVRO`)
-Big Data columnar formats.
+---
 
-| Property | Description | Mandatory |
+### 3.3 JSON (`JSON`)
+Document extraction with JSONPath addressing for nested data.
+
+| Option | Description | Mandatory |
 | :--- | :--- | :---: |
-| `PATH` | Absolute path to the file | Yes |
-| `COMPRESSION`| `SNAPPY` (Def), `GZIP`, `UNCOMPRESSED` | No |
+| `PATH` | Absolute path to the file | Yes (structured) |
+| `ROOT_PATH` | JSONPath to the root data array (e.g. `$.data.orders`) | No |
+| `ENCODING` | Character encoding (Default: `UTF8`) | No |
+| `COMPRESS` | `ON`/`OFF` — transparent GZip support | No |
+| `ENCRYPT` | `ON`/`OFF` — AES file encryption (Default: `OFF`) | No |
+| `PASSWORD` | Password for encryption/decryption (Required if `ENCRYPT=ON`) | Conditional |
+| `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (Default: `SHA2_256`) | No |
+| `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
+| `PASSPHRASE` | Passphrase for the key file | Conditional |
 
 *Examples:*
 ```sql
-CREATE CONNECTION pq_out ON PARQUET() WITH(PATH='C:\Data\output.parquet', COMPRESSION=SNAPPY);
-```
-
-### 3.4 JSON & XML (`JSON` / `XML`)
-Document extraction with deep-nesting support.
-
-| Property | Description | Mandatory |
-| :--- | :--- | :---: |
-| `PATH` | Absolute path to the file | Yes |
-| `ROOT_PATH` | JSONPath (`$.Array`) or XPath (`/Root/Node`) | No |
-| `ENCODING` | character encoding for reading | No |
-| `TRIM` | `ON`/`OFF` (Manage whitespace) | No |
-
-*Examples:*
-```sql
--- Drill into a specific nested array
+-- Drill into a nested array
 CREATE CONNECTION json_src ON JSON('C:\Data\orders.json') WITH(ROOT_PATH='$.data.orders');
+
+-- Compressed JSON
+CREATE CONNECTION json_gz ON JSON() WITH(PATH='C:\Data\events.json.gz', COMPRESS=ON);
+```
+
+---
+
+### 3.4 XML (`XML`)
+Document extraction with XPath addressing for nested elements.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PATH` | Absolute path to the file | Yes (structured) |
+| `ROOT_PATH` | XPath to the repeating element (e.g. `/Catalog/Book`) | No |
+| `ENCODING` | Character encoding (Default: `UTF8`) | No |
+| `COMPRESS` | `ON`/`OFF` — transparent GZip support | No |
+| `ENCRYPT` | `ON`/`OFF` — AES file encryption (Default: `OFF`) | No |
+| `PASSWORD` | Password for encryption/decryption (Required if `ENCRYPT=ON`) | Conditional |
+| `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (Default: `SHA2_256`) | No |
+| `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
+| `PASSPHRASE` | Passphrase for the key file | Conditional |
+
+*Examples:*
+```sql
+-- XPath root selector
+CREATE CONNECTION xml_src ON XML('C:\Data\catalog.xml') WITH(ROOT_PATH='/Catalog/Product');
+
+-- Encrypted XML archive
+CREATE CONNECTION xml_vault ON XML()
+    WITH(PATH='C:\Vault\archive.xml', ENCRYPT=ON, PASSWORD='vault_pass');
+```
+
+---
+
+### 3.5 Parquet (`PARQUET`)
+Apache Parquet columnar format. Ideal for high-throughput analytics and interoperability with Spark, Hive, and data lake systems.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PATH` | Absolute path to the file | Yes (structured) |
+| `COMPRESSION` | `SNAPPY` (Default), `GZIP`, `LZO`, `BROTLI`, `LZ4`, `ZSTD`, `UNCOMPRESSED` | No |
+| `ENCRYPT` | `ON`/`OFF` — AES file encryption (Default: `OFF`) | No |
+| `PASSWORD` | Password for encryption/decryption (Required if `ENCRYPT=ON`) | Conditional |
+| `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (Default: `SHA2_256`) | No |
+| `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
+| `PASSPHRASE` | Passphrase for the key file | Conditional |
+
+*Examples:*
+```sql
+-- Write a Snappy-compressed Parquet file (default)
+CREATE CONNECTION pq_out ON PARQUET() WITH(PATH='C:\Data\output.parquet');
+
+-- Maximum compression for archival
+CREATE CONNECTION pq_archive ON PARQUET('C:\Archive\data.parquet') WITH(COMPRESSION=ZSTD);
+```
+
+---
+
+### 3.6 Avro (`AVRO`)
+Apache Avro format. Schema is embedded within the file. Optionally reference an external `.avsc` schema file.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PATH` | Absolute path to the file | Yes (structured) |
+| `SCHEMA_FILE` | Path to an external `.avsc` Avro schema file | No |
+| `ENCRYPT` | `ON`/`OFF` — AES file encryption (Default: `OFF`) | No |
+| `PASSWORD` | Password for encryption/decryption (Required if `ENCRYPT=ON`) | Conditional |
+| `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (Default: `SHA2_256`) | No |
+| `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
+| `PASSPHRASE` | Passphrase for the key file | Conditional |
+
+*Examples:*
+```sql
+-- Read Avro with an external schema definition
+CREATE CONNECTION avro_src ON AVRO('C:\Data\events.avro')
+    WITH(SCHEMA_FILE='C:\Schemas\events.avsc');
 ```
 
 ---
 
 ## 4. Remote & Cloud Protocol Connectors
 
-### 4.1 SFTP & SSH (`SFTP`)
-Secure File Transfer Protocol.
+### 4.1 SFTP / SSH (`SFTP`)
+Aliases: `SSH`
 
-| Property | Description | Mandatory |
+Secure File Transfer Protocol over SSH. Supports password and key-pair authentication (mutually exclusive).
+
+| Option | Description | Mandatory |
 | :--- | :--- | :---: |
-| `HOST` | Server domain or IP | Yes |
-| `PORT` | Listening port (Default: 22) | No |
+| `HOST` | Server domain or IP address | Yes (structured) |
+| `PORT` | Listening port (Default: `22`) | No |
 | `USER` | Login username | Yes |
-| `PASSWORD` | Login password (if using basic auth) | No |
-| `KEYFILE` | Path to private SSH key | No |
-| `PASSPHRASE` | Passphrase for the keyfile | No |
+| `PASSWORD` | Login password — use for password auth only | No |
+| `KEYFILE` | Path to the private SSH key — use for key auth only | No |
+| `PASSPHRASE` | Passphrase for the private key (if set) | No |
+
+> [!CAUTION]
+> `PASSWORD` and `KEYFILE` are mutually exclusive. Providing both will cause an authentication error.
 
 *Examples:*
 ```sql
--- Password Authentication
-CREATE CONNECTION sftp_pwd ON SFTP() 
-    WITH(HOST='sftp.example.com', USER='admin', PASSWORD='secret');
+-- Password authentication
+CREATE CONNECTION sftp_pwd ON SFTP()
+    WITH(HOST='sftp.example.com', USER='admin', PASSWORD='s3cr3t');
 
--- Keyfile Authentication
-CREATE CONNECTION sftp_key ON SFTP('sftp.example.com') 
+-- Key-pair authentication (recommended for production)
+CREATE CONNECTION sftp_key ON SFTP('sftp.example.com')
     WITH(USER='deploy', KEYFILE='/home/etl/.ssh/id_rsa', PASSPHRASE='keypass');
 ```
 
+---
+
 ### 4.2 FTP (`FTP`)
-Legacy File Transfer Protocol.
+Aliases: `FTP_CONN`, `FTPS`
+
+Legacy File Transfer Protocol. Supports active and passive mode depending on the server.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `HOST` | FTP server address or IP | Yes (structured) |
+| `PORT` | Listening port (Default: `21`) | No |
+| `USER` | Login username | No |
+| `PASSWORD` | Login password | No |
+
+*Examples:*
 ```sql
-CREATE CONNECTION ftp_conn ON FTP('ftp.example.com') WITH(USER='ftpuser', PASSWORD='ftppass');
+-- Structured
+CREATE CONNECTION ftp_src ON FTP() WITH(HOST='ftp.example.com', USER='ftpuser', PASSWORD='ftppass');
+
+-- Traditional
+CREATE CONNECTION ftp_legacy ON FTP('ftp.example.com') WITH(USER='ftpuser', PASSWORD='ftppass');
 ```
+
+---
 
 ### 4.3 Azure Blob Storage (`AZURE_BLOB`)
-Cloud storage extraction.
+Aliases: `BLOB`
+
+Cloud storage connector for reading and writing files in Azure Blob Storage containers.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `CONTAINER` | Target blob container name | Yes |
+| `ACCOUNT_NAME` | Azure storage account name | No |
+| `ACCOUNT_KEY` | Azure storage account key | No |
+
+> [!NOTE]
+> You can provide a full SAS connection string in the traditional syntax, or use `ACCOUNT_NAME` + `ACCOUNT_KEY` in structured syntax.
+
+*Examples:*
 ```sql
-CREATE CONNECTION cloud_store ON AZURE_BLOB('DefaultEndpointsProtocol=https;AccountName=myacc;AccountKey=abc...')
+-- Full connection string (SAS or AccountKey)
+CREATE CONNECTION cloud ON AZURE_BLOB('DefaultEndpointsProtocol=https;AccountName=myaccount;AccountKey=abc...')
     WITH(CONTAINER='backup-archive');
+
+-- Structured with account credentials
+CREATE CONNECTION cloud_struct ON AZURE_BLOB()
+    WITH(ACCOUNT_NAME='myaccount', ACCOUNT_KEY='abc...', CONTAINER='raw-data');
 ```
 
-### 4.4 Local Directory (`DIRECTORY`)
-Treats a local filesystem directory as a data source for file manipulation tasks (`COPY_FILE`, `DELETE_FILE`, etc.).
+---
+
+### 4.4 REST API (`API`)
+Aliases: `REST`, `HTTP`
+
+Universal connector for web services and REST APIs returning JSON data.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `URL` | The endpoint URL | Yes |
+| `METHOD` | HTTP method: `GET`, `POST`, `PUT`, `DELETE` (Default: `GET`) | No |
+| `AUTH_TYPE` | Authentication mode: `NONE`, `BASIC`, `BEARER`, `APIKEY` (Default: `NONE`) | No |
+| `USER` | Username (for `BASIC` auth) | No |
+| `PASSWORD` | Password (for `BASIC` auth) | No |
+| `TOKEN` | Secret token (for `BEARER` or `APIKEY` auth) | No |
+| `HEADER_NAME` | Header name for `APIKEY` auth (e.g. `X-API-Key`) | No |
+| `ROOT_PATH` | JSONPath to the data array within the response (e.g. `$.items`) | No |
+| `BODY` | JSON request body for `POST`/`PUT` requests | No |
+| `PAG_TYPE` | Pagination style: `NONE`, `OFFSET` (Default: `NONE`) | No |
+| `PAG_LIMIT` | Batch size / page size for paginated APIs | No |
+
+*Examples:*
 ```sql
-CREATE CONNECTION data_dir ON DIRECTORY('C:\Data\Incoming') WITH(CREATE=ON);
+-- Public GitHub API — array is the root response
+CREATE CONNECTION github_issues ON API()
+    WITH(URL='https://api.github.com/repos/microsoft/terminal/issues', ROOT_PATH='$');
+
+SELECT title, created_at FROM github_issues;
+
+-- Bearer token authentication
+CREATE CONNECTION my_api ON API()
+    WITH(URL='https://api.example.com/v1/customers',
+         AUTH_TYPE='BEARER',
+         TOKEN='sk_live_abc123');
+
+-- APIKEY header auth
+CREATE CONNECTION weather ON API()
+    WITH(URL='https://api.weather.com/data',
+         AUTH_TYPE='APIKEY',
+         TOKEN='my_api_key_value',
+         HEADER_NAME='X-API-Key');
+
+-- POST with a JSON body
+CREATE CONNECTION submit ON API()
+    WITH(URL='https://api.example.com/events',
+         METHOD='POST',
+         AUTH_TYPE='BEARER',
+         TOKEN='tok_live_xyz',
+         BODY='{"type":"etl_run","status":"complete"}');
+
+-- Paginated API with OFFSET-style paging
+CREATE CONNECTION pages ON API()
+    WITH(URL='https://api.example.com/records',
+         ROOT_PATH='$.data',
+         PAG_TYPE='OFFSET',
+         PAG_LIMIT=100);
 ```
+
+---
 
 ### 4.5 Email (`SMTP`)
-Outbound email automation.
+Aliases: `EMAIL`
+
+Outbound-only email connector used with the `SEND EMAIL` statement.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PORT` | SMTP server port (Default: `25`) | No |
+| `USERNAME` | Authentication username | No |
+| `PASSWORD` | Authentication password | No |
+| `USE_SSL` | Enable TLS/SSL (`TRUE`/`FALSE`, Default: `FALSE`) | No |
+| `DEFAULT_FROM` | Default sender address when `FROM` is omitted in `SEND EMAIL` | No |
+
+*Examples:*
 ```sql
+-- Gmail with TLS
 CREATE CONNECTION mailer ON SMTP('smtp.gmail.com')
-    WITH(PORT=587, USERNAME='alerts@example.com', PASSWORD='apppassword', USE_SSL=TRUE);
+    WITH(PORT=587, USERNAME='alerts@example.com', PASSWORD='apppassword',
+         USE_SSL=TRUE, DEFAULT_FROM='alerts@example.com');
+
+SEND EMAIL
+    TO 'ops@example.com'
+    SUBJECT 'Nightly Load Complete'
+    BODY 'All records processed.'
+    AT mailer;
+```
+
+---
+
+### 4.6 Local Directory (`DIRECTORY`)
+Treats a local filesystem folder as a data source for file management operations (`COPY FILE`, `DELETE FILE`, etc.) and directory listing via `SELECT`.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PATH` | Absolute directory path | Yes (structured) |
+| `CREATE` | `ON`/`OFF` — create the directory if it doesn't exist (Default: `ON`) | No |
+
+*Examples:*
+```sql
+CREATE CONNECTION data_dir ON DIRECTORY('C:\Data\Incoming') WITH(CREATE=ON);
+
+-- List all files in the directory as a result set
+SELECT * FROM data_dir;
 ```
 
 ---
 
 ## 5. Development & Testing: `MOCKDB`
 
-ETL-SQL provides a built-in, zero-configuration in-memory database designed exclusively for script development and testing. It requires no credentials.
+ETL-SQL provides a built-in, zero-configuration in-memory database for script development and testing. No credentials, no server, no configuration required.
 
-`CREATE CONNECTION <name> ON MOCKDB();`
+```sql
+CREATE CONNECTION <name> ON MOCKDB();
+```
 
 ### Pre-populated Tables
-When you instantiate `MOCKDB`, the engine generates these tables with sample rows so you can immediately practice writing queries, performing joins, expanding active tables, and testing flow logic:
 
-- `Users`: (UserID, UserName, Email)
-- `Products`: (ProductID, ProductName, Price)
-- `Orders`: (OrderID, OrderDate, TotalAmount)
-- `Employee`: (ID, Name, Status, Active, first_name, last_name)
+| Table | Columns |
+| :--- | :--- |
+| `Users` | `UserID`, `UserName`, `Email` |
+| `Products` | `ProductID`, `ProductName`, `Price` |
+| `Orders` | `OrderID`, `OrderDate`, `TotalAmount` |
+| `Employee` | `ID`, `Name`, `Status`, `Active`, `first_name`, `last_name` |
+| `departments` | `column1`, `column2`, `column3` |
+
+All tables are pre-seeded with sample rows. `INSERT`, `UPDATE`, and `DELETE` operations are accepted but **do not persist** between sessions.
 
 *Example:*
 ```sql
 CREATE CONNECTION m ON MOCKDB();
 
-SELECT u.*, o.TotalAmount 
-INTO #UserOrders 
-FROM m.Users AS u 
+SELECT u.UserName, o.TotalAmount
+INTO #UserOrders
+FROM m.Users AS u
 JOIN m.Orders AS o ON u.UserID = o.OrderID;
+
+-- Test an EXECUTE block
+EXECUTE m INTO #emp
+BEGIN
+    SELECT ID, Name FROM Employee WHERE Active = 1;
+END
 ```
 
 > [!WARNING]
-> `MOCKDB` is strictly an ephemeral workspace. Data inserted or modified in `MOCKDB` does not persist after the script terminates.
+> `MOCKDB` is strictly for development and testing. Do not use it in production scripts.
 
 ---
 
-## 6. Connection Lifecycle Commands
+## 6. Security Utilities
 
-Managing the scope and duration of connections helps prevent resource leaks.
+### 6.1 `USE PASSWORD`
+Sets the master password for the current session used to decrypt `ENC:` connection strings.
 
-### 6.1 `DROP CONNECTION`
-Explicitly closes and destroys a connection from the current context.
+```sql
+USE PASSWORD = 'myMasterSecret';
+CREATE CONNECTION db ON MSSQL('ENC:U2FsdGVkX1+...');
+```
+
+> [!NOTE]
+> This is the **session master password**, not a connector credential. It is used only for `ENC:` string decryption.
+
+### 6.2 `CREATE SSH_KEY_PAIR`
+Generates an SSH key pair (public and private) at the specified directory. Supports SQL-style and function-style syntax.
+
+*SQL Style (with named options):*
+```sql
+CREATE SSH_KEY_PAIR '<directory_path>'
+    [WITH(BITS=2048, ALGORITHM='RSA', PASSPHRASE='pwd', COMMENT='comment')];
+```
+
+*Function Style (positional):*
+```sql
+SSH_KEY_PAIR('<directory_path>' [, bits, 'algorithm', 'passphrase', 'comment']);
+```
+
+| Option | Description | Default |
+| :--- | :--- | :--- |
+| `BITS` | Key size in bits (2048, 3072, 4096 for RSA; 256, 384, 521 for ECDSA) | `2048` |
+| `ALGORITHM` | `RSA`, `ECDSA`, `ED25519` | `RSA` |
+| `PASSPHRASE` | Passphrase to encrypt the private key | *(none)* |
+| `COMMENT` | Comment embedded in the public key file | *(none)* |
+
+*Examples:*
+```sql
+-- Standard RSA key
+CREATE SSH_KEY_PAIR 'C:\Keys\id_rsa';
+
+-- 4096-bit RSA with passphrase
+CREATE SSH_KEY_PAIR 'C:\Keys\id_rsa_prod'
+    WITH(BITS=4096, PASSPHRASE='StrongPassword123!', COMMENT='Production ETL Service Account');
+
+-- ECDSA key
+SSH_KEY_PAIR('C:\Keys\id_ecdsa', 384, 'ECDSA', 's3cr3t');
+```
+
+---
+
+## 7. Connection Lifecycle Commands
+
+### 7.1 `DROP CONNECTION`
+Closes and removes a connection from the current session. Frees connection pool slots and file handles.
+
 ```sql
 DROP CONNECTION IF EXISTS legacy_db;
 ```
 
-### 6.2 `ALTER CONNECTION`
-Modifies an existing connection while preserving all other undisturbed properties.
+### 7.2 `ALTER CONNECTION`
+Modifies properties of an existing connection. All unspecified properties are preserved.
+
 ```sql
 ALTER CONNECTION remote_srv WITH(PASSWORD='new_rotated_password');
 ```
 
-### 6.3 `CREATE OR ALTER CONNECTION`
-Upserts a connection. If it exists, it is torn down and fully rebuilt with only the options provided.
+### 7.3 `CREATE OR ALTER CONNECTION`
+Upserts a connection. If it exists, it is completely rebuilt with only the new options provided (previous options are NOT preserved).
+
 ```sql
-CREATE OR ALTER CONNECTION remote_srv ON MSSQL('Server=db;...') WITH(TABLE='dbo.Config');
+CREATE OR ALTER CONNECTION remote_srv ON MSSQL('Server=db;Database=DW;')
+    WITH(TABLE='dbo.Config');
 ```
+
+### 7.4 `SHOW CONNECTIONS`
+Lists all active connections in the current session.
+
+```sql
+SHOW CONNECTIONS [INTO #temp];
+```
+
+### 7.5 `HELP CONNECTION <type>`
+Displays the connector's supported options and authentication patterns directly in the messages panel.
+
+```sql
+HELP CONNECTION MSSQL;
+HELP CONNECTION SFTP;
+HELP CONNECTION FLATFILE;
+```
+
+---
+
+## 8. Quick Reference Table
+
+| Token | Aliases | Type | Pushdown | Transactional |
+| :--- | :--- | :--- | :---: | :---: |
+| `MSSQL` | `SQL`, `SQLSERVER` | Relational | ✓ | ✓ |
+| `POSTGRES` | `NPSQL`, `PG` | Relational | ✓ | ✓ |
+| `ORACLE` | — | Relational | ✓ | ✓ |
+| `ODBC` | — | Relational | Varies | — |
+| `MOCKDB` | — | In-memory | — | — |
+| `FLATFILE` | `CSV`, `TSV` | File | — | — |
+| `EXCEL` | `XLSX`, `XLS` | File | — | — |
+| `JSON` | — | File | — | — |
+| `XML` | — | File | — | — |
+| `PARQUET` | — | File | — | — |
+| `AVRO` | — | File | — | — |
+| `API` | `REST`, `HTTP` | Protocol | — | — |
+| `SFTP` | `SSH` | Protocol | — | — |
+| `FTP` | `FTP_CONN`, `FTPS` | Protocol | — | — |
+| `AZURE_BLOB` | `BLOB` | Protocol | — | — |
+| `SMTP` | `EMAIL` | Protocol | — | — |
+| `DIRECTORY` | — | File | — | — |

@@ -1,6 +1,6 @@
 # 🚀 ETL-SQL Engine
 
-![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v2.0-blue?style=for-the-badge&logo=dotnet)
+![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.5.0-blue?style=for-the-badge&logo=dotnet)
 ![Language](https://img.shields.io/badge/Language-C%23-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux-lightgrey?style=for-the-badge)
 
@@ -13,9 +13,7 @@ A powerful, high-performance ETL (Extract, Transform, Load) engine that blends t
 ### Professional Console Editor (`ui edit`)
 Experience a modern, terminal-based development environment designed for productivity.
 
-![Console Editor Mockup](file:///C:/Users/chuck/.gemini/antigravity/brain/44bd390e-4370-4efb-bd44-045ddc12d9bb/etl_sql_console_editor_mockup_1774819217352.png)
-
-- **Vibrant Syntax Highlighting**: Context-aware coloring for DML, DDL, Control Flow, and specific ETL keywords.
+- **Vibrant Syntax Highlighting**: Context-aware coloring for DML, DDL, Control Flow, and ETL-specific keywords.
 - **Intelligent Autocomplete**: Deep integration with data source schemas, variables, and file systems.
 - **Live Results Grid**: Interactive paging and multi-result set navigation directly in your terminal.
 - **Standardized Shortcuts**:
@@ -25,9 +23,7 @@ Experience a modern, terminal-based development environment designed for product
   - Standard `Undo/Redo`, `Duplicate`, and `File Management` shortcuts.
 
 ### VS Code Extension Support
-Leverage the power of ETL-SQL within Visual Studio Code with our dedicated language server.
-
-![VS Code Mockup](file:///C:/Users/chuck/.gemini/antigravity/brain/44bd390e-4370-4efb-bd44-045ddc12d9bb/etl_sql_vscode_mockup_1774819235517.png)
+Leverage the power of ETL-SQL within Visual Studio Code with our dedicated language extension — syntax highlighting, autocomplete, inline LINT, and a report preview panel for `.rptsql` files.
 
 ---
 
@@ -35,27 +31,30 @@ Leverage the power of ETL-SQL within Visual Studio Code with our dedicated langu
 
 ### ⚡ High-Stream Performance
 - **Zero-Copy Streaming**: Process billion-row datasets with a fixed memory footprint.
-- **Native Pushdown**: Automatically detects when to push operations (Joins, Filters) to source databases like MSSQL or Postgres.
+- **Native Pushdown**: Automatically detects when to push operations (joins, filters) to source databases like MSSQL or Postgres.
 - **Parallel Execution**: Run data transfers and transformations in concurrent streams with the `PARALLEL` keyword.
 
 ### 🛠️ Standardized Automation Syntax
-We adhere to a strict `VERB_NOUN` convention for all automation commands, ensuring a predictable and intuitive API.
+A strict `VERB NOUN` / `VERB_NOUN` convention for all automation commands — predictable and intuitive.
 
 | Category | Commands |
 | :--- | :--- |
-| **Data Flow** | `SEND_EMAIL`, `SEND_FILE`, `RECEIVE_FILE` |
-| **Filesystem** | `CREATE_DIRECTORY`, `DELETE_FILE`, `COMPRESS_FILE`, `ENCRYPT_FILE` |
-| **Management** | `CREATE CONNECTION`, `DROP CONNECTION`, `START_DOCKER`, `CREATE JOB` |
+| **Data Flow** | `SEND EMAIL`, `SEND FILE`, `RECEIVE FILE` |
+| **Filesystem** | `CREATE DIRECTORY`, `DELETE FILE`, `COMPRESS FILE`, `ENCRYPT FILE` |
+| **Management** | `CREATE CONNECTION`, `DROP CONNECTION`, `USE DOCKER`, `CREATE JOB` |
 | **Scripting** | `CREATE PROCEDURE`, `CREATE FUNCTION`, `CREATE SETS`, `USE SETS` |
-| **Analysis** | `LINT`, `EXPLAIN`, `LINEAGE()` |
+| **Analysis** | `LINT`, `EXPLAIN`, `LINEAGE()`, `SET PROFILING ON` |
+
+### 🔒 Zero-Trust Security
+- **Sandbox Isolation**: Scripts cannot access OS system directories, credentials stores (`.ssh`, `.aws`, `.git`), or drive roots.
+- **Script Immutability**: The engine cannot write or modify `.etlsql`, `.sql`, or `.py` files — logic is always human-authored.
+- **Credential Encryption**: All connection strings can be encrypted with `ENC:` prefix + AES-256 master password.
+- **Resource Caps**: Maximum 100 file operations and 5 recursive directory levels per script execution.
 
 ### 🔍 Deep Observability
-- **Data Lineage**: Trace exactly where every column came from and how it was transformed using `LINEAGE()`. Export full Mermaid.js diagrams and audit tables with `LINEAGE(#result) TO 'report.md';`.
-- **Static Analysis (LINT)**: Catch logic errors, missing indices, or unoptimized joins before they hit production. Run `LINT 'script.etlsql';` to get a structured table of findings.
-- **Execution Profiling**: Enable `SET PROFILING ON` to see exactly where your bottlenecks are.
-
----
-
+- **Data Lineage**: Trace exactly where every column came from using `LINEAGE()`. Export Mermaid.js diagrams with `LINEAGE(#result) TO 'report.md'`.
+- **Static Analysis**: Catch logic errors and dialect mismatches before production with `LINT 'script.etlsql'`.
+- **Execution Profiling**: `SET PROFILING ON` reveals statement-by-statement timing and memory deltas.
 
 ---
 
@@ -66,36 +65,41 @@ graph TD
     A[Source Script .etlsql] --> B[Lexer]
     B --> C[Parser]
     C --> D[AST Builder]
-    D --> E[Evaluator]
-    
+    D --> E[Evaluator / Engine]
+
     subgraph Engine Services
         E --> F[Variable Manager]
         E --> G[DataSource Manager]
         E --> H[Schema Manager]
+        E --> S[SecurityService]
+        E --> O[Orchestrator / Scheduler]
     end
-    
-    G --> I[(MSSQL / Postgres)]
-    G --> J[Flat Files / JSON]
-    G --> K[SFTP / Azure Blob]
+
+    G --> I[(MSSQL / Postgres / Oracle)]
+    G --> J[Flat Files / JSON / Parquet]
+    G --> K[SFTP / FTP / Azure Blob]
     G --> L[SMTP / Email]
+    G --> M[REST API]
+    O --> N[ReportBuilder / .rptsql]
 ```
 
 ---
 
 ## Executables
 
-- **ETL-SQL.exe** — Headless Script Executor. Use in pipelines, CI/CD, cron, and server deployments. Built from `src/ETL-SQL.App/`.
-- **ETL-SQL-TUI.exe** — Interactive console editor for development, debugging, and ad-hoc queries. Built from `src/ETL-SQL.TUI/` (in progress).
-
----
+| Binary | Purpose |
+| :--- | :--- |
+| `ETL-SQL.exe` | Headless script executor for pipelines, CI/CD, cron, and server deployments. Built from `src/ETL-SQL.App/`. |
+| `ETL-SQL-TUI.exe` | Interactive console IDE for development, debugging, and ad-hoc queries. Built from `src/ETL-SQL.App/ --ui edit`. |
 
 ---
 
 ## 🚀 Getting Started
 
-### Installation
-Clone the repository and ensure you have the **.NET 10.0 SDK** installed.
+### Prerequisites
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download)
 
+### Installation
 ```bash
 git clone https://github.com/AmericanSuperstar/ETL-SQL.git
 cd ETL-SQL
@@ -104,56 +108,89 @@ dotnet build
 
 ### Launch the Editor
 ```bash
-# Open a script in the interactive editor
 dotnet run --project src/ETL-SQL.App -- --ui edit MyScript.etlsql
 ```
 
-### Fast-Track Example
+### Headless Execution
+```bash
+dotnet run --project src/ETL-SQL.App -- --run MyScript.etlsql
+```
+
+### Quick-Start Example
+
 ```sql
--- Define your environment
-CREATE CONNECTION prod_db ON MSSQL('Server=prod;Database=Sales;');
-CREATE CONNECTION archive ON FLATFILE('C:\Exports\') WITH (DELIMITER=PIPE);
-CREATE CONNECTION my_smtp ON SMTP('smtp.company.com') WITH (USERNAME='admin', PASSWORD='secret');
+-- Define connections
+CREATE CONNECTION prod_db ON MSSQL() WITH(SERVER='prod', DATABASE='Sales', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION archive  ON FLATFILE('C:\Exports\sales_2026.csv') WITH(DELIMITER=COMMA, HEADER=ON);
+CREATE CONNECTION my_smtp  ON SMTP('smtp.company.com') WITH(PORT=587, USERNAME='admin', PASSWORD='secret', USE_SSL=TRUE);
 
--- Perform the ETL
-INSERT INTO archive.Sales_2026
-SELECT * FROM prod_db.Orders
-WHERE OrderDate >= '2026-01-01';
+BEGIN TRY
+    -- Extract from SQL Server into engine memory
+    SELECT OrderId, Customer, Amount INTO #latest
+    FROM prod_db.dbo.Orders
+    WHERE OrderDate >= '2026-01-01';
 
--- Send a notification
-SEND_EMAIL TO 'admin@company.com' 
-SUBJECT 'ETL Success' 
-BODY 'Sales archived successfully.'
-AT my_smtp;
+    -- Write to CSV archive
+    INSERT INTO archive SELECT * FROM #latest;
+
+    -- Notify on success
+    SEND EMAIL
+        TO      'admin@company.com'
+        FROM    'etl@company.com'
+        SUBJECT 'ETL Success'
+        BODY    ('Archived ' + CAST((SELECT COUNT(*) FROM #latest) AS STRING) + ' orders.')
+        AT      my_smtp;
+END TRY
+BEGIN CATCH
+    PRINT 'Load failed: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH;
 ```
 
 ---
 
 ## 📚 Documentation Library
 
-Explore the high-fidelity documentation library for deep technical insights and practical guides.
-
 ### 📖 Getting Started & Guides
-- **[User Manual](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/User_Manual.md)**: Narrative guide to the ETL-SQL "Mental Model" and first pipelines.
-- **[Pattern Cookbook](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)**: Ready-to-use recipes for SFTP, Incremental Loads, and Automation.
+| Document | Description |
+| :--- | :--- |
+| [User Manual](Docs/User_Manual.md) | Pipeline mental model, connections, variables, control flow, and debugging |
+| [Pattern Cookbook](Docs/Cookbook.md) | 12 self-contained, production-ready ETL recipes |
+| [Sample Guide](Docs/Sample_Guide.md) | Inventory of 34+ sample scripts in the `/scripts/` folder |
 
 ### 📜 Language Reference
-- **[Language Grammar](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md)**: Total syntax reference, procedural logic, and variable management.
-- **[Standard Library](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md)**: Exhaustive built-in function catalog, windowing, and types.
-- **[Data Connectors](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Data_Connectors.md)**: Comprehensive spec for SQL, Cloud, and FlatFile producers.
+| Document | Description |
+| :--- | :--- |
+| [Grammar](Docs/Reference/Grammar.md) | Complete syntax — variables, control flow, SELECT, DML, DDL, scheduling |
+| [Standard Library](Docs/Reference/Standard_Library.md) | All built-in functions: string, date, math, regex, window, JSON/XML |
+| [Data Connectors](Docs/Reference/Data_Connectors.md) | Every connector type, all `WITH()` options, authentication patterns |
+| [Specialized Operations](Docs/Reference/Specialized_Operations.md) | File ops, email, SFTP transfer, lineage, SSH keygen, Docker, jobs |
+| [Report SQL Guide](Docs/Report_SQL_Guide.md) | `.rptsql` syntax, `CREATE VISUAL`, dashboards, and the report player |
+| [Master Language Reference](Docs/ETL_SQL_Language_Reference.md) | Comprehensive single-document language specification |
 
-### 🏛️ Engineering & Architecture
-- **[Connector Engineering](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Engineering.md)**: Architecture deep-dive, batching protocols, and data flow.
-- **[Presentation Architecture](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Presentation_Architecture.md)**: UI/UX infrastructure and the terminal rendering engine.
-- **[Security Whitepaper](file:///c:/Users/chuck/scratch/ETL-SQL/SECURITY.md)**: Zero-Trust protocols and the Script Immutability guardrail.
+### 🏛️ Architecture & Engineering
+| Document | Description |
+| :--- | :--- |
+| [Engine Architecture](Docs/Architecture/Engine.md) | Parser, AST, Evaluator internals, statement dispatch loop |
+| [Connector Architecture](Docs/Architecture/Connectors.md) | Connector interface contracts, lifecycle, pushdown logic, error propagation |
+| [Presentation Architecture](Docs/Architecture/Presentation.md) | TUI IDE, ANSI rendering, SharpConsoleUI integration |
 
-### 📏 Governance & Standards
-- **[Connector Standards](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Connectors_Standards.md)**: Inviolable rules for data access development.
-- **[Presentation Standards](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Standards/Presentation_Standards.md)**: UI consistency and error sanitization rules.
-- **[AI Agent Manual](file:///c:/Users/chuck/scratch/ETL-SQL/AGENTS.md)**: Mandatory instruction set for AI-assisted development.
+### 📏 Standards & Governance
+| Document | Description |
+| :--- | :--- |
+| [Connector Standards](Docs/Standards/Connectors_Standards.md) | 10 inviolable rules + 25-item compliance checklist for new connectors |
+| [Presentation Standards](Docs/Standards/Presentation_Standards.md) | UI consistency, color system, error sanitization rules |
+| [Security Policy](SECURITY.md) | Zero-Trust sandbox, cryptographic architecture, audit trail |
+| [AI Agent Manual](AGENTS.md) | Mandatory instruction set for AI-assisted development in this repo |
+
+---
+
+## 🤝 Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to set up a development environment, the branching model, and contribution guidelines.
 
 ---
 
 © 2026 ETL-SQL Team. Built for speed, designed for clarity.
 
-**Commercial Use & Licensing** — This software is free for personal, non-commercial use only. If you wish to use this software for commercial purposes (including use by a business or for-profit entity), or if you are interested in a service agreement, please contact [etlsqlsoftware@gmail.com](mailto:etlsqlsoftware@gmail.com) for a commercial license.
+**Commercial Use & Licensing** — This software is free for personal, non-commercial use only. For commercial licensing or service agreements, contact [etlsqlsoftware@gmail.com](mailto:etlsqlsoftware@gmail.com).

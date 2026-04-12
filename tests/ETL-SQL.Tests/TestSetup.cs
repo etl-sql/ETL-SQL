@@ -23,10 +23,11 @@ namespace ETL_SQL.Tests
                 // ── Test file logger ─────────────────────────────────────────────
                 // Use the centralized Logger for test output to ensure all engine 
                 // messages are captured in the logs/tests folder.
-                Logger.InitializeTestLogger("logs/tests");
+                var sp = DependencyInjectionSetup.BuildServiceProvider();
+                var loggerService = sp.GetRequiredService<ILoggerService>();
+                loggerService.InitializeTestLogger("logs/tests");
 
                 // ── DI container shared across tests ─────────────────────────────
-                var sp = DependencyInjectionSetup.BuildServiceProvider();
                 ETL_SQL.Program.ServiceProvider = sp;
                 // TUI types (ConsoleEditor, ReplUi) resolve Program → ETL_SQL.TUI.Program
                 ETL_SQL.TUI.Program.ServiceProvider = sp;
@@ -35,7 +36,7 @@ namespace ETL_SQL.Tests
                 sp.GetService<IConnectorRegistry>();
 
                 // Suppress console noise (ETL-SQL.Common.Logger)
-                Logger.SuppressConsole = true;
+                if (loggerService is LoggerService ls) ls.SuppressConsole = true;
             }
             catch (Exception ex)
             {

@@ -190,6 +190,7 @@ namespace ETL_SQL.Core
         void Record(string target, IEnumerable<string> sources, string operation, string? targetColumn = null, IEnumerable<string>? sourceColumns = null, Dictionary<string, string>? metadata = null, string? derivedFromDescriptions = null, int line = 0, int column = 0, int endLine = 0, int endColumn = 0, string? sourceFile = null);
         IEnumerable<LineageEntry> GetLineage(string tableName);
         IEnumerable<LineageEntry> GetColumnLineage(string tableName, string columnName);
+        Dictionary<string, string> GetTableMetadata(string tableName);
         Dictionary<string, string> GetColumnMetadata(string tableName, string columnName);
         IEnumerable<LineageEntry> GetAncestors(string tableName, string? columnName = null);
         Dictionary<string, string> InheritMetadata(IEnumerable<string> sourceTables, IEnumerable<string> sourceColumns, out string? derivedFromDescriptions);

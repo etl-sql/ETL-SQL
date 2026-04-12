@@ -3,59 +3,188 @@
 ## 1. Executive Summary
 ETL-SQL is engineered with a **Security-by-Design** philosophy, prioritizing the integrity of the host environment during the execution of data transformations. The engine employs a "Zero-Trust" isolation model, ensuring that all script-level operations are strictly sandboxed and cryptographically verified.
 
+---
+
 ## 2. Threat Model & Security Philosophy
-The engine treats all user-provided scripts as **Untrusted Actors**. Our security architecture is built on three core pillars:
+The engine treats all user-provided scripts as **Untrusted Actors**. Our security architecture is built on four core pillars:
+
 - **Isolation**: Prevent scripts from exiting the approved workspace or accessing sensitive system assets.
 - **Resource Governance**: Prevent denial-of-service (DoS) via runaway processes or recursive resource exhaustion.
 - **Transparency**: Maintain a non-bypassable audit trail for all security-relevant exceptions.
+- **Credential Hygiene**: Ensure secrets, tokens, and passwords are never exposed in logs, diagnostics, or output streams.
+
+---
 
 ## 3. Host System Isolation (The Sandbox)
-The sandbox is enforced at the core evaluation layer, intercepting all filesystem and system-level calls before execution.
+The sandbox is enforced at the core evaluation layer (`SecurityService`) via `ValidatePath()`, `ValidateFileType()`, and `ValidateWriteAccess()`, intercepting all filesystem and system-level calls before execution.
 
 ### 3.1 Non-Bypassable Path Validation (Zero-Trust)
 All path resolutions undergo mandatory normalization and recursive segment matching.
-- **Immutable System Blocklist**: Absolute protection for OS-critical directories (e.g., `Windows`, `System32`, `/etc`, `/lib`, `/root`). These blocks are enforced at the engine level and cannot be overridden by script flags.
-- **Sensitive Asset Protection**: Explicitly blocks access to development/config metadata (e.g., `.git`, `.ssh`, `.aws`, `.kube`) to prevent credential harvesting.
-- **Root Directory Lockdown**: Prevents operations targeting the system root (`C:\` or `/`) to protect filesystem integrity.
+
+**Critical blocks (never bypassable, even in test mode):**
+
+| Category | Blocked Segments |
+| :--- | :--- |
+| Version control | `.git` |
+| Credential stores | `.ssh`, `.aws`, `.azure`, `.kube`, `.gnupg`, `.config` |
+| Windows OS | `Windows`, `System32` |
+| Linux OS | `etc`, `/root` |
+
+**Standard blocks (bypassed only in test mode for authorized test paths):**
+
+| Category | Blocked Segments |
+| :--- | :--- |
+| IDE / Build artifacts | `.vscode`, `.idea`, `node_modules`, `bin`, `obj` |
+| Windows system directories | `SysWOW64`, `Program Files`, `Program Files (x86)`, `ProgramData`, `AppData`, `Documents and Settings`, `Config.msi`, `System Volume Information` |
+| Linux system directories | `/bin`, `/boot`, `/dev`, `/lib`, `/lib32`, `/lib64`, `/libx32`, `/lost+found`, `/media`, `/mnt`, `/opt`, `/proc`, `/run`, `/sbin`, `/srv`, `/sys`, `/tmp`, `/usr`, `/var` |
+| Sensitive config | `.gnupg`, `.config`, `Users/Public` |
+
+**Root directory lockdown:** Any path resolving exactly to a drive root (e.g., `C:\` or `/`) always throws a `SecurityException` regardless of test mode or override flags.
+
+**Session metadata protection:** Scripts cannot directly access `.etlsession` files or `.recovery.json` manifests. Direct access to `_temp` session storage folders is also blocked.
 
 ### 3.2 Immutable File Type Hardening
-To prevent arbitrary code execution or system-level tampering, the following extensions are globally blacklisted:
-- `.dll`, `.exe`, `.bat`, `.cmd`, `.sh`, `.msi`, `.sys`, `.com`, `.pfx`, `.cer`.
+To prevent arbitrary code execution or system-level tampering, the following extensions are globally blacklisted and can **never** be accessed regardless of override flags:
 
-### 3.3 Resource Thresholds (Runaway Protection)
-To maintain host stability, the engine enforces strict resource caps:
-- **Operation Cap**: Maximum of 100 filesystem operations per script execution.
-- **Recursion Depth**: Maximum of 5 directory layers for recursive operations.
-- **Safe Zone Enforcement**: Safety overrides (e.g., `### ALLOW_GREATER_THAN_100_FILE`) are **only honored** when the target path resides within a verified **Approved Safe Zone** (the directory of the active script).
+```
+.dll  .exe  .bat  .cmd  .sh  .msi  .sys  .com  .pfx  .cer
+```
 
-### 3.4 Script Immutability (Human-Centric Control)
-To protect the integrity of the application's control plane, the engine enforces a strict write-block on logic files.
-- **Protected Extensions**: Writing, moving, or renaming files with extensions `.etlsql`, `.rptsql`, `.sql`, `.etls`, `.py`, `.js`, `.sh`, `.bat`, or `.cmd` is strictly prohibited via script execution.
-- **Human Mastery**: Application logic is reserved exclusively for the human operator. The engine is a consumer of logic, not a producer, preventing automated "self-modifying" script attacks.
+The following extensions are explicitly on the **allowed whitelist**:
+```
+.csv  .json  .parquet  .avro  .db  .enc  .gz  .7z  .txt  .sql
+.log  .xlsx  .xml  .yaml  .yml  .ini  .md  .zip
+```
+
+> [!NOTE]
+> Unknown extensions (not on either list) are blocked by default. Use the `### ALLOW_FILE_TYPE_ACCESS` override flag to allow specific unlisted extensions within an approved safe zone.
+
+### 3.3 Script Immutability (Human-Centric Control)
+To protect the integrity of the application's control plane, the engine enforces a strict write-block via `ValidateWriteAccess()`. Scripts **cannot write, move, or rename** files with these extensions:
+
+```
+.etlsql  .rptsql  .sql  .etls  .py  .js  .sh  .bat  .cmd
+```
+
+**Rationale**: Application logic is reserved exclusively for the human operator. The engine is a consumer of logic, not a producer, preventing automated "self-modifying" script attacks.
+
+### 3.4 Resource Thresholds (Runaway Protection)
+To maintain host stability, `SecurityService.CheckRunawayProtection()` enforces strict resource caps:
+
+| Guard | Default Limit | Override Flag |
+| :--- | :--- | :--- |
+| Filesystem operation count | **100 per script** | `### ALLOW_GREATER_THAN_100_FILE` |
+| Recursive directory depth | **5 levels** | `### ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS` |
+
+> [!IMPORTANT]
+> Override flags are **only honored** when the target path resides within a verified **Approved Safe Zone** (registered directories in `ApprovedSafeZones`). Providing an override flag while operating outside a safe zone still throws a `SecurityException` — with a distinct message explaining that the path is outside an authorized workspace.
+
+---
 
 ## 4. Cryptographic Architecture
 ETL-SQL implements a dual-layer cryptographic model to balance local security with asset portability.
 
 ### 4.1 Hardware-Bound Session Hardening (Data at Rest)
-Session snapshots (`.etlsession`) and temporary cache data are protected using **Hardware-Locked Encryption** to ensure that sensitive ephemeral data remains local to the system.
-- **Windows Architecture**: Utilizes OS-native **DPAPI** (`System.Security.Cryptography.ProtectedData`) in `CurrentUser` scope. 
-- **Linux/macOS Architecture**: Utilizes **Machine-Locked AES-256 Encryption** using a high-entropy secret stored in a protected user directory (`~/.etl-sql/machine.key`). This key is generated on first-run and secured with OS-level file permissions (chmod 600).
-- **Security Guarantee**: State is strictly non-portable; it can only be decrypted by the the original OS user on the original host machine.
-- **Transparency**: Encryption is transparent to the user, eliminating password management risks for ad-hoc state.
+Session snapshots (`.etlsession`) and temporary cache data are protected using **hardware-locked encryption**, ensuring sensitive ephemeral data remains local to the originating system.
 
-### 4.2 Portable Asset Protection
-For connection strings and files intended for cross-machine portability, the engine utilizes a **Master Password** model.
-- **Algorithm**: AES-256 with PBKDF2 key derivation.
-- **Key Derivation**: 10,000 iterations for resistance against brute-force attacks.
-- **Entropy & Salting**: Every operation utilizes a **16-byte cryptographically random salt**, ensuring unique ciphertexts for identical inputs and providing robust protection against rainbow table attacks.
+| Platform | Mechanism | Scope |
+| :--- | :--- | :--- |
+| **Windows** | OS-native **DPAPI** (`ProtectedData.Protect`, `CurrentUser` scope) | Current OS user on current machine |
+| **Linux / macOS** | **Machine-locked AES-256** using a high-entropy key at `~/.etl-sql/machine.key` (generated on first-run, `chmod 600`) | Current machine only |
 
-## 5. Auditing & Forensics
-Every security violation or unauthorized access attempt triggers an immediate `SecurityException`, halting execution and generating a diagnostic entry in the session audit logs. 
+**Security guarantee:** Session state is strictly non-portable. It cannot be decrypted by a different OS user, on a different machine, or after OS reinstallation.
 
-> [!IMPORTANT]
-> **Audit Integrity**: The engine explicitly blocks any script-level attempt to modify session audit metadata or recovery manifests.
+### 4.2 Portable Asset Protection (`ENC:` Prefix)
+For connection strings and files intended for cross-machine portability, the engine uses a **Master Password** model managed via `USE PASSWORD = '...'`.
+
+| Property | Value |
+| :--- | :--- |
+| Algorithm | AES-256 (CBC) |
+| Key derivation | PBKDF2 |
+| Iterations | 10,000 (brute-force resistance) |
+| Salt | 16 bytes, cryptographically random per-operation |
+
+**Design consequence**: The same plaintext encrypted twice produces different ciphertexts (unique salts), providing robust protection against rainbow table and known-plaintext attacks.
+
+**Workflow:**
+```sql
+-- Step 1: Encrypt a script's plaintext connection strings
+USE PASSWORD = 'myMasterSecret';
+-- Engine calls SecurityService.EncryptScript() — replaces all plaintext
+-- connection strings with ENC:... inplace.
+
+-- Step 2: At runtime, decrypt transparently
+USE PASSWORD = 'myMasterSecret';
+CREATE CONNECTION db ON MSSQL('ENC:U2FsdGVkX1+...'); -- decrypted before connecting
+```
+
+**`SecurityService.NeedsEncryption()`** — can be called by the IDE or CLI to warn users that a script still contains unencrypted plaintext connection strings before saving or sharing.
+
+### 4.3 Credential Masking
+Credentials are never allowed to appear in output. The engine enforces:
+- Connection strings containing passwords are masked in all `SHOW CONNECTIONS` output, diagnostics, and exception messages.
+- `ENC:` values are passed as-is to the `SecurityService` for decryption and are **never** logged.
+- `PASSWORD` and `TOKEN` option values in `WITH()` blocks are redacted in any serialized connection metadata.
+
+> [!CAUTION]
+> Never include raw credentials, API keys, or database passwords in `PRINT` statements or `BODY` strings in `SEND EMAIL`. These will appear in session logs. Use `ENCRYPTED` typed variables and `ENC:` strings instead.
 
 ---
-**Policy Version**: 1.5  
-**Compliance Standard**: Built with reference to NIST SP 800-204 (Microservices Security) and OWASP CLI Security Principles.  
-**Last Review Date**: 2026-04-11
+
+## 5. Audit Trail & Forensics
+
+Every security violation or unauthorized access attempt triggers an immediate `SecurityException`, halting execution and generating a diagnostic entry in the session audit logs.
+
+> [!IMPORTANT]
+> **Audit Integrity**: The engine explicitly blocks any script-level attempt to modify session audit metadata or recovery manifests (`.etlsession`, `.recovery.json`). These files are only accessible to the engine's internal `SessionManager` via the `IsInternalOperation` bypass, which is not accessible from script context.
+
+### 5.1 `SecurityException` Thrown By
+All of the following trigger an immediate halt with a `SecurityException`:
+- `ValidatePath()` — blocked path segment, root access, session metadata access
+- `ValidateFileType()` — blocked extension (`.dll`, `.exe`, etc.)
+- `ValidateWriteAccess()` — write attempt to a logic file (`.etlsql`, etc.)
+- `CheckRunawayProtection()` — operation count or recursion depth exceeded
+
+### 5.2 What Gets Logged
+| Event | Logged |
+| :--- | :--- |
+| `SecurityException` thrown | Yes — message, path, operation type |
+| Override flag used (`### ALLOW_...`) | Yes — flag name, script line, current safe zone |
+| `ENC:` decryption failure | Yes — failure recorded; ciphertext is **not** included |
+| Script contains unencrypted credentials (`NeedsEncryption()`) | Warning issued in IDE/CLI |
+
+---
+
+## 6. Test Mode Behavior
+The `SecurityService` has an explicit `IsTestMode` flag used only by the automated test harness. When active:
+
+- Paths within `AppDomain.CurrentDomain.BaseDirectory` and `Path.GetTempPath()` are automatically authorized, bypassing standard directory blocks only.
+- **Critical blocks are never bypassed** — `.git`, `.ssh`, `Windows`, `System32`, etc. remain blocked even in test mode.
+- `IsTestMode` is **never readable or settable** from ETL-SQL script context. It is only injectable during test initialization.
+
+> [!CAUTION]
+> `IsInternalOperation` bypass exists for the `SessionManager` to read/write its own `.etlsession` files. This flag must **never** be exposed to script context or passed through any user-facing API surface.
+
+---
+
+## 7. Known Limitations & Open Risk Items
+
+| Risk | Severity | Status |
+| :--- | :--- | :--- |
+| PBKDF2 iteration count of 10,000 is below the current NIST SP 800-132 recommendation of ≥ 600,000 | Medium | Consider increasing; may impact startup latency |
+| No per-user or per-script `ApprovedSafeZones` management UI | Medium | Safe zones are currently added programmatically only |
+| `### ALLOW_...` override flags are comment-based and not cryptographically signed | Medium | A malicious script author can add these freely in a safe zone |
+| No network egress controls — any `API`/`SFTP`/`FTP`/`SMTP` connection can reach any endpoint | Medium | No allowlist/denylist for outbound hostnames |
+| No rate-limiting or throttle on `SEND EMAIL` — possible spam amplification | Low | Manual safe zone + operation count limit provides some protection |
+|`.sql` is on the write blocklist but also on the allowed-read whitelist | Note | Deliberate — reading `.sql` is allowed; writing is not |
+
+---
+
+## 8. Security Contact
+To report a security vulnerability in ETL-SQL, open a confidential issue or contact the project maintainer directly. Do not post vulnerability details in public issues.
+
+---
+
+**Policy Version**: 0.5
+**Compliance Standard**: Built with reference to NIST SP 800-204 (Microservices Security), NIST SP 800-132 (Password-Based Key Derivation), and OWASP CLI Security Principles.
+**Last Review Date**: 2026-04-12

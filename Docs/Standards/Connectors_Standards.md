@@ -1,95 +1,330 @@
 # ETL-SQL Connectors Engineering Standards
 
-This document defines the mandatory engineering and design standards for developing and maintaining Data Connectors within the ETL-SQL ecosystem. All connector implementations MUST adhere to these rules to ensure security, portability, and dialect awareness.
+**Version 1.0 — Established with the IConnector / IDataSource / IDatabaseSource architecture**
+
+This document is the authoritative standard for all work that touches any data connector in the ETL-SQL ecosystem. It defines rules that are non-negotiable and must be met by any change, any new connector, and any future version of the data access layer.
+
+When in doubt about whether a change is acceptable: if it would require you to violate any rule in this document, the design is wrong. Rethink the design.
 
 ---
 
-## 1. Core Engineering Principles
+## Part I — The Inviolable Rules
 
-Connectors are the 'Sensors' of the ETL-SQL engine. They must remain isolated from the execution logic while providing structured metadata and data streams.
+These rules exist because previous violations caused security incidents, data corruption, and silent performance regressions. They are not style preferences — they are load-bearing constraints.
 
-### 1.1 Dialect Isolation & Awareness
-Connectors are responsible for declaring their native dialect constraints to the engine's Linter.
-- **Rule**: Connectors MUST implement `GetExcludedKeywords()` to inform the engine of keywords that are invalid in their target dialect.
-- **Rule**: Connectors MUST handle provider-specific exception wrapping.
+### Rule 1: The Engine Executes SQL. Connectors Move Data.
 
-**Engineering Pattern:**
+Nothing in a connector implementation may evaluate SQL, interpret expressions, or apply filter logic. A connector's only responsibilities are:
+
+1. Translate the raw connection string and options into a live provider session.
+2. Stream data in and out in batches.
+3. Report metadata (table names, columns, version).
+
+SQL evaluation is the engine's responsibility. Connectors that filter, aggregate, or transform rows internally bypass the engine's lineage tracking and optimizer.
+
+**Violation indicator:** Any `WHERE`, `GROUP BY`, `ORDER BY`, or expression evaluation logic inside an `IDataSource` implementation.
+
+### Rule 2: No Connector May Block an Async Call
+
+All I/O operations — connection establishment, query execution, batch reads, batch writes — must use the `Async` variants of all SDK methods. Blocking calls on async threads exhaust the thread pool and cause latency spikes that affect the entire engine.
+
 ```csharp
-// CORRECT: Declarative Awareness
-public IReadOnlyList<string> GetExcludedKeywords() => new[] { "TOP", "DATALENGTH" };
+// CORRECT
+await _connection.OpenAsync(cancellationToken);
+await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
 
-// INCORRECT: Attempting to rewrite the query manually within the connector.
+// INCORRECT — blocking I/O on async thread
+_connection.Open();
+using var reader = cmd.ExecuteReader();
 ```
 
-### 1.2 Resource Lifecycle Management
-Connectors must be 'Good Citizens' of the system memory and handle connection pools strictly.
+**Violation indicator:** Any `.Result`, `.Wait()`, or `GetAwaiter().GetResult()` inside a connector. Any call to a non-async SDK method where an async version exists.
 
----
+### Rule 3: Credentials Must Never Leave the Connector Boundary
 
-## 2. Inviolable Governance Rules
+Connection strings, passwords, API keys, tokens, and any other secret material must be used for connection establishment and immediately discarded. They must never appear in:
 
-### 2.1 Security & Path Resolution
-Path resolution is a critical security guardrail. Connectors do not have the authority to bypass the Security Service.
-- **Rule**: Connectors MUST NOT use relative paths.
-- **Rule**: All file-based connectors MUST use the `IExecutionContext.ResolvePath()` utility.
+- `ILogger` messages at any level
+- `ExecutionException` messages
+- `OutputMessage.Text` in any category
+- Any `Dictionary<string, string>` returned to the engine (options, metadata, etc.)
 
-**Engineering Pattern:**
+The `ConnectionString` property on `IDatabaseSource` exists for internal connection renewal only. It is not a channel for exposing credentials to the engine.
+
+**Violation indicator:** Any interpolated string in a log call or exception message that includes a connection string parameter.
+
+### Rule 4: All File I/O Must Go Through ResolvePath
+
+`IExecutionContext.ResolvePath()` is the security guardrail for all file-based connectors. It validates the path, enforces the Zero-Trust blocklist, and applies `ALLOW_*` override permissions. Bypassing it is a security vulnerability — it allows scripts to read system files, write to unintended directories, or escape the working directory sandbox.
+
 ```csharp
-// CORRECT: Security-Aware Resolution
-string safePath = context.ResolvePath(sourceString);
+// CORRECT — security-aware
+string safePath = _context.ResolvePath(rawConnectionString);
 using var stream = File.OpenRead(safePath);
 
-// INCORRECT: Bypassing the guardrails
-using var stream = File.OpenRead(sourceString); // SECURITY VULNERABILITY
+// INCORRECT — bypasses all security validation
+using var stream = File.OpenRead(rawConnectionString);  // SECURITY VULNERABILITY
 ```
 
-### 2.3 Credential Masking
-Connectors are responsible for sanitizing their own metadata to prevent secret leakage in logs and diagnostics.
-- **Rule**: All sensitive properties (`PASS`, `KEY`, `TOKEN`, `SECRET`) MUST be masked with `***` in `GetOptionValues()`, `GetSupportedOptions()`, and `SHOW CONNECTION` outputs.
-- **Rule**: Never include plain-text connection strings in `ExecutionException` messages.
+**Violation indicator:** Any direct `File.Open`, `File.Create`, `File.Delete`, `Directory.GetFiles`, or `Directory.EnumerateFiles` call that does not use a path returned by `ResolvePath`.
 
-### 2.4 Encrypted Asset Portability
-Every connector must support the engine's portable encryption scheme.
-- **Rule**: Connectors MUST support the `ENC:` prefix for all credential fields.
-- **Rule**: Decryption must be performed via the `SecurityService` before provider instantiation.
+### Rule 5: All Provider Exceptions Must Be Wrapped
 
-### 2.5 Pushdown optimization Contract
-To ensure high-performance execution, SQL-like connectors SHOULD NOT rely solely on row-by-row iteration.
-- **Rule**: All Relational or query-capable providers MUST implement `IDatabaseSource`.
-- **Rule**: `SupportsSqlPushdown` must be set to `true` to enable MPP (Massive Parallel Processing).
-- **Rule**: Connectors MUST provide a valid `DialectProfile` to the engine's optimizer.
+Raw provider exceptions (`SqlException`, `OracleException`, `NpgsqlException`, `IOException`, etc.) must not propagate out of the connector boundary. They must be caught and re-thrown as `ExecutionException` with a sanitized, user-readable message.
 
-### 2.2 Dependency Injection & Logging
-- **Rule**: Use the `ILogger` provided during `CreateDataSource` or the `IExecutionContext` to record events.
-- **Rule**: All diagnostic logs MUST be sanitized. Never log connection strings or credentials.
+```csharp
+// CORRECT
+catch (SqlException ex)
+{
+    throw new ExecutionException(
+        $"MSSQL error ({ex.Number}): {StripCredentials(ex.Message)}");
+}
+
+// INCORRECT — raw exception with internal detail escapes
+catch (SqlException ex)
+{
+    throw;   // Connection string may appear in ex.Message
+}
+```
+
+The inner exception must NOT be chained. Inner exceptions may contain server paths, connection parameters, or stack traces that violate Rule 3.
+
+**Violation indicator:** Any unhandled provider-specific exception type visible in the Messages tab. Any connection string appearing in error text.
+
+### Rule 6: Sensitive Option Values Must Be Masked in All Metadata Output
+
+`GetSupportedOptions()` declares option keys — including sensitive keys like `PASSWORD`, `API_KEY`, `TOKEN`. When values for these keys are returned in any display context (`SHOW CONNECTION`, `GetOptionValues()`, IDE hover), the value must be replaced with `***`.
+
+The masking rule applies to any option key that contains: `PASS`, `KEY`, `TOKEN`, `SECRET`, `PWD`, `CREDENTIAL`, `AUTH`.
+
+```csharp
+// CORRECT — key declared for linter/IDE; value masked when displayed
+public Dictionary<string, string[]> GetSupportedOptions() => new()
+{
+    ["PASSWORD"] = Array.Empty<string>(),  // Free string; value masked at display time
+};
+
+// GetOptionValues() — only return safe display values
+public Dictionary<string, string[]> GetOptionValues() => new()
+{
+    ["ENCRYPT"] = new[] { "ON", "OFF" },
+    // PASSWORD intentionally omitted — no safe display values
+};
+```
+
+**Violation indicator:** Any credential value visible in SHOW CONNECTION output or IDE autocomplete suggestions.
+
+### Rule 7: `IDataSource` Must Support O(1) Memory Processing
+
+`ReadBatches()` must yield data in discrete batches. It must never accumulate the entire result set into memory before yielding. The default batch size of 10,000 rows must be respected as the ceiling, not a target — smaller batches are acceptable; larger batches are not.
+
+```csharp
+// CORRECT — streaming
+public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10_000)
+{
+    var batch = new DataTable();
+    while (await reader.ReadAsync())
+    {
+        batch.Rows.Add(ReadRow(reader));
+        if (batch.Rows.Count >= batchSize)
+        {
+            yield return batch;
+            batch = new DataTable();
+        }
+    }
+    if (batch.Rows.Count > 0) yield return batch;
+}
+
+// INCORRECT — full materialisation defeats the entire memory model
+public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10_000)
+{
+    var allRows = await LoadAllRowsAsync();   // MEMORY EXHAUSTION RISK
+    yield return new DataTable(allRows);
+}
+```
+
+**Violation indicator:** Any `ToList()`, `ToArray()`, or `await foreach` followed by collection accumulation inside `ReadBatches()`. Memory usage scaling linearly with source row count during `INSERT INTO` or `MERGE` operations.
+
+### Rule 8: SQL-Capable Connectors Must Implement IDatabaseSource
+
+Any connector that targets a SQL-capable engine (relational databases, columnar warehouses, OLAP stores) must implement `IDatabaseSource` and set `SupportsSqlPushdown = true`. Not doing so forces the engine into row-by-row iteration mode, causing 10–100× performance degradation for large datasets.
+
+**Violation indicator:** A relational database connector that does not implement `IDatabaseSource`. Any SQL connector that reads all rows into the engine when a pushdown path is available.
+
+### Rule 9: Dialect Exclusions Must Be Declared
+
+Every connector must implement `GetExcludedKeywords()` to declare which ETL-SQL baseline keywords are invalid in its dialect. This prevents the linter from allowing scripts that would fail at runtime on that connector.
+
+```csharp
+// CORRECT — Postgres connector
+public HashSet<string> GetExcludedKeywords() =>
+    new(StringComparer.OrdinalIgnoreCase) { "TOP", "DATALENGTH", "ISNULL", "GETDATE" };
+
+// INCORRECT — silent runtime failures on Postgres
+public HashSet<string> GetExcludedKeywords() => new();  // Returns empty — linter won't catch TOP
+```
+
+**Violation indicator:** A relational connector that returns an empty `GetExcludedKeywords()` when its target dialect is known to reject baseline keywords.
+
+### Rule 10: `DisposeAsync` Must Release All Resources
+
+`IDataSource` extends `IAsyncDisposable`. `DisposeAsync()` must close the provider connection, release connection pool slots, close file handles, and cancel any in-progress reads or writes. It must not throw.
+
+**Violation indicator:** Connection pool exhaustion after DROP CONNECTION. File handles remaining open after a script completes.
 
 ---
 
-## 3. Violation Indicators (Code Smells)
+## Part II — Testing Standards
 
-| Indicator | Severity | Description |
-| :--- | :--- | :--- |
-| `System.IO.File.OpenRead(path)` | **CRITICAL** | Bypasses `SecurityService` path resolution. |
-| `Console.WriteLine(...)` | **MAJOR** | Bypasses the unified logging sink. |
-| `new SqlConnection(...)` | **MAJOR** | Direct instantiation in the connector logic. |
-| `using (var r = cmd.ExecuteReader())` | **MINOR** | Blocking I/O. Use `ExecuteReaderAsync`. |
+### Rule T1: Every New Connector Must Have a Smoke Test
+
+A smoke test must verify the minimum viable lifecycle:
+1. `CreateDataSource()` returns without throwing.
+2. `ReadBatches()` yields at least one batch for a known non-empty source.
+3. `WriteBatches()` completes without throwing for a batch of known rows.
+4. `DisposeAsync()` completes without throwing.
+
+For SQL connectors, use Testcontainers to provision a real database instance. For file connectors, use `Path.GetTempPath()` as the working directory.
+
+### Rule T2: Security-Relevant Paths Must Have Negative Tests
+
+Every connector that accepts file paths must have a test asserting that passing a system path (e.g., `C:\Windows\System32`) causes an `ExecutionException` from `ResolvePath`, not a raw `UnauthorizedAccessException` from the OS.
+
+### Rule T3: Credential Masking Must Be Verified by Test
+
+For every connector that declares a sensitive option key, there must be a test that:
+1. Creates the connector with a known password or API key.
+2. Calls `GetSupportedOptions()` or the equivalent metadata path.
+3. Asserts the credential value does NOT appear in any returned string.
+
+### Rule T4: Exception Wrapping Must Be Verified by Test
+
+For every provider SDK exception type that the connector can receive, there must be a test that:
+1. Simulates the provider exception (e.g., wrong credentials, network unreachable).
+2. Asserts that an `ExecutionException` is thrown (not the raw provider type).
+3. Asserts the `ExecutionException.Message` does not contain the connection string.
+
+### Rule T5: The Regression Gate Must Pass Before Any Merge
+
+The full test suite must pass — including integration tests that exercise the connector in a real or containerised environment — before a connector change is considered complete. A connector that compiles but breaks integration tests is not shippable.
 
 ---
 
-## 4. Compliance Checklist (New Connector)
+## Part III — Versioning Standards
 
-Before a new connector is merged into the `ETL-SQL.Connectors` layer, it must pass this audit:
+### Rule V1: `GetSupportedOptions()` Is Additive
 
-- [ ] Does it implement `IConnector` and `IDataSource`?
-- [ ] Are all path operations validated via the `SecurityService`?
-- [ ] Does it provide a full list of `GetSupportedOptions()` for the UI/Linter?
-- [ ] **Security**: Are all secrets masked in metadata and `SHOW CONNECTION` outputs?
-- [ ] **Security**: Does it handle `ENC:` prefixes via the `SecurityService`?
-- [ ] **Performance**: Does it implement `IDatabaseSource` (for SQL targets)?
-- [ ] **Performance**: Is a correct `DialectProfile` provided for query pushdown?
-- [ ] Is every provider exception caught and re-thrown as an `ExecutionException`?
-- [ ] Does it support `SET WHAT_IF` dry-run modes?
-- [ ] Have all keywords and functions for this dialect been declared via `GetExcludedKeywords`?
+New option keys may be added to `GetSupportedOptions()` and `GetOptionValues()` at any time. Existing keys may not be removed or renamed without a deprecation period, because scripts written against the old key names will fail the linter.
+
+### Rule V2: `GetExcludedKeywords()` Is Additive
+
+New keywords may be added to the exclusion list. Existing exclusions may not be removed — they were added because the target dialect rejected them. Removing an exclusion would cause previously-linted scripts to become invalid at runtime.
+
+### Rule V3: `Aliases` Are Additive
+
+New aliases may be added to `IConnector.Aliases`. Existing aliases may not be removed — scripts referencing the old alias will fail at parse time if it disappears.
+
+### Rule V4: Breaking Changes Require a Transition Period
+
+Any change that removes an option key, renames a connector token, or changes the semantics of an existing interface method requires:
+
+1. A deprecation notice in this document.
+2. Dual support (accept both old and new forms simultaneously).
+3. Consumer migration (all scripts and tests updated) before the old form is removed.
 
 ---
-*Refer to [Connectors_Architecture.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors_Architecture.md) for technical implementation details.*
+
+## Part IV — Security Standards
+
+### Rule S1: The Zero-Trust Principle Applies to All Connectors
+
+No connector has the authority to bypass the engine's security service. All path validation, permission checking, and credential decryption flows through `SecurityService`. A connector that implements its own security logic is non-compliant — it creates a gap in the unified security model.
+
+### Rule S2: `ENC:` Decryption Is the Engine's Responsibility
+
+When a connection string arrives at `CreateDataSource()`, any `ENC:` prefix has already been decrypted by `CreateConnectionStatementHandler`. Connectors must not check for or process `ENC:` prefixes themselves. If a connector receives an `ENC:`-prefixed string, it is a bug in the handler — the connector should treat it as a literal connection string, which will cause a readable error.
+
+### Rule S3: Connectors Must Support `SET WHAT_IF` Dry-Run Mode
+
+When the evaluator's `IsWhatIf` flag is true, connectors must not perform any write operations. `WriteBatches()` must be a no-op. `TruncateAsync()` must be a no-op. `ExecuteRawSql()` must not execute DDL or DML statements. Read operations are permitted.
+
+```csharp
+public Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+{
+    if (_context.IsWhatIf) return Task.CompletedTask;  // Dry-run: skip all writes
+    // ... normal write logic ...
+}
+```
+
+**Violation indicator:** Any write or destructive operation executing when `IsWhatIf = true`.
+
+### Rule S4: Security Override Invocations Must Be Logged
+
+When a connector invokes a `ALLOW_*` permission override (e.g., `ALLOW_FILE_TYPE_ACCESS`), it must emit a `MessageCategory.Security` message via the `IOutputSink`. Users must always be informed when a security override was required for their script to execute.
+
+---
+
+## Part V — Platform Consistency Standards
+
+### Rule C1: Connector Behaviour Must Be Source-Agnostic
+
+A connector must behave identically whether it is used from the Terminal IDE, the VS Code extension, the `etl-sql` CLI, or the `etl-sql-report` build tool. Connectors must not branch on the calling context. Platform-specific behaviour belongs in the presentation layer, not the connector.
+
+### Rule C2: Connector Metadata Must Support Both IDE and CLI Contexts
+
+`GetHelp()`, `GetSupportedOptions()`, `GetOptionValues()`, `GetTablesAsync()`, and `GetColumnsAsync()` must work without an active database connection where possible. The IDE calls these methods for autocomplete before the user has typed a complete connection string.
+
+### Rule C3: Error Messages Must Be Platform-Neutral
+
+`ExecutionException` messages from connectors are plain text with no ANSI codes, no Markdown, and no HTML. Each presentation platform formats errors for its own rendering target.
+
+---
+
+## Compliance Checklist (New Connector)
+
+Use this checklist when reviewing any PR that adds or significantly modifies a connector:
+
+**Interfaces & Registration**
+- [ ] Implements both `IConnector` (factory) and `IDataSource` (session)?
+- [ ] Implements `IDatabaseSource` if the target is a SQL-capable engine?
+- [ ] Implements `ITransactionalDataSource` if the target supports ACID transactions?
+- [ ] Registered as a singleton `IConnector` in `DependencyInjectionSetup`?
+
+**Metadata**
+- [ ] `GetSupportedOptions()` lists all `WITH` clause keys including sensitive ones?
+- [ ] `GetOptionValues()` provides safe display values (no sensitive value defaults)?
+- [ ] `GetExcludedKeywords()` lists all baseline keywords the target dialect rejects?
+- [ ] `GetHelp()` documents authentication patterns and required vs. optional options?
+- [ ] `BuildConnectionString()` implemented for connectors that use standard DSNs?
+
+**Security**
+- [ ] All sensitive option values masked as `***` in all metadata and display outputs?
+- [ ] All file path I/O goes through `IExecutionContext.ResolvePath()`?
+- [ ] No connection strings, passwords, or keys appear in any log or exception message?
+- [ ] `ENC:` prefix NOT handled by the connector (engine decrypts before calling `CreateDataSource`)?
+- [ ] `WriteBatches()` and `TruncateAsync()` are no-ops when `IsWhatIf = true`?
+
+**Performance**
+- [ ] `ReadBatches()` yields in discrete batches ≤ 10,000 rows — never accumulates all rows?
+- [ ] SQL-capable target: `SupportsSqlPushdown = true` and `ExecuteRawSql()` implemented?
+- [ ] `WriteBatches()` uses the provider's bulk-insert mechanism (not row-by-row INSERT)?
+
+**Resource Management**
+- [ ] All SDK calls use async overloads with `CancellationToken` support?
+- [ ] No `.Result`, `.Wait()`, or `GetAwaiter().GetResult()` in any code path?
+- [ ] `DisposeAsync()` closes connections, file handles, and stream readers — does not throw?
+
+**Error Handling**
+- [ ] All provider exceptions caught and re-thrown as `ExecutionException`?
+- [ ] Inner exception NOT chained to `ExecutionException` (prevents credential leakage)?
+- [ ] Empty source / empty write handled gracefully (no exception for zero rows)?
+
+**Testing**
+- [ ] Smoke test: create → read → write → dispose lifecycle passes?
+- [ ] Negative test: system path rejected by `ResolvePath` with `ExecutionException`?
+- [ ] Credential masking test: password/key value absent from all metadata output?
+- [ ] Exception wrapping test: provider exception produces `ExecutionException`, not raw type?
+
+---
+
+*Refer to [Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connectors.md) for technical implementation details and [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) for language specifications.*

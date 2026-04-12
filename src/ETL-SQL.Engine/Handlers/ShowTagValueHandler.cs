@@ -26,7 +26,7 @@ namespace ETL_SQL.Engine.Handlers
             }
             else
             {
-                metadata = new Dictionary<string, string>();
+                metadata = context.LineageTracker.GetTableMetadata(stmt.TableName);
             }
 
             var table = new DataTable();

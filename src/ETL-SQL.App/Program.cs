@@ -38,7 +38,6 @@ namespace ETL_SQL
                 ServiceProvider = DependencyInjectionSetup.BuildServiceProvider();
                 Console.Error.WriteLine("[DI_READY] Dependency injection logic completed.");
                 
-                Logger.Factory = ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
                 
                 // Start scheduler
                 var scheduler = ServiceProvider.GetRequiredService<SchedulerService>();

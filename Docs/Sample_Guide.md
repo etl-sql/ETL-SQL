@@ -2,6 +2,9 @@
 
 This guide describes the provided sample scripts in the `scripts/` folder. These samples are designed to demonstrate the various capabilities of the ETL-SQL engine.
 
+> [!TIP]
+> **Running the samples safely**: All scripts in the **Core Samples** section use `MOCKDB` and require no external connections. Scripts in the **Enterprise Real-World Scenarios** section reference external databases — replace the connection details with your own before running. Use `SET WHAT_IF ON;` at the top of any script to do a dry-run before executing destructive operations.
+
 ## Core Samples
 
 ### 1. [sample.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/sample.etlsql)
@@ -161,7 +164,7 @@ These advanced scripts demonstrate complex, production-grade business requiremen
 **Dynamic Masking & JSON Formatting**: Redacts PII records iteratively (SSN, Email) using native `SUBSTRING`/`CONCAT` operations, reallocates projection vectors dynamically grouping profiles, and deposits a unified struct explicitly defined as JSON onto an Azure storage blob.
 
 ### 30. [realworld_06_reconciliation_anti_join.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_06_reconciliation_anti_join.etlsql)
-**Data Reconciliation Anti-Join**: Extracts live dimensions simultaneously from a Postgres node versus a MySQL fulfillment database to orchestrate a `LEFT IS NULL` mapping pipeline that immediately logs untracked disparities directly to a flat report.
+**Data Reconciliation Anti-Join**: Extracts live dimensions simultaneously from a Postgres node versus a secondary database (connected via `ODBC` — MySQL is not a natively supported connector type) to orchestrate a `LEFT IS NULL` anti-join mapping pipeline that immediately logs untracked disparities to a flat report.
 
 ### 31. [realworld_07_window_deduplication.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_07_window_deduplication.etlsql)
 **Window Analytics Deduplication**: Ingests unstructured clickstream events formatting natively sequentially over a unified `ROW_NUMBER() OVER(PARTITION BY UserID)` logical ranking hierarchy to dynamically compress/delete old transactions before executing a compressed `PARQUET` write.
@@ -174,3 +177,7 @@ These advanced scripts demonstrate complex, production-grade business requiremen
 
 ### 34. [realworld_10_docker_sync.etlsql](file:///c:/Users/chuck/scratch/ETL-SQL/scripts/realworld_10_docker_sync.etlsql)
 **Ephemeral Sandboxed Synchronization**: Instantiates temporary synchronized infrastructure utilizing simultaneous lightweight engine hooks triggering `mcr.mssql` environments and secondary `alpine.postgres` hubs, safely cloning configuration grids autonomously prior to terminating operations flawlessly.
+
+---
+
+*Refer to [User_Manual.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/User_Manual.md) for the pipeline mental model, [Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md) for production recipes, [Reference/Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) for full syntax, and [Reference/Data_Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Data_Connectors.md) for connector options.*

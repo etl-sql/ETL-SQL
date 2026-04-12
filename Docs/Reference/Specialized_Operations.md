@@ -1,208 +1,613 @@
 # ETL-SQL Specialized Operations & Automation
 
-This document provides a comprehensive technical reference for the non-SQL orchestration and automation features of ETL-SQL. It focuses on filesystem management, remote transfers, structured metadata tracking, and engine-level infrastructure scheduling.
+This document is the technical reference for ETL-SQL's non-query automation features: filesystem management, remote file transfer, email notifications, metadata/lineage tracking, cryptographic key generation, Docker lifecycle integration, and background job scheduling.
 
 ---
 
-## 1. File & Directory Operations
+## 1. Local File Operations
 
-ETL-SQL provides a unified interface for local filesystem management. All paths are resolved and isolated via the `SecurityService` (Zero-Trust sandbox) for safety.
+ETL-SQL provides a unified interface for filesystem management. All paths are validated by the `SecurityService` (Zero-Trust sandbox) before any I/O occurs.
 
-### 1.1 Local File Manipulations
-Used for staging flat files securely during pipeline cycles.
+### 1.1 File Statements (SQL Style)
 
 ```sql
--- Standard replication with overwrite flag
-COPY FILE 'C:\Dropzone\data.csv' TO 'D:\Archive\data_backup.csv' WITH(OVERWRITE = ON);
+COPY FILE    '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];
+MOVE FILE    '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];
+RENAME FILE  '<source>' TO '<new_name>'   [WITH(OVERWRITE=ON|OFF)];
+DELETE FILE  '<path>';
 
--- Rename and destroy
+COMPRESS FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];
+ENCRYPT FILE  '<source>' TO '<destination>' PASSWORD('<pwd>') [WITH(OVERWRITE=ON|OFF)];
+DECRYPT FILE  '<source>' TO '<destination>' PASSWORD('<pwd>') [WITH(OVERWRITE=ON|OFF)];
+```
+
+### 1.2 File Functions (Underscore Style — Backward Compatible)
+
+All functions accept an optional last argument for `OVERWRITE` (`ON`/`OFF`, default `ON`):
+
+```sql
+COPY_FILE('src', 'dest' [, ON|OFF])
+MOVE_FILE('src', 'dest' [, ON|OFF])
+RENAME_FILE('src', 'new_name' [, ON|OFF])
+DELETE_FILE('path')
+COMPRESS_FILE('src', 'dest' [, ON|OFF])
+ENCRYPT_FILE('src', 'dest' [, ON|OFF])
+DECRYPT_FILE('src', 'dest' [, ON|OFF])
+```
+
+### 1.3 Directory Statements (SQL Style)
+
+```sql
+CREATE DIRECTORY '<path>' [WITH(OVERWRITE=ON|OFF)];
+
+COPY DIRECTORY      '<src>' TO '<dest>'     [WITH(OVERWRITE=ON|OFF)];
+MOVE DIRECTORY      '<src>' TO '<dest>'     [WITH(OVERWRITE=ON|OFF)];
+RENAME DIRECTORY    '<src>' TO '<new_name>' [WITH(OVERWRITE=ON|OFF)];
+
+DELETE DIRECTORY          '<path>';
+DELETE DIRECTORY_CONTENTS '<path>' [WITH(RECURSIVE=ON|OFF)];
+
+COMPRESS DIRECTORY '<src>' TO '<dest.zip>'  [WITH(OVERWRITE=ON|OFF)];
+ENCRYPT DIRECTORY  '<src>' TO '<dest>' PASSWORD('<pwd>') [WITH(OVERWRITE=ON|OFF)];
+DECRYPT DIRECTORY  '<src>' TO '<dest>' PASSWORD('<pwd>') [WITH(OVERWRITE=ON|OFF)];
+```
+
+### 1.4 Directory Functions (Underscore Style)
+
+```sql
+CREATE_DIRECTORY('path' [, ON|OFF])
+COPY_DIRECTORY('src', 'dest' [, ON|OFF])
+MOVE_DIRECTORY('src', 'dest' [, ON|OFF])
+RENAME_DIRECTORY('src', 'new_name' [, ON|OFF])
+DELETE_DIRECTORY('path')
+DELETE_DIRECTORY_CONTENTS('path' [, RECURSIVE=ON|OFF])
+COMPRESS_DIRECTORY('src', 'dest' [, ON|OFF])
+ENCRYPT_DIRECTORY('src', 'dest', 'pwd' [, ON|OFF])
+DECRYPT_DIRECTORY('src', 'dest', 'pwd' [, ON|OFF])
+```
+
+### 1.5 Examples
+
+```sql
+-- Stage a backup with overwrite
+COPY FILE 'C:\Dropzone\data.csv' TO 'D:\Archive\data_backup.csv' WITH(OVERWRITE=ON);
+
+-- Rename then delete the working copy
 RENAME FILE 'C:\Incoming\latest.csv' TO 'processing.csv';
 DELETE FILE 'C:\Incoming\processing.csv';
 
--- Cryptography handling
+-- Compress and encrypt a finished payload
 COMPRESS FILE 'C:\Outbound\payload.xml' TO 'C:\Outbound\payload.zip';
-ENCRYPT FILE 'C:\Outbound\payload.zip' TO 'C:\Outbound\payload.enc' PASSWORD('secure_pwd');
+ENCRYPT FILE  'C:\Outbound\payload.zip' TO 'C:\Outbound\payload.enc' PASSWORD('vault_key');
+
+-- Create staging directory and wipe stale contents after processing
+CREATE DIRECTORY 'C:\AppTemp\PipelineA';
+DELETE DIRECTORY_CONTENTS 'C:\AppTemp\PipelineA' WITH(RECURSIVE=ON);
 ```
 
-### 1.2 Local Directory Management
+### 1.6 Filesystem Query Functions
+
+| Function | Signature | Returns |
+| :--- | :--- | :--- |
+| `FILE_EXISTS` | `FILE_EXISTS(path)` | `TRUE` if the file exists |
+| `DIRECTORY_EXISTS` | `DIRECTORY_EXISTS(path)` | `TRUE` if the directory exists |
+| `FILE_LIST` | `FILE_LIST(path [, recursive])` | Table: `Name`, `Path`, `Extension`, `Size`, `LastModified` |
+
 ```sql
-CREATE DIRECTORY 'C:\AppTemp\PipelineA';
+IF FILE_EXISTS('C:\Incoming\payload.csv')
+    COPY FILE 'C:\Incoming\payload.csv' TO 'C:\Archive\payload.csv';
 
--- Moves the entire directory tree safely
-COPY DIRECTORY 'C:\AppTemp\PipelineA' TO 'C:\Archive\PipelineA';
-
--- Wipes the contents but retains the folder mapping
-DELETE DIRECTORY_CONTENTS 'C:\AppTemp\PipelineA' WITH(RECURSIVE=ON);
-
--- Only succeeds if the directory is completely empty
-DELETE DIRECTORY 'C:\AppTemp\PipelineA';
+-- List all .csv files recursively
+SELECT Name, Size, LastModified FROM FILE_LIST('C:\Incoming', TRUE)
+WHERE Extension = '.csv'
+ORDER BY LastModified DESC;
 ```
 
 ---
 
-## 2. Remote Orchestration & File Routing
+## 2. Remote File Transfer
 
-Coordinate data movement directly between the local Engine layer and remote connectors (like `SFTP`, `FTP`, or `AZURE_BLOB`).
+Coordinates data movement between the local engine layer and remote connectors (`SFTP`, `FTP`, `AZURE_BLOB`).
 
-### 2.1 Pushing and Pulling
+### 2.1 `SEND FILE` — Upload to Remote
 
+*SQL Style:*
 ```sql
--- Assuming a connection has been made:
--- CREATE CONNECTION remote_sftp ON SFTP() WITH(HOST='corp.filedrop.com', ...);
-
--- Downloads a file into the local Engine layer
-RECEIVE FILE FROM '/var/ftp/incoming/payload.csv' TO 'C:\LocalDrop\payload.csv' AT remote_sftp;
-
--- Uploads a finalized report artifact
-SEND FILE 'C:\LocalDrop\report.pdf' TO '/var/ftp/outgoing/report.pdf' AT remote_sftp;
+SEND FILE '<local_path>' TO '<remote_path>' AT <connection> [WITH(OVERWRITE=ON|OFF)];
 ```
 
-### 2.2 Remote Introspection
-Explore remote file directories and return the metadata dynamically as a queryable `#temp` table.
+*Function Style:*
+```sql
+SEND_FILE('<local_path>', <connection>, '<remote_path>' [, OVERWRITE=ON|OFF]);
+```
+
+### 2.2 `RECEIVE FILE` — Download from Remote
+
+*SQL Style:*
+```sql
+RECEIVE FILE FROM '<remote_path>' TO '<local_path>' AT <connection> [WITH(OVERWRITE=ON|OFF)];
+```
+
+*Function Style:*
+```sql
+RECEIVE_FILE('<remote_path>', <connection>, '<local_path>' [, OVERWRITE=ON|OFF]);
+```
+
+### 2.3 `REMOTE_FILE_LIST` — Remote Directory Listing
+
+Returns a queryable table of files from an SFTP, FTP, or Azure Blob connection.
 
 ```sql
--- Use standard SELECT clauses against the metadata struct
-SELECT Name, Size, LastModified 
+-- SQL function
+SELECT Name, Path, Size, LastModified
 INTO #remote_inventory
 FROM REMOTE_FILE_LIST(remote_sftp, '/var/ftp/incoming/');
 ```
 
----
+**Returned columns:**
 
-## 3. Automated Notifications (`SEND EMAIL`)
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `Name` | `STRING` | File name (with extension) |
+| `Path` | `STRING` | Full remote path to the file |
+| `Size` | `BIGINT` | File size in bytes |
+| `LastModified` | `DATETIME` | Last-modified timestamp |
 
-Sends high-fidelity emails using a configured `SMTP` connection wrapper.
+### 2.4 Examples
 
 ```sql
--- CREATE CONNECTION mailer ON SMTP('smtp.google.com') WITH(USERNAME='...', PASSWORD='...');
+-- Assuming a configured SFTP connection named remote_sftp:
 
-SEND EMAIL 
-    TO 'admin@company.com'
-    FROM 'etl@company.com'  -- Optional: Inherited from Connection if blank
-    SUBJECT 'Job Failure: Nightly Load'
-    BODY 'The incremental load failed at step 4. See the attached logs.'
-    ATTACH 'C:\Logs\nightly_error.log'
-    AT mailer;
+-- Download today's extract
+RECEIVE FILE FROM '/var/ftp/incoming/extract_20260412.csv'
+    TO 'C:\LocalDrop\extract.csv'
+    AT remote_sftp WITH(OVERWRITE=ON);
+
+-- Process data and upload the result
+SEND FILE 'C:\LocalDrop\report.pdf'
+    TO '/var/ftp/outgoing/report.pdf'
+    AT remote_sftp;
+
+-- Find only files modified in the last 24 hours
+SELECT Name, Size, LastModified
+INTO #new_files
+FROM REMOTE_FILE_LIST(remote_sftp, '/var/ftp/incoming/')
+WHERE LastModified >= DATEADD(HOUR, -24, GETDATE())
+ORDER BY LastModified DESC;
 ```
 
 ---
 
-## 4. Metadata, Lineage, & Tagging
+## 3. Email Notifications (`SEND EMAIL`)
 
-ETL-SQL natively tracks the ancestry and lineage for every transformation via explicitly injected tags. Tags are propagated seamlessly across joins.
+Sends automated emails using a configured `SMTP` connection. Both styles support any clause order.
 
-### 4.1 Applying Metadata Tags (`/* @key: value */`)
-Apply metadata tags securely via SQL commentary syntax straight into column declarations:
+*SQL Style:*
 ```sql
-CREATE TABLE #EmployeeLayout (
-    ID INT /* @PII: TRUE */ /* @Source: HR_System */,
-    Name VARCHAR(20) /* @PII: TRUE */
+SEND EMAIL
+    TO   '<to_address>'
+    FROM '<from_address>'
+    SUBJECT '<subject>'
+    BODY '<body_text>'
+    [CC  '<cc_address>' [, '<cc2>', ...]]
+    [BCC '<bcc_address>' [, '<bcc2>', ...]]
+    [ATTACH '<file_path>' [, '<file2>', ...]]
+    [AT <smtp_connection>];
+```
+
+*Function Style:*
+```sql
+SEND_EMAIL(<smtp_conn>, '<to>', '<from>', '<subject>', '<body>' [, '<cc>', '<bcc>', '<attach>']);
+```
+
+| Clause | Required | Notes |
+| :--- | :---: | :--- |
+| `TO` | Yes | One or more recipient addresses |
+| `FROM` | Yes | Sender address; omit to use `DEFAULT_FROM` from the SMTP connection |
+| `SUBJECT` | Yes | Email subject line |
+| `BODY` | Yes | Plain text email body |
+| `CC` | No | One or more carbon-copy recipients |
+| `BCC` | No | One or more blind-copy recipients |
+| `ATTACH` | No | One or more local file paths to attach |
+| `AT` | No | If omitted, uses the last configured SMTP connection |
+
+*Example:*
+```sql
+CREATE CONNECTION mailer ON SMTP('smtp.company.com')
+    WITH(PORT=587, USERNAME='alerts@company.com', PASSWORD='apppassword',
+         USE_SSL=TRUE, DEFAULT_FROM='alerts@company.com');
+
+-- Clauses can be in any order
+SEND EMAIL
+    FROM    'etl@company.com'
+    TO      'ops@company.com'
+    CC      'manager@company.com'
+    SUBJECT 'Nightly Load Failed'
+    BODY    'The nightly load failed at step 4. See attached log for details.'
+    ATTACH  'C:\Logs\nightly_error.log'
+    AT      mailer;
+```
+
+---
+
+## 4. Metadata, Lineage & Tagging
+
+ETL-SQL natively tracks the ancestry and lineage of every transformation via metadata tags that propagate seamlessly across joins.
+
+### 4.1 Applying Tags (Inline Comment Syntax)
+
+Tags are embedded directly in SQL using `/* @key: value; */` comment blocks.
+
+**Column tags** — placed after a column expression in a `SELECT` list:
+```sql
+SELECT
+    UserId   /* @d: Internal user ID; @PII: true; */,
+    UserName /* @d: Full display name; @owner: SecurityTeam; */
+INTO #TaggedUsers
+FROM m.Users /* @sensitivity: high; */;
+```
+
+**Fixed-width width declarations** (special tag for `FORMAT=FIXED` connectors):
+```sql
+CREATE TABLE #Layout (
+    ID   INT          /* @width: 5 */,
+    Name VARCHAR(20),           -- Width inferred from VARCHAR(20)
+    Code CHAR(3)
 );
 ```
 
-### 4.2 Querying Tags Dynamically (`SHOW TAGS`)
-You can introspect the tagging hierarchy on loaded connections or temp tables.
+`@d:` is the reserved description tag, displayed in IDE hover and lineage reports.
+
+### 4.2 Querying Tags
 
 ```sql
--- Returns a LIST of all tag keys currently applied to the column
-SELECT GET_TAGS(#EmployeeLayout, ID);
+-- Return all tag names on a column
+DECLARE @tags LIST = GET_TAGS('#TaggedUsers', 'UserId');
 
--- Retrieves the specific string value of the defined tag
-SELECT GET_TAG_VALUE(#EmployeeLayout, ID, 'Source');
+-- Return the value of a specific tag
+DECLARE @desc STRING = GET_TAG_VALUE('#TaggedUsers', 'UserId', 'd');
 
--- Globally output the metadata dictionary mapped on the table to the UI/Console
-SHOW TAGS FOR #EmployeeLayout.ID;
-SHOW TAG VALUE 'Source' FOR #EmployeeLayout.ID;
+-- Guard on a PII tag
+IF 'PII' IN @tags
+BEGIN
+    PRINT 'Warning: column contains PII — apply masking before export.';
+END
 ```
 
-### 4.3 Rendering Ancestry Reports
-Exports the full ancestry of loaded data sets (where the data travelled) directly into a Mermaid.js diagram or an interactive log.
-
+**Tag introspection statements:**
 ```sql
--- Output tracing directly into a markdown schema
-LINEAGE(#EmployeeLayout) TO 'C:\Reports\Employee_Lineage.md';
+SHOW TAGS FOR TABLE #TaggedUsers;
+SHOW TAGS FOR TABLE #TaggedUsers COLUMN UserId;
+SHOW TAG VALUE FOR TABLE #TaggedUsers COLUMN UserId WITH TAG 'd';
+```
+
+### 4.3 `LINEAGE` — Data Ancestry Reporting
+
+Traces the full lineage graph of a table — every source, join, transformation, and tag inheritance that led to its current state.
+
+*Syntax variants:*
+
+| Variant | Syntax | Effect |
+| :--- | :--- | :--- |
+| Console view | `LINEAGE(#table);` | Prints a hierarchical tree in the messages panel |
+| Column trace | `LINEAGE(#table, 'Column');` | Filters the trace to a single column's ancestry |
+| Markdown export | `LINEAGE(#table) TO 'reports/lineage.md';` | Generates a Mermaid.js diagram + audit table in a Markdown file |
+| Queryable source | `SELECT * FROM LINEAGE(#table);` | Lets you filter/JOIN the lineage log as a standard table |
+
+**Queryable columns from `LINEAGE(...)`:**
+
+| Column | Description |
+| :--- | :--- |
+| `Timestamp` | When the operation was recorded |
+| `Operation` | Statement type (`SELECT`, `INSERT`, `MERGE`, etc.) |
+| `TargetTable` | Destination table name |
+| `TargetColumn` | Destination column name |
+| `SourceTables` | Comma-separated list of source table names |
+| `SourceColumns` | Comma-separated list of source column names |
+| `Description` | Column `@d` description tag at this point |
+| `Metadata` | JSON blob of all custom tags at this point |
+| `DerivedFromDescriptions` | Amalgamated descriptions from all upstream sources |
+| `SourceFile` | Script file that produced this lineage entry |
+| `Line`, `Column` | Position in the script |
+
+*Example:*
+```sql
+-- Export a full lineage Mermaid report
+LINEAGE(#FinalAudit) TO 'C:\Reports\Employee_Lineage.md';
+
+-- Validate lineage programmatically in a pipeline
+SELECT Operation, SourceTables
+INTO #lineage_check
+FROM LINEAGE(#FinalAudit);
+
+IF NOT EXISTS (SELECT 1 FROM #lineage_check WHERE SourceTables LIKE '%HR_System%')
+BEGIN
+    THROW 50010, 'Expected source HR_System not found in lineage.', 1;
+END
 ```
 
 ---
 
-## 5. Security & Cryptographic Keys
+## 5. SSH Key Pair Generation
 
-### 5.1 SSH Key Infrastructure
-Script-based generation of cryptographic key pairs for SFTP and symmetric file encryption architectures.
+Script-based generation of cryptographic key pairs for SFTP authentication and file encryption.
 
+*SQL Style (named options):*
 ```sql
--- Standard execution
-CREATE SSH_KEY_PAIR 'C:\Keys\id_rsa' WITH (BITS=4096, ALGORITHM='RSA', PASSPHRASE='complex_pwd');
+CREATE SSH_KEY_PAIR '<directory_path>'
+    [WITH(BITS=2048, ALGORITHM='RSA', PASSPHRASE='pwd', COMMENT='comment')];
+```
 
--- Function shorthand block
-SSH_KEY_PAIR('C:\Keys\id_ed25519', 256, 'ED25519', 'complex_pwd', 'Autogenerated service key');
+*Function Style (positional):*
+```sql
+SSH_KEY_PAIR('<directory_path>' [, bits, 'algorithm', 'passphrase', 'comment']);
+```
+
+| Option | Values | Default | Notes |
+| :--- | :--- | :--- | :--- |
+| `BITS` | 2048, 3072, 4096 (RSA); 256, 384, 521 (ECDSA) | `2048` | Larger = stronger but slower |
+| `ALGORITHM` | `RSA`, `ECDSA`, `ED25519` | `RSA` | ED25519 is compact and modern |
+| `PASSPHRASE` | Any string | *(none)* | Encrypts the private key at rest |
+| `COMMENT` | Any string | *(none)* | Embedded in the `.pub` file |
+
+*Examples:*
+```sql
+-- Quick RSA key (2048-bit, no passphrase)
+CREATE SSH_KEY_PAIR 'C:\Keys\id_rsa';
+
+-- Production-grade RSA with passphrase
+CREATE SSH_KEY_PAIR 'C:\Keys\prod_rsa'
+    WITH(BITS=4096, PASSPHRASE='StrongPassword123!', COMMENT='Production ETL Service');
+
+-- Modern ED25519 key (compact and fast)
+SSH_KEY_PAIR('C:\Keys\id_ed25519', 256, 'ED25519', 'keypass', 'Dev account');
 ```
 
 ---
 
 ## 6. Docker Lifecycle Integration
 
-Automatically spin up containerized databases for test staging or complex isolated staging calculations, then dispose of them.
+Automatically provision containerized databases for isolated staging or testing, then dispose of them.
+
+### 6.1 SQL-Style Commands
 
 ```sql
--- Start a clean Postgres container and attach it to the `dpost` alias
+-- Start a container and assign an alias
+USE DOCKER('<image>') AS <alias>;
+
+-- Access the generated connection string
+DECLARE @conn VARCHAR(500) = <alias>.CONNECTION_STRING;
+
+-- Container lifecycle
+<alias> STOP;    -- Pauses container (state retained)
+<alias> START;   -- Resumes a stopped container
+<alias> PAUSE;   -- Suspends container CPU
+<alias> CLOSE;   -- Destroys container and wipes all state
+
+-- Close ALL active containers
+DOCKER CLOSE;
+```
+
+### 6.2 Function-Style Aliases
+
+| Function | Equivalent |
+| :--- | :--- |
+| `START_DOCKER('image' [, 'alias'])` | `USE DOCKER(...) AS alias` |
+| `STOP_DOCKER('alias')` | `alias STOP` |
+| `PAUSE_DOCKER('alias')` | `alias PAUSE` |
+| `RESUME_DOCKER('alias')` | `alias START` |
+| `CLOSE_DOCKER('alias')` | `alias CLOSE` |
+
+### 6.3 Example
+
+```sql
+-- Spin up two isolated databases
+USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS dms;
 USE DOCKER('postgres:15-alpine') AS dpost;
 
--- Grab the dynamically generated, isolated connection string
-DECLARE @conn varchar(500) = dpost.CONNECTION_STRING;
-CREATE CONNECTION stage_db ON POSTGRES(@conn);
+DECLARE @ms_conn VARCHAR(500) = dms.CONNECTION_STRING;
+DECLARE @pg_conn VARCHAR(500) = dpost.CONNECTION_STRING;
 
--- Inject data...
+CREATE CONNECTION stage_sql ON MSSQL(@ms_conn);
+CREATE CONNECTION stage_pg  ON POSTGRES(@pg_conn);
 
--- Management commands once finished
-dpost STOP;  -- Retains state
-dpost START; -- Reboots container
-dpost CLOSE; -- Atomically destroys the container and wipes state
+-- Load and validate data
+SELECT * INTO #stage FROM source_db.Orders;
+INSERT INTO stage_sql.dbo.Orders SELECT * FROM #stage;
 
--- Closes all active containers globally generated in the session
-DOCKER CLOSE;  
+-- Tear down when done
+dms CLOSE;
+dpost CLOSE;
 ```
 
 ---
 
-## 7. Engine Monitoring & Background Scheduling
+## 7. Background Job Scheduling
 
-### 7.1 Background Service Mode (`CREATE JOB`)
-Orchestrates script execution on a recurring schedule. Designed purely for execution when ETL-SQL is running in service/headless polling mode.
+### 7.1 `CREATE JOB`
+Orchestrates script execution on a repeating schedule. Jobs run only when ETL-SQL is operating in headless/service mode.
 
+*Syntax:*
 ```sql
--- Run a full cleanup script every 30 minutes
-CREATE JOB CleanupJob ON SCHEDULE EVERY 30 MINUTES AS
-    RUN SCRIPT 'scripts/cleanup.etlsql';
+CREATE JOB <name> ON SCHEDULE EVERY <n> SECONDS|MINUTES|HOURS|DAYS [AT 'HH:MM'] AS
+    <statement>;
 
--- Pin an execution precisely at Midnight
-CREATE JOB NightlyArchive ON SCHEDULE EVERY 1 DAY AT '00:00' AS
+-- OR with a block:
+CREATE JOB <name> ON SCHEDULE EVERY <n> ... AS
 BEGIN
-    DELETE FROM prod_db.logs WHERE log_date < GETDATE();
+    <statements>;
 END;
 ```
 
-**Job Management Operations:**
+| Option | Notes |
+| :--- | :--- |
+| `EVERY n SECONDS\|MINUTES\|HOURS\|DAYS` | Recurrence interval |
+| `AT 'HH:MM'` | Optional. Pin the job to a specific time of day |
+| `AS <statement>` | The statement to execute; typically `RUN SCRIPT` or a `BEGIN...END` block |
+
+*Examples:*
 ```sql
-SHOW JOBS;                -- Lists registered jobs
-SHOW JOB HISTORY;         -- Lists timeline failures / success logs
-DROP JOB IF EXISTS NightlyArchive;
-KILL JOB 'job_id_123';    -- Halts actively executing background runners
+-- Run a cleanup script every 30 minutes
+CREATE JOB CleanupJob ON SCHEDULE EVERY 30 MINUTES AS
+    RUN SCRIPT 'scripts/cleanup.etlsql';
+
+-- Nightly archive at 2 AM
+CREATE JOB NightlyArchive ON SCHEDULE EVERY 1 DAY AT '02:00' AS
+BEGIN
+    INSERT INTO archive_db.logs
+    SELECT * FROM prod_db.logs WHERE log_date < DATEADD(DAY, -30, GETDATE());
+
+    DELETE FROM prod_db.logs WHERE log_date < DATEADD(DAY, -30, GETDATE());
+END;
 ```
 
-### 7.2 Diagnostics & Execution Profiling (`SET PROFILING`)
-The profiling layer accurately tracks memory deltas, recursion depths, disk spills, and exact millisecond benchmarks for each command chunk sequentially. 
+### 7.2 Job Management Commands
 
 ```sql
--- Enable deeper recording instrumentation
+SHOW JOBS;                            -- List all registered jobs and their schedules
+SHOW JOB HISTORY;                     -- Execution history for all jobs
+SHOW JOB HISTORY NightlyArchive;      -- History for a specific job
+DROP JOB IF EXISTS CleanupJob;        -- Remove a job
+KILL JOB 'job_id_abc123';             -- Terminate an actively running job
+```
+
+---
+
+## 8. Diagnostics & Execution Profiling
+
+### 8.1 `SET PROFILING`
+Enables deep performance recording: millisecond-level benchmarks, memory deltas, and recursion depths for each statement.
+
+```sql
 SET PROFILING ON;
 
--- Execute slow, complex logic
+-- Run complex operations
 RUN SCRIPT 'massive_transform.etlsql';
 
--- Disable recording
 SET PROFILING OFF;
 
--- Render the captured profile benchmarks to the session result buffer or local structure
+-- View captured metrics in the results pane or export to a table
 SHOW PROFILE INTO #execution_benchmarks;
+
+SELECT *
+FROM #execution_benchmarks
+ORDER BY DurationMs DESC
+LIMIT 10;
 ```
+
+### 8.2 `EXPLAIN`
+Shows the execution plan for a query — join strategies, index usage, and data flow — before the query runs.
+
+```sql
+EXPLAIN
+SELECT o.OrderId, c.Name
+FROM orders_db.Orders AS o
+JOIN customers_db.Customers AS c ON o.CustomerId = c.Id
+WHERE o.Status = 'Open';
+```
+
+### 8.3 `LINT`
+Statically analyzes a script for syntax errors, dialect mismatches, and best-practice violations without executing it.
+
+```sql
+LINT 'scripts/nightly_load.etlsql';   -- Analyze a file
+LINT;                                  -- Analyze the current interactive buffer
+```
+
+### 8.4 `SHOW PROFILE`
+Displays timing and resource usage for the most recently profiled execution.
+
+```sql
+SHOW PROFILE;
+
+---
+
+## 9. Dynamic SQL & Remote Execution (EXEC)
+
+ETL-SQL supports dynamic construction and execution of scripts using the `EXEC` statement. This allows for parameterized table names, dynamic DDL, and direct execution of native SQL against remote databases.
+
+### 9.1 Dynamic Expression Execution
+
+Executes a string expression as a script.
+
+```sql
+-- Local Dynamic Execution (runs in the current engine session)
+-- Can access all current #temp tables and @variables
+DECLARE @tableName = '#stage_data';
+DECLARE @sql = 'SELECT COUNT(*) FROM ' + @tableName + ';';
+EXEC(@sql);
+
+-- Remote Dynamic Execution (sent to the specified connection)
+-- The string is evaluated and sent verbatim to the remote database
+DECLARE @sql = 'SELECT TOP 10 * FROM dbo.Customers';
+EXEC(@sql) AT mssql_conn;
+```
+
+### 9.2 Block Pushdown (Native SQL)
+
+Executes a block of native SQL against a remote connection. This is the primary way to use database-specific features (e.g., CTEs, window functions, hints) that are not natively supported in ETL-SQL.
+
+```sql
+EXEC prod_db
+BEGIN
+    -- This block is passed verbatim to the SQL Server
+    WITH TopSales AS (
+        SELECT SalesPerson, SUM(Amount) as Total
+        FROM dbo.Sales
+        GROUP BY SalesPerson
+    )
+    SELECT * FROM TopSales WHERE Total > 10000;
+END;
+```
+
+### 9.3 Result Capture (`INTO`)
+
+Both dynamic expressions and remote blocks can capture their results into a local `#temp` table.
+
+```sql
+-- Capture dynamic SQL result
+EXEC(@dynamicSql) AT pg_conn INTO #results;
+
+-- Capture block pushdown result
+EXEC prod_db INTO #top_inventory
+BEGIN
+    SELECT ProductId, StockLevel FROM Warehouse.Inventory WHERE StockLevel < 100;
+END;
+```
+
+### 9.4 Parameterized Execution (`WITH`)
+
+For remote execution, use the `WITH` clause to pass parameters safely. The remote SQL should reference parameters as `@p0`, `@p1`, etc. (indexing matches the `WITH` list).
+
+```sql
+DECLARE @status = 'Active';
+DECLARE @min_amt = 5000;
+
+EXEC('SELECT * FROM dbo.Orders WHERE Status = @p0 AND Amount > @p1') 
+    AT mssql_conn 
+    WITH(@status, @min_amt)
+    INTO #filtered_orders;
+```
+
+### 9.5 Stored Procedure Execution
+
+Executes a stored procedure on a remote connection. Parameters can be passed by position or by name.
+
+```sql
+-- Positional parameters
+EXEC mssql_conn.dbo.sp_ArchiveData '2024-01-01', 0;
+
+-- Named parameters
+EXEC mssql_conn.dbo.sp_ProcessBatch @BatchId = 42, @Mode = 'FULL';
+
+-- With output parameters (if supported by the connector)
+DECLARE @RetVal INT;
+EXEC mssql_conn.dbo.sp_GetCount @Count = @RetVal OUTPUT;
+```
+
+### 9.6 Security & Behavior
+
+- **WHAT_IF Support**: When `SET WHAT_IF ON` is active, `EXEC` against a remote connection will log the SQL that *would* be executed without actually transmitting it.
+- **SQL Injection**: Always prefer parameterized execution (`WITH`) or block pushdown over string concatenation when building SQL strings with user-provided input.
+- **Transaction Scope**: Remote `EXEC` statements participate in the ambient ETL-SQL transaction if `BEGIN TRANSACTION` has been called and the connector supports it.
+

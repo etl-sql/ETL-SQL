@@ -1527,6 +1527,9 @@ Appends data to a table.
 INSERT INTO TargetTable SELECT * FROM SourceTable;
 ```
 
+#### EXPORT (Planned)
+The `EXPORT` statement is designed to push local result sets to external sinks such as configured servers, applications, or file dumps. It is currently mapped in the engine's Abstract Syntax Tree (AST) but **not yet implemented**. Any attempts to use `EXPORT` will not function. Please use `INSERT INTO <connection>` as the primary mechanism for routing data.
+
 ### Job & Profile Management
 
 #### CREATE JOB

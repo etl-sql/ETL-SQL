@@ -19,7 +19,6 @@ namespace ETL_SQL.TUI
             {
                 ServiceProvider = TuiDependencyInjectionSetup.BuildServiceProvider();
 
-                Logger.Factory = ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>();
 
                 var scheduler = ServiceProvider.GetRequiredService<SchedulerService>();
                 scheduler.Start();

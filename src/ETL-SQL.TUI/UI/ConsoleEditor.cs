@@ -62,9 +62,11 @@ namespace ETL_SQL.TUI.UI
             _metadata = new MetadataManager(_connections);
             _autocomplete = new AutocompleteController(_buffer, _renderer, _metadata, _connections, _logger);
             _input = new InputHandler(this, _buffer, _renderer, _autocomplete);
-            
-            Logger.SuppressConsole = true;
-            Logger.OnMessage = (msg, color) => _evaluator.Log(msg, color);
+            if (_logger is LoggerService ls)
+            {
+                ls.SuppressConsole = true;
+                ls.OnMessage += (msg, color) => _evaluator.Log(msg, color);
+            }
         }
 
         /// <summary>Performs asynchronous initialization, including loading the initial file.</summary>

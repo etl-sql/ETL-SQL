@@ -26,10 +26,7 @@ namespace ETL_SQL.Engine.Handlers
             }
             else
             {
-                // For tables, we might need to aggregate or look at table-level metadata
-                // Since ILineageTracker doesn't have GetTableMetadata explicitly in the interface yet,
-                // we'll check the interface again.
-                metadata = new Dictionary<string, string>();
+                metadata = context.LineageTracker.GetTableMetadata(stmt.TableName);
             }
 
             var table = new DataTable();

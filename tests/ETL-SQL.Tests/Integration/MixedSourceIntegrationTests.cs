@@ -20,8 +20,6 @@ namespace ETL_SQL.Tests
         public async Task TestJsonToParquetToMsSql()
         {
             AnsiConsole.MarkupLine("  - Scenario: JSON -> Parquet -> MSSQL...");
-            ETL_SQL.Common.Logger.IsVerbose = true;
-            ETL_SQL.Common.Logger.SuppressConsole = false;
             
             string jsonPath = Path.Combine(AppContext.BaseDirectory, "users.json");
             string parquetPath = Path.Combine(AppContext.BaseDirectory, "users.parquet");
