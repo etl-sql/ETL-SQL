@@ -143,6 +143,25 @@ DECLARE @c INT = @a + @b;
             Assert.All(results, v => Assert.Equal(3, v));
         }
 
+        // ── Auto-generated SessionId (CQ-5.4) ────────────────────────────────
+
+        [Fact]
+        public void NewEvaluator_AutoGeneratesSessionId()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            Assert.NotNull(ev.SessionId);
+            Assert.Equal(8, ev.SessionId!.Length);
+        }
+
+        [Fact]
+        public void TwoNewEvaluators_HaveDistinctAutoSessionIds()
+        {
+            var sp = DependencyInjectionSetup.BuildServiceProvider();
+            var e1 = sp.GetRequiredService<Evaluator>();
+            var e2 = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            Assert.NotEqual(e1.SessionId, e2.SessionId);
+        }
+
         // ── SessionId is stamped and isolated per evaluator ───────────────────
 
         [Fact]

@@ -27,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
 
             var connNameObj = await context.EvaluateValue(stmt.ConnectionName, new Row());
             string connName = connNameObj?.ToString() ?? "";
-            _logger.Debug($"Executing remote block on {connName}");
+            _logger.Debug("Executing remote block on {ConnName}", connName);
 
             if (context.Connections.TryGetValue(connName, out var source) && source is IDatabaseSource db)
             {

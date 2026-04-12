@@ -393,3 +393,105 @@ LintStatementHandler.Execute(LintStatement, IExecutionContext)
 `Linter.AnalyzeAsync` iterates all registered rules sequentially; each rule receives the full `Script` AST and the `ILintContext`. Rules return `IEnumerable<LintResult>` — zero or more findings per rule.
 
 `ILintContext` exposes the `IConnectorRegistry` so dialect-aware rules (like `DialectKeywordRule`) can query which keywords and functions are excluded for a given connector.
+
+---
+
+## Scale & Large Dataset Handling
+
+ETL-SQL processes data in batches and can spill intermediate results to disk when in-memory thresholds are exceeded. This section covers where those decisions are made and what mechanisms are in play. For design rationale, profiling targets, and the future roadmap see [`Docs/Strategy/LargeDatasets.md`](../Strategy/LargeDatasets.md).
+
+### SelectStatementHandler execution strategies
+
+Every SELECT goes through one of two internal paths chosen at the start of `EvaluateSelect`:
+
+**Streaming path** (`canStream = true`)
+
+Qualifies when the query has no GROUP BY, no window functions, no ORDER BY, and no OFFSET. Rows flow from the source in `BatchSize`-row chunks, each chunk is filtered and projected, and the result batches are yielded immediately. Memory usage is bounded by `BatchSize` (default 10,000 rows) at any moment.
+
+```
+Source.ReadBatches(BatchSize)
+  → filter WHERE inline
+  → project SELECT columns
+  → yield DataTable batch       ← caller receives batches as they arrive
+```
+
+**Multi-pass path** (`canStream = false`)
+
+Activates when ORDER BY, window functions, GROUP BY, or GROUPING SETS are present, or when JOINs require buffering. Execution proceeds in pipeline stages:
+
+```
+1. Acquire rows (join / aggregate / buffer — see below)
+2. Apply WHERE (if not already applied inline)
+3. GROUP BY / aggregate
+4. Window functions
+5. ORDER BY / sort
+6. OFFSET / TOP / LIMIT
+7. Yield result batches
+```
+
+### Streaming aggregate (GROUP BY without joins)
+
+For `SELECT ... GROUP BY` with no JOINs and no GROUPING SETS, the multi-pass path does **not** buffer the full source. Instead it streams source rows directly into `ExternalAggregateEngine`, with the WHERE clause applied as an inline filter:
+
+```
+Source.ReadBatches()
+  → WhereStream (inline filter, no buffer)
+  → ExternalAggregateEngine.ApplyAggregationExternal(stream, ...)
+      → partition rows to 32 disk files by GROUP BY key hash
+      → aggregate each partition in-memory
+      → return List<Row> of group results
+```
+
+This means a 50M-row CSV with `SELECT region, SUM(revenue) GROUP BY region` never holds all 50M rows in RAM. The `ExternalAggregateEngine` streams them into 32 partition files and processes one partition at a time.
+
+Queries that cannot use this path (and still buffer first):
+- Queries with JOINs — the join engine buffers the left side
+- `GROUPING SETS` / `ROLLUP` / `CUBE` — multi-dimensional grouping requires a full pass
+- Window functions alongside GROUP BY — window engine requires the complete group result
+
+### External engines — thresholds and behaviour
+
+Three external engines activate automatically when row counts exceed thresholds. All three write to `%TEMP%\ETL-SQL\` and increment `Evaluator.TotalSpilledBytes`.
+
+**ExternalSortEngine** (`ETL-SQL.Engine/Engines/ExternalSortEngine.cs`)
+
+| Trigger | Chunk size | Algorithm |
+|---|---|---|
+| `allBufferedRows.Count > 100,000` in ORDER BY path | 100,000 rows | External k-way merge sort |
+
+Sorted chunks are written as newline-delimited JSON, then merged in a single pass. Called from `SelectStatementHandler` when the ORDER BY input exceeds 100k rows.
+
+**ExternalJoinEngine** (`ETL-SQL.Engine/Engines/ExternalJoinEngine.cs`)
+
+| Trigger | Partition count | Algorithm |
+|---|---|---|
+| Right-side join buffer > 100,000 rows | 32 | Hash partitioning + in-memory join per partition |
+
+`JoinEngine` buffers the left side up to 100k rows. If the right side also exceeds 100k, both sides are hash-partitioned to disk and each partition pair is joined in-memory. Called from `JoinEngine.ApplyJoins`.
+
+**ExternalAggregateEngine** (`ETL-SQL.Engine/Engines/ExternalAggregateEngine.cs`)
+
+| Trigger | Partition count | Algorithm |
+|---|---|---|
+| Always used for streaming aggregate path | 32 | Hash partitioning + in-memory aggregate per partition |
+| `allBufferedRows.Count > 100,000` in legacy path | 32 | Same |
+
+Rows are routed to one of 32 partition files by the hash of their GROUP BY key(s). Each partition is then aggregated in-memory by `AggregateEngine`. Because partitioning is always done via file I/O, `TotalSpilledBytes` always increases when `ExternalAggregateEngine` runs, which makes it a reliable signal in tests.
+
+### Batch size and spill configuration
+
+`Evaluator.BatchSize` (default 10,000) controls how many rows each `IDataSource.ReadBatches()` call yields per chunk. It is the primary lever for memory / throughput trade-off on the streaming path.
+
+`context.LastResult` is always capped at `MaxLastResultRows` (50,000) for display — the full row count is available via `TotalRowsMatched` regardless of the cap.
+
+There is currently no configuration for the external engine thresholds (100k) or partition counts (32). These are compile-time constants in each engine class.
+
+### What is not yet done (Phase 8A remaining items)
+
+**`InMemoryDataSource` spill-to-disk (8A-2)**
+
+Even with streaming and external engines, a `#temp` table is still backed entirely by `InMemoryDataSource._batches` (a `List<DataTable>`). A 50M-row `SELECT * INTO #t FROM file.csv` streams correctly through the handler but all 50M rows accumulate in the destination `InMemoryDataSource`. Fixing this requires `InMemoryDataSource` to overflow pages to disk when a configurable `SpillThresholdRows` is exceeded. Detailed design is in `LargeDatasets.md` §5.
+
+**Chunked `FOR` loop pushdown (8A-3)**
+
+`FOR @row IN (SELECT ...)` loads all rows from the source into memory before iterating. When the source is a SQL connector, it should re-issue the query with `OFFSET / FETCH` pagination per batch instead. Not yet implemented.

@@ -127,8 +127,8 @@ namespace ETL_SQL.Engine.Handlers
             await File.WriteAllTextAsync(publicKeyFile, publicKeyPem);
 
             _logger.WriteLine($"SSH key pair generated successfully.");
-            _logger.Debug($"Private key saved to: {privateKeyFile}");
-            _logger.Debug($"Public key saved to: {publicKeyFile}");
+            _logger.Debug("Private key saved to: {PrivateKeyFile}", privateKeyFile);
+            _logger.Debug("Public key saved to: {PublicKeyFile}", publicKeyFile);
         }
     }
 }

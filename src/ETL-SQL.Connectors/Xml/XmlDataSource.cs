@@ -278,7 +278,7 @@ namespace ETL_SQL.Connectors.Xml
                 }
                 return Enumerable.Empty<string>();
             }
-            catch (Exception ex) { _logger.Debug($"[XmlDataSource.GetColumnsAsync] Failed to read columns from '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+            catch (Exception ex) { _logger.Debug("[XmlDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
         }
 
         public object? Snapshot() => null;

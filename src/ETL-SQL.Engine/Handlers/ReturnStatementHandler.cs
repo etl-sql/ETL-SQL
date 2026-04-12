@@ -22,7 +22,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (ReturnStatement)statement;
             
-            _logger.Debug($"Executing RETURN");
+            _logger.Debug("Executing RETURN");
             var val = stmt.ReturnValue != null ? await context.EvaluateValue(stmt.ReturnValue, new Row()) : null;
             throw new ReturnException(val);
         }

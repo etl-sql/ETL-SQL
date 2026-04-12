@@ -141,11 +141,11 @@ namespace ETL_SQL.Engine.Services
                             await dt.AddRowAsync(row);
                         }
                         await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
-                        _logger.Debug($"[SESSION] Restored {rows.Count} rows into temp table {info.Name}");
+                        _logger.Debug("[SESSION] Restored {RowCount} rows into temp table {TableName}", rows.Count, info.Name);
                     }
                     else
                     {
-                        _logger.Debug($"[SESSION] Data file for {info.Name} found but contained 0 rows.");
+                        _logger.Debug("[SESSION] Data file for {TableName} found but contained 0 rows.", info.Name);
                     }
                 }
                 catch (Exception ex)
@@ -155,7 +155,7 @@ namespace ETL_SQL.Engine.Services
             }
             else
             {
-                _logger.Debug($"[SESSION] No data file found for temp table {info.Name} at {info.DataFilePath}");
+                _logger.Debug("[SESSION] No data file found for temp table {TableName} at {DataFilePath}", info.Name, info.DataFilePath);
             }
             
             return ds;

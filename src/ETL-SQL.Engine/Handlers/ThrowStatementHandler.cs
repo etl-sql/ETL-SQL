@@ -23,7 +23,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (ThrowStatement)statement;
             
-            _logger.Debug($"Executing THROW");
+            _logger.Debug("Executing THROW");
             object? msgObj = stmt.Message != null ? await context.EvaluateValue(stmt.Message, new Row()) : "An explicit error was thrown.";
             throw new ExecutionException(msgObj?.ToString() ?? "An explicit error was thrown.");
         }

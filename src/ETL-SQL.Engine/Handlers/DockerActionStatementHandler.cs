@@ -23,7 +23,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             if (statement is not DockerActionStatement actionStmt) return;
 
-            _logger.Debug($"Docker Action: {actionStmt.Action} on {actionStmt.Alias}");
+            _logger.Debug("Docker Action: {Action} on {Alias}", actionStmt.Action, actionStmt.Alias);
 
             if (context.IsWhatIf)
             {

@@ -150,7 +150,7 @@ namespace ETL_SQL.Connectors.FlatFile
                 if (options.TryGetValue("CULTURE", out var cult))
                 {
                     try { _culture = new CultureInfo(cult); }
-                    catch { _logger.Debug($"[FlatFileDataSource] Invalid culture '{cult}', falling back to Invariant."); }
+                    catch { _logger.Debug("[FlatFileDataSource] Invalid culture '{Culture}', falling back to Invariant.", cult); }
                 }
 
                 if (options.TryGetValue("TEXT_QUALIFIER", out var tq))
@@ -609,7 +609,7 @@ namespace ETL_SQL.Connectors.FlatFile
             {
                 tempFile = System.IO.Path.GetTempFileName();
                 try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch (Exception ex) { _logger.Debug($"[FlatFileDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+                catch (Exception ex) { _logger.Debug("[FlatFileDataSource.GetColumnsAsync] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
             }
             else if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
@@ -623,7 +623,7 @@ namespace ETL_SQL.Connectors.FlatFile
                         else return Enumerable.Empty<string>();
                     }
                 }
-                catch (Exception ex) { _logger.Debug($"[FlatFileDataSource.GetColumnsAsync] Failed to decompress '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+                catch (Exception ex) { _logger.Debug("[FlatFileDataSource.GetColumnsAsync] Failed to decompress '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
             }
 
             try
@@ -648,7 +648,7 @@ namespace ETL_SQL.Connectors.FlatFile
                 if (_hasHeader) return headers.Select(h => h.Trim());
                 return headers.Select((h, i) => $"Col{i + 1}");
             }
-            catch (Exception ex) { _logger.Debug($"[FlatFileDataSource.GetColumnsAsync] Failed to read headers from '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+            catch (Exception ex) { _logger.Debug("[FlatFileDataSource.GetColumnsAsync] Failed to read headers from '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
             finally
             {
                 TempFileHelper.SafeDelete(tempFile, _logger);

@@ -23,7 +23,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (IfStatement)statement;
             
-            _logger.Debug($"Evaluating IF condition");
+            _logger.Debug("Evaluating IF condition");
             if (await context.EvaluateCondition(stmt.Condition, new Row()))
             {
                 await context.EvaluateStatement(stmt.IfBody);
@@ -34,7 +34,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 foreach (var elseif in stmt.ElseIfClauses)
                 {
-                    _logger.Debug($"Evaluating ELSE IF condition");
+                    _logger.Debug("Evaluating ELSE IF condition");
                     if (await context.EvaluateCondition(elseif.Condition, new Row()))
                     {
                         await context.EvaluateStatement(elseif.Body);
@@ -45,7 +45,7 @@ namespace ETL_SQL.Engine.Handlers
 
             if (stmt.ElseBody != null)
             {
-                _logger.Debug($"Executing ELSE block");
+                _logger.Debug("Executing ELSE block");
                 await context.EvaluateStatement(stmt.ElseBody);
             }
         }

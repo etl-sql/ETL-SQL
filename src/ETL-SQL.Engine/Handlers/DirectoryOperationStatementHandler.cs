@@ -59,7 +59,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
 
-            _logger.Debug($"Directory Operation: {stmt.Type} on {path}{(dest != null ? $" -> {dest}" : "")}");
+            _logger.Debug("Directory Operation: {OperationType} on {Path}{Dest}", stmt.Type, path, dest != null ? $" -> {dest}" : "");
 
             if (context.IsWhatIf)
             {

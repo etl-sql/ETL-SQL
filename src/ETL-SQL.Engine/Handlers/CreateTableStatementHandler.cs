@@ -18,7 +18,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (CreateTableStatement)statement;
             
-            _logger.Debug($"Creating table {stmt.TargetTable.TableName} on {stmt.TargetTable.ConnectionName ?? "local"}");
+            _logger.Debug("Creating table {TableName} on {ConnectionName}", stmt.TargetTable.TableName, stmt.TargetTable.ConnectionName ?? "local");
             await context.EvaluateCreateTable(stmt);
         }
     }

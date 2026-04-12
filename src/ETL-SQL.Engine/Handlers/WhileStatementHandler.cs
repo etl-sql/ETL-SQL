@@ -23,10 +23,10 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (WhileStatement)statement;
             
-            _logger.Debug($"Starting WHILE loop");
+            _logger.Debug("Starting WHILE loop");
             while (true)
             {
-                _logger.Debug($"Evaluating WHILE condition");
+                _logger.Debug("Evaluating WHILE condition");
                 var conditionResult = await context.EvaluateValue(stmt.Condition, new Row());
                 bool condition = conditionResult is bool b && b;
                 

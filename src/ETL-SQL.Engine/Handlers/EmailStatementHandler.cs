@@ -94,7 +94,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // 3. Send via WriteBatches
-            _logger.Debug($"Sending email to {row["To"]} via {connName ?? "default SMTP"}");
+            _logger.Debug("Sending email to {To} via {ConnName}", row["To"], connName ?? "default SMTP");
             
             if (context.IsWhatIf)
             {

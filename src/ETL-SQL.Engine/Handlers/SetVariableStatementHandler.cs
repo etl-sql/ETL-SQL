@@ -24,7 +24,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (SetVariableStatement)statement;
             
-            _logger.Debug($"Setting variable {stmt.VariableName}");
+            _logger.Debug("Setting variable {VariableName}", stmt.VariableName);
 
             var variables = (IVariableContext)context;
             var evaluator = (IEvaluationContext)context;

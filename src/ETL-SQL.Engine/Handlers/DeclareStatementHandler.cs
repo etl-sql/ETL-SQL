@@ -25,7 +25,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (DeclareStatement)statement;
             
-            _logger.Debug($"Declaring variable {stmt.VariableName} as {stmt.DataType}");
+            _logger.Debug("Declaring variable {VariableName} as {DataType}", stmt.VariableName, stmt.DataType);
 
             var variables = (IVariableContext)context;
             var evaluator = (IEvaluationContext)context;

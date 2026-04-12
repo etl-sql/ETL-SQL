@@ -29,7 +29,7 @@ namespace ETL_SQL.Engine.Handlers
             
 
             string targetConnName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
-            _logger.Debug($"Merging into {targetConnName}");
+            _logger.Debug("Merging into {TargetConnName}", targetConnName);
             context.LineageTracker.Record(targetConnName, stmt.GetSourceTables(), "MERGE", line: stmt.Line, column: stmt.Column);
 
             var targetSource = await context.ResolveDataSourceAsync(stmt.TargetTable);
@@ -136,7 +136,7 @@ namespace ETL_SQL.Engine.Handlers
 
             if (isEquality)
             {
-                _logger.Debug($"Optimizing merge with O(S+T) Hash Join on columns: [{string.Join(", ", targetCols!)}]");
+                _logger.Debug("Optimizing merge with O(S+T) Hash Join on columns: [{Columns}]", string.Join(", ", targetCols!));
                 var targetIndex = new Dictionary<CompositeKey, List<Row>>();
                 foreach(var tr in targetRows)
                 {
@@ -231,7 +231,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 else
                 {
-                    _logger.Debug($"Finalizing MERGE by overwriting {target.GetType().Name}");
+                    _logger.Debug("Finalizing MERGE by overwriting {TargetType}", target.GetType().Name);
                     var finalBatch = await CreateDataTable(targetRows, await target.GetColumnsAsync());
                     await target.WriteBatches(new[] { finalBatch }.ToAsyncEnumerable());
                 }

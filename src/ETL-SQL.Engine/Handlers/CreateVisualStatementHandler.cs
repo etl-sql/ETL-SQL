@@ -36,7 +36,7 @@ namespace ETL_SQL.Engine.Handlers
             // Register / overwrite visual definition
             context.VisualDefinitions[stmt.Name] = stmt;
 
-            _logger.Debug($"Visual '{stmt.Name}' ({stmt.VisualType}) registered.");
+            _logger.Debug("Visual '{VisualName}' ({VisualType}) registered.", stmt.Name, stmt.VisualType);
             context.Log($"Visual '{stmt.Name}' created.");
 
             return Task.CompletedTask;

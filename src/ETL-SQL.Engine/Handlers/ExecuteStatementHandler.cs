@@ -37,7 +37,7 @@ namespace ETL_SQL.Engine.Handlers
                 return;
             }
 
-            _logger.Debug($"Executing procedure {stmt.ProcedureName}");
+            _logger.Debug("Executing procedure {ProcedureName}", stmt.ProcedureName);
             var args = new List<object?>();
             foreach (var param in stmt.Parameters)
             {
@@ -49,7 +49,7 @@ namespace ETL_SQL.Engine.Handlers
 
         private async Task ExecuteScript(ExecuteStatement stmt, IExecutionContext context)
         {
-            _logger.Debug($"Running sub-script: {stmt.ProcedureName}");
+            _logger.Debug("Running sub-script: {ScriptPath}", stmt.ProcedureName);
 
             if (!File.Exists(stmt.ProcedureName))
                 throw new ExecutionException($"Script file not found: {stmt.ProcedureName}");

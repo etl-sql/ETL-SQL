@@ -33,7 +33,7 @@ namespace ETL_SQL.Engine.Handlers
                 context.Connections[connName] = new InMemoryDataSource();
             }
 
-            _logger.Debug($"Inserting into {connName}");
+            _logger.Debug("Inserting into {ConnName}", connName);
             
             if (stmt.SelectQuery != null && stmt.SelectQuery is SelectStatement select)
             {
@@ -82,7 +82,7 @@ namespace ETL_SQL.Engine.Handlers
             var destination = await context.ResolveDataSourceAsync(stmt.TargetTable);
             if (destination == null)
                  throw new ExecutionException($"Unknown connection: {connName} at Line {stmt.Line}");
-            _logger.Debug($"Destination resolved as {destination.GetType().Name}");
+            _logger.Debug("Destination resolved as {DestinationType}", destination.GetType().Name);
 
             if (destination is IDatabaseSource sqlDest)
             {
@@ -107,7 +107,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 else if (stmt.Values != null)
                 {
-                    _logger.Debug($"Strategy: Remote SQL Values ({stmt.Values.Count} rows)");
+                    _logger.Debug("Strategy: Remote SQL Values ({RowCount} rows)", stmt.Values.Count);
                     var rowStrings = stmt.Values.Select(row => "(" + string.Join(", ", row.Select(v => context.CompileExpression(v, sqlDest.Dialect))) + ")");
                     var colList = stmt.Columns != null ? "(" + string.Join(", ", stmt.Columns) + ") " : "";
                     var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable)} {colList}VALUES {string.Join(", ", rowStrings)}";

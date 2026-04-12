@@ -298,6 +298,10 @@ namespace ETL_SQL.Engine
                 _statementHandlers[typeof(SetOperationStatement)] = selectHandler;
             }
 
+            // Assign a short session ID for log correlation across concurrent sessions.
+            // Callers can override this after construction if they have a meaningful ID.
+            SessionId = Guid.NewGuid().ToString("N")[..8];
+
             _logger.Info("Evaluator initialized.");
 
             // Standard OnMessage hook for capturing output into the Messages list
@@ -338,6 +342,21 @@ namespace ETL_SQL.Engine
                 };
                 ExecutionTree.AddNode(scriptNode);
                 CurrentNodeId = scriptNode.Id;
+
+                // Inject script metadata into LineageTracker
+                LineageTracker.GlobalMetadata.Clear();
+                foreach (var kv in script.Metadata)
+                {
+                    LineageTracker.GlobalMetadata[kv.Key] = kv.Value;
+                }
+                if (!LineageTracker.GlobalMetadata.ContainsKey("author"))
+                {
+                    LineageTracker.GlobalMetadata["author"] = Environment.UserName;
+                }
+                if (!LineageTracker.GlobalMetadata.ContainsKey("engine_version"))
+                {
+                    LineageTracker.GlobalMetadata["engine_version"] = LanguageMetadata.EngineVersion;
+                }
 
                 foreach (var statement in script.Statements)
                 {

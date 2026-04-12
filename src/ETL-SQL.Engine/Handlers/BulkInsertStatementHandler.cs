@@ -100,7 +100,7 @@ namespace ETL_SQL.Engine.Handlers
 
             try
             {
-                _logger.Debug($"Bulk loading from {stmt.FilePath} into {stmt.TargetTable.TableName}");
+                _logger.Debug("Bulk loading from {FilePath} into {TableName}", stmt.FilePath, stmt.TargetTable.TableName);
                 
                 int batchSize = 10000;
                 if (options.TryGetValue("BATCHSIZE", out var bs) && int.TryParse(bs, out var bsv))

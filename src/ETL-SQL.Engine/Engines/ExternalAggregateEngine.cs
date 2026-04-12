@@ -120,15 +120,31 @@ namespace ETL_SQL.Engine.Engines
             string? line;
             while ((line = await reader.ReadLineAsync()) != null)
             {
-                var cols = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(line);
-                if (cols != null) 
+                var cols = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(line);
+                if (cols != null)
                 {
                     var row = new Row();
-                    foreach (var kvp in cols) row[kvp.Key] = kvp.Value;
+                    foreach (var kvp in cols) row[kvp.Key] = JsonElementToValue(kvp.Value);
                     rows.Add(row);
                 }
             }
             return rows;
         }
+
+        /// <summary>
+        /// Converts a <see cref="System.Text.Json.JsonElement"/> to the closest .NET primitive.
+        /// Required because deserializing to <c>object?</c> yields boxed JsonElement values
+        /// that cannot be used by AggregateEngine's Convert.ToDecimal / ToString calls.
+        /// </summary>
+        private static object? JsonElementToValue(System.Text.Json.JsonElement element) =>
+            element.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.Number  => element.TryGetDecimal(out var d) ? d : (object?)element.GetDouble(),
+                System.Text.Json.JsonValueKind.String  => element.GetString(),
+                System.Text.Json.JsonValueKind.True    => (object?)true,
+                System.Text.Json.JsonValueKind.False   => (object?)false,
+                System.Text.Json.JsonValueKind.Null    => null,
+                _                                      => element.GetRawText()
+            };
     }
 }

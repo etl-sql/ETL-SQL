@@ -105,7 +105,7 @@ namespace ETL_SQL.Connectors.Json
                         doc = await JsonDocument.ParseAsync(stream); 
                     }
                 }
-                catch (Exception ex) { _logger.Debug($"[JsonDataSource.ReadBatches] Failed to parse JSON '{effectivePath}': {ex.Message}"); yield break; }
+                catch (Exception ex) { _logger.Debug("[JsonDataSource.ReadBatches] Failed to parse JSON '{FilePath}': {Message}", effectivePath, ex.Message); yield break; }
 
                 using (doc)
                 {
@@ -194,7 +194,7 @@ namespace ETL_SQL.Connectors.Json
             {
                 tempFile = System.IO.Path.GetTempFileName();
                 try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch (Exception ex) { _logger.Debug($"[JsonDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+                catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
             }
             else if (_compress && _filePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
@@ -208,7 +208,7 @@ namespace ETL_SQL.Connectors.Json
                         else return Enumerable.Empty<string>();
                     }
                 }
-                catch (Exception ex) { _logger.Debug($"[JsonDataSource.GetColumnsAsync] Failed to decompress '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+                catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to decompress '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
             }
 
             try
@@ -217,7 +217,7 @@ namespace ETL_SQL.Connectors.Json
                 using var doc = JsonDocument.Parse(stream);
                 return JsonExtractor.GetColumns(doc, _rootPath);
             }
-            catch (Exception ex) { _logger.Debug($"[JsonDataSource.GetColumnsAsync] Failed to read columns from '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+            catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
             finally
             {
                 TempFileHelper.SafeDelete(tempFile, _logger);

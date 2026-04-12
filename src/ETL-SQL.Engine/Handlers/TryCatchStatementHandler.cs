@@ -23,14 +23,14 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (TryCatchStatement)statement;
             
-            _logger.Debug($"Entering TRY block");
+            _logger.Debug("Entering TRY block");
             try
             {
                 await context.EvaluateStatement(stmt.TryBody);
             }
             catch (Exception ex)
             {
-                _logger.Debug($"Exception caught in TRY block: {ex.Message}");
+                _logger.Debug("Exception caught in TRY block: {Message}", ex.Message);
                 if (!context.ContainsVariable("@ERROR_MESSAGE"))
                 {
                     context.DeclareVariable("@ERROR_MESSAGE", ex.Message);

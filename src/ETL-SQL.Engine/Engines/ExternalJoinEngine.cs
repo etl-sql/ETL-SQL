@@ -85,7 +85,7 @@ namespace ETL_SQL.Engine.Engines
                     var json = System.Text.Json.JsonSerializer.Serialize(row.Columns);
                     var bytes = System.Text.Encoding.UTF8.GetByteCount(json) + 2; // + newline
                     _context.TotalSpilledBytes += bytes;
-                    if (prefix == "left" && bytes > 0 && Math.Abs(hash % 20000) == 0) _logger.Debug($"[DIAG] Spilled {bytes} bytes to partition {pIdx}. Total bytes spilled: {_context.TotalSpilledBytes}");
+                    if (prefix == "left" && bytes > 0 && Math.Abs(hash % 20000) == 0) _logger.Debug("[DIAG] Spilled {Bytes} bytes to partition {PartitionIndex}. Total bytes spilled: {TotalSpilledBytes}", bytes, pIdx, _context.TotalSpilledBytes);
                     await writers[pIdx].WriteLineAsync(json);
                 }
             }
@@ -98,7 +98,7 @@ namespace ETL_SQL.Engine.Engines
                     w.Flush(); w.Close(); 
                 }
                 _context.PartitionsCount += usedPartitions;
-                _logger.Debug($"Finished partitioning {prefix}. Used {usedPartitions} partitions. Context PartitionsCount: {_context.PartitionsCount}");
+                _logger.Debug("Finished partitioning {Prefix}. Used {UsedPartitions} partitions. Context PartitionsCount: {PartitionsCount}", prefix, usedPartitions, _context.PartitionsCount);
             }
 
             return paths;

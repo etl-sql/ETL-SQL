@@ -299,5 +299,139 @@ namespace ETL_SQL.Tests.Performance
                 $"Expected spill for {LEFT_SIDE}x{RIGHT_SIDE} join. Before={before}, After={e.TotalSpilledBytes}");
             _output.WriteLine($"JoinEngine spilled {e.TotalSpilledBytes - before:N0} bytes. Result rows: {e.LastResult.TotalRowsMatched:N0}");
         }
+
+        // ─── Streaming aggregate (8A-1) ──────────────────────────────────────────
+        //
+        // These tests verify that SELECT ... GROUP BY against a large source no longer
+        // materializes the full source into a List<Row> before aggregation. The proxy
+        // signal is TotalSpilledBytes: ExternalAggregateEngine always spills during
+        // partitioning, so a non-zero value confirms the streaming path was taken rather
+        // than the in-memory AggregateEngine (which produces zero spill bytes).
+
+        private static async Task<Evaluator> EvaluatorWithLargeSource(int rowCount, int categoryCount = 3)
+        {
+            var e = NewEvaluator();
+
+            // Build a DataTable large enough to trigger ExternalAggregateEngine spill
+            var schema = new TableSchema(new[] { "category", "value" });
+            var table  = new DataTable();
+            table.SetColumns(new[] { "category", "value" });
+
+            for (int i = 0; i < rowCount; i++)
+            {
+                var r = new Row(schema);
+                r["category"] = ((char)('A' + (i % categoryCount))).ToString();
+                r["value"]    = (decimal)(i + 1);
+                await table.AddRowAsync(r);
+            }
+
+            var mem = new InMemoryDataSource();
+            await mem.WriteBatches(new[] { table }.ToAsyncEnumerable());
+            e.Connections["#large"] = mem;
+            return e;
+        }
+
+        [Fact]
+        public async Task StreamingAggregate_GroupBy_ProducesCorrectCounts()
+        {
+            // 150k rows, 3 categories (A/B/C) → each group should have exactly 50k rows
+            const int ROWS = 150_000;
+            const int CATS = 3;
+            var e = await EvaluatorWithLargeSource(ROWS, CATS);
+
+            await e.Evaluate(new Parser(new Lexer(
+                "SELECT category, COUNT(*) AS cnt FROM #large GROUP BY category ORDER BY category;")
+                .Tokenize()).Parse());
+
+            Assert.NotNull(e.LastResult);
+            Assert.Equal(CATS, e.LastResult.Rows.Count);
+
+            foreach (var row in e.LastResult.Rows)
+            {
+                var cnt = Convert.ToInt64(row["cnt"]);
+                Assert.Equal(ROWS / CATS, cnt);
+            }
+        }
+
+        [Fact]
+        public async Task StreamingAggregate_GroupBy_SpillsBytes()
+        {
+            // Confirms ExternalAggregateEngine ran (not in-memory AggregateEngine).
+            // ExternalAgg always writes partition files, so TotalSpilledBytes must increase.
+            const int ROWS = 150_000;
+            var e    = await EvaluatorWithLargeSource(ROWS);
+            long before = e.TotalSpilledBytes;
+
+            await e.Evaluate(new Parser(new Lexer(
+                "SELECT category, SUM(value) AS total FROM #large GROUP BY category;")
+                .Tokenize()).Parse());
+
+            Assert.True(e.TotalSpilledBytes > before,
+                $"Expected TotalSpilledBytes to increase. Before={before}, After={e.TotalSpilledBytes}");
+            _output.WriteLine($"Streaming aggregate spilled {e.TotalSpilledBytes - before:N0} bytes for {ROWS:N0} rows.");
+        }
+
+        [Fact]
+        public async Task StreamingAggregate_WithWhere_FiltersBeforeAggregating()
+        {
+            // 150k rows: A=50k, B=50k, C=50k.
+            // WHERE category <> 'C' should produce only A and B groups.
+            const int ROWS = 150_000;
+            const int CATS = 3;
+            var e = await EvaluatorWithLargeSource(ROWS, CATS);
+
+            await e.Evaluate(new Parser(new Lexer(
+                "SELECT category, COUNT(*) AS cnt FROM #large WHERE category <> 'C' GROUP BY category ORDER BY category;")
+                .Tokenize()).Parse());
+
+            Assert.NotNull(e.LastResult);
+            Assert.Equal(2, e.LastResult.Rows.Count);
+
+            var categories = e.LastResult.Rows.Select(r => r["category"]?.ToString()).ToHashSet();
+            Assert.Contains("A", categories);
+            Assert.Contains("B", categories);
+            Assert.DoesNotContain("C", categories);
+
+            foreach (var row in e.LastResult.Rows)
+                Assert.Equal(ROWS / CATS, Convert.ToInt64(row["cnt"]));
+        }
+
+        [Fact]
+        public async Task StreamingAggregate_ScalarAggregate_ReturnsOneRow()
+        {
+            // SELECT COUNT(*) with no GROUP BY — the scalar aggregate streaming path.
+            const int ROWS = 120_000;
+            var e = await EvaluatorWithLargeSource(ROWS);
+
+            await e.Evaluate(new Parser(new Lexer(
+                "SELECT COUNT(*) AS total_rows FROM #large;")
+                .Tokenize()).Parse());
+
+            Assert.NotNull(e.LastResult);
+            Assert.Single(e.LastResult.Rows);
+            Assert.Equal(ROWS, Convert.ToInt64(e.LastResult.Rows[0]["total_rows"]));
+        }
+
+        [Fact]
+        public async Task StreamingAggregate_Into_WritesCorrectResultToTempTable()
+        {
+            // Verify the streaming aggregate path works end-to-end when combined with INTO.
+            const int ROWS = 120_000;
+            const int CATS = 4;
+            var e = await EvaluatorWithLargeSource(ROWS, CATS);
+            var parser = new Parser(new Lexer(string.Empty).Tokenize());
+
+            await e.Evaluate(new Parser(new Lexer(
+                "SELECT category, COUNT(*) AS cnt INTO #summary FROM #large GROUP BY category;")
+                .Tokenize()).Parse());
+
+            await e.Evaluate(new Parser(new Lexer(
+                "SELECT SUM(cnt) AS grand_total FROM #summary;")
+                .Tokenize()).Parse());
+
+            Assert.NotNull(e.LastResult);
+            Assert.Single(e.LastResult.Rows);
+            Assert.Equal(ROWS, Convert.ToInt64(e.LastResult.Rows[0]["grand_total"]));
+        }
     }
 }

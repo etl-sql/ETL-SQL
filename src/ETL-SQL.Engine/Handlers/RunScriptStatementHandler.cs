@@ -34,7 +34,7 @@ namespace ETL_SQL.Engine.Handlers
             
             string scriptPath = pathObj.ToString()!;
 
-            _logger.Debug($"Running sub-script: {scriptPath}");
+            _logger.Debug("Running sub-script: {ScriptPath}", scriptPath);
 
             if (!File.Exists(scriptPath))
                 throw new ExecutionException($"Script file not found: {scriptPath}");

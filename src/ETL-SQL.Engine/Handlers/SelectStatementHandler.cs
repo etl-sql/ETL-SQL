@@ -33,7 +33,7 @@ namespace ETL_SQL.Engine.Handlers
             if (statement is SelectStatement selPush && selPush.IntoTable == null && context.IsSqlPushdown(selPush.FromTable.ConnectionName ?? selPush.FromTable.TableName))
             {
                 var connName = selPush.FromTable.ConnectionName ?? selPush.FromTable.TableName;
-                _logger.Debug($"Pushing down SELECT to remote connection: {connName}");
+                _logger.Debug("Pushing down SELECT to remote connection: {ConnName}", connName);
                 var conn = (IDatabaseSource)context.Connections[connName];
                 var sql = context.CompileQuery(selPush, conn.Dialect);
                 var pushdownBatches = conn.ExecuteRawSql(sql);
@@ -57,7 +57,7 @@ namespace ETL_SQL.Engine.Handlers
                         else if (!capped)
                         {
                             capped = true;
-                            _logger.Debug($"[SELECT] Result buffer capped at {MaxLastResultRows:N0} rows to prevent memory exhaustion. All rows still counted and streamed to display.");
+                            _logger.Debug("[SELECT] Result buffer capped at {MaxLastResultRows} rows to prevent memory exhaustion. All rows still counted and streamed to display.", MaxLastResultRows);
                         }
                     }
 
@@ -203,7 +203,7 @@ namespace ETL_SQL.Engine.Handlers
                         else if (!capped)
                         {
                             capped = true;
-                            _logger.Debug($"[SELECT] Result buffer capped at {MaxLastResultRows:N0} rows to prevent memory exhaustion. All rows still counted and streamed to display.");
+                            _logger.Debug("[SELECT] Result buffer capped at {MaxLastResultRows} rows to prevent memory exhaustion. All rows still counted and streamed to display.", MaxLastResultRows);
                         }
                     }
 
@@ -260,7 +260,7 @@ namespace ETL_SQL.Engine.Handlers
             
             // Handle CTEs are now in EvaluateQuery or Execute
             
-            _logger.Debug($"Evaluating SELECT FROM {stmt.FromTable.TableName}");
+            _logger.Debug("Evaluating SELECT FROM {TableName}", stmt.FromTable.TableName);
             var batches = context.ResolveAndApplyOperators(stmt.FromTable);
 
             // Expand * and alias.*
@@ -399,17 +399,29 @@ namespace ETL_SQL.Engine.Handlers
             }).ToAsyncEnumerable());
 
             List<Row> allBufferedRows;
+            bool whereApplied = false;
+
+            // For GROUP BY (or scalar aggregates) with no joins and no GROUPING SETS, stream
+            // the source directly into ExternalAggregateEngine rather than buffering the full
+            // source first. This prevents OOM on large file sources: a 50M-row CSV GROUP BY
+            // no longer requires all rows in a List<Row> before aggregation begins.
+            // Excluded: GROUPING SETS / ROLLUP / CUBE (multi-dimensional — ExternalAgg does
+            // not support them), and window functions (require a full pass first).
+            bool streamAggregate = (stmt.Joins == null || stmt.Joins.Count == 0)
+                && !hasWindowInColumns
+                && stmt.GroupingSet == null
+                && (stmt.GroupBy != null || hasAggInColumns);
 
             if (stmt.Joins != null && stmt.Joins.Count > 0)
             {
-                // JoinEngine.ApplyJoin currently takes List<Row>. 
+                // JoinEngine.ApplyJoin currently takes List<Row>.
                 // We'll buffer only if it's small, otherwise we use ExternalJoinEngine.
                 // For simplicity, let's buffer for now but use the external engine if it's large.
                 allBufferedRows = new List<Row>();
                 int count = 0;
-                await foreach (var r in inputStream) 
-                { 
-                    allBufferedRows.Add(r); 
+                await foreach (var r in inputStream)
+                {
+                    allBufferedRows.Add(r);
                     count++;
                     if (count > 100000) break; // Memory limit reached
                 }
@@ -417,7 +429,7 @@ namespace ETL_SQL.Engine.Handlers
                 if (count > 100000)
                 {
                     _logger.WriteLine("[yellow]HYPER-SCALE: Primary source exceeded memory limit. Switching to streaming external join.[/]");
-                    // Re-create stream starting from the 100,001st row... 
+                    // Re-create stream starting from the 100,001st row...
                     // This is tricky. Better to just use External engine from the start if we suspect scale.
                     // For now, let's assume we use the external engine if we have joins and we are in 'complex' mode.
                     var externalJoin = new ExternalJoinEngine(context, _logger);
@@ -429,13 +441,27 @@ namespace ETL_SQL.Engine.Handlers
                     allBufferedRows = await joinEngine.ApplyJoins(allBufferedRows, stmt.Joins, stmt);
                 }
             }
+            else if (streamAggregate)
+            {
+                // Stream source rows directly into the aggregate engine — no full-source buffer.
+                // Apply WHERE inline so filtering also avoids any accumulation.
+                IAsyncEnumerable<Row> aggInput = inputStream;
+                if (stmt.WhereClause != null)
+                {
+                    aggInput = WhereStream(inputStream, stmt.WhereClause, context);
+                    whereApplied = true;
+                }
+                _logger.Debug("Execution Strategy (multi-pass): streaming aggregate — source not materialized");
+                var externalAgg = new ExternalAggregateEngine(context, _logger);
+                allBufferedRows = await externalAgg.ApplyAggregationExternal(aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause);
+            }
             else
             {
                 allBufferedRows = new List<Row>();
                 await foreach (var r in inputStream) allBufferedRows.Add(r);
             }
 
-            if (stmt.WhereClause != null)
+            if (!whereApplied && stmt.WhereClause != null)
             {
                 var filtered = new List<Row>();
                 foreach (var r in allBufferedRows) if (await context.EvaluateCondition(stmt.WhereClause, r)) filtered.Add(r);
@@ -443,7 +469,8 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // 1. GROUP BY / HAVING  (includes GROUPING SETS / ROLLUP / CUBE)
-            if (stmt.GroupBy != null || stmt.GroupingSet != null || hasAggInColumns)
+            // Skipped when streamAggregate=true — ExternalAggregateEngine already ran above.
+            if (!streamAggregate && (stmt.GroupBy != null || stmt.GroupingSet != null || hasAggInColumns))
             {
                 if (allBufferedRows.Count > 100000 && stmt.GroupingSet == null)
                 {
@@ -455,7 +482,7 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     allBufferedRows = await aggregateEngine.ApplyAggregation(allBufferedRows, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
                 }
-                _logger.Debug($"Aggregation applied: {allBufferedRows.Count} groups remaining");
+                _logger.Debug("Aggregation applied: {GroupCount} groups remaining", allBufferedRows.Count);
             }
 
             // 2. WINDOW FUNCTIONS
@@ -608,7 +635,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 if (IsRecursive(cte, out var anchor, out var recursive, out var isDistinct))
                 {
-                    _logger.Debug($"Evaluating RECURSIVE CTE: {cte.Name} ({(isDistinct ? "UNION" : "UNION ALL")})");
+                    _logger.Debug("Evaluating RECURSIVE CTE: {CteName} ({UnionType})", cte.Name, isDistinct ? "UNION" : "UNION ALL");
                     var finalResult = new DataTable();
                     var currentStep = new DataTable();
 
@@ -709,6 +736,19 @@ namespace ETL_SQL.Engine.Handlers
                     context.LocalSources[cte.Name] = mem;
                 }
             }
+        }
+
+        /// <summary>
+        /// Yields rows from <paramref name="source"/> that satisfy <paramref name="whereClause"/>
+        /// without buffering. Used by the streaming aggregate path so WHERE filtering does not
+        /// force full source materialization.
+        /// </summary>
+        private static async IAsyncEnumerable<Row> WhereStream(
+            IAsyncEnumerable<Row> source, Expression whereClause, IExecutionContext context)
+        {
+            await foreach (var r in source)
+                if (await context.EvaluateCondition(whereClause, r))
+                    yield return r;
         }
 
         private bool IsRecursive(CteDefinition cte, out Statement? anchor, out Statement? recursive, out bool isDistinct)

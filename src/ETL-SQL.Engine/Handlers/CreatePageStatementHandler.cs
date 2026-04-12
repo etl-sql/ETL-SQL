@@ -34,7 +34,7 @@ namespace ETL_SQL.Engine.Handlers
             // Register / overwrite page definition
             context.PageDefinitions[stmt.Name] = stmt;
 
-            _logger.Debug($"Page '{stmt.Name}' registered with {stmt.SlotMap.Count} visual slot(s).");
+            _logger.Debug("Page '{PageName}' registered with {SlotCount} visual slot(s).", stmt.Name, stmt.SlotMap.Count);
             context.Log($"Page '{stmt.Name}' created.");
 
             return Task.CompletedTask;

@@ -22,9 +22,9 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (DeleteStatement)statement;
 
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
-            _logger.Debug($"Deleting from {connName}");
+            _logger.Debug("Deleting from {ConnName}", connName);
             if (!context.Connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown: {connName}");
-            _logger.Debug($"Connection resolved as {connection.GetType().Name}");
+            _logger.Debug("Connection resolved as {ConnectionType}", connection.GetType().Name);
             if (connection is IDatabaseSource sqlConn)
             {
                 _logger.Debug("Strategy: Remote SQL DELETE");

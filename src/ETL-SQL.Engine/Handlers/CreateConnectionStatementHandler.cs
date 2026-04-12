@@ -57,7 +57,7 @@ namespace ETL_SQL.Engine.Handlers
                 options = stmt.Options != null ? new Dictionary<string, string>(stmt.Options, StringComparer.OrdinalIgnoreCase) : null;
             }
 
-            _logger.Debug($"{(alreadyExists ? "Upserting" : "Creating")} connection {stmt.ConnectionName} of type {connectionType}");
+            _logger.Debug("{Action} connection {ConnectionName} of type {ConnectionType}", alreadyExists ? "Upserting" : "Creating", stmt.ConnectionName, connectionType);
 
             if (target != null && target.StartsWith("ENC:"))
             {
@@ -172,7 +172,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 catch (Exception ex)
                 {
-                    _logger.Debug($"Preview data not available for {stmt.ConnectionName}: {ex.Message}");
+                    _logger.Debug("Preview data not available for {ConnectionName}: {Message}", stmt.ConnectionName, ex.Message);
                 }
             }
             preview.TotalRowsMatched = preview.Rows.Count;

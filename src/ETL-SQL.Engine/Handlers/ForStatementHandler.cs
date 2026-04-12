@@ -27,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
             var end = Convert.ToInt32(await context.EvaluateValue(stmt.EndValue, new Row()));
             var step = stmt.StepValue != null ? Convert.ToInt32(await context.EvaluateValue(stmt.StepValue, new Row())) : 1;
             
-            _logger.Debug($"Starting FOR loop for {stmt.VariableName} from {start} to {end} step {step}");
+            _logger.Debug("Starting FOR loop for {VariableName} from {Start} to {End} step {Step}", stmt.VariableName, start, end, step);
 
             if (!context.ContainsVariable(stmt.VariableName))
             {

@@ -101,7 +101,7 @@ namespace ETL_SQL.TUI.UI
         /// <summary>Starts the main editor loop, handling rendering and input.</summary>
         public async Task Run()
         {
-            try { Console.Clear(); } catch (Exception ex) { _logger.Debug($"[ConsoleEditor] Console.Clear() failed: {ex.Message}"); }
+            try { Console.Clear(); } catch (Exception ex) { _logger.Debug("[ConsoleEditor] Console.Clear() failed: {Message}", ex.Message); }
             _metadata.RefreshConnections(_buffer.GetText(), force: true);
             
             while (!_isExiting)

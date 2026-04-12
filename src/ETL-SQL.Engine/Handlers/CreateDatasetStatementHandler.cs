@@ -48,7 +48,7 @@ namespace ETL_SQL.Engine.Handlers
                 GroupingSet  = src.GroupingSet
             };
 
-            _logger.Debug($"Materialising dataset '{stmt.TempTableName}'...");
+            _logger.Debug("Materialising dataset '{TempTableName}'...", stmt.TempTableName);
             await context.EvaluateStatement(selectInto);
 
             // Refresh scheduling is advisory at this stage — log a notice and continue

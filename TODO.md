@@ -46,6 +46,10 @@ Identified during 2026-04-12 documentation structure review against professional
 - [X] **DOC-9** — **Resolve `Docs/Engine.md` vs `Docs/Architecture/Engine.md` duplication.**
   There is an 18.6 KB `Docs/Engine.md` at the root of Docs AND a 3.7 KB `Docs/Architecture/Engine.md`. Determine which is the canonical file, migrate any unique content from the root-level file into `Architecture/Engine.md`, and delete `Docs/Engine.md`. Update any cross-references.
 
+- [ ] **DOC-10** - **Create `Docs/Orchestrators_Guide.md`.**
+  Detail out how to use the orchestrator app, what the commands are.  How to schedule a job, see job history, etc.
+
+
 ### README.md Fixes (applied 2026-04-12 — for reference)
 
 - [x] **DOC-R1** — Broken `file:///C:/Users/chuck/.gemini/...` image paths removed (were local-only, would 404 on GitHub).
@@ -67,8 +71,8 @@ Identified during 2026-04-12 documentation review. Each item was verified agains
   In T-SQL you can write `WAITFOR (SELECT ...)` to block until a query returns a row. This form does **not** exist in ETL-SQL — the parser only accepts `WAITFOR DELAY` and `WAITFOR TIME`. The recommended workaround is a `WHILE` loop with `WAITFOR DELAY`, but this is a common beginner trap. Either implement the polling form or add a dedicated `WAIT UNTIL (condition)` statement.
   - Files: `ETL-SQL.Core/Parser/StatementParser.Extensions.cs` `ParseWaitFor()`, new `WaitUntilStatement` AST node, `WaitForStatementHandler.cs`.
 
-- [ ] **ENG-2** — **`@@VERSION` system variable / `SHOW VERSION` command.**
-  No mechanism exists to query the current engine version from within a script. Add `@@VERSION` as a system variable resolving to `'ETL-SQL 2.0.0 (.NET 10.0)'` and a `SHOW VERSION;` statement that prints it to the messages panel.
+- [X] **ENG-2** — **`@@VERSION` system variable / `SHOW VERSION` command.**
+  No mechanism exists to query the current engine version from within a script. Add `@@VERSION` as a system variable resolving to `'ETL-SQL 0.5.0 (.NET 10.0)'` and a `SHOW VERSION;` statement that prints it to the messages panel.
   - Files: `ETL-SQL.Core/Common/LanguageMetadata.cs`, `Evaluator.cs` (resolve `@@VERSION`).
   - Doc: Add to `Standard_Library.md` §8 System Functions.
 
@@ -208,22 +212,35 @@ The items below were identified during the Phase 5.8 review pass on 2026-04-12. 
 
 ---
 
-## Phase 5 Code Quality — Steps 5.3–5.7 (Outstanding)
+## Phase 5 Code Quality — Steps 5.3–5.7
 
-These steps from `Engine_Upgrade_Strategy.md` were not addressed in the Phase 5.8 review pass. They are prerequisites for Phases 8–9 scale work.
+All steps complete.
 
-- [ ] **CQ-5.3** Structured logging throughout the codebase (CQ-17). Replace all `Logger.Verbose($"...")` string-interpolation calls with Serilog structured templates (`Logger.Verbose("Executing {StatementType} at line {Line}", ...)`). Covers Evaluator, all handlers, all connectors. Do not change log levels or sink config — only change call sites.
-- [ ] **CQ-5.4** Per-session correlation IDs (CQ-18). Add a `SessionId` (GUID, 8-char short form) to `ISessionState`, populated at `Evaluator` construction time. Attach to every log call via `Serilog.LogContext.PushProperty("SessionId", sessionId)`. Output format: `[{SessionId}]` in log lines so parallel runs are distinguishable.
-- [ ] **CQ-5.5** Concurrent Evaluator tests (CQ-19). Fork two `Evaluator` instances with different sessions, run conflicting operations simultaneously (same `#TempTable` name, same session variable name), assert no cross-contamination between session states. Required before any multi-session dashboard work.
-- [ ] **CQ-5.6** CI coverage reporting pipeline (CQ-21). Wire `coverlet.collector` + `reportgenerator` into the CI pipeline. Publish HTML coverage report as a build artifact. Set a coverage floor at the current measured baseline (do not set an aspirational target that will immediately fail).
-- [ ] **CQ-5.7** Polly retry logic for transient DB failures (CQ-24). Add `Polly` to `ETL-SQL.Connectors`. Wrap `OpenConnectionAsync()` and `ExecuteQueryAsync()` in SqlServer, Postgres, and Oracle connectors: 3 attempts, exponential backoff from 500ms, retry only on transient exceptions. Log each retry at Warning level with attempt number and exception message.
+- [x] **CQ-5.3** Structured logging throughout the codebase. Converted 76 string-interpolated log calls across 42 files to Serilog structured templates. Empty interpolations simplified to plain strings; nested ternaries flattened to args.
+- [x] **CQ-5.4** Per-session correlation IDs. `Evaluator` constructor now auto-generates an 8-char GUID short-form `SessionId` and propagates it to `_logger.SessionId`, which calls `Serilog.LogContext.PushProperty("SessionId", ...)`. Callers can override after construction.
+- [x] **CQ-5.5** Concurrent Evaluator tests. `Engine/ConcurrentEvaluatorTests.cs` — 7 tests covering isolated variables (5 sessions), isolated temp tables (4 sessions), no shared connection names (barrier-synchronized), no deadlock under load (10 sessions), auto-generated SessionId format/uniqueness, and explicit SessionId isolation.
+- [x] **CQ-5.6** CI coverage reporting pipeline. Already in place: `coverlet.collector` in test csproj, `dotnet reportgenerator` step in `.github/workflows/ci.yml`, HTML artifact upload, 70.0% line-coverage floor.
+- [x] **CQ-5.7** Retry logic for transient DB failures. Already in place via Polly: `ConnectorRetryPolicy` in `ETL-SQL.Connectors/Shared/` covers SqlServer, Postgres, Oracle, and ODBC — 3 attempts, exponential backoff, transient-only, Warning-level logging per retry.
 
 ---
 
 ## Phase 8 — Scale & Performance (Outstanding)
 
-- [ ] **Phase 8A** Large dataset handling design spike. Profile real bottlenecks on 50M+ row scripts. Produce a concrete recommendation in `Docs/Strategy/LargeDatasets.md` covering: streaming execution, chunked processing with OFFSET/FETCH pushdown, spill-to-disk for `#temp` tables, and Parquet as in-process columnar format. No code until the design document is approved.
-- [ ] **Phase 8B** Parallel execution and resource throttling. Once Phase 7 (process spawning) is running, expose `max_concurrent_jobs` in `appsettings.json`, enforce the cap before each spawn, queue jobs that exceed it, and emit metrics (active/queued jobs, CPU/RAM per job) to a structured log sink.
+### Phase 8A — Large Dataset Handling
+
+Design spike complete (`Docs/Strategy/LargeDatasets.md`). Architecture documented in `Docs/Architecture/Engine.md` §Scale & Large Dataset Handling.
+
+- [x] **8A-design** Design spike: profiled bottlenecks, produced `Docs/Strategy/LargeDatasets.md` with streaming, spill-to-disk, and chunked-processing recommendations.
+- [x] **8A-1** Streaming aggregate path in `SelectStatementHandler`. GROUP BY queries without joins/window functions now stream directly to `ExternalAggregateEngine` without buffering all rows into RAM first. WHERE filtering applied inline via `WhereStream`. Fixed `JsonElementToValue` bug in `ExternalAggregateEngine.ReadPartition` (spilled rows were deserializing as `JsonElement` boxes, causing `InvalidCastException` on SUM/AVG). 13 `SpillToDiskTests` pass.
+- [ ] **8A-2** Spill-to-disk for `InMemoryDataSource` (`#temp` tables). Add `SpillThresholdRows` config; when a `#temp` table exceeds the threshold, overflow pages spill to NDJSON on disk. Reads transparently merge in-memory and on-disk pages. Cleanup on `DROP TABLE` or session end.
+- [ ] **8A-3** Chunked `FOR` loop pushdown. `FOR @row IN (SELECT ... FROM <sql_connector>)` should push `OFFSET`/`FETCH` to the remote connector rather than pulling all rows into the evaluator. Detect the pattern in `ForStatementHandler` and iterate in configurable page sizes.
+
+### Phase 8B — Parallel Execution & Resource Throttling
+
+Most infrastructure is already in place (`SchedulerService`, `ProcessJobExecutor`, `JobHistoryStore`). The remaining work is exposing limits and emitting metrics.
+
+- [ ] **8B-1** Periodic metrics emission. Log `SchedulerService.GetMetrics()` (active/queued job counts) every 60 seconds to the structured log sink. Add `GetMetrics()` to `SchedulerService` if not already present.
+- [ ] **8B-2** Per-job CPU/RAM tracking. Capture peak CPU and RSS from each `ProcessJobExecutor` child process on completion; attach to the `JobHistoryStore` entry so it is visible in `SHOW JOB HISTORY`.
 
 ---
 

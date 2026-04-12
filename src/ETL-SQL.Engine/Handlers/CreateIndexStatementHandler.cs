@@ -22,7 +22,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (CreateIndexStatement)statement;
             
-            _logger.Debug($"Creating index {stmt.IndexName} on {stmt.TargetTable.TableName}");
+            _logger.Debug("Creating index {IndexName} on {TableName}", stmt.IndexName, stmt.TargetTable.TableName);
             await context.EvaluateCreateIndex(stmt);
         }
     }

@@ -32,7 +32,7 @@ namespace ETL_SQL.Engine.Engines
                     continue;
                 }
 
-                _logger.Debug($"Joining table {join.Table.TableName}{(join.Table.Alias != null ? $" AS {join.Table.Alias}" : "")} ({join.JoinType})");
+                _logger.Debug("Joining table {TableName}{Alias} ({JoinType})", join.Table.TableName, join.Table.Alias != null ? $" AS {join.Table.Alias}" : "", join.JoinType);
                 var joinRows = await GetJoinRows(join);
 
                 if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase))
@@ -132,7 +132,7 @@ namespace ETL_SQL.Engine.Engines
 
             JoinHint algorithm = GetBestAlgorithm(join, -1, joinRows.Count, hasEquality); // -1 means unknown (stream)
             
-            _logger.Debug($"Join Strategy (Streaming): {algorithm} Join between {leftAlias} and {rightAlias}");
+            _logger.Debug("Join Strategy (Streaming): {Algorithm} Join between {LeftAlias} and {RightAlias}", algorithm, leftAlias, rightAlias);
 
             if (algorithm == JoinHint.Hash)
             {
@@ -344,7 +344,7 @@ namespace ETL_SQL.Engine.Engines
 
         private async Task<List<Row>> PerformMergeJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join, List<string> leftKeys, List<string> rightKeys)
         {
-            _logger.Debug($"  Performing Merge Join (Sorting {leftRows.Count} and {rightRows.Count} rows)");
+            _logger.Debug("  Performing Merge Join (Sorting {LeftCount} and {RightCount} rows)", leftRows.Count, rightRows.Count);
             var sortedLeft = leftRows.OrderBy(r => GetHashKey(r, leftKeys)).ToList();
             var sortedRight = rightRows.OrderBy(r => GetHashKey(r, rightKeys)).ToList();
 

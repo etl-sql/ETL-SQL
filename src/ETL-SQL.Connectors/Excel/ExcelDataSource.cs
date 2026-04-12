@@ -158,7 +158,7 @@ namespace ETL_SQL.Connectors.Excel
             {
                 tempFile = System.IO.Path.GetTempFileName();
                 try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch (Exception ex) { _logger.Debug($"[ExcelDataSource.GetColumnsAsync] Failed to decrypt '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
+                catch (Exception ex) { _logger.Debug("[ExcelDataSource.GetColumnsAsync] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
             }
 
             try
@@ -197,7 +197,7 @@ namespace ETL_SQL.Connectors.Excel
                     return names;
                 }
             }
-            catch (Exception ex) { _logger.Debug($"[ExcelDataSource.GetColumnsAsync] Failed to read columns from '{_filePath}': {ex.Message}"); }
+            catch (Exception ex) { _logger.Debug("[ExcelDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}", _filePath, ex.Message); }
             finally { TempFileHelper.SafeDelete(tempFile, _logger); }
             return Enumerable.Empty<string>();
         }

@@ -22,7 +22,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (DropIndexStatement)statement;
             
-            _logger.Debug($"Dropping index {stmt.IndexName} from {stmt.Table?.TableName ?? "unknown table"}");
+            _logger.Debug("Dropping index {IndexName} from {TableName}", stmt.IndexName, stmt.Table?.TableName ?? "unknown table");
             await context.EvaluateDropIndex(stmt);
         }
     }

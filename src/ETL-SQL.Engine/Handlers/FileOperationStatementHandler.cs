@@ -45,7 +45,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
 
-            _logger.Debug($"File Operation: {stmt.Type} on {source}{(dest != null ? $" -> {dest}" : "")}");
+            _logger.Debug("File Operation: {OperationType} on {Source}{Dest}", stmt.Type, source, dest != null ? $" -> {dest}" : "");
 
             if (context.IsWhatIf)
             {

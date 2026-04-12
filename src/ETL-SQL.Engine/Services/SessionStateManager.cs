@@ -144,13 +144,13 @@ namespace ETL_SQL.Engine.Services
                             // Hardware-bound encryption for temp data
                             var entropy = GetMachineKey();
                             File.WriteAllText(dataFile, CryptoUtils.Protect(json, entropy));
-                            _logger.Debug($"[SESSION] Persisted {totalSavedRows} rows for temp table {conn.Key} to {Path.GetFileName(dataFile)} (Machine-Locked)");
+                            _logger.Debug("[SESSION] Persisted {RowCount} rows for temp table {TableName} to {FileName} (Machine-Locked)", totalSavedRows, conn.Key, Path.GetFileName(dataFile));
                         }
                     }
                     
                     if (totalSavedRows == 0)
                     {
-                        _logger.Debug($"[SESSION] Temp table {conn.Key} is empty; no data file created.");
+                        _logger.Debug("[SESSION] Temp table {TableName} is empty; no data file created.", conn.Key);
                     }
                     
                     state.TempTables.Add(info);
@@ -226,7 +226,7 @@ namespace ETL_SQL.Engine.Services
 
             try
             {
-                _logger.Debug($"[SESSION_READ_FILE] Reading {sessionFile}...");
+                _logger.Debug("[SESSION_READ_FILE] Reading {SessionFile}...", sessionFile);
                 string protectedJson = File.ReadAllText(sessionFile);
                 
                 _logger.Debug("[SESSION_UNPROTECT] Unprotecting state using OS context...");
@@ -239,12 +239,12 @@ namespace ETL_SQL.Engine.Services
             }
             catch (CryptographicException)
             {
-                _logger.Warning($"[SESSION_SECURITY] Failed to resume session {sessionId}. The session file is locked to a different machine or user account.");
+                _logger.Warning("[SESSION_SECURITY] Failed to resume session {SessionId}. The session file is locked to a different machine or user account.", sessionId);
                 return null;
             }
             catch (Exception ex)
             {
-                _logger.Error($"[SESSION_ERROR] Unexpected error loading session: {ex.Message}");
+                _logger.Error("[SESSION_ERROR] Unexpected error loading session: {Message}", ex, ex.Message);
                 return null;
             }
         }

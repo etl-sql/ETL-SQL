@@ -18,7 +18,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (DropTableStatement)statement;
             
-            _logger.Debug($"Dropping table {stmt.TargetTable.TableName} on {stmt.TargetTable.ConnectionName ?? "local"}");
+            _logger.Debug("Dropping table {TableName} on {ConnectionName}", stmt.TargetTable.TableName, stmt.TargetTable.ConnectionName ?? "local");
             await context.EvaluateDropTable(stmt);
         }
     }

@@ -22,9 +22,9 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (UpdateStatement)statement;
 
             string connName = stmt.TargetTable.ConnectionName ?? stmt.TargetTable.TableName;
-            _logger.Debug($"Updating {connName}");
+            _logger.Debug("Updating {ConnName}", connName);
             if (!context.Connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown connection: {connName}");
-            _logger.Debug($"Connection resolved as {connection.GetType().Name}");
+            _logger.Debug("Connection resolved as {ConnectionType}", connection.GetType().Name);
             if (connection is IDatabaseSource sqlConn)
             {
                 _logger.Debug("Strategy: Remote SQL UPDATE");
