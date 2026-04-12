@@ -368,10 +368,10 @@ These items were identified during the 2026-04-12 security review of `SECURITY.m
   - Files: `SecurityService.cs`, `SessionManager.cs` (or wherever the flag is set).
 
 ## Issues 
-- [ ] **LINT-1** - **Linter does not validate that the column names in the PIVOT IN clause exist in the source table.**
+- [x] **LINT-1** - **Linter does not validate that the column names in the PIVOT IN clause exist in the source table.**
   - Files: `ETL-SQL.Core/Linting/PivotLinterRule.cs` (new).
 
-- [ ] **LINT-2** - **Linter throws an warning on DROP CONNECTION IF EXISTS.**
+- [x] **LINT-2** - **Linter throws an warning on DROP CONNECTION IF EXISTS.**
   ```sql
   DROP CONNECTION IF EXISTS c;
   CREATE CONNECTION c ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\TestData\test_sales.csv');
