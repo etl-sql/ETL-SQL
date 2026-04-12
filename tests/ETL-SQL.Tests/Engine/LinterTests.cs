@@ -198,5 +198,86 @@ SELECT * FROM MyTable WHERE Id = @param2; -- Should error
 
             Assert.Empty(results);
         }
+
+        [Fact]
+        public async Task TestConnectionForwardReferenceRule_DropConnection_NoWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new ConnectionForwardReferenceRule());
+
+            // DROP before CREATE — should NOT warn anymore
+            var sql = @"
+                DROP CONNECTION IF EXISTS c;
+                CREATE CONNECTION c ON FLATFILE('test.csv');
+            ";
+
+            var script = Parse(sql);
+            var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
+
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task TestPivotColumnValidationRule_MissingColumn_IsWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new PivotColumnValidationRule());
+
+            var metadata = new MockMetadataProvider();
+            metadata.Columns["Sales"] = new List<string> { "Region", "Year", "Category", "Amount" };
+            
+            var context = new DefaultLintContext { Metadata = metadata };
+
+            // PIVOT with valid columns
+            var sqlValid = "SELECT * FROM src.Sales PIVOT (SUM(Amount) FOR Category IN ('A', 'B')) AS pvt;";
+            var scriptValid = Parse(sqlValid);
+            var resultsValid = (await linter.AnalyzeAsync(scriptValid, context)).ToList();
+            Assert.Empty(resultsValid);
+
+            // PIVOT with missing aggregate column
+            var sqlInvalidAgg = "SELECT * FROM src.Sales PIVOT (SUM(MissingCol) FOR Category IN ('A', 'B')) AS pvt;";
+            var scriptInvalidAgg = Parse(sqlInvalidAgg);
+            var resultsInvalidAgg = (await linter.AnalyzeAsync(scriptInvalidAgg, context)).ToList();
+            Assert.Single(resultsInvalidAgg);
+            Assert.Contains("Aggregate column 'MissingCol' not found", resultsInvalidAgg[0].Message);
+
+            // PIVOT with missing pivot column
+            var sqlInvalidPvt = "SELECT * FROM src.Sales PIVOT (SUM(Amount) FOR MissingCat IN ('A', 'B')) AS pvt;";
+            var scriptInvalidPvt = Parse(sqlInvalidPvt);
+            var resultsInvalidPvt = (await linter.AnalyzeAsync(scriptInvalidPvt, context)).ToList();
+            Assert.Single(resultsInvalidPvt);
+            Assert.Contains("Pivot column 'MissingCat' not found", resultsInvalidPvt[0].Message);
+        }
+
+        [Fact]
+        public async Task TestUnpivotColumnValidationRule_MissingColumn_IsWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new PivotColumnValidationRule());
+
+            var metadata = new MockMetadataProvider();
+            metadata.Columns["Sales"] = new List<string> { "Region", "Q1", "Q2" };
+            
+            var context = new DefaultLintContext { Metadata = metadata };
+
+            // UNPIVOT with missing source column
+            var sqlInvalid = "SELECT * FROM src.Sales UNPIVOT (Val FOR Q IN (Q1, Q3)) AS upvt;";
+            var scriptInvalid = Parse(sqlInvalid);
+            var resultsInvalid = (await linter.AnalyzeAsync(scriptInvalid, context)).ToList();
+            
+            Assert.Single(resultsInvalid);
+            Assert.Contains("Unpivot source column 'Q3' not found", resultsInvalid[0].Message);
+        }
+    }
+
+    public class MockMetadataProvider : IMetadataProvider
+    {
+        public Dictionary<string, List<string>> Columns { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<string> Connections { get; set; } = new() { "src" };
+
+        public Task<IEnumerable<string>> GetTablesAsync(string connectionName) => Task.FromResult(Columns.Keys.AsEnumerable());
+        public Task<IEnumerable<string>> GetColumnsAsync(string connectionName, string tableName) => Task.FromResult(Columns.TryGetValue(tableName, out var cols) ? cols.AsEnumerable() : Enumerable.Empty<string>());
+        public IEnumerable<string> GetConnections() => Connections;
+        public string? GetConnectionType(string connectionName) => "MSSQL";
     }
 }

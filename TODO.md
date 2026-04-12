@@ -296,7 +296,7 @@ CREATE PAGE <name> AS LAYOUT (
   )
 );
 ```
-My initial draft was that the STRUCTURE option was listed like this 'A A / B C / D E' to represent a 2x3 grid.  I'm not sure if that's the best way to represent it, but it's what I came up with.  Maybe that's hard to impliment but it gives you a better indication of what is happening.
+My initial draft was that the STRUCTURE option was listed like this 'A A / B C / D E' to represent a 2x3 grid.  I'm not sure if that's the best way to represent it, but it's what I came up with.  Maybe that's hard to implement but it gives you a better indication of what is happening.  I guess the assumption is it works top 
 
 
 - [ ] **Need a comprehensive list of options available for each visual type**  I have started a list in the docs folder, `Docs/Report_SQL_Guide.md`, but it is not complete.  I'm guessing once I get to see everything that may lead to some more syntax optimizations.
@@ -367,3 +367,13 @@ These items were identified during the 2026-04-12 security review of `SECURITY.m
   `IsInternalOperation = true` disables the entire sandbox. Wrap every internal operation in a `try/finally` that resets it to `false`. Add a unit test asserting that `ValidatePath()` against a protected path still throws immediately after a legitimate internal operation completes.
   - Files: `SecurityService.cs`, `SessionManager.cs` (or wherever the flag is set).
 
+## Issues 
+- [ ] **LINT-1** - **Linter does not validate that the column names in the PIVOT IN clause exist in the source table.**
+  - Files: `ETL-SQL.Core/Linting/PivotLinterRule.cs` (new).
+
+- [ ] **LINT-2** - **Linter throws an warning on DROP CONNECTION IF EXISTS.**
+  ```sql
+  DROP CONNECTION IF EXISTS c;
+  CREATE CONNECTION c ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\TestData\test_sales.csv');
+  ```
+  Message: Connection 'c' is used at line 1 but is not defined until line 2.  This warning is not correct that's how it is designed.

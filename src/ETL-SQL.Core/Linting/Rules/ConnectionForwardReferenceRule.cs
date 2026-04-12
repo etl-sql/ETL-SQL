@@ -68,10 +68,6 @@ namespace ETL_SQL.Core.Linting.Rules
             {
                 names.Add(ins.TargetTable.ConnectionName);
             }
-            else if (stmt is DropConnectionStatement drop)
-            {
-                names.Add(drop.ConnectionName);
-            }
             else if (stmt is AlterConnectionStatement alter)
             {
                 names.Add(alter.ConnectionName);
