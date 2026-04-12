@@ -68,7 +68,7 @@ namespace ETL_SQL.TUI
                         {
                             var argLower = args[i].ToLower();
                             if (argLower == "ui") continue;
-                            if (argLower == "old" || argLower == "edit" || argLower == "simple" || argLower == "repl")
+                            if (argLower == "simple" || argLower == "repl" || argLower == "ide")
                             {
                                 ctx.UiMode = argLower;
                                 continue;

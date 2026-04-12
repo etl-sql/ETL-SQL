@@ -39,7 +39,9 @@ namespace ETL_SQL.Connectors.FlatFile
             { "COUNT_AT_END", new[] { "ON", "OFF" } },
             { "COMPRESS", new[] { "ON", "OFF" } },
             { "ENCRYPT", new[] { "ON", "OFF" } },
-            { "PASSWORD", Array.Empty<string>() }
+            { "PASSWORD", Array.Empty<string>() },
+            { "CULTURE", Array.Empty<string>() },
+            { "TRIM", new[] { "ON", "OFF" } }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new(StringComparer.OrdinalIgnoreCase)
@@ -47,10 +49,11 @@ namespace ETL_SQL.Connectors.FlatFile
             { "HEADER", new[] { "ON", "OFF" } },
             { "DELIMITER", new[] { "COMMA", "PIPE", "TAB", "SEMICOLON", "COLON", "TILDE" } },
             { "ROW_DELIMITER", new[] { "LF", "CR", "CRLF", "TILDE", "SEMICOLON", "COLON", "COMMA", "TAB", "PIPE" } },
-            { "ENCODING", new[] { "UTF8", "ANSI", "UTF16", "LATIN1", "UNICODE" } },
+            { "ENCODING", new[] { "UTF8", "ANSI", "UTF16", "LATIN1", "UNICODE", "UTF32", "ASCII" } },
             { "TEXT_QUALIFIER", new[] { "DOUBLEQUOTE", "SINGLEQUOTE", "DOUBLEQUOTES", "SINGLEQUOTES" } },
             { "NULL_AS", new[] { "NULL", "EMPTY", "BACKSLASH_N" } },
-            { "STRICT_SCHEMA", new[] { "ON", "OFF" } }
+            { "STRICT_SCHEMA", new[] { "ON", "OFF" } },
+            { "TRIM", new[] { "ON", "OFF" } }
         };
 
         public string GetHelp() =>
@@ -58,7 +61,9 @@ namespace ETL_SQL.Connectors.FlatFile
             "Options:\n" +
             "  DELIMITER: COMMA | PIPE | TAB | SEMICOLON | COLON | TILDE | <char>\n" +
             "  HEADER: ON (default) | OFF\n" +
-            "  ENCODING: UTF8 | ANSI | UTF16 | LATIN1 | UNICODE\n" +
+            "  ENCODING: UTF8 | ANSI | UTF16 | LATIN1 | UNICODE | UTF32 | ASCII\n" +
+            "  CULTURE: Locale for parsing (e.g. 'en-US', 'de-DE')\n" +
+            "  TRIM: ON (default) | OFF (Whitespace management)\n" +
             "  TEXT_QUALIFIER: DOUBLEQUOTE | SINGLEQUOTE\n" +
             "  ESCAPE_CHAR: Character used to escape delimiters within fields (e.g. '\\')\n" +
             "  ROW_DELIMITER: LF | CR | CRLF\n" +

@@ -94,6 +94,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.VISUAL_SCATTER)) return VisualType.Scatter;
             if (_parser.Match(TokenType.VISUAL_PIE))     return VisualType.Pie;
             if (_parser.Match(TokenType.VISUAL_TABLE))   return VisualType.Table;
+            if (_parser.Match(TokenType.TABLE))          return VisualType.Table;
             if (_parser.Match(TokenType.CARD))           return VisualType.Card;
             if (_parser.Match(TokenType.SLICER))         return VisualType.Slicer;
 

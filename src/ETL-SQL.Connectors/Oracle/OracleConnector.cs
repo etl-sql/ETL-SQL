@@ -29,14 +29,33 @@ namespace ETL_SQL.Connectors.Oracle
         public HashSet<string> GetSupportedKeywords() => OracleSyntax.GetSupportedKeywords();
         public HashSet<string> GetExcludedKeywords() => OracleSyntax.Exclusions;
         
+        public string GetHelp() => 
+            "ORACLE Connector: Connects to Oracle Database instances.\n" +
+            "Options:\n" +
+            "  HOST/PORT/SERVICE_NAME: Connection via Easy Connect.\n" +
+            "  TNS_NAME: Connection via TNS alias.\n" +
+            "  USER/PASSWORD: Standard credentials.\n" +
+            "  POOLING: Set to TRUE to enable connection pooling.\n" +
+            "  MIN_POOL_SIZE / MAX_POOL_SIZE: Connection pooling bounds.\n" +
+            "  CONNECTION_LIFETIME: Maximum seconds a connection remains in the pool.\n" +
+            "  TABLE: Pre-selects a default table context.";
+
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
+            { "HOST", Array.Empty<string>() },
+            { "PORT", Array.Empty<string>() },
+            { "SERVICE_NAME", Array.Empty<string>() },
+            { "TNS_NAME", Array.Empty<string>() },
+            { "USER", Array.Empty<string>() },
+            { "PASSWORD", Array.Empty<string>() },
+            { "POOLING", new[] { "TRUE", "FALSE" } },
+            { "MIN_POOL_SIZE", Array.Empty<string>() },
+            { "MAX_POOL_SIZE", Array.Empty<string>() },
+            { "CONNECTION_LIFETIME", Array.Empty<string>() },
             { "TABLE", Array.Empty<string>() }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new();
-
-        public string GetHelp() => "ORACLE Connector: Connects to Oracle Database instances.";
 
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null) 
         {

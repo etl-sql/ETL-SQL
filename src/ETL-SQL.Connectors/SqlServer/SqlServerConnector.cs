@@ -26,15 +26,42 @@ namespace ETL_SQL.Connectors.SqlServer
         public HashSet<string> GetSupportedKeywords() => SqlServerSyntax.GetSupportedKeywords();
         public HashSet<string> GetExcludedKeywords() => SqlServerSyntax.Exclusions;
         
+        public string GetHelp() => 
+            "MSSQL Connector: Connects to Microsoft SQL Server.\n" +
+            "Options:\n" +
+            "  SERVER: The target server.\n" +
+            "  DATABASE: The target database.\n" +
+            "  USER/PASS: Standard credentials.\n" +
+            "  TRUSTED_CONNECTION: Set to TRUE for Windows Auth.\n" +
+            "  ENCRYPT / USE_SSL: Set to TRUE for encrypted transit.\n" +
+            "  TRUST_SERVER_CERTIFICATE: Set to TRUE to skip cert validation.\n" +
+            "  APPLICATION_INTENT: READONLY or READWRITE.\n" +
+            "  MULTI_SUBNET_FAILOVER: Set to TRUE for high-availability clusters.\n" +
+            "  MIN_POOL_SIZE / MAX_POOL_SIZE: Connection pooling bounds.\n" +
+            "  POOL_LIFETIME: Maximum duration (seconds) a connection remains in the pool.\n" +
+            "  CONNECT_TIMEOUT: Maximum seconds to wait for a connection.\n" +
+            "  TABLE: Pre-selects a default table context.";
+
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
+            { "SERVER", Array.Empty<string>() },
+            { "DATABASE", Array.Empty<string>() },
+            { "USER", Array.Empty<string>() },
+            { "PASSWORD", Array.Empty<string>() },
+            { "TRUSTED_CONNECTION", new[] { "TRUE", "FALSE" } },
+            { "ENCRYPT", new[] { "TRUE", "FALSE" } },
+            { "USE_SSL", new[] { "TRUE", "FALSE" } },
+            { "TRUST_SERVER_CERTIFICATE", new[] { "TRUE", "FALSE" } },
+            { "APPLICATION_INTENT", new[] { "READONLY", "READWRITE" } },
+            { "MULTI_SUBNET_FAILOVER", new[] { "TRUE", "FALSE" } },
+            { "MIN_POOL_SIZE", Array.Empty<string>() },
+            { "MAX_POOL_SIZE", Array.Empty<string>() },
+            { "POOL_LIFETIME", Array.Empty<string>() },
+            { "CONNECT_TIMEOUT", Array.Empty<string>() },
             { "TABLE", Array.Empty<string>() }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new();
-
-        public string GetHelp() => 
-            "MSSQL Connector: Connects to Microsoft SQL Server.\nOptions:\n  TABLE: Pre-selects a default table context.";
 
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null) 
         {

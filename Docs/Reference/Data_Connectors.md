@@ -42,6 +42,10 @@ Oracle supports two distinct connection patterns.
 | `TNS_NAME` | The Oracle TNS alias | Yes (TNS Pattern) |
 | `USER` | Login username | Yes |
 | `PASSWORD` | Login password | Yes |
+| `POOLING` | Enable connection pooling (`TRUE`/`FALSE`) | No |
+| `MIN_POOL_SIZE` | Minimum number of connections in the pool | No |
+| `MAX_POOL_SIZE` | Maximum number of connections in the pool | No |
+| `CONNECTION_LIFETIME` | Maximum time (sec) a connection stays alive | No |
 
 > [!CAUTION]
 > **Mutual Exclusivity**: You cannot use `TNS_NAME` and `SERVICE_NAME` in the same connection block.
@@ -65,7 +69,13 @@ Supports standard authentication and Windows Integrated Security.
 | `DATABASE` | Target database name | Yes |
 | `USER` | SQL username | No (if Trusted) |
 | `PASSWORD` | SQL password | No (if Trusted) |
-| `TRUSTED_CONNECTION` | Use Windows Auth (TRUE/FALSE) | No |
+| `TRUSTED_CONNECTION` | Use Windows Auth (`TRUE`/`FALSE`) | No |
+| `APPLICATION_INTENT`| `READWRITE` or `READONLY` | No |
+| `MULTI_SUBNET_FAILOVER`| Optimized failover for multi-subnet clusters | No |
+| `MIN_POOL_SIZE` | Minimum connections in pool | No |
+| `MAX_POOL_SIZE` | Maximum connections in pool | No |
+| `POOL_LIFETIME` | Time (sec) for load balancing timeout | No |
+| `CONNECT_TIMEOUT` | Time (sec) to wait for a connection | No |
 | `TABLE` | Set a default table context | No |
 
 *Examples:*
@@ -86,12 +96,73 @@ CREATE CONNECTION m_hr ON MSSQL('Server=sql01;Database=HR;Trusted_Connection=Tru
 | `USER` | Login username | Yes |
 | `PASSWORD` | Login password | Yes |
 | `PORT` | Listening port (Default: 5432) | No |
+| `POOLING` | Enable pooling (`TRUE`/`FALSE`) | No |
+| `MIN_POOL_SIZE` | Minimum pool size | No |
+| `MAX_POOL_SIZE` | Maximum pool size | No |
+| `CONNECTION_IDLE_LIFETIME` | Idle timeout for connections | No |
+| `SSL_MODE` | `DISABLE`, `REQUIRE`, `VERIFYFULL`, etc. | No |
+| `TRUST_SERVER_CERTIFICATE` | Bypass certificate validation | No |
 
 *Examples:*
 ```sql
 -- Structured Syntax
 CREATE CONNECTION pg_db ON POSTGRES() 
     WITH(HOST='10.0.0.5', PORT=5432, DATABASE='inventory', USER='admin', PASSWORD='pwd');
+```
+
+### 2.4 ODBC Bridge (`ODBC`)
+Universal bridge for any source with a local ODBC driver. Supports DSN-based and DSN-less connections.
+
+| Property | Description | Mandatory |
+| :--- | :--- | :---: |
+| `DSN` | Pre-configured Data Source Name | No |
+| `DRIVER` | Name of driver in `{}` | No |
+| `SERVER` | Server name or IP | No |
+| `PORT` | Listening port | No |
+| `DATABASE` | Database name or file path | No |
+| `UID` | Login username | No |
+| `PWD` | Login password | No |
+| `CONNECT_TIMEOUT` | Login timeout (sec) | No |
+
+> [!NOTE]
+> For **DSN-less** connections, you must provide the `DRIVER` and at least one identifying property like `SERVER` or `DATABASE`.
+
+*Examples:*
+```sql
+-- DSN Pattern
+CREATE CONNECTION my_dsn ON ODBC() WITH(DSN='ProdSales', UID='etl', PWD='pwd');
+
+-- DSN-less Pattern (e.g. SQLite)
+CREATE CONNECTION my_sqlite ON ODBC() 
+    WITH(DRIVER='{SQLite3 ODBC Driver}', DATABASE='C:\Data\local.db');
+```
+
+### 2.5 REST API Connector (`API`)
+Universal connector for web services and cloud APIs returning JSON data.
+
+| Property | Description | Mandatory |
+| :--- | :--- | :---: |
+| `URL` | The endpoint URL | Yes |
+| `METHOD` | HTTP Method (GET, POST, etc.) | No |
+| `AUTH_TYPE` | NONE, BASIC, BEARER, APIKEY | No |
+| `USER` | Username (for BASIC) | No |
+| `PASSWORD` | Password (for BASIC) | No |
+| `TOKEN` | Secret (for BEARER/APIKEY) | No |
+| `HEADER_NAME`| Header for APIKEY (e.g. X-API-Key) | No |
+| `ROOT_PATH` | JSONPath to the data array | No |
+| `BODY` | Request body for POST/PUT | No |
+
+*Examples:*
+```sql
+-- Fetch GitHub Issues (Public)
+CREATE CONNECTION github ON API() 
+    WITH(URL='https://api.github.com/repos/microsoft/terminal/issues', ROOT_PATH='$');
+
+-- Authenticated Private API
+CREATE CONNECTION my_service ON API() 
+    WITH(URL='https://api.internal.com/v1/customers', 
+         AUTH_TYPE='BEARER', 
+         TOKEN='sk_live_12345');
 ```
 
 ---
@@ -110,6 +181,9 @@ Used for reading delimited or fixed-width text files.
 | `TEMPLATE` | Table name defining fixed widths (e.g., `#tmp`) | Yes (if FIXED) |
 | `COMPRESS` | Transparent GZip support `ON`/`OFF` | No |
 | `ENCRYPT` | AES encryption `ON`/`OFF` | No |
+| `ENCODING` | `UTF8`, `ANSI`, `UTF16`, `LATIN1`, etc. | No |
+| `CULTURE` | Locale for parsing (e.g., `en-US`, `de-DE`) | No |
+| `TRIM` | `ON`/`OFF` (Manage whitespace) | No |
 
 *Examples:*
 ```sql
@@ -174,6 +248,8 @@ Document extraction with deep-nesting support.
 | :--- | :--- | :---: |
 | `PATH` | Absolute path to the file | Yes |
 | `ROOT_PATH` | JSONPath (`$.Array`) or XPath (`/Root/Node`) | No |
+| `ENCODING` | character encoding for reading | No |
+| `TRIM` | `ON`/`OFF` (Manage whitespace) | No |
 
 *Examples:*
 ```sql

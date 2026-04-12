@@ -22,6 +22,8 @@ using ETL_SQL.Connectors.Avro;
 using ETL_SQL.Connectors.Email;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
+using ETL_SQL.Connectors.Rest;
+using ETL_SQL.Connectors.Odbc;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Execution;
@@ -91,6 +93,8 @@ namespace ETL_SQL.TUI
             services.AddSingleton<IConnector, ParquetConnector>();
             services.AddSingleton<IConnector, AvroConnector>();
             services.AddSingleton<IConnector, SmtpConnector>();
+            services.AddSingleton<IConnector, RestConnector>();
+            services.AddSingleton<IConnector, OdbcConnector>();
 
             var ftpHost = configuration["Connectors:Ftp:Host"]      ?? "localhost";
             var ftpUser = configuration["Connectors:Ftp:Username"]   ?? "anonymous";
@@ -123,7 +127,9 @@ namespace ETL_SQL.TUI
             services.AddTransient<IEngineContext>(sp => sp.GetRequiredService<Evaluator>());
 
             // ── Storage & Scheduling ───────────────────────────────────────────
-            services.AddSingleton<IJobHistoryStore, SQLiteJobHistoryStore>();
+            services.Configure<JobThrottleOptions>(configuration.GetSection("Scheduling:Throttle"));
+            services.AddSingleton<JobThrottle>();
+            services.AddSingleton<IJobHistoryStore>(_ => new SQLiteJobHistoryStore());
             services.AddSingleton<SchedulerService>();
             services.AddTransient<IScriptExecutor, ScriptExecutorAdapter>();
 

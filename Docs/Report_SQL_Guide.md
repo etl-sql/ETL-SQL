@@ -7,21 +7,29 @@ Report-SQL extends ETL-SQL with three new statement types — `CREATE DATASET`, 
 ## Quick start
 
 ```sql
--- 1. Pull data
-SELECT category, SUM(revenue) AS total
-INTO #monthly
-FROM sales
-WHERE month = '2025-01';
+-- 1. Connect and pull data
+CREATE CONNECTION c ON FLATFILE('data/sales.csv');
+
+SELECT region, SUM(revenue) AS revenue
+INTO #summary
+FROM c
+GROUP BY region;
 
 -- 2. Define a visual
-CREATE VISUAL SalesChart TYPE BAR
-  SOURCE #monthly
-  MAPPING (X = category, Y = total)
-  TITLE 'Monthly Revenue by Category';
+CREATE VISUAL SalesChart AS BAR (
+  SOURCE = #summary,
+  MAPPINGS (X = region, Y = revenue),
+  OPTIONS (
+    X_AXIS (label = 'Region'),
+    Y_AXIS (label = 'Revenue ($)')
+  )
+);
 
 -- 3. Arrange on a page
-CREATE PAGE MainDashboard LAYOUT GRID(2,1)
-  SLOT MAP (1,1) = SalesChart;
+CREATE PAGE Main AS LAYOUT (
+  STRUCTURE = 'grid:1x1',
+  MAP ('A' = SalesChart)
+);
 ```
 
 Save as `report.rptsql`, then:
@@ -36,15 +44,15 @@ etl-sql-report serve report.rptsql        # → opens http://localhost:5200
 ## CREATE VISUAL
 
 ```
-CREATE VISUAL <name> TYPE <type>
-  SOURCE <source>
-  [MAPPING (...)]
-  [AXIS (...)]
-  [TITLE '<string>']
-  [WITH (...)]
-  [ACTION <action>]
-;
+CREATE VISUAL <name> AS <TYPE> (
+  SOURCE = <source>,
+  [MAPPINGS (role = column, ...),]
+  [OPTIONS (key = value, X_AXIS (...), Y_AXIS (...)),]
+  [ACTIONS (ON_CLICK = <action>, ON_CHANGE = <action>)]
+);
 ```
+
+All clauses inside the outer `( )` are separated by commas. The closing `)` ends the statement.
 
 ### Visual types
 
@@ -63,101 +71,114 @@ CREATE VISUAL <name> TYPE <type>
 The data source is either a temp table reference or an inline SELECT:
 
 ```sql
--- Temp table (defined elsewhere in the script)
-SOURCE #my_temp_table
+-- Temp table (populated earlier in the same script)
+SOURCE = #my_temp_table
 
--- Inline SELECT
-SOURCE (SELECT region, sales FROM results WHERE year = 2025)
+-- Inline SELECT (wrap in parentheses)
+SOURCE = (SELECT region, SUM(revenue) AS rev FROM #summary GROUP BY region)
 ```
 
-### MAPPING
+### MAPPINGS
 
-Maps column names to semantic roles. Available roles depend on the chart type:
+Maps column names to semantic roles. Each role depends on the chart type:
 
 ```sql
-MAPPING (X = month, Y = revenue)            -- BAR / LINE
-MAPPING (LABEL = category, VALUE = total)   -- PIE
-MAPPING (X = score, Y = rank)               -- SCATTER
-MAPPING (VALUE = total, LABEL = 'Revenue')  -- CARD
-MAPPING (PARAMETER = @region)               -- SLICER
+MAPPINGS (X = month, Y = revenue)           -- BAR / LINE
+MAPPINGS (LABEL = category, VALUE = total)  -- PIE
+MAPPINGS (X = score, Y = rank)              -- SCATTER
+MAPPINGS (VALUE = total, LABEL = 'Revenue') -- CARD
+MAPPINGS (PARAMETER = @region)              -- SLICER
 ```
 
-### AXIS
+### OPTIONS
 
-Customizes axis labels and scale:
+General key/value options plus axis sub-blocks:
 
 ```sql
-AXIS (
-  X LABEL = 'Month',
-  Y LABEL = 'Revenue ($)',
-  Y MIN   = 0,
-  Y MAX   = 100000
+OPTIONS (
+  STACKED = true,            -- BAR / LINE: stacked series
+  SMOOTH  = true,            -- LINE: smooth curves
+  X_AXIS (label = 'Month'),
+  Y_AXIS (label = 'Revenue ($)', min = 0)
 )
 ```
 
-### WITH options
+`X_AXIS` and `Y_AXIS` each take their own `(key = value, ...)` list.
+
+### ACTIONS
 
 ```sql
-WITH (
-  STACKED   = ON,    -- BAR / LINE: stacked series
-  LEGEND    = ON,    -- show legend (default ON)
-  SMOOTH    = ON     -- LINE: smooth curves
+ACTIONS (
+  ON_CLICK = DRILL_DOWN(Target = DetailChart, Key = region)
 )
 ```
 
-### ACTION — drill-down
-
-```sql
-ACTION DRILL_DOWN (TARGET = DetailChart, KEY = category)
-```
-
-Clicking a bar/segment passes the selected value to `@key` in the target visual's inline SELECT.
+`ON_CLICK` or `ON_CHANGE` triggers. `DRILL_DOWN` passes the selected value as the key column into the target visual's inline SELECT.
 
 ---
 
 ## CREATE DATASET
 
-Pre-computes a named snapshot that can be refreshed independently:
+Pre-computes a named snapshot that can be refreshed independently. Options come before `AS`:
 
 ```sql
-CREATE DATASET SalesSnapshot
-  AS (SELECT * FROM sales WHERE active = 1)
-  INTO #sales_snap
-  REFRESH INTERVAL = '1h'
-  [ENCRYPT = ON KEYFILE = 'C:\keys\report.key']
-;
+CREATE DATASET #sales_snap
+  REFRESH EVERY '1h'
+  AS (SELECT * FROM sales WHERE active = 1);
+```
+
+With all options:
+
+```sql
+CREATE DATASET #sales_snap
+  REFRESH EVERY '1h'
+  TTL = '24h'
+  COMPRESS = ON
+  ENCRYPT = ON KEYFILE = 'C:\keys\report.key'
+  AS (SELECT region, product, SUM(revenue) AS revenue FROM sales GROUP BY region, product);
 ```
 
 | Clause | Description |
 |--------|-------------|
-| `AS (SELECT ...)` | Query to execute |
-| `INTO #name` | Temp table to populate |
-| `REFRESH INTERVAL` | `<n>s`, `<n>m`, `<n>h`, or `<n>d` |
-| `ENCRYPT = ON KEYFILE = '...'` | AES-encrypt the snapshot at rest. `KEYFILE` is required when encryption is on. |
+| `REFRESH EVERY '<interval>'` | Re-run interval: `<n>s`, `<n>m`, `<n>h`, or `<n>d` |
+| `TTL = '<duration>'` | How long a snapshot stays valid |
+| `COMPRESS = ON` | Compress the snapshot file |
+| `ENCRYPT = ON KEYFILE = '<path>'` | AES-encrypt the snapshot. `KEYFILE` is required when encryption is on. |
+| `AS (SELECT ...)` | Query to execute — must be last, before the semicolon |
 
 ---
 
 ## CREATE PAGE
 
-Arranges visuals into a named layout:
+Arranges visuals into a named layout. Slot keys are single-quoted letters:
 
-```
-CREATE PAGE <name> LAYOUT GRID(<cols>,<rows>)
-  SLOT MAP (<col>,<row>) = <visual>
-  [SLOT MAP (<col>,<row>) = <visual> ...]
-  [TITLE '<string>']
+```sql
+CREATE PAGE <name> AS LAYOUT (
+  STRUCTURE = '<label>',
+  MAP (
+    '<slot>' = VisualName,
+    '<slot>' = VisualName
+  )
+)
+[WITH PARAMETERS (@param = default, ...)]
 ;
 ```
+
+`STRUCTURE` is a free-form descriptive string (e.g. `'grid:2x2'`, `'tabs'`). The ReportPlayer uses it as a hint for rendering.
 
 Example — 2-column, 2-row grid:
 
 ```sql
-CREATE PAGE Overview LAYOUT GRID(2,2)
-  SLOT MAP (1,1) = SalesChart
-  SLOT MAP (2,1) = RegionMap
-  SLOT MAP (1,2) = KpiCard
-  SLOT MAP (2,2) = CategorySlicer
-  TITLE 'Sales Overview';
+CREATE PAGE Overview AS LAYOUT (
+  STRUCTURE = 'grid:2x2',
+  MAP (
+    'A' = TotalRevenue,
+    'B' = RevenueByRegion,
+    'C' = RevenueByProduct,
+    'D' = SalesTable
+  )
+)
+WITH PARAMETERS (@region = 'All');
 ```
 
 If no pages are defined the build tool renders all visuals in definition order.
@@ -191,8 +212,6 @@ Re-evaluates the script and updates the snapshot without writing a report file:
 etl-sql-report refresh report.rptsql
 ```
 
-Use this on a schedule to keep snapshots fresh.
-
 ### serve
 
 Starts the web dashboard at `http://localhost:5200`:
@@ -223,51 +242,78 @@ The language server checks `.rptsql` files automatically:
 
 | Rule | Severity | Condition |
 |------|----------|-----------|
-| `VisualSourceExists` | Warning | `SOURCE #table` references a temp table not defined in the script |
-| `VisualMappingColumnExists` | Warning | A `MAPPING` role references a column not in the inline SELECT |
-| `PageVisualReferenced` | Warning | `SLOT MAP` references a visual name not defined in the script |
-| `DatasetRefreshInterval` | Warning | `REFRESH INTERVAL` value doesn't match `<n>s/m/h/d` |
-| `DatasetEncryptWithoutKey` | **Error** | `ENCRYPT = ON` without a `KEYFILE` |
+| `VisualSourceExists` | Warning | `SOURCE = #table` references a temp table not defined in the script |
+| `VisualMappingColumnExists` | Warning | A `MAPPINGS` role references a column not in the inline SELECT |
+| `PageVisualReferenced` | Warning | `MAP` references a visual name not defined in the script |
+| `DatasetRefreshInterval` | Warning | `REFRESH EVERY` value doesn't match `<n>s/m/h/d` |
+| `DatasetEncryptWithoutKey` | **Error** | `ENCRYPT = ON` without a `KEYFILE` clause |
 | `LayerOrder` | Warning | A visual references a dataset defined later, or a page references a visual defined later |
 
 ---
 
-## Full example
+## Full working example
+
+Source CSV columns: `region`, `product`, `units`, `revenue`, `month`, `date`
 
 ```sql
--- Pull sales data
-SELECT region, product, SUM(units) AS units, SUM(revenue) AS revenue
+DROP CONNECTION IF EXISTS c;
+CREATE CONNECTION c ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\TestData\test_sales.csv');
+
+-- Base dataset
+SELECT month, region, product, SUM(units) AS units, SUM(revenue) AS revenue
 INTO #summary
-FROM warehouse.sales
-WHERE year = 2025;
+FROM c
+GROUP BY month, region, product;
 
--- KPI card
-CREATE VISUAL TotalRevenue TYPE CARD
-  SOURCE (SELECT SUM(revenue) AS val, 'Total Revenue' AS lbl FROM #summary)
-  MAPPING (VALUE = val, LABEL = lbl)
-;
+-- KPI card: total revenue
+CREATE VISUAL TotalRevenue AS CARD (
+  SOURCE = (SELECT SUM(revenue) AS val, 'Total Revenue' AS lbl FROM #summary),
+  MAPPINGS (VALUE = val, LABEL = lbl)
+);
 
--- Bar chart with region filter
-CREATE VISUAL RevenueByRegion TYPE BAR
-  SOURCE (SELECT region, revenue FROM #summary)
-  MAPPING (X = region, Y = revenue)
-  AXIS (X LABEL = 'Region', Y LABEL = 'Revenue ($)')
-  TITLE 'Revenue by Region'
-;
+-- Bar chart: revenue by region
+CREATE VISUAL RevenueByRegion AS BAR (
+  SOURCE = (SELECT region, SUM(revenue) AS revenue FROM #summary GROUP BY region),
+  MAPPINGS (X = region, Y = revenue),
+  OPTIONS (
+    X_AXIS (label = 'Region'),
+    Y_AXIS (label = 'Revenue ($)')
+  )
+);
 
--- Region slicer
-CREATE VISUAL RegionFilter TYPE SLICER
-  SOURCE (SELECT DISTINCT region FROM #summary)
-  MAPPING (PARAMETER = @region)
-  TITLE 'Filter by Region'
-;
+-- Pie chart: revenue by product
+CREATE VISUAL RevenueByProduct AS PIE (
+  SOURCE = (SELECT product, SUM(revenue) AS revenue FROM #summary GROUP BY product),
+  MAPPINGS (LABEL = product, VALUE = revenue)
+);
 
--- Arrange dashboard
-CREATE PAGE Main LAYOUT GRID(2,2)
-  SLOT MAP (1,1) = TotalRevenue
-  SLOT MAP (2,1) = RegionFilter
-  SLOT MAP (1,2) = RevenueByRegion
-  SLOT MAP (2,2) = RevenueByRegion
-  TITLE '2025 Sales Dashboard'
-;
+-- Line chart: units by month
+CREATE VISUAL UnitsByMonth AS LINE (
+  SOURCE = (SELECT month, SUM(units) AS units FROM #summary GROUP BY month),
+  MAPPINGS (X = month, Y = units),
+  OPTIONS (
+    X_AXIS (label = 'Month'),
+    Y_AXIS (label = 'Units Sold'),
+    SMOOTH = true
+  )
+);
+
+-- Detail table: all rows
+CREATE VISUAL SalesTable AS TABLE (
+  SOURCE = #summary
+);
+
+-- Dashboard page
+CREATE PAGE Main AS LAYOUT (
+  STRUCTURE = 'grid:2x3',
+  MAP (
+    'A' = TotalRevenue,
+    'B' = RevenueByRegion,
+    'C' = RevenueByProduct,
+    'D' = UnitsByMonth,
+    'E' = SalesTable
+  )
+);
 ```
+
+This script is saved at `TestData/sales_report.rptsql` and can be run directly.

@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Microsoft.Data.SqlClient;
 using Npgsql;
 using Oracle.ManagedDataAccess.Client;
+using System.Data.Odbc;
 using Polly;
 using Polly.Retry;
 using ETL_SQL.Common;
@@ -154,5 +155,46 @@ namespace ETL_SQL.Connectors.Shared
                 17410 => true,  // No more data to read from socket
                 _     => false
             };
+
+        // ── ODBC ─────────────────────────────────────────────────────────────
+
+        public static ResiliencePipeline ForOdbc(ILogger logger) =>
+            new ResiliencePipelineBuilder()
+                .AddRetry(new RetryStrategyOptions
+                {
+                    MaxRetryAttempts = MaxAttempts,
+                    Delay             = BaseDelay,
+                    BackoffType       = DelayBackoffType.Exponential,
+                    UseJitter         = true,
+                    ShouldHandle      = new PredicateBuilder()
+                        .Handle<OdbcException>(IsTransientOdbc)
+                        .Handle<TimeoutException>(),
+                    OnRetry = args =>
+                    {
+                        logger.Warning(
+                            "ODBC transient error on attempt {Attempt}/{Max}: {Message}. Retrying in {Delay}ms.",
+                            args.AttemptNumber + 1, MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
+                        return ValueTask.CompletedTask;
+                    }
+                })
+                .Build();
+
+        /// <summary>
+        /// Returns true for OdbcException codes that represent transient conditions.
+        /// Uses SQLState prefixes (08 is connection class, 40 is serializable class).
+        /// </summary>
+        private static bool IsTransientOdbc(OdbcException ex)
+        {
+            foreach (OdbcError error in ex.Errors)
+            {
+                var state = error.SQLState ?? "";
+                if (state.StartsWith("08") || // Connection Error
+                    state.StartsWith("40") || // Transaction Rollback/Deadlock
+                    state == "HYT00" ||       // Timeout expired
+                    state == "HYT01")         // Connection timeout expired
+                    return true;
+            }
+            return false;
+        }
     }
 }

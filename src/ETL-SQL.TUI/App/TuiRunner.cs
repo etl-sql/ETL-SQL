@@ -22,19 +22,15 @@ namespace ETL_SQL.TUI
                     await repl.RunAsync();
                     return 0;
                 }
-
                 case "simple":
                 {
                     var simpleUi = new SimpleUi(ctx, serviceProvider);
                     await simpleUi.RunAsync();
                     return 0;
                 }
-
-                case "edit":
-                case "old":
+                case "ide":
                 default:
                 {
-                    // Promote the working Spectre-based Editor to be the primary IDE
                     var editor = new ConsoleEditor(ctx.ScriptFile?.FullName ?? "untitled.etlsql", new System.Collections.Generic.Dictionary<string, IDataSource>());
                     await editor.InitializeAsync();
                     await editor.Run();

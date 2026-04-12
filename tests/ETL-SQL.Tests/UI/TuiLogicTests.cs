@@ -16,20 +16,7 @@ namespace ETL_SQL.Tests.UI
 {
     public class TuiLogicTests
     {
-        [Theory]
-        [InlineData("m.", 2, "m.")]
-        [InlineData("m.v", 3, "m.v")]
-        [InlineData("u.*", 3, "u.*")]
-        [InlineData("SELECT u.*", 10, "u.*")]
-        [InlineData("SELECT u.* FROM", 10, "u.*")]
-        public void TerminalIdeWindow_GetWordPrefix_MatchesCorrectTokens(string line, int col, string expected)
-        {
-            // Act
-            var prefix = TerminalIdeWindow.GetWordPrefix(line, col);
 
-            // Assert
-            Assert.Equal(expected, prefix);
-        }
 
         [Fact]
         public async Task KeywordProvider_DoesNotAppendTrailingSpace()

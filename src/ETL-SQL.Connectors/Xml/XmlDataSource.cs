@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Xml.Linq;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
@@ -21,6 +22,8 @@ namespace ETL_SQL.Connectors.Xml
         private readonly string _filePath;
         private readonly string? _rootPath;
         private readonly bool _compress;
+        private readonly Encoding _encoding = Encoding.UTF8;
+        private readonly bool _trim = true;
         private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
@@ -40,6 +43,17 @@ namespace ETL_SQL.Connectors.Xml
             {
                 _rootPath = options.TryGetValue("ROOT_PATH", out var rp) ? rp : null;
                 if (options.TryGetValue("COMPRESS", out var comp)) _compress = comp.ToUpperInvariant() == "ON";
+                if (options.TryGetValue("ENCODING", out var enc))
+                {
+                    _encoding = enc.ToUpperInvariant() switch
+                    {
+                        "ANSI" or "LATIN1" => Encoding.GetEncoding("ISO-8859-1"),
+                        "UTF8" => Encoding.UTF8,
+                        "UTF16" or "UNICODE" => Encoding.Unicode,
+                        _ => Encoding.GetEncoding(enc)
+                    };
+                }
+                if (options.TryGetValue("TRIM", out var tr)) _trim = tr.ToUpperInvariant() == "ON" || tr.ToUpperInvariant() == "TRUE";
             }
             
             _encryption = new EncryptionOptions(options);
@@ -55,7 +69,7 @@ namespace ETL_SQL.Connectors.Xml
             try
             {
                 XDocument doc;
-                using (var stream = System.IO.File.OpenRead(effectivePath))
+                using (var stream = new StreamReader(effectivePath, _encoding))
                 {
                     doc = await XDocument.LoadAsync(stream, LoadOptions.None, default);
                 }
@@ -98,7 +112,7 @@ namespace ETL_SQL.Connectors.Xml
                         if (!sub.HasElements)
                         {
                             int idx = activeSchema.GetIndex(sub.Name.LocalName);
-                            if (idx >= 0) row[idx] = sub.Value;
+                            if (idx >= 0) row[idx] = _trim ? sub.Value.Trim() : sub.Value;
                         }
                     }
 

@@ -9,6 +9,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
 using System.IO.Compression;
 using ETL_SQL.Core.Common.Exceptions;
+using System.Globalization;
 
 namespace ETL_SQL.Connectors.FlatFile
 {
@@ -36,6 +37,7 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly Dictionary<string, string>? _options;
         private readonly List<FixedWidthColumn>? _fixedColumns;
         private readonly bool _trim = true;
+        private readonly CultureInfo _culture;
         private readonly ILogger _logger;
 
         private class FixedWidthColumn
@@ -133,10 +135,22 @@ namespace ETL_SQL.Connectors.FlatFile
 
                 if (options.TryGetValue("ENCODING", out var enc))
                 {
-                    if (enc.ToUpperInvariant() == "ANSI")
-                        _encoding = Encoding.Latin1;
-                    else if (enc.ToUpperInvariant() == "UTF8")
-                        _encoding = Encoding.UTF8;
+                    _encoding = enc.ToUpperInvariant() switch
+                    {
+                        "ANSI" or "LATIN1" => Encoding.GetEncoding("ISO-8859-1"),
+                        "UTF8" => Encoding.UTF8,
+                        "UTF16" or "UNICODE" => Encoding.Unicode,
+                        "UTF32" => Encoding.UTF32,
+                        "ASCII" => Encoding.ASCII,
+                        _ => Encoding.GetEncoding(enc)
+                    };
+                }
+
+                _culture = CultureInfo.InvariantCulture;
+                if (options.TryGetValue("CULTURE", out var cult))
+                {
+                    try { _culture = new CultureInfo(cult); }
+                    catch { _logger.Debug($"[FlatFileDataSource] Invalid culture '{cult}', falling back to Invariant."); }
                 }
 
                 if (options.TryGetValue("TEXT_QUALIFIER", out var tq))
@@ -481,7 +495,7 @@ namespace ETL_SQL.Connectors.FlatFile
             var columnNames = batch.ColumnNames;
             for (int i = 0; i < columnNames.Count && i < values.Length; i++)
             {
-                string val = _textQualifier == null ? values[i].Trim() : values[i];
+                string val = _trim ? values[i].Trim() : values[i];
                 
                 if (_nullAs != null && (val.Equals(_nullAs, StringComparison.OrdinalIgnoreCase) || (string.IsNullOrEmpty(val) && _nullAs == "")))
                 {
@@ -489,7 +503,7 @@ namespace ETL_SQL.Connectors.FlatFile
                 }
                 else
                 {
-                    if (_dateFormat != null && DateTime.TryParseExact(val, _dateFormat, null, System.Globalization.DateTimeStyles.None, out var dt))
+                    if (_dateFormat != null && DateTime.TryParseExact(val, _dateFormat, _culture, DateTimeStyles.None, out var dt))
                     {
                         row[i] = dt;
                     }

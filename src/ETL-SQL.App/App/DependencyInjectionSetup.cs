@@ -16,6 +16,8 @@ using ETL_SQL.Connectors.Postgres;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Connectors.Json;
 using ETL_SQL.Connectors.Xml;
+using ETL_SQL.Connectors.Odbc;
+using ETL_SQL.Connectors.Rest;
 using ETL_SQL.Connectors.Excel;
 using ETL_SQL.Connectors.Directory;
 using ETL_SQL.Connectors.Parquet;
@@ -98,6 +100,8 @@ namespace ETL_SQL.App
             services.AddSingleton<IConnector, FlatFileConnector>();
             services.AddSingleton<IConnector, JsonConnector>();
             services.AddSingleton<IConnector, XmlConnector>();
+            services.AddSingleton<IConnector, OdbcConnector>();
+            services.AddSingleton<IConnector, RestConnector>();
             services.AddSingleton<IConnector, ExcelConnector>();
             services.AddSingleton<IConnector, DirectoryConnector>();
             services.AddSingleton<IConnector, ParquetConnector>();
@@ -137,6 +141,8 @@ namespace ETL_SQL.App
             
             // Storage & Scheduling
             services.AddSingleton<IJobHistoryStore, SQLiteJobHistoryStore>();
+            services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
+            services.AddSingleton<JobThrottle>();
             services.AddSingleton<SchedulerService>();
 
             // IScriptExecutor — thin adapter used by SchedulerService for job execution

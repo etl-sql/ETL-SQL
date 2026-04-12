@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
@@ -21,6 +22,8 @@ namespace ETL_SQL.Connectors.Json
         private readonly string _filePath;
         private readonly string? _rootPath;
         private readonly bool _compress;
+        private readonly Encoding? _encoding;
+        private readonly bool _trim = true;
         private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
@@ -42,6 +45,17 @@ namespace ETL_SQL.Connectors.Json
             {
                 if (options.TryGetValue("ROOT_PATH", out var rp)) _rootPath = rp;
                 if (options.TryGetValue("COMPRESS", out var comp)) _compress = comp.ToUpperInvariant() == "ON";
+                if (options.TryGetValue("ENCODING", out var enc))
+                {
+                    _encoding = enc.ToUpperInvariant() switch
+                    {
+                        "ANSI" or "LATIN1" => Encoding.GetEncoding("ISO-8859-1"),
+                        "UTF8" => Encoding.UTF8,
+                        "UTF16" or "UNICODE" => Encoding.Unicode,
+                        _ => Encoding.GetEncoding(enc)
+                    };
+                }
+                if (options.TryGetValue("TRIM", out var tr)) _trim = tr.ToUpperInvariant() == "ON" || tr.ToUpperInvariant() == "TRUE";
             }
             
             _encryption = new EncryptionOptions(options);
@@ -78,52 +92,26 @@ namespace ETL_SQL.Connectors.Json
             {
                 using var stream = System.IO.File.OpenRead(effectivePath);
                 JsonDocument doc;
-                try { doc = await JsonDocument.ParseAsync(stream); }
+                try 
+                { 
+                    if (_encoding != null && _encoding != Encoding.UTF8)
+                    {
+                        using var reader = new StreamReader(stream, _encoding);
+                        string json = await reader.ReadToEndAsync();
+                        doc = JsonDocument.Parse(json);
+                    }
+                    else
+                    {
+                        doc = await JsonDocument.ParseAsync(stream); 
+                    }
+                }
                 catch (Exception ex) { _logger.Debug($"[JsonDataSource.ReadBatches] Failed to parse JSON '{effectivePath}': {ex.Message}"); yield break; }
 
                 using (doc)
                 {
-                    JsonElement root = doc.RootElement;
-                    if (_rootPath != null)
+                    await foreach (var batch in JsonExtractor.ExtractBatches(doc, _rootPath, batchSize, _trim))
                     {
-                        foreach (var part in _rootPath.Split('.', StringSplitOptions.RemoveEmptyEntries))
-                        {
-                            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(part, out var next)) root = next;
-                            else if (root.ValueKind == JsonValueKind.Array && int.TryParse(part, out var idx) && idx >= 0 && idx < root.GetArrayLength()) root = root[idx];
-                            else yield break;
-                        }
-                    }
-
-                    if (root.ValueKind != JsonValueKind.Array && root.ValueKind != JsonValueKind.Object) yield break;
-
-                    var elements = root.ValueKind == JsonValueKind.Array ? root.EnumerateArray() : new[] { root }.AsEnumerable();
-                    var currentBatch = new DataTable();
-                    var allColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-                    foreach (var element in elements)
-                    {
-                        if (element.ValueKind != JsonValueKind.Object) continue;
-
-                        var row = new Row();
-                        foreach (var property in element.EnumerateObject())
-                        {
-                            row[property.Name] = GetJsonValue(property.Value);
-                            allColumns.Add(property.Name);
-                        }
-                        await currentBatch.AddRowAsync(row);
-
-                        if (currentBatch.Rows.Count >= batchSize)
-                        {
-                            currentBatch.SetColumns(allColumns);
-                            yield return currentBatch;
-                            currentBatch = new DataTable();
-                        }
-                    }
-
-                    if (currentBatch.Rows.Count > 0)
-                    {
-                        currentBatch.SetColumns(allColumns);
-                        yield return currentBatch;
+                        yield return batch;
                     }
                 }
             }
@@ -132,16 +120,6 @@ namespace ETL_SQL.Connectors.Json
                 TempFileHelper.SafeDelete(tempFile, _logger);
             }
         }
-
-        private object? GetJsonValue(JsonElement element) => element.ValueKind switch
-        {
-            JsonValueKind.String => element.GetString(),
-            JsonValueKind.Number => element.TryGetDecimal(out var d) ? d : element.GetDouble(),
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.Null => null,
-            _ => element.GetRawText()
-        };
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
         {
@@ -237,19 +215,7 @@ namespace ETL_SQL.Connectors.Json
             {
                 using var stream = System.IO.File.OpenRead(effectivePath);
                 using var doc = JsonDocument.Parse(stream);
-                JsonElement root = doc.RootElement;
-                if (_rootPath != null)
-                {
-                    foreach (var part in _rootPath.Split('.', StringSplitOptions.RemoveEmptyEntries))
-                    {
-                        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(part, out var next)) root = next;
-                        else if (root.ValueKind == JsonValueKind.Array && int.TryParse(part, out var idx) && idx >= 0 && idx < root.GetArrayLength()) root = root[idx];
-                        else return Enumerable.Empty<string>();
-                    }
-                }
-                var first = root.ValueKind == JsonValueKind.Array ? root.EnumerateArray().FirstOrDefault() : root;
-                if (first.ValueKind == JsonValueKind.Object) return first.EnumerateObject().Select(p => p.Name).ToList();
-                return Enumerable.Empty<string>();
+                return JsonExtractor.GetColumns(doc, _rootPath);
             }
             catch (Exception ex) { _logger.Debug($"[JsonDataSource.GetColumnsAsync] Failed to read columns from '{_filePath}': {ex.Message}"); return Enumerable.Empty<string>(); }
             finally

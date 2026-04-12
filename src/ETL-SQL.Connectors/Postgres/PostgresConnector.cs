@@ -25,14 +25,37 @@ namespace ETL_SQL.Connectors.Postgres
         public HashSet<string> GetSupportedKeywords() => PostgresSyntax.GetSupportedKeywords();
         public HashSet<string> GetExcludedKeywords() => PostgresSyntax.Exclusions;
         
+        public string GetHelp() => 
+            "POSTGRES Connector: Used for PostgreSQL database connections.\n" +
+            "Options:\n" +
+            "  HOST: The target server.\n" +
+            "  DATABASE: The target database.\n" +
+            "  USER/PASSWORD: Standard credentials.\n" +
+            "  PORT: Listening port (Default 5432).\n" +
+            "  POOLING: Set to TRUE to enable connection pooling.\n" +
+            "  MIN_POOL_SIZE / MAX_POOL_SIZE: Connection pooling bounds.\n" +
+            "  CONNECTION_IDLE_LIFETIME: Maximum seconds an idle connection stays in the pool.\n" +
+            "  SSL_MODE: Disable, Prefer, Require, etc.\n" +
+            "  TRUST_SERVER_CERTIFICATE: Set to TRUE to skip cert validation.\n" +
+            "  TABLE: Pre-selects a default table context.";
+
         public Dictionary<string, string[]> GetSupportedOptions() => new(StringComparer.OrdinalIgnoreCase)
         {
+            { "HOST", Array.Empty<string>() },
+            { "DATABASE", Array.Empty<string>() },
+            { "USER", Array.Empty<string>() },
+            { "PASSWORD", Array.Empty<string>() },
+            { "PORT", Array.Empty<string>() },
+            { "POOLING", new[] { "TRUE", "FALSE" } },
+            { "MIN_POOL_SIZE", Array.Empty<string>() },
+            { "MAX_POOL_SIZE", Array.Empty<string>() },
+            { "CONNECTION_IDLE_LIFETIME", Array.Empty<string>() },
+            { "SSL_MODE", new[] { "Disable", "Prefer", "Require", "VerifyCA", "VerifyFull" } },
+            { "TRUST_SERVER_CERTIFICATE", new[] { "TRUE", "FALSE" } },
             { "TABLE", Array.Empty<string>() }
         };
 
         public Dictionary<string, string[]> GetOptionValues() => new();
-
-        public string GetHelp() => "POSTGRES Connector: Used for PostgreSQL database connections.";
 
         public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null) 
         {
