@@ -35,14 +35,15 @@ namespace ETL_SQL.TUI.UI
             string stats = $"[cyan]Set {_renderer.ActiveResultSetIndex + 1}/{_evaluator.LastResultSets.Count} | Time: {res.ExecutionTimeMs}ms | Rows: {res.TotalRowsMatched}{(res.TotalRowsMatched >= 1000 ? "+" : "")}[/]";
 
             var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey).Expand();
-            foreach (var col in res.ColumnNames.Take(10)) table.AddColumn($"[bold cyan]{Markup.Escape(col)}[/]");
+            var visibleColumns = res.ColumnNames.Skip(_renderer.ResultScrollCol).Take(10).ToList();
+            foreach (var col in visibleColumns) table.AddColumn($"[bold cyan]{Markup.Escape(col)}[/]");
 
             if (res.Rows.Any())
             {
                 var visibleRows = res.Rows.Skip(_renderer.ResultScrollRow).Take(Math.Max(1, height - 4)).ToList();
                 foreach (var row in visibleRows)
                 {
-                    table.AddRow(res.ColumnNames.Take(10).Select(c => Markup.Escape(row[c]?.ToString() ?? "")).ToArray());
+                    table.AddRow(visibleColumns.Select(c => Markup.Escape(row[c]?.ToString() ?? "")).ToArray());
                 }
             }
 

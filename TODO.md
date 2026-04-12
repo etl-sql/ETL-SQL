@@ -1,6 +1,8 @@
 # ETL-SQL Development Roadmap
 
 ## TUI on-going issues
+- [x] When switching to the results tab or execute tree tab the up/down arrow don't work to scroll through.  Can we come up with a better way to handle this?  Maybe on execute make those spaces bigger or add an expand key that makes it use the full window and then press that key to return.
+- [x] When switching between focus's F3 and going back to the script window it get wonky and the top row is unusable.  It doesn't fix itself until I reload.  Thinking we need to repaint the screen when we switch back to the script window.
 
 ## VS Code Extension on-going issues
 - [ ] Each time I execute either all or selected the execute tree should be cleared an should start over.  Currently it just keeps adding to the tree view.
@@ -8,15 +10,20 @@
 - [ ] Export to csv should be added to the results grid context menu. It was but at some point it seems to have disappeared.
 - [ ] Setting is really messy, it should just need a pointer to where the exe files are and do you want to show debugging or not.  I don't know of any other options needed at this time. 
 
+## Misc Issues
+- [x] **ENCRYPT FILE** and **DECRYPT FILE** now support an explicit `PASSWORD('<password>')` clause in both SQL and functional syntax. Falls back to MasterPassword if omitted.
+
 ## Connector Modernization & Expansion
 
 Refer to the **[Connector_Upgrade_Strategy.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connector_Upgrade_Strategy.md)** for the exhaustive technical specs, implementation archetypes, and roadmap for the items below.
 
-### [ ] Current Connector Technical Debt
-- [ ] Implement missing production options (Failover, Pooling, Security, Culture-aware parsing) for existing SQL and FlatFile providers.
+### [X] Current Connector Technical Debt
+- [X] Implement missing production options (Failover, Pooling, Security, Culture-aware parsing) for existing SQL and FlatFile providers.
 
 ### [ ] Future Connector Roadmap
-- [ ] **ODBC Bridge**: Universal legacy connectivity.
+- [X] **ODBC Bridge**: Universal legacy connectivity.
+- [X] **REST API**: Generic REST API connector.
+** The rest are on hold no good way to test them at this time.
 - [ ] **Cloud Lakehouse**: Snowflake, Databricks, Delta Sharing, Synapse.
 - [ ] **Enterprise SaaS**: ServiceNow, Dynamics 365, SharePoint.
 - [ ] **Enterprise ERP**: SAP HANA, SAP BW.
@@ -31,33 +38,32 @@ The items below were identified during the Phase 5.8 review pass on 2026-04-12. 
 
 ### Bugs (CQ-B)
 
-- [ ] **CQ-B1** `ScriptExecutorAdapter.ExecuteTextAsync` ignores its `CancellationToken` parameter — the token is never forwarded to `Evaluator.Evaluate()`. In Phase 7 (process spawning) the scheduler will cancel jobs via CancellationToken; this must propagate. `src/ETL-SQL.Orchestrator/Execution/ExecutionSession.cs:189`
-- [ ] **CQ-B2** `LintStatementHandler` throws bare `Exception` instead of `ExecutionException` for file-not-found and unsupported-mode errors. All handler errors should use `ExecutionException` so the evaluator can route them correctly. `src/ETL-SQL.Engine/Handlers/LintStatementHandler.cs:36,43`
-- [ ] **CQ-B3** `ExecutionSession` never disposes the `Evaluator` even in the happy path, because "we DO NOT dispose if persisting connections." The ADO.NET connections inside will eventually leak if the user closes the TUI session without an explicit `DROP CONNECTION`. Consider adding a `DisposeAsync()` method on `ExecutionSession` and calling it from `TUI` on exit.
+- [x] **CQ-B1** `CancellationToken` now threaded through `ScriptExecutorAdapter` → `ExecutionSession.ExecuteAsync` → `Evaluator.Evaluate`. Token checked between each statement in the evaluation loop.
+- [x] **CQ-B2** `LintStatementHandler` now throws `ExecutionException` instead of bare `Exception` for file-not-found and unsupported-mode errors.
+- [x] **CQ-B3** `ExecutionSession` now implements `IAsyncDisposable`. `DisposeAsync()` closes the last evaluator and all persistent connections. `SimpleUi` uses `await using` so it's called on exit.
 
 ### SRP Violations (CQ-S)
 
-- [ ] **CQ-S1** `ExecutionSession.cs` hosts three distinct types: `ExecutionResult`, `ExecutionSession`, and `ScriptExecutorAdapter`. Split into three files.
-- [ ] **CQ-S2** `ExecutionSession.ExecuteAsync` is responsible for lexing, parsing, linting, execution, AND Spectre rendering (building `IRenderable` result tables). Rendering is a TUI concern and should be extracted — `ExecutionResult` should carry raw `DataTable` results; the TUI converts them to `IRenderable`. This also removes the Spectre.Console dependency from the Orchestrator layer.
+- [x] **CQ-S1** `ExecutionSession.cs` split into three files: `ExecutionResult.cs`, `ExecutionSession.cs`, `ScriptExecutorAdapter.cs`.
+- [x] **CQ-S2** Spectre rendering removed from `ExecutionSession`. `ExecutionResult.ResultsTables` is now `List<DataTable>` and `ExecutionTree` is the raw `ExecutionTree` object. `SimpleUi` converts to Spectre tables. Spectre.Console dependency removed from `ETL-SQL.Orchestrator`.
 
 ### Code Duplication (CQ-D)
 
-- [ ] **CQ-D1** The pattern `foreach (var type in typeof(ILintRule).Assembly.GetTypes().Where(...)) { if (Activator.CreateInstance(type) is ILintRule rule) linter.AddRule(rule); }` appears in both `LintStatementHandler` and `ExecutionSession.ExecuteAsync`. Extract a `LinterFactory.CreateWithAllRules()` static helper in `ETL-SQL.Core`.
+- [x] **CQ-D1** `LinterFactory.CreateWithAllRules()` extracted to `ETL-SQL.Core/Linting/LinterFactory.cs`. Both `LintStatementHandler` and `ExecutionSession` now use it.
 
 ### Missing Logging (CQ-L)
-
-- [ ] **CQ-L1** `ExecutionSession.ExecuteAsync` has no structured logging — no trace of which session executed which script, parse errors, lint findings, or execution duration. Add `ILogger` or `ILogger` (ETL-SQL's own) injection and log at least: session start (`{SessionId}`), parse error count, lint findings count, execution duration, and any caught exceptions.
-- [ ] **CQ-L2** `LintStatementHandler.Execute` has no logging. Should log: file path, number of lint findings, and any error at Warning/Error level.
+- [x] **CQ-L1** `ExecutionSession.ExecuteAsync` now has structured logging (`ILogger`) tracking session start, parse/lint results, duration, and success status.
+- [x] **CQ-L2** `LintStatementHandler.Execute` now has structured logging tracking file path, finding counts, and errors.
 
 ### Untested Code (CQ-T)
 
-- [ ] **CQ-T1** `SchedulerService` is at **5.1%** coverage. Need integration tests that: register a job, advance the simulated clock, verify `IScriptExecutor.ExecuteTextAsync` is called, verify history is written. Use a mock `IScriptExecutor`.
-- [ ] **CQ-T2** `ShowTablesStatementHandler`, `ShowColumnsStatementHandler`, `ShowConnectionsStatementHandler`, `ShowJobHistoryStatementHandler` are all ≤ 3.3%. Add basic tests that execute each SHOW statement against a mock data source.
-- [ ] **CQ-T3** `WaitForStatementHandler` is at 45.1%. Cover the timeout and signal paths.
-- [ ] **CQ-T4** `MockDbSyntax` and `OracleSyntax` are at 0%. Add dialect syntax tests (identifier quoting, data type mapping, reserved words).
-- [ ] **CQ-T5** `ETL_SQL.DataGenerator` is at 0% — fully untested. Validate at minimum that `GenerateMockData(n)` returns a non-empty table with the expected schema.
-- [ ] **CQ-T6** `ExternalAggregateEngine` is at 0% — never triggered in tests. Add a test that forces an external aggregate (large enough group to spill).
-- [ ] **CQ-T7** `LintStatementHandler` is at 2.2%. Add a test that executes `LINT 'path.sql'` against a temp file.
+- [x] **CQ-T1** `SchedulerService` — 7 tests: job with null/past NextRun fires, future NextRun skips, success/failure/exception all log to history, NextRun is updated after execution. Uses mock `IScriptExecutor` and `IJobHistoryStore`.
+- [x] **CQ-T2** `ShowTablesStatementHandler`, `ShowColumnsStatementHandler`, `ShowConnectionsStatementHandler`, `ShowJobHistoryStatementHandler` — 11 tests covering result schema, row contents, INTO table routing, and mock store injection.
+- [x] **CQ-T3** `WaitForStatementHandler` — 8 tests: zero/short delay passes, invalid format throws, negative delay throws, TIME format errors, parsing round-trips.
+- [x] **CQ-T4** `MockDbSyntax` and `OracleSyntax` — 14 tests verifying keyword sets, function sets, exclusions, case-insensitivity, and accessor consistency.
+- [x] **CQ-T5** `ETL_SQL.DataGenerator` — 7 smoke tests: files created, header schema correct, row count correct, data format per column, SmallTable has 1000 sequential rows.
+- [x] **CQ-T6** `ExternalAggregateEngine` — 5 tests: GROUP BY correctness, TotalSpilledBytes incremented, empty input, global COUNT, temp file cleanup.
+- [x] **CQ-T7** `LintStatementHandler` — 8 tests: clean script, expected columns, DELETE/SELECT-star violations, multiple findings, file-not-found error, sorted by line, UnusedConnection rule fires.
 
 ### Language Reference Gaps (CQ-Doc)
 
@@ -68,18 +74,61 @@ The items below were identified during the Phase 5.8 review pass on 2026-04-12. 
 
 ### Potential Linter Rule Gaps (CQ-R)
 
-- [ ] **CQ-R1** No linter rule for referencing a connection before it is created in the script (forward reference). Add `ConnectionForwardReferenceRule`.
-- [ ] **CQ-R2** No linter rule for connections that are opened but never used (dead connections). Add `UnusedConnectionRule`.
+- [x] **CQ-R1** `ConnectionForwardReferenceRule` added — warns when a connection is used before its `CREATE CONNECTION`.
+- [x] **CQ-R2** `UnusedConnectionRule` added — warns when a `CREATE CONNECTION` is never referenced in the script.
 - [ ] **CQ-R3** No linter rule catching `INSERT INTO` where the column list is omitted but the target table has more columns than the SELECT provides (silent null injection). Add `InsertColumnCountMismatchRule`.
+
+### Architecture (CQ-Arch)
+
+- [x] **CQ-Arch1** `ALTER CONNECTION` now has its own `AlterConnectionStatement` AST node and `AlterConnectionStatementHandler`. Previously it was conflated with `CreateConnectionStatement(mode=Alter)`. Behavior is preserved: previous options are inherited and only provided keys are overwritten.
 
 ### Performance (CQ-P)
 
-- [ ] **CQ-P1** `ExecutionSession` accumulates all result sets as fully-materialized `IRenderable` (Spectre Table) objects in memory before returning. For large result sets this is unbounded. After CQ-S2 (return raw `DataTable`), paginate rendering in the TUI.
+- [x] **CQ-P1** Resolved by CQ-S2 — `ExecutionResult.ResultsTables` is now `List<DataTable>` (not pre-rendered `IRenderable`). TUI renders on demand.
 - [ ] **CQ-P2** `StandardFunctions` is at 58.2% — the low coverage suggests date/time and string functions may have untested edge cases that could hide silent incorrect conversions. Audit for functions that silently return null or default on bad input instead of throwing.
 
 ### Legacy Code (CQ-Legacy)
 
-- [ ] **CQ-Legacy1** `ETL_SQL.Common.Logger` (original non-Serilog logger) is at 9.5% — it is effectively dead after `LoggerService` replaced it. Verify no call sites remain and delete the class.
+- [ ] **CQ-Legacy1** `ETL_SQL.Common.Logger` static façade — one call site (`OrchestratorService/Program.cs`) removed. The class is fully obsolete but kept to avoid breaking any external consumers. Safe to delete once confirmed no external references remain.
+
+---
+
+## Phase 5 Code Quality — Steps 5.3–5.7 (Outstanding)
+
+These steps from `Engine_Upgrade_Strategy.md` were not addressed in the Phase 5.8 review pass. They are prerequisites for Phases 8–9 scale work.
+
+- [ ] **CQ-5.3** Structured logging throughout the codebase (CQ-17). Replace all `Logger.Verbose($"...")` string-interpolation calls with Serilog structured templates (`Logger.Verbose("Executing {StatementType} at line {Line}", ...)`). Covers Evaluator, all handlers, all connectors. Do not change log levels or sink config — only change call sites.
+- [ ] **CQ-5.4** Per-session correlation IDs (CQ-18). Add a `SessionId` (GUID, 8-char short form) to `ISessionState`, populated at `Evaluator` construction time. Attach to every log call via `Serilog.LogContext.PushProperty("SessionId", sessionId)`. Output format: `[{SessionId}]` in log lines so parallel runs are distinguishable.
+- [ ] **CQ-5.5** Concurrent Evaluator tests (CQ-19). Fork two `Evaluator` instances with different sessions, run conflicting operations simultaneously (same `#TempTable` name, same session variable name), assert no cross-contamination between session states. Required before any multi-session dashboard work.
+- [ ] **CQ-5.6** CI coverage reporting pipeline (CQ-21). Wire `coverlet.collector` + `reportgenerator` into the CI pipeline. Publish HTML coverage report as a build artifact. Set a coverage floor at the current measured baseline (do not set an aspirational target that will immediately fail).
+- [ ] **CQ-5.7** Polly retry logic for transient DB failures (CQ-24). Add `Polly` to `ETL-SQL.Connectors`. Wrap `OpenConnectionAsync()` and `ExecuteQueryAsync()` in SqlServer, Postgres, and Oracle connectors: 3 attempts, exponential backoff from 500ms, retry only on transient exceptions. Log each retry at Warning level with attempt number and exception message.
+
+---
+
+## Phase 8 — Scale & Performance (Outstanding)
+
+- [ ] **Phase 8A** Large dataset handling design spike. Profile real bottlenecks on 50M+ row scripts. Produce a concrete recommendation in `Docs/LargeDatasets.md` covering: streaming execution, chunked processing with OFFSET/FETCH pushdown, spill-to-disk for `#temp` tables, and Parquet as in-process columnar format. No code until the design document is approved.
+- [ ] **Phase 8B** Parallel execution and resource throttling. Once Phase 7 (process spawning) is running, expose `max_concurrent_jobs` in `appsettings.json`, enforce the cap before each spawn, queue jobs that exceed it, and emit metrics (active/queued jobs, CPU/RAM per job) to a structured log sink.
+
+---
+
+## Phase 9 Report-SQL — Post-Launch Items
+
+Phases 9A–9D are complete. The following items were deferred as out-of-scope for the initial launch or identified in the Phase 9 risk register as follow-up work.
+
+### Dashboard Behavior
+
+- [ ] **Rpt-1** Slicer parameter optimization. `DashboardService.SetParameterAsync` currently does a full script rebuild on every parameter change (noted in code as "Phase 9D simplified: full rebuild"). Upgrade to selective re-evaluation: parse each visual's `SourceSql` at manifest-build time to extract which `@params` it references; on parameter change, only re-query and re-render visuals whose source references that parameter. All other visuals keep their current data.
+- [ ] **Rpt-2** `SnapshotStore` write safety. Two issues: (a) atomic write — serialize to a `.tmp` file, rename to the final path on success; orphaned `.tmp` files from a crash are deleted on startup. (b) Concurrent access — wrap reads/writes in a `ReaderWriterLockSlim` so live dashboard reads and a scheduled `CREATE DATASET` refresh job do not race.
+
+### Linter Rules
+
+- [ ] **Rpt-3** Report-SQL keyword conflict linter rule. Add a rule that warns when a column alias or variable name shadows a Report-SQL keyword (`VISUAL`, `PAGE`, `DATASET`, `MAPPINGS`, `SOURCE`, `STRUCTURE`, `MAP`, etc.). These are non-reserved and will not cause a parse error, but they will confuse anyone reading the script.
+- [ ] **Rpt-4** `STRUCTURE` string validation. `CreatePageStatementHandler` and the linter should validate the CSS grid template areas string: every letter in the `MAP(...)` must appear in `STRUCTURE`, and every letter in `STRUCTURE` must appear in the map. Mismatches produce a broken layout silently today.
+
+### Documentation
+
+- [ ] **Rpt-5** Create `Docs/Engine.md` (Phase 4.4 from Engine_Upgrade_Strategy). Engineering document covering: full project dependency graph, what each project owns, Evaluator statement dispatch loop, `#temp` table scoping, pushdown decision logic, Orchestrator job scheduling, Connector interface contract, and Linting pipeline. This is the onboarding reference for new contributors.
 
 ---
 

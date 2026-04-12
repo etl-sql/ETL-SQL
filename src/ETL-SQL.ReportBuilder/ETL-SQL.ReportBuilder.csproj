@@ -13,8 +13,5 @@
     <ProjectReference Include="..\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
   </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="System.Text.Json" Version="9.0.3" />
-  </ItemGroup>
 
 </Project>

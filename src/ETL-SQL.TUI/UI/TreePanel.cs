@@ -21,8 +21,8 @@ namespace ETL_SQL.TUI.UI
             var tree = _evaluator.ExecutionTree;
             var visualizer = new ExecuteTreeVisualizer(tree);
             
-            // Generate the Spectre.Console Table renderable
-            var treeWidget = visualizer.CreateRenderable();
+            // Generate the Spectre.Console Table renderable with scrolling
+            var treeWidget = visualizer.CreateRenderable(_renderer.ResultScrollRow, height - 3);
             
             var borderColor = _renderer.ResultsFocus ? Color.Yellow : Color.Cyan;
             

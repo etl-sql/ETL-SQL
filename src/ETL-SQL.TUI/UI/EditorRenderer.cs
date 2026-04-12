@@ -24,7 +24,12 @@ namespace ETL_SQL.TUI.UI
 
         public bool ResultsFocus { get; set; } = false;
         public int ResultScrollRow { get; set; } = 0;
+        public int ResultScrollCol { get; set; } = 0;
         public int ActiveResultSetIndex { get; set; } = 0;
+        public bool IsBottomMaximized { get; set; } = false;
+        private bool _forceFullRepaintPending = false;
+
+        public void ForceFullRepaint() => _forceFullRepaintPending = true;
 
         public string? PromptTitle { get; set; }
         public string PromptValue { get; set; } = "";
@@ -54,7 +59,7 @@ namespace ETL_SQL.TUI.UI
             _editorPanel = new EditorPanel(buffer, this);
             _messagePanel = new MessagePanel(evaluator);
             _resultsPanel = new ResultsPanel(evaluator, this);
-            _performancePanel = new PerformancePanel(evaluator);
+            _performancePanel = new PerformancePanel(evaluator, this);
             _treePanel = new TreePanel(evaluator, this);
         }
 
@@ -69,13 +74,23 @@ namespace ETL_SQL.TUI.UI
         {
             if (!Headless) _console.CursorVisible = false;
 
-            // Layout definitions: Balanced 60/40 or similar instead of fixed small sizes
+            if (_forceFullRepaintPending)
+            {
+                try { Console.Clear(); } catch { }
+                _forceFullRepaintPending = false;
+            }
+
+            // ── Layout Definitions ──────────────────────────────────────────
             int editorAreaTop = 1;
             int statusHeight = 1;
-            int lowerAreaHeight = (int)(totalHeight * 0.4); // 40% for results/messages
+            
+            // Adjust lower area height based on focus/maximize
+            int lowerAreaHeight = (int)(totalHeight * 0.4); 
+            if (IsBottomMaximized) lowerAreaHeight = Math.Max(5, totalHeight - editorAreaTop - statusHeight - 2);
+            
             int messageAreaHeight = 4;
             int resultAreaHeight = lowerAreaHeight - messageAreaHeight;
-            if (resultAreaHeight < 5) resultAreaHeight = 5; // Minimum 5 lines for results
+            if (resultAreaHeight < 5) resultAreaHeight = 5; 
 
             int editorAreaHeight = Math.Max(1, totalHeight - resultAreaHeight - messageAreaHeight - statusHeight - editorAreaTop);
 
@@ -83,17 +98,17 @@ namespace ETL_SQL.TUI.UI
             if (buffer.CursorLine < ScrollLine) ScrollLine = buffer.CursorLine;
             if (buffer.CursorLine >= ScrollLine + editorAreaHeight) ScrollLine = buffer.CursorLine - editorAreaHeight + 1;
 
-            if (evaluator.LastResult != null)
-            {
-                int maxScroll = Math.Max(0, evaluator.LastResult.Rows.Count - (resultAreaHeight - 4));
-                ResultScrollRow = Math.Clamp(ResultScrollRow, 0, maxScroll);
-                if (ActiveResultSetIndex >= evaluator.LastResultSets.Count) ActiveResultSetIndex = Math.Max(0, evaluator.LastResultSets.Count - 1);
-            }
-            else
-            {
-                ResultScrollRow = 0;
-                ActiveResultSetIndex = 0;
-            }
+            // Calculate scroll limits based on visible panel
+            int totalItems = 0;
+            if (PerformanceVisible) totalItems = evaluator.ProfileMetrics.Count;
+            else if (TreeVisible) totalItems = evaluator.ExecutionTree.GetAllNodes().Count();
+            else if (evaluator.LastResult != null) totalItems = evaluator.LastResult.Rows.Count;
+
+            int maxScroll = Math.Max(0, totalItems - (resultAreaHeight - 4));
+            ResultScrollRow = Math.Clamp(ResultScrollRow, 0, maxScroll);
+
+            if (ActiveResultSetIndex >= evaluator.LastResultSets.Count) 
+                ActiveResultSetIndex = Math.Max(0, evaluator.LastResultSets.Count - 1);
 
             int gutterWidth = (buffer.Lines.Count).ToString().Length + 2;
             int editorWidth = totalWidth - gutterWidth - 1;
@@ -139,7 +154,7 @@ namespace ETL_SQL.TUI.UI
                 var perfLabel = TreeVisible ? " F4:Results " : (PerformanceVisible ? " F4:Tree    " : " F4:Perf    ");
                 
                 // Build status text components
-                string shortcuts = " F1:Help ^S:Save ^O:Open ^F:Find F5:Run | F3:Focus |" + perfLabel + "| F6:Tree |" + focusInfo2;
+                string shortcuts = " F1:Help ^S:Save ^O:Open ^F:Find F5:Run | F3:Focus |" + perfLabel + "| ^M:Exp | F6:Tree | " + focusInfo2;
                 string cursor = " | " + debugInfo2 + status2;
                 
                 // Combine and ensure it fits the width
@@ -264,21 +279,29 @@ namespace ETL_SQL.TUI.UI
             
             table.AddRow("F1", "Show/Hide this help screen");
             table.AddRow("F3", "Toggle Focus (Editor vs Results)");
-            table.AddRow("F5", "Run entire script");
-            table.AddRow("Shift+F5", "Run statement at cursor");
-            table.AddRow("Ctrl+S", "Save current script");
+            table.AddRow("F4", "Cycle View (Results / Perf / Tree)");
+            table.AddRow("F5", "Run entire script (Shift+F5 for statement)");
+            table.AddRow("F6", "Toggle Execution Tree view");
+            table.AddRow("Ctrl+M", "Maximize / Restore active panel");
+            table.AddRow("Ctrl+S", "Save current script (Shift+S for Save As)");
             table.AddRow("Ctrl+O", "Open script (with file autocomplete)");
             table.AddRow("Ctrl+N", "New script");
             table.AddRow("Ctrl+F", "Find text");
             table.AddRow("Ctrl+I / Alt+F", "Format script (SQL Beautifier)");
             table.AddRow("Ctrl+H", "Replace text");
             table.AddRow("Ctrl+G", "Go to line");
+            table.AddRow("Ctrl+P", "Export results to CSV");
+            table.AddRow("Ctrl+R", "Clear all results and output");
+            table.AddRow("Ctrl+Space", "Trigger Autocomplete suggestions");
             table.AddRow("Ctrl+X", "Exit or Cut (if text selected)");
             table.AddRow("Ctrl+C / Ctrl+V", "Copy / Paste");
             table.AddRow("Ctrl+Z / Ctrl+Y", "Undo / Redo");
             table.AddRow("Ctrl+D / Ctrl+K", "Duplicate / Delete Line");
-            table.AddRow("Ctrl+Home/End", "Go to start/end of script");
-            table.AddRow("Arrows / Tab", "Navigate / Cycle Suggestions");
+            table.AddRow("Ctrl+Home / End", "Go to start/end of script");
+            table.AddRow("Ctrl+Up / Down", "Scroll active panel vertically (Line)");
+            table.AddRow("Ctrl+PgUp / PgDn", "Scroll active panel vertically (Page)");
+            table.AddRow("Ctrl+Left / Right", "Scroll results horizontally / Switch Set");
+            table.AddRow("Arrows / Tab", "Navigate Editor / Cycle Suggestions");
             table.AddRow("Shift+Arrows", "Select text");
 
             var panel = new Panel(table)

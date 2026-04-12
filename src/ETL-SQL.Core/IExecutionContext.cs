@@ -122,7 +122,7 @@ namespace ETL_SQL.Core
     {
         Functions.IFunctionRegistry FunctionRegistry { get; }
         Task EvaluateStatement(Statement statement);
-        Task Evaluate(Script script);
+        Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default);
         Task EvaluateProcedure(string name, List<object?> args);
         string ResolvePath(string path);
         int MaxRecursiveDepth { get; set; }

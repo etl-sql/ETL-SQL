@@ -332,6 +332,7 @@ namespace ETL_SQL.Core.Parser
             Expression? source = null;
             Expression? dest = null;
             Expression? overwrite = null;
+            Expression? password = null;
 
             bool isFunctionStyle = _parser.Match(TokenType.LPAREN);
 
@@ -346,6 +347,10 @@ namespace ETL_SQL.Core.Parser
                 {
                     overwrite = _parser.ParseExpression();
                 }
+                if (_parser.Match(TokenType.COMMA))
+                {
+                    password = _parser.ParseExpression();
+                }
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after arguments");
             }
             else // SQL style
@@ -355,6 +360,19 @@ namespace ETL_SQL.Core.Parser
                     if (_parser.Match(TokenType.TO))
                     {
                         dest = _parser.ParseExpression();
+                    }
+                    else if (_parser.Match(TokenType.PASSWORD))
+                    {
+                        if (_parser.Current.Type == TokenType.LPAREN)
+                        {
+                            _parser.Advance();
+                            password = _parser.ParseExpression();
+                            _parser.Consume(TokenType.RPAREN, "Expected ')' after PASSWORD value");
+                        }
+                        else
+                        {
+                            password = _parser.ParseExpression();
+                        }
                     }
                     else if (_parser.Match(TokenType.WITH))
                     {
@@ -379,7 +397,7 @@ namespace ETL_SQL.Core.Parser
 
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
 
-            return new FileOperationStatement(type, source, dest, overwrite) { Line = startToken.Line, Column = startToken.Column };
+            return new FileOperationStatement(type, source, dest, overwrite, password) { Line = startToken.Line, Column = startToken.Column };
         }
 
         private Statement ParseDirectoryOperation(Token startToken)
@@ -401,6 +419,7 @@ namespace ETL_SQL.Core.Parser
             Expression? path = null;
             Expression? extra = null;
             Expression? overwrite = null;
+            Expression? password = null;
 
             bool isFunctionStyle = _parser.Match(TokenType.LPAREN);
 
@@ -415,6 +434,10 @@ namespace ETL_SQL.Core.Parser
                 {
                     overwrite = _parser.ParseExpression();
                 }
+                if (_parser.Match(TokenType.COMMA))
+                {
+                    password = _parser.ParseExpression();
+                }
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after arguments");
             }
             else // SQL style
@@ -424,6 +447,19 @@ namespace ETL_SQL.Core.Parser
                     if (_parser.Match(TokenType.TO))
                     {
                         extra = _parser.ParseExpression();
+                    }
+                    else if (_parser.Match(TokenType.PASSWORD))
+                    {
+                        if (_parser.Current.Type == TokenType.LPAREN)
+                        {
+                            _parser.Advance();
+                            password = _parser.ParseExpression();
+                            _parser.Consume(TokenType.RPAREN, "Expected ')' after PASSWORD value");
+                        }
+                        else
+                        {
+                            password = _parser.ParseExpression();
+                        }
                     }
                     else if (_parser.Match(TokenType.WITH))
                     {
@@ -448,7 +484,7 @@ namespace ETL_SQL.Core.Parser
 
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
 
-            return new DirectoryOperationStatement(type, path, extra, overwrite) { Line = startToken.Line, Column = startToken.Column };
+            return new DirectoryOperationStatement(type, path, extra, overwrite, null, password) { Line = startToken.Line, Column = startToken.Column };
         }
 
         private Expression? ParseWithOverwrite()

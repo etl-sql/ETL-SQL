@@ -139,14 +139,16 @@ namespace ETL_SQL.Engine.Handlers
                 case FileOpType.Encrypt:
                     if (dest != null)
                     {
-                        var pwd = context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
+                        var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
+                        pwd ??= context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
                         CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
                     }
                     break;
                 case FileOpType.Decrypt:
                     if (dest != null)
                     {
-                        var pwd = context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
+                        var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
+                        pwd ??= context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
                         CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
                     }
                     break;

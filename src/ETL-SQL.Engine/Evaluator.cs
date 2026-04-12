@@ -315,7 +315,7 @@ namespace ETL_SQL.Engine
             };
         }
 
-        public async Task Evaluate(Script script)
+        public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)
         {
             LastResultSets.Clear();
             _operationCount = 0;
@@ -331,8 +331,8 @@ namespace ETL_SQL.Engine
                     throw new ExecutionException($"Syntax error: {firstError.Message} at {firstError.Line}:{firstError.Column}");
                 }
 
-                var scriptNode = new ExecutionNode { 
-                    Name = "Script Execution", 
+                var scriptNode = new ExecutionNode {
+                    Name = "Script Execution",
                     Status = ExecutionStatus.Running,
                     StartTicks = Stopwatch.GetTimestamp()
                 };
@@ -341,6 +341,7 @@ namespace ETL_SQL.Engine
 
                 foreach (var statement in script.Statements)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     await EvaluateStatement(statement);
                 }
                 

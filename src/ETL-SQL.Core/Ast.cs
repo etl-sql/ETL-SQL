@@ -770,6 +770,31 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
+    /// <summary>
+    /// ALTER CONNECTION &lt;name&gt; [ON &lt;type&gt;(&lt;target&gt;)] [WITH(&lt;options&gt;)];
+    /// Modifies an existing connection. Previous options are preserved unless explicitly overridden.
+    /// </summary>
+    public record AlterConnectionStatement : Statement
+    {
+        public string ConnectionName { get; }
+        /// <summary>New connector type — null means keep the existing type.</summary>
+        public string? ConnectionType { get; }
+        /// <summary>New target/connection-string expression — null means keep the existing one.</summary>
+        public Expression? TargetExpression { get; }
+        /// <summary>Options to merge into the existing connection's option set.</summary>
+        public Dictionary<string, string>? Options { get; }
+
+        public AlterConnectionStatement(string name, string? type, Expression? target, Dictionary<string, string>? options)
+        {
+            ConnectionName   = name;
+            ConnectionType   = type;
+            TargetExpression = target;
+            Options          = options;
+        }
+
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
     public record ClearSessionStatement : Statement
     {
         public override string ToSql() => AstSerializer.Format(this);
@@ -1660,13 +1685,15 @@ namespace ETL_SQL.Core
         public Expression Source { get; }
         public Expression? Destination { get; }
         public Expression? Overwrite { get; set; }
+        public Expression? Password { get; set; }
 
-        public FileOperationStatement(FileOpType type, Expression source, Expression? destination = null, Expression? overwrite = null)
+        public FileOperationStatement(FileOpType type, Expression source, Expression? destination = null, Expression? overwrite = null, Expression? password = null)
         {
             Type = type;
             Source = source;
             Destination = destination;
             Overwrite = overwrite;
+            Password = password;
         }
 
         public override string ToSql() => AstSerializer.Format(this);
@@ -1681,14 +1708,16 @@ namespace ETL_SQL.Core
         public Expression? NewNameOrDest { get; }
         public Expression? Overwrite { get; set; }
         public Expression? Recursive { get; set; }
+        public Expression? Password { get; set; }
 
-        public DirectoryOperationStatement(DirectoryOpType type, Expression path, Expression? newNameOrDest = null, Expression? overwrite = null, Expression? recursive = null)
+        public DirectoryOperationStatement(DirectoryOpType type, Expression path, Expression? newNameOrDest = null, Expression? overwrite = null, Expression? recursive = null, Expression? password = null)
         {
             Type = type;
             Path = path;
             NewNameOrDest = newNameOrDest;
             Overwrite = overwrite;
             Recursive = recursive;
+            Password = password;
         }
 
         public override string ToSql() => AstSerializer.Format(this);

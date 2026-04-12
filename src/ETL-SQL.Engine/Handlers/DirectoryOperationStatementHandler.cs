@@ -132,7 +132,8 @@ namespace ETL_SQL.Engine.Handlers
                 case DirectoryOpType.Encrypt:
                     if (dest != null)
                     {
-                        var pwd = context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
+                        var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
+                        pwd ??= context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
                         EncryptDirectory(path, dest, pwd, overwrite, context);
                         _logger.WriteLine($"Directory encrypted: {path} -> {dest}", ConsoleColor.Green);
                     }
@@ -140,7 +141,8 @@ namespace ETL_SQL.Engine.Handlers
                 case DirectoryOpType.Decrypt:
                     if (dest != null)
                     {
-                        var pwd = context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
+                        var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
+                        pwd ??= context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
                         DecryptDirectory(path, dest, pwd, overwrite, context);
                         _logger.WriteLine($"Directory decrypted: {path} -> {dest}", ConsoleColor.Green);
                     }

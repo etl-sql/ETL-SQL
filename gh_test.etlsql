@@ -1,8 +1,0 @@
--- Live GitHub API Verification Script
--- Fetches the latest issues from the Microsoft Terminal repository
-
-CREATE CONNECTION gh ON API() 
-    WITH(URL='https://api.github.com/repos/microsoft/terminal/issues', ROOT_PATH='$');
-
--- Query top 5 issues to verify connectivity and parsing
-SELECT TOP 5 title, state, created_at FROM gh;

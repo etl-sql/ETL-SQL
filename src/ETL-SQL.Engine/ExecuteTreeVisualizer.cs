@@ -51,8 +51,8 @@ namespace ETL_SQL.Engine
                 });
         }
 
-        /// <summary>Builds the Tree-Table renderable object.</summary>
-        public IRenderable CreateRenderable()
+        /// <summary>Builds the Tree-Table renderable object with support for scrolling.</summary>
+        public IRenderable CreateRenderable(int skip = 0, int take = int.MaxValue)
         {
             var table = new Table()
                 .Border(TableBorder.Rounded)
@@ -63,41 +63,50 @@ namespace ETL_SQL.Engine
                 .AddColumn(new TableColumn("Time").RightAligned())
                 .AddColumn(new TableColumn("Speed").RightAligned());
 
+            int currentRow = 0;
+            int count = 0;
             foreach (var rootId in _tree.RootNodeIds)
             {
                 var rootNode = _tree.GetNode(rootId);
                 if (rootNode != null)
-                    AddNodeToTable(table, rootNode, 0);
+                    AddNodeToTable(table, rootNode, 0, ref currentRow, skip, take, ref count);
             }
 
             return table;
         }
 
-        private void AddNodeToTable(Table table, ExecutionNode node, int depth)
+        private void AddNodeToTable(Table table, ExecutionNode node, int depth, ref int currentRow, int skip, int take, ref int count)
         {
-            var statusStyle = GetStatusStyle(node.Status);
-            var indent = new string(' ', depth * 2);
-            var prefix = depth > 0 ? "└─ " : "";
+            if (count >= take) return;
 
-            var nameMarkup = $"{indent}[grey]{prefix}[/]{statusStyle.Icon} {statusStyle.Color}{Markup.Escape(node.Name)}[/]";
+            if (currentRow >= skip)
+            {
+                var statusStyle = GetStatusStyle(node.Status);
+                var indent = new string(' ', depth * 2);
+                var prefix = depth > 0 ? "└─ " : "";
 
-            var elapsed = node.GetElapsedMs();
-            var timeStr = elapsed > 1000 ? $"{(elapsed / 1000.0):N1}s" : $"{elapsed:N0}ms";
-            var velocity = node.GetVelocity();
-            var velStr = velocity > 1000 ? $"{(velocity / 1000.0):N1}k/s" : $"{velocity:N0} r/s";
+                var nameMarkup = $"{indent}[grey]{prefix}[/]{statusStyle.Icon} {statusStyle.Color}{Markup.Escape(node.Name)}[/]";
 
-            table.AddRow(
-                new Markup(nameMarkup),
-                new Markup($"{statusStyle.Color}{node.RowsProcessed:N0}[/]"),
-                new Markup($"[grey]{timeStr}[/]"),
-                new Markup(node.Status == ExecutionStatus.Running ? $"[yellow]{velStr}[/]" : "[grey]--[/]")
-            );
+                var elapsed = node.GetElapsedMs();
+                var timeStr = elapsed > 1000 ? $"{(elapsed / 1000.0):N1}s" : $"{elapsed:N0}ms";
+                var velocity = node.GetVelocity();
+                var velStr = velocity > 1000 ? $"{(velocity / 1000.0):N1}k/s" : $"{velocity:N0} r/s";
+
+                table.AddRow(
+                    new Markup(nameMarkup),
+                    new Markup($"{statusStyle.Color}{node.RowsProcessed:N0}[/]"),
+                    new Markup($"[grey]{timeStr}[/]"),
+                    new Markup(node.Status == ExecutionStatus.Running ? $"[yellow]{velStr}[/]" : "[grey]--[/]")
+                );
+                count++;
+            }
+            currentRow++;
 
             foreach (var childId in node.ChildIds)
             {
                 var child = _tree.GetNode(childId);
                 if (child != null)
-                    AddNodeToTable(table, child, depth + 1);
+                    AddNodeToTable(table, child, depth + 1, ref currentRow, skip, take, ref count);
             }
         }
 

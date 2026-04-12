@@ -81,10 +81,6 @@ try
         int.TryParse(cfg["Logging:AppLog:RetentionDays"],   out var rd) ? rd : 30,
         int.TryParse(cfg["Logging:AppLog:FileSizeLimitMb"], out var sl) ? sl : 10);
 
-#pragma warning disable CS0618
-    ETL_SQL.Common.Logger.Instance = loggerService;
-#pragma warning restore CS0618
-
     builder.Services.AddSingleton<LoggerService>(loggerService);
     builder.Services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
     builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);

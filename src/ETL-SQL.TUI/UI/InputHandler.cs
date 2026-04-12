@@ -105,12 +105,31 @@ namespace ETL_SQL.TUI.UI
             if (key.Key == ConsoleKey.Home && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.GoToTop(); return; }
             if (key.Key == ConsoleKey.End && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.GoToBottom(); return; }
 
+            // ── Global Bottom Panel Scrolling ──
+            if (key.Modifiers.HasFlag(ConsoleModifiers.Control))
+            {
+                if (key.Key == ConsoleKey.UpArrow) { _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 1); return; }
+                if (key.Key == ConsoleKey.DownArrow) { _renderer.ResultScrollRow++; return; }
+                if (key.Key == ConsoleKey.PageUp) { _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 10); return; }
+                if (key.Key == ConsoleKey.PageDown) { _renderer.ResultScrollRow += 10; return; }
+            }
+
             // F3 - Focus Toggle
             if (key.Key == ConsoleKey.F3)
             {
                 _renderer.ResultsFocus = !_renderer.ResultsFocus;
                 _renderer.AutocompleteVisible = false;
+                _renderer.ForceFullRepaint();
                 _renderer.ShowStatus(_renderer.ResultsFocus ? "Focused: Results (Use arrows/PgUp/PgDn to scroll)" : "Focused: Editor");
+                return;
+            }
+
+            // Ctrl+M - Maximize Bottom Panel
+            if (key.Key == ConsoleKey.M && key.Modifiers.HasFlag(ConsoleModifiers.Control))
+            {
+                _renderer.IsBottomMaximized = !_renderer.IsBottomMaximized;
+                _renderer.ForceFullRepaint();
+                _renderer.ShowStatus(_renderer.IsBottomMaximized ? "Expand: Bottom Panel" : "Collapse: Bottom Panel");
                 return;
             }
 
@@ -120,6 +139,7 @@ namespace ETL_SQL.TUI.UI
                 if (!_renderer.PerformanceVisible && !_renderer.TreeVisible) { _renderer.PerformanceVisible = true; _renderer.ShowStatus("View: Performance Metrics"); }
                 else if (_renderer.PerformanceVisible) { _renderer.PerformanceVisible = false; _renderer.TreeVisible = true; _renderer.ShowStatus("View: Execution Tree"); }
                 else { _renderer.TreeVisible = false; _renderer.ShowStatus("View: Query Results"); }
+                _renderer.ForceFullRepaint();
                 return;
             }
 
@@ -128,6 +148,7 @@ namespace ETL_SQL.TUI.UI
             {
                 _renderer.TreeVisible = !_renderer.TreeVisible;
                 _renderer.PerformanceVisible = false;
+                _renderer.ForceFullRepaint();
                 _renderer.ShowStatus(_renderer.TreeVisible ? "View: Execution Tree" : "View: Query Results");
                 return;
             }
@@ -196,12 +217,19 @@ namespace ETL_SQL.TUI.UI
         {
             switch (key.Key)
             {
-                case ConsoleKey.UpArrow: _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 1); break;
-                case ConsoleKey.DownArrow: _renderer.ResultScrollRow++; break;
-                case ConsoleKey.LeftArrow: _renderer.ActiveResultSetIndex = Math.Max(0, _renderer.ActiveResultSetIndex - 1); _renderer.ResultScrollRow = 0; break;
+                case ConsoleKey.UpArrow: 
+                    _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 1); 
+                    break;
+                case ConsoleKey.DownArrow: 
+                    _renderer.ResultScrollRow++; 
+                    break;
+                case ConsoleKey.LeftArrow: 
+                    if (key.Modifiers.HasFlag(ConsoleModifiers.Control)) _renderer.ResultScrollCol = Math.Max(0, _renderer.ResultScrollCol - 1);
+                    else { _renderer.ActiveResultSetIndex = Math.Max(0, _renderer.ActiveResultSetIndex - 1); _renderer.ResultScrollRow = 0; _renderer.ResultScrollCol = 0; }
+                    break;
                 case ConsoleKey.RightArrow: 
-                    _renderer.ActiveResultSetIndex = Math.Min(_editor._evaluator.LastResultSets.Count - 1, _renderer.ActiveResultSetIndex + 1); 
-                    _renderer.ResultScrollRow = 0; 
+                    if (key.Modifiers.HasFlag(ConsoleModifiers.Control)) _renderer.ResultScrollCol++;
+                    else { _renderer.ActiveResultSetIndex = Math.Min(_editor._evaluator.LastResultSets.Count - 1, _renderer.ActiveResultSetIndex + 1); _renderer.ResultScrollRow = 0; _renderer.ResultScrollCol = 0; }
                     break;
                 case ConsoleKey.PageUp: _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 10); break;
                 case ConsoleKey.PageDown: _renderer.ResultScrollRow += 10; break;

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Spectre.Console;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -90,13 +91,20 @@ namespace ETL_SQL.TUI.UI
             };
 
             var source = await File.ReadAllTextAsync(script.FullName);
-            var session = new ExecutionSession(_serviceProvider, runCtx);
+            var logger = _serviceProvider.GetRequiredService<ILogger>();
+            await using var session = new ExecutionSession(_serviceProvider, runCtx, logger);
             var result = await session.ExecuteAsync(source);
 
             if (result.Success)
             {
-                foreach (var table in result.ResultsTables)
-                    AnsiConsole.Write(table);
+                foreach (var dataTable in result.ResultsTables)
+                {
+                    var spectreTable = new Table().Border(TableBorder.Rounded);
+                    foreach (var col in dataTable.ColumnNames) spectreTable.AddColumn(col);
+                    foreach (var row in dataTable.Rows)
+                        spectreTable.AddRow(row.Columns.Values.Select(v => v?.ToString() ?? "").ToArray());
+                    AnsiConsole.Write(spectreTable);
+                }
                 AnsiConsole.MarkupLine($"\n[green]OK[/] — {result.ExecutionTimeMs}ms — {result.RowsProcessed:N0} rows");
             }
             else

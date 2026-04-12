@@ -67,8 +67,8 @@ BEGIN TRY
     WHERE MonthID = 202604;
 
     -- 2. Post-Processing (Archive & Secure)
-    COMPRESS_FILE 'C:\Exports\monthly_ledger.csv', 'C:\Exports\ledger.zip' OVERWRITE ON;
-    ENCRYPT_FILE 'C:\Exports\ledger.zip', 'C:\Exports\ledger.zip.enc' PASS 'MasterSecret2026' OVERWRITE ON;
+    COMPRESS FILE 'C:\Exports\monthly_ledger.csv' TO 'C:\Exports\ledger.zip' WITH(OVERWRITE ON);
+    ENCRYPT FILE 'C:\Exports\ledger.zip' TO 'C:\Exports\ledger.zip.enc' PASSWORD('MasterSecret2026') WITH(OVERWRITE ON);
 
     -- 3. Transmit
     SEND FILE 'C:\Exports\ledger.zip.enc' TO '/inbox/incoming/' AT sftp_vendor;
@@ -196,6 +196,7 @@ Compare local flat files against a remote production database to identify missin
 -- Pattern Scenario: Bank Statement Reconciliation
 CREATE CONNECTION bank_csv ON FLATFILE('inbox/bank_stmt.csv');
 CREATE CONNECTION local_db ON MSSQL('Server=Prod;DB=Accounts');
+CREATE CONNECTION local_file_report ON FLATFILE('out/recon_error.csv');
 
 -- 1. Stage both sides into Engine memory
 SELECT TranID, Amount INTO #Bank FROM bank_csv.Main;
@@ -213,7 +214,7 @@ WHERE B.TranID IS NULL OR I.TranID IS NULL OR B.Amount <> I.Amount;
 
 -- 3. Export Discrepancies
 IF (SELECT COUNT(*) FROM #ReconReport) > 0
-    SELECT * INTO LocalFile.Report('out/recon_error.csv') FROM #ReconReport;
+    SELECT * INTO local_file_report FROM #ReconReport;
 ```
 
 ---
@@ -322,7 +323,7 @@ BEGIN
     
     SELECT * INTO LocalFile.CSV(@OutFile) FROM prod.Sales WHERE Country = @C;
     
-    ENCRYPT_FILE @OutFile, @OutFile + '.enc' PASS 'Secret' OVERWRITE ON;
+    ENCRYPT_FILE(@OutFile, @OutFile + '.enc','Secret',ON);
     
     SEND FILE @OutFile + '.enc' TO '/inbox/' + @C + '/' AT vendor_sftp;
     

@@ -29,51 +29,35 @@ namespace ETL_SQL.Engine.Handlers
             bool alreadyExists = context.Connections.TryGetValue(stmt.ConnectionName, out var existingDataSource);
 
             if (stmt.Mode == ObjectCreationMode.Create && alreadyExists)
-                throw new ExecutionException($"Connection '{stmt.ConnectionName}' already exists.");
-            if (stmt.Mode == ObjectCreationMode.Alter && !alreadyExists)
-                throw new ExecutionException($"Connection '{stmt.ConnectionName}' does not exist.");
+                throw new ExecutionException($"Connection '{stmt.ConnectionName}' already exists. Use ALTER CONNECTION to modify it.");
 
             string? connectionType = stmt.ConnectionType;
             string? target = null;
             Dictionary<string, string>? options = null;
 
-            if (stmt.Mode == ObjectCreationMode.Alter || (stmt.Mode == ObjectCreationMode.CreateOrAlter && alreadyExists))
+            if (stmt.Mode == ObjectCreationMode.CreateOrAlter && alreadyExists)
             {
-                // Patching existing connection
+                // CREATE OR ALTER with existing connection — patches and preserves options
                 if (existingDataSource == null) throw new ExecutionException($"Connection '{stmt.ConnectionName}' exists but its data source is null.");
-                
                 connectionType ??= existingDataSource.ConnectorType;
                 options = new Dictionary<string, string>(existingDataSource.Options ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
                 target = existingDataSource.Path;
-
-                // Merge options
                 if (stmt.Options != null)
-                {
                     foreach (var kvp in stmt.Options) options[kvp.Key] = kvp.Value;
-                }
-
-                // Update target if provided
                 if (stmt.TargetExpression != null)
-                {
                     target = (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString() ?? "";
-                }
             }
             else
             {
-                // New connection
+                // CREATE (new) or CREATE OR ALTER (not yet existing)
                 if (connectionType == null) throw new ExecutionException("Connection type must be specified for CREATE CONNECTION.");
-                if (stmt.TargetExpression != null)
-                {
-                    target = (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString() ?? "";
-                }
-                else
-                {
-                    target = "";
-                }
+                target = stmt.TargetExpression != null
+                    ? (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString() ?? ""
+                    : "";
                 options = stmt.Options != null ? new Dictionary<string, string>(stmt.Options, StringComparer.OrdinalIgnoreCase) : null;
             }
 
-            _logger.Debug($"{(alreadyExists ? "Altering" : "Initializing")} connection {stmt.ConnectionName} of type {connectionType}");
+            _logger.Debug($"{(alreadyExists ? "Upserting" : "Creating")} connection {stmt.ConnectionName} of type {connectionType}");
 
             if (target != null && target.StartsWith("ENC:"))
             {

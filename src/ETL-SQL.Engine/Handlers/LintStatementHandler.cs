@@ -3,10 +3,11 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Linting;
-using ETL_SQL.Core.Linting.Rules;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
@@ -17,7 +18,13 @@ namespace ETL_SQL.Engine.Handlers
     /// </summary>
     public class LintStatementHandler : IStatementHandler
     {
+        private readonly ILogger _logger;
         public Type SupportedStatementType => typeof(LintStatement);
+
+        public LintStatementHandler(ILogger logger)
+        {
+            _logger = logger;
+        }
 
         /// <summary>Executes the LINT statement, running all registered static analysis rules and returning the results as a table.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
@@ -33,13 +40,18 @@ namespace ETL_SQL.Engine.Handlers
 
                 if (!File.Exists(fullPath))
                 {
-                    throw new Exception($"Script file not found: {fullPath}");
+                    _logger.Error("LINT target file not found: {Path}", null, fullPath);
+                    throw new ExecutionException($"Script file not found: {fullPath}", null, lintStmt.Line, lintStmt.Column);
                 }
+
+                _logger.Info("Linting script file: {Path}", fullPath);
                 sql = await File.ReadAllTextAsync(fullPath);
             }
             else
             {
-                throw new Exception("LINT without a file path is not yet supported in this context. Use LINT 'path.sql';");
+                throw new ExecutionException(
+                    "LINT without a file path is not yet supported. Use LINT 'path.sql';",
+                    null, lintStmt.Line, lintStmt.Column);
             }
 
             var lexer = new Lexer(sql);
@@ -47,13 +59,7 @@ namespace ETL_SQL.Engine.Handlers
             var parser = new ETL_SQL.Core.Parser.Parser(tokens, sql);
             var script = parser.Parse();
 
-            var linter = new Linter();
-            foreach (var type in typeof(ILintRule).Assembly.GetTypes()
-                .Where(t => typeof(ILintRule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract))
-            {
-                if (Activator.CreateInstance(type) is ILintRule rule)
-                    linter.AddRule(rule);
-            }
+            var linter = LinterFactory.CreateWithAllRules();
 
             var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
 
@@ -73,6 +79,7 @@ namespace ETL_SQL.Engine.Handlers
                 await table.AddRowAsync(row);
             }
 
+            _logger.Info("Linting completed for {Path}. Findings: {Count}", lintStmt.ScriptPath, results.Count);
             context.LastResult = table;
         }
     }

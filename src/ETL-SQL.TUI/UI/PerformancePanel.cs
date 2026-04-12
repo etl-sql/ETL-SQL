@@ -8,10 +8,12 @@ namespace ETL_SQL.TUI.UI
     public class PerformancePanel : IUIComponent
     {
         private readonly Evaluator _evaluator;
+        private readonly EditorRenderer _renderer;
 
-        public PerformancePanel(Evaluator evaluator)
+        public PerformancePanel(Evaluator evaluator, EditorRenderer renderer)
         {
             _evaluator = evaluator;
+            _renderer = renderer;
         }
 
         public void Render(IConsoleInterface console, int x, int y, int width, int height)
@@ -59,7 +61,38 @@ namespace ETL_SQL.TUI.UI
 
             layoutTable.AddRow(chart, statsTable);
 
-            var panel = new Panel(layoutTable)
+            // 3. Execution Profile (Table of all statements)
+            var profileTable = new Table().Border(TableBorder.None).Expand();
+            profileTable.AddColumn("Time");
+            profileTable.AddColumn("Statement");
+            profileTable.AddColumn(new TableColumn("Rows").RightAligned());
+            profileTable.AddColumn(new TableColumn("Dur").RightAligned());
+            profileTable.AddColumn(new TableColumn("Mem").RightAligned());
+
+            int tableHeight = Math.Max(1, height - 10);
+            var visibleMetrics = _evaluator.ProfileMetrics
+                .Skip(_renderer.ResultScrollRow)
+                .Take(tableHeight)
+                .ToList();
+
+            foreach (var m in visibleMetrics)
+            {
+                profileTable.AddRow(
+                    new Markup($"[grey]{m.Timestamp:HH:mm:ss}[/]"),
+                    new Markup(Markup.Escape(m.Sql.Length > 40 ? m.Sql.Substring(0, 37) + "..." : m.Sql)),
+                    new Markup($"[cyan]{m.RowsProcessed:N0}[/]"),
+                    new Markup($"[green]{m.DurationMs:N0}ms[/]"),
+                    new Markup($"[blue]{(m.MemoryDeltaBytes / 1024.0):N1}K[/]")
+                );
+            }
+
+            var rootTable = new Table().NoBorder().Expand();
+            rootTable.AddColumn("Main");
+            rootTable.AddRow(layoutTable);
+            rootTable.AddRow(new Rule("[grey]Detailed Execution Profile[/]"));
+            rootTable.AddRow(profileTable);
+
+            var panel = new Panel(rootTable)
             {
                 Header = new PanelHeader("[yellow]Performance Dashboard[/]"),
                 Height = height,

@@ -145,14 +145,66 @@ namespace ETL_SQL.Core.Parser
         private Statement ParseAlter()
         {
             var startToken = _parser.Previous;
-            var mode = ObjectCreationMode.Alter;
 
-            if (_parser.Match(TokenType.CONNECTION)) return ParseCreateConnection(startToken, mode);
-            if (_parser.Match(TokenType.PROCEDURE)) return ParseCreateProcedure(startToken, mode);
-            if (_parser.Match(TokenType.FUNCTION)) return ParseCreateFunction(startToken, mode);
+            if (_parser.Match(TokenType.CONNECTION)) return ParseAlterConnection(startToken);
+            if (_parser.Match(TokenType.PROCEDURE))  return ParseCreateProcedure(startToken, ObjectCreationMode.Alter);
+            if (_parser.Match(TokenType.FUNCTION))   return ParseCreateFunction(startToken, ObjectCreationMode.Alter);
+            if (_parser.Match(TokenType.TABLE))       return ParseAlterTable(startToken);
 
-            if (_parser.Match(TokenType.TABLE)) return ParseAlterTable(startToken);
             throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, or TABLE after ALTER", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        /// <summary>
+        /// Parses ALTER CONNECTION &lt;name&gt; [ON &lt;type&gt;(&lt;target&gt;)] [WITH(&lt;options&gt;)];
+        /// Preserves existing options — only the keys supplied in WITH are overwritten.
+        /// </summary>
+        private Statement ParseAlterConnection(Token startToken)
+        {
+            var name = _parser.ConsumeIdentifier("Expected connection name after ALTER CONNECTION").Value;
+
+            string? connectionType = null;
+            Expression? target = null;
+
+            if (_parser.Match(TokenType.ON))
+            {
+                var typeToken = _parser.Advance();
+                connectionType = typeToken.Value;
+
+                if (typeToken.Type == TokenType.FILE)
+                    throw new SyntaxException("Connection type 'FILE' is deprecated. Please use 'FLATFILE' instead.", typeToken.Line, typeToken.Column);
+
+                bool hasParen = _parser.Match(TokenType.LPAREN);
+                if (hasParen && _parser.Current.Type == TokenType.RPAREN)
+                    target = new LiteralExpression("", TokenType.STRING);
+                else
+                    target = _parser.ParseExpression();
+
+                if (hasParen) _parser.Consume(TokenType.RPAREN, "Expected ')' after target string");
+            }
+
+            Dictionary<string, string>? options = null;
+            if (_parser.Match(TokenType.WITH))
+            {
+                options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                _parser.Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+                {
+                    string key = _parser.Advance().Value;
+                    _parser.Consume(TokenType.EQUALS, "Expected '=' after option key");
+                    string val = _parser.Advance().Value;
+                    options[key] = val;
+                    if (!_parser.Match(TokenType.COMMA)) break;
+                }
+                _parser.Consume(TokenType.RPAREN, "Expected ')' at end of WITH options");
+            }
+
+            _parser.Consume(TokenType.SEMICOLON, "Expected ';' at end of ALTER CONNECTION");
+
+            return new AlterConnectionStatement(name, connectionType, target, options)
+            {
+                Line   = startToken.Line,
+                Column = startToken.Column
+            };
         }
 
         private Statement ParseCreateProcedure(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
