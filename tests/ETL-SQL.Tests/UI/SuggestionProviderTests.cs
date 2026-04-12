@@ -191,12 +191,16 @@ namespace ETL_SQL.Tests
         [Fact]
         public async Task DatabaseSchemaProvider_MockDbConnection_SuggestsTablesWithPrefix()
         {
+            // Provide a live MockDB data source in the context so the provider can resolve tables.
+            // Without this, the regex fallback returns only the connection name "m", not tables.
+            var mockDs = new MockSqlDataSource("mock", "MOCKDB");
             var provider = new DatabaseSchemaProvider();
             var context = new SuggestionContext
             {
-                Prefix     = "m.",
-                FullScript  = "CREATE CONNECTION m ON MOCKDB();\nSELECT * FROM m.",
-                ScriptBefore = "CREATE CONNECTION m ON MOCKDB();\nSELECT * FROM m."
+                Prefix       = "m.",
+                FullScript   = "CREATE CONNECTION m ON MOCKDB();\nSELECT * FROM m.",
+                ScriptBefore = "CREATE CONNECTION m ON MOCKDB();\nSELECT * FROM m.",
+                Connections  = new Dictionary<string, IDataSource> { ["m"] = mockDs }
             };
 
             var results = (await provider.GetSuggestionsAsync(context)).ToList();

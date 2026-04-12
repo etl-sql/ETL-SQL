@@ -46,7 +46,8 @@ namespace ETL_SQL.TUI.UI
                 }
             }
 
-            var panel = new Panel(table) { Header = new PanelHeader(stats), Height = height, Width = width, Border = BoxBorder.Rounded, Padding = new Padding(0, 0, 0, 0) };
+            var borderColor = _renderer.ResultsFocus ? Color.Yellow : Color.Cyan;
+            var panel = new Panel(table) { Header = new PanelHeader(stats), Height = height, Width = width, Border = BoxBorder.Rounded, BorderStyle = new Style(borderColor), Padding = new Padding(0, 0, 0, 0) };
             console.SetCursorPosition(x, y);
             console.WriteWidget(panel);
         }

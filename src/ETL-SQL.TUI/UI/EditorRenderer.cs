@@ -55,7 +55,7 @@ namespace ETL_SQL.TUI.UI
             _messagePanel = new MessagePanel(evaluator);
             _resultsPanel = new ResultsPanel(evaluator, this);
             _performancePanel = new PerformancePanel(evaluator);
-            _treePanel = new TreePanel(evaluator);
+            _treePanel = new TreePanel(evaluator, this);
         }
 
         /// <summary>Renders the entire editor UI to the console.</summary>
@@ -69,11 +69,14 @@ namespace ETL_SQL.TUI.UI
         {
             if (!Headless) _console.CursorVisible = false;
 
-            // Layout definitions
+            // Layout definitions: Balanced 60/40 or similar instead of fixed small sizes
             int editorAreaTop = 1;
             int statusHeight = 1;
+            int lowerAreaHeight = (int)(totalHeight * 0.4); // 40% for results/messages
             int messageAreaHeight = 4;
-            int resultAreaHeight = 6;
+            int resultAreaHeight = lowerAreaHeight - messageAreaHeight;
+            if (resultAreaHeight < 5) resultAreaHeight = 5; // Minimum 5 lines for results
+
             int editorAreaHeight = Math.Max(1, totalHeight - resultAreaHeight - messageAreaHeight - statusHeight - editorAreaTop);
 
             // Viewport clamping
@@ -102,23 +105,24 @@ namespace ETL_SQL.TUI.UI
             {
                 _console.SetCursorPosition(0, 0);
                 string fileLabel = string.IsNullOrEmpty(filePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(filePath);
-                string header = $" ETL-SQL Console | {fileLabel}{(isDirty ? "*" : "")} ".PadRight(totalWidth - 1);
+                string focusInfo = !ResultsFocus ? " [bold yellow] (FOCUSED) [/]" : " (F3 to focus)";
+                string header = $" ETL-SQL IDE | {fileLabel}{(isDirty ? "*" : "")}{focusInfo} ".PadRight(totalWidth - 1);
                 _console.Markup($"[white on grey15]{Markup.Escape(header)}[/]");
             }
 
-            // 2. Main Panels (Panels should also respect headless if they touch console, but they usually just return strings or use IRenderable)
-            // Actually, Panels take the console now.
+            // 2. Main Panels
             if (!Headless)
             {
                 _editorPanel.Render(_console, 0, editorAreaTop, totalWidth, editorAreaHeight);
                 _messagePanel.Render(_console, 0, editorAreaTop + editorAreaHeight, totalWidth, messageAreaHeight);
                 
+                int lowerY = editorAreaTop + editorAreaHeight + messageAreaHeight;
                 if (TreeVisible)
-                    _treePanel.Render(_console, 0, editorAreaTop + editorAreaHeight + messageAreaHeight, totalWidth, resultAreaHeight);
+                    _treePanel.Render(_console, 0, lowerY, totalWidth, resultAreaHeight);
                 else if (PerformanceVisible)
-                    _performancePanel.Render(_console, 0, editorAreaTop + editorAreaHeight + messageAreaHeight, totalWidth, resultAreaHeight);
+                    _performancePanel.Render(_console, 0, lowerY, totalWidth, resultAreaHeight);
                 else
-                    _resultsPanel.Render(_console, 0, editorAreaTop + editorAreaHeight + messageAreaHeight, totalWidth, resultAreaHeight);
+                    _resultsPanel.Render(_console, 0, lowerY, totalWidth, resultAreaHeight);
             }
 
             // 4. Status Bar
@@ -131,7 +135,7 @@ namespace ETL_SQL.TUI.UI
 
                 var debugInfo2 = $"Ln {buffer.CursorLine + 1}, Col {buffer.CursorColumn + 1}";
                 var status2 = (DateTime.Now < StatusMessageExpiry) ? $" | {Markup.Escape(StatusMessage ?? "")}" : "";
-                var focusInfo2 = ResultsFocus ? " FOCUS: RESULTS" : " FOCUS: EDITOR";
+                var focusInfo2 = ResultsFocus ? "[bold yellow] FOCUS: RESULTS [/]" : " FOCUS: EDITOR";
                 var perfLabel = TreeVisible ? " F4:Results " : (PerformanceVisible ? " F4:Tree    " : " F4:Perf    ");
                 
                 // Build status text components

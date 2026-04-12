@@ -24,7 +24,13 @@ namespace ETL_SQL.TUI.UI
             if (string.IsNullOrEmpty(content)) return;
 
             var lines = content.Split('\n');
-            var bg = ColorScheme?.Normal.Background ?? Color.Black;
+            // Use the view's current background to prevent visual leakage.
+            var bg = ColorScheme?.Normal.Background ?? Color.DarkGray; 
+            var fgBase = ColorScheme?.Normal.Foreground ?? Color.White;
+            var normalAttr = new Terminal.Gui.Attribute(fgBase, bg);
+            
+            // Set the theme for the whole view to ensure consistency
+            if (ColorScheme == null) ColorScheme = new ColorScheme { Normal = normalAttr, Focus = new Terminal.Gui.Attribute(Color.White, Color.Cyan) };
 
             for (int lineIdx = TopRow; lineIdx < lines.Length; lineIdx++)
             {
@@ -37,6 +43,7 @@ namespace ETL_SQL.TUI.UI
                 foreach (var token in tokens)
                 {
                     var fg = TokenColor(token.Color);
+                    // Use the view-wide background color to prevent background leakage
                     Application.Driver.SetAttribute(new Terminal.Gui.Attribute(fg, bg));
 
                     for (int i = 0; i < token.Length; i++)
@@ -53,7 +60,7 @@ namespace ETL_SQL.TUI.UI
             }
 
             // Restore normal attribute so cursor rendering isn't affected
-            Application.Driver.SetAttribute(ColorScheme?.Normal ?? new Terminal.Gui.Attribute(Color.White, Color.Black));
+            Application.Driver.SetAttribute(normalAttr);
         }
 
         private static Color TokenColor(HighlightColor c) => c switch
@@ -78,5 +85,19 @@ namespace ETL_SQL.TUI.UI
             HighlightColor.DataType    => Color.Cyan,
             _                          => Color.White
         };
+        public override bool ProcessKey(KeyEvent kb)
+        {
+            // Allow Tab to accept suggestions if the autocomplete is visible
+            if (Autocomplete != null && Autocomplete.Visible)
+            {
+                if (kb.Key == Key.Tab)
+                {
+                    // Map Tab to the configured selection key (Enter) 
+                    // so Autocomplete handles it and inserts the text.
+                    kb.Key = Autocomplete.SelectionKey;
+                }
+            }
+            return base.ProcessKey(kb);
+        }
     }
 }

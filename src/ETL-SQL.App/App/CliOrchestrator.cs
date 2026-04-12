@@ -76,10 +76,34 @@ namespace ETL_SQL.App
             var uiCommand = new Command("ui", "Interactive user interface commands");
             var replSubcommand = new Command("repl", "Start the JSON-based REPL protocol for IDE integration")
             {
-                BatchSizeOption, PerfOption, VerboseOption, LogOption, SessionOption, VarOption
+                BatchSizeOption, PerfOption, VerboseOption, LogOption, JsonOption, SessionOption, VarOption
             };
             replSubcommand.SetHandler(async (context) => await Dispatch(context, "ui-repl", handler));
+
+            var simpleSubcommand = new Command("simple", "Start the simple interactive menu UI")
+            {
+                BatchSizeOption, VerboseOption
+            };
+            simpleSubcommand.SetHandler(async (context) => await Dispatch(context, "ui-simple", handler));
+
+            var editSubcommand = new Command("edit", "Start the modern windowed Terminal IDE (default)")
+            {
+                new Argument<string?>("file", "Optional file to pre-load") { Arity = ArgumentArity.ZeroOrOne },
+                BatchSizeOption, VerboseOption, SessionOption
+            };
+            editSubcommand.SetHandler(async (context) => await Dispatch(context, "ui-edit", handler));
+
+            var oldSubcommand = new Command("old", "Start the legacy Spectre-based console editor")
+            {
+                new Argument<string?>("file", "Optional file to pre-load") { Arity = ArgumentArity.ZeroOrOne },
+                BatchSizeOption, VerboseOption
+            };
+            oldSubcommand.SetHandler(async (context) => await Dispatch(context, "ui-old", handler));
+
             uiCommand.AddCommand(replSubcommand);
+            uiCommand.AddCommand(simpleSubcommand);
+            uiCommand.AddCommand(editSubcommand);
+            uiCommand.AddCommand(oldSubcommand);
             
             rootCommand.AddCommand(runCommand);
             rootCommand.AddCommand(testCommand);
@@ -128,6 +152,17 @@ namespace ETL_SQL.App
             {
                 var idArg = res.CommandResult.Children.OfType<ArgumentResult>().FirstOrDefault();
                 cliContext.SessionId = idArg?.GetValueOrDefault<string>();
+            }
+            else if (commandName.StartsWith("ui-"))
+            {
+                cliContext.UiMode = commandName.Substring(3); // "repl", "simple", "edit", "old"
+                // Check if there was a positional file argument
+                var fileResult = res.CommandResult.Children.OfType<ArgumentResult>().FirstOrDefault(a => a.Argument.Name == "file");
+                if (fileResult != null)
+                {
+                    var input = fileResult.GetValueOrDefault<string?>();
+                    cliContext.ScriptFile = string.IsNullOrWhiteSpace(input) ? null : new FileInfo(input.Trim('"', '\'', ' '));
+                }
             }
 
             cliContext.SessionId ??= res.FindResultFor(SessionOption) != null ? res.GetValueForOption(SessionOption) : null;

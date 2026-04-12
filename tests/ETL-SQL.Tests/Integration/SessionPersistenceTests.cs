@@ -88,16 +88,16 @@ namespace ETL_SQL.Tests.Integration
             Assert.NotNull(connStr);
 
             // 2nd run: Create remote table
-            AnsiConsole.MarkupLine("  - Step 2: Create remote table dbo.Employee");
+            AnsiConsole.MarkupLine("  - Step 2: Create remote table dbo.SessionStateTestEmployee");
             var (eval2, code2) = await RunSessionStep(@"
                 EXECUTE m
                 BEGIN
-                    IF OBJECT_ID('dbo.Employee', 'U') IS NOT NULL DROP TABLE dbo.Employee;
-                    CREATE TABLE dbo.Employee (
+                    IF OBJECT_ID('dbo.SessionStateTestEmployee', 'U') IS NOT NULL DROP TABLE dbo.SessionStateTestEmployee;
+                    CREATE TABLE dbo.SessionStateTestEmployee (
                         id INT PRIMARY KEY,
                         [name] NVARCHAR(100)
                     );
-                    INSERT INTO dbo.Employee (id, [name]) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'John');   
+                    INSERT INTO dbo.SessionStateTestEmployee (id, [name]) VALUES (1, 'Alice'), (2, 'Bob'), (3, 'John');   
                 END
             ");
             Assert.Equal(0, code2);
@@ -106,7 +106,7 @@ namespace ETL_SQL.Tests.Integration
             AnsiConsole.MarkupLine("  - Step 3: Fast Pushdown SELECT INTO #emp");
             var (eval3, code3) = await RunSessionStep(@"
                 EXECUTE m
-                SELECT * INTO #emp FROM m.dbo.Employee;
+                SELECT * INTO #emp FROM m.dbo.SessionStateTestEmployee;
             ");
             Assert.Equal(0, code3);
             Assert.True(eval3.Connections.ContainsKey("#emp"));
@@ -117,9 +117,9 @@ namespace ETL_SQL.Tests.Integration
             Assert.Equal(0, code4);
             Assert.Equal(3, eval4.LastResult?.Rows.Count);
 
-            // 5th run: Query remote m.dbo.Employee
+            // 5th run: Query remote m.dbo.SessionStateTestEmployee
             AnsiConsole.MarkupLine("  - Step 5: Verify remote table content");
-            var (eval5, code5) = await RunSessionStep("SELECT * FROM m.dbo.Employee;");
+            var (eval5, code5) = await RunSessionStep("SELECT * FROM m.dbo.SessionStateTestEmployee;");
             Assert.Equal(0, code5);
             Assert.Equal(3, eval5.LastResult?.Rows.Count);
 
@@ -129,7 +129,7 @@ namespace ETL_SQL.Tests.Integration
             Assert.Equal(0, code6);
             var lineageId = eval6.LineageTracker.GetLineage("#emp").ToList();
             Assert.NotEmpty(lineageId);
-            Assert.Contains(lineageId, r => r.TargetTable == "#emp" && r.SourceTables.Contains("m.dbo.Employee"));
+            Assert.Contains(lineageId, r => r.TargetTable == "#emp" && r.SourceTables.Contains("m.dbo.SessionStateTestEmployee"));
 
             // 7th run: Lineage check (name)
             AnsiConsole.MarkupLine("  - Step 7: Verify column lineage for #emp.name");
@@ -158,7 +158,7 @@ namespace ETL_SQL.Tests.Integration
 
             // 11th run: Fails gracefully (m gone)
             AnsiConsole.MarkupLine("  - Step 11: Verify connection 'm' is correctly marked as missing");
-            var (eval11, code11) = await RunSessionStep("SELECT * FROM m.dbo.Employee;");
+            var (eval11, code11) = await RunSessionStep("SELECT * FROM m.dbo.SessionStateTestEmployee;");
             Assert.Equal(1, code11); // Error expected
 
             // 12th run: Fails gracefully
@@ -180,12 +180,12 @@ namespace ETL_SQL.Tests.Integration
             var (eval14, code14) = await RunSessionStep(@"
                 EXECUTE m
                 BEGIN
-                    IF OBJECT_ID('dbo.Employee', 'U') IS NOT NULL DROP TABLE dbo.Employee;
-                    CREATE TABLE dbo.Employee (
+                    IF OBJECT_ID('dbo.SessionStateTestEmployee', 'U') IS NOT NULL DROP TABLE dbo.SessionStateTestEmployee;
+                    CREATE TABLE dbo.SessionStateTestEmployee (
                         id INT PRIMARY KEY,
                         [name] NVARCHAR(100)
                     );
-                    INSERT INTO dbo.Employee (id, [name]) VALUES (1, 'Mike'), (2, 'Steve'), (3, 'Angus');   
+                    INSERT INTO dbo.SessionStateTestEmployee (id, [name]) VALUES (1, 'Mike'), (2, 'Steve'), (3, 'Angus');   
                 END
             ");
             Assert.Equal(0, code14);
@@ -199,7 +199,7 @@ namespace ETL_SQL.Tests.Integration
             // 16th run: Update #emp from m and verify
             AnsiConsole.MarkupLine("  - Step 16: Refresh #emp from current remote data");
             var (eval16, code16) = await RunSessionStep(@"
-                SELECT * INTO #emp FROM m.dbo.Employee;
+                SELECT * INTO #emp FROM m.dbo.SessionStateTestEmployee;
                 SELECT * FROM #emp WHERE id = 1;
             ");
             Assert.Equal(0, code16);

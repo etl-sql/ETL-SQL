@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, 'feature/**' ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Restore tools
+        run: dotnet tool restore
+
+      - name: Restore dependencies
+        run: dotnet restore ETL-SQL.slnx
+
+      - name: Build
+        run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
+
+      - name: Run tests with coverage
+        run: >
+          dotnet test ETL-SQL.slnx
+          --no-build
+          --configuration Release
+          --collect:"XPlat Code Coverage"
+          --results-directory ./coverage
+          --filter "Category!=Integration"
+        continue-on-error: false
+
+      - name: Generate coverage report
+        run: >
+          dotnet reportgenerator
+          -reports:"./coverage/**/coverage.cobertura.xml"
+          -targetdir:"./coverage/report"
+          -reporttypes:"Html;Cobertura;TextSummary"
+          -assemblyfilters:"+ETL-SQL.*;-ETL-SQL.Tests;-ETL-SQL.PerfTests;-ETL-SQL.Benchmarks;-ETL-SQL.LintTests"
+
+      - name: Print coverage summary
+        run: cat ./coverage/report/Summary.txt
+        shell: bash
+
+      - name: Check coverage threshold
+        shell: pwsh
+        run: |
+          $summaryPath = "./coverage/report/Summary.txt"
+          $content = Get-Content $summaryPath -Raw
+          if ($content -match "Line coverage:\s+([\d.]+)%") {
+            $lineCoverage = [double]$Matches[1]
+            Write-Host "Line coverage: $lineCoverage%"
+            # Baseline measured 2026-04-12: 70.5% line coverage
+            $threshold = 70.0
+            if ($lineCoverage -lt $threshold) {
+              Write-Error "Coverage $lineCoverage% is below threshold $threshold%"
+              exit 1
+            }
+          } else {
+            Write-Warning "Could not parse coverage from summary — skipping gate"
+          }
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: ./coverage/report/
+          retention-days: 14
+
+  build-vscode:
+    name: Build VS Code Extension
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: src/etl-sql-vscode
+        run: npm ci
+
+      - name: Compile extension
+        working-directory: src/etl-sql-vscode
+        run: npm run compile
+
+      - name: Run vitest
+        working-directory: src/etl-sql-vscode
+        run: npm test

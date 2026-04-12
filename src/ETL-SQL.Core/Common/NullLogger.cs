@@ -10,7 +10,8 @@ namespace ETL_SQL.Common
         public static readonly NullLogger Instance = new();
 
         public void Log(LogLevel level, string message, Exception? ex = null) { }
-        
+
+        public string? SessionId { get; set; }
         public bool IsDebugEnabled => false;
         public bool IsVerboseEnabled => false;
         public bool IsVerbose { get; set; } = false;

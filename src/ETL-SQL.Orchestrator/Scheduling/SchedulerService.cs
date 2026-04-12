@@ -8,25 +8,34 @@ using Microsoft.Extensions.Logging;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Orchestrator.Execution;
 
 namespace ETL_SQL.Orchestrator.Scheduling
 {
     /// <summary>
     /// Background service that manages the scheduling and execution of automated ETL-SQL jobs.
+    /// Concurrency is limited by <see cref="JobThrottle"/> — jobs beyond the cap are queued
+    /// and executed as slots become available.
     /// </summary>
     public class SchedulerService
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly IJobHistoryStore _store;
         private readonly ILogger<SchedulerService> _logger;
+        private readonly JobThrottle _throttle;
         private CancellationTokenSource? _cts;
 
-        public SchedulerService(IServiceProvider serviceProvider, IJobHistoryStore store, ILogger<SchedulerService> logger)
+        public SchedulerService(IServiceProvider serviceProvider, IJobHistoryStore store,
+            ILogger<SchedulerService> logger, JobThrottle throttle)
         {
             _serviceProvider = serviceProvider;
-            _store = store;
-            _logger = logger;
+            _store           = store;
+            _logger          = logger;
+            _throttle        = throttle;
         }
+
+        /// <summary>Returns a snapshot of current concurrency metrics.</summary>
+        public JobThrottleMetrics GetMetrics() => _throttle.GetMetrics();
 
         private Task? _runTask;
 
@@ -107,6 +116,9 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
             try
             {
+                // Acquire a concurrency slot — waits if the cap is reached.
+                using var slot = await _throttle.AcquireAsync(job.Name);
+
                 using var scope = _serviceProvider.CreateScope();
                 // Inject IScriptExecutor — decoupled from the concrete Evaluator class.
                 var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();

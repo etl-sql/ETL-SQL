@@ -9,9 +9,10 @@ namespace ETL_SQL.TUI.UI
     /// A TUI-based panel that renders the graphical execution tree.
     /// Provides real-time visual feedback on the progress of statements in a script.
     /// </summary>
-    public class TreePanel(Evaluator evaluator)
+    public class TreePanel(Evaluator evaluator, EditorRenderer renderer)
     {
         private readonly Evaluator _evaluator = evaluator;
+        private readonly EditorRenderer _renderer = renderer;
 
         public void Render(IConsoleInterface console, int x, int y, int width, int height)
         {
@@ -23,12 +24,14 @@ namespace ETL_SQL.TUI.UI
             // Generate the Spectre.Console Table renderable
             var treeWidget = visualizer.CreateRenderable();
             
+            var borderColor = _renderer.ResultsFocus ? Color.Yellow : Color.Cyan;
+            
             // Wrap in a panel to provide a border and header
             var panel = new Panel(treeWidget)
             {
                 Header = new PanelHeader("[bold cyan] Execution Pipeline [/]"),
                 Border = BoxBorder.Rounded,
-                BorderStyle = new Style(Color.Cyan),
+                BorderStyle = new Style(borderColor),
                 Height = height,
                 Width = width
             };

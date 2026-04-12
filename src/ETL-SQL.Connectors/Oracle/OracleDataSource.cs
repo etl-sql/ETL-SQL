@@ -6,6 +6,7 @@ using Oracle.ManagedDataAccess.Client;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors.Oracle
 {
@@ -37,10 +38,17 @@ namespace ETL_SQL.Connectors.Oracle
 
         public IDataSource WithTable(string tableName) => new OracleDataSource(_connectionString, tableName, _options, _logger);
 
+        private async Task<OracleConnection> OpenConnectionAsync()
+        {
+            var conn = new OracleConnection(_connectionString);
+            await ConnectorRetryPolicy.ForOracle(_logger)
+                .ExecuteAsync(async ct => await conn.OpenAsync(ct));
+            return conn;
+        }
+
         public async Task<string> GetVersionAsync()
         {
-            using var conn = new OracleConnection(_connectionString);
-            await conn.OpenAsync();
+            using var conn = await OpenConnectionAsync();
             using var cmd = new OracleCommand("SELECT version FROM v$instance", conn);
             var result = await cmd.ExecuteScalarAsync();
             return result?.ToString() ?? "Unknown Oracle Version";
@@ -53,8 +61,7 @@ namespace ETL_SQL.Connectors.Oracle
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Oracle data source read.");
 
-            using var conn = new OracleConnection(_connectionString);
-            await conn.OpenAsync();
+            using var conn = await OpenConnectionAsync();
             using var cmd = new OracleCommand($"SELECT * FROM {_tableName}", conn);
             using var reader = await cmd.ExecuteReaderAsync();
 
@@ -95,8 +102,7 @@ namespace ETL_SQL.Connectors.Oracle
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Oracle data source write.");
 
-            using var conn = new OracleConnection(_connectionString);
-            await conn.OpenAsync();
+            using var conn = await OpenConnectionAsync();
 
             using var bulkCopy = new OracleBulkCopy(conn);
             bulkCopy.DestinationTableName = _tableName;
@@ -136,8 +142,7 @@ namespace ETL_SQL.Connectors.Oracle
 
         public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
         {
-            using var conn = new OracleConnection(_connectionString);
-            await conn.OpenAsync();
+            using var conn = await OpenConnectionAsync();
             
             // Wire up InfoMessage if needed, Oracle doesn't have InfoMessage like SQL Server,
             // but we can log execution start/finish if we want.
@@ -189,8 +194,7 @@ namespace ETL_SQL.Connectors.Oracle
 
         public async Task<IEnumerable<string>> GetTablesAsync()
         {
-            using var conn = new OracleConnection(_connectionString);
-            await conn.OpenAsync();
+            using var conn = await OpenConnectionAsync();
             using var cmd = new OracleCommand("SELECT owner, table_name FROM all_tables WHERE owner NOT IN ('SYS')", conn);
             using var reader = await cmd.ExecuteReaderAsync();
             var tables = new List<string>();
@@ -205,8 +209,7 @@ namespace ETL_SQL.Connectors.Oracle
 
         public async Task<IEnumerable<string>> GetViewsAsync()
         {
-            using var conn = new OracleConnection(_connectionString);
-            await conn.OpenAsync();
+            using var conn = await OpenConnectionAsync();
             using var cmd = new OracleCommand("SELECT owner, view_name FROM all_views WHERE owner NOT IN ('SYS')", conn);
             using var reader = await cmd.ExecuteReaderAsync();
             var views = new List<string>();
@@ -221,8 +224,7 @@ namespace ETL_SQL.Connectors.Oracle
 
         public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
         {
-            using var conn = new OracleConnection(_connectionString);
-            await conn.OpenAsync();
+            using var conn = await OpenConnectionAsync();
             using var cmd = new OracleCommand($"SELECT * FROM {tableName} WHERE ROWNUM = 0", conn);
             using var reader = await cmd.ExecuteReaderAsync();
             var columns = new List<string>();

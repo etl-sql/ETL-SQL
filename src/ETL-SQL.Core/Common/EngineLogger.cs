@@ -15,6 +15,7 @@ namespace ETL_SQL.Common
             _category = category;
         }
 
+        public string? SessionId { get; set; }
         public bool IsDebugEnabled => true; // Fallback assumes enabled or handled by global flags
         public bool IsVerboseEnabled => true;
         public bool IsVerbose { get; set; }
@@ -41,7 +42,8 @@ namespace ETL_SQL.Common
 
         private void WriteToConsole(string level, string message, ConsoleColor color, Exception? ex = null)
         {
-            string formattedMessage = $"[{level}] [{_category}] {message}";
+            var sid = SessionId != null ? $" [{SessionId}]" : "";
+            string formattedMessage = $"[{level}] [{_category}]{sid} {message}";
             if (ex != null) formattedMessage += $"{Environment.NewLine}Exception: {ex.Message}";
             
             if (SuppressConsole)

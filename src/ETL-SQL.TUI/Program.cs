@@ -63,9 +63,17 @@ namespace ETL_SQL.TUI
                         ctx.IsVerbose = true;
                         break;
                     default:
-                        // Positional arg → treat as script file
+                        // Positional arg → treat as UI mode or script file
                         if (!args[i].StartsWith("-"))
                         {
+                            var argLower = args[i].ToLower();
+                            if (argLower == "ui") continue;
+                            if (argLower == "old" || argLower == "edit" || argLower == "simple" || argLower == "repl")
+                            {
+                                ctx.UiMode = argLower;
+                                continue;
+                            }
+
                             var fi = new FileInfo(args[i]);
                             if (fi.Exists) ctx.ScriptFile = fi;
                         }

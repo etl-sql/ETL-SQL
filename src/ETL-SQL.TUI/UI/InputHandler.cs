@@ -199,13 +199,23 @@ namespace ETL_SQL.TUI.UI
                 case ConsoleKey.UpArrow: _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 1); break;
                 case ConsoleKey.DownArrow: _renderer.ResultScrollRow++; break;
                 case ConsoleKey.LeftArrow: _renderer.ActiveResultSetIndex = Math.Max(0, _renderer.ActiveResultSetIndex - 1); _renderer.ResultScrollRow = 0; break;
-                case ConsoleKey.RightArrow: _renderer.ActiveResultSetIndex = Math.Min(_editor._evaluator.LastResultSets.Count - 1, _renderer.ActiveResultSetIndex + 1); _renderer.ResultScrollRow = 0; break;
-                case ConsoleKey.PageUp: _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 5); break;
-                case ConsoleKey.PageDown: _renderer.ResultScrollRow += 5; break;
+                case ConsoleKey.RightArrow: 
+                    _renderer.ActiveResultSetIndex = Math.Min(_editor._evaluator.LastResultSets.Count - 1, _renderer.ActiveResultSetIndex + 1); 
+                    _renderer.ResultScrollRow = 0; 
+                    break;
+                case ConsoleKey.PageUp: _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 10); break;
+                case ConsoleKey.PageDown: _renderer.ResultScrollRow += 10; break;
                 case ConsoleKey.Home: _renderer.ResultScrollRow = 0; break;
                 case ConsoleKey.End: 
                     if (_editor._evaluator.LastResultSets.Count > 0) 
                         _renderer.ResultScrollRow = _editor._evaluator.LastResultSets[_renderer.ActiveResultSetIndex].Rows.Count; 
+                    break;
+                case ConsoleKey.Tab:
+                    if (_editor._evaluator.LastResultSets.Count > 1) {
+                        _renderer.ActiveResultSetIndex = (_renderer.ActiveResultSetIndex + 1) % _editor._evaluator.LastResultSets.Count;
+                        _renderer.ResultScrollRow = 0;
+                        _renderer.ShowStatus($"View: Result Set {_renderer.ActiveResultSetIndex + 1}/{_editor._evaluator.LastResultSets.Count}");
+                    }
                     break;
             }
         }

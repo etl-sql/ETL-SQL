@@ -68,11 +68,9 @@ namespace ETL_SQL.App
                 return 0;
             }
 
-            if (ctx.Command == "ui-repl")
+            if (ctx.Command.StartsWith("ui-"))
             {
-                var repl = new ETL_SQL.TUI.UI.ReplUi(ctx, Program.ServiceProvider);
-                await repl.RunAsync();
-                return 0;
+                return await ETL_SQL.TUI.TuiRunner.Run(ctx, Program.ServiceProvider);
             }
 
             // 2. RUN command (requires script)

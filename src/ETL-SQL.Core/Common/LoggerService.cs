@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using Microsoft.Extensions.Logging;
 using Serilog;
+using Serilog.Context;
 using Serilog.Events;
 using Serilog.Extensions.Logging;
 
@@ -19,6 +20,8 @@ namespace ETL_SQL.Common
         private Serilog.Core.Logger? _testLogger;
         private ILoggerFactory? _msLoggerFactory;
         private Microsoft.Extensions.Logging.ILogger? _msLogger;
+        private string? _sessionId;
+        private IDisposable? _sessionContext;
 
         public bool IsSilent { get; set; }
         public bool IsVerbose { get; set; }
@@ -30,61 +33,113 @@ namespace ETL_SQL.Common
         public bool IsDebugEnabled => IsVerbose;
         public bool IsVerboseEnabled => IsVerbose;
 
+        /// <summary>
+        /// When set, enriches every Serilog log event with a SessionId property and
+        /// prefixes console output with [sid:{value}] for correlation across concurrent sessions.
+        /// </summary>
+        public string? SessionId
+        {
+            get => _sessionId;
+            set
+            {
+                _sessionId = value;
+                _sessionContext?.Dispose();
+                _sessionContext = value != null
+                    ? LogContext.PushProperty("SessionId", value)
+                    : null;
+            }
+        }
+
         public void Log(LogLevel level, string message, Exception? ex = null)
         {
             if (IsSilent && level != LogLevel.Error) return;
             if (level == LogLevel.Debug && !IsVerbose) return;
 
+            WriteCore(level, "{Message}", ex, message);
+        }
+
+        // ── Structured-template overloads ─────────────────────────────────────
+        // Pass the raw template + args to Serilog so named properties are
+        // preserved in file/Seq sinks for structured querying.
+
+        public void Debug(string template, params object?[] args)
+        {
+            if (IsSilent || !IsVerbose) return;
+            WriteCore(LogLevel.Debug, template, null, args);
+        }
+
+        public void Info(string template, params object?[] args)
+        {
+            if (IsSilent) return;
+            WriteCore(LogLevel.Info, template, null, args);
+        }
+
+        public void Warning(string template, params object?[] args)
+        {
+            if (IsSilent) return;
+            WriteCore(LogLevel.Warning, template, null, args);
+        }
+
+        public void Error(string template, Exception? ex, params object?[] args)
+        {
+            WriteCore(LogLevel.Error, template, ex, args);
+        }
+
+        // ── Shared write path ──────────────────────────────────────────────────
+        private void WriteCore(LogLevel level, string template, Exception? ex, params object?[] args)
+        {
             var serilogLevel = level switch
             {
-                LogLevel.Error => LogEventLevel.Error,
+                LogLevel.Error   => LogEventLevel.Error,
                 LogLevel.Warning => LogEventLevel.Warning,
-                LogLevel.Debug => LogEventLevel.Debug,
-                _ => LogEventLevel.Information
+                LogLevel.Debug   => LogEventLevel.Debug,
+                _                => LogEventLevel.Information
             };
 
             var color = level switch
             {
-                LogLevel.Error => ConsoleColor.Red,
+                LogLevel.Error   => ConsoleColor.Red,
                 LogLevel.Warning => ConsoleColor.Yellow,
-                LogLevel.Debug => ConsoleColor.DarkGray,
-                _ => ConsoleColor.White
+                LogLevel.Debug   => ConsoleColor.DarkGray,
+                _                => ConsoleColor.White
             };
 
-            string formattedMessage = message;
-            if (ex != null) formattedMessage += $"{Environment.NewLine}Exception: {ex.Message}";
-
-            // 1. Serilog - Sinks
-            _appLogger?.Write(serilogLevel, ex, message);
-            _scriptLogger?.Write(serilogLevel, ex, message);
-            _testLogger?.Write(serilogLevel, ex, message);
+            // 1. Serilog structured write — named properties preserved in file/Seq sinks
+            var serilogArgs = args.Select(a => (object)(a ?? "<null>")).ToArray();
+            _appLogger?.Write(serilogLevel, ex, template, serilogArgs);
+            _scriptLogger?.Write(serilogLevel, ex, template, serilogArgs);
+            _testLogger?.Write(serilogLevel, ex, template, serilogArgs);
 
             // 2. MEL Bridge
             if (_msLogger != null)
             {
                 var msLevel = level switch
                 {
-                    LogLevel.Error => Microsoft.Extensions.Logging.LogLevel.Error,
+                    LogLevel.Error   => Microsoft.Extensions.Logging.LogLevel.Error,
                     LogLevel.Warning => Microsoft.Extensions.Logging.LogLevel.Warning,
-                    LogLevel.Debug => Microsoft.Extensions.Logging.LogLevel.Debug,
-                    _ => Microsoft.Extensions.Logging.LogLevel.Information
+                    LogLevel.Debug   => Microsoft.Extensions.Logging.LogLevel.Debug,
+                    _                => Microsoft.Extensions.Logging.LogLevel.Information
                 };
-                _msLogger.Log(msLevel, ex, message);
+                _msLogger.Log(msLevel, ex, ILogger.FormatArgs(template, args));
             }
 
-            // 3. Console
+            // 3. Console — format template and prefix SessionId when set
+            var consoleMessage = ILogger.FormatArgs(template, args);
+            if (_sessionId != null) consoleMessage = $"[{_sessionId}] {consoleMessage}";
+            if (ex != null) consoleMessage += $"{Environment.NewLine}Exception: {ex.Message}";
+
             if (!IsSilent && !SuppressConsole)
             {
                 if (color != ConsoleColor.White) Console.ForegroundColor = color;
-                Console.WriteLine(formattedMessage);
+                Console.WriteLine(consoleMessage);
                 if (color != ConsoleColor.White) Console.ResetColor();
             }
 
             // 4. UI Callback
-            OnMessage?.Invoke(formattedMessage, color);
-            
-            // 5. Legacy Bridge - Ensure static Logger.OnMessage is also called
-            Logger.OnMessage?.Invoke(formattedMessage, color);
+            OnMessage?.Invoke(consoleMessage, color);
+
+            // 5. Legacy Bridge
+            Logger.OnMessage?.Invoke(consoleMessage, color);
         }
 
         public void InitializeAppLogger(string logDirectory, int retentionDays = 30, int fileSizeLimitMb = 10)
@@ -95,12 +150,13 @@ namespace ETL_SQL.Common
 
             _appLogger = new LoggerConfiguration()
                 .MinimumLevel.Debug()
+                .Enrich.FromLogContext()
                 .WriteTo.File(
                     path: Path.Combine(logDirectory, "etlsql-.log"),
                     rollingInterval: RollingInterval.Day,
                     fileSizeLimitBytes: fileSizeLimitMb > 0 ? (long?)fileSizeLimitMb * 1024 * 1024 : null,
                     rollOnFileSizeLimit: true,
-                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}]{SessionId: [sid=]:l} {Message:lj}{NewLine}{Exception}")
                 .CreateLogger();
 
             if (_msLoggerFactory == null)
@@ -123,12 +179,13 @@ namespace ETL_SQL.Common
             _scriptLogger?.Dispose();
             _scriptLogger = new LoggerConfiguration()
                 .MinimumLevel.Debug()
+                .Enrich.FromLogContext()
                 .WriteTo.File(
                     path: Path.Combine(logDirectory, $"{scriptName}_{dateStamp}-.log"),
                     rollingInterval: RollingInterval.Infinite,
                     fileSizeLimitBytes: fileSizeLimitMb > 0 ? (long?)fileSizeLimitMb * 1024 * 1024 : null,
                     rollOnFileSizeLimit: true,
-                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}]{SessionId: [sid=]:l} {Message:lj}{NewLine}{Exception}")
                 .CreateLogger();
 
             Log(LogLevel.Info, "--- ETL-SQL Script Log Started ---");
@@ -142,12 +199,13 @@ namespace ETL_SQL.Common
             _testLogger?.Dispose();
             _testLogger = new LoggerConfiguration()
                 .MinimumLevel.Debug()
+                .Enrich.FromLogContext()
                 .WriteTo.File(
                     path: Path.Combine(logDirectory, "test-.log"),
                     rollingInterval: RollingInterval.Day,
                     fileSizeLimitBytes: fileSizeLimitMb > 0 ? (long?)fileSizeLimitMb * 1024L * 1024L : null,
                     rollOnFileSizeLimit: true,
-                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+                    outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss} {Level:u3}]{SessionId: [sid=]:l} {Message:lj}{NewLine}{Exception}")
                 .CreateLogger();
 
             Log(LogLevel.Info, "=== ETL-SQL Test Logger Initialized ===");
@@ -155,7 +213,6 @@ namespace ETL_SQL.Common
 
         private string ResolvePath(string path)
         {
-            // Simplified resolution for now, can bridge to Logger.ResolveRootPath if needed
             return Path.IsPathRooted(path) ? path : Path.GetFullPath(path);
         }
 
@@ -176,6 +233,7 @@ namespace ETL_SQL.Common
 
         public void Dispose()
         {
+            _sessionContext?.Dispose();
             _testLogger?.Dispose();
             _scriptLogger?.Dispose();
             _appLogger?.Dispose();

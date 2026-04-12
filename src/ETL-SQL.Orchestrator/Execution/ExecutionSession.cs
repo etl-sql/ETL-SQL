@@ -10,6 +10,8 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Linting;
 using ETL_SQL.Core.Linting.Rules;
 using ETL_SQL.Engine;
+using ETL_SQL.Engine.Services;
+using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
 using Spectre.Console.Rendering;
@@ -30,6 +32,10 @@ namespace ETL_SQL.Orchestrator.Execution
         public long ExecutionTimeMs { get; set; }
         public long RowsProcessed { get; set; }
         public bool Success { get; set; }
+        /// <summary>Captured log messages for display in the TUI.</summary>
+        public List<string> Messages { get; set; } = new();
+        /// <summary>Active connections captured from the engine after execution, used for TUI autocomplete.</summary>
+        public Dictionary<string, IDataSource> ActiveConnections { get; set; } = new();
     }
 
     /// <summary>
@@ -40,6 +46,10 @@ namespace ETL_SQL.Orchestrator.Execution
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly CliContext _ctx;
+        
+        // Persistent state containers for the IDE
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IDataSource> _persistentConnections = new(StringComparer.OrdinalIgnoreCase);
+        private readonly VariableScopeManager _persistentVariables = new();
 
         /// <summary>
         /// Optional callback fired each time the evaluator appends a node to the
@@ -57,6 +67,7 @@ namespace ETL_SQL.Orchestrator.Execution
         {
             var result = new ExecutionResult();
             var timer = Stopwatch.StartNew();
+            Evaluator? evaluator = null;
 
             try
             {
@@ -93,7 +104,15 @@ namespace ETL_SQL.Orchestrator.Execution
                 }
 
                 // 4. Execution
-                await using var evaluator = _serviceProvider.GetRequiredService<Evaluator>();
+                // Resolve using ActivatorUtilities to inject the persistent connection and variable state,
+                // overriding the transient behavior so connections live across F5 runs.
+                evaluator = ActivatorUtilities.CreateInstance<Evaluator>(
+                    _serviceProvider,
+                    _persistentConnections,
+                    _persistentVariables,
+                    new ExecutionTree()
+                );
+                
                 evaluator.BatchSize = _ctx.BatchSize;
                 evaluator.IsVerbose = _ctx.IsVerbose;
                 evaluator.SessionId = _ctx.SessionId;
@@ -125,6 +144,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
                 result.ExecutionTree = new ExecuteTreeVisualizer(evaluator.ExecutionTree).CreateRenderable();
                 result.RowsProcessed = evaluator.RowsProcessed;
+                result.Messages = evaluator.Messages.ToList();
                 result.Success = true;
             }
             catch (Exception ex)
@@ -134,6 +154,16 @@ namespace ETL_SQL.Orchestrator.Execution
             }
             finally
             {
+                // Capture active connections in the finally block so the UI's connection cache 
+                // survives syntax errors
+                if (evaluator != null)
+                {
+                    result.ActiveConnections = evaluator.Connections.ToDictionary(k => k.Key, v => v.Value);
+                    
+                    // We DO NOT dispose the evaluator if we are persisting connections,
+                    // otherwise the ADO.NET objects are closed and autocomplete fails.
+                }
+                
                 timer.Stop();
                 result.ExecutionTimeMs = timer.ElapsedMilliseconds;
             }

@@ -108,14 +108,15 @@ describe('ReplManager', () => {
 
     // ── Process lifecycle ──────────────────────────────────────────────────────
 
-    it('spawns process with "repl" as first arg', async () => {
+    it('spawns process with "ui repl" as first args', async () => {
         const { execPromise } = await startRepl();
         fakeProcess.emitLine({ type: 'done', exitCode: 0 });
         await execPromise;
 
         expect(cp.spawn).toHaveBeenCalledOnce();
         const spawnArgs = (cp.spawn as ReturnType<typeof vi.fn>).mock.calls[0][1];
-        expect(spawnArgs[0]).toBe('repl');
+        expect(spawnArgs[0]).toBe('ui');
+        expect(spawnArgs[1]).toBe('repl');
     });
 
     it('passes session flag in spawn args', async () => {

@@ -1,6 +1,7 @@
 using System;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
+using ETL_SQL.Data;
 using ETL_SQL.TUI.UI;
 
 namespace ETL_SQL.TUI
@@ -29,10 +30,16 @@ namespace ETL_SQL.TUI
                     return 0;
                 }
 
+                case "edit":
+                case "old":
                 default:
-                    // "ide" or no mode → launch the full Terminal IDE window
-                    TerminalIdeWindow.Launch(ctx, serviceProvider);
+                {
+                    // Promote the working Spectre-based Editor to be the primary IDE
+                    var editor = new ConsoleEditor(ctx.ScriptFile?.FullName ?? "untitled.etlsql", new System.Collections.Generic.Dictionary<string, IDataSource>());
+                    await editor.InitializeAsync();
+                    await editor.Run();
                     return 0;
+                }
             }
         }
     }

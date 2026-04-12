@@ -47,14 +47,16 @@ namespace ETL_SQL.Tests.UI
         public void Constructor_BuiltinAutocomplete_IsConfigured()
         {
             Assert.NotNull(_window._editor.Autocomplete);
-            Assert.Equal(Key.Tab, _window._editor.Autocomplete.SelectionKey);
+            // Enter is used instead of Tab to avoid conflict with Terminal.Gui's default Tab navigation
+            Assert.Equal(Key.Enter, _window._editor.Autocomplete.SelectionKey);
         }
 
         [Fact]
-        public void Constructor_DefaultTab_IsResults()
+        public void Constructor_DefaultTab_IsExecuteTree()
         {
+            // Execute Tree is the default tab so users immediately see execution progress on run
             Assert.Equal("results", _window._activeTab);
-            Assert.Equal("Results", _window._tabView.SelectedTab.Text.ToString());
+            Assert.Equal("Execute Tree", _window._tabView.SelectedTab.Text.ToString());
         }
 
         [Fact]

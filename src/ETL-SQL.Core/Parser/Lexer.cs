@@ -59,7 +59,38 @@ namespace ETL_SQL.Core.Parser
             dict["CLOSE"] = TokenType.CLOSE;
             dict["EACH"] = TokenType.EACH;
             dict["FOREACH"] = TokenType.FOREACH;
-            
+
+            // ── Report-SQL keywords (Phase 9A) ─────────────────────────────
+            // These are registered so the lexer produces typed tokens inside
+            // CREATE VISUAL / CREATE PAGE / CREATE DATASET statements.
+            // They are non-reserved: outside those contexts the parser treats them as identifiers.
+            dict["VISUAL"]        = TokenType.VISUAL;
+            dict["PAGE"]          = TokenType.PAGE;
+            dict["DATASET"]       = TokenType.DATASET;
+            dict["LAYOUT"]        = TokenType.LAYOUT;
+            dict["MAPPINGS"]      = TokenType.MAPPINGS;
+            dict["OPTIONS"]       = TokenType.OPTIONS;
+            dict["ACTIONS"]       = TokenType.ACTIONS;
+            dict["STRUCTURE"]     = TokenType.STRUCTURE;
+            dict["MAP"]           = TokenType.MAP;
+            dict["SERIES"]        = TokenType.SERIES;
+            // SOURCE is already registered via LanguageMetadata (maps to TokenType.SOURCE)
+            dict["BAR"]           = TokenType.VISUAL_BAR;
+            dict["SCATTER"]       = TokenType.VISUAL_SCATTER;
+            dict["PIE"]           = TokenType.VISUAL_PIE;
+            dict["SLICER"]        = TokenType.SLICER;
+            dict["CARD"]          = TokenType.CARD;
+            dict["ON_CLICK"]      = TokenType.ON_CLICK;
+            dict["DRILL_DOWN"]    = TokenType.DRILL_DOWN;
+            dict["SET_PARAMETER"] = TokenType.SET_PARAMETER;
+            dict["ON_CHANGE"]     = TokenType.ON_CHANGE;
+            dict["REFRESH"]       = TokenType.REFRESH;
+            // EVERY and COMPRESS are already registered via LanguageMetadata
+            dict["TTL"]           = TokenType.TTL;
+            dict["KEYFILE"]       = TokenType.KEYFILE;
+            dict["X_AXIS"]        = TokenType.X_AXIS;
+            dict["Y_AXIS"]        = TokenType.Y_AXIS;
+
             return dict;
         }
 

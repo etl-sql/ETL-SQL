@@ -53,10 +53,10 @@ export class ReplManager {
     private async _start(exePath: string, args: string[]): Promise<void> {
         return new Promise((resolve, reject) => {
             const absoluteExePath = require('path').resolve(exePath);
-            const startMsg = `Starting ETL-SQL REPL: "${absoluteExePath}" repl ${args.join(' ')}`;
+            const startMsg = `Starting ETL-SQL REPL: "${absoluteExePath}" ui repl ${args.join(' ')}`;
             this._outputChannel?.appendLine(startMsg);
 
-            this._process = cp.spawn(absoluteExePath, ["repl", ...args], {
+            this._process = cp.spawn(absoluteExePath, ["ui", "repl", ...args], {
                 env: { ...process.env, "FORCE_COLOR": "0" }
             });
 

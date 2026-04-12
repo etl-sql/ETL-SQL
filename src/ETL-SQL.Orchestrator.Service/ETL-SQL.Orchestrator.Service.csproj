@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ETL_SQL.Orchestrator.Service</RootNamespace>
+    <AssemblyName>ETL-SQL-OrchestratorService</AssemblyName>
+    <!-- Windows Service and systemd integration -->
+    <WindowsRuntimePackageVersion Condition="$([MSBuild]::IsOSPlatform('windows'))">10.0.19041.0</WindowsRuntimePackageVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0-preview.2.25163.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices"
+                      Condition="$([MSBuild]::IsOSPlatform('windows'))"
+                      Version="10.0.0-preview.2.25163.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Systemd" Version="10.0.0-preview.2.25163.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.5" />
+    <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0-preview.1.25080.5" />
+    <PackageReference Include="Serilog" Version="4.2.0" />
+    <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
+    <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.4" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Orchestrator\ETL-SQL.Orchestrator.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="ETL_SQL.Core" />
+    <Using Include="ETL_SQL.Core.Data" />
+    <Using Include="ETL_SQL.Orchestrator" />
+  </ItemGroup>
+
+</Project>

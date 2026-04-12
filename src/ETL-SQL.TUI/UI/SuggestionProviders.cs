@@ -54,9 +54,18 @@ namespace ETL_SQL.TUI.UI
         public Task<IEnumerable<Suggestion>> GetSuggestionsAsync(SuggestionContext context)
         {
             var results = new List<Suggestion>();
-            results.AddRange(LanguageMetadata.GetAllKeywords().Select(k => new Suggestion(k, SuggestionType.Keyword)));
-            results.AddRange(LanguageMetadata.Functions.Select(f => new Suggestion(f, SuggestionType.Function)));
-            results.AddRange(LanguageMetadata.DataTypes.Select(d => new Suggestion(d, SuggestionType.Keyword))); // Data types are also keywords for auto-complete
+            if (string.IsNullOrEmpty(context.Prefix) || context.Prefix == "*" || context.Prefix.EndsWith(".*"))
+                return Task.FromResult<IEnumerable<Suggestion>>(results);
+
+            var keywords = LanguageMetadata.GetAllKeywords();
+            results.AddRange(keywords.Where(k => k.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase))
+                                     .Select(k => new Suggestion(k, SuggestionType.Keyword)));
+            
+            results.AddRange(LanguageMetadata.Functions.Where(f => f.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase))
+                                                       .Select(f => new Suggestion(f, SuggestionType.Function)));
+            
+            results.AddRange(LanguageMetadata.DataTypes.Where(d => d.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase))
+                                                       .Select(d => new Suggestion(d, SuggestionType.Keyword))); 
             return Task.FromResult<IEnumerable<Suggestion>>(results);
         }
     }
@@ -68,6 +77,51 @@ namespace ETL_SQL.TUI.UI
             var results = new List<Suggestion>();
             if (string.IsNullOrEmpty(context.Prefix)) return results;
 
+            if (context.Prefix == "*")
+            {
+                var allCols = new List<string>();
+                foreach (var info in context.Aliases.Values)
+                {
+                    IEnumerable<string>? tableCols = null;
+                    if (context.Connections.TryGetValue(info.TableName, out var dsAll)) tableCols = await dsAll.GetColumnsAsync();
+                    else if (context.VirtualSchemas.TryGetValue(info.TableName, out var vcolsAll)) tableCols = vcolsAll;
+                    else if (info.TableName.Contains("."))
+                    {
+                        var partsTable = info.TableName.Split('.');
+                        if (context.Connections.TryGetValue(partsTable[0], out var dbDS) && dbDS is IDatabaseSource db)
+                        {
+                            tableCols = await db.GetColumnsAsync(partsTable[1]);
+                        }
+                    }
+                    else
+                    {
+                        // Final fallback: Check if the name IS a table inside any of the connections
+                        // This handles JOIN Orders where Orders is in the only defined connection.
+                        foreach (var ds in context.Connections.Values.OfType<IDatabaseSource>())
+                        {
+                            var tables = await ds.GetTablesAsync();
+                            if (tables.Contains(info.TableName, StringComparer.OrdinalIgnoreCase))
+                            {
+                                tableCols = await ds.GetColumnsAsync(info.TableName);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (tableCols != null)
+                    {
+                        var aliasStr = info.HasExplicitAlias ? info.Alias : info.TableName;
+                        allCols.AddRange(tableCols.Select(c => $"{aliasStr}.{c.Trim('[', ']', '\"', '\'')}"));
+                    }
+                }
+                
+                if (allCols.Any())
+                {
+                    results.Add(new Suggestion(string.Join(", ", allCols.Distinct()), SuggestionType.Column));
+                    return results;
+                }
+            }
+
             if (context.Prefix.EndsWith(".*"))
             {
                 var aliasForStar = context.Prefix.Substring(0, context.Prefix.Length - 2);
@@ -76,14 +130,18 @@ namespace ETL_SQL.TUI.UI
                 {
                     if (context.Connections.TryGetValue(infoStar.TableName, out var dsStar)) colsForStar = await dsStar.GetColumnsAsync();
                     else if (context.VirtualSchemas.TryGetValue(infoStar.TableName, out var vcolsStar)) colsForStar = vcolsStar;
+                    else if (infoStar.TableName.Contains("."))
+                    {
+                        var partsStar = infoStar.TableName.Split('.');
+                        if (context.Connections.TryGetValue(partsStar[0], out var dbDS) && dbDS is IDatabaseSource db)
+                        {
+                            colsForStar = await db.GetColumnsAsync(partsStar[1]);
+                        }
+                    }
                 }
                 else if (context.Connections.TryGetValue(aliasForStar, out var connDSStar))
                 {
                     colsForStar = await connDSStar.GetColumnsAsync();
-                }
-                else if (context.VirtualSchemas.TryGetValue(aliasForStar, out var vcolsDirectStar))
-                {
-                    colsForStar = vcolsDirectStar;
                 }
 
                 if (colsForStar != null)
@@ -98,7 +156,6 @@ namespace ETL_SQL.TUI.UI
             
             var parts = context.Prefix.Split('.');
             var aliasName = parts[0];
-
             try
             {
                 if (context.Aliases.TryGetValue(aliasName, out var info))
@@ -127,10 +184,6 @@ namespace ETL_SQL.TUI.UI
                 {
                     var cols = await connDS.GetColumnsAsync();
                     results.AddRange(cols.Select(c => new Suggestion($"{aliasName}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column)));
-                }
-                else if (context.VirtualSchemas.TryGetValue(aliasName, out var vcolsDirect))
-                {
-                    results.AddRange(vcolsDirect.Select(c => new Suggestion($"{aliasName}.{c}", SuggestionType.Column)));
                 }
             }
             catch (Exception ex) { context.Logger?.Debug($"[AliasColumnProvider] Column resolution error: {ex.Message}"); }
@@ -164,69 +217,48 @@ namespace ETL_SQL.TUI.UI
             var results = new List<Suggestion>();
             try
             {
-                // Support both quoted and unquoted connection targets, and optional targets
-                var connMatches = Regex.Matches(context.FullScript, @"CREATE\s+CONNECTION\s+(\w+)\s+ON\s+(\w+)(?:\s+(?:TO|FOR)?\s*(?:'([^']*)'|(\w+)))?", RegexOptions.IgnoreCase);
-                
+                // Rule 4: Prefer live connections from the context cache.
+                // This ensures "m." works even for connections created in previous REPL turns
+                // or loaded from session state.
+                foreach (var kvp in context.Connections)
+                {
+                    var connName = kvp.Key;
+                    var dataSource = kvp.Value;
+                    
+                    try 
+                    {
+                        var tables = (await dataSource.GetTablesAsync()).ToList();
+                        results.AddRange(tables.Select(t => new Suggestion($"{connName}.{t}", SuggestionType.Table)));
+                        
+                        if (context.Prefix.StartsWith($"{connName}.", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var tablePref = context.Prefix.Substring(connName.Length + 1);
+                            if (tablePref.Contains(".") && dataSource is IDatabaseSource dbSource)
+                            {
+                                var partsPref = tablePref.Split('.');
+                                if (tables.Any(t => t.Equals(partsPref[0], StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    results.AddRange((await dbSource.GetColumnsAsync(partsPref[0])).Select(c => new Suggestion($"{connName}.{partsPref[0]}.{c}", SuggestionType.Column)));
+                                }
+                            }
+                            else 
+                            {
+                                results.AddRange(tables.Where(t => t.StartsWith(tablePref, StringComparison.OrdinalIgnoreCase)).Select(t => new Suggestion($"{connName}.{t}", SuggestionType.Table)));
+                            }
+                        }
+                    }
+                    catch (Exception ex) { context.Logger?.Debug($"[DatabaseSchemaProvider] Connection error for '{connName}': {ex.Message}"); }
+                }
+
+                // Fallback to Regex for connections defined in the current script but not yet executed
+                var connMatches = Regex.Matches(context.FullScript, @"CREATE\s+CONNECTION\s+(\w+)\s+ON\s+(\w+)", RegexOptions.IgnoreCase);
                 foreach (Match m in connMatches)
                 {
                     var connName = m.Groups[1].Value;
-                    var type = m.Groups[2].Value;
-                    var connStr = m.Groups[3].Value;
-                    if (string.IsNullOrEmpty(connStr)) connStr = m.Groups[4].Value; 
+                    if (context.Connections.ContainsKey(connName)) continue; // Already handled by live cache
                     
-                    var connector = ConnectorRegistry.Instance!.GetConnector(type);
-                    if (connector != null)
-                    {
-                        try
-                        {
-                            var tables = (await connector.GetTablesAsync(connStr)).ToList();
-                            results.AddRange(tables.Select(t => new Suggestion($"{connName}.{t}", SuggestionType.Table)));
-                            
-                            if (context.Prefix.StartsWith($"{connName}.", StringComparison.OrdinalIgnoreCase))
-                            {
-                                var tablePref = context.Prefix.Substring(connName.Length + 1);
-                                if (tablePref.Contains("."))
-                                {
-                                    var partsPref = tablePref.Split('.');
-                                    // If we have a full table name in the list, suggest its columns
-                                    if (tables.Any(t => t.Equals(tablePref, StringComparison.OrdinalIgnoreCase)))
-                                    {
-                                        try { results.AddRange((await connector.GetColumnsAsync(connStr, tablePref)).Select(c => new Suggestion($"{connName}.{tablePref}.{c}", SuggestionType.Column))); }
-                                        catch (Exception ex) { context.Logger?.Debug($"[DatabaseSchemaProvider] GetColumnsAsync error for {connName}.{tablePref}: {ex.Message}"); }
-                                    }
-                                    else if (partsPref.Length > 0 && tables.Any(t => t.StartsWith(tablePref, StringComparison.OrdinalIgnoreCase)))
-                                    {
-                                         // It's a partial schema/table name, suggest next level
-                                         var nextLevelParts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                                         foreach (var t in tables)
-                                         {
-                                             if (t.StartsWith(tablePref, StringComparison.OrdinalIgnoreCase))
-                                             {
-                                                 var tParts = t.Split('.');
-                                                 if (tParts.Length > partsPref.Length - 1)
-                                                 {
-                                                     nextLevelParts.Add(string.Join(".", tParts.Take(partsPref.Length)));
-                                                 }
-                                             }
-                                         }
-                                         results.AddRange(nextLevelParts.Select(p => new Suggestion($"{connName}.{p}", SuggestionType.Table)));
-                                    }
-                                }
-                                else
-                                {
-                                    // Suggest top-level parts (either full table names or first part of multi-part names)
-                                    var topLevelParts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                                    foreach (var t in tables)
-                                    {
-                                        var tParts = t.Split('.');
-                                        topLevelParts.Add(tParts[0]);
-                                    }
-                                    results.AddRange(topLevelParts.Select(p => new Suggestion($"{connName}.{p}", SuggestionType.Table)));
-                                }
-                            }
-                        }
-                        catch (Exception ex) { context.Logger?.Debug($"[DatabaseSchemaProvider] Connector error for '{connName}': {ex.Message}"); }
-                    }
+                    var type = m.Groups[2].Value;
+                    results.Add(new Suggestion(connName, SuggestionType.Connection));
                 }
             }
             catch (Exception ex) { context.Logger?.Debug($"[DatabaseSchemaProvider] Schema discovery error: {ex.Message}"); }

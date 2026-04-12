@@ -5,6 +5,7 @@ using Microsoft.Data.SqlClient;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Common;
+using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors.SqlServer
 {
@@ -328,7 +329,8 @@ namespace ETL_SQL.Connectors.SqlServer
             if (string.IsNullOrWhiteSpace(_connectionString))
                 throw new ExecutionException("Connection string is missing for SQL Server data source.");
             var conn = new SqlConnection(_connectionString);
-            await conn.OpenAsync();
+            await ConnectorRetryPolicy.ForSqlServer(_logger)
+                .ExecuteAsync(async ct => await conn.OpenAsync(ct));
             return (conn, false);
         }
 

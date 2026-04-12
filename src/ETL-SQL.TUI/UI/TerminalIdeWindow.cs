@@ -25,6 +25,8 @@ namespace ETL_SQL.TUI.UI
         private readonly IServiceProvider? _serviceProvider;
         private readonly EditorFileHandler _fileHandler;
         private readonly SuggestionEngine _suggestionEngine = new();
+        private readonly MetadataManager _metadata;
+        private ExecutionSession? _session;
 
         // ── Views (internal for testability) ──────────────────────────────────
         internal readonly SyntaxTextView _editor;
@@ -46,6 +48,8 @@ namespace ETL_SQL.TUI.UI
         private List<string> _treeLines = new();
         private bool _justAccepted = false;
         private CancellationTokenSource? _autocompleteCts;
+        
+        private Dictionary<string, IDataSource> _connectionCache = new();
 
         // ── Launch (production entry point) ───────────────────────────────────
 
@@ -54,6 +58,7 @@ namespace ETL_SQL.TUI.UI
             Application.Init();
 
             var win = new TerminalIdeWindow(ctx, serviceProvider);
+            win._session = new ExecutionSession(serviceProvider, ctx);
             win.X = 0; win.Y = 0;
             win.Width = Dim.Fill(); win.Height = Dim.Fill() - 1;
 
@@ -69,9 +74,19 @@ namespace ETL_SQL.TUI.UI
         public TerminalIdeWindow(CliContext ctx, IServiceProvider? serviceProvider = null)
             : base("ETL-SQL Editor")
         {
+            // Apply a global Dark Theme to prevent Terminal.Gui's default 'Blue' layout
+            ColorScheme = new ColorScheme 
+            {
+                Normal = new Terminal.Gui.Attribute(Terminal.Gui.Color.White, Terminal.Gui.Color.Black),
+                Focus = new Terminal.Gui.Attribute(Terminal.Gui.Color.White, Terminal.Gui.Color.Black),
+                HotNormal = new Terminal.Gui.Attribute(Terminal.Gui.Color.Cyan, Terminal.Gui.Color.Black),
+                HotFocus = new Terminal.Gui.Attribute(Terminal.Gui.Color.Cyan, Terminal.Gui.Color.Black)
+            };
+
             _context = ctx;
             _serviceProvider = serviceProvider;
             _fileHandler = new EditorFileHandler(new PhysicalFileSystem(), new ETL_SQL.Services.SecurityService());
+            _metadata = new MetadataManager(_connectionCache);
 
             // Eagerly resolve IConnectorRegistry so ConnectorRegistry.Instance is set before
             // the user starts typing. DatabaseSchemaProvider reads the static Instance property,
@@ -90,7 +105,7 @@ namespace ETL_SQL.TUI.UI
                 X = 0, Y = 0,
                 Width = Dim.Fill(), Height = Dim.Fill(),
                 AllowsReturn = true,
-                AllowsTab = false   // Tab is autocomplete, not indent
+                AllowsTab = true   // Must be true to prevent focus loss, intercepted in SyntaxTextView
             };
             editorFrame.Add(_editor);
 
@@ -100,7 +115,7 @@ namespace ETL_SQL.TUI.UI
             // NOTE: HostControl is NOT auto-set by the TextView constructor — we must
             // set it explicitly here or GenerateSuggestions will NullRef on GetCurrentWord.
             _editor.Autocomplete.HostControl = _editor;
-            _editor.Autocomplete.SelectionKey = Key.Tab;
+            _editor.Autocomplete.SelectionKey = Key.Enter; // Enter is safer for Terminal.Gui default handling
             _editor.Autocomplete.MaxHeight = 6;
             _editor.Autocomplete.MaxWidth = 40;
 
@@ -135,9 +150,9 @@ namespace ETL_SQL.TUI.UI
                 X = 0, Y = Pos.Bottom(editorFrame),
                 Width = Dim.Fill(), Height = Dim.Fill()
             };
-            _tabView.AddTab(_resultsTab,  andSelect: true);
+            _tabView.AddTab(_treeTab,     andSelect: true);
+            _tabView.AddTab(_resultsTab,  andSelect: false);
             _tabView.AddTab(_messagesTab, andSelect: false);
-            _tabView.AddTab(_treeTab,     andSelect: false);
             _tabView.AddTab(_perfTab,     andSelect: false);
 
             Add(editorFrame, _tabView);
@@ -181,6 +196,7 @@ namespace ETL_SQL.TUI.UI
                 "perf"     => _perfTab,
                 _          => _resultsTab
             };
+            _tabView.SetFocus();
         }
 
         // ── Key handling ──────────────────────────────────────────────────────
@@ -258,6 +274,10 @@ namespace ETL_SQL.TUI.UI
             _editor.KeyUp += async (e) =>
             {
                 UpdateStatusBar();
+                
+                // If the user just typed a space, and we just accepted a suggestion,
+                // we should ensure it's not double-spaced or eaten. 
+                // However, most TUI inconsistency comes from the popup not clearing.
                 await UpdateAutocompleteAsync(forced: false);
             };
         }
@@ -300,9 +320,12 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            // Never call GetService<Evaluator>() here — it's a transient service and
-            // creates a new engine instance (with side-effect logs) on every keystroke.
-            var connections = new Dictionary<string, IDataSource>();
+            _metadata.RefreshConnections(text);
+
+            // Rule 4: Use cached connections — never call GetService<Evaluator>() here.
+            var connections = _connectionCache;
+            var aliases     = ETLSuggestEngine.ParseAliases(text);
+            var virtuals    = ETLSuggestEngine.ParseVirtualSchemas(text);
 
             var scriptBefore = col <= currentLine.Length
                 ? string.Join("\n", lines.Take(row)) + "\n" + currentLine.Substring(0, col)
@@ -312,8 +335,10 @@ namespace ETL_SQL.TUI.UI
             {
                 Prefix       = prefix,
                 FullScript   = text,
-                ScriptBefore = scriptBefore,
-                Connections  = connections
+                ScriptBefore   = scriptBefore,
+                Connections    = connections,
+                Aliases        = aliases,
+                VirtualSchemas = virtuals
             };
 
             List<Suggestion> suggestions;
@@ -333,17 +358,30 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
+            // Immediately expand '*' or '.*' wildcards without popping up a menu, 
+            // bypassing Terminal.Gui's 'char.IsLetterOrDigit' word-boundary replacement bug entirely.
+            if (forced && (prefix == "*" || prefix.EndsWith(".*")) && suggestions.Count == 1 
+                && suggestions[0].Type != SuggestionType.Keyword)
+            {
+                var lineText = lines[row];
+                var startPos = col - prefix.Length;
+                _editor.Text = lineText.Remove(startPos, prefix.Length).Insert(startPos, suggestions[0].Text);
+                _editor.CursorPosition = new Point(startPos + suggestions[0].Text.Length, row);
+                _justAccepted = true;
+                return;
+            }
             _editor.Autocomplete.AllSuggestions = suggestions.Select(s => s.Text).ToList();
             _editor.Autocomplete.GenerateSuggestions(0);
             // GenerateSuggestions populates Suggestions but does NOT set Visible — do it here.
             _editor.Autocomplete.Visible = _editor.Autocomplete.Suggestions?.Count > 0;
         }
 
-        private static string GetWordPrefix(string line, int col)
+        internal static string GetWordPrefix(string line, int col)
         {
             if (col <= 0 || col > line.Length) return "";
             var sub = line.Substring(0, col);
-            var m = Regex.Match(sub, @"[\w.#@/\\]*$");
+            // Include '*' in the word prefix regex so "u.*" can be expanded as a single token
+            var m = Regex.Match(sub, @"[\w.#@/\\*]*$");
             return m.Success ? m.Value : "";
         }
 
@@ -383,17 +421,22 @@ namespace ETL_SQL.TUI.UI
 
             try
             {
-                var session = new ExecutionSession(sp, _context);
-
-                // Wire live tree updates
-                session.OnTreeNodeAdded = line => Application.MainLoop?.Invoke(() =>
+                if (_session != null)
                 {
-                    _treeLines.Add(line);
-                    _treeView.SetSource(new List<string>(_treeLines));
-                    _treeView.MoveDown();
-                });
+                    // Wire live tree updates once
+                    _session.OnTreeNodeAdded = line => Application.MainLoop?.Invoke(() =>
+                    {
+                        _treeLines.Add(line);
+                        _treeView.SetSource(new List<string>(_treeLines));
+                        _treeView.MoveDown();
+                        _treeView.SetNeedsDisplay(); // Force physical redraw for live updates
+                        Application.Refresh();
+                    });
+                }
 
-                var result = await session.ExecuteAsync(script);
+                // Run the actual execution on a background thread so the UI MainLoop 
+                // remains free to process and render live tree updates!
+                var result = await Task.Run(async () => await _session!.ExecuteAsync(script));
 
                 Application.MainLoop?.Invoke(() =>
                 {
@@ -420,13 +463,11 @@ namespace ETL_SQL.TUI.UI
                         }
                         _resultsView.Text = ustring.Make(
                             sb.Length > 0 ? sb.ToString() : "No results returned.");
-                        SwitchTab("results");
                     }
                     else
                     {
                         var errors = string.Join("\n", result.Diagnostics.Select(d => $"Error: {d.Message}"));
                         _resultsView.Text = ustring.Make(errors);
-                        SwitchTab("results");
                     }
 
                     // Perf tab
@@ -435,16 +476,15 @@ namespace ETL_SQL.TUI.UI
                         $"Rows processed : {result.RowsProcessed:N0}");
 
                     // Messages tab: execution-scoped messages only.
-                    // Rule 2/3: ILogger messages are not shown here — they contain engine
-                    // lifecycle noise ("Evaluator initialized" etc.) that must never reach users.
-                    var msgLines = new List<string>();
-                    foreach (var d in result.Diagnostics)
-                        msgLines.Add($"[{d.Severity}] {d.Message}");
-                    var statusLine = result.Success
-                        ? $"OK — {result.ExecutionTimeMs}ms — {result.RowsProcessed:N0} rows processed"
-                        : $"FAILED — {result.ExecutionTimeMs}ms";
-                    msgLines.Add(statusLine);
-                    _messagesView.Text = ustring.Make(string.Join("\n", msgLines));
+                    _messagesView.Text = ustring.Make(string.Join("\n", result.Messages));
+
+                    // Rule 4: Update the connection cache for subsequent autocomplete suggests.
+                    // DO NOT clear the cache if the engine failed to launch (e.g. syntax error), 
+                    // otherwise the user loses all autocompletes due to a typo.
+                    if (result.Success || result.ActiveConnections.Any())
+                    {
+                        _connectionCache = result.ActiveConnections;
+                    }
 
                     UpdateStatusBar();
                 });

@@ -1,102 +1,208 @@
 # ETL-SQL Specialized Operations & Automation
 
-This document provides a comprehensive technical reference for the non-SQL orchestration and automation features of ETL-SQL, including filesystem management, remote transfers, email, and diagnostics.
+This document provides a comprehensive technical reference for the non-SQL orchestration and automation features of ETL-SQL. It focuses on filesystem management, remote transfers, structured metadata tracking, and engine-level infrastructure scheduling.
 
 ---
 
 ## 1. File & Directory Operations
 
-ETL-SQL provides a unified interface for local filesystem management. All paths are resolved via the `SecurityService` for safety.
+ETL-SQL provides a unified interface for local filesystem management. All paths are resolved and isolated via the `SecurityService` (Zero-Trust sandbox) for safety.
 
-### 1.1 Local File Operations
-Supports both SQL-style and function-style syntax.
-- **`COPY FILE <src> TO <dest> [WITH(OVERWRITE=ON|OFF)]`**
-- **`MOVE FILE <src> TO <dest> [WITH(OVERWRITE=ON|OFF)]`**
-- **`DELETE FILE <path>`**
-- **`RENAME FILE <path> TO <new_name>`**
-- **`COMPRESS FILE <src> TO <dest.zip>`**
-- **`ENCRYPT FILE <src> TO <dest> PASSWORD('<pwd>')`**
+### 1.1 Local File Manipulations
+Used for staging flat files securely during pipeline cycles.
 
-### 1.2 Local Directory Operations
-- **`CREATE DIRECTORY <path>`**
-- **`DELETE DIRECTORY <path>`** (Requires directory to be empty).
-- **`DELETE DIRECTORY_CONTENTS <path> [WITH(RECURSIVE=ON|OFF)]`**
-- **`COPY DIRECTORY <src> TO <dest>`**
-
----
-
-## 2. Remote Orchestration
-
-Coordinate data movement between the local machine and remote connectors (SFTP, FTP, Azure Blob).
-
-### 2.1 File Transfers
-- **`SEND FILE '<local>' TO '<remote>' AT <connection_name>`**: Uploads a file.
-- **`RECEIVE FILE FROM '<remote>' TO '<local>' AT <connection_name>`**: Downloads a file.
-
-### 2.2 Remote Introspection
-- **`REMOTE_FILE_LIST(@connection, [@path])`** -> Returns a metadata table (`Name`, `Path`, `Size`, `LastModified`).
-
----
-
-## 3. Automated Email (`SEND EMAIL`)
-
-Sends high-fidelity emails using a configured `SMTP` connection. Supports attachments and flexible formatting.
-
-**Syntax:**
 ```sql
-SEND EMAIL 
-    TO 'admin@company.com'
-    FROM 'etl@company.com' -- Defaults to connection setting
-    SUBJECT 'Job Failure: Nightly Load'
-    BODY 'The incremental load failed at step 4. See attached log.'
-    ATTACH 'C:\Logs\nightly_error.log'
-    AT mailer_conn;
+-- Standard replication with overwrite flag
+COPY FILE 'C:\Dropzone\data.csv' TO 'D:\Archive\data_backup.csv' WITH(OVERWRITE = ON);
+
+-- Rename and destroy
+RENAME FILE 'C:\Incoming\latest.csv' TO 'processing.csv';
+DELETE FILE 'C:\Incoming\processing.csv';
+
+-- Cryptography handling
+COMPRESS FILE 'C:\Outbound\payload.xml' TO 'C:\Outbound\payload.zip';
+ENCRYPT FILE 'C:\Outbound\payload.zip' TO 'C:\Outbound\payload.enc' PASSWORD('secure_pwd');
+```
+
+### 1.2 Local Directory Management
+```sql
+CREATE DIRECTORY 'C:\AppTemp\PipelineA';
+
+-- Moves the entire directory tree safely
+COPY DIRECTORY 'C:\AppTemp\PipelineA' TO 'C:\Archive\PipelineA';
+
+-- Wipes the contents but retains the folder mapping
+DELETE DIRECTORY_CONTENTS 'C:\AppTemp\PipelineA' WITH(RECURSIVE=ON);
+
+-- Only succeeds if the directory is completely empty
+DELETE DIRECTORY 'C:\AppTemp\PipelineA';
 ```
 
 ---
 
-## 4. Lineage & Metadata
+## 2. Remote Orchestration & File Routing
 
-ETL-SQL tracks the ancestry of every data point. Metadata tags (`/* @d: description */`) are automatically propagated through joins and transformations.
+Coordinate data movement directly between the local Engine layer and remote connectors (like `SFTP`, `FTP`, or `AZURE_BLOB`).
 
-### 4.1 Reporting
-- **`LINEAGE(<target_table> [, <column>]) [TO '<file.md>']`**
-  - Exports a Mermaid.js diagram and detailed audit log.
-- **`SELECT * FROM LINEAGE(<target_table>)`**: Queries the audit trail as a table.
+### 2.1 Pushing and Pulling
 
-### 4.2 Metadata Functions
-- **`GET_TAGS(@table, [@column])`**: Returns a `LIST` of active metadata tag names.
-- **`GET_TAG_VALUE(@table, @column, @tag)`**: Returns the specific value of a tag.
+```sql
+-- Assuming a connection has been made:
+-- CREATE CONNECTION remote_sftp ON SFTP() WITH(HOST='corp.filedrop.com', ...);
 
----
+-- Downloads a file into the local Engine layer
+RECEIVE FILE FROM '/var/ftp/incoming/payload.csv' TO 'C:\LocalDrop\payload.csv' AT remote_sftp;
 
-## 5. Security & Infrastructure
+-- Uploads a finalized report artifact
+SEND FILE 'C:\LocalDrop\report.pdf' TO '/var/ftp/outgoing/report.pdf' AT remote_sftp;
+```
 
-### 5.1 SSH Key Management
-Generates cryptographic key pairs for SFTP and file encryption.
-- **`CREATE SSH_KEY_PAIR '<dir>' [WITH(BITS=4096, ALGORITHM='RSA', PASSPHRASE='...')];`**
+### 2.2 Remote Introspection
+Explore remote file directories and return the metadata dynamically as a queryable `#temp` table.
 
-### 5.2 Docker Lifecycle
-Manage containerized databases for temporary ETL staging.
-- **`USE DOCKER('<image>') AS <alias>`**
-- **`<alias> STOP | START | CLOSE`**
-
-### 5.3 Job Scheduling (`CREATE JOB`)
-Orchestrates script execution on a recurring schedule (supported in Service mode).
-- **`CREATE JOB 'NightlySync' EXECUTE 'sync.etlsql' AT '00:00:00' EVERY 1 DAY;`**
-- **`SHOW JOBS`** / **`DROP JOB <name>`**.
-- **`START JOB <name>`** / **`STOP JOB <name>`**.
+```sql
+-- Use standard SELECT clauses against the metadata struct
+SELECT Name, Size, LastModified 
+INTO #remote_inventory
+FROM REMOTE_FILE_LIST(remote_sftp, '/var/ftp/incoming/');
+```
 
 ---
 
-## 6. Diagnostics & Profiling
+## 3. Automated Notifications (`SEND EMAIL`)
 
-Optimize script performance and validate logic.
+Sends high-fidelity emails using a configured `SMTP` connection wrapper.
 
-- **`EXPLAIN <query>`**: Shows the internal join and stream strategy.
-- **`LINT ['path']`**: Statically analyzes code for security and performance risks.
-- **`SET PROFILING ON | OFF`**: Enables metric tracking.
-- **`SHOW PROFILE [INTO #temp]`**: Displays execution times for all recent statements.
+```sql
+-- CREATE CONNECTION mailer ON SMTP('smtp.google.com') WITH(USERNAME='...', PASSWORD='...');
+
+SEND EMAIL 
+    TO 'admin@company.com'
+    FROM 'etl@company.com'  -- Optional: Inherited from Connection if blank
+    SUBJECT 'Job Failure: Nightly Load'
+    BODY 'The incremental load failed at step 4. See the attached logs.'
+    ATTACH 'C:\Logs\nightly_error.log'
+    AT mailer;
+```
 
 ---
-*Refer to [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) for syntax rules and [Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md) for the function catalog.*
+
+## 4. Metadata, Lineage, & Tagging
+
+ETL-SQL natively tracks the ancestry and lineage for every transformation via explicitly injected tags. Tags are propagated seamlessly across joins.
+
+### 4.1 Applying Metadata Tags (`/* @key: value */`)
+Apply metadata tags securely via SQL commentary syntax straight into column declarations:
+```sql
+CREATE TABLE #EmployeeLayout (
+    ID INT /* @PII: TRUE */ /* @Source: HR_System */,
+    Name VARCHAR(20) /* @PII: TRUE */
+);
+```
+
+### 4.2 Querying Tags Dynamically (`SHOW TAGS`)
+You can introspect the tagging hierarchy on loaded connections or temp tables.
+
+```sql
+-- Returns a LIST of all tag keys currently applied to the column
+SELECT GET_TAGS(#EmployeeLayout, ID);
+
+-- Retrieves the specific string value of the defined tag
+SELECT GET_TAG_VALUE(#EmployeeLayout, ID, 'Source');
+
+-- Globally output the metadata dictionary mapped on the table to the UI/Console
+SHOW TAGS FOR #EmployeeLayout.ID;
+SHOW TAG VALUE 'Source' FOR #EmployeeLayout.ID;
+```
+
+### 4.3 Rendering Ancestry Reports
+Exports the full ancestry of loaded data sets (where the data travelled) directly into a Mermaid.js diagram or an interactive log.
+
+```sql
+-- Output tracing directly into a markdown schema
+LINEAGE(#EmployeeLayout) TO 'C:\Reports\Employee_Lineage.md';
+```
+
+---
+
+## 5. Security & Cryptographic Keys
+
+### 5.1 SSH Key Infrastructure
+Script-based generation of cryptographic key pairs for SFTP and symmetric file encryption architectures.
+
+```sql
+-- Standard execution
+CREATE SSH_KEY_PAIR 'C:\Keys\id_rsa' WITH (BITS=4096, ALGORITHM='RSA', PASSPHRASE='complex_pwd');
+
+-- Function shorthand block
+SSH_KEY_PAIR('C:\Keys\id_ed25519', 256, 'ED25519', 'complex_pwd', 'Autogenerated service key');
+```
+
+---
+
+## 6. Docker Lifecycle Integration
+
+Automatically spin up containerized databases for test staging or complex isolated staging calculations, then dispose of them.
+
+```sql
+-- Start a clean Postgres container and attach it to the `dpost` alias
+USE DOCKER('postgres:15-alpine') AS dpost;
+
+-- Grab the dynamically generated, isolated connection string
+DECLARE @conn varchar(500) = dpost.CONNECTION_STRING;
+CREATE CONNECTION stage_db ON POSTGRES(@conn);
+
+-- Inject data...
+
+-- Management commands once finished
+dpost STOP;  -- Retains state
+dpost START; -- Reboots container
+dpost CLOSE; -- Atomically destroys the container and wipes state
+
+-- Closes all active containers globally generated in the session
+DOCKER CLOSE;  
+```
+
+---
+
+## 7. Engine Monitoring & Background Scheduling
+
+### 7.1 Background Service Mode (`CREATE JOB`)
+Orchestrates script execution on a recurring schedule. Designed purely for execution when ETL-SQL is running in service/headless polling mode.
+
+```sql
+-- Run a full cleanup script every 30 minutes
+CREATE JOB CleanupJob ON SCHEDULE EVERY 30 MINUTES AS
+    RUN SCRIPT 'scripts/cleanup.etlsql';
+
+-- Pin an execution precisely at Midnight
+CREATE JOB NightlyArchive ON SCHEDULE EVERY 1 DAY AT '00:00' AS
+BEGIN
+    DELETE FROM prod_db.logs WHERE log_date < GETDATE();
+END;
+```
+
+**Job Management Operations:**
+```sql
+SHOW JOBS;                -- Lists registered jobs
+SHOW JOB HISTORY;         -- Lists timeline failures / success logs
+DROP JOB IF EXISTS NightlyArchive;
+KILL JOB 'job_id_123';    -- Halts actively executing background runners
+```
+
+### 7.2 Diagnostics & Execution Profiling (`SET PROFILING`)
+The profiling layer accurately tracks memory deltas, recursion depths, disk spills, and exact millisecond benchmarks for each command chunk sequentially. 
+
+```sql
+-- Enable deeper recording instrumentation
+SET PROFILING ON;
+
+-- Execute slow, complex logic
+RUN SCRIPT 'massive_transform.etlsql';
+
+-- Disable recording
+SET PROFILING OFF;
+
+-- Render the captured profile benchmarks to the session result buffer or local structure
+SHOW PROFILE INTO #execution_benchmarks;
+```

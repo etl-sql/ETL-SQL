@@ -5,6 +5,7 @@ using Npgsql;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Connectors.Shared;
 
 namespace ETL_SQL.Connectors.Postgres
 {
@@ -312,7 +313,8 @@ namespace ETL_SQL.Connectors.Postgres
         {
             if (_transactionalConnection != null) return (_transactionalConnection, true);
             var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync();
+            await ConnectorRetryPolicy.ForPostgres(_logger)
+                .ExecuteAsync(async ct => await conn.OpenAsync(ct));
             return (conn, false);
         }
 
