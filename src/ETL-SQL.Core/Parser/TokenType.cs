@@ -43,6 +43,7 @@ namespace ETL_SQL.Core.Parser
         CONNECTIONS, TABLES, COLUMNS, TAGS, TAG, VALUE, BITS, ALGORITHM, PASSPHRASE, COMMENT,
         SUBSTRING, POSITION, OVERLAY, EXTRACT, TRIM, PLACING, LEADING, TRAILING, BOTH,
         CHARACTER_LENGTH, CHAR_LENGTH, OCTET_LENGTH,
+        VARIABLES, LOCAL, ANALYZE,
         SETS, BANG,     // SETS keyword and ! prefix for set names
         ROLLUP, CUBE, GROUPING,   // GROUP BY extensions
         RANGE, BETWEEN, PRECEDING, FOLLOWING, UNBOUNDED, CURRENT,
@@ -98,36 +99,14 @@ namespace ETL_SQL.Core.Parser
 
         // ── Report-SQL tokens (Phase 9A) ───────────────────────────────────
         // All are non-reserved: only treated as keywords inside CREATE VISUAL /
-        // CREATE PAGE / CREATE DATASET context; safe to use as column/alias names elsewhere.
-        VISUAL,         // CREATE VISUAL
-        PAGE,           // CREATE PAGE
-        DATASET,        // CREATE DATASET
-        LAYOUT,         // AS LAYOUT (...)
-        MAPPINGS,       // MAPPINGS ( ... )
-        OPTIONS,        // OPTIONS ( ... )
-        ACTIONS,        // ACTIONS ( ... )
-        STRUCTURE,      // STRUCTURE = '...'
-        MAP,            // MAP ( 'A' = VisualName )
-        SERIES,         // series = Column
-        // SOURCE already exists in the main token set (line 11)
-        VISUAL_BAR,     // BAR
-        VISUAL_LINE,    // LINE (separate from SQL LINE reserved word if any)
-        VISUAL_SCATTER, // SCATTER
-        VISUAL_PIE,     // PIE
-        SLICER,         // SLICER
-        VISUAL_TABLE,   // TABLE (contextual; plain TABLE already exists)
-        CARD,           // CARD
-        ON_CLICK,       // ON_CLICK
-        DRILL_DOWN,     // DRILL_DOWN
-        SET_PARAMETER,  // SET_PARAMETER
-        ON_CHANGE,      // ON_CHANGE
-        REFRESH,        // REFRESH EVERY '...' (EVERY already exists in main set)
-        // EVERY already exists in main token set (line 42)
-        // COMPRESS already exists in main token set (line 12)
-        TTL,            // TTL = '...'
-        KEYFILE,        // KEYFILE = '...'
-        X_AXIS,         // X_AXIS ( ... )
-        Y_AXIS,         // Y_AXIS ( ... )
+        // CREATE DASHBOARD / CREATE PAGE context.
+        VISUAL, DASHBOARD, THEME, LAYOUT, REFRESH,
+        BAR, LINE, PIE, GAUGE, RADAR, SCATTER, HEATMAP, TABLE_VISUAL,
+        TITLE, SUBTITLE,
+        MAPPINGS, OPTIONS, ACTIONS, STRUCTURE, MAP, SERIES,
+        SLICER, CARD, ON_CLICK, DRILL_DOWN, SET_PARAMETER, ON_CHANGE,
+        TTL, KEYFILE, X_AXIS, Y_AXIS,
+        PAGE, DATASET,
 
         EOF         // End of file / string
     }

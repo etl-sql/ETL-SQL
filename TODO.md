@@ -6,17 +6,6 @@
 
 Identified during 2026-04-12 documentation structure review against professional project standards (dbt, SQLFluff, Temporal, etc.).
 
-### Missing Root-Level Files
-
-- [x] **DOC-1** — **Create `CONTRIBUTING.md`.**
-  Every professional OSS project includes this. Cover: dev environment setup (`.NET 10 SDK`, `dotnet build`, running tests), branching model (`main` = stable, `dev` = active), PR checklist (tests pass, docs updated, AGENTS.md compliance for AI-generated code), and how to report a bug vs. open a feature request. Referenced in README.md already.
-
-- [x] **DOC-2** — **Create `CHANGELOG.md`.**
-  Tracks what changed in each release. Use [Keep a Changelog](https://keepachangelog.com) format (`Added`, `Changed`, `Fixed`, `Removed`, `Security` sections per version). Recommended format: `## [2.0.0] - 2026-04-12`. Users and integrators depend on this to understand what broke between upgrades.
-
-- [x] **DOC-3** — **Create `CODE_OF_CONDUCT.md`.**
-  Standard for any project accepting external contributors. The [Contributor Covenant v2.1](https://www.contributor-covenant.org/) is a one-paste boilerplate — takes 5 minutes.
-
 ### Architecture Documents (Planned)
 
 - [ ] **DOC-4** — **Create `Docs/Architecture/Orchestrator.md`.**
@@ -49,6 +38,36 @@ Identified during 2026-04-12 documentation structure review against professional
 - [ ] **DOC-10** - **Create `Docs/Orchestrators_Guide.md`.**
   Detail out how to use the orchestrator app, what the commands are.  How to schedule a job, see job history, etc.
 
+- [ ] **DOC-11** - **FOREACH File parameter options need to be documented**
+  In the example below, what are the options for the FOREACH File parameter?  I see Path, Name.  I'm guessing there are other.  These need to be documented.  I didn't even know these existed or if they work.  Is these kind of parameters only available for lists of files?  What about other objects that end up in the list do they have the dot functionality too?
+```sql
+FOREACH @File IN @Drops
+BEGIN
+    BEGIN TRY
+        -- 2. Bulk Load directly to Staging
+        -- BULK INSERT uses FIRSTROW=2 to skip a header row, not HEADER=ON
+        BULK INSERT #DailyRaw 
+        FROM @File.Path 
+        WITH (FORMAT='CSV', FIRSTROW=2, STRICT_SCHEMA=ON);
+        
+        -- 3. Archive the processed file
+        DECLARE @ArchiveDir = 'C:\Archive\' + FORMAT(GETDATE(), 'yyyyMMdd');
+        IF NOT DIRECTORY_EXISTS(@ArchiveDir)
+        BEGIN
+            CREATE DIRECTORY @ArchiveDir;
+        END
+        
+        MOVE FILE @File.Path TO @ArchiveDir + '\' + @File.Name;
+        
+        PRINT 'Processed and Archived: ' + @File.Name;
+    END TRY
+    BEGIN CATCH
+        PRINT 'Error processing ' + @File.Name + ': ' + ERROR_MESSAGE();
+        -- Move to error folder instead of archive
+        MOVE FILE @File.Path TO 'C:\Errors\' + @File.Name;
+    END CATCH;
+END;
+```
 
 ### README.md Fixes (applied 2026-04-12 — for reference)
 
@@ -151,79 +170,6 @@ Refer to the **[Connector_Upgrade_Strategy.md](file:///c:/Users/chuck/scratch/ET
 
 ---
 
-## Phase 5.8 Code Review Findings
-
-The items below were identified during the Phase 5.8 review pass on 2026-04-12. Coverage baseline: 70.5% lines / 58.3% branches.
-
-### Bugs (CQ-B)
-
-- [x] **CQ-B1** `CancellationToken` now threaded through `ScriptExecutorAdapter` → `ExecutionSession.ExecuteAsync` → `Evaluator.Evaluate`. Token checked between each statement in the evaluation loop.
-- [x] **CQ-B2** `LintStatementHandler` now throws `ExecutionException` instead of bare `Exception` for file-not-found and unsupported-mode errors.
-- [x] **CQ-B3** `ExecutionSession` now implements `IAsyncDisposable`. `DisposeAsync()` closes the last evaluator and all persistent connections. `SimpleUi` uses `await using` so it's called on exit.
-
-### SRP Violations (CQ-S)
-
-- [x] **CQ-S1** `ExecutionSession.cs` split into three files: `ExecutionResult.cs`, `ExecutionSession.cs`, `ScriptExecutorAdapter.cs`.
-- [x] **CQ-S2** Spectre rendering removed from `ExecutionSession`. `ExecutionResult.ResultsTables` is now `List<DataTable>` and `ExecutionTree` is the raw `ExecutionTree` object. `SimpleUi` converts to Spectre tables. Spectre.Console dependency removed from `ETL-SQL.Orchestrator`.
-
-### Code Duplication (CQ-D)
-
-- [x] **CQ-D1** `LinterFactory.CreateWithAllRules()` extracted to `ETL-SQL.Core/Linting/LinterFactory.cs`. Both `LintStatementHandler` and `ExecutionSession` now use it.
-
-### Missing Logging (CQ-L)
-- [x] **CQ-L1** `ExecutionSession.ExecuteAsync` now has structured logging (`ILogger`) tracking session start, parse/lint results, duration, and success status.
-- [x] **CQ-L2** `LintStatementHandler.Execute` now has structured logging tracking file path, finding counts, and errors.
-
-### Untested Code (CQ-T)
-
-- [x] **CQ-T1** `SchedulerService` — 7 tests: job with null/past NextRun fires, future NextRun skips, success/failure/exception all log to history, NextRun is updated after execution. Uses mock `IScriptExecutor` and `IJobHistoryStore`.
-- [x] **CQ-T2** `ShowTablesStatementHandler`, `ShowColumnsStatementHandler`, `ShowConnectionsStatementHandler`, `ShowJobHistoryStatementHandler` — 11 tests covering result schema, row contents, INTO table routing, and mock store injection.
-- [x] **CQ-T3** `WaitForStatementHandler` — 8 tests: zero/short delay passes, invalid format throws, negative delay throws, TIME format errors, parsing round-trips.
-- [x] **CQ-T4** `MockDbSyntax` and `OracleSyntax` — 14 tests verifying keyword sets, function sets, exclusions, case-insensitivity, and accessor consistency.
-- [x] **CQ-T5** `ETL_SQL.DataGenerator` — 7 smoke tests: files created, header schema correct, row count correct, data format per column, SmallTable has 1000 sequential rows.
-- [x] **CQ-T6** `ExternalAggregateEngine` — 5 tests: GROUP BY correctness, TotalSpilledBytes incremented, empty input, global COUNT, temp file cleanup.
-- [x] **CQ-T7** `LintStatementHandler` — 8 tests: clean script, expected columns, DELETE/SELECT-star violations, multiple findings, file-not-found error, sorted by line, UnusedConnection rule fires.
-
-### Language Reference Gaps (CQ-Doc)
-
-- [x] **CQ-Doc1** `CLEAR SESSION` statement (`ClearSessionStatement`) is implemented in the AST and presumably has a handler, but is at 0% coverage and likely undocumented in the Language Reference. Verify it works, add a test, and document it.
-- [x] **CQ-Doc2** `SET PROFILING` statement (`SetProfilingStatement`) is at 0% handler coverage. Document behavior and add a smoke test.
-- [x] **CQ-Doc3** `EXPORT` statement (`ExportStatement`) AST node is at 0%. Verify whether it is fully implemented or just a stub — if stub, document as unimplemented.
-- [x] **CQ-Doc4** `SHOW TAGS` / `SHOW TAG VALUE` handlers are at ~3%. Verify they work end-to-end and document the tagging system in the Language Reference.
-
-### Potential Linter Rule Gaps (CQ-R)
-
-- [x] **CQ-R1** `ConnectionForwardReferenceRule` added — warns when a connection is used before its `CREATE CONNECTION`.
-- [x] **CQ-R2** `UnusedConnectionRule` added — warns when a `CREATE CONNECTION` is never referenced in the script.
-- [x] **CQ-R3** No linter rule catching `INSERT INTO` where the column list is omitted but the target table has more columns than the SELECT provides (silent null injection). Add `InsertColumnCountMismatchRule`.
-
-### Architecture (CQ-Arch)
-
-- [x] **CQ-Arch1** `ALTER CONNECTION` now has its own `AlterConnectionStatement` AST node and `AlterConnectionStatementHandler`. Previously it was conflated with `CreateConnectionStatement(mode=Alter)`. Behavior is preserved: previous options are inherited and only provided keys are overwritten.
-
-### Performance (CQ-P)
-
-- [x] **CQ-P1** Resolved by CQ-S2 — `ExecutionResult.ResultsTables` is now `List<DataTable>` (not pre-rendered `IRenderable`). TUI renders on demand.
-- [x] **CQ-P2** `StandardFunctions` is at 58.2% — the low coverage suggests date/time and string functions may have untested edge cases that could hide silent incorrect conversions. Audit for functions that silently return null or default on bad input instead of throwing.
-
-### Legacy Code (CQ-Legacy)
-
-- [x] **CQ-Legacy1** `ETL_SQL.Common.Logger` static façade — one call site (`OrchestratorService/Program.cs`) removed. The class is fully obsolete but kept to avoid breaking any external consumers. Safe to delete once confirmed no external references remain.
-
----
-
-## Phase 5 Code Quality — Steps 5.3–5.7
-
-All steps complete.
-
-- [x] **CQ-5.3** Structured logging throughout the codebase. Converted 76 string-interpolated log calls across 42 files to Serilog structured templates. Empty interpolations simplified to plain strings; nested ternaries flattened to args.
-- [x] **CQ-5.4** Per-session correlation IDs. `Evaluator` constructor now auto-generates an 8-char GUID short-form `SessionId` and propagates it to `_logger.SessionId`, which calls `Serilog.LogContext.PushProperty("SessionId", ...)`. Callers can override after construction.
-- [x] **CQ-5.5** Concurrent Evaluator tests. `Engine/ConcurrentEvaluatorTests.cs` — 7 tests covering isolated variables (5 sessions), isolated temp tables (4 sessions), no shared connection names (barrier-synchronized), no deadlock under load (10 sessions), auto-generated SessionId format/uniqueness, and explicit SessionId isolation.
-- [x] **CQ-5.6** CI coverage reporting pipeline. Already in place: `coverlet.collector` in test csproj, `dotnet reportgenerator` step in `.github/workflows/ci.yml`, HTML artifact upload, 70.0% line-coverage floor.
-- [x] **CQ-5.7** Retry logic for transient DB failures. Already in place via Polly: `ConnectorRetryPolicy` in `ETL-SQL.Connectors/Shared/` covers SqlServer, Postgres, Oracle, and ODBC — 3 attempts, exponential backoff, transient-only, Warning-level logging per retry.
-
----
-
 ## Phase 8 — Scale & Performance (Outstanding)
 
 ### Phase 8A — Large Dataset Handling
@@ -263,7 +209,7 @@ Phases 9A–9D are complete. The following items were deferred as out-of-scope f
 - [x] **Rpt-5** Create `Docs/Engine.md` (Phase 4.4 from Engine_Upgrade_Strategy). Engineering document covering: full project dependency graph, what each project owns, Evaluator statement dispatch loop, `#temp` table scoping, pushdown decision logic, Orchestrator job scheduling, Connector interface contract, and Linting pipeline. This is the onboarding reference for new contributors.
 
 ### Syntax modifications
-- [ ] **Source equals** I would like to make a slight change to make this consistent with the rest of the system.  Title and subtile are optional but I would like to make a way for the user to be able to format them in the way they want to.  Can we use Markdown syntax for the title and subtitle?  
+- [x] **Source equals** I would like to make a slight change to make this consistent with the rest of the system.  Title and subtile are optional but I would like to make a way for the user to be able to format them in the way they want to.  Can we use Markdown syntax for the title and subtitle?  
 ```sql
 -- Current syntax
 CREATE VISUAL <name> AS <TYPE> (
@@ -366,14 +312,3 @@ These items were identified during the 2026-04-12 security review of `SECURITY.m
 - [ ] **SEC-7** — **`IsInternalOperation` bypass is not guarded against accidental leakage.**
   `IsInternalOperation = true` disables the entire sandbox. Wrap every internal operation in a `try/finally` that resets it to `false`. Add a unit test asserting that `ValidatePath()` against a protected path still throws immediately after a legitimate internal operation completes.
   - Files: `SecurityService.cs`, `SessionManager.cs` (or wherever the flag is set).
-
-## Issues 
-- [x] **LINT-1** - **Linter does not validate that the column names in the PIVOT IN clause exist in the source table.**
-  - Files: `ETL-SQL.Core/Linting/PivotLinterRule.cs` (new).
-
-- [x] **LINT-2** - **Linter throws an warning on DROP CONNECTION IF EXISTS.**
-  ```sql
-  DROP CONNECTION IF EXISTS c;
-  CREATE CONNECTION c ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\TestData\test_sales.csv');
-  ```
-  Message: Connection 'c' is used at line 1 but is not defined until line 2.  This warning is not correct that's how it is designed.

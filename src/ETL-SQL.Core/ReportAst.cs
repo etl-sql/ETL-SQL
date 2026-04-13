@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Formatting;
 
 namespace ETL_SQL.Core
 {
@@ -24,81 +25,72 @@ namespace ETL_SQL.Core
     /// </summary>
     public record VisualSourceExpression : AstNode
     {
-        /// <summary>Set when SOURCE = ( SELECT ... ) — the inline query AST.</summary>
         public SelectStatement? InlineSelect { get; init; }
-        /// <summary>Set when SOURCE = #tableName — the temp table name (with #).</summary>
         public string? TempTableName        { get; init; }
         public bool IsInlineSelect          => InlineSelect != null;
+        public string ToSql() => AstSerializer.Format(this);
     }
 
-    /// <summary>Role-to-column mapping inside MAPPINGS ( role = Column, ... ).</summary>
     public record VisualMapping : AstNode
     {
         public required string Role   { get; init; }
         public required new string Column { get; init; }
+        public string ToSql() => AstSerializer.Format(this);
     }
 
-    /// <summary>Flat key-value option inside OPTIONS ( key = value, ... ).</summary>
     public record VisualOption : AstNode
     {
         public required string Key   { get; init; }
         public required string Value { get; init; }
+        public string ToSql() => AstSerializer.Format(this);
     }
 
-    /// <summary>Nested axis options: X_AXIS ( scale = ..., format = ... ) or Y_AXIS (...).</summary>
     public record AxisOptions : AstNode
     {
         public required string Axis             { get; init; }  // "X" or "Y"
         public List<VisualOption> Options       { get; init; } = new();
+        public string ToSql() => AstSerializer.Format(this);
     }
 
-    /// <summary>Base record for action definitions inside ACTIONS ( ... ).</summary>
     public abstract record VisualAction : AstNode
     {
-        /// <summary>"ON_CLICK" or "ON_CHANGE"</summary>
         public required string Trigger { get; init; }
+        public virtual string ToSql() => "UNKNOWN ACTION";
     }
 
-    /// <summary>SET_PARAMETER(@paramName, columnRef) action.</summary>
     public record SetParameterAction : VisualAction
     {
         public required string ParameterName   { get; init; }
         public required string ValueExpression { get; init; }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
-    /// <summary>DRILL_DOWN(Target = VisualName, Key = ColumnName) action.</summary>
     public record DrillDownAction : VisualAction
     {
         public required string TargetVisual { get; init; }
         public required string KeyColumn    { get; init; }
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
-    /// <summary>A parameter default declared in WITH PARAMETERS ( @name = value, ... ).</summary>
     public record PageParameter : AstNode
     {
         public required string Name     { get; init; }
         public string? DefaultValue     { get; init; }
+        public string ToSql() => AstSerializer.Format(this);
     }
 
-    // ── Top-level statements ──────────────────────────────────────────────────
-
-    /// <summary>
-    /// CREATE VISUAL &lt;name&gt; AS &lt;type&gt; (
-    ///     SOURCE = ( ... ) | #table,
-    ///     MAPPINGS ( ... ),
-    ///     OPTIONS ( ... ),
-    ///     ACTIONS ( ... )
-    /// );
-    /// </summary>
     public record CreateVisualStatement : Statement
     {
         public required string Name                    { get; init; }
         public required VisualType VisualType          { get; init; }
+        public string? Title                          { get; init; }
+        public string? Subtitle                       { get; init; }
         public required VisualSourceExpression Source  { get; init; }
         public List<VisualMapping> Mappings            { get; init; } = new();
         public List<VisualOption> Options              { get; init; } = new();
         public List<AxisOptions> AxisOptions           { get; init; } = new();
         public List<VisualAction> Actions              { get; init; } = new();
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     /// <summary>

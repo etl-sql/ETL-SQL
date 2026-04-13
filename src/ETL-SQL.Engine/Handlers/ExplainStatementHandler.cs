@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
+using Spectre.Console.Rendering;
 using Spectre.Console;
 
 namespace ETL_SQL.Engine.Handlers
@@ -22,14 +23,47 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (ExplainStatement)statement;
             
             var plan = new DataTable();
-            plan.SetColumns(new[] { "ID", "Operation", "Details", "Cost" });
+            var columns = new List<string> { "ID", "Operation", "Details", "Cost" };
+            if (stmt.IsAnalyze)
+            {
+                columns.Add("Actual Rows");
+                columns.Add("Actual Time (ms)");
+            }
+            plan.SetColumns(columns.ToArray());
             
             Counter id = new Counter();
             var metrics = new ExecutionMetrics 
             { 
-                Sql = "EXPLAIN: " + stmt.Query.ToSql(),
+                Sql = (stmt.IsAnalyze ? "EXPLAIN ANALYZE: " : "EXPLAIN: ") + stmt.Query.ToSql(),
                 Timestamp = DateTime.Now
             };
+
+            // If ANALYZE, run the actual query first to collect metrics
+            long actualRows = 0;
+            long actualTime = 0;
+            if (stmt.IsAnalyze)
+            {
+                var oldProfiling = context.IsProfiling;
+                var oldRedirect = context.RedirectOutput;
+                context.IsProfiling = true;
+                context.RedirectOutput = true; // Don't print the actual rows to console
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                try
+                {
+                    await foreach (var batch in context.ExecuteQuery(stmt.Query))
+                    {
+                        actualRows += batch.Rows.Count;
+                    }
+                }
+                finally
+                {
+                    sw.Stop();
+                    actualTime = sw.ElapsedMilliseconds;
+                    context.IsProfiling = oldProfiling;
+                    context.RedirectOutput = oldRedirect;
+                }
+            }
 
             if (stmt.Query is SelectStatement select)
             {
@@ -45,6 +79,17 @@ namespace ETL_SQL.Engine.Handlers
                 });
             }
             
+            if (stmt.IsAnalyze)
+            {
+                // For now, map the total metrics to the final step of the plan
+                var lastRow = plan.Rows.LastOrDefault();
+                if (lastRow != null)
+                {
+                    lastRow["Actual Rows"] = actualRows;
+                    lastRow["Actual Time (ms)"] = actualTime;
+                }
+            }
+
             // Populate the context's profile metrics so the UI Performance tab can see it
             metrics.DurationMs = plan.Rows.Sum(r => Convert.ToInt64(r["Cost"] ?? 0));
             context.ProfileMetrics.Add(metrics);
@@ -55,23 +100,57 @@ namespace ETL_SQL.Engine.Handlers
             {
                 var table = new Table()
                     .Border(TableBorder.Rounded)
-                    .Title("[bold yellow]Execution Plan[/]")
+                    .Title(stmt.IsAnalyze ? "[bold yellow]Execution Plan (ANALYZE)[/]" : "[bold yellow]Execution Plan[/]")
                     .AddColumn("ID")
                     .AddColumn("Operation")
                     .AddColumn("Details")
                     .AddColumn("Cost", c => c.RightAligned());
 
+                if (stmt.IsAnalyze)
+                {
+                    table.AddColumn("Actual Rows", c => c.RightAligned());
+                    table.AddColumn("Actual Time", c => c.RightAligned());
+                }
+
                 foreach (var row in plan.Rows)
                 {
-                    table.AddRow(
-                        new Text(row["ID"]?.ToString() ?? ""),
-                        new Text(row["Operation"]?.ToString() ?? ""),
-                        new Text(row["Details"]?.ToString() ?? ""),
-                        new Text(row["Cost"]?.ToString() ?? "")
-                    );
+                    if (stmt.IsAnalyze)
+                    {
+                        table.AddRow(
+                            new Text(row["ID"]?.ToString() ?? ""),
+                            new Text(row["Operation"]?.ToString() ?? ""),
+                            new Text(row["Details"]?.ToString() ?? ""),
+                            new Text(row["Cost"]?.ToString() ?? ""),
+                            new Text(row["Actual Rows"]?.ToString() ?? "-"),
+                            new Text(row["Actual Time (ms)"]?.ToString() ?? "-")
+                        );
+                    }
+                    else
+                    {
+                        table.AddRow(
+                            new Text(row["ID"]?.ToString() ?? ""),
+                            new Text(row["Operation"]?.ToString() ?? ""),
+                            new Text(row["Details"]?.ToString() ?? ""),
+                            new Text(row["Cost"]?.ToString() ?? "")
+                        );
+                    }
                 }
-                AnsiConsole.Write(table);
-                AnsiConsole.MarkupLine($"[grey]Total Plan Cost:[/] [yellow]{metrics.DurationMs}[/]");
+                if (stmt.IntoTable != null)
+                {
+                    var destination = await context.ResolveDataSourceAsync(stmt.IntoTable);
+                    await destination.WriteBatches(new List<DataTable> { plan }.ToAsyncEnumerable());
+                    context.Log($"Query plan stored in {stmt.IntoTable.TableName}.");
+                }
+                else
+                {
+                    AnsiConsole.Write(table);
+                    AnsiConsole.MarkupLine($"[grey]Total Plan Cost:[/] [yellow]{metrics.DurationMs}[/]");
+                    if (stmt.IsAnalyze)
+                    {
+                        AnsiConsole.MarkupLine($"[grey]Total Actual Time:[/] [green]{actualTime}ms[/]");
+                        AnsiConsole.MarkupLine($"[grey]Total Actual Rows:[/] [green]{actualRows}[/]");
+                    }
+                }
             }
         }
 

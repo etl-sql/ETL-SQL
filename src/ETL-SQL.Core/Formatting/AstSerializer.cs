@@ -94,13 +94,15 @@ namespace ETL_SQL.Core.Formatting
             ShowConnectionsStatement       s => "SHOW CONNECTIONS" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
             ShowTablesStatement            s => (s.ConnectionName != null ? $"SHOW TABLES ON {s.ConnectionName}" : "SHOW TABLES") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
             ShowColumnsStatement           s => $"SHOW COLUMNS FOR {s.Table.ToSql()}" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
+            ShowVariablesStatement         s => (s.IsLocalOnly ? "SHOW LOCAL VARIABLES" : "SHOW VARIABLES") + (s.IntoTable != null ? $" INTO {s.IntoTable}" : "") + ";",
             ShowTagsStatement              s => $"SHOW TAGS FOR TABLE {s.TableName}" + (s.ColumnName != null ? $" COLUMN {s.ColumnName}" : "") + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
             ShowTagValueStatement          s => $"SHOW TAG VALUE FOR TABLE {s.TableName}" + (s.ColumnName != null ? $" COLUMN {s.ColumnName}" : "") + $" WITH TAG {s.TagName}" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
 
             // ── Misc statements ──
             RunScriptStatement             s => FormatRunScript(s),
             WaitForStatement               s => $"WAITFOR {s.Type.ToString().ToUpper()} {s.Expression.ToSql()};",
-            ExplainStatement               s => $"EXPLAIN {s.Query.ToSql()}",
+            ExplainStatement               s => (s.IsAnalyze ? "EXPLAIN ANALYZE " : "EXPLAIN ") + s.Query.ToSql() + (s.IntoTable != null ? " INTO " + s.IntoTable.ToSql() : ""),
+            CreateVisualStatement          s => FormatCreateVisual(s),
             LineageStatement               s => FormatLineage(s),
             LintStatement                  s => s.ScriptPath != null ? $"LINT '{s.ScriptPath}';" : "LINT;",
             HelpStatement                  s => $"HELP {(s.Topic != null ? s.Topic + (s.SubTopic != null ? " " + s.SubTopic : "") : "")}",
@@ -715,6 +717,25 @@ namespace ETL_SQL.Core.Formatting
                 ? " /* " + string.Join(" ", col.Metadata.Select(kv => $"@{kv.Key}: {kv.Value}")) + " */"
                 : "";
             return $"{col.ColumnName} {col.DataType}{pk}{unq}{nullable}{identity}{def}{check}{fk}{tags}";
+        }
+        private static string FormatCreateVisual(CreateVisualStatement s)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine($"CREATE VISUAL {s.Name} AS {s.VisualType.ToString().ToUpper()} (");
+            if (s.Title != null) sb.AppendLine($"    TITLE = '{s.Title.Replace("'", "''")}',");
+            if (s.Subtitle != null) sb.AppendLine($"    SUBTITLE = '{s.Subtitle.Replace("'", "''")}',");
+            sb.AppendLine($"    SOURCE = {s.Source.ToSql()},");
+            if (s.Mappings.Count > 0)
+                sb.AppendLine($"    MAPPINGS ( {string.Join(", ", s.Mappings.Select(m => $"{m.Role} = {m.Column}"))} ),");
+            if (s.Options.Count > 0)
+                sb.AppendLine($"    OPTIONS ( {string.Join(", ", s.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} ),");
+            foreach (var axis in s.AxisOptions)
+                sb.AppendLine($"    {axis.Axis}_AXIS ( {string.Join(", ", axis.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"))} ),");
+            if (s.Actions.Count > 0)
+                sb.AppendLine($"    ACTIONS ( {string.Join(", ", s.Actions.Select(a => a.ToSql()))} ),");
+            
+            var result = sb.ToString().TrimEnd().TrimEnd(',');
+            return result + "\n);";
         }
     }
 }

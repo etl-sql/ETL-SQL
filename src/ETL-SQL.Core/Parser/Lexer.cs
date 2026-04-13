@@ -59,6 +59,7 @@ namespace ETL_SQL.Core.Parser
             dict["CLOSE"] = TokenType.CLOSE;
             dict["EACH"] = TokenType.EACH;
             dict["FOREACH"] = TokenType.FOREACH;
+            dict["RAISERROR"] = TokenType.RAISEERROR;
 
             // ── Report-SQL keywords (Phase 9A) ─────────────────────────────
             // These are registered so the lexer produces typed tokens inside
@@ -75,9 +76,10 @@ namespace ETL_SQL.Core.Parser
             dict["MAP"]           = TokenType.MAP;
             dict["SERIES"]        = TokenType.SERIES;
             // SOURCE is already registered via LanguageMetadata (maps to TokenType.SOURCE)
-            dict["BAR"]           = TokenType.VISUAL_BAR;
-            dict["SCATTER"]       = TokenType.VISUAL_SCATTER;
-            dict["PIE"]           = TokenType.VISUAL_PIE;
+            dict["BAR"]           = TokenType.BAR;
+            dict["LINE"]          = TokenType.LINE;
+            dict["SCATTER"]       = TokenType.SCATTER;
+            dict["PIE"]           = TokenType.PIE;
             dict["SLICER"]        = TokenType.SLICER;
             dict["CARD"]          = TokenType.CARD;
             dict["ON_CLICK"]      = TokenType.ON_CLICK;

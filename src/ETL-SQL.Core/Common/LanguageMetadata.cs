@@ -25,7 +25,7 @@ namespace ETL_SQL.Common
         public static readonly HashSet<string> ControlFlowKeywords = new(StringComparer.OrdinalIgnoreCase)
         {
             "IF", "ELSE", "WHILE", "FOR", "FOREACH", "EACH", "BEGIN", "END", "TRY", "CATCH", "THROW",
-            "RAISEERROR", "EXEC", "EXECUTE", "RETURN", "BREAK", "CONTINUE", "CASE", "WHEN", "THEN", "SEND_EMAIL"
+            "RAISEERROR", "RAISERROR", "EXEC", "EXECUTE", "RETURN", "BREAK", "CONTINUE", "CASE", "WHEN", "THEN", "SEND_EMAIL"
         };
 
         public static readonly HashSet<string> JoinKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -71,9 +71,9 @@ namespace ETL_SQL.Common
             "BULK", "LOAD", "BATCHSIZE", "MAXERRORS", "FIELDTERMINATOR", "ROWTERMINATOR", "FIRSTROW", "DATA_SOURCE",
             "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND", "INCLUDE_NULL_VALUES", "WITHOUT_ARRAY_WRAPPER",
             "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT", "VERSION",
-            "SETS", "SESSION", "CONNECTIONS", "TABLES", "COLUMNS", "TAGS", "TAG", "VALUE", "BITS", "ALGORITHM", "PASSPHRASE", "COMMENT",
+            "SETS", "SESSION", "CONNECTIONS", "VARIABLES", "LOCAL", "ANALYZE", "TABLES", "COLUMNS", "TAGS", "TAG", "VALUE", "BITS", "ALGORITHM", "PASSPHRASE", "COMMENT",
             "SUBSTRING", "POSITION", "OVERLAY", "EXTRACT", "TRIM", "PLACING", "LEADING", "TRAILING", "BOTH",
-            "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH"
+            "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE"
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)

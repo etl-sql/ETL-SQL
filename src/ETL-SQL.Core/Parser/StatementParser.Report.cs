@@ -28,6 +28,8 @@ namespace ETL_SQL.Core.Parser
             _parser.Consume(TokenType.LPAREN, "Expected '(' after visual type");
 
             VisualSourceExpression? source = null;
+            string? title = null;
+            string? subtitle = null;
             var mappings    = new List<VisualMapping>();
             var options     = new List<VisualOption>();
             var axisOptions = new List<AxisOptions>();
@@ -37,8 +39,34 @@ namespace ETL_SQL.Core.Parser
             {
                 if (_parser.Match(TokenType.SOURCE))
                 {
-                    _parser.Consume(TokenType.EQUALS, "Expected '=' after SOURCE");
+                    _parser.Match(TokenType.EQUALS); // Optional =
                     source = ParseVisualSource();
+                }
+                else if (_parser.Match(TokenType.TITLE))
+                {
+                    _parser.Match(TokenType.EQUALS); // Optional =
+                    if (_parser.Match(TokenType.LPAREN))
+                    {
+                        title = _parser.Consume(TokenType.STRING, "Expected string literal for TITLE").Value;
+                        _parser.Consume(TokenType.RPAREN, "Expected ')' after TITLE");
+                    }
+                    else
+                    {
+                        title = _parser.Consume(TokenType.STRING, "Expected string literal for TITLE").Value;
+                    }
+                }
+                else if (_parser.Match(TokenType.SUBTITLE))
+                {
+                    _parser.Match(TokenType.EQUALS); // Optional =
+                    if (_parser.Match(TokenType.LPAREN))
+                    {
+                        subtitle = _parser.Consume(TokenType.STRING, "Expected string literal for SUBTITLE").Value;
+                        _parser.Consume(TokenType.RPAREN, "Expected ')' after SUBTITLE");
+                    }
+                    else
+                    {
+                        subtitle = _parser.Consume(TokenType.STRING, "Expected string literal for SUBTITLE").Value;
+                    }
                 }
                 else if (_parser.Match(TokenType.MAPPINGS))
                 {
@@ -77,6 +105,8 @@ namespace ETL_SQL.Core.Parser
             {
                 Name        = name,
                 VisualType  = visualType,
+                Title       = title,
+                Subtitle    = subtitle,
                 Source      = source,
                 Mappings    = mappings,
                 Options     = options,
@@ -89,14 +119,14 @@ namespace ETL_SQL.Core.Parser
 
         private VisualType ParseVisualType()
         {
-            if (_parser.Match(TokenType.VISUAL_BAR))     return VisualType.Bar;
-            if (_parser.Match(TokenType.VISUAL_LINE))    return VisualType.Line;
-            if (_parser.Match(TokenType.VISUAL_SCATTER)) return VisualType.Scatter;
-            if (_parser.Match(TokenType.VISUAL_PIE))     return VisualType.Pie;
-            if (_parser.Match(TokenType.VISUAL_TABLE))   return VisualType.Table;
-            if (_parser.Match(TokenType.TABLE))          return VisualType.Table;
-            if (_parser.Match(TokenType.CARD))           return VisualType.Card;
-            if (_parser.Match(TokenType.SLICER))         return VisualType.Slicer;
+            if (_parser.Match(TokenType.BAR))           return VisualType.Bar;
+            if (_parser.Match(TokenType.LINE))          return VisualType.Line;
+            if (_parser.Match(TokenType.SCATTER))       return VisualType.Scatter;
+            if (_parser.Match(TokenType.PIE))           return VisualType.Pie;
+            if (_parser.Match(TokenType.TABLE_VISUAL))  return VisualType.Table;
+            if (_parser.Match(TokenType.TABLE))         return VisualType.Table;
+            if (_parser.Match(TokenType.CARD))          return VisualType.Card;
+            if (_parser.Match(TokenType.SLICER))        return VisualType.Slicer;
 
             // Fallback: visual type may arrive as IDENTIFIER when lexer context is ambiguous
             if (_parser.Current.Type == TokenType.IDENTIFIER)
@@ -133,8 +163,15 @@ namespace ETL_SQL.Core.Parser
                 return new VisualSourceExpression { InlineSelect = select };
             }
 
+            if (_parser.Current.Type == TokenType.SELECT)
+            {
+                // Raw inline SELECT
+                var select = (SelectStatement)_parser.ParseStatement();
+                return new VisualSourceExpression { InlineSelect = select };
+            }
+
             // #temp table reference — may start with # or just be a plain name
-            var tableRef = _parser.ConsumeIdentifier("Expected #tableName or ( SELECT ... ) after SOURCE =").Value;
+            var tableRef = _parser.ConsumeIdentifier("Expected #tableName or SELECT or ( SELECT ... ) after SOURCE").Value;
             return new VisualSourceExpression { TempTableName = tableRef };
         }
 

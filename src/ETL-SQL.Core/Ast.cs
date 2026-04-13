@@ -1444,6 +1444,20 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
+    public record ShowVariablesStatement : Statement
+    {
+        public bool IsLocalOnly { get; init; }
+        public string? IntoTable { get; init; }
+
+        public ShowVariablesStatement(bool isLocalOnly = false, string? intoTable = null)
+        {
+            IsLocalOnly = isLocalOnly;
+            IntoTable = intoTable;
+        }
+
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
     public record EmailStatement : Statement
     {
         public Expression To { get; }
@@ -1669,10 +1683,14 @@ namespace ETL_SQL.Core
     public record ExplainStatement : Statement
     {
         public Statement Query { get; }
+        public bool IsAnalyze { get; init; }
+        public TableReference? IntoTable { get; init; }
 
-        public ExplainStatement(Statement query)
+        public ExplainStatement(Statement query, bool isAnalyze = false, TableReference? intoTable = null)
         {
             Query = query;
+            IsAnalyze = isAnalyze;
+            IntoTable = intoTable;
         }
 
         public override string ToSql() => AstSerializer.Format(this);

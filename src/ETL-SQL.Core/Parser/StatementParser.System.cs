@@ -248,6 +248,16 @@ namespace ETL_SQL.Core.Parser
                 var table = ParseTableReference();
                 stmt = new ShowColumnsStatement(table);
             }
+            else if (_parser.Match(TokenType.VARIABLES) || (_parser.Current.Type == TokenType.LOCAL && _parser.Peek.Type == TokenType.VARIABLES))
+            {
+                bool localOnly = false;
+                if (_parser.Match(TokenType.LOCAL))
+                {
+                    localOnly = true;
+                    _parser.Consume(TokenType.VARIABLES, "Expected VARIABLES after SHOW LOCAL");
+                }
+                stmt = new ShowVariablesStatement(localOnly);
+            }
             else if (_parser.Match(TokenType.TAGS))
             {
                 _parser.Consume(TokenType.FOR, "Expected FOR after SHOW TAGS");
@@ -289,7 +299,7 @@ namespace ETL_SQL.Core.Parser
 
             if (stmt == null)
             {
-                throw new SyntaxException($"Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, TAGS, VERSION or LINEAGE after SHOW", _parser.Current.Line, _parser.Current.Column);
+                throw new SyntaxException($"Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, VARIABLES, TAGS, VERSION or LINEAGE after SHOW", _parser.Current.Line, _parser.Current.Column);
             }
 
             if (_parser.Match(TokenType.INTO))
@@ -308,6 +318,7 @@ namespace ETL_SQL.Core.Parser
                     ShowColumnsStatement scols => scols with { IntoTable = tempTable },
                     ShowTagsStatement stag => stag with { IntoTable = tempTable },
                     ShowTagValueStatement stv => stv with { IntoTable = tempTable },
+                    ShowVariablesStatement svars => svars with { IntoTable = tempTable },
                     _ => stmt
                 };
             }
@@ -321,8 +332,18 @@ namespace ETL_SQL.Core.Parser
         private Statement ParseExplain()
         {
             var startToken = _parser.Previous;
+            bool isAnalyze = _parser.Match(TokenType.ANALYZE);
             var stmt = _parser.ParseStatement();
-            return new ExplainStatement(stmt) { Line = startToken.Line, Column = startToken.Column };
+            
+            TableReference? intoTable = null;
+            if (_parser.Match(TokenType.INTO))
+            {
+                var tempTable = _parser.ConsumeIdentifier("Expected temporary table name after INTO").Value;
+                if (!tempTable.StartsWith("#")) throw new SyntaxException("EXPLAIN ... INTO target must be a temporary table starting with '#'", _parser.Current.Line, _parser.Current.Column);
+                intoTable = new TableReference(tempTable);
+            }
+            
+            return new ExplainStatement(stmt, isAnalyze, intoTable) { Line = startToken.Line, Column = startToken.Column };
         }
 
         private Statement ParsePrint()
