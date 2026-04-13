@@ -8,7 +8,32 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 *Changes staged on `dev` that have not yet been cut into a release.*
 
+### Added
+- **System Variables**:
+    - `@@ERROR` – Captures the error code of the preceding statement; remains stable during `TRY...CATCH` transitions.
+    - `@@DATASET` – Provides script-level access to report visual data for manual assignment.
+- **Reporting Reliability (Rpt-2)**:
+    - **Atomic Writes**: `SnapshotStore` now uses temporary files and atomic renames to prevent report corruption during crashes.
+    - **Concurrency Control**: Thread-safe serialization of snapshot writes via `SemaphoreSlim`.
+- **Configuration Hardening**:
+    - `ReportPlayer:Port` – Configurable dashboard port in `appsettings.json` (defaults to 5200).
+    - `Security:MaxFileOperationsPerScript` – Configurable runaway protection limit (formerly hardcoded at 100).
+    - `Security:MaxRecursiveNestingDepth` – Configurable recursion safety limit (formerly hardcoded at 5).
+- **Documentation**:
+    - **[Administrators Guide](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Administrators_Guide.md)** – New central resource for deployment, host-level configuration, and resource governance.
+    *   Updated `SECURITY.md` with hardening details for report snapshots and configurable limits.
+    *   Updated `Grammar.md` and `Report_SQL_Guide.md` with comprehensive system variable documentation.
+
+### Fixed
+- **Security (CR-S1)**: Resolved high-severity script injection vulnerability in `DashboardService` by refactoring slicer parameter injection to use engine-level `DeclareVariable` instead of raw string concatenation.
+- **Evaluation Stability**: Improved `@@ERROR` accuracy by buffering `PreviousErrorNumber` within `Evaluator.EvaluateStatement`, ensuring correct cross-statement error reporting.
+
+### Changed
+- `Orchestrators_Guide.md` – Cleaned up redundant deployment/configuration sections; redirected to the new Administrators Guide.
+- `DependencyInjectionSetup.cs` – Refactored to propagate all `appsettings.json` safety and logging limits at startup.
+
 ---
+
 
 ## [0.5.0] — 2026-04-12
 

@@ -101,5 +101,17 @@ namespace ETL_SQL.Connectors.SqlServer
 
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
+
+        public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
+        {
+            if (options != null && options.TryGetValue("SERVER", out var server)) return server;
+            
+            try
+            {
+                var builder = new SqlConnectionStringBuilder(connectionString);
+                return builder.DataSource;
+            }
+            catch { return null; }
+        }
     }
 }

@@ -20,7 +20,7 @@ namespace ETL_SQL.Engine.Services
     /// </summary>
     public class SessionStateManager(ILogger logger, string? customSessionDir = null)
     {
-        private readonly string _sessionRoot = InitializeSessionRoot(customSessionDir);
+        public string SessionRoot { get; } = InitializeSessionRoot(customSessionDir);
         private readonly ILogger _logger = logger;
         private const string SessionFileExtension = ".etlsession";
         private const string RecoveryManifestExtension = ".recovery.json";
@@ -46,9 +46,9 @@ namespace ETL_SQL.Engine.Services
             return root;
         }
 
-        private string GetSessionFilePath(string sessionId) => Path.Combine(_sessionRoot, sessionId + SessionFileExtension);
-        private string GetRecoveryFilePath(string sessionId) => Path.Combine(_sessionRoot, sessionId + RecoveryManifestExtension);
-        private string GetTempTableDir(string sessionId) => Path.Combine(_sessionRoot, sessionId + "_temp");
+        private string GetSessionFilePath(string sessionId) => Path.Combine(SessionRoot, sessionId + SessionFileExtension);
+        private string GetRecoveryFilePath(string sessionId) => Path.Combine(SessionRoot, sessionId + RecoveryManifestExtension);
+        private string GetTempTableDir(string sessionId) => Path.Combine(SessionRoot, sessionId + "_temp");
 
         public string GetMachineKey()
         {
@@ -266,7 +266,7 @@ namespace ETL_SQL.Engine.Services
         public void ReapStaleSessions(TimeSpan maxAge)
         {
             var now = DateTime.Now;
-            foreach (var file in Directory.GetFiles(_sessionRoot, "*" + SessionFileExtension))
+            foreach (var file in Directory.GetFiles(SessionRoot, "*" + SessionFileExtension))
             {
                 if (now - File.GetLastWriteTime(file) > maxAge)
                 {

@@ -1,68 +1,12 @@
 # ETL-SQL Development Roadmap
-
-## Language & Engine Feature Gaps (ENG)
-
-Identified during 2026-04-12 documentation review. Each item was verified against the source — these are confirmed missing from the engine, not just undocumented.
-
-### Confirmed Not Implemented
-
-- [x] **ENG-1** — **`WAITFOR (SELECT ...)` polling syntax.**
-  Implemented T-SQL style polling syntax and a cleaner `WAIT UNTIL` statement. Features a default 1-second polling interval and full integration with the engine's `CancellationToken` for safe, interruptible waits.
-  - Files: `TokenType.cs`, `Ast.cs`, `StatementParser.Extensions.cs`, `WaitForStatementHandler.cs`.
-  - Tests: `WaitForPollingTests.cs`.
-
-- [X] **ENG-2** — **`@@VERSION` system variable / `SHOW VERSION` command.**
-  No mechanism exists to query the current engine version from within a script. Add `@@VERSION` as a system variable resolving to `'ETL-SQL 0.5.0 (.NET 10.0)'` and a `SHOW VERSION;` statement that prints it to the messages panel.
-  - Files: `ETL-SQL.Core/Common/LanguageMetadata.cs`, `Evaluator.cs` (resolve `@@VERSION`).
-  - Doc: Add to `Standard_Library.md` §8 System Functions.
-
-- [x] **ENG-3** — **`PIVOT` / `UNPIVOT` implementation.**
-  The `PIVOT` and `UNPIVOT` operators are fully implemented in the engine. Supports grouped aggregation rotation, operator chaining, and pivoting on subqueries. deduplication logic ensures clean headers.
-  - Files: `ETL_SQL.Engine.Engines.PivotEngine.cs`, `Parser.cs` (table operator loop), `DataSourceManager.cs`.
-  - Tests: `PivotTests.cs` (5 tests covering all scenarios).
-
-- [x] **ENG-4** — **`THROW` needs custom message/code support.**
-  Implemented T-SQL compatible `THROW [error_number, message, state]` syntax.
-  - Files: `Ast.cs`, `StatementParser.Flow.cs`, `ThrowStatementHandler.cs`.
-
-- [x] **ENG-5** — **Extended error functions in `CATCH` blocks: `ERROR_NUMBER()`, `ERROR_LINE()`, `ERROR_SEVERITY()`.**
-  Implemented `ERROR_NUMBER()`, `ERROR_MESSAGE()`, `ERROR_SEVERITY()`, `ERROR_STATE()`, and `ERROR_LINE()`.
-  - Files: `StandardFunctions.cs`, `IExecutionContext.cs`, `TryCatchStatementHandler.cs`.
-  - Doc: Added to `Standard_Library.md` §8 System Functions.
-
-- [x] **ENG-6** — **Environment variable expansion in scripts.**
-  Implemented `ENV('VAR_NAME')` function with security allow-list validation in `SecurityService`.
-  - Files: `StandardFunctions.cs`, `SecurityService.cs`.
-
-- [x] **ENG-7** — **CLI headless mode does not return a meaningful exit code.**
-  Already implemented: `EngineRunner.Run` returns `1` on parse errors, lint errors, and execution exceptions; `0` on success. `Program.Main` propagates the value through `System.CommandLine`'s `InvokeAsync`.
-
-### Nice-to-Have / Quality of Life
-
-- [x] **ENG-8** — **`REQUIRE VERSION >= 'x.y.z'` script directive.**
-  Implemented `REQUIRE VERSION` pre-flight check. Scripts can now declare minimum engine version requirements.
-  - Files: `TokenType.cs`, `Ast.cs`, `StatementParser.cs`, `RequireVersionStatementHandler.cs`.
-  - Doc: Added to `Grammar.md` Section 1.7.
-
-- [x] **ENG-9** — **`SHOW VARIABLES` — display all current session `@` variables.**
-  Implemented `SHOW VARIABLES` and `SHOW LOCAL VARIABLES` with support for `INTO #temp`. Masks `@secret` variables marked with `PASSWORD` keyword unless `SET SHOW_PASSWORD ON` is active.
-  - Files: `ShowVariablesStatementHandler.cs`, `IExecutionContext` (expose variables/metadata).
-  - Doc: Added to `Grammar.md` Section 14 and `Specialized_Operations.md` Section 8.5.
-
-- [x] **ENG-10** — **`HELP VARIABLES` and `HELP STATEMENT <name>` topics missing from `HelpStatementHandler`.**
-  Implemented `HELP VARIABLES` (covers `@@` system vars), `HELP SECURITY` (summarizes sandbox rules), and `HELP STATEMENT <name>` (syntax cheat sheets for core commands). 
-  - Files: `HelpStatementHandler.cs`, `ExpressionEvaluator.cs` (added `@@ROWCOUNT` support).
-
----
-
 ## TUI on-going issues
 
 ## VS Code Extension on-going issues
-- [ ] Each time I execute either all or selected the execute tree should be cleared an should start over.  Currently it just keeps adding to the tree view.
-- [ ] Variable values should not display on the sidebar, that was added recently.  I think the code is in place but they are not displayed.
-- [ ] Export to csv should be added to the results grid context menu. It was but at some point it seems to have disappeared.
-- [ ] Setting is really messy, it should just need a pointer to where the exe files are and do you want to show debugging or not.  I don't know of any other options needed at this time. 
-- [ ] rptsql extension is not supported.  Its really the same as etlsql extension except a button should appear so that the user can preview the report in a new panel.  Should work like Markdown preview.  The report preview is already an option so there shouldn't be much to do here.
+- [ ] **Execute Tree Clear** Each time I execute either all or selected the execute tree should be cleared an should start over.  Currently it just keeps adding to the tree view.
+- [ ] **Variable Values** Variable values should not display on the sidebar, that was added recently.  I think the code is in place but they are not displayed.
+- [ ] **Export to CSV** Export to csv should be added to the results grid context menu. It was but at some point it seems to have disappeared.
+- [ ] **Settings cleanup** Setting is really messy, it should just need a pointer to where the exe files are and do you want to show debugging or not.  I don't know of any other options needed at this time. 
+- [ ] **Add .rptsql extension** rptsql extension is not supported.  Its really the same as etlsql extension except a button should appear so that the user can preview the report in a new panel.  Should work like Markdown preview.  The report preview is already an option so there shouldn't be much to do here.
 
 ## Phase 8 — Scale & Performance (Outstanding)
 
@@ -72,8 +16,8 @@ Design spike complete (`Docs/Strategy/LargeDatasets.md`). Architecture documente
 
 - [x] **8A-design** Design spike: profiled bottlenecks, produced `Docs/Strategy/LargeDatasets.md` with streaming, spill-to-disk, and chunked-processing recommendations.
 - [x] **8A-1** Streaming aggregate path in `SelectStatementHandler`. GROUP BY queries without joins/window functions now stream directly to `ExternalAggregateEngine` without buffering all rows into RAM first. WHERE filtering applied inline via `WhereStream`. Fixed `JsonElementToValue` bug in `ExternalAggregateEngine.ReadPartition` (spilled rows were deserializing as `JsonElement` boxes, causing `InvalidCastException` on SUM/AVG). 13 `SpillToDiskTests` pass.
-- [ ] **8A-2** Spill-to-disk for `InMemoryDataSource` (`#temp` tables). Add `SpillThresholdRows` config; when a `#temp` table exceeds the threshold, overflow pages spill to NDJSON on disk. Reads transparently merge in-memory and on-disk pages. Cleanup on `DROP TABLE` or session end.
-- [ ] **8A-3** Chunked `FOR` loop pushdown. `FOR @row IN (SELECT ... FROM <sql_connector>)` should push `OFFSET`/`FETCH` to the remote connector rather than pulling all rows into the evaluator. Detect the pattern in `ForStatementHandler` and iterate in configurable page sizes.
+- [x] **8A-2** Spill-to-disk for `InMemoryDataSource` (`#temp` tables). Added `Orchestration:MaxInMemoryBatches` configuration. Implemented automatic encryption using machine-bound keys and background serialization to disk when memory threshold is met. Reads transparently stream from both disk and RAM. Automatic cleanup on `DROP TABLE`, `TRUNCATE`, or session disposal. Verified with `InMemorySpillTests`.
+- [x] **8A-3** Chunked `FOR` loop pushdown. `FOREACH @row IN (SELECT ... FROM <sql_connector>)` now pushes `OFFSET`/`FETCH` pagination to remote connectors when an `ORDER BY` clause is present. Supported by runtime-adjustable `ForeachPageSize` in `appsettings.json`.
 
 ### Phase 8B — Parallel Execution & Resource Throttling
 
@@ -216,29 +160,17 @@ Identified by automated deep review of the current codebase. Verified against so
 
 ### Bugs
 
-- [ ] **CR-B1** — **External join fallback silently discards the first 100k rows.**
-  `SelectStatementHandler` breaks out of the source-read loop after 100,001 rows, then passes the *already-partially-consumed* `inputStream` iterator to `ApplyHashJoinExternal`. The first 100k buffered rows are never fed into the join — they are dropped. The right-side argument is also `Enumerable.Empty`, so the join always produces zero results. A `// This is a placeholder` comment confirms the path is incomplete but it is reachable in production.
-  - **Severity:** High
-  - Files: `src/ETL-SQL.Engine/Handlers/SelectStatementHandler.cs` ~line 435
-  - Fix: Either complete the external join using both the buffered rows and the remaining stream, or throw `ExecutionException("Large-scale join not yet supported")` to fail fast instead of silently returning empty results.
+- [x] **CR-B1** — **External join fallback correctly preserves all source rows.**
+  Refactored `SelectStatementHandler` to use a single-pass `IAsyncEnumerator` and a `PrependRows` helper. This ensures the first 100k buffered rows are correctly combined with the remaining stream before passing to the external join engine. Verified with `LargeScaleJoinPersistenceTests`.
 
-- [ ] **CR-B2** — **External sort crashes on duplicate sort-key values.**
-  `ExternalSortEngine.MergeChunks` uses a `SortedList` keyed on the comparison tuple. `SortedList` does not allow duplicate keys — when two rows from different chunks compare equal, `heap.Add()` throws `ArgumentException`. Sorting by any low-cardinality column (status, category, boolean) triggers this crash reliably.
-  - **Severity:** High
-  - Files: `src/ETL-SQL.Engine/Engines/ExternalSortEngine.cs` ~line 129
-  - Fix: Replace `SortedList` with a min-heap or append a tie-breaker (chunk index) to the key so equal-priority entries can coexist.
+- [x] **CR-B2** — **External sort handles duplicate sort-key values successfully.**
+  Replaced `SortedList` with `PriorityQueue` in `ExternalSortEngine.cs`. This allows entries with identical comparison values to be correctly merged during the final sort phase without throwing `ArgumentException`.
 
-- [ ] **CR-B3** — **StreamWriter cleanup loop aborts on first flush failure, leaking file handles.**
-  `ExternalAggregateEngine.PartitionStream` closes 32 `StreamWriter`s in a `foreach` with no per-writer try/catch. If any single `Flush()` throws (e.g., disk full), the remaining writers in the loop are never closed, leaking up to 31 file handles and leaving temp files locked until process exit.
-  - **Severity:** High
-  - Files: `src/ETL-SQL.Engine/Engines/ExternalAggregateEngine.cs` ~line 104
-  - Fix: Wrap each `w.Flush(); w.Close()` in a per-writer `try/catch` that discards the exception, so all writers are always released.
+- [x] **CR-B3** — **StreamWriter cleanup loop is robust against flush failures.**
+  Wrapped per-writer cleanup in `try/catch` and `finally` blocks in `ExternalAggregateEngine.cs` and `ExternalJoinEngine.cs`. This guarantees that file handles are released even if a specific writer fails to flush due to disk errors.
 
-- [ ] **CR-B4** — **`ExternalJoinEngine.ReadPartition` deserializes numbers as `long` instead of `decimal`, causing missed join matches.**
-  `ExternalJoinEngine` deserializes spilled rows as `Dictionary<string, object?>`, which causes System.Text.Json to box numbers as `JsonElement`. Its `UnwrapJsonValue` then extracts them as `long` (via `TryGetInt64`). The main engine uses `decimal` everywhere. Join key equality between a `long` from the spilled right side and a `decimal` from the left stream fails silently, producing missed matches for any join on a numeric key.
-  - **Severity:** Medium
-  - Files: `src/ETL-SQL.Engine/Engines/ExternalJoinEngine.cs` ~line 114
-  - Fix: Deserialize as `Dictionary<string, JsonElement>` and apply `JsonElementToValue` (same pattern as the `ExternalAggregateEngine` fix) to normalise numbers to `decimal`.
+- [x] **CR-B4** — **Standardized numeric deserialization to `decimal` for all disk-spilling engines.**
+  Updated `ExternalJoinEngine.cs`, `ExternalSortEngine.cs`, and `CompoundKey.cs` to force `decimal` conversion when unwrapping numeric values from `JsonElement`. This resolves join key and sort key mismatches between in-memory decimal values and disk-serialized numbers.
 
 - [ ] **CR-B5** — **Date values stored as strings are not reconverted to `DateTime` after aggregate spill/read.**
   `ExternalAggregateEngine.JsonElementToValue` returns dates stored in spilled JSON as plain `string` (they round-trip through `JsonValueKind.String`). When `AggregateEngine` evaluates `MIN`/`MAX` on a date column after a spill, it performs string comparison instead of date ordering, producing wrong results for dates that sort differently as strings (e.g., `"2025-01-10"` < `"2025-09-01"` by string but not in all locales).
@@ -292,11 +224,8 @@ Identified by automated deep review of the current codebase. Verified against so
   - Files: `src/ETL-SQL.Engine/Services/SessionStateManager.cs` ~line 165
   - Fix: Serialize per-session operations through a `SemaphoreSlim` keyed by session ID; write via temp-file-then-rename for atomicity.
 
-- [ ] **CR-C2** — **Chunk `StreamReader`s in `ExternalSortEngine.MergeChunks` are not disposed on exception.**
-  All chunk readers are opened before the merge loop. If the loop throws (e.g., the duplicate-key crash from CR-B2), execution jumps past the `foreach (var rd in readers) rd.Dispose()` cleanup at the end of the method, leaking all open file handles.
-  - **Severity:** Medium
-  - Files: `src/ETL-SQL.Engine/Engines/ExternalSortEngine.cs` ~line 118
-  - Fix: Wrap the readers list in a `try/finally` that disposes all readers regardless of outcome.
+- [x] **CR-C2** — **Chunk `StreamReader`s in `ExternalSortEngine.MergeChunks` are disposed correctly.**
+  Applied `try/finally` around the heap-merge loop to ensure all open file readers are closed and disposed even if the sort operation is aborted by an exception.
 
 - [x] **CR-C3** — **Dead static `_random` field in `Evaluator` is non-thread-safe.**
   `Evaluator` declares `private static readonly Random _random = new Random()`. `System.Random` is not thread-safe under concurrent calls from multiple `Evaluator` instances. The field appears to be unused (no `_random.Next()` call exists anywhere), but its `static` presence is a maintenance trap — any future contributor who uses it will introduce a threading bug.
@@ -478,6 +407,13 @@ Hardcoded constants that should be surfaced as `appsettings.json` entries so use
 
 ### Security Limits
 
+- [x] **DOC-1**: Update `Grammar.md` and `Report_SQL_Guide.md` with system variables (`@@ERROR`, `@@DATASET`).
+- [x] **CFG-7**: Externalize `SecurityService.DefaultMaxFileOperations` to `appsettings.json`.
+- [x] **CFG-8**: Externalize `SecurityService.DefaultMaxRecursiveDepth` to `appsettings.json`.
+- [ ] **CFG-9**: Implement `ConnectorRetryOptions` in `appsettings.json` (MaxAttempts, BaseDelay).
+- [ ] **CFG-10**: Support `Session:StaleSessionRetentionDays` configuration.
+- [x] **CFG-11**: Externalize `ReportPlayer` port (`5200`) to `appsettings.json`.
+
 - [ ] **CFG-7** — **`SecurityService.DefaultMaxFileOperations` (default 100) — per-script file-op runaway limit.**
   Hard limit on the number of file operations (DELETE FILE, COPY FILE, etc.) a single script may perform before the engine throws a `SecurityException`. ETL scripts dealing with large file sets legitimately need to raise this; the current workaround is the `### ALLOW_GREATER_THAN_100_FILE` magic comment which is not discoverable.
   - Currently: `public const int DefaultMaxFileOperations = 100` in `SecurityService.cs`
@@ -508,3 +444,7 @@ Hardcoded constants that should be surfaced as `appsettings.json` entries so use
   `app.Urls.Add("http://localhost:5200")` is a literal. Users running multiple report servers on the same machine (e.g., dev + staging) cannot configure a different port without recompiling. The CLI already has a `--port` flag for `serve` but the default is not read from config.
   - Currently: literal `"http://localhost:5200"` in `src/ETL-SQL.ReportPlayer/Program.cs` line 80
   - Add: `ReportPlayer:Port` in `src/ETL-SQL.ReportPlayer/appsettings.json`; fall back to 5200 if absent.
+
+
+### Documentation missing
+- [ ] **DOC-1** - **Missing documentation of the @@ variables.**  I don't see any documentation on what @@ variables are available or how to use them. Can we list them all out and have their purpose.  Like the @@dataset we know this is a List<Row> but what about the others?  

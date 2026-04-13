@@ -33,13 +33,17 @@ SET @label = UPPER(@name) + '_PROCESSED';
 ```
 
 ### 1.3 System Variables
-The engine provides built-in variables for session-level state.
+The engine provides built-in variables for session-level state. All system variables are read-only except for `@@DATASET` (which is user-clearable).
 
 | Variable | Description |
 | :--- | :--- |
 | `@@VERSION` | Full engine version and build metadata string. |
 | `@@TRANCOUNT` | Current transaction nesting level (0 = no active transaction). |
-| `@@RESULTSETS` | Number of result sets produced by the last executed statement. |
+| `@@RESULTSETS` | Collection (LIST) of result sets produced by the last executed statement. Can be iterated via `FOREACH` or counted via `@@RESULTSETS.COUNT`. |
+| `@@ROWCOUNT` | The number of rows processed or affected by the **absolute last executed statement**. For SELECT statements, this is the count of rows fetched. |
+| `@@ERROR` | The integer error code of the **preceding statement**. If the last statement was successful, `@@ERROR` returns `0`. Capturing this value immediately into a variable (e.g., `SET @err = @@ERROR`) is recommended inside `CATCH` blocks. |
+| `@@DATASET` | (Report-Builder Only) A reference to the current data set being processed or manually assigned for visual rendering. |
+
 
 ### 1.4 `INPUT` and `OUTPUT` Variables
 Control how variables interact with the CLI or parent scripts via `RUN SCRIPT`.

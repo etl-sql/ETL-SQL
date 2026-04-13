@@ -28,7 +28,7 @@ namespace ETL_SQL.Tests
             await evaluator.Evaluate(TestHelpers.Parse(script));
 
             // Verify that an INSERT statement was sent to the mock DB
-            Assert.Contains(mockDb.ExecutedSql, s => s.Contains("INSERT INTO TargetTable"));
+            Assert.Contains(mockDb.ExecutedSql, s => s.Contains("INSERT INTO [TargetTable]") || s.Contains("INSERT INTO TargetTable"));
         }
 
         [Fact]
@@ -41,8 +41,8 @@ namespace ETL_SQL.Tests
             string script = "UPDATE remote.TargetTable SET Val = 200 WHERE ID = 1;";
 
             await evaluator.Evaluate(TestHelpers.Parse(script));
-
-            Assert.Contains(mockDb.ExecutedSql, s => s.Contains("UPDATE TargetTable SET Val = 200") && s.Contains("ID = 1"));
+            
+            Assert.Contains(mockDb.ExecutedSql, s => (s.Contains("UPDATE [TargetTable]") || s.Contains("UPDATE TargetTable")) && s.Contains("Val = 200") && s.Contains("ID = 1"));
         }
 
         [Fact]
@@ -55,8 +55,8 @@ namespace ETL_SQL.Tests
             string script = "DELETE FROM remote.TargetTable WHERE ID = 1;";
 
             await evaluator.Evaluate(TestHelpers.Parse(script));
-
-            Assert.Contains(mockDb.ExecutedSql, s => s.Contains("DELETE FROM TargetTable") && s.Contains("ID = 1"));
+            
+            Assert.Contains(mockDb.ExecutedSql, s => (s.Contains("DELETE FROM [TargetTable]") || s.Contains("DELETE FROM TargetTable")) && s.Contains("ID = 1"));
         }
 
         [Fact]
@@ -69,8 +69,8 @@ namespace ETL_SQL.Tests
             string script = "DROP TABLE remote.TargetTable;";
 
             await evaluator.Evaluate(TestHelpers.Parse(script));
-
-            Assert.Contains(mockDb.ExecutedSql, s => s.Contains("DROP TABLE TargetTable"));
+            
+            Assert.Contains(mockDb.ExecutedSql, s => s.Contains("DROP TABLE [TargetTable]") || s.Contains("DROP TABLE TargetTable"));
         }
     }
 }

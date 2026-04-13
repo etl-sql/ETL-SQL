@@ -39,7 +39,9 @@
     <ProjectReference Include="..\..\src\ETL-SQL.Orchestrator\ETL-SQL.Orchestrator.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.TUI\ETL-SQL.TUI.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.ReportBuilder\ETL-SQL.ReportBuilder.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.ReportPlayer\ETL-SQL.ReportPlayer.csproj" />
   </ItemGroup>
+
 
   <ItemGroup>
     <None Update="xunit.runner.json">

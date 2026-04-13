@@ -50,6 +50,34 @@ namespace ETL_SQL.Orchestrator.Storage
             using var command = connection.CreateCommand();
             command.CommandText = createJobsTable + createHistoryTable;
             await command.ExecuteNonQueryAsync();
+
+            // 8B-2: Schema migration — add resource tracking columns if missing
+            await EnsureHistoryColumnsExist(connection);
+        }
+
+        private async Task EnsureHistoryColumnsExist(SqliteConnection connection)
+        {
+            var columns = new List<string>();
+            using (var cmd = connection.CreateCommand())
+            {
+                cmd.CommandText = "PRAGMA table_info(JobHistory);";
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync()) columns.Add(reader.GetString(1));
+            }
+
+            if (!columns.Contains("PeakMemoryBytes"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN PeakMemoryBytes INTEGER DEFAULT 0;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            if (!columns.Contains("CpuTimeSeconds"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN CpuTimeSeconds REAL DEFAULT 0;";
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
 
         public async Task SaveJobAsync(JobDefinition job)
@@ -161,12 +189,12 @@ namespace ETL_SQL.Orchestrator.Storage
             return (long)(await command.ExecuteScalarAsync())!;
         }
 
-        public async Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0)
+        public async Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0)
         {
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 
-            var sql = "UPDATE JobHistory SET EndTime = $end, Status = $status, ErrorMessage = $err, RowsProcessed = $rows WHERE Id = $id;";
+            var sql = "UPDATE JobHistory SET EndTime = $end, Status = $status, ErrorMessage = $err, RowsProcessed = $rows, PeakMemoryBytes = $mem, CpuTimeSeconds = $cpu WHERE Id = $id;";
             using var command = connection.CreateCommand();
             command.CommandText = sql;
             command.Parameters.AddWithValue("$id", entryId);
@@ -174,6 +202,8 @@ namespace ETL_SQL.Orchestrator.Storage
             command.Parameters.AddWithValue("$status", status);
             command.Parameters.AddWithValue("$err", (object?)errorMessage ?? DBNull.Value);
             command.Parameters.AddWithValue("$rows", rowsProcessed);
+            command.Parameters.AddWithValue("$mem", peakMemoryBytes);
+            command.Parameters.AddWithValue("$cpu", cpuTimeSeconds);
 
             await command.ExecuteNonQueryAsync();
         }
@@ -203,7 +233,9 @@ namespace ETL_SQL.Orchestrator.Storage
                     reader.IsDBNull(3) ? null : DateTime.Parse(reader.GetString(3)),
                     reader.GetString(4),
                     reader.IsDBNull(5) ? null : reader.GetString(5),
-                    reader.GetInt64(6)
+                    reader.GetInt64(6),
+                    reader.IsDBNull(7) ? 0 : reader.GetInt64(7),
+                    reader.IsDBNull(8) ? 0 : reader.GetDouble(8)
                 ));
             }
             return entries;

@@ -180,7 +180,14 @@ namespace ETL_SQL.App
                     var scriptDir = Path.GetDirectoryName(ctx.ScriptFile.FullName);
                     if (!string.IsNullOrEmpty(scriptDir))
                     {
-                        evaluator.SecurityService.ApprovedSafeZones.Add(scriptDir);
+                        if (!evaluator.SecurityService.IsSystemPath(scriptDir))
+                        {
+                            evaluator.SecurityService.ApprovedSafeZones.Add(scriptDir);
+                        }
+                        else
+                        {
+                            evaluator.Log($"[WARNING] Script directory '{scriptDir}' is a protected system path and will not be authorized as a security Safe Zone.", ConsoleColor.Yellow);
+                        }
                     }
 
                     // Inject CLI variables as input parameters

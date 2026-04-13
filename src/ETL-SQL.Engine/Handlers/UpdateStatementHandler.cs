@@ -29,7 +29,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 _logger.Debug("Strategy: Remote SQL UPDATE");
                 var assignments = stmt.Assignments.Select(a => $"{a.ColumnName} = {context.CompileExpression(a.Value, sqlConn.Dialect)}");
-                var sql = $"UPDATE {context.GetSqlTableName(stmt.TargetTable)} SET {string.Join(", ", assignments)}";
+                var sql = $"UPDATE {context.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)} SET {string.Join(", ", assignments)}";
                 if (stmt.WhereClause != null) sql += $"\nWHERE {context.CompileExpression(stmt.WhereClause, sqlConn.Dialect)}";
                 
                 if (context.IsWhatIf)

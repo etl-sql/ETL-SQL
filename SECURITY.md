@@ -69,12 +69,51 @@ To protect the integrity of the application's control plane, the engine enforces
 **Rationale**: Application logic is reserved exclusively for the human operator. The engine is a consumer of logic, not a producer, preventing automated "self-modifying" script attacks.
 
 ### 3.4 Resource Thresholds (Runaway Protection)
-To maintain host stability, `SecurityService.CheckRunawayProtection()` enforces strict resource caps:
+To maintain host stability, `SecurityService.CheckRunawayProtection()` enforces strict resource caps. These are configurable per-installation via `appsettings.json` (see the [Administrators Guide](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Administrators_Guide.md) for details).
 
-| Guard | Default Limit | Override Flag |
-| :--- | :--- | :--- |
-| Filesystem operation count | **100 per script** | `### ALLOW_GREATER_THAN_100_FILE` |
-| Recursive directory depth | **5 levels** | `### ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS` |
+| Guard | Default Limit | Configuration Key | Override Flag |
+| :--- | :--- | :--- | :--- |
+| Filesystem operation count | **100 per script** | `Security:MaxFileOperationsPerScript` | `### ALLOW_GREATER_THAN_n_FILE` |
+| Recursive directory depth | **5 levels** | `Security:MaxRecursiveNestingDepth` | `### ALLOW_RECURSIVE_GREATER_THAN_n_LAYERS` |
+
+> [!TIP]
+> Error messages dynamically reflect the current configured limit, ensuring that developers know exactly which override flag (e.g., `### ALLOW_GREATER_THAN_500_FILE`) to use if a limit is increased by an administrator.
+
+
+### 3.5 Network Egress Control (Outbound Hardening)
+The engine provides a non-bypassable guard for all network-based connectors (`MSSQL`, `POSTGRES`, `API`, `SFTP`, etc.). This prevents data exfiltration to unauthorized endpoints.
+
+**Default Behavior**: To maintain backward compatibility and ease of development, the engine is **unrestricted (`*`)** by default. Any valid network connection is permitted.
+
+**Hardening (Strict Mode)**: To enable strict security, provide an explicit `AllowedHosts` list in your application configuration (`appsettings.json`). Once a non-empty list is provided, the engine clears the default "allow-all" flag and only permits connections to listed targets.
+
+**Configuration Example (`appsettings.json`):**
+```json
+{
+  "Security": {
+    "AllowedHosts": [
+      "localhost",
+      "127.0.0.1",
+      "api.github.com",
+      "*.microsoft.com",
+      "sql-prod.internal.corp"
+    ]
+  }
+}
+```
+
+**Validation Rules:**
+- **Exact Match**: Matches the host string exactly (case-insensitive).
+- **Wildcards**: Supports `*` at the start of a domain (e.g., `*.google.com` matches `api.google.com` and `translate.google.com`).
+- **Implicit Safety**: `localhost` and loopback IPs are not automatically allowed once strict mode is activated; they must be explicitly added to the list if needed.
+
+### 3.6 Hardening the Report Dashboard
+The Report-SQL dashboard (`ReportPlayer`) exposes a live web interface that must be protected in multi-tenant environments.
+
+- **Port Assignment**: By default, the server listens on `http://localhost:5200`. In production, this can be customized via `ReportPlayer:Port` in `appsettings.json` to avoid conflicts or to bind to specific interfaces.
+- **Snapshot Integrity**: The dashboard uses a `SnapshotStore` that implements **atomic file writes** (write-to-temp-then-move) and process-level concurrency locking. This ensures that even during high-frequency refreshes, the data manifest cannot be corrupted.
+- **Limited Surface Area**: The dashboard only exposes read-only visual data and slicer parameter updates. It does not provide arbitrary script execution capability to web users.
+
 
 > [!IMPORTANT]
 > Override flags are **only honored** when the target path resides within a verified **Approved Safe Zone** (registered directories in `ApprovedSafeZones`). Providing an override flag while operating outside a safe zone still throws a `SecurityException` — with a distinct message explaining that the path is outside an authorized workspace.
@@ -174,7 +213,7 @@ The `SecurityService` has an explicit `IsTestMode` flag used only by the automat
 | PBKDF2 iteration count of 10,000 is below the current NIST SP 800-132 recommendation of ≥ 600,000 | Medium | Consider increasing; may impact startup latency |
 | No per-user or per-script `ApprovedSafeZones` management UI | Medium | Safe zones are currently added programmatically only |
 | `### ALLOW_...` override flags are comment-based and not cryptographically signed | Medium | A malicious script author can add these freely in a safe zone |
-| No network egress controls — any `API`/`SFTP`/`FTP`/`SMTP` connection can reach any endpoint | Medium | No allowlist/denylist for outbound hostnames |
+| No network egress controls — any `API`/`SFTP`/`FTP`/`SMTP` connection can reach any endpoint | Medium | **Implemented (SEC-2)** — Configure via `AllowedHosts` in appsettings.json |
 | No rate-limiting or throttle on `SEND EMAIL` — possible spam amplification | Low | Manual safe zone + operation count limit provides some protection |
 |`.sql` is on the write blocklist but also on the allowed-read whitelist | Note | Deliberate — reading `.sql` is allowed; writing is not |
 

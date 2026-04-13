@@ -94,8 +94,13 @@ namespace ETL_SQL.Engine.Engines
                 int usedPartitions = 0;
                 foreach (var w in writers) 
                 { 
-                    if (w.BaseStream.Length > 0) usedPartitions++;
-                    w.Flush(); w.Close(); 
+                    try
+                    {
+                        if (w.BaseStream.Length > 0) usedPartitions++;
+                        w.Flush(); 
+                        w.Close(); 
+                    }
+                    catch { /* Best effort cleanup */ }
                 }
                 _context.PartitionsCount += usedPartitions;
                 _logger.Debug("Finished partitioning {Prefix}. Used {UsedPartitions} partitions. Context PartitionsCount: {PartitionsCount}", prefix, usedPartitions, _context.PartitionsCount);
@@ -127,9 +132,8 @@ namespace ETL_SQL.Engine.Engines
             if (val is System.Text.Json.JsonElement je)
                 return je.ValueKind switch
                 {
-                    System.Text.Json.JsonValueKind.Number when je.TryGetInt64(out var l) => l,
-                    System.Text.Json.JsonValueKind.Number => je.GetDouble(),
-                    System.Text.Json.JsonValueKind.True   => true,
+                    System.Text.Json.JsonValueKind.Number  => je.TryGetDecimal(out var d) ? d : (object?)je.GetDouble(),
+                    System.Text.Json.JsonValueKind.True    => true,
                     System.Text.Json.JsonValueKind.False  => false,
                     System.Text.Json.JsonValueKind.String => je.GetString(),
                     System.Text.Json.JsonValueKind.Null   => null,

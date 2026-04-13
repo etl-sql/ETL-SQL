@@ -608,89 +608,21 @@ crontab -r
 > **Rule of thumb:** If you have more than two or three recurring pipelines that share data or depend on each other, use `CREATE JOB` with the in-engine scheduler. For a single nightly script with no dependencies, OS-level scheduling (Task Scheduler or cron) is simpler and requires no long-running process.
 
 
-## 9. Running as a Background Service
+---
 
-To run the scheduler continuously without an interactive session, run the engine in a long-lived process. The scheduler polls for due jobs every 30 seconds and fires them automatically.
-
-### 9.1 Windows Service (using NSSM)
-
-```powershell
-# Install NSSM (Non-Sucking Service Manager) — or use sc.exe
-nssm install ETL-SQL-Scheduler "C:\ETL\ETL-SQL.exe" "ui repl"
-nssm set ETL-SQL-Scheduler AppDirectory "C:\ETL"
-nssm set ETL-SQL-Scheduler AppStdout "C:\ETL\Logs\service.log"
-nssm set ETL-SQL-Scheduler AppStderr "C:\ETL\Logs\service-error.log"
-nssm start ETL-SQL-Scheduler
-```
-
-### 9.2 Linux (systemd)
-
-```ini
-# /etc/systemd/system/etlsql-scheduler.service
-[Unit]
-Description=ETL-SQL Scheduler Service
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=/opt/etlsql
-ExecStart=/opt/etlsql/etl-sql ui repl
-Restart=on-failure
-RestartSec=5s
-StandardOutput=append:/var/log/etlsql/service.log
-StandardError=append:/var/log/etlsql/service-error.log
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable etlsql-scheduler
-sudo systemctl start etlsql-scheduler
-sudo systemctl status etlsql-scheduler
-```
 
 ---
 
-## 10. Configuration Reference (`appsettings.json`)
+## 10. Configuration & Deployment
 
-`appsettings.json` lives in the same directory as the executable. All sections are optional — defaults are safe for most deployments.
+Host-level settings, including security limits, dashboard ports, and background service deployment (NSSM/systemd), are now managed in the central **[Administrators Guide](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Administrators_Guide.md)**.
 
-```json
-{
-  "Jobs": {
-    "MaxConcurrentJobs": 4,
-    "UseProcessSpawning": false,
-    "ExecutablePath": "",
-    "TimeoutSeconds": 3600
-  },
-  "JobStore": {
-    "DatabasePath": "etlsql.db"
-  },
-  "Logging": {
-    "ScriptLog": {
-      "Directory": "logs/scripts",
-      "DefaultRetentionDays": 30,
-      "FileSizeLimitMb": 10
-    }
-  },
-  "Security": {
-    "MasterPassword": ""
-  }
-}
-```
+Refer to that guide for:
+- **`appsettings.json`** configuration keys.
+- **Security Limits** (runaway protection).
+- **Background Service** installation.
+- **Resource Governance** (memory and disk spilling).
 
-| Key | Default | Description |
-|-----|---------|-------------|
-| `Jobs:MaxConcurrentJobs` | `0` (auto) | Maximum simultaneously running jobs. `0` = `max(1, CPU/2)` |
-| `Jobs:UseProcessSpawning` | `false` | `true` = each job runs as a separate `ETL-SQL.exe` child process (memory isolation) |
-| `Jobs:ExecutablePath` | `""` (auto-discover) | Path to `ETL-SQL.exe` when using process spawning |
-| `Jobs:TimeoutSeconds` | `3600` | Kill child process after this many seconds. `0` = no limit |
-| `JobStore:DatabasePath` | `etlsql.db` | Path to the SQLite job database |
-| `Logging:ScriptLog:Directory` | `logs/scripts` | Directory for script execution log files |
-| `Logging:ScriptLog:DefaultRetentionDays` | `30` | Days to keep log files |
-| `Logging:ScriptLog:FileSizeLimitMb` | `10` | Max log file size before rolling |
 
 ---
 

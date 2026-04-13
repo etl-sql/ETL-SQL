@@ -1,6 +1,8 @@
 using System;
 using System.IO;
+using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -28,6 +30,8 @@ using ETL_SQL.Data;
 using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Services;
+
 
 namespace ETL_SQL.App
 {
@@ -86,7 +90,20 @@ namespace ETL_SQL.App
             {
                 securityService.IsTestMode = true;
             }
+
+            // Load network egress allow-list from configuration (Security:AllowedHosts)
+            var allowedHosts = configuration.GetSection("Security:AllowedHosts").Get<string[]>();
+            if (allowedHosts != null && allowedHosts.Length > 0)
+            {
+                securityService.AllowedHosts.Clear();
+                securityService.AllowedHosts.UnionWith(allowedHosts);
+            }
+
+            securityService.MaxFileOperations = int.TryParse(configuration["Security:MaxFileOperationsPerScript"], out var mfo) ? mfo : SecurityService.DefaultMaxFileOperations;
+            securityService.MaxRecursiveDepth = int.TryParse(configuration["Security:MaxRecursiveNestingDepth"], out var mrd) ? mrd : SecurityService.DefaultMaxRecursiveDepth;
+
             services.AddSingleton<ETL_SQL.Services.SecurityService>(securityService);
+
             
             // Connectors
             services.AddSingleton<IConnector, MockDbConnector>();
@@ -122,7 +139,23 @@ namespace ETL_SQL.App
 
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
             services.AddTransient<ExecutionSession>();
-            services.AddTransient<Evaluator>();
+            
+            services.AddSingleton<IJobHistoryStore, SQLiteJobHistoryStore>();
+            int maxInMemoryBatches = int.TryParse(configuration["Orchestration:MaxInMemoryBatches"], out var mb) ? mb : LanguageMetadata.DefaultMaxInMemoryBatches;
+            int foreachPageSize = int.TryParse(configuration["Orchestration:ForeachPageSize"], out var ps) ? ps : 10000;
+            
+            services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
+            services.AddSingleton<JobThrottle>();
+            services.AddSingleton<SchedulerService>();
+
+            services.AddTransient<Evaluator>(sp => {
+                var evaluator = ActivatorUtilities.CreateInstance<Evaluator>(sp);
+                evaluator.MaxInMemoryBatches = maxInMemoryBatches;
+                evaluator.ForeachPageSize = foreachPageSize;
+                return evaluator;
+            });
+
+            // Map all interfaces back to the same Evaluator instance
             services.AddTransient<IExecutionContext>(sp => sp.GetRequiredService<Evaluator>());
             services.AddTransient<IVariableContext>(sp => sp.GetRequiredService<Evaluator>());
             services.AddTransient<IQueryContext>(sp => sp.GetRequiredService<Evaluator>());
@@ -134,12 +167,6 @@ namespace ETL_SQL.App
             services.AddTransient<IEvaluationContext>(sp => sp.GetRequiredService<Evaluator>());
             services.AddTransient<IDataContext>(sp => sp.GetRequiredService<Evaluator>());
             services.AddTransient<IEngineContext>(sp => sp.GetRequiredService<Evaluator>());
-            
-            // Storage & Scheduling
-            services.AddSingleton<IJobHistoryStore, SQLiteJobHistoryStore>();
-            services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
-            services.AddSingleton<JobThrottle>();
-            services.AddSingleton<SchedulerService>();
 
             // IScriptExecutor — thin adapter used by SchedulerService for job execution
             services.AddTransient<IScriptExecutor, ScriptExecutorAdapter>();

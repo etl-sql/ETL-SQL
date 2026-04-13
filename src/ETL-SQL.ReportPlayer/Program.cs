@@ -5,7 +5,9 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using ETL_SQL.ReportBuilder;
+
 using ETL_SQL.ReportPlayer;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -74,11 +76,15 @@ app.MapGet("/api/refresh", async (DashboardService svc) =>
     return Results.Json(new { rebuilt = true, visuals = manifest.Visuals.Count });
 });
 
-Console.WriteLine($"ReportPlayer: serving {Path.GetFileName(scriptPath)}");
-Console.WriteLine("Dashboard: http://localhost:5200");
+// ── Configuration ─────────────────────────────────────────────────────────────
+int port = builder.Configuration.GetValue<int>("ReportPlayer:Port", 5200);
 
-app.Urls.Add("http://localhost:5200");
+Console.WriteLine($"ReportPlayer: serving {Path.GetFileName(scriptPath)}");
+Console.WriteLine($"Dashboard: http://localhost:{port}");
+
+app.Urls.Add($"http://localhost:{port}");
 app.Run();
+
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

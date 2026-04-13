@@ -54,7 +54,7 @@ namespace ETL_SQL.Engine.Handlers
             else if (destination is IDatabaseSource sqlDest)
             {
                 // Push down to SQL database
-                var sql = $"ALTER TABLE {context.GetSqlTableName(stmt.TargetTable)} ";
+                var sql = $"ALTER TABLE {context.GetSqlTableName(stmt.TargetTable, sqlDest.Dialect)} ";
                 switch (stmt.Action)
                 {
                     case AlterTableActionType.ADD:
@@ -68,7 +68,7 @@ namespace ETL_SQL.Engine.Handlers
                     case AlterTableActionType.RENAME_COLUMN:
                         // Dialect specific rename
                         if (sqlDest.Dialect.Contains("MSSQL") || sqlDest.Dialect.Contains("SQLSERVER"))
-                            sql = $"EXEC sp_rename '{context.GetSqlTableName(stmt.TargetTable)}.{stmt.OldColumnName}', '{stmt.NewColumnName}', 'COLUMN'";
+                            sql = $"EXEC sp_rename '{context.GetSqlTableName(stmt.TargetTable, sqlDest.Dialect)}.{stmt.OldColumnName}', '{stmt.NewColumnName}', 'COLUMN'";
                         else
                             sql += $"RENAME COLUMN {stmt.OldColumnName} TO {stmt.NewColumnName}";
                         break;

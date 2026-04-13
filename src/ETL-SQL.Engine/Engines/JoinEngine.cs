@@ -171,10 +171,16 @@ namespace ETL_SQL.Engine.Engines
             return JoinHint.Hash;
         }
 
-        private async Task<List<Row>> GetJoinRows(JoinClause join)
+        public async Task<List<Row>> GetJoinRows(JoinClause join)
+        {
+            var rows = new List<Row>();
+            await foreach (var r in GetJoinRowsAsyncEnumerable(join)) rows.Add(r);
+            return rows;
+        }
+
+        public async IAsyncEnumerable<Row> GetJoinRowsAsyncEnumerable(JoinClause join)
         {
             var joinBatches = _context.ResolveAndApplyOperators(join.Table);
-            var joinRows = new List<Row>();
             string joinName = join.Table.Alias ?? join.Table.TableName;
             await foreach (var jb in joinBatches)
             {
@@ -182,10 +188,9 @@ namespace ETL_SQL.Engine.Engines
                 {
                     var r = jr.Clone();
                     foreach (var kv in jr.Columns.ToList()) r[$"{joinName}.{kv.Key}"] = kv.Value;
-                    joinRows.Add(r);
+                    yield return r;
                 }
             }
-            return joinRows;
         }
 
         private async Task<List<Row>> PerformApplyJoin(List<Row> leftRows, JoinClause join)
@@ -406,7 +411,7 @@ namespace ETL_SQL.Engine.Engines
         private bool IsLeftOuter(string type) => type.Contains("LEFT", StringComparison.OrdinalIgnoreCase) || type.Contains("FULL", StringComparison.OrdinalIgnoreCase) || type.Contains("OUTER", StringComparison.OrdinalIgnoreCase);
         private bool IsRightOuter(string type) => type.Contains("RIGHT", StringComparison.OrdinalIgnoreCase) || type.Contains("FULL", StringComparison.OrdinalIgnoreCase);
 
-        private bool TryExtractEqualityKeys(Expression? cond, string leftAlias, string rightAlias, List<string> leftKeys, List<string> rightKeys)
+        public bool TryExtractEqualityKeys(Expression? cond, string leftAlias, string rightAlias, List<string> leftKeys, List<string> rightKeys)
         {
             if (cond is BinaryExpression bin)
             {

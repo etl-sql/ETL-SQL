@@ -28,7 +28,7 @@ namespace ETL_SQL.Engine.Handlers
             if (connection is IDatabaseSource sqlConn)
             {
                 _logger.Debug("Strategy: Remote SQL DELETE");
-                var sql = $"DELETE FROM {context.GetSqlTableName(stmt.TargetTable)}";
+                var sql = $"DELETE FROM {context.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)}";
                 if (stmt.WhereClause != null) sql += $"\nWHERE {context.CompileExpression(stmt.WhereClause, sqlConn.Dialect)}";
                 
                 if (context.IsWhatIf)

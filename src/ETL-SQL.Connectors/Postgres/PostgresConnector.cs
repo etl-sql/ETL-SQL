@@ -95,5 +95,17 @@ namespace ETL_SQL.Connectors.Postgres
 
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
+
+        public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
+        {
+            if (options != null && options.TryGetValue("HOST", out var host)) return host;
+            
+            try
+            {
+                var builder = new NpgsqlConnectionStringBuilder(connectionString);
+                return builder.Host;
+            }
+            catch { return null; }
+        }
     }
 }

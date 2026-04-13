@@ -96,8 +96,12 @@ namespace ETL_SQL.Core.Parser
         public bool IsIdentifier(Token token)
         {
             if (token.Type == TokenType.IDENTIFIER || token.Type == TokenType.LINEAGE || token.Type == TokenType.FILE ||
+                token.Type == TokenType.DIRECTORY || token.Type == TokenType.SFTP || token.Type == TokenType.FTP_CONN ||
+                token.Type == TokenType.FLATFILE || token.Type == TokenType.JSON || token.Type == TokenType.XML ||
+                token.Type == TokenType.EXCEL || token.Type == TokenType.AZURE_BLOB ||
                 token.Type == TokenType.SYSDATE || token.Type == TokenType.CURRENT_TIMESTAMP || 
-                token.Type == TokenType.CURRENT_DATE || token.Type == TokenType.CURRENT_TIME) return true;
+                token.Type == TokenType.CURRENT_DATE || token.Type == TokenType.CURRENT_TIME ||
+                LanguageMetadata.IsConnectorType(token.Value)) return true;
             if (token.Type == TokenType.EOF) return false;
 
             // Data types are allowed as identifiers in many contexts, or at least shouldn't block parsing
@@ -107,6 +111,11 @@ namespace ETL_SQL.Core.Parser
             // (DATEPART(YEAR, ...), DATEDIFF(DAY, ...)). Treat them as identifiers so both uses parse.
             if (token.Type == TokenType.YEAR || token.Type == TokenType.MONTH || token.Type == TokenType.DAY ||
                 token.Type == TokenType.HOUR || token.Type == TokenType.MINUTE || token.Type == TokenType.SECOND)
+                return true;
+
+            // Report-SQL tokens (Phase 9A) are contextual: they are reserved inside CREATE VISUAL/PAGE/DATASET,
+            // but should be allowed as identifiers elsewhere (and as keys inside report clauses).
+            if (token.Type >= TokenType.VISUAL && token.Type <= TokenType.DATASET)
                 return true;
 
             // Symbols and operators should never be identifiers

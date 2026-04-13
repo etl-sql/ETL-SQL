@@ -104,8 +104,13 @@ namespace ETL_SQL.Engine.Engines
                 int usedPartitions = 0;
                 foreach (var w in writers) 
                 { 
-                    if (w.BaseStream.Length > 0) usedPartitions++;
-                    w.Flush(); w.Close(); 
+                    try
+                    {
+                        if (w.BaseStream.Length > 0) usedPartitions++;
+                        w.Flush(); 
+                        w.Close(); 
+                    }
+                    catch { /* Best effort cleanup */ }
                 }
                 _context.PartitionsCount += usedPartitions;
             }
@@ -140,7 +145,7 @@ namespace ETL_SQL.Engine.Engines
             element.ValueKind switch
             {
                 System.Text.Json.JsonValueKind.Number  => element.TryGetDecimal(out var d) ? d : (object?)element.GetDouble(),
-                System.Text.Json.JsonValueKind.String  => element.GetString(),
+                System.Text.Json.JsonValueKind.String  => DateTime.TryParse(element.GetString() ?? "", out var dt) ? dt : (object?)element.GetString(),
                 System.Text.Json.JsonValueKind.True    => (object?)true,
                 System.Text.Json.JsonValueKind.False   => (object?)false,
                 System.Text.Json.JsonValueKind.Null    => null,

@@ -254,6 +254,18 @@ namespace ETL_SQL.Engine.Handlers
         /// </summary>
         public async IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt, IExecutionContext context)
         {
+            // Handle pushdown if applicable (only if no INTO clause)
+            if (stmt.IntoTable == null && context.IsSqlPushdown(stmt.FromTable.ConnectionName ?? stmt.FromTable.TableName))
+            {
+                var connName = stmt.FromTable.ConnectionName ?? stmt.FromTable.TableName;
+                _logger.Debug("[SELECT] Pushing down subquery to remote connection: {ConnName}", connName);
+                
+                var conn = (IDatabaseSource)context.Connections[connName];
+                var sql = context.CompileQuery(stmt, conn.Dialect);
+                await foreach (var batch in conn.ExecuteRawSql(sql)) yield return batch;
+                yield break;
+            }
+
             var joinEngine = new JoinEngine(context, _logger);
             var aggregateEngine = new AggregateEngine(context, _logger);
             var windowEngine = new WindowEngine(context, aggregateEngine, _logger);
@@ -414,32 +426,43 @@ namespace ETL_SQL.Engine.Handlers
 
             if (stmt.Joins != null && stmt.Joins.Count > 0)
             {
-                // JoinEngine.ApplyJoin currently takes List<Row>.
-                // We'll buffer only if it's small, otherwise we use ExternalJoinEngine.
-                // For simplicity, let's buffer for now but use the external engine if it's large.
                 allBufferedRows = new List<Row>();
-                int count = 0;
-                await foreach (var r in inputStream)
+                var inputEnumerator = inputStream.GetAsyncEnumerator();
+                try
                 {
-                    allBufferedRows.Add(r);
-                    count++;
-                    if (count > 100000) break; // Memory limit reached
-                }
+                    int count = 0;
+                    while (await inputEnumerator.MoveNextAsync())
+                    {
+                        allBufferedRows.Add(inputEnumerator.Current);
+                        count++;
+                        if (count > 100000) break;
+                    }
 
-                if (count > 100000)
-                {
-                    _logger.WriteLine("[yellow]HYPER-SCALE: Primary source exceeded memory limit. Switching to streaming external join.[/]");
-                    // Re-create stream starting from the 100,001st row...
-                    // This is tricky. Better to just use External engine from the start if we suspect scale.
-                    // For now, let's assume we use the external engine if we have joins and we are in 'complex' mode.
-                    var externalJoin = new ExternalJoinEngine(context, _logger);
-                    allBufferedRows = await externalJoin.ApplyHashJoinExternal(inputStream, Enumerable.Empty<Row>().ToAsyncEnumerable(), stmt.Joins[0], new List<string>(), new List<string>());
-                    // This is a placeholder for a more robust streaming join pipeline.
+                    if (count > 100000)
+                    {
+                        _logger.WriteLine("[yellow]HYPER-SCALE: Primary source exceeded memory limit. Switching to streaming external join.[/]");
+
+                        var join = stmt.Joins[0];
+                        var leftAlias = stmt.FromTable.Alias ?? fromName;
+                        var rightAlias = join.Table.Alias ?? join.Table.TableName;
+                        var hashKeysLeft = new List<string>();
+                        var hashKeysRight = new List<string>();
+                        
+                        joinEngine.TryExtractEqualityKeys(join.Condition, leftAlias, rightAlias, hashKeysLeft, hashKeysRight);
+
+                        var externalJoin = new ExternalJoinEngine(context, _logger);
+                        var remainingStream = ContinueStream(inputEnumerator); 
+                        var combinedLeftStream = PrependRows(allBufferedRows, remainingStream);
+                        var rightStream = joinEngine.GetJoinRowsAsyncEnumerable(join);
+
+                        allBufferedRows = await externalJoin.ApplyHashJoinExternal(combinedLeftStream, rightStream, join, hashKeysLeft, hashKeysRight);
+                    }
+                    else
+                    {
+                        allBufferedRows = await joinEngine.ApplyJoins(allBufferedRows, stmt.Joins, stmt);
+                    }
                 }
-                else
-                {
-                    allBufferedRows = await joinEngine.ApplyJoins(allBufferedRows, stmt.Joins, stmt);
-                }
+                finally { await inputEnumerator.DisposeAsync(); }
             }
             else if (streamAggregate)
             {
@@ -749,6 +772,27 @@ namespace ETL_SQL.Engine.Handlers
             await foreach (var r in source)
                 if (await context.EvaluateCondition(whereClause, r))
                     yield return r;
+        }
+
+        /// <summary>
+        /// Concatenates a list of already-read rows with the remainder of an async stream.
+        /// Essential for hyper-scale fallback where we've already peeked/buffered X rows.
+        /// </summary>
+        private static async IAsyncEnumerable<Row> PrependRows(IEnumerable<Row> buffered, IAsyncEnumerable<Row> remaining)
+        {
+            foreach (var r in buffered) yield return r;
+            await foreach (var r in remaining) yield return r;
+        }
+
+        /// <summary>
+        /// Wraps an existing, already-advanced enumerator into an async stream.
+        /// Essential for pivoting mid-stream without re-reading from the beginning.
+        /// </summary>
+        private static async IAsyncEnumerable<Row> ContinueStream(IAsyncEnumerator<Row> enumerator)
+        {
+            // Note: We do NOT dispose the enumerator here; the caller's try/finally block
+            // handles the shared enumerator resource.
+            while (await enumerator.MoveNextAsync()) yield return enumerator.Current;
         }
 
         private bool IsRecursive(CteDefinition cte, out Statement? anchor, out Statement? recursive, out bool isDistinct)

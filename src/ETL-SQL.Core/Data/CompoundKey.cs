@@ -53,7 +53,7 @@ namespace ETL_SQL.Data
             {
                 val = je.ValueKind switch
                 {
-                    JsonValueKind.Number when je.TryGetInt64(out var jl) => jl,
+                    JsonValueKind.Number when je.TryGetDecimal(out var dv) => dv,
                     JsonValueKind.Number => je.GetDouble(),
                     JsonValueKind.True  => true,
                     JsonValueKind.False => false,

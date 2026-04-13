@@ -116,39 +116,43 @@ namespace ETL_SQL.Engine.Engines
 
             // Open all chunk readers
             var readers = paths.Select(p => new StreamReader(p)).ToList();
-            var heap = new SortedList<(Row, object?[]), int>(Comparer<(Row, object?[])>.Create(compare));
-
-            // Seed heap with first row from each chunk
-            var currentLines = new string?[readers.Count];
-            for (int i = 0; i < readers.Count; i++)
+            try
             {
-                currentLines[i] = await readers[i].ReadLineAsync();
-                if (currentLines[i] != null)
-                {
-                    var entry = ParseEntry(currentLines[i]!);
-                    if (entry != null) heap.Add(entry.Value, i);
-                }
-            }
+                var heap = new PriorityQueue<int, (Row Row, object?[] Keys)>(Comparer<(Row, object?[])>.Create(compare));
 
-            var result = new List<Row>();
-            while (heap.Count > 0)
+                // Seed heap with first row from each chunk
+                for (int i = 0; i < readers.Count; i++)
+                {
+                    var line = await readers[i].ReadLineAsync();
+                    if (line != null)
+                    {
+                        var entry = ParseEntry(line);
+                        if (entry != null) heap.Enqueue(i, entry.Value);
+                    }
+                }
+
+                var result = new List<Row>();
+                while (heap.Count > 0)
+                {
+                    if (heap.TryDequeue(out int chunkIdx, out var first))
+                    {
+                        result.Add(first.Item1);
+
+                        var nextLine = await readers[chunkIdx].ReadLineAsync();
+                        if (nextLine != null)
+                        {
+                            var entry = ParseEntry(nextLine);
+                            if (entry != null) heap.Enqueue(chunkIdx, entry.Value);
+                        }
+                    }
+                }
+
+                return result;
+            }
+            finally
             {
-                var first = heap.Keys[0];
-                int chunkIdx = heap.Values[0];
-                heap.RemoveAt(0);
-
-                result.Add(first.Item1);
-
-                var nextLine = await readers[chunkIdx].ReadLineAsync();
-                if (nextLine != null)
-                {
-                    var entry = ParseEntry(nextLine);
-                    if (entry != null) heap.Add(entry.Value, chunkIdx);
-                }
+                foreach (var rd in readers) rd.Dispose();
             }
-
-            foreach (var rd in readers) rd.Dispose();
-            return result;
         }
 
         private (Row, object?[])? ParseEntry(string line)
@@ -166,9 +170,8 @@ namespace ETL_SQL.Engine.Engines
             if (val is System.Text.Json.JsonElement je)
                 return je.ValueKind switch
                 {
-                    System.Text.Json.JsonValueKind.Number when je.TryGetInt64(out var l) => l,
-                    System.Text.Json.JsonValueKind.Number => je.GetDouble(),
-                    System.Text.Json.JsonValueKind.True   => true,
+                    System.Text.Json.JsonValueKind.Number  => je.TryGetDecimal(out var d) ? d : (object?)je.GetDouble(),
+                    System.Text.Json.JsonValueKind.True    => true,
                     System.Text.Json.JsonValueKind.False  => false,
                     System.Text.Json.JsonValueKind.String => je.GetString(),
                     System.Text.Json.JsonValueKind.Null   => null,
@@ -186,7 +189,7 @@ namespace ETL_SQL.Engine.Engines
             {
                 return el.ValueKind switch
                 {
-                    System.Text.Json.JsonValueKind.Number when el.TryGetInt64(out var l) => l,
+                    System.Text.Json.JsonValueKind.Number when el.TryGetDecimal(out var d) => d,
                     System.Text.Json.JsonValueKind.Number => el.GetDouble(),
                     System.Text.Json.JsonValueKind.True => true,
                     System.Text.Json.JsonValueKind.False => false,

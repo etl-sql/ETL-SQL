@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Text.RegularExpressions;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
 
@@ -16,6 +17,7 @@ namespace ETL_SQL.Engine
     /// </summary>
     public class ExpressionEvaluator
     {
+        private static readonly TableSchema _scalarSchema = new TableSchema(new[] { "Value" });
         private readonly IExecutionContext _context;
         private readonly ILogger _logger;
 
@@ -113,6 +115,85 @@ namespace ETL_SQL.Engine
             return await EvaluateInternal(expr, context);
         }
 
+        /// <summary>Evaluates an expression as an asynchronous stream of rows.</summary>
+        public async IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context)
+        {
+            if (expr == null) yield break;
+
+            if (expr is SubqueryExpression subq)
+            {
+                _context.OuterRowStack.Push(context);
+                await foreach (var batch in _context.ExecuteQuery(subq.Query))
+                {
+                    foreach (var row in batch.Rows) yield return row;
+                }
+                _context.OuterRowStack.Pop();
+                yield break;
+            }
+
+            if (expr is VariableExpression v)
+            {
+                var val = EvaluateVariable(v);
+                if (val is DataTable dt)
+                {
+                    foreach (var row in dt.Rows) yield return row;
+                }
+                else if (val is System.Collections.IEnumerable list && val is not string)
+                {
+                    foreach (var item in list)
+                    {
+                        if (item is Row r) yield return r;
+                        else if (item is DataTable dtItem) foreach (var dtr in dtItem.Rows) yield return dtr;
+                        else yield return new Row(_scalarSchema, new[] { item });
+                    }
+                }
+                else if (val != null)
+                {
+                    yield return new Row(_scalarSchema, new[] { val });
+                }
+                yield break;
+            }
+
+            if (expr is IdentifierExpression id)
+            {
+                if (_context.Connections.ContainsKey(id.Name))
+                {
+                    var sql = new SelectStatement(
+                        new List<SelectColumn> { new SelectColumn(new IdentifierExpression("*")) },
+                        null,
+                        new TableReference(id.Name),
+                        new List<JoinClause>(),
+                        null
+                    );
+
+                    await foreach (var batch in _context.ExecuteQuery(sql))
+                    {
+                        foreach (var row in batch.Rows) yield return row;
+                    }
+                    yield break;
+                }
+            }
+
+            var singleVal = await EvaluateInternal(expr, context);
+            if (singleVal is DataTable dt2)
+            {
+                foreach (var row in dt2.Rows) yield return row;
+            }
+            else if (singleVal is System.Collections.IEnumerable list2 && singleVal is not string)
+            {
+                foreach (var item in list2)
+                {
+                    if (item is Row r) yield return r;
+                    else if (item is DataTable dtItem) foreach (var dtr in dtItem.Rows) yield return dtr;
+                    else yield return new Row(_scalarSchema, new[] { item });
+                }
+            }
+            else if (singleVal != null)
+            {
+                yield return new Row(_scalarSchema, new[] { singleVal });
+            }
+        }
+
         /// <summary>Internal recursive entry point for expression evaluation.</summary>
         public async Task<object?> EvaluateInternal(Expression? expr, Row context)
         {
@@ -148,22 +229,15 @@ namespace ETL_SQL.Engine
             var l = await EvaluateInternal(inExp.Left, context);
             bool found = false;
             var inSubq = inExp.Subquery ?? (inExp.Right as SubqueryExpression)?.Query;
-            if (inSubq != null)
+            if (inSubq != null || inExp.Right is SubqueryExpression)
             {
-                _context.OuterRowStack.Push(context);
-                await foreach (var batch in _context.ExecuteQuery(inSubq))
+                await foreach (var row in EvaluateStream(inExp.Right, context))
                 {
-                    foreach (var row in batch.Rows)
+                    if (row.Schema?.ColumnCount > 0)
                     {
-                        if (batch.ColumnNames.Count > 0)
-                        {
-                            var val = row[0];
-                            if (IsSoftEqual(l, val)) { found = true; break; }
-                        }
+                        if (IsSoftEqual(l, row[0])) { found = true; break; }
                     }
-                    if (found) break;
                 }
-                _context.OuterRowStack.Pop();
             }
             else if (inExp.Right is ListExpression list)
             {
@@ -179,12 +253,11 @@ namespace ETL_SQL.Engine
         private async Task<object?> EvaluateExists(ExistsExpression ex, Row context)
         {
             bool found = false;
-            _context.OuterRowStack.Push(context);
-            await foreach (var batch in _context.ExecuteQuery(ex.Subquery))
+            await foreach (var row in EvaluateStream(new SubqueryExpression(ex.Subquery), context))
             {
-                if (batch.Rows.Count > 0) { found = true; break; }
+                found = true;
+                break;
             }
-            _context.OuterRowStack.Pop();
             return ex.IsNot ? !found : found;
         }
 
@@ -300,9 +373,13 @@ namespace ETL_SQL.Engine
         private object? EvaluateVariable(VariableExpression v)
         {
             if (v.Name.Equals("@@TRANCOUNT", StringComparison.OrdinalIgnoreCase)) return _context.TranCount;
-            if (v.Name.Equals("@@RESULTSETS", StringComparison.OrdinalIgnoreCase)) return _context.LastResultSets.Count;
+            if (v.Name.Equals("@@RESULTSETS", StringComparison.OrdinalIgnoreCase)) return _context.LastResultSets;
             if (v.Name.Equals("@@VERSION", StringComparison.OrdinalIgnoreCase)) return LanguageMetadata.GetFullVersionString();
             if (v.Name.Equals("@@ROWCOUNT", StringComparison.OrdinalIgnoreCase)) return _context.RowsProcessed;
+            if (v.Name.Equals("@@ERROR", StringComparison.OrdinalIgnoreCase)) return _context.PreviousErrorNumber;
+            if (v.Name.Equals("@@DATASET", StringComparison.OrdinalIgnoreCase)) return _context.ContainsVariable("@@DATASET") ? _context.GetVariable("@@DATASET") : null;
+
+
             
             if (!_context.ContainsVariable(v.Name))
                 throw new ExecutionException($"Undeclared: {v.Name}");
@@ -317,7 +394,17 @@ namespace ETL_SQL.Engine
             if (val == null) return null;
             
             // Handle Row or IDictionary
-            if (val is Row row && row.Columns.TryGetValue(ma.MemberName, out var rVal)) return rVal;
+            if (val is Row row) 
+            {
+                // Try direct indexer (best for schema-backed columns)
+                var r = row[ma.MemberName];
+                if (r != null) return r;
+                
+                // Fallback: Check if it's explicitly null in the Columns dictionary or a dynamic column
+                if (row.Columns.TryGetValue(ma.MemberName, out var dynamicVal)) return dynamicVal;
+                
+                return null;
+            }
             if (val is IDictionary<string, object?> dict && dict.TryGetValue(ma.MemberName, out var dVal)) return dVal;
             
             // Handle reflection for properties/fields
@@ -391,6 +478,11 @@ namespace ETL_SQL.Engine
             // Use the registry for arithmetic and simple logical operators
             var result = BinaryOperatorFactory.Execute(bin.Operator, lVal, rVal);
             if (result != null) return result;
+
+            // Arithmetic operators don't fall back to soft equality if null
+            if (bin.Operator == TokenType.PLUS || bin.Operator == TokenType.MINUS || 
+                bin.Operator == TokenType.STAR || bin.Operator == TokenType.SLASH || 
+                bin.Operator == TokenType.MODULO) return null;
 
             return bin.Operator switch
             {

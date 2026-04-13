@@ -46,6 +46,9 @@ namespace ETL_SQL.Data
         Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null);
         /// <summary>Builds a provider-specific connection string from a dictionary of properties.</summary>
         string BuildConnectionString(Dictionary<string, string> properties) => string.Empty;
+
+        /// <summary>Returns the target host for network-based connectors to support egress validation.</summary>
+        string? GetHost(string connectionString, Dictionary<string, string>? options = null) => null;
     }
 
     public interface IConnectorRegistry

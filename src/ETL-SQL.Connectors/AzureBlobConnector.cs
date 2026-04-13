@@ -137,5 +137,26 @@ namespace ETL_SQL.Connectors
         public void Restore(object? snapshot) { }
         public IDataSource WithTable(string tableName) => this;
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+        public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
+        {
+            var parts = connectionString.Split(';', StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Split('=', 2))
+                .Where(p => p.Length == 2)
+                .ToDictionary(p => p[0].Trim(), p => p[1].Trim(), StringComparer.OrdinalIgnoreCase);
+
+            if (parts.TryGetValue("BlobEndpoint", out var endpoint))
+            {
+                if (Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)) return uri.Host;
+            }
+
+            if (parts.TryGetValue("AccountName", out var account))
+            {
+                var suffix = parts.GetValueOrDefault("EndpointSuffix") ?? "core.windows.net";
+                return $"{account}.blob.{suffix}";
+            }
+
+            return null;
+        }
     }
 }

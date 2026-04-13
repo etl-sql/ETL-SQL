@@ -255,7 +255,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // Limit
-            if (select.ToSql().Contains("LIMIT", StringComparison.OrdinalIgnoreCase) || select.ToSql().Contains("TOP", StringComparison.OrdinalIgnoreCase))
+            if (select.LimitCount != null || select.TopCount != null)
             {
                 await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Top/Limit", ["Details"] = "", ["Cost"] = 1 });
             }

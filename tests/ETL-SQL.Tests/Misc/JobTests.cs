@@ -107,7 +107,7 @@ namespace ETL_SQL.Tests
             // we'll use a manual execution logic similar to what scheduler does but synchronously.
             
             long historyId = await store.LogJobStartAsync("TestJob");
-            await store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: 1);
+            await store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: 1, peakMemoryBytes: 1024, cpuTimeSeconds: 0.5);
 
             history = await store.GetHistoryAsync("TestJob");
             Assert.Single(history);

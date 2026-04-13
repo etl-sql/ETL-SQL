@@ -162,7 +162,7 @@ namespace ETL_SQL.Engine.Handlers
                     catch (Exception ex)
                     {
                         if (context.IsWhatIf) throw; // Should not happen in dry run really, but keep consistency
-                        if (maxErrors > 0 || errorCount < maxErrors)
+                        if (errorCount < maxErrors)
                         {
                             _logger.WriteLine($"[WARNING] Batch write failed: {ex.Message}. Retrying row-by-row up to MAXERRORS={maxErrors}.");
                             

@@ -92,5 +92,17 @@ Supported Options:
         }
 
         public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+
+        public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
+        {
+            if (options != null && options.TryGetValue("URL", out var url))
+            {
+                if (Uri.TryCreate(url, UriKind.Absolute, out var uri)) return uri.Host;
+            }
+            
+            if (Uri.TryCreate(connectionString, UriKind.Absolute, out var connUri)) return connUri.Host;
+            
+            return null;
+        }
     }
 }

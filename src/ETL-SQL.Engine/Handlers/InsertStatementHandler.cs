@@ -89,7 +89,7 @@ namespace ETL_SQL.Engine.Handlers
                 if (stmt.SelectQuery != null && stmt.SelectQuery is SelectStatement sel && (sel.FromTable.ConnectionName ?? sel.FromTable.TableName).Equals(connName, StringComparison.OrdinalIgnoreCase))
                 {
                     _logger.Debug("Strategy: Remote SQL Pushdown (Insert from Select)");
-                    var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable)}\n{context.CompileQuery(stmt.SelectQuery, sqlDest.Dialect)}";
+                    var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable, sqlDest.Dialect)}\n{context.CompileQuery(stmt.SelectQuery, sqlDest.Dialect)}";
                     if (context.IsWhatIf)
                     {
                         _logger.WriteLine($"WHAT IF: Would execute remote SQL pushdown insert on {connName}:\n{sql}", ConsoleColor.Yellow);
@@ -110,7 +110,7 @@ namespace ETL_SQL.Engine.Handlers
                     _logger.Debug("Strategy: Remote SQL Values ({RowCount} rows)", stmt.Values.Count);
                     var rowStrings = stmt.Values.Select(row => "(" + string.Join(", ", row.Select(v => context.CompileExpression(v, sqlDest.Dialect))) + ")");
                     var colList = stmt.Columns != null ? "(" + string.Join(", ", stmt.Columns) + ") " : "";
-                    var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable)} {colList}VALUES {string.Join(", ", rowStrings)}";
+                    var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable, sqlDest.Dialect)} {colList}VALUES {string.Join(", ", rowStrings)}";
                     
                     if (context.IsWhatIf)
                     {

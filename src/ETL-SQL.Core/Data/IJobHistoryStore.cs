@@ -22,7 +22,9 @@ namespace ETL_SQL.Core.Data
         DateTime? EndTime,
         string Status,
         string? ErrorMessage,
-        long RowsProcessed = 0
+        long RowsProcessed = 0,
+        long PeakMemoryBytes = 0,
+        double CpuTimeSeconds = 0
     );
 
     public interface IJobHistoryStore
@@ -37,7 +39,7 @@ namespace ETL_SQL.Core.Data
 
         // History Management
         Task<long> LogJobStartAsync(string jobName);
-        Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0);
+        Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0);
         Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100);
     }
 }

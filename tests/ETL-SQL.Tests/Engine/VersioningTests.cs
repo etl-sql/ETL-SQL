@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
 using System.Linq;
+using ETL_SQL.App;
 
 namespace ETL_SQL.Tests.Engine
 {

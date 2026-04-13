@@ -78,9 +78,17 @@ namespace ETL_SQL.Engine
         public int CurrentRecursiveDepth { get; set; } = 0;
         public string? LastIndexUsedName { get; set; }
         public ErrorInfo? LastError { get; set; }
+        public int PreviousErrorNumber { get; set; } = 0;
+
         
         /// <summary>Size of row batches used during streaming operations.</summary>
         public int BatchSize { get; set; } = 10000;
+        
+        /// <summary>Number of batches held in memory before spilling to disk for #temp tables.</summary>
+        public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
+
+        /// <summary>Maximum rows to fetch per page for remote FOREACH pushdown.</summary>
+        public int ForeachPageSize { get; set; } = 10000;
         
         private bool _isVerbose;
         
@@ -225,8 +233,15 @@ namespace ETL_SQL.Engine
         public object? GetVariable(string name)
         {
             if (name.Equals("@@TRANCOUNT", StringComparison.OrdinalIgnoreCase)) return TranCount;
+            if (name.Equals("@@RESULTSETS", StringComparison.OrdinalIgnoreCase)) return LastResultSets;
+            if (name.Equals("@@VERSION", StringComparison.OrdinalIgnoreCase)) return LanguageMetadata.GetFullVersionString();
+            if (name.Equals("@@ROWCOUNT", StringComparison.OrdinalIgnoreCase)) return RowsProcessed;
+            if (name.Equals("@@ERROR", StringComparison.OrdinalIgnoreCase)) return PreviousErrorNumber;
+            
             return _variableScopeManager.GetVariable(name);
+
         }
+
         public bool ContainsVariable(string name) => _variableScopeManager.ContainsVariable(name);
         public bool ContainsVariableInCurrentScope(string name) => _variableScopeManager.CurrentVariables.ContainsKey(name);
         public void DeclareVariable(string name, object? value, VariableMetadata? metadata = null) => _variableScopeManager.DeclareVariable(name, value, metadata);
@@ -249,7 +264,7 @@ namespace ETL_SQL.Engine
         {
         }
 
-        [ActivatorUtilitiesConstructor]
+        // Removed attribute to allow DI to pick the simpler constructor above
         public Evaluator(
             IEnumerable<IStatementHandler> handlers,
             IServiceProvider serviceProvider,
@@ -410,7 +425,16 @@ namespace ETL_SQL.Engine
 
         public async Task EvaluateStatement(Statement statement)
         {
+            // Update PreviousErrorNumber and reset LastError for the new statement
+            // We skip this for internal/structural nodes that don't count as "atomic" statements for @@ERROR purposes
+            if (statement is not NoOpStatement && statement is not BlockStatement)
+            {
+                PreviousErrorNumber = LastError?.Number ?? 0;
+                LastError = null;
+            }
+
             var parentId = CurrentNodeId;
+
             var nodeName = statement.GetType().Name.Replace("Statement", "");
             
             // Refine node name for readability
@@ -452,8 +476,10 @@ namespace ETL_SQL.Engine
                 {
                     node.Status = ExecutionStatus.Faulted;
                     node.ErrorMessage = ex.Message;
+                    LastError = new ErrorInfo(50000, ex.Message, 16, 1, statement.Line, null);
                     throw;
                 }
+
                 finally
                 {
                     node.EndTicks = Stopwatch.GetTimestamp();
@@ -505,9 +531,24 @@ namespace ETL_SQL.Engine
         }
 
         public Task<object?> EvaluateValue(Expression? expr, Row context) => _expressionEvaluator.Evaluate(expr, context);
+        public IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context) => _expressionEvaluator.EvaluateStream(expr, context);
         public string CompileExpression(Expression e, string d = "MSSQL") => _queryCompiler.CompileExpression(e, d);
         public string CompileQuery(Statement s, string d = "MSSQL") => _queryCompiler.CompileQuery(s, d);
-        public string GetSqlTableName(TableReference t) => t.TableName;
+        public string GetSqlTableName(TableReference t, string dialect = "MSSQL")
+        {
+            var parts = new List<string>();
+            if (t.DatabaseName != null) parts.Add(t.DatabaseName);
+            if (t.SchemaName != null) parts.Add(t.SchemaName);
+            parts.Add(t.TableName);
+
+            // Security Hardening (CR-S2): Apply dialect-appropriate identifier quoting
+            // MSSQL uses [identifier], others use "identifier"
+            Func<string, string> quote = dialect.Equals("MSSQL", StringComparison.OrdinalIgnoreCase)
+                ? s => s.StartsWith("[") ? s : $"[{s.Replace("]", "]]")}]"
+                : s => s.StartsWith("\"") ? s : $"\"{s.Replace("\"", "\"\"")}\"";
+
+            return string.Join(".", parts.Select(quote));
+        }
 
         public IAsyncEnumerable<DataTable> InterceptProgress(IAsyncEnumerable<DataTable> chunks)
             => _batchPipelineHelper.InterceptProgress(chunks, OnBatchProcessed);
@@ -623,11 +664,15 @@ namespace ETL_SQL.Engine
 
         public void Log(string message, ConsoleColor color = ConsoleColor.White)
         {
-            Messages.Add(message);
-            if (Messages.Count > MaxMessages)
+            lock (_messagesLock)
             {
-                Messages.RemoveAt(0);
-                if (Messages.Count > 0 && !Messages[0].StartsWith("[TRUNCATED]")) Messages[0] = "[TRUNCATED] " + Messages[0];
+                Messages.Add(message);
+                if (Messages.Count > MaxMessages)
+                {
+                    Messages.RemoveAt(0);
+                    if (Messages.Count > 0 && !Messages[0].StartsWith("[TRUNCATED]")) 
+                        Messages[0] = "[TRUNCATED] " + Messages[0];
+                }
             }
         }
 

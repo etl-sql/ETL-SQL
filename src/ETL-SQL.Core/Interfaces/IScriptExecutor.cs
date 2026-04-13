@@ -14,5 +14,4 @@ public interface IScriptExecutor
     Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, CancellationToken cancellationToken = default);
 }
 
-/// <summary>Lightweight result returned by IScriptExecutor.</summary>
-public record ScriptExecutionResult(bool Success, long RowsProcessed, string? ErrorMessage = null);
+public record ScriptExecutionResult(bool Success, long RowsProcessed, string? ErrorMessage = null, long PeakMemoryBytes = 0, double CpuTimeSeconds = 0);

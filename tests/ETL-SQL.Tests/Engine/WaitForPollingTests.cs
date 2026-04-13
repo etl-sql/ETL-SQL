@@ -58,16 +58,17 @@ namespace ETL_SQL.Tests
         {
             var eval = await GetEvaluator();
             
-            // Background task to create a temp table after 1 second
+            // Background task to set a variable after 1 second
             _ = Task.Run(async () =>
             {
                 await Task.Delay(1000);
-                eval.Connections["#signal"] = new ETL_SQL.Data.InMemoryDataSource();
+                eval.SetVariable("@signal", 1);
             });
 
             var sql = @"
-                WAIT UNTIL (SELECT COUNT(*) FROM DIRECTORY('C:\') WHERE 1=0) = 0; -- Immediate true
-                WAIT UNTIL EXISTS (SELECT 1 FROM #signal);
+                DECLARE @signal INT = 0;
+                WAIT UNTIL (SELECT COUNT(*) FROM DIRECTORY('../../../../Docs') WHERE 1=0) = 0; -- Immediate true
+                WAIT UNTIL @signal = 1;
                 SELECT 'Signal Received' AS msg;
             ";
 

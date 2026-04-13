@@ -111,6 +111,9 @@ namespace ETL_SQL.Common
 
         public static string EngineVersion => typeof(LanguageMetadata).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
         public static string GetFullVersionString() => $"ETL-SQL {EngineVersion} (.NET 10.0)";
+        
+        /// <summary>Default number of batches held in memory before spilling to disk for #temp tables.</summary>
+        public const int DefaultMaxInMemoryBatches = 100;
 
         public static bool IsKeyword(string word) => DmlKeywords.Contains(word) || DdlKeywords.Contains(word) || ControlFlowKeywords.Contains(word) || JoinKeywords.Contains(word) || OperatorKeywords.Contains(word) || Keywords.Contains(word) || ConnectorTypes.Contains(word) || Functions.Contains(word);
         public static bool IsFunction(string word) => Functions.Contains(word);

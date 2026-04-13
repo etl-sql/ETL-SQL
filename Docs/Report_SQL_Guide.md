@@ -40,7 +40,16 @@ Report-SQL extends ETL-SQL with three new statement types — `CREATE DATASET`, 
 
 A `.rptsql` file is a normal ETL-SQL script that may also contain `CREATE VISUAL`, `CREATE PAGE`, and `CREATE DATASET` statements. The engine evaluates it exactly like any `.etlsql` file; the new statements register visual/page/dataset definitions in the execution context. After evaluation the `ManifestBuilder` snapshots the data and produces a `ReportManifest` — a serialisable JSON structure consumed by both the static Markdown renderer and the live web dashboard.
 
+### The `@@DATASET` System Variable
+Report-SQL provides the `@@DATASET` system variable which can be used to manually pass data to visuals or capture the result of a `CREATE DATASET` operation. It is treated as a `LIST` of rows. You can manually assign to it before a visual is declared if that visual uses it as a source:
+
+```sql
+DECLARE @@DATASET = (('Product A', 100), ('Product B', 250));
+CREATE VISUAL ManualCard AS CARD (SOURCE = @@DATASET, MAPPINGS(VALUE = Col1, LABEL = Col0));
+```
+
 ---
+
 
 ## Quick start
 

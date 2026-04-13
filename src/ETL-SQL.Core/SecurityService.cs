@@ -34,6 +34,10 @@ namespace ETL_SQL.Services
 
         public const int DefaultMaxFileOperations = 100;
         public const int DefaultMaxRecursiveDepth = 5;
+
+        public int MaxFileOperations { get; set; } = DefaultMaxFileOperations;
+        public int MaxRecursiveDepth { get; set; } = DefaultMaxRecursiveDepth;
+
         public string? MasterPassword { get; set; }
 
         /// <summary>
@@ -53,18 +57,57 @@ namespace ETL_SQL.Services
         /// Explicit list of environment variable names that scripts are authorized to read via ENV().
         /// Empty by default. Use '*' to allow all (not recommended for multi-tenant envs).
         /// </summary>
-        public List<string> AllowedEnvVars { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> AllowedEnvVars { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Explicit list of network hosts that scripts are authorized to connect to.
+        /// Supports '*' wildcards at the start (e.g. *.google.com).
+        /// Default is '*' (unrestricted). Remove '*' to enable strict egress control.
+        /// </summary>
+        public HashSet<string> AllowedHosts { get; } = new(StringComparer.OrdinalIgnoreCase) { "*" };
 
         /// <summary>
         /// Validates that an environment variable is safe to read.
         /// </summary>
         public void ValidateEnvVar(string name)
         {
-            if (string.IsNullOrWhiteSpace(name)) return;
             if (AllowedEnvVars.Contains("*")) return;
-            if (AllowedEnvVars.Contains(name)) return;
+            if (!AllowedEnvVars.Contains(name))
+            {
+                throw new SecurityException($"Access to environment variable '{name}' is denied. It must be added to the authorized list in SecurityService.AllowedEnvVars.");
+            }
+        }
 
-            throw new SecurityException($"Unauthorized access to environment variable: {name}. Add it to AllowedEnvVars to enable access.");
+        /// <summary>
+        /// Validates that a network host is safe to connect to.
+        /// </summary>
+        public void ValidateHost(string host)
+        {
+            if (string.IsNullOrEmpty(host)) return;
+            if (IsInternalOperation || IsTestMode) return;
+
+            // Always allow local loopback
+            if (host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || 
+                host.Equals("127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+                host.Equals("::1", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (AllowedHosts.Contains("*")) return;
+
+            foreach (var allowed in AllowedHosts)
+            {
+                if (allowed.StartsWith("*."))
+                {
+                    var domain = allowed.Substring(2);
+                    if (host.EndsWith(domain, StringComparison.OrdinalIgnoreCase)) return;
+                }
+                
+                if (string.Equals(host, allowed, StringComparison.OrdinalIgnoreCase)) return;
+            }
+
+            throw new SecurityException($"Connection to host '{host}' is denied. This host must be added to the authorized list in SecurityService.AllowedHosts.");
         }
 
         /// <summary>
@@ -196,21 +239,23 @@ namespace ETL_SQL.Services
                 isSafeZone = ApprovedSafeZones.Any(z => fullPath.StartsWith(z, StringComparison.OrdinalIgnoreCase));
             }
 
-            if (count > DefaultMaxFileOperations && (!allowLargeCount || !isSafeZone))
+            if (count > MaxFileOperations && (!allowLargeCount || !isSafeZone))
             {
                 string msg = allowLargeCount && !isSafeZone 
                     ? $"Runaway protection: Safety overrides for operation count are only permitted within approved user workspaces. Path '{path}' is outside a safe zone."
-                    : $"Runaway protection: File operation count ({count}) exceeds the safety limit of {DefaultMaxFileOperations}. Use ### ALLOW_GREATER_THAN_100_FILE override.";
+                    : $"Runaway protection: File operation count ({count}) exceeds the safety limit of {MaxFileOperations}. Use ### ALLOW_GREATER_THAN_{MaxFileOperations}_FILE override.";
                 throw new SecurityException(msg);
             }
 
-            if (depth > DefaultMaxRecursiveDepth && (!allowDeepRecursion || !isSafeZone))
+
+            if (depth > MaxRecursiveDepth && (!allowDeepRecursion || !isSafeZone))
             {
                  string msg = allowDeepRecursion && !isSafeZone 
                     ? $"Runaway protection: Safety overrides for recursive depth are only permitted within approved user workspaces. Path '{path}' is outside a safe zone."
-                    : $"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {DefaultMaxRecursiveDepth}. Use ### ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS override.";
+                    : $"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {MaxRecursiveDepth}. Use ### ALLOW_RECURSIVE_GREATER_THAN_{MaxRecursiveDepth}_LAYERS override.";
                 throw new SecurityException(msg);
             }
+
         }
 
         /// <summary>
@@ -270,6 +315,37 @@ namespace ETL_SQL.Services
                 }
             }
             return false;
+        }
+        /// <summary>
+        /// Checks if a path is considered a critical system path that should never be registered as a Safe Zone.
+        /// </summary>
+        public bool IsSystemPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path)) return true;
+            try
+            {
+                var fullPath = Path.GetFullPath(path);
+                var root = Path.GetPathRoot(fullPath);
+                
+                // 1. Root of any drive is a system path
+                if (string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase)) return true;
+                
+                var normalizedPath = fullPath.Replace('\\', '/');
+                var segments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                
+                // 2. Check against critical system directories (Windows & Linux)
+                string[] criticalBlocks = { "Windows", "System32", "etc", "root", "bin", "sbin", "usr", "var", "etc", "Boot" };
+                foreach (var blocked in criticalBlocks)
+                {
+                    if (segments.Any(s => string.Equals(s, blocked, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        return true;
+                    }
+                }
+                
+                return false;
+            }
+            catch { return true; } // Safety first: if invalid path, treat as system path
         }
     }
 

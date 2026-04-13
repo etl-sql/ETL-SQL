@@ -44,7 +44,7 @@ namespace ETL_SQL.Core
     {
         string CompileExpression(Expression e, string dialect = "MSSQL");
         string CompileQuery(Statement s, string dialect = "MSSQL");
-        string GetSqlTableName(TableReference t);
+        string GetSqlTableName(TableReference t, string dialect = "MSSQL");
     }
 
     public interface ITransactionContext
@@ -79,6 +79,7 @@ namespace ETL_SQL.Core
     public interface IEvaluationContext
     {
         Task<object?> EvaluateValue(Expression? expr, Row context);
+        IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context);
         Task<bool> EvaluateCondition(Expression? expr, Row context);
         Task<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context);
         object? ResolveIdentifier(string name, Row? row);
@@ -111,7 +112,10 @@ namespace ETL_SQL.Core
         
         /// <summary>Metadata about the last caught exception in this session.</summary>
         ErrorInfo? LastError { get; set; }
+        /// <summary>The error number of the most recently COMPLETED statement (for @@ERROR).</summary>
+        int PreviousErrorNumber { get; set; }
     }
+
 
     /// <summary>Stores metadata about an execution error for use with ERROR_* functions.</summary>
     public record ErrorInfo(int Number, string Message, int Severity, int State, int Line, string? Procedure);
@@ -134,6 +138,7 @@ namespace ETL_SQL.Core
         int MaxRecursiveDepth { get; set; }
         int CurrentRecursiveDepth { get; set; }
         int BatchSize { get; set; }
+        int ForeachPageSize { get; }
         int? PreviewLimit { get; set; }
         bool FunctionExists(string name);
         bool ProcedureExists(string name);

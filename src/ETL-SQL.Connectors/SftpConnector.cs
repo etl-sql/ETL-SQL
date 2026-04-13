@@ -182,5 +182,11 @@ namespace ETL_SQL.Connectors
             }
             await Task.CompletedTask;
         }
+
+        public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
+        {
+            if (options != null && options.TryGetValue("HOST", out var host)) return host;
+            return connectionString;
+        }
     }
 }

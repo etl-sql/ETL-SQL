@@ -25,7 +25,7 @@ namespace ETL_SQL.Connectors.Directory
             _logger = logger ?? NullLogger.Instance;
         }
 
-        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "Path", "Extension", "Size", "LastModified", "IsReadOnly", "CreationTime" });
+        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "FileName", "Path", "Extension", "Size", "LastModified", "IsReadOnly", "CreationTime" });
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize)
         {
@@ -40,7 +40,7 @@ namespace ETL_SQL.Connectors.Directory
             {
                 var info = new FileInfo(file);
                 var row = new Row();
-                row["Name"] = info.Name;
+                row["FileName"] = info.Name;
                 row["Path"] = info.FullName;
                 row["Extension"] = info.Extension;
                 row["Size"] = (decimal)info.Length;

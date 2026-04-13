@@ -62,7 +62,7 @@ namespace ETL_SQL.Engine.Handlers
                 
                 while (true)
                 {
-                    if (context.CancellationToken.IsCancellationRequested) return;
+                    context.CancellationToken.ThrowIfCancellationRequested();
 
                     var result = await context.EvaluateValue(stmt.Expression, new Row());
                     bool met = false;
@@ -76,7 +76,7 @@ namespace ETL_SQL.Engine.Handlers
 
                     if (met) break;
 
-                    await Task.Delay(TimeSpan.FromSeconds(1), context.CancellationToken);
+                    await Task.Delay(TimeSpan.FromMilliseconds(200), context.CancellationToken);
                 }
 
                 if (context.IsVerbose) context.Log("[WaitFor] Condition met.");

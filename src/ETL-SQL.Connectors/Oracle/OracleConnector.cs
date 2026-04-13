@@ -111,5 +111,18 @@ namespace ETL_SQL.Connectors.Oracle
 
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
+
+        public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
+        {
+            if (options != null && options.TryGetValue("HOST", out var host)) return host;
+            if (options != null && options.TryGetValue("TNS_NAME", out var tns)) return tns;
+            
+            try
+            {
+                var builder = new OracleConnectionStringBuilder(connectionString);
+                return builder.DataSource;
+            }
+            catch { return null; }
+        }
     }
 }

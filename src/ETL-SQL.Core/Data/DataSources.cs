@@ -125,6 +125,12 @@ namespace ETL_SQL.Data
         public List<TableConstraint> TableConstraints { get; private set; } = new();
         public IDataValidator? Validator { get; set; }
 
+        public string? OverflowDirectory { get; set; }
+        public string? OverflowEntropy { get; set; }
+        public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
+        private readonly List<string> _spilledFiles = new();
+        public IExecutionContext? ExecutionContext { get; set; }
+
         public async Task ValidateRow(Row row)
         {
             foreach (var kv in Schema)
@@ -363,6 +369,12 @@ namespace ETL_SQL.Data
             {
                 _lock.Release();
             }
+
+            foreach (var file in _spilledFiles)
+            {
+                if (File.Exists(file)) try { File.Delete(file); } catch { }
+            }
+            _spilledFiles.Clear();
         }
 
         public void CreateIndex(string columnName, bool isUnique = false)
@@ -441,11 +453,34 @@ namespace ETL_SQL.Data
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
             await _lock.WaitAsync();
-            List<DataTable> copy;
-            try { copy = _batches.ToList(); }
+            List<string> spilledCopy;
+            List<DataTable> memoryCopy;
+            try 
+            { 
+                spilledCopy = _spilledFiles.ToList();
+                memoryCopy = _batches.ToList(); 
+            }
             finally { _lock.Release(); }
             
-            foreach (var batch in copy)
+            foreach (var file in spilledCopy)
+            {
+                if (!File.Exists(file)) continue;
+
+                var dt = new DataTable();
+                dt.SetColumns(_columnOrder);
+                
+                string encrypted = await File.ReadAllTextAsync(file);
+                string json = CryptoUtils.Unprotect(encrypted, OverflowEntropy ?? "");
+                var rows = JsonSerializer.Deserialize<List<object?[]>>(json);
+                
+                if (rows != null)
+                {
+                    foreach (var r in rows) await dt.AddRowAsync(new Row(dt.Schema, r));
+                }
+                yield return dt;
+            }
+
+            foreach (var batch in memoryCopy)
             {
                 yield return batch;
             }
@@ -459,6 +494,14 @@ namespace ETL_SQL.Data
                 try
                 {
                     foreach (var row in b.Rows) await ValidateRow(row);
+                    
+                    if (_batches.Count >= MaxInMemoryBatches && OverflowDirectory != null)
+                    {
+                        var oldest = _batches[0];
+                        _batches.RemoveAt(0);
+                        await SpillBatchToDiskAsync(oldest);
+                    }
+
                     _batches.Add(b);
                     if (_indexes.Count > 0)
                     {
@@ -472,6 +515,35 @@ namespace ETL_SQL.Data
                 {
                     _lock.Release();
                 }
+            }
+        }
+
+        private async Task SpillBatchToDiskAsync(DataTable batch)
+        {
+            if (OverflowDirectory == null) return;
+            if (!Directory.Exists(OverflowDirectory)) Directory.CreateDirectory(OverflowDirectory);
+
+            var fileName = System.IO.Path.Combine(OverflowDirectory, Guid.NewGuid().ToString() + ".spill");
+            
+            // Extract the raw object arrays from the rows for efficient serialization
+            var rows = batch.Rows.Select(r => {
+                var values = new object?[_columnOrder.Count];
+                for (int i = 0; i < _columnOrder.Count; i++) values[i] = r[_columnOrder[i]];
+                return values;
+            }).ToList();
+
+            var json = JsonSerializer.Serialize(rows);
+            var encrypted = CryptoUtils.Protect(json, OverflowEntropy ?? "");
+            await File.WriteAllTextAsync(fileName, encrypted);
+            
+            lock (_spilledFiles)
+            {
+                _spilledFiles.Add(fileName);
+            }
+
+            if (ExecutionContext != null)
+            {
+                ExecutionContext.TotalSpilledBytes += encrypted.Length; // Rough estimate of disk impact
             }
         }
 
@@ -600,6 +672,13 @@ namespace ETL_SQL.Data
             _batches.Clear();
             _indexes.Clear();
             _indexColumnMap.Clear();
+
+            foreach (var file in _spilledFiles)
+            {
+                if (File.Exists(file)) try { File.Delete(file); } catch { }
+            }
+            _spilledFiles.Clear();
+            
             await Task.CompletedTask;
         }
     }

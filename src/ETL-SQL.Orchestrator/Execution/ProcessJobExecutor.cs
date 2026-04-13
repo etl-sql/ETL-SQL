@@ -105,16 +105,27 @@ namespace ETL_SQL.Orchestrator.Execution
                 _tracker.Unregister(process.Id);
             }
 
+            long peakMemory = 0;
+            double cpuSeconds = 0;
+            try
+            {
+                // Capture metrics before disposing
+                peakMemory = process.PeakWorkingSet64;
+                cpuSeconds = process.TotalProcessorTime.TotalSeconds;
+            }
+            catch { /* Process object might be in a state where these are unavailable */ }
+
             var exitCode = process.ExitCode;
-            _logger.LogInformation("Job process PID={Pid} exited with code {ExitCode}", process.Id, exitCode);
+            _logger.LogInformation("Job process PID={Pid} exited with code {ExitCode}. CPU: {Cpu}s, Peak RAM: {Mem} bytes", 
+                process.Id, exitCode, cpuSeconds, peakMemory);
 
             if (stderr.Length > 0)
                 _logger.LogWarning("Job process stderr: {Stderr}", stderr.ToString().Trim());
 
-            return ParseResult(exitCode, stdout.ToString());
+            return ParseResult(exitCode, stdout.ToString(), peakMemory, cpuSeconds);
         }
 
-        private ScriptExecutionResult ParseResult(int exitCode, string stdout)
+        private ScriptExecutionResult ParseResult(int exitCode, string stdout, long peakMemory, double cpuSeconds)
         {
             // ETL-SQL.exe with --json writes a JSON envelope as the LAST non-empty line
             var lines = stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries);
@@ -132,7 +143,7 @@ namespace ETL_SQL.Orchestrator.Execution
                     long   rows     = root.TryGetProperty("rowsProcessed", out var r) ? r.GetInt64() : 0;
                     string? error   = root.TryGetProperty("error",         out var e) ? e.GetString() : null;
 
-                    return new ScriptExecutionResult(success, rows, error);
+                    return new ScriptExecutionResult(success, rows, error, peakMemory, cpuSeconds);
                 }
                 catch (JsonException)
                 {
@@ -142,8 +153,8 @@ namespace ETL_SQL.Orchestrator.Execution
 
             // No parseable JSON envelope — fall back to exit code
             return exitCode == 0
-                ? new ScriptExecutionResult(true,  0, null)
-                : new ScriptExecutionResult(false, 0, $"Process exited with code {exitCode}. Stdout: {stdout.Trim()}");
+                ? new ScriptExecutionResult(true,  0, null, peakMemory, cpuSeconds)
+                : new ScriptExecutionResult(false, 0, $"Process exited with code {exitCode}. Stdout: {stdout.Trim()}", peakMemory, cpuSeconds);
         }
 
         private string ResolveExecutablePath()

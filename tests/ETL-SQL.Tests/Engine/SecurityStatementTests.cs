@@ -15,7 +15,13 @@ namespace ETL_SQL.Tests.Engine
         private Evaluator CreateEvaluator()
         {
             // Use the shared service provider from TestSetup
-            return Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();
+            
+            // Reset state between tests (SecurityService is a singleton)
+            eval.SecurityService.MasterPassword = null;
+            eval.ScriptPassword = null;
+            
+            return eval;
         }
 
         [Fact]

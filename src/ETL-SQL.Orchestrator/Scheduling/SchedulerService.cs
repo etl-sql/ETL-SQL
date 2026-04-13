@@ -37,12 +37,14 @@ namespace ETL_SQL.Orchestrator.Scheduling
         /// <summary>Returns a snapshot of current concurrency metrics.</summary>
         public JobThrottleMetrics GetMetrics() => _throttle.GetMetrics();
 
+        private DateTime _lastMetricsLog = DateTime.MinValue;
         private Task? _runTask;
 
         /// <summary>Starts the background scheduler loop.</summary>
         public void Start()
         {
             _cts = new CancellationTokenSource();
+            _lastMetricsLog = DateTime.Now;
             _runTask = Task.Run(() => RunAsync(_cts.Token));
             _ = _runTask.ContinueWith(t =>
                 _logger.LogError(t.Exception, "Scheduler background task terminated unexpectedly."),
@@ -81,6 +83,15 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         {
                             await ExecuteJobAsync(job);
                         }
+                    }
+
+                    // 8B-1: Periodic metrics emission
+                    if (now - _lastMetricsLog >= TimeSpan.FromMinutes(1))
+                    {
+                        var metrics = GetMetrics();
+                        _logger.LogInformation("Orchestrator Metrics: ActiveJobs={Active}, QueuedJobs={Queued}, MaxConcurrent={Max}, AvailableSlots={Slots}", 
+                            metrics.ActiveJobs, metrics.QueuedJobs, metrics.MaxJobs, metrics.AvailableSlots);
+                        _lastMetricsLog = now;
                     }
                 }
                 catch (Exception ex)
@@ -127,15 +138,18 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
                 if (result.Success)
                 {
-                    _logger.LogInformation("Job {JobName} finished successfully.", job.Name);
+                    _logger.LogInformation("Job {JobName} finished successfully. (RAM: {Mem} bytes, CPU: {Cpu}s)", 
+                        job.Name, result.PeakMemoryBytes, result.CpuTimeSeconds);
                     if (historyId > 0)
-                        await _store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: result.RowsProcessed);
+                        await _store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: result.RowsProcessed, 
+                            peakMemoryBytes: result.PeakMemoryBytes, cpuTimeSeconds: result.CpuTimeSeconds);
                 }
                 else
                 {
                     _logger.LogWarning("Job {JobName} finished with failure: {Error}", job.Name, result.ErrorMessage);
                     if (historyId > 0)
-                        await _store.LogJobEndAsync(historyId, "FAILURE", result.ErrorMessage);
+                        await _store.LogJobEndAsync(historyId, "FAILURE", result.ErrorMessage, 
+                            peakMemoryBytes: result.PeakMemoryBytes, cpuTimeSeconds: result.CpuTimeSeconds);
                 }
             }
             catch (Exception ex)

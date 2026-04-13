@@ -33,11 +33,12 @@ namespace ETL_SQL.Orchestrator.Execution
                 var session = new ExecutionSession(_serviceProvider, _ctx, _logger);
                 var result = await session.ExecuteAsync(scriptText, cancellationToken);
                 return new ScriptExecutionResult(result.Success, result.RowsProcessed,
-                    result.Success ? null : string.Join("; ", result.Diagnostics.Select(d => d.Message)));
+                    result.Success ? null : string.Join("; ", result.Diagnostics.Select(d => d.Message)),
+                    0, 0); // In-process execution doesn't easily report isolated metrics here
             }
             catch (Exception ex)
             {
-                return new ScriptExecutionResult(false, 0, ex.Message);
+                return new ScriptExecutionResult(false, 0, ex.Message, 0, 0);
             }
         }
     }

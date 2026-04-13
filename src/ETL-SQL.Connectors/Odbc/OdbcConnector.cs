@@ -109,5 +109,20 @@ Supported Options:
   CONNECT_TIMEOUT  - Time (sec) to wait for connection.
   TABLE            - Default table for reading.";
         }
+
+        public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
+        {
+            if (options != null && options.TryGetValue("SERVER", out var server)) return server;
+            
+            try
+            {
+                var builder = new OdbcConnectionStringBuilder(connectionString);
+                if (builder.TryGetValue("SERVER", out var s)) return s.ToString();
+                if (builder.TryGetValue("Host", out var h)) return h.ToString();
+                if (builder.TryGetValue("DSN", out var dsn)) return dsn.ToString(); // DSN is the "host" of the config
+                return null;
+            }
+            catch { return null; }
+        }
     }
 }

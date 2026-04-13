@@ -52,5 +52,11 @@ namespace ETL_SQL.Connectors.Email
 
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
+
+        public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
+        {
+            if (options != null && options.TryGetValue("HOST", out var host)) return host;
+            return null;
+        }
     }
 }

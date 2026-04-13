@@ -5,7 +5,10 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Data;
 using ETL_SQL.Core.Parser;
+
+
 using ETL_SQL.Engine;
 using ETL_SQL.ReportBuilder;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,11 +66,7 @@ namespace ETL_SQL.ReportPlayer
             await _lock.WaitAsync();
             try
             {
-                var scriptText = await File.ReadAllTextAsync(_scriptPath);
-
-                // Inject current parameter values as DECLARE statements at the top
-                var paramHeader = BuildParameterHeader(_parameters);
-                var source      = paramHeader + scriptText;
+                var source = await File.ReadAllTextAsync(_scriptPath);
 
                 var lexer    = new Lexer(source);
                 var tokens   = lexer.Tokenize();
@@ -77,6 +76,15 @@ namespace ETL_SQL.ReportPlayer
                 var provider  = DependencyInjectionSetup.BuildServiceProvider();
                 var evaluator = provider.GetRequiredService<Evaluator>();
                 evaluator.RedirectOutput = true;
+
+                // Security Hardening (CR-S1): Inject current parameter values directly into the scope 
+                // instead of concatenating source text. This prevents script injection.
+                foreach (var (name, value) in _parameters)
+                {
+                    var varName = name.StartsWith('@') ? name : '@' + name;
+                    evaluator.DeclareVariable(varName, value, new VariableMetadata { IsInput = true });
+                }
+
                 await evaluator.Evaluate(script);
 
                 var builder   = new ManifestBuilder(evaluator);
@@ -96,19 +104,6 @@ namespace ETL_SQL.ReportPlayer
         {
             if (_manifest == null) return true;
             return new SnapshotStore().IsStale(_manifest, _scriptPath, ttl);
-        }
-
-        private static string BuildParameterHeader(Dictionary<string, string> parameters)
-        {
-            if (parameters.Count == 0) return string.Empty;
-            var sb = new System.Text.StringBuilder();
-            foreach (var (name, value) in parameters)
-            {
-                var safeName  = name.StartsWith('@') ? name : '@' + name;
-                var safeValue = value.Replace("'", "''");
-                sb.AppendLine($"DECLARE {safeName} = '{safeValue}';");
-            }
-            return sb.ToString();
         }
     }
 }

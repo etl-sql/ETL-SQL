@@ -16,6 +16,8 @@ namespace ETL_SQL.ReportBuilder
     /// </summary>
     public class SnapshotStore
     {
+        private static readonly System.Threading.SemaphoreSlim _writeLock = new(1, 1);
+
         private static readonly JsonSerializerOptions _opts = new()
         {
             WriteIndented        = true,
@@ -26,16 +28,34 @@ namespace ETL_SQL.ReportBuilder
         public static string DefaultPath(string scriptPath) =>
             Path.ChangeExtension(scriptPath, null) + ".snapshot.json";
 
-        /// <summary>Serialises the manifest to a JSON file.</summary>
+        /// <summary>Serialises the manifest to a JSON file atomically.</summary>
         public async Task SaveAsync(ReportManifest manifest, string outputPath)
         {
-            var dir = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
+            await _writeLock.WaitAsync();
+            var tmpPath = outputPath + ".tmp";
+            try
+            {
+                var dir = Path.GetDirectoryName(outputPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
 
-            var json = JsonSerializer.Serialize(manifest, _opts);
-            await File.WriteAllTextAsync(outputPath, json);
+                var json = JsonSerializer.Serialize(manifest, _opts);
+                await File.WriteAllTextAsync(tmpPath, json);
+                
+                // Atomic rename/replace
+                if (File.Exists(outputPath)) File.Delete(outputPath);
+                File.Move(tmpPath, outputPath);
+            }
+            finally
+            {
+                if (File.Exists(tmpPath))
+                {
+                    try { File.Delete(tmpPath); } catch { /* ignore cleanup errors */ }
+                }
+                _writeLock.Release();
+            }
         }
+
 
         /// <summary>
         /// Deserialises a previously saved manifest. Returns null if the file does not exist.
