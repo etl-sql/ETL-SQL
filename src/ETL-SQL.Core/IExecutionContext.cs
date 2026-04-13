@@ -114,7 +114,13 @@ namespace ETL_SQL.Core
         ErrorInfo? LastError { get; set; }
         /// <summary>The error number of the most recently COMPLETED statement (for @@ERROR).</summary>
         int PreviousErrorNumber { get; set; }
+
+        /// <summary>Number of rows before in-memory joins spill to disk (CFG-6).</summary>
+        int JoinSpillThreshold { get; set; }
+        /// <summary>Number of partitions used for external disk-spilling operations (CFG-5).</summary>
+        int ExternalHashPartitions { get; set; }
     }
+
 
 
     /// <summary>Stores metadata about an execution error for use with ERROR_* functions.</summary>

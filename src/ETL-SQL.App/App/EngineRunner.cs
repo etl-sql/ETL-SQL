@@ -208,7 +208,9 @@ namespace ETL_SQL.App
                     }
                     
                     // Periodic reaping of stale sessions
-                    sessionManager.ReapStaleSessions(TimeSpan.FromDays(7));
+                    var sessionRetentionDays = int.TryParse(Program.ServiceProvider.GetRequiredService<IConfiguration>()["Session:StaleSessionRetentionDays"], out var srd) ? srd : 7;
+                    sessionManager.ReapStaleSessions(TimeSpan.FromDays(sessionRetentionDays));
+
 
                     if (ctx.IsJsonMode)
                     {

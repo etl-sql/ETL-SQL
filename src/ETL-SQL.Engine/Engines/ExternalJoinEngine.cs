@@ -16,7 +16,10 @@ namespace ETL_SQL.Engine.Engines
         private readonly IExecutionContext _context;
         private readonly ILogger _logger;
         private readonly string _tempDir;
-        private const int PARTITION_COUNT = 32;
+
+        private int PartitionCount => _context.ExternalHashPartitions;
+
+
 
         public ExternalJoinEngine(IExecutionContext context, ILogger logger)
         {
@@ -38,7 +41,8 @@ namespace ETL_SQL.Engine.Engines
                 var results = new List<Row>();
 
                 // 2. Join Phase (one partition at a time)
-                for (int i = 0; i < PARTITION_COUNT; i++)
+                for (int i = 0; i < PartitionCount; i++)
+
                 {
                     var leftPath = leftPartitions[i];
                     var rightPath = rightPartitions[i];
@@ -67,10 +71,11 @@ namespace ETL_SQL.Engine.Engines
 
         private async Task<string[]> PartitionStream(IAsyncEnumerable<Row> stream, List<string> keys, string prefix)
         {
-            var paths = new string[PARTITION_COUNT];
-            var writers = new StreamWriter[PARTITION_COUNT];
+            var paths = new string[PartitionCount];
+            var writers = new StreamWriter[PartitionCount];
 
-            for (int i = 0; i < PARTITION_COUNT; i++)
+            for (int i = 0; i < PartitionCount; i++)
+
             {
                 paths[i] = Path.Combine(_tempDir, $"{prefix}_{i}.tmp");
                 writers[i] = new StreamWriter(paths[i]);
@@ -81,7 +86,8 @@ namespace ETL_SQL.Engine.Engines
                 await foreach (var row in stream)
                 {
                     var hash = GetKeyHash(row, keys);
-                    int pIdx = Math.Abs(hash % PARTITION_COUNT);
+                    int pIdx = Math.Abs(hash % PartitionCount);
+
                     var json = System.Text.Json.JsonSerializer.Serialize(row.Columns);
                     var bytes = System.Text.Encoding.UTF8.GetByteCount(json) + 2; // + newline
                     _context.TotalSpilledBytes += bytes;

@@ -165,6 +165,10 @@ namespace ETL_SQL.Engine
         public bool AllowLargeFileOperationCount { get; set; }
         public bool AllowDeepRecursion { get; set; }
 
+        public int JoinSpillThreshold { get; set; } = 100000;
+        public int ExternalHashPartitions { get; set; } = 32;
+
+
         /// <summary>The ID of the currently executing node in this task/context.</summary>
         public Guid? CurrentNodeId
         {

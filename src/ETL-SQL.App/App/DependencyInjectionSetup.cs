@@ -31,6 +31,8 @@ using ETL_SQL.Orchestrator.Storage;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Services;
+using ETL_SQL.Connectors.Shared;
+
 
 
 namespace ETL_SQL.App
@@ -104,6 +106,15 @@ namespace ETL_SQL.App
 
             services.AddSingleton<ETL_SQL.Services.SecurityService>(securityService);
 
+            // ── Connector Retry Policy (CFG-9) ──────────────────────────────────
+            var retryOptions = new ConnectorRetryOptions
+            {
+                MaxAttempts = int.TryParse(configuration["Connectors:Retry:MaxAttempts"], out var rma) ? rma : 3,
+                BaseDelaySeconds = double.TryParse(configuration["Connectors:Retry:BaseDelaySeconds"], out var rbd) ? rbd : 1.0
+            };
+            ConnectorRetryPolicy.Initialize(retryOptions);
+
+
             
             // Connectors
             services.AddSingleton<IConnector, MockDbConnector>();
@@ -148,12 +159,18 @@ namespace ETL_SQL.App
             services.AddSingleton<JobThrottle>();
             services.AddSingleton<SchedulerService>();
 
+            int joinSpillThreshold = int.TryParse(configuration["Engine:JoinSpillThreshold"], out var jst) ? jst : 100000;
+            int externalHashPartitions = int.TryParse(configuration["Engine:ExternalHashPartitions"], out var ehp) ? ehp : 32;
+
             services.AddTransient<Evaluator>(sp => {
                 var evaluator = ActivatorUtilities.CreateInstance<Evaluator>(sp);
                 evaluator.MaxInMemoryBatches = maxInMemoryBatches;
                 evaluator.ForeachPageSize = foreachPageSize;
+                evaluator.JoinSpillThreshold = joinSpillThreshold;
+                evaluator.ExternalHashPartitions = externalHashPartitions;
                 return evaluator;
             });
+
 
             // Map all interfaces back to the same Evaluator instance
             services.AddTransient<IExecutionContext>(sp => sp.GetRequiredService<Evaluator>());

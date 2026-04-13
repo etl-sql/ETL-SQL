@@ -17,7 +17,9 @@ namespace ETL_SQL.Engine.Engines
         private readonly AggregateEngine _inMemoryEngine;
         private readonly ILogger _logger;
         private readonly string _tempDir;
-        private const int PARTITION_COUNT = 32;
+        private int PartitionCount => _context.ExternalHashPartitions;
+
+
 
         public ExternalAggregateEngine(IExecutionContext context, ILogger logger)
         {
@@ -68,14 +70,15 @@ namespace ETL_SQL.Engine.Engines
 
         private async Task<string[]> PartitionStream(IAsyncEnumerable<Row> stream, List<Expression>? groupBy)
         {
-            var paths = new string[PARTITION_COUNT];
-            var writers = new StreamWriter[PARTITION_COUNT];
+            var paths = new string[PartitionCount];
+            var writers = new StreamWriter[PartitionCount];
 
-            for (int i = 0; i < PARTITION_COUNT; i++)
+            for (int i = 0; i < PartitionCount; i++)
             {
                 paths[i] = Path.Combine(_tempDir, $"agg_{i}.tmp");
                 writers[i] = new StreamWriter(paths[i]);
             }
+
 
             try
             {
@@ -90,8 +93,9 @@ namespace ETL_SQL.Engine.Engines
                             var val = await _context.EvaluateValue(g, row);
                             hash = hash * 31 + (val?.GetHashCode() ?? 0);
                         }
-                        pIdx = Math.Abs(hash % PARTITION_COUNT);
+                        pIdx = Math.Abs(hash % PartitionCount);
                     }
+
 
                     var json = System.Text.Json.JsonSerializer.Serialize(row.Columns);
                     var bytes = System.Text.Encoding.UTF8.GetByteCount(json) + 2; // + newline

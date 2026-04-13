@@ -7,18 +7,31 @@ using System.Data.Odbc;
 using Polly;
 using Polly.Retry;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
+
 
 namespace ETL_SQL.Connectors.Shared
 {
     /// <summary>
     /// Provides pre-built Polly resilience pipelines for SQL connector open/execute operations.
-    /// Retries up to 3 times with exponential back-off on transient network and timeout errors.
-    /// Non-transient errors (syntax, permissions, constraint violations) are never retried.
+    /// Retries are configurable via appsettings.json.
     /// </summary>
-    internal static class ConnectorRetryPolicy
+    public static class ConnectorRetryPolicy
+
     {
-        private const int MaxAttempts = 3;
-        private static readonly TimeSpan BaseDelay = TimeSpan.FromSeconds(1);
+        private static ConnectorRetryOptions _options = new();
+
+        /// <summary>
+        /// Initializes the retry policy with custom options from configuration.
+        /// </summary>
+        public static void Initialize(ConnectorRetryOptions options)
+        {
+            _options = options ?? new();
+        }
+
+        private static int MaxAttempts => _options.MaxAttempts;
+        private static TimeSpan BaseDelay => _options.BaseDelay;
+
 
         // ── SqlServer ────────────────────────────────────────────────────────
 

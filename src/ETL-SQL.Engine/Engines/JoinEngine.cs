@@ -51,11 +51,11 @@ namespace ETL_SQL.Engine.Engines
                     var hashKeysRight = new List<string>();
                     bool hasEquality = TryExtractEqualityKeys(join.Condition, leftAlias, rightAlias, hashKeysLeft, hashKeysRight);
 
-                    // HYPER-SCALE: Check for disk-spilling threshold (100k rows)
-                    const int SPILL_THRESHOLD = 100000;
-                    if (hasEquality && (allBufferedRows.Count > SPILL_THRESHOLD || joinRows.Count > SPILL_THRESHOLD))
+                    // HYPER-SCALE: Check for disk-spilling threshold
+                    if (hasEquality && (allBufferedRows.Count > _context.JoinSpillThreshold || joinRows.Count > _context.JoinSpillThreshold))
                     {
                         _logger.WriteLine($"[yellow]HYPER-SCALE: Memory threshold exceeded ({Math.Max(allBufferedRows.Count, joinRows.Count)} rows). Triggering External Disk-Spilling Join.[/]");
+
                         var externalEngine = new ExternalJoinEngine(_context, _logger);
                         allBufferedRows = await externalEngine.ApplyHashJoinExternal(allBufferedRows.ToAsyncEnumerable(), joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight);
                     }
@@ -167,8 +167,9 @@ namespace ETL_SQL.Engine.Engines
 
             if (!hasEquality) return JoinHint.Loop;
             if (rightCount < 20 || (leftCount != -1 && leftCount < 20)) return JoinHint.Loop;
-            if (rightCount > 100000 && leftCount > 100000) return JoinHint.Merge;
+            if (rightCount > _context.JoinSpillThreshold && leftCount > _context.JoinSpillThreshold) return JoinHint.Merge;
             return JoinHint.Hash;
+
         }
 
         public async Task<List<Row>> GetJoinRows(JoinClause join)

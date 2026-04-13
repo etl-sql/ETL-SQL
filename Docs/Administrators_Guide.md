@@ -63,7 +63,21 @@ Core engine behavior is controlled via `appsettings.json` located in the same di
 | `Orchestration:ForeachPageSize` | `10000` | Number of rows to fetch per pagination loop for remote `FOREACH` calls. |
 | `Orchestration:JobThrottle:MaxConcurrentJobs` | `0` | Max simultaneous background jobs. `0` = auto (CPU count / 2). |
 
-### 2.3 Reporting Dashboard
+### 2.3 Engine Tuning & Scaling
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `Engine:JoinSpillThreshold` | `100000` | Number of rows in a join before spilling to disk (CFG-6). |
+| `Engine:ExternalHashPartitions` | `32` | Number of partitions used for disk-spilling joins and aggregates (CFG-5). |
+| `Session:StaleSessionRetentionDays` | `7` | How many days to keep inactive session state before reaping (CFG-10). |
+
+### 2.4 Connector Resilience
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `Connectors:Retry:MaxAttempts` | `3` | Max retry attempts for transient SQL errors (CFG-9). |
+| `Connectors:Retry:BaseDelaySeconds` | `1.0` | Base delay for exponential backoff during retries. |
+
+### 2.5 Reporting Dashboard
+
 | Key | Default | Description |
 | :--- | :--- | :--- |
 | `ReportPlayer:Port` | `5200` | The port for the Report-SQL web dashboard. |

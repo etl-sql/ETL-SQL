@@ -8,16 +8,17 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 *Changes staged on `dev` that have not yet been cut into a release.*
 
-### Added
-- **System Variables**:
-    - `@@ERROR` – Captures the error code of the preceding statement; remains stable during `TRY...CATCH` transitions.
-    - `@@DATASET` – Provides script-level access to report visual data for manual assignment.
-- **Reporting Reliability (Rpt-2)**:
-    - **Atomic Writes**: `SnapshotStore` now uses temporary files and atomic renames to prevent report corruption during crashes.
-    - **Concurrency Control**: Thread-safe serialization of snapshot writes via `SemaphoreSlim`.
-- **Configuration Hardening**:
-    - `ReportPlayer:Port` – Configurable dashboard port in `appsettings.json` (defaults to 5200).
-    - `Security:MaxFileOperationsPerScript` – Configurable runaway protection limit (formerly hardcoded at 100).
+- **Configuration & Scaling (CFG-5, CFG-6, CFG-9, CFG-10)**:
+    - **Connector Resilience**: Externalized retry policies (`MaxAttempts`, `BaseDelay`) to `appsettings.json`.
+    - **Hyper-Scale Join Tuning**: Configurable `JoinSpillThreshold` for disk-spilling behavior.
+    - **Hash Partition Optimization**: Externalized `ExternalHashPartitions` for disk-spilling join/aggregate ops.
+    - **Session Lifecycle**: Configurable `StaleSessionRetentionDays` in `EngineRunner`.
+- **Documentation (DOC-1, DOC-2)**:
+    - **Administrators Guide**: Created a central resource for deployment, configuration, and resource governance.
+    - **Security Documentation**: Hardened `SECURITY.md` with configurable limits and dashboard integrity.
+    - **Orchestrators Guide**: Streamlined with pointers to the new administrator resources.
+- **Testing**: Added verification suites for system variables, scaling configuration, and snapshot safety.
+
     - `Security:MaxRecursiveNestingDepth` – Configurable recursion safety limit (formerly hardcoded at 5).
 - **Documentation**:
     - **[Administrators Guide](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Administrators_Guide.md)** – New central resource for deployment, host-level configuration, and resource governance.
