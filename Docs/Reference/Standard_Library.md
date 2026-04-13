@@ -357,12 +357,20 @@ SELECT IIF(Score >= 90, 'Pass', 'Fail') AS Result FROM #tests;
 | `NEWID()` / `NEWSEQUENTIALID()` | New UUID v7 (time-ordered unique identifier) |
 | `GETDATE()` / `NOW()` | Current system date and time |
 | `SYSDATE` / `CURRENT_TIMESTAMP` | Current date/time (bare identifiers — no parentheses) |
-| `ERROR_MESSAGE()` | Error message inside `CATCH` block |
+| `ERROR_MESSAGE()` | Error message string inside `CATCH` block |
+| `ERROR_NUMBER()` | Error number/code inside `CATCH` block |
+| `ERROR_SEVERITY()` | Error severity level inside `CATCH` block |
+| `ERROR_STATE()` | Error state code inside `CATCH` block |
+| `ERROR_LINE()` | Line number where error occurred |
+| `ENV(variable)` | Value of a host environment variable (see security note below) |
 | `@@TRANCOUNT` | Current transaction nesting level |
 | `@@VERSION` | Full engine version and metadata string |
 | `@@RESULTSETS` | Number of result sets produced by the last statement |
 | `FILE_EXISTS(path)` | `TRUE` if the specified file exists on disk |
 | `DIRECTORY_EXISTS(path)` | `TRUE` if the directory exists on disk |
+
+> [!IMPORTANT]
+> **Security Guardrail (Zero-Trust):** To prevent unauthorized harvesting of host information, `ENV()` can only access environment variables explicitly authorized in the `SecurityService.AllowedEnvVars` allow-list. Accessing an unauthorized variable throws a `SecurityException`.
 
 ---
 
@@ -520,8 +528,26 @@ FROM #products;
 | :--- | :--- | :--- |
 | `FILE_EXISTS` | `FILE_EXISTS(path)` | `TRUE` if the file exists |
 | `DIRECTORY_EXISTS` | `DIRECTORY_EXISTS(path)` | `TRUE` if the directory exists |
-| `FILE_LIST` | `FILE_LIST(path [, recursive])` | Table: `Name`, `Path`, `Extension`, `Size`, `LastModified` |
-| `REMOTE_FILE_LIST` | `REMOTE_FILE_LIST(conn_name [, path])` | Table from SFTP/FTP/Blob: `Name`, `Path`, `Size`, `LastModified` |
+| `FILE_LIST` | `FILE_LIST(path [, recursive])` | Table: `NAME`, `PATH`, `EXTENSION`, `SIZE`, `LASTMODIFIED`, `ISREADONLY`, `CREATIONTIME` |
+| `REMOTE_FILE_LIST` | `REMOTE_FILE_LIST(conn_name [, path])` | Table from SFTP/FTP/Blob: `NAME`, `FULLPATH`, `SIZE`, `LASTMODIFIED`, `ISDIRECTORY` |
+
+#### `FILE_LIST` / `DIRECTORY` Schema
+Returns a table with one row per file found:
+- `NAME` (STRING): The filename with extension (e.g. `data.csv`).
+- `PATH` (STRING): The absolute local path (e.g. `C:\Data\data.csv`).
+- `EXTENSION` (STRING): The file extension including the dot.
+- `SIZE` (DECIMAL): Size in bytes.
+- `LASTMODIFIED` (DATETIME): Last write time.
+- `ISREADONLY` (BIT): Whether the file is read-only.
+- `CREATIONTIME` (DATETIME): Creation time.
+
+#### `REMOTE_FILE_LIST` Schema
+Returns a table from a remote connection (SFTP, FTP, Azure Blob):
+- `NAME` (STRING): The name of the file or directory.
+- `FULLPATH` (STRING): The full remote path.
+- `SIZE` (DECIMAL): Size in bytes.
+- `LASTMODIFIED` (DATETIME): Last modify time provided by the server.
+- `ISDIRECTORY` (BIT): `TRUE` if the entry is a directory.
 
 *Examples:*
 ```sql

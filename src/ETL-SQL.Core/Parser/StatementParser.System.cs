@@ -397,5 +397,30 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
             return new RollbackTransactionStatement(name);
         }
+
+        private Statement ParseRequireVersion()
+        {
+            var startToken = _parser.Previous; // REQUIRE
+            
+            // VERSION keyword is optional: REQUIRE VERSION >= '0.5.0' vs REQUIRE >= '0.5.0'
+            _parser.Match(TokenType.VERSION);
+
+            string op = ">=";
+            if (_parser.Match(TokenType.GREATER_EQUALS)) op = ">=";
+            else if (_parser.Match(TokenType.GREATER_THAN)) op = ">";
+            else if (_parser.Match(TokenType.EQUALS)) op = "=";
+            else throw new SyntaxException("Expected operator (>=, >, or =) after REQUIRE VERSION", _parser.Current.Line, _parser.Current.Column);
+
+            var versionToken = _parser.Consume(TokenType.STRING, "Expected version string literal after REQUIRE operator");
+            var version = versionToken.Value.Trim('\'', '\"');
+
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+
+            return new RequireVersionStatement(op, version)
+            {
+                Line = startToken.Line,
+                Column = startToken.Column
+            };
+        }
     }
 }

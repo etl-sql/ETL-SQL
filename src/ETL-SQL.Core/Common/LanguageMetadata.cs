@@ -54,7 +54,7 @@ namespace ETL_SQL.Common
         {
             "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON", "WHAT_IF", "SYSDATE", "PERCENT", "TIES",
             "CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME",
-            "WAITFOR", "DELAY",
+            "WAIT", "WAITFOR", "DELAY", "UNTIL",
             "WITH", "RECURSIVE", "HASH", "LOOP",
             "IDENTITY", "DEFAULT", "RANGE", "PRECEDING", "FOLLOWING", "UNBOUNDED", "CURRENT",
             "OVER", "PARTITION", "PATH", "ROOT", "AUTO", "RAW", "EXPLICIT", "ELEMENTS",
@@ -73,7 +73,7 @@ namespace ETL_SQL.Common
             "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT", "VERSION",
             "SETS", "SESSION", "CONNECTIONS", "VARIABLES", "LOCAL", "ANALYZE", "TABLES", "COLUMNS", "TAGS", "TAG", "VALUE", "BITS", "ALGORITHM", "PASSPHRASE", "COMMENT",
             "SUBSTRING", "POSITION", "OVERLAY", "EXTRACT", "TRIM", "PLACING", "LEADING", "TRAILING", "BOTH",
-            "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE"
+            "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE", "REQUIRE"
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)

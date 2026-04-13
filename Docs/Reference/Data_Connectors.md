@@ -571,6 +571,16 @@ CREATE CONNECTION data_dir ON DIRECTORY('C:\Data\Incoming') WITH(CREATE=ON);
 SELECT * FROM data_dir;
 ```
 
+#### Result Set Schema
+When querying a `DIRECTORY` connection via `SELECT`, the following columns are returned:
+- `NAME` (STRING): Filename with extension.
+- `PATH` (STRING): Absolute path to the file.
+- `EXTENSION` (STRING): File extension (including dot).
+- `SIZE` (DECIMAL): File size in bytes.
+- `LASTMODIFIED` (DATETIME): Last write time.
+- `ISREADONLY` (BIT): `TRUE` if the file is read-only.
+- `CREATIONTIME` (DATETIME): Time the file was created.
+
 ---
 
 ## 5. Development & Testing: `MOCKDB`

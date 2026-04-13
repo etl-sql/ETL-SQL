@@ -1,22 +1,5 @@
 # ETL-SQL Development Roadmap
 
----
-
-## Documentation Structure (DOC)
-
-Identified during 2026-04-12 documentation structure review against professional project standards (dbt, SQLFluff, Temporal, etc.).
-
-### Architecture Documents (Planned)
-
-- [x] **DOC-4** — **Create `Docs/Architecture/Orchestrator.md`.**
-  Document the `ETL-SQL.Orchestrator` project: `ExecutionSession`, `SchedulerService`, `JobHistoryStore`, `ScriptExecutorAdapter`, session lifecycle (boot → parse → lint → evaluate → dispose), how job concurrency is governed, and how `RUN SCRIPT` nesting / `PARALLEL` blocks are scheduled. Should match the depth of `Architecture/Connectors.md`.
-
-- [x] **DOC-5** — **Create `Docs/Architecture/Reporting.md`.**
-  Document the `ETL-SQL.ReportBuilder`, `ETL-SQL.ReportBuilder.CLI`, and `ETL-SQL.ReportPlayer` projects: the `.rptsql` parse pipeline, `DashboardService`, `SnapshotStore`, visual rendering contracts (`IVisualRenderer`), the parameter/slicer system, and how the report player serves output. Cross-reference `Report_SQL_Guide.md` for the user-facing syntax.
-
-- [X] **DOC-6** — **Expand `Docs/Architecture/Engine.md`** (currently 3.7 KB — still a stub).
-  Fill it out to match the depth of `Connectors.md` and `Presentation.md`: full project dependency graph, Lexer → Parser → AST → Evaluator dispatch loop details, `#temp` table scoping rules, variable lifetime, pushdown decision logic, and the linting pipeline. This is the onboarding doc for engine contributors.
-
 ## Language & Engine Feature Gaps (ENG)
 
 Identified during 2026-04-12 documentation review. Each item was verified against the source — these are confirmed missing from the engine, not just undocumented.
@@ -56,10 +39,10 @@ Identified during 2026-04-12 documentation review. Each item was verified agains
 
 ### Nice-to-Have / Quality of Life
 
-- [ ] **ENG-8** — **`REQUIRE VERSION >= 'x.y.z'` script directive.**
-  Allows a script to declare the minimum engine version it requires. If the running engine is older, execution halts with a clear error before any statements run. Prevents confusing runtime failures when a script uses syntax from a newer engine.
-  - Syntax: `REQUIRE VERSION >= '2.0.0';` (first statement in a script)
-  - Files: New `RequireVersionStatement` AST node, check in `Evaluator.Evaluate()` before the dispatch loop.
+- [x] **ENG-8** — **`REQUIRE VERSION >= 'x.y.z'` script directive.**
+  Implemented `REQUIRE VERSION` pre-flight check. Scripts can now declare minimum engine version requirements.
+  - Files: `TokenType.cs`, `Ast.cs`, `StatementParser.cs`, `RequireVersionStatementHandler.cs`.
+  - Doc: Added to `Grammar.md` Section 1.7.
 
 - [x] **ENG-9** — **`SHOW VARIABLES` — display all current session `@` variables.**
   Implemented `SHOW VARIABLES` and `SHOW LOCAL VARIABLES` with support for `INTO #temp`. Masks `@secret` variables marked with `PASSWORD` keyword unless `SET SHOW_PASSWORD ON` is active.
@@ -223,3 +206,138 @@ These items were identified during the 2026-04-12 security review of `SECURITY.m
 - [ ] **SEC-7** — **`IsInternalOperation` bypass is not guarded against accidental leakage.**
   `IsInternalOperation = true` disables the entire sandbox. Wrap every internal operation in a `try/finally` that resets it to `false`. Add a unit test asserting that `ValidatePath()` against a protected path still throws immediately after a legitimate internal operation completes.
   - Files: `SecurityService.cs`, `SessionManager.cs` (or wherever the flag is set).
+
+---
+
+## Code Review Findings — 2026-04-12 Pass 2
+
+Identified by automated deep review of the current codebase. Verified against source. Ordered by severity within category.
+
+### Bugs
+
+- [ ] **CR-B1** — **External join fallback silently discards the first 100k rows.**
+  `SelectStatementHandler` breaks out of the source-read loop after 100,001 rows, then passes the *already-partially-consumed* `inputStream` iterator to `ApplyHashJoinExternal`. The first 100k buffered rows are never fed into the join — they are dropped. The right-side argument is also `Enumerable.Empty`, so the join always produces zero results. A `// This is a placeholder` comment confirms the path is incomplete but it is reachable in production.
+  - **Severity:** High
+  - Files: `src/ETL-SQL.Engine/Handlers/SelectStatementHandler.cs` ~line 435
+  - Fix: Either complete the external join using both the buffered rows and the remaining stream, or throw `ExecutionException("Large-scale join not yet supported")` to fail fast instead of silently returning empty results.
+
+- [ ] **CR-B2** — **External sort crashes on duplicate sort-key values.**
+  `ExternalSortEngine.MergeChunks` uses a `SortedList` keyed on the comparison tuple. `SortedList` does not allow duplicate keys — when two rows from different chunks compare equal, `heap.Add()` throws `ArgumentException`. Sorting by any low-cardinality column (status, category, boolean) triggers this crash reliably.
+  - **Severity:** High
+  - Files: `src/ETL-SQL.Engine/Engines/ExternalSortEngine.cs` ~line 129
+  - Fix: Replace `SortedList` with a min-heap or append a tie-breaker (chunk index) to the key so equal-priority entries can coexist.
+
+- [ ] **CR-B3** — **StreamWriter cleanup loop aborts on first flush failure, leaking file handles.**
+  `ExternalAggregateEngine.PartitionStream` closes 32 `StreamWriter`s in a `foreach` with no per-writer try/catch. If any single `Flush()` throws (e.g., disk full), the remaining writers in the loop are never closed, leaking up to 31 file handles and leaving temp files locked until process exit.
+  - **Severity:** High
+  - Files: `src/ETL-SQL.Engine/Engines/ExternalAggregateEngine.cs` ~line 104
+  - Fix: Wrap each `w.Flush(); w.Close()` in a per-writer `try/catch` that discards the exception, so all writers are always released.
+
+- [ ] **CR-B4** — **`ExternalJoinEngine.ReadPartition` deserializes numbers as `long` instead of `decimal`, causing missed join matches.**
+  `ExternalJoinEngine` deserializes spilled rows as `Dictionary<string, object?>`, which causes System.Text.Json to box numbers as `JsonElement`. Its `UnwrapJsonValue` then extracts them as `long` (via `TryGetInt64`). The main engine uses `decimal` everywhere. Join key equality between a `long` from the spilled right side and a `decimal` from the left stream fails silently, producing missed matches for any join on a numeric key.
+  - **Severity:** Medium
+  - Files: `src/ETL-SQL.Engine/Engines/ExternalJoinEngine.cs` ~line 114
+  - Fix: Deserialize as `Dictionary<string, JsonElement>` and apply `JsonElementToValue` (same pattern as the `ExternalAggregateEngine` fix) to normalise numbers to `decimal`.
+
+- [ ] **CR-B5** — **Date values stored as strings are not reconverted to `DateTime` after aggregate spill/read.**
+  `ExternalAggregateEngine.JsonElementToValue` returns dates stored in spilled JSON as plain `string` (they round-trip through `JsonValueKind.String`). When `AggregateEngine` evaluates `MIN`/`MAX` on a date column after a spill, it performs string comparison instead of date ordering, producing wrong results for dates that sort differently as strings (e.g., `"2025-01-10"` < `"2025-09-01"` by string but not in all locales).
+  - **Severity:** Medium
+  - Files: `src/ETL-SQL.Engine/Engines/ExternalAggregateEngine.cs` ~line 143
+  - Fix: In the `JsonValueKind.String` branch of `JsonElementToValue`, attempt `DateTime.TryParse` and return a `DateTime` when successful.
+
+- [ ] **CR-B6** — **`BulkInsertStatementHandler` MAXERRORS condition allows double the error budget.**
+  The outer fallback condition `if (maxErrors > 0 || errorCount < maxErrors)` short-circuits on `maxErrors > 0`, entering the row-by-row fallback regardless of whether `errorCount` has already reached `maxErrors`. This allows up to `2 × maxErrors` rows to be skipped before aborting.
+  - **Severity:** Medium
+  - Files: `src/ETL-SQL.Engine/Handlers/BulkInsertStatementHandler.cs` ~line 165
+  - Fix: Change the condition to `if (errorCount < maxErrors)` — remove the `maxErrors > 0 ||` clause.
+
+- [ ] **CR-B7** — **`Log()` method writes to `Messages` list without the lock used by the `OnMessage` handler.**
+  The constructor's `OnMessage` handler acquires `_messagesLock` before writing to `Messages`. The public `Log(string, ConsoleColor)` method writes to the same list without acquiring the lock. Concurrent calls produce a data race.
+  - **Severity:** Low
+  - Files: `src/ETL-SQL.Engine/Evaluator.cs` ~line 629
+  - Fix: Add `lock (_messagesLock)` around the `Messages.Add` / trim logic in `Log()`.
+
+### Security
+
+- [ ] **CR-S1** — **Dashboard parameter values are injected as ETL-SQL source text (script injection).**
+  `DashboardService.BuildParameterHeader` escapes single quotes in user-supplied parameter values and embeds them in `DECLARE @name = 'value';` statements that are prepended to the script source. Single-quote escaping prevents string literals from breaking out, but it does not prevent statement injection — a value of `'; DROP TABLE #data; DECLARE @x = '` will parse as three separate statements. Any user who can POST to `/api/parameter` can execute arbitrary ETL-SQL statements.
+  - **Severity:** High
+  - Files: `src/ETL-SQL.ReportPlayer/DashboardService.cs` ~line 101
+  - Fix: Pass parameters directly via `evaluator.DeclareVariable(name, value, ...)` before calling `evaluator.Evaluate(script)`, bypassing the parser entirely for parameter injection.
+
+- [ ] **CR-S2** — **Table names are interpolated unquoted into SQL pushdown strings.**
+  `InsertStatementHandler` builds `INSERT INTO {tableName}` by interpolating `GetSqlTableName()` directly into a SQL string without identifier quoting. A table name containing SQL metacharacters (e.g., from a user-supplied variable) produces an injection vector in pushdown queries.
+  - **Severity:** Medium
+  - Files: `src/ETL-SQL.Engine/Handlers/InsertStatementHandler.cs` ~line 92
+  - Fix: Apply dialect-appropriate identifier quoting in `GetSqlTableName` (`[name]` for SQL Server, `"name"` for Postgres/Oracle).
+
+- [ ] **CR-S3** — **Script directory added to `ApprovedSafeZones` without system-path validation.**
+  `EngineRunner` unconditionally adds the script's containing directory to `SecurityService.ApprovedSafeZones`. If the script path resolves to a system directory (e.g., the working directory is `/etc` or `C:\Windows`), the entire directory becomes an approved override zone.
+  - **Severity:** Medium
+  - Files: `src/ETL-SQL.App/App/EngineRunner.cs` ~line 183
+  - Fix: Validate that `scriptDir` is not under common system paths (or is under a configured workspace root) before adding to `ApprovedSafeZones`.
+
+- [ ] **CR-S4** — **`CredentialLeakRule` does not scan pushdown SQL text or track variable taint.**
+  The linter rule detects credential names in `PRINT`/`SEND EMAIL` but does not scan the raw `SqlText` of `EXECUTE PUSHDOWN` statements. It also has no taint propagation — `SET @conn = @password` does not mark `@conn` as sensitive.
+  - **Severity:** Low
+  - Files: `src/ETL-SQL.Core/Linting/Rules/CredentialLeakRule.cs` ~line 65
+  - Fix: Extend rule to scan pushdown `SqlText` for credential-name patterns; add single-step taint tracking for assignment statements.
+
+### Concurrency & Resource Management
+
+- [ ] **CR-C1** — **`SessionStateManager` file I/O is non-atomic and unlocked.**
+  `SaveSession` writes two files (`session.json`, recovery manifest) with bare `File.WriteAllText` — no locking and no atomic write. Concurrent saves for the same session ID (e.g., multi-request web scenario) interleave writes, corrupting both files. `ReapStaleSessions` can also delete files while `LoadSession` is reading them.
+  - **Severity:** Medium
+  - Files: `src/ETL-SQL.Engine/Services/SessionStateManager.cs` ~line 165
+  - Fix: Serialize per-session operations through a `SemaphoreSlim` keyed by session ID; write via temp-file-then-rename for atomicity.
+
+- [ ] **CR-C2** — **Chunk `StreamReader`s in `ExternalSortEngine.MergeChunks` are not disposed on exception.**
+  All chunk readers are opened before the merge loop. If the loop throws (e.g., the duplicate-key crash from CR-B2), execution jumps past the `foreach (var rd in readers) rd.Dispose()` cleanup at the end of the method, leaking all open file handles.
+  - **Severity:** Medium
+  - Files: `src/ETL-SQL.Engine/Engines/ExternalSortEngine.cs` ~line 118
+  - Fix: Wrap the readers list in a `try/finally` that disposes all readers regardless of outcome.
+
+- [ ] **CR-C3** — **Dead static `_random` field in `Evaluator` is non-thread-safe.**
+  `Evaluator` declares `private static readonly Random _random = new Random()`. `System.Random` is not thread-safe under concurrent calls from multiple `Evaluator` instances. The field appears to be unused (no `_random.Next()` call exists anywhere), but its `static` presence is a maintenance trap — any future contributor who uses it will introduce a threading bug.
+  - **Severity:** Low
+  - Files: `src/ETL-SQL.Engine/Evaluator.cs` ~line 49
+  - Fix: Remove the unused field; use `Random.Shared` (thread-safe in .NET 6+) if random numbers are ever needed.
+
+- [ ] **CR-C4** — **`EXPLAIN ANALYZE` mutates shared context flags and does not update `LastResultSets`.**
+  `ExplainStatementHandler` sets `context.IsProfiling = true` and `context.RedirectOutput = true` on the shared `Evaluator` instance before running the inner query. These flags affect all concurrent readers of the context during execution. The `finally` block restores them, but the analyzed result is never appended to `context.LastResultSets`, so `@@RESULTSETS` and any test checking `LastResultSets` see stale data.
+  - **Severity:** Low
+  - Files: `src/ETL-SQL.Engine/Handlers/ExplainStatementHandler.cs` ~line 46
+  - Fix: Fork a child context for the `ANALYZE` inner execution; append the result table to `LastResultSets` on completion.
+
+### Test Gaps
+
+- [ ] **CR-T1** — **No test for HAVING clause through the streaming aggregate path.**
+  `SpillToDiskTests.cs` has no test that exercises `HAVING` with the `streamAggregate` path (GROUP BY with no joins, over > 100k rows). The HAVING clause is passed through to `ExternalAggregateEngine` but this combination is completely untested.
+  - Files: `tests/ETL-SQL.Tests/Performance/SpillToDiskTests.cs`
+  - Fix: Add `SELECT category, SUM(value) AS total FROM #large GROUP BY category HAVING SUM(value) > X` test over 150k rows.
+
+- [ ] **CR-T2** — **External sort test data uses unique keys only — duplicate-key crash (CR-B2) is never triggered.**
+  All `SpillToDiskTests` sort by `Id = i` (unique sequential integers). The `SortedList` duplicate-key crash only occurs with repeated sort-key values, so CR-B2 is invisible to the test suite.
+  - Files: `tests/ETL-SQL.Tests/Performance/SpillToDiskTests.cs`
+  - Fix: Add `ORDER BY Val` test where `Val = i % 100` across 250k rows — this exposes the crash immediately.
+
+- [ ] **CR-T3** — **`EXPLAIN ANALYZE`, `ShowVariablesStatementHandler`, and Report-SQL handlers have no dedicated tests.**
+  No test files exist for the `EXPLAIN ANALYZE` path, `ShowVariablesStatementHandler`, `CreateVisualStatementHandler`, `CreatePageStatementHandler`, or `CreateDatasetStatementHandler`. New handlers added in recent sessions have no unit or smoke test coverage.
+  - Fix: Add at minimum one smoke test per new handler verifying the observable side-effect (result schema, registered definitions, or error on bad input).
+
+### Quality
+
+- [ ] **CR-Q1** — **`JsonFunctions.cs` uses bare `catch {}` blocks that swallow fatal exceptions.**
+  Multiple `catch { return null; }` and `catch { return 0m; }` blocks in JSON scalar functions catch all exceptions, including `OutOfMemoryException` and `StackOverflowException`.
+  - Files: `src/ETL-SQL.Engine/Functions/JsonFunctions.cs` lines 69, 93, 116, 131, 150, 209, 248
+  - Fix: Replace with `catch (Exception ex) when (ex is not OutOfMemoryException)` to allow fatal exceptions to propagate.
+
+- [ ] **CR-Q2** — **`ExplainStatementHandler` detects `DISTINCT` via string-matching regenerated SQL instead of the AST flag.**
+  Line ~239 uses `select.ToSql().Contains("DISTINCT")` to decide whether to show a Distinct operator in the plan. If `ToSql()` serializes differently, the plan silently omits the step.
+  - Files: `src/ETL-SQL.Engine/Handlers/ExplainStatementHandler.cs` ~line 239
+  - Fix: Use `select.IsDistinct` (AST property) directly.
+
+- [ ] **CR-Q3** — **Engine.md does not distinguish streaming aggregate (always external) from buffered aggregate (external only at 100k rows).**
+  The architecture doc implies both paths use the same threshold. The streaming aggregate path bypasses the threshold check entirely and always uses `ExternalAggregateEngine` regardless of row count, which is not documented.
+  - Files: `Docs/Architecture/Engine.md`
+  - Fix: Add a note clarifying that `streamAggregate = true` routes directly to `ExternalAggregateEngine` unconditionally, while the legacy buffered path uses it only after 100k rows are accumulated.

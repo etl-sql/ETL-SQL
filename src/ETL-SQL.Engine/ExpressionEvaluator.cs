@@ -302,6 +302,7 @@ namespace ETL_SQL.Engine
             if (v.Name.Equals("@@TRANCOUNT", StringComparison.OrdinalIgnoreCase)) return _context.TranCount;
             if (v.Name.Equals("@@RESULTSETS", StringComparison.OrdinalIgnoreCase)) return _context.LastResultSets.Count;
             if (v.Name.Equals("@@VERSION", StringComparison.OrdinalIgnoreCase)) return LanguageMetadata.GetFullVersionString();
+            if (v.Name.Equals("@@ROWCOUNT", StringComparison.OrdinalIgnoreCase)) return _context.RowsProcessed;
             
             if (!_context.ContainsVariable(v.Name))
                 throw new ExecutionException($"Undeclared: {v.Name}");
@@ -320,10 +321,10 @@ namespace ETL_SQL.Engine
             if (val is IDictionary<string, object?> dict && dict.TryGetValue(ma.MemberName, out var dVal)) return dVal;
             
             // Handle reflection for properties/fields
-            var prop = val.GetType().GetProperty(ma.MemberName);
+            var prop = val.GetType().GetProperty(ma.MemberName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
             if (prop != null) return prop.GetValue(val);
             
-            var field = val.GetType().GetField(ma.MemberName);
+            var field = val.GetType().GetField(ma.MemberName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
             if (field != null) return field.GetValue(val);
 
             return null;

@@ -50,6 +50,24 @@ namespace ETL_SQL.Services
         public bool IsTestMode { get; set; }
 
         /// <summary>
+        /// Explicit list of environment variable names that scripts are authorized to read via ENV().
+        /// Empty by default. Use '*' to allow all (not recommended for multi-tenant envs).
+        /// </summary>
+        public List<string> AllowedEnvVars { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Validates that an environment variable is safe to read.
+        /// </summary>
+        public void ValidateEnvVar(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return;
+            if (AllowedEnvVars.Contains("*")) return;
+            if (AllowedEnvVars.Contains(name)) return;
+
+            throw new SecurityException($"Unauthorized access to environment variable: {name}. Add it to AllowedEnvVars to enable access.");
+        }
+
+        /// <summary>
         /// Validates that a path is safe to access. Checks for root access, protected directories, and system paths.
         /// </summary>
         public void ValidatePath(string path)

@@ -102,6 +102,22 @@ BEGIN
     @schema   = 'dbo';
     SET WITH_PROMPT ON;   -- Prompts for confirmation in interactive mode
 END
+```
+
+### 1.7 `REQUIRE VERSION`
+Ensures the script is running on a minimum version of the engine. If the condition is not met, the engine throws an error immediately before executing any further statements.
+
+```sql
+REQUIRE VERSION >= '0.5.0';
+-- Optional keyword 'VERSION':
+REQUIRE >= '0.5.0';
+```
+
+Supported operators: `=`, `>`, `>=`.
+
+---
+
+## 2. Control Flow
 
 -- Apply the DEV set
 USE SETS !DEV;
@@ -112,6 +128,45 @@ DROP SETS IF EXISTS !STAGING;
 
 > [!TIP]
 > `SET WITH_PROMPT ON` inside a `CREATE SETS` block causes `USE SETS` to ask for confirmation before applying in interactive mode. In batch or scripted mode the set is applied automatically.
+
+### 1.8 Member Access (Dot Notation)
+The engine supports accessing members of complex objects using the `.` operator. This is used extensively with loops and metadata functions. All member lookups are **case-insensitive**.
+
+**Resolution Order:**
+1. **Row Columns**: If the variable is a `Row` (e.g., from a `SELECT` or `FILE_LIST`), the engine looks for a column matching the name.
+2. **JSON Fields**: If the variable contains a JSON object, the engine extracts the field with that name.
+3. **C# Properties/Fields**: If the variable is a system object (like a `FileInfo`), the engine uses reflection to access public properties.
+
+#### Known Object Schemas
+While many objects are dynamic, the following standard functions return objects with fixed, reliable property sets:
+
+| Object Context | Member Property | Description |
+| :--- | :--- | :--- |
+| **Local File** (`FILE_LIST`) | `.NAME` | The name of the file (e.g., `data.csv`) |
+| | `.PATH` | The absolute path to the file |
+| | `.EXTENSION` | The file extension (including the dot) |
+| | `.SIZE` | File size in bytes |
+| | `.LASTMODIFIED` | Datetime of the last write |
+| | `.ISREADONLY` | Boolean indicator |
+| | `.CREATIONTIME` | Datetime the file was created |
+| **Remote File** (`REMOTE_FILE_LIST`) | `.NAME` | Name of the remote file/directory |
+| | `.FULLPATH` | Full remote path |
+| | `.SIZE` | Size in bytes |
+| | `.LASTMODIFIED` | Last modified time from remote server |
+| | `.ISDIRECTORY` | Boolean indicator |
+| **Docker Helper** | `.CONNECTION_STRING` | Host-mapped connection string for a container |
+
+*Example using FOREACH with files:*
+```sql
+DECLARE @Drops = FILE_LIST('C:\Data\Drops');
+
+FOREACH @File IN @Drops
+BEGIN
+    PRINT 'Processing ' + @File.NAME + ' (' + @File.SIZE + ' bytes)';
+    -- Use .PATH for the source of a COPY or SELECT
+    COPY FILE @File.PATH TO 'C:\Archive\' + @File.NAME;
+END
+```
 
 ---
 
@@ -265,11 +320,17 @@ Pauses execution for a fixed duration or until a specific clock time.
 | :--- | :--- |
 | `WAITFOR DELAY 'hh:mm:ss[.fff]';` | Pause for a fixed duration. Supports milliseconds via `.fff`. |
 | `WAITFOR TIME 'hh:mm:ss[.fff]';` | Pause until the specified time. If the time has already passed today, waits until **tomorrow**. |
+| `WAITFOR (condition);` | Polls the condition (expression or subquery) every 1 second until it evaluates to true or returns rows. |
+| `WAIT UNTIL condition;` | Cleaner alternative to `WAITFOR (condition)`. |
 
 ```sql
 WAITFOR DELAY '00:00:05';          -- 5 seconds
 WAITFOR DELAY '00:00:00.500';      -- 500 milliseconds
 WAITFOR TIME '23:30:00';           -- Until 11:30 PM
+
+-- Polling for data
+WAITFOR (SELECT 1 FROM incoming_queue WHERE status = 'READY');
+WAIT UNTIL EXIST (SELECT 1 FROM #batch_done);
 
 -- Dynamic delay using a variable
 DECLARE @pause = '00:00:02';
@@ -747,12 +808,16 @@ SHOW CONNECTIONS [INTO #temp];                   -- Active connections
 SHOW VERSION [INTO #temp];                       -- Engine version and metadata
 SHOW TABLES [ON conn] [INTO #temp];              -- Tables in a connection
 SHOW COLUMNS FOR conn.TableName [INTO #temp];    -- Columns for a table
+SHOW VARIABLES [INTO #temp];                     -- All session variables
+SHOW LOCAL VARIABLES [INTO #temp];               -- Variables in the current local scope (e.g. inside procedure)
 SHOW PROFILE [INTO #benchmarks];                 -- Last profiling results
 
 EXPLAIN SELECT * FROM conn.Orders WHERE status = 'Open';   -- Execution plan
 LINT 'scripts/nightly_load.etlsql';                        -- Static analysis
 
 HELP CONNECTION MSSQL;    -- Connector-specific option help
+HELP VARIABLES;           -- List all @@ system variables
+```
 ```
 
 ### 14.1 Script Metadata Headers

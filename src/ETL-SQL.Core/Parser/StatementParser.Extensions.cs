@@ -641,6 +641,30 @@ namespace ETL_SQL.Core.Parser
         private Statement ParseWaitFor()
         {
             var startToken = _parser.Previous;
+            if (_parser.Match(TokenType.LPAREN))
+            {
+                if (_parser.Match(TokenType.DELAY))
+                {
+                    var e1 = _parser.ParseExpression();
+                    _parser.Consume(TokenType.RPAREN, "Expected ')'");
+                    if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                    return new WaitForStatement(e1, WaitType.Delay) { Line = startToken.Line, Column = startToken.Column };
+                }
+                if (_parser.Match(TokenType.TIME))
+                {
+                    var e2 = _parser.ParseExpression();
+                    _parser.Consume(TokenType.RPAREN, "Expected ')'");
+                    if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                    return new WaitForStatement(e2, WaitType.Time) { Line = startToken.Line, Column = startToken.Column };
+                }
+                
+                // It's a polling condition: WAITFOR (SELECT ...) or WAITFOR (@x = 1)
+                var condition = _parser.ParseExpression();
+                _parser.Consume(TokenType.RPAREN, "Expected ')' after WAITFOR condition");
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                return new WaitForStatement(condition, WaitType.Until) { Line = startToken.Line, Column = startToken.Column };
+            }
+
             WaitType type = WaitType.Delay;
             if (_parser.Match(TokenType.TIME))
             {
@@ -648,12 +672,21 @@ namespace ETL_SQL.Core.Parser
             }
             else
             {
-                _parser.Consume(TokenType.DELAY, "Expected DELAY or TIME after WAITFOR");
+                _parser.Consume(TokenType.DELAY, "Expected DELAY, TIME, or (condition) after WAITFOR");
             }
             
             var expr = _parser.ParseExpression();
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
             return new WaitForStatement(expr, type) { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        private Statement ParseWait()
+        {
+            var startToken = _parser.Previous;
+            _parser.Consume(TokenType.UNTIL, "Expected UNTIL after WAIT");
+            var condition = _parser.ParseExpression();
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+            return new WaitForStatement(condition, WaitType.Until) { Line = startToken.Line, Column = startToken.Column };
         }
 
         private Statement ParseExecute()

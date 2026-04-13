@@ -75,6 +75,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.MERGE)) return ParseMerge();
             if (_parser.Match(TokenType.PRINT)) return ParsePrint();
             if (_parser.Match(TokenType.WAITFOR)) return ParseWaitFor();
+            if (_parser.Match(TokenType.WAIT)) return ParseWait();
             if (_parser.Match(TokenType.RAISEERROR)) return ParseRaiseError();
             if (_parser.Match(TokenType.EXEC) || _parser.Match(TokenType.EXECUTE)) return ParseExecute();
             if (_parser.Match(TokenType.PARALLEL)) return ParseParallel();
@@ -87,6 +88,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.BULK)) return ParseBulkInsert();
             if (_parser.Match(TokenType.LINEAGE)) return ParseLineage();
             if (_parser.Match(TokenType.LINT)) return ParseLint();
+            if (_parser.Match(TokenType.REQUIRE)) return ParseRequireVersion();
 
             if (_parser.Match(TokenType.SEND_EMAIL))
             {

@@ -11,9 +11,9 @@ This document describes the internal mechanics of the `ETL-SQL.Orchestrator` pro
 ```
 ┌────────────────────────────────────────────────────────────────────┐
 │                      Host layer                                    │
-│  ETL-SQL.App (CLI/TUI) ◄──────────────────────────────────────┐    │
+│  ETL-SQL.App (CLI/TUI) ◄────────────────────────────────────────┐  │
 │  ETL-SQL-OrchestratorService (background Windows Service/daemon)│  │
-└──────────────────────────┬────────────────────────────────────┘    │
+└──────────────────────────┬──────────────────────────────────────┘  │
                            │ triggers via                            │
                            ▼                                         │
 ┌────────────────────────────────────────────────────────────────────┤
@@ -23,25 +23,25 @@ This document describes the internal mechanics of the `ETL-SQL.Orchestrator` pro
 │  │  SchedulerService                                            │  │
 │  │  • Polls SQLiteJobHistoryStore every 30 seconds              │  │
 │  │  • Finds active jobs whose NextRun ≤ now                     │  │
-│  │  • Acquires concurrency slot via JobThrottle                  │  │
+│  │  • Acquires concurrency slot via JobThrottle                 │  │
 │  │  • Delegates to IScriptExecutor                              │  │
 │  └──────────────────────────────────────────────────────────────┘  │
 │                           │                                        │
-│            ┌──────────────┴──────────────────┐                    │
-│            ▼                                 ▼                    │
-│  ┌────────────────────┐        ┌─────────────────────────────┐    │
-│  │ ScriptExecutorAdapter│      │ ProcessJobExecutor           │    │
-│  │ (default / in-proc)│       │ (optional / out-of-proc)     │    │
-│  │                    │       │                              │    │
-│  │ wraps              │       │ spawns ETL-SQL.exe run <f>   │    │
-│  │ ExecutionSession   │       │ --json as child process      │    │
-│  └────────────────────┘        └─────────────────────────────┘    │
+│            ┌──────────────┴──────────────────┐                     │
+│            ▼                                 ▼                     │
+│  ┌────────────────────┐        ┌─────────────────────────────┐     │
+│  │ ScriptExecutorAdapter│      │ ProcessJobExecutor          │     │
+│  │ (default / in-proc)│       │ (optional / out-of-proc)     │     │
+│  │                    │       │                              │     │
+│  │ wraps              │       │ spawns ETL-SQL.exe run <f>   │     │
+│  │ ExecutionSession   │       │ --json as child process      │     │
+│  └────────────────────┘        └─────────────────────────────┘     │
 │            │                                                       │
 │            ▼                                                       │
 │  ┌────────────────────────────────────────────────────────────┐    │
 │  │  ExecutionSession                                          │    │
-│  │  1. Lex  →  2. Parse  →  3. Lint  →  4. Evaluate          │    │
-│  │  Persistent connections & variables across IDE F5 runs      │    │
+│  │  1. Lex  →  2. Parse  →  3. Lint  →  4. Evaluate           │    │
+│  │  Persistent connections & variables across IDE F5 runs     │    │
 │  └────────────────────────────────────────────────────────────┘    │
 │            │                                                       │
 │            ▼                                                       │
@@ -109,7 +109,7 @@ External NuGet packages:
 │    _persistentVariables   → variables from run N available      │
 │                                                                 │
 │  ─────────────────────────────────────────────────────────      │
-│  Session end (TUI exit / IDE close):                             │
+│  Session end (TUI exit / IDE close):                            │
 │   DisposeAsync()                                                │
 │    → disposes _lastEvaluator (closes any open reader/writer)    │
 │    → disposes all _persistentConnections (releases ADO.NET      │

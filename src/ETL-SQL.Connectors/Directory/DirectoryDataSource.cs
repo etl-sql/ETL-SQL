@@ -25,7 +25,7 @@ namespace ETL_SQL.Connectors.Directory
             _logger = logger ?? NullLogger.Instance;
         }
 
-        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "FilePath", "FileName", "Extension", "Size", "CreationTime", "LastWriteTime" });
+        public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "Path", "Extension", "Size", "LastModified", "IsReadOnly", "CreationTime" });
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize)
         {
@@ -34,17 +34,19 @@ namespace ETL_SQL.Connectors.Directory
             var files = System.IO.Directory.GetFiles(Path);
             int count = 0;
             var currentBatch = new DataTable();
-            currentBatch.SetColumns(new[] { "FileName", "Extension", "Size", "LastModified", "FullPath" });
+            currentBatch.SetColumns(await GetColumnsAsync());
 
             foreach (var file in files)
             {
                 var info = new FileInfo(file);
                 var row = new Row();
-                row["FileName"] = info.Name;
+                row["Name"] = info.Name;
+                row["Path"] = info.FullName;
                 row["Extension"] = info.Extension;
-                row["Size"] = info.Length;
+                row["Size"] = (decimal)info.Length;
                 row["LastModified"] = info.LastWriteTime;
                 row["IsReadOnly"] = info.IsReadOnly;
+                row["CreationTime"] = info.CreationTime;
                 
                 await currentBatch.AddRowAsync(row);
                 count++;
@@ -53,7 +55,7 @@ namespace ETL_SQL.Connectors.Directory
                 {
                     yield return currentBatch;
                     currentBatch = new DataTable();
-                    currentBatch.ColumnNames.AddRange(await GetColumnsAsync());
+                    currentBatch.SetColumns(await GetColumnsAsync());
                     count = 0;
                 }
             }

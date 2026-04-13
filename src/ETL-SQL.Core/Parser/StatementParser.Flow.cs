@@ -190,13 +190,34 @@ namespace ETL_SQL.Core.Parser
 
         private Statement ParseThrow()
         {
+            Expression? errorNumber = null;
             Expression? message = null;
+            Expression? state = null;
+
             if (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.EOF && _parser.Current.Type != TokenType.END && _parser.Current.Type != TokenType.CATCH)
             {
-                message = _parser.ParseExpression();
+                // SQL Server THROW syntax: THROW [ (error_number, message, state) ]
+                // It can be a bare expression (old behavior) or 3 comma-separated expressions.
+                
+                errorNumber = _parser.ParseExpression();
+
+                if (_parser.Match(TokenType.COMMA))
+                {
+                    message = _parser.ParseExpression();
+                    _parser.Consume(TokenType.COMMA, "Expected comma after THROW message expression");
+                    state = _parser.ParseExpression();
+                }
+                else
+                {
+                    // If only one expression is provided, we treat it as the message for backward compatibility/simplicity
+                    // though strictly T-SQL requires 0 or 3.
+                    message = errorNumber;
+                    errorNumber = null;
+                }
             }
+            
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
-            return new ThrowStatement(message);
+            return new ThrowStatement(errorNumber, message, state);
         }
     }
 }

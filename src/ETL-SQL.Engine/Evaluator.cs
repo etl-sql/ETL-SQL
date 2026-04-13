@@ -79,6 +79,7 @@ namespace ETL_SQL.Engine
         public int MaxRecursiveDepth { get; set; } = 10000;
         public int CurrentRecursiveDepth { get; set; } = 0;
         public string? LastIndexUsedName { get; set; }
+        public ErrorInfo? LastError { get; set; }
         
         /// <summary>Size of row batches used during streaming operations.</summary>
         public int BatchSize { get; set; } = 10000;
@@ -204,6 +205,9 @@ namespace ETL_SQL.Engine
         
         /// <summary>Cache for scalar subquery results to avoid redundant execution.</summary>
         public Dictionary<Statement, object?> SubqueryCache => _subqueryCache;
+        
+        /// <summary>Token used to cancel long-running operations in this context.</summary>
+        public System.Threading.CancellationToken CancellationToken { get; private set; } = System.Threading.CancellationToken.None;
         
         /// <summary>Stack of row contexts for correlated subquery resolution.</summary>
         public Stack<Row> OuterRowStack => _outerRowStack;
@@ -358,6 +362,7 @@ namespace ETL_SQL.Engine
                     LineageTracker.GlobalMetadata["engine_version"] = LanguageMetadata.EngineVersion;
                 }
 
+                CancellationToken = cancellationToken;
                 foreach (var statement in script.Statements)
                 {
                     cancellationToken.ThrowIfCancellationRequested();

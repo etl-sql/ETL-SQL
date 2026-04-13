@@ -115,6 +115,21 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("MAX", Max, "MAX(expression): Returns the maximum value in a collection.");
             registry.RegisterWithHelp("STDDEV", StdDev, "STDDEV(expression): Returns the statistical standard deviation.");
             registry.RegisterWithHelp("VAR", Variance, "VAR(expression): Returns the statistical variance.");
+
+            // ENG-5 - Error Functions
+            registry.RegisterWithHelp("ERROR_NUMBER", (args, ctx) => ctx.LastError?.Number ?? 0, "ERROR_NUMBER(): Returns the error number of the error that caused the CATCH block to run.");
+            registry.RegisterWithHelp("ERROR_MESSAGE", (args, ctx) => ctx.LastError?.Message, "ERROR_MESSAGE(): Returns the message text of the error that caused the CATCH block to run.");
+            registry.RegisterWithHelp("ERROR_SEVERITY", (args, ctx) => ctx.LastError?.Severity ?? 0, "ERROR_SEVERITY(): Returns the severity of the error that caused the CATCH block to run.");
+            registry.RegisterWithHelp("ERROR_STATE", (args, ctx) => ctx.LastError?.State ?? 0, "ERROR_STATE(): Returns the state number of the error that caused the CATCH block to run.");
+            registry.RegisterWithHelp("ERROR_LINE", (args, ctx) => ctx.LastError?.Line ?? 0, "ERROR_LINE(): Returns the line number where the error occurred.");
+
+            // ENG-6 - Env Var Expansion
+            registry.RegisterWithHelp("ENV", (args, ctx) => {
+                string? name = args.FirstOrDefault()?.ToString();
+                if (string.IsNullOrEmpty(name)) return null;
+                ctx.SecurityService.ValidateEnvVar(name);
+                return Environment.GetEnvironmentVariable(name);
+            }, "ENV('VAR_NAME'): Returns the value of a host environment variable (subject to security allow-list).");
         }
 
         /// <summary>Calculates the length of a string or collection.</summary>

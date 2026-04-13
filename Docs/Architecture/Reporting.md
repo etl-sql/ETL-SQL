@@ -171,7 +171,7 @@ ManifestBuilder.BuildAsync(context)
         ├─ foreach VisualDefinitions
         │       │
         │       ├─ Execute source query → DataTable
-        │       ├─ Materialise rows → List<List<string?>>
+        │       ├─ Materialize rows → List<List<string?>>
         │       ├─ Copy mapping hints as "mapping:{role}" options
         │       └─ ChartJsRenderer.Render(vm) → Chart.js JSON
         │
@@ -203,7 +203,7 @@ Rows        — List<List<string?>> — all data as strings for portability
 Options     — Dictionary<string, string> (includes "mapping:{role}" entries)
 ```
 
-All numeric data is serialised as strings in `Rows` to avoid JSON type loss and ensure the client runtime can format values appropriately.
+All numeric data is serialized as strings in `Rows` to avoid JSON type loss and ensure the client runtime can format values appropriately.
 
 ---
 
@@ -253,10 +253,10 @@ Rendering logic per visual type mirrors the server-side renderer but produces li
 **File:** `ETL-SQL.ReportBuilder/SnapshotStore.cs`  
 **Format:** indented JSON at `<script-basename>.snapshot.json`
 
-| Method | Behaviour |
+| Method | Behavior |
 |---|---|
-| `SaveAsync(manifest, path)` | Serialise manifest to JSON; overwrites existing file |
-| `LoadAsync(path)` | Deserialise JSON → `ReportManifest`; returns `null` if absent |
+| `SaveAsync(manifest, path)` | Serialize manifest to JSON; overwrites existing file |
+| `LoadAsync(path)` | Deserialize JSON → `ReportManifest`; returns `null` if absent |
 | `IsStale(manifest, scriptPath, ttl?)` | True if script file is newer than `BuiltAt`, or TTL elapsed |
 
 **Known gaps (see TODO Rpt-2):**
@@ -305,7 +305,7 @@ A `Slicer` visual executes a `SELECT` query to populate its options and binds to
 
 ### 9.1 Routes
 
-| Route | Method | Behaviour |
+| Route | Method | Behavior |
 |---|---|---|
 | `/` | GET | Returns full HTML page with embedded initial manifest |
 | `/api/manifest` | GET | Returns current `ReportManifest` as JSON |

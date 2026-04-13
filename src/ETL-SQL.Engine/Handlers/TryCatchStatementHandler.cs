@@ -31,14 +31,32 @@ namespace ETL_SQL.Engine.Handlers
             catch (Exception ex)
             {
                 _logger.Debug("Exception caught in TRY block: {Message}", ex.Message);
+                
+                int number = 50000;
+                int severity = 16;
+                int state = 1;
+                int line = 0;
+                string? message = ex.Message;
+
+                if (ex is ExecutionException ee)
+                {
+                    number = ee.ErrorNumber;
+                    severity = ee.Severity;
+                    state = ee.State;
+                    line = ee.Line;
+                }
+
+                context.LastError = new ErrorInfo(number, message, severity, state, line, null);
+
                 if (!context.ContainsVariable("@ERROR_MESSAGE"))
                 {
-                    context.DeclareVariable("@ERROR_MESSAGE", ex.Message);
+                    context.DeclareVariable("@ERROR_MESSAGE", message);
                 }
                 else
                 {
-                    context.SetVariable("@ERROR_MESSAGE", ex.Message);
+                    context.SetVariable("@ERROR_MESSAGE", message);
                 }
+
                 await context.EvaluateStatement(stmt.CatchBody);
             }
         }

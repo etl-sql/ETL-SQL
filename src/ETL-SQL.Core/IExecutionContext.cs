@@ -108,7 +108,13 @@ namespace ETL_SQL.Core
         bool AllowUnknownFileTypes { get; set; }
         bool AllowLargeFileOperationCount { get; set; }
         bool AllowDeepRecursion { get; set; }
+        
+        /// <summary>Metadata about the last caught exception in this session.</summary>
+        ErrorInfo? LastError { get; set; }
     }
+
+    /// <summary>Stores metadata about an execution error for use with ERROR_* functions.</summary>
+    public record ErrorInfo(int Number, string Message, int Severity, int State, int Line, string? Procedure);
 
     /// <summary>A stored collection of variable assignments created by CREATE SETS.</summary>
     public class NamedSet
@@ -153,6 +159,7 @@ namespace ETL_SQL.Core
     {
         Stack<Row> OuterRowStack { get; }
         Dictionary<Statement, object?> SubqueryCache { get; }
+        System.Threading.CancellationToken CancellationToken { get; }
         
         bool IsProfiling { get; set; }
         bool IsWhatIf { get; set; }

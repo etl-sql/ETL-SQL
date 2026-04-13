@@ -31,9 +31,9 @@ namespace ETL_SQL.Engine.Handlers
                         "WAITFOR DELAY: delay must be non-negative.");
 
                 if (context.IsVerbose) context.Log($"[WaitFor] Pausing for {delay}");
-                await Task.Delay(delay);
+                await Task.Delay(delay, context.CancellationToken);
             }
-            else
+            else if (stmt.Type == WaitType.Time)
             {
                 TimeSpan targetTime;
                 if (!TimeSpan.TryParse(raw, out targetTime))
@@ -54,7 +54,32 @@ namespace ETL_SQL.Engine.Handlers
                 }
 
                 if (context.IsVerbose) context.Log($"[WaitFor] Waiting until {targetTime} (duration: {waitDuration})");
-                await Task.Delay(waitDuration);
+                await Task.Delay(waitDuration, context.CancellationToken);
+            }
+            else // WaitType.Until
+            {
+                if (context.IsVerbose) context.Log($"[WaitFor] Polling until condition is met: {stmt.Expression.ToSql()}");
+                
+                while (true)
+                {
+                    if (context.CancellationToken.IsCancellationRequested) return;
+
+                    var result = await context.EvaluateValue(stmt.Expression, new Row());
+                    bool met = false;
+
+                    if (result is bool b) met = b;
+                    else if (result is int i) met = i != 0;
+                    else if (result is long l) met = l != 0;
+                    else if (result is double dbl) met = dbl != 0;
+                    else if (result is ETL_SQL.Data.DataTable dt) met = dt.Rows.Count > 0;
+                    else if (result != null) met = true;
+
+                    if (met) break;
+
+                    await Task.Delay(TimeSpan.FromSeconds(1), context.CancellationToken);
+                }
+
+                if (context.IsVerbose) context.Log("[WaitFor] Condition met.");
             }
         }
     }

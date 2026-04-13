@@ -1009,7 +1009,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
-    public enum WaitType { Delay, Time }
+    public enum WaitType { Delay, Time, Until }
 
     /// <summary>WAITFOR DELAY/TIME '...' — pauses execution.</summary>
     public record WaitForStatement(Expression expression, WaitType type = WaitType.Delay) : Statement
@@ -1188,8 +1188,17 @@ namespace ETL_SQL.Core
 
     public record ThrowStatement : Statement
     {
+        public Expression? ErrorNumber { get; }
         public Expression? Message { get; }
-        public ThrowStatement(Expression? message = null) => Message = message;
+        public Expression? State { get; }
+
+        public ThrowStatement(Expression? errorNumber = null, Expression? message = null, Expression? state = null)
+        {
+            ErrorNumber = errorNumber;
+            Message = message;
+            State = state;
+        }
+
         public override string ToSql() => AstSerializer.Format(this);
     }
 
@@ -1407,6 +1416,11 @@ namespace ETL_SQL.Core
             SubTopic = subTopic;
         }
 
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
+    public record RequireVersionStatement(string Operator, string Version) : Statement
+    {
         public override string ToSql() => AstSerializer.Format(this);
     }
 

@@ -537,7 +537,16 @@ SHOW VERSION;
 SHOW VERSION INTO #version_info;
 ```
 
-### 8.5 `SHOW PROFILE`
+### 8.5 `SHOW VARIABLES`
+Lists all variables in the current session as a table. Supports `SHOW LOCAL VARIABLES` to only see variables in the current scope.
+
+```sql
+SHOW VARIABLES;
+SHOW VARIABLES INTO #vars;
+SHOW LOCAL VARIABLES;
+```
+
+### 8.6 `SHOW PROFILE`
 Displays timing and resource usage for the most recently profiled execution.
 
 ```sql

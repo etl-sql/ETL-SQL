@@ -214,6 +214,72 @@ namespace ETL_SQL.Engine.Handlers
                 _logger.WriteLine("  CLOSE_DOCKER <alias|image>");
                 _logger.WriteLine("\nNote: All commands support optional parentheses, e.g., START_DOCKER('mysql').");
             }
+            else if (stmt.Topic.Equals("VARIABLES", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.WriteLine("System Variables (@@):", ConsoleColor.Cyan);
+                _logger.WriteLine("  @@VERSION:     Engine version string.");
+                _logger.WriteLine("  @@TRANCOUNT:   Active transaction nesting level.");
+                _logger.WriteLine("  @@ROWCOUNT:    Rows processed by the last DML statement.");
+                _logger.WriteLine("  @@RESULTSETS:  Count of result sets returned by the last operation.");
+                _logger.WriteLine("\nSession Variables (@):", ConsoleColor.Yellow);
+                _logger.WriteLine("  Defined via DECLARE @varname. View all with SHOW VARIABLES.");
+            }
+            else if (stmt.Topic.Equals("SECURITY", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.WriteLine("Zero-Trust Security Guardrails:", ConsoleColor.Cyan);
+                _logger.WriteLine("\n1. Path Isolation:", ConsoleColor.Yellow);
+                _logger.WriteLine("   - Access to root (C:\\, /), System32, /etc, .git, .ssh is blocked.");
+                _logger.WriteLine("   - All paths must be absolute or resolved via WORKSPACE.");
+                _logger.WriteLine("\n2. Script Immutability:", ConsoleColor.Yellow);
+                _logger.WriteLine("   - Scripts cannot create or edit .sql, .etlsql, or .rptsql files.");
+                _logger.WriteLine("\n3. Runaway Protection:", ConsoleColor.Yellow);
+                _logger.WriteLine("   - Default limit: 100 file operations / 5 levels of recursion.");
+                _logger.WriteLine("   - Overrides (### ALLOW_...) only valid in approved Safe Zones.");
+            }
+            else if (stmt.Topic.Equals("STATEMENT", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrEmpty(stmt.SubTopic))
+                {
+                    _logger.WriteLine("Statement Syntax Help:", ConsoleColor.Cyan);
+                    _logger.WriteLine("  Use HELP STATEMENT <name> (e.g., HELP STATEMENT SELECT).");
+                    _logger.WriteLine("\nCore Statements: SELECT, INSERT, UPDATE, DELETE, MERGE, WAITFOR, PRINT, CREATE CONNECTION");
+                }
+                else
+                {
+                    var sub = stmt.SubTopic.ToUpperInvariant();
+                    _logger.WriteLine($"HELP: STATEMENT {sub}", ConsoleColor.Cyan);
+                    switch (sub)
+                    {
+                        case "SELECT":
+                            _logger.WriteLine("Syntax: SELECT [TOP n] <cols> [INTO <table>] FROM <src> [JOIN...] [WHERE...] [GROUP BY...] [ORDER BY...]");
+                            break;
+                        case "MERGE":
+                            _logger.WriteLine("Syntax: MERGE INTO <target> USING <source> ON <condition> WHEN MATCHED THEN UPDATE... WHEN NOT MATCHED THEN INSERT...");
+                            break;
+                        case "WAITFOR":
+                            _logger.WriteLine("Syntax: WAITFOR DELAY 'hh:mm:ss' | TIME 'hh:mm:ss' | (condition)");
+                            break;
+                        case "INSERT":
+                            _logger.WriteLine("Syntax: INSERT INTO <target> [(cols)] SELECT... | VALUES(...)");
+                            break;
+                        case "UPDATE":
+                            _logger.WriteLine("Syntax: UPDATE <target> SET <col>=<val> [WHERE...]");
+                            break;
+                        case "DELETE":
+                            _logger.WriteLine("Syntax: DELETE FROM <target> [WHERE...]");
+                            break;
+                        case "PRINT":
+                            _logger.WriteLine("Syntax: PRINT <expression> [, timestamp=TRUE|FALSE]");
+                            break;
+                        case "CREATE":
+                            _logger.WriteLine("Syntax: CREATE CONNECTION <name> ON <type>(<conn_string>) [WITH(...)];");
+                            break;
+                        default:
+                            _logger.WriteLine($"No syntax summary available for statement '{sub}'.", ConsoleColor.Yellow);
+                            break;
+                    }
+                }
+            }
             else if (stmt.Topic.Equals("SHOW", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.WriteLine("Introspection Commands (SHOW):", ConsoleColor.Cyan);
@@ -223,14 +289,16 @@ namespace ETL_SQL.Engine.Handlers
                 _logger.WriteLine("  SHOW CONNECTIONS [INTO #temp]");
                 _logger.WriteLine("  SHOW TABLES [ON <conn>] [INTO #temp]");
                 _logger.WriteLine("  SHOW COLUMNS FOR [<table>] [INTO #temp]");
+                _logger.WriteLine("  SHOW VARIABLES [LOCAL] [INTO #temp]");
                 _logger.WriteLine("  SHOW TAGS FOR TABLE <tbl> [COLUMN <col>] [INTO #temp]");
                 _logger.WriteLine("  SHOW TAG VALUE FOR TABLE <tbl> [COLUMN <col>] WITH TAG <tag> [INTO #temp]");
                 _logger.WriteLine("  SHOW PROFILE [INTO #temp]");
+                _logger.WriteLine("  SHOW VERSION [INTO #temp]");
             }
             else
             {
                 _logger.WriteLine($"Help for topic '{stmt.Topic}' is not yet implemented.", ConsoleColor.Yellow);
-                _logger.WriteLine("Available topics: CONNECTION, FUNCTION, DIRECTORY, FILE, TRANSFER, EMAIL, SSH_KEY_PAIR, DOCKER, SHOW");
+                _logger.WriteLine("Available topics: CONNECTION, FUNCTION, DIRECTORY, FILE, TRANSFER, EMAIL, SSH_KEY_PAIR, DOCKER, SHOW, VARIABLES, SECURITY, STATEMENT");
             }
             await Task.CompletedTask;
         }

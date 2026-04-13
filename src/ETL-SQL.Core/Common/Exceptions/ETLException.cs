@@ -26,20 +26,29 @@ namespace ETL_SQL.Core.Common.Exceptions
         public string? StatementContext { get; }
         public int Line { get; }
         public int Column { get; }
+        public int ErrorNumber { get; }
+        public int Severity { get; }
+        public int State { get; }
 
-        public ExecutionException(string message, string? statementContext = null, int line = 0, int column = 0) : base(message)
+        public ExecutionException(string message, string? statementContext = null, int line = 0, int column = 0, int errorNumber = 50000, int severity = 16, int state = 1) : base(message)
         {
             StatementContext = statementContext;
             Line = line;
             Column = column;
+            ErrorNumber = errorNumber;
+            Severity = severity;
+            State = state;
         }
 
-        public ExecutionException(string message, Exception innerException, string? statementContext = null, int line = 0, int column = 0) 
+        public ExecutionException(string message, Exception innerException, string? statementContext = null, int line = 0, int column = 0, int errorNumber = 50000, int severity = 16, int state = 1) 
             : base(message, innerException)
         {
             StatementContext = statementContext;
             Line = line;
             Column = column;
+            ErrorNumber = errorNumber;
+            Severity = severity;
+            State = state;
         }
     }
 
