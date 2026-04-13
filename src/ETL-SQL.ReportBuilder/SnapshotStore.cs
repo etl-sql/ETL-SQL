@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
 using System.Threading;
@@ -8,22 +10,18 @@ namespace ETL_SQL.ReportBuilder
 {
     /// <summary>
     /// Persists and loads a <see cref="ReportManifest"/> snapshot to/from disk.
-    ///
-    /// Snapshot files are plain JSON, stored alongside the .rptsql script as
-    /// <c>&lt;scriptName&gt;.snapshot.json</c> by default.
-    ///
-    /// Used by <c>etl-sql-report refresh</c> to determine staleness and update
-    /// the <see cref="DatasetManifest.LastRefresh"/> timestamps.
+    /// 
+    /// Rpt-2 Hardening: Uses atomic move operations and path-based async reader-writer locks
+    /// to ensure integrity during concurrent dashboard access and background refreshes.
     /// </summary>
     public class SnapshotStore
     {
-        private static readonly SemaphoreSlim _readLock = new(1, 1);
-        private static readonly SemaphoreSlim _writeLock = new(1, 1);
-        private static int _readerCount = 0;
+        // Path-based locking registry to allow parallel processing of different reports
+        private static readonly ConcurrentDictionary<string, AsyncReaderWriterLock> _pathLocks = new();
 
         private static readonly JsonSerializerOptions _opts = new()
         {
-            WriteIndented        = true,
+            WriteIndented = true,
             PropertyNamingPolicy = null
         };
 
@@ -34,20 +32,22 @@ namespace ETL_SQL.ReportBuilder
         /// <summary>Serialises the manifest to a JSON file atomically.</summary>
         public async Task SaveAsync(ReportManifest manifest, string outputPath)
         {
-            await _writeLock.WaitAsync();
-            var tmpPath = outputPath + ".tmp";
+            var fullPath = Path.GetFullPath(outputPath);
+            var lockObj = _pathLocks.GetOrAdd(fullPath, _ => new AsyncReaderWriterLock());
+
+            await lockObj.WriterLock.WaitAsync();
+            var tmpPath = fullPath + ".tmp";
             try
             {
-                var dir = Path.GetDirectoryName(outputPath);
+                var dir = Path.GetDirectoryName(fullPath);
                 if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                     Directory.CreateDirectory(dir);
 
                 var json = JsonSerializer.Serialize(manifest, _opts);
                 await File.WriteAllTextAsync(tmpPath, json);
-                
-                // Atomic rename/replace
-                if (File.Exists(outputPath)) File.Delete(outputPath);
-                File.Move(tmpPath, outputPath);
+
+                // Atomic Replace: File.Move with overwrite handles the atomic swap on most filesystems
+                File.Move(tmpPath, fullPath, overwrite: true);
             }
             finally
             {
@@ -55,38 +55,53 @@ namespace ETL_SQL.ReportBuilder
                 {
                     try { File.Delete(tmpPath); } catch { /* ignore cleanup errors */ }
                 }
-                _writeLock.Release();
+                lockObj.WriterLock.Release();
             }
         }
 
-
         /// <summary>
         /// Deserialises a previously saved manifest. Returns null if the file does not exist.
-        /// Supports parallel reads while blocking for writes.
+        /// Supports parallel reads while blocking for writes (per-file).
         /// </summary>
         public async Task<ReportManifest?> LoadAsync(string snapshotPath)
         {
-            await _readLock.WaitAsync();
-            if (++_readerCount == 1) await _writeLock.WaitAsync();
-            _readLock.Release();
+            var fullPath = Path.GetFullPath(snapshotPath);
+            var lockObj = _pathLocks.GetOrAdd(fullPath, _ => new AsyncReaderWriterLock());
 
+            await lockObj.EnterReadLockAsync();
             try
             {
-                if (!File.Exists(snapshotPath)) return null;
-                var json = await File.ReadAllTextAsync(snapshotPath);
+                if (!File.Exists(fullPath)) return null;
+                var json = await File.ReadAllTextAsync(fullPath);
                 return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
+            }
+            catch (JsonException)
+            {
+                // If the JSON is corrupt (e.g. partial write during unexpected crash),
+                // treat as missing so it can be rebuilt.
+                return null;
             }
             finally
             {
-                await _readLock.WaitAsync();
-                if (--_readerCount == 0) _writeLock.Release();
-                _readLock.Release();
+                await lockObj.ExitReadLockAsync();
+            }
+        }
+
+        /// <summary>
+        /// Scans for and removes orphaned .tmp files in the specified directory.
+        /// </summary>
+        public static void CleanupOrphanedSnapshots(string directory)
+        {
+            if (!Directory.Exists(directory)) return;
+
+            foreach (var file in Directory.GetFiles(directory, "*.snapshot.json.tmp"))
+            {
+                try { File.Delete(file); } catch { /* ignore */ }
             }
         }
 
         /// <summary>
         /// Checks whether the snapshot is stale relative to the script's last-write time.
-        /// Returns true if the snapshot is older than the script file or the TTL has elapsed.
         /// </summary>
         public bool IsStale(ReportManifest manifest, string scriptPath, TimeSpan? ttl = null)
         {
@@ -100,6 +115,31 @@ namespace ETL_SQL.ReportBuilder
                 return true;
 
             return false;
+        }
+
+        /// <summary>
+        /// Internal implementation of an async-friendly Reader-Writer lock using Nested Semaphores.
+        /// avoids the blocking behavior of ReaderWriterLockSlim.
+        /// </summary>
+        private class AsyncReaderWriterLock
+        {
+            private readonly SemaphoreSlim _readLock = new(1, 1);
+            public readonly SemaphoreSlim WriterLock = new(1, 1);
+            private int _readerCount = 0;
+
+            public async Task EnterReadLockAsync()
+            {
+                await _readLock.WaitAsync();
+                if (++_readerCount == 1) await WriterLock.WaitAsync();
+                _readLock.Release();
+            }
+
+            public async Task ExitReadLockAsync()
+            {
+                await _readLock.WaitAsync();
+                if (--_readerCount == 0) WriterLock.Release();
+                _readLock.Release();
+            }
         }
     }
 }

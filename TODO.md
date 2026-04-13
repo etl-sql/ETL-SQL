@@ -35,7 +35,10 @@ Phases 9A–9D are complete. The following items were deferred as out-of-scope f
 ### Dashboard Behavior
 
 - [x] **Rpt-1** Slicer parameter optimization. `DashboardService.SetParameterAsync` upgraded to selective re-evaluation: scans visual `SourceSql` for dependencies; on parameter change, only re-materializes affected visuals.
-- [ ] **Rpt-2** `SnapshotStore` write safety. Two issues: (a) atomic write — serialize to a `.tmp` file, rename to the final path on success; orphaned `.tmp` files from a crash are deleted on startup. (b) Concurrent access — wrap reads/writes in a `ReaderWriterLockSlim` so live dashboard reads and a scheduled `CREATE DATASET` refresh job do not race.
+- [x] **Rpt-2** `SnapshotStore` write safety.
+    - **Atomic write**: Implemented temp-file-then-rename pattern with `File.Move(..., overwrite: true)`.
+    - **Concurrent access**: Implemented path-based `AsyncReaderWriterLock` to ensure live dashboard reads and background refreshes do not race.
+    - **Cleanup**: Automatic removal of orphaned `.tmp` files in `EngineRunner` script-execution lifecycle.
 
 ### Linter Rules
 

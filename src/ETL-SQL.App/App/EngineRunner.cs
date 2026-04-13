@@ -180,6 +180,9 @@ namespace ETL_SQL.App
                     var scriptDir = Path.GetDirectoryName(ctx.ScriptFile.FullName);
                     if (!string.IsNullOrEmpty(scriptDir))
                     {
+                        // Rpt-2: Cleanup orphaned snapshot temp files from previous failed runs
+                        ETL_SQL.ReportBuilder.SnapshotStore.CleanupOrphanedSnapshots(scriptDir);
+
                         if (!evaluator.SecurityService.IsSystemPath(scriptDir))
                         {
                             evaluator.SecurityService.ApprovedSafeZones.Add(scriptDir);

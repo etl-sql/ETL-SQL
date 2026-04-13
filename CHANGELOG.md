@@ -8,10 +8,11 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 *Changes staged on `dev` that have not yet been cut into a release.*
 
-- **Security & Integrity (SEC-1, CR-S4, CR-C4, Rpt-3)**:
+- **Security & Integrity (SEC-1, CR-S4, CR-C4, Rpt-2, Rpt-3)**:
     - **Hardened Connection Encryption**: Increased PBKDF2 iterations to 600,000 for industry-standard brute-force resistance.
     - **Expanded Credential Protection**: `CredentialLeakRule` now scans native pushdown SQL text for sensitive variable references.
     - **Engine Isolation**: Fixed context flag mutation in `EXPLAIN ANALYZE` and ensured proper result-set registration for analytical output.
+    - **Snapshot Safety**: Hardened `SnapshotStore` with atomic file replacements and per-path async reader-writer locks.
     - **Dashboard Stability**: New `DashboardKeywordConflictRule` prevents user-defined visuals/datasets from shadowing internal dashboard state.
 - **Testing**: Added verification suites for system variables, scaling configuration, snapshot safety, and security hardening.
 
