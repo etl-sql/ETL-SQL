@@ -3,8 +3,10 @@ using System.Diagnostics;
 using System.Threading.Tasks;
 using Xunit;
 using Xunit.Abstractions;
+using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Engine;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Tests.Performance
 {
@@ -33,7 +35,7 @@ namespace ETL_SQL.Tests.Performance
                 SELECT n FROM Counter;
             ";
 
-            var eval = (Evaluator)Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService(ETL_SQL.Program.ServiceProvider, typeof(Evaluator));
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var sw = Stopwatch.StartNew();
 
             // Act

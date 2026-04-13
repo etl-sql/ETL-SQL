@@ -46,8 +46,6 @@ namespace ETL_SQL.Engine
         private readonly SessionStateManager _sessionStateManager;
         private readonly SecurityService _securityService;
         private readonly ETL_SQL.Common.ILogger _logger;
-        private static readonly Random _random = new Random();
-
         private readonly ConcurrentDictionary<string, IDataSource> _connections;
         private readonly Dictionary<string, IDataSource> _localSources = new(StringComparer.OrdinalIgnoreCase);
         private readonly VariableScopeManager _variableScopeManager;

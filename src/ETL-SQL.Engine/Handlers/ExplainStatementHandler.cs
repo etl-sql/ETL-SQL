@@ -236,7 +236,7 @@ namespace ETL_SQL.Engine.Handlers
             }
             
             // Distinct
-            if (select.ToSql().Contains("DISTINCT", StringComparison.OrdinalIgnoreCase))
+            if (select.IsDistinct)
             {
                  await plan.AddRowAsync(new Row { ["ID"] = id.Value++, ["Operation"] = "Distinct", ["Details"] = "", ["Cost"] = 3 });
             }

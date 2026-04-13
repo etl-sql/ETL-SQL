@@ -17,7 +17,7 @@ namespace ETL_SQL.Tests.Engine
 
         public VersioningTests()
         {
-            _serviceProvider = ETL_SQL.Program.ServiceProvider;
+            _serviceProvider = DependencyInjectionSetup.BuildServiceProvider();
         }
 
         [Fact]

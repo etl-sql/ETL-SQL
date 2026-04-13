@@ -11,7 +11,7 @@ namespace ETL_SQL.Tests.Engine
     public class ReportSqlTests
     {
         [Fact]
-        public async Task TestCreateVisual_SubtitleAndSourceNoEquals()
+        public void TestCreateVisual_SubtitleAndSourceNoEquals()
         {
             var sql = @"
                 CREATE VISUAL SalesChart AS BAR (
@@ -33,7 +33,7 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task TestCreateVisual_SourceParenthesesNoEquals()
+        public void TestCreateVisual_SourceParenthesesNoEquals()
         {
             var sql = @"
                 CREATE VISUAL SalesChart AS BAR (
@@ -55,7 +55,7 @@ namespace ETL_SQL.Tests.Engine
         }
         
         [Fact]
-        public async Task TestExplainInto_Serialization()
+        public void TestExplainInto_Serialization()
         {
             var sql = "EXPLAIN SELECT * FROM #T INTO #Plan;";
             var tokens = new Lexer(sql).Tokenize();
