@@ -35,7 +35,7 @@ Identified during 2026-04-12 documentation structure review against professional
 - [X] **DOC-9** — **Resolve `Docs/Engine.md` vs `Docs/Architecture/Engine.md` duplication.**
   There is an 18.6 KB `Docs/Engine.md` at the root of Docs AND a 3.7 KB `Docs/Architecture/Engine.md`. Determine which is the canonical file, migrate any unique content from the root-level file into `Architecture/Engine.md`, and delete `Docs/Engine.md`. Update any cross-references.
 
-- [ ] **DOC-10** - **Create `Docs/Orchestrators_Guide.md`.**
+- [x] **DOC-10** - **Create `Docs/Orchestrators_Guide.md`.**
   Detail out how to use the orchestrator app, what the commands are.  How to schedule a job, see job history, etc.
 
 - [ ] **DOC-11** - **FOREACH File parameter options need to be documented**
