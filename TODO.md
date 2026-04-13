@@ -11,74 +11,11 @@ Identified during 2026-04-12 documentation structure review against professional
 - [x] **DOC-4** — **Create `Docs/Architecture/Orchestrator.md`.**
   Document the `ETL-SQL.Orchestrator` project: `ExecutionSession`, `SchedulerService`, `JobHistoryStore`, `ScriptExecutorAdapter`, session lifecycle (boot → parse → lint → evaluate → dispose), how job concurrency is governed, and how `RUN SCRIPT` nesting / `PARALLEL` blocks are scheduled. Should match the depth of `Architecture/Connectors.md`.
 
-- [ ] **DOC-5** — **Create `Docs/Architecture/Reporting.md`.**
+- [x] **DOC-5** — **Create `Docs/Architecture/Reporting.md`.**
   Document the `ETL-SQL.ReportBuilder`, `ETL-SQL.ReportBuilder.CLI`, and `ETL-SQL.ReportPlayer` projects: the `.rptsql` parse pipeline, `DashboardService`, `SnapshotStore`, visual rendering contracts (`IVisualRenderer`), the parameter/slicer system, and how the report player serves output. Cross-reference `Report_SQL_Guide.md` for the user-facing syntax.
 
 - [X] **DOC-6** — **Expand `Docs/Architecture/Engine.md`** (currently 3.7 KB — still a stub).
   Fill it out to match the depth of `Connectors.md` and `Presentation.md`: full project dependency graph, Lexer → Parser → AST → Evaluator dispatch loop details, `#temp` table scoping rules, variable lifetime, pushdown decision logic, and the linting pipeline. This is the onboarding doc for engine contributors.
-
-### Content Gaps in Existing Docs
-
-- [x] **DOC-7** — **Create `Docs/FAQ.md`** (or `Docs/Troubleshooting.md`).
-  A language FAQ is a high-value, low-effort document that cuts support questions. Suggested topics:
-  - *"Why does my `SELECT TOP 10` fail against Postgres?"* (dialect awareness)
-  - *"Why can't my script write to another `.etlsql` file?"* (script immutability)
-  - *"What is `ENC:` and how do I encrypt my connection string?"*
-  - *"How do I poll for a condition? `WAITFOR (SELECT ...)` doesn't work."*
-  - *"How do I load a 500M row file without running out of memory?"* (BULK INSERT streaming)
-  - *"What's the difference between `SEND EMAIL` and `SEND_EMAIL`?"* (SQL style vs function style)
-  - *"Can I use MySQL?"* (no — use ODBC with a MySQL driver)
-
-- [x] **DOC-8** — **Create `Docs/Migration_Guide.md`.**
-  As the language evolves, syntax changes break existing scripts. Document breaking changes between major versions and provide find-and-replace patterns. Start with the v1 → v2 changes (e.g. `SEND_EMAIL` function-style → SQL-style preference, `ALTER CONNECTION` AST refactor).
-
-- [X] **DOC-9** — **Resolve `Docs/Engine.md` vs `Docs/Architecture/Engine.md` duplication.**
-  There is an 18.6 KB `Docs/Engine.md` at the root of Docs AND a 3.7 KB `Docs/Architecture/Engine.md`. Determine which is the canonical file, migrate any unique content from the root-level file into `Architecture/Engine.md`, and delete `Docs/Engine.md`. Update any cross-references.
-
-- [x] **DOC-10** - **Create `Docs/Orchestrators_Guide.md`.**
-  Detail out how to use the orchestrator app, what the commands are.  How to schedule a job, see job history, etc.
-
-- [ ] **DOC-11** - **FOREACH File parameter options need to be documented**
-  In the example below, what are the options for the FOREACH File parameter?  I see Path, Name.  I'm guessing there are other.  These need to be documented.  I didn't even know these existed or if they work.  Is these kind of parameters only available for lists of files?  What about other objects that end up in the list do they have the dot functionality too?
-```sql
-FOREACH @File IN @Drops
-BEGIN
-    BEGIN TRY
-        -- 2. Bulk Load directly to Staging
-        -- BULK INSERT uses FIRSTROW=2 to skip a header row, not HEADER=ON
-        BULK INSERT #DailyRaw 
-        FROM @File.Path 
-        WITH (FORMAT='CSV', FIRSTROW=2, STRICT_SCHEMA=ON);
-        
-        -- 3. Archive the processed file
-        DECLARE @ArchiveDir = 'C:\Archive\' + FORMAT(GETDATE(), 'yyyyMMdd');
-        IF NOT DIRECTORY_EXISTS(@ArchiveDir)
-        BEGIN
-            CREATE DIRECTORY @ArchiveDir;
-        END
-        
-        MOVE FILE @File.Path TO @ArchiveDir + '\' + @File.Name;
-        
-        PRINT 'Processed and Archived: ' + @File.Name;
-    END TRY
-    BEGIN CATCH
-        PRINT 'Error processing ' + @File.Name + ': ' + ERROR_MESSAGE();
-        -- Move to error folder instead of archive
-        MOVE FILE @File.Path TO 'C:\Errors\' + @File.Name;
-    END CATCH;
-END;
-```
-
-### README.md Fixes (applied 2026-04-12 — for reference)
-
-- [x] **DOC-R1** — Broken `file:///C:/Users/chuck/.gemini/...` image paths removed (were local-only, would 404 on GitHub).
-- [x] **DOC-R2** — Wrong Architecture doc links fixed (`Connectors_Engineering.md` → `Connectors.md`; `Presentation_Architecture.md` → `Presentation.md`).
-- [x] **DOC-R3** — All `file:///` doc links converted to relative paths (work correctly on GitHub).
-- [x] **DOC-R4** — Quick-start `SEND_EMAIL` syntax error fixed (was missing `FROM`, used wrong unified syntax).
-- [x] **DOC-R5** — Mermaid diagram updated to include Orchestrator, Scheduler, REST API connector, and ReportBuilder.
-- [x] **DOC-R6** — `Specialized_Operations.md` and `Report_SQL_Guide.md` added to the doc table (were absent).
-
----
 
 ## Language & Engine Feature Gaps (ENG)
 
@@ -86,9 +23,10 @@ Identified during 2026-04-12 documentation review. Each item was verified agains
 
 ### Confirmed Not Implemented
 
-- [ ] **ENG-1** — **`WAITFOR (SELECT ...)` polling syntax.**
-  In T-SQL you can write `WAITFOR (SELECT ...)` to block until a query returns a row. This form does **not** exist in ETL-SQL — the parser only accepts `WAITFOR DELAY` and `WAITFOR TIME`. The recommended workaround is a `WHILE` loop with `WAITFOR DELAY`, but this is a common beginner trap. Either implement the polling form or add a dedicated `WAIT UNTIL (condition)` statement.
-  - Files: `ETL-SQL.Core/Parser/StatementParser.Extensions.cs` `ParseWaitFor()`, new `WaitUntilStatement` AST node, `WaitForStatementHandler.cs`.
+- [x] **ENG-1** — **`WAITFOR (SELECT ...)` polling syntax.**
+  Implemented T-SQL style polling syntax and a cleaner `WAIT UNTIL` statement. Features a default 1-second polling interval and full integration with the engine's `CancellationToken` for safe, interruptible waits.
+  - Files: `TokenType.cs`, `Ast.cs`, `StatementParser.Extensions.cs`, `WaitForStatementHandler.cs`.
+  - Tests: `WaitForPollingTests.cs`.
 
 - [X] **ENG-2** — **`@@VERSION` system variable / `SHOW VERSION` command.**
   No mechanism exists to query the current engine version from within a script. Add `@@VERSION` as a system variable resolving to `'ETL-SQL 0.5.0 (.NET 10.0)'` and a `SHOW VERSION;` statement that prints it to the messages panel.
@@ -100,18 +38,18 @@ Identified during 2026-04-12 documentation review. Each item was verified agains
   - Files: `ETL_SQL.Engine.Engines.PivotEngine.cs`, `Parser.cs` (table operator loop), `DataSourceManager.cs`.
   - Tests: `PivotTests.cs` (5 tests covering all scenarios).
 
-- [ ] **ENG-4** — **`THROW` only supports bare re-throw — no error number or custom severity.**
-  `ThrowStatementHandler` only emits an `ExecutionException` with a message string. T-SQL `THROW 50001, 'message', 1` (error number, message, state) is not supported. Add optional `number, message, state` arguments to enable typed, catchable errors with specific codes.
-  - Files: `ETL-SQL.Core/Ast.cs` (`ThrowStatement`), `ThrowStatementHandler.cs`, `StatementParser.Extensions.cs`.
+- [x] **ENG-4** — **`THROW` needs custom message/code support.**
+  Implemented T-SQL compatible `THROW [error_number, message, state]` syntax.
+  - Files: `Ast.cs`, `StatementParser.Flow.cs`, `ThrowStatementHandler.cs`.
 
-- [ ] **ENG-5** — **Extended error functions in `CATCH` blocks: `ERROR_NUMBER()`, `ERROR_LINE()`, `ERROR_SEVERITY()`.**
-  Only `ERROR_MESSAGE()` is implemented. T-SQL programmers expect all four functions inside `CATCH`. Requires `TryCatchStatementHandler` to populate these in execution context during catch execution.
-  - Files: `ETL-SQL.Engine/Handlers/TryCatchStatementHandler.cs`, `IExecutionContext`, `StandardFunctions.cs`.
-  - Doc: Add to `Standard_Library.md` §8 System Functions.
+- [x] **ENG-5** — **Extended error functions in `CATCH` blocks: `ERROR_NUMBER()`, `ERROR_LINE()`, `ERROR_SEVERITY()`.**
+  Implemented `ERROR_NUMBER()`, `ERROR_MESSAGE()`, `ERROR_SEVERITY()`, `ERROR_STATE()`, and `ERROR_LINE()`.
+  - Files: `StandardFunctions.cs`, `IExecutionContext.cs`, `TryCatchStatementHandler.cs`.
+  - Doc: Added to `Standard_Library.md` §8 System Functions.
 
-- [ ] **ENG-6** — **Environment variable expansion in scripts.**
-  Scripts cannot read OS environment variables. This is critical for CI/CD and containerized deployments where secrets are injected as env vars. Add an `ENV('VAR_NAME')` function. Consider an allow-list in `SecurityService` to prevent wholesale credential harvesting.
-  - Files: `StandardFunctions.cs` (add `ENV` function), `SecurityService.cs` (allow-list consideration).
+- [x] **ENG-6** — **Environment variable expansion in scripts.**
+  Implemented `ENV('VAR_NAME')` function with security allow-list validation in `SecurityService`.
+  - Files: `StandardFunctions.cs`, `SecurityService.cs`.
 
 - [x] **ENG-7** — **CLI headless mode does not return a meaningful exit code.**
   Already implemented: `EngineRunner.Run` returns `1` on parse errors, lint errors, and execution exceptions; `0` on success. `Program.Main` propagates the value through `System.CommandLine`'s `InvokeAsync`.
@@ -123,23 +61,18 @@ Identified during 2026-04-12 documentation review. Each item was verified agains
   - Syntax: `REQUIRE VERSION >= '2.0.0';` (first statement in a script)
   - Files: New `RequireVersionStatement` AST node, check in `Evaluator.Evaluate()` before the dispatch loop.
 
-- [ ] **ENG-9** — **`SHOW VARIABLES` — display all current session `@` variables.**
-  No way to inspect all declared variables and their current values in one call. `SHOW VARIABLES [INTO #temp]` should return `(Name, Type, Value)`. `SHOW TABLES` already exists; `SHOW VARIABLES` completes the session introspection set.
-  - Files: New `ShowVariablesStatementHandler.cs`, `IExecutionContext` (expose `GetAllVariables()`).
-  - Doc: Add to `Grammar.md` Introspection section and `Specialized_Operations.md`.
+- [x] **ENG-9** — **`SHOW VARIABLES` — display all current session `@` variables.**
+  Implemented `SHOW VARIABLES` and `SHOW LOCAL VARIABLES` with support for `INTO #temp`. Masks `@secret` variables marked with `PASSWORD` keyword unless `SET SHOW_PASSWORD ON` is active.
+  - Files: `ShowVariablesStatementHandler.cs`, `IExecutionContext` (expose variables/metadata).
+  - Doc: Added to `Grammar.md` Section 14 and `Specialized_Operations.md` Section 8.5.
 
-- [ ] **ENG-10** — **`HELP VARIABLES` and `HELP STATEMENT <name>` topics missing from `HelpStatementHandler`.**
-  The HELP handler covers: CONNECTION, FUNCTION, DIRECTORY, FILE, TRANSFER, EMAIL, SSH_KEY_PAIR, DOCKER, SHOW. Missing topics commonly reached for:
-  - `HELP VARIABLES` — list all `@@` system variables (`@@ROWCOUNT`, `@@TRANCOUNT`, `@@VERSION`)
-  - `HELP STATEMENT SELECT` — syntax summary for a specific statement
-  - `HELP SECURITY` — quick sandbox rules reference
-  - Files: `HelpStatementHandler.cs` — add new `else if` branches.
+- [x] **ENG-10** — **`HELP VARIABLES` and `HELP STATEMENT <name>` topics missing from `HelpStatementHandler`.**
+  Implemented `HELP VARIABLES` (covers `@@` system vars), `HELP SECURITY` (summarizes sandbox rules), and `HELP STATEMENT <name>` (syntax cheat sheets for core commands). 
+  - Files: `HelpStatementHandler.cs`, `ExpressionEvaluator.cs` (added `@@ROWCOUNT` support).
 
 ---
 
 ## TUI on-going issues
-- [x] When switching to the results tab or execute tree tab the up/down arrow don't work to scroll through.  Can we come up with a better way to handle this?  Maybe on execute make those spaces bigger or add an expand key that makes it use the full window and then press that key to return.
-- [x] When switching between focus's F3 and going back to the script window it get wonky and the top row is unusable.  It doesn't fix itself until I reload.  Thinking we need to repaint the screen when we switch back to the script window.
 
 ## VS Code Extension on-going issues
 - [ ] Each time I execute either all or selected the execute tree should be cleared an should start over.  Currently it just keeps adding to the tree view.
@@ -147,28 +80,6 @@ Identified during 2026-04-12 documentation review. Each item was verified agains
 - [ ] Export to csv should be added to the results grid context menu. It was but at some point it seems to have disappeared.
 - [ ] Setting is really messy, it should just need a pointer to where the exe files are and do you want to show debugging or not.  I don't know of any other options needed at this time. 
 - [ ] rptsql extension is not supported.  Its really the same as etlsql extension except a button should appear so that the user can preview the report in a new panel.  Should work like Markdown preview.  The report preview is already an option so there shouldn't be much to do here.
-
-## Misc Issues
-- [x] **ENCRYPT FILE** and **DECRYPT FILE** now support an explicit `PASSWORD('<password>')` clause in both SQL and functional syntax. Falls back to MasterPassword if omitted.
-
-## Connector Modernization & Expansion
-
-Refer to the **[Connector_Upgrade_Strategy.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Architecture/Connector_Upgrade_Strategy.md)** for the exhaustive technical specs, implementation archetypes, and roadmap for the items below.
-
-### [X] Current Connector Technical Debt
-- [X] Implement missing production options (Failover, Pooling, Security, Culture-aware parsing) for existing SQL and FlatFile providers.
-
-### [ ] Future Connector Roadmap
-- [X] **ODBC Bridge**: Universal legacy connectivity.
-- [X] **REST API**: Generic REST API connector.
-** The rest are on hold no good way to test them at this time.
-- [ ] **Cloud Lakehouse**: Snowflake, Databricks, Delta Sharing, Synapse.
-- [ ] **Enterprise SaaS**: ServiceNow, Dynamics 365, SharePoint.
-- [ ] **Enterprise ERP**: SAP HANA, SAP BW.
-- [ ] **Object Storage**: AWS S3.
-- [ ] **Marketing & Finance**: Google Analytics, Quickbooks Online.
-
----
 
 ## Phase 8 — Scale & Performance (Outstanding)
 
@@ -245,9 +156,9 @@ CREATE PAGE <name> AS LAYOUT (
 My initial draft was that the STRUCTURE option was listed like this 'A A / B C / D E' to represent a 2x3 grid.  I'm not sure if that's the best way to represent it, but it's what I came up with.  Maybe that's hard to implement but it gives you a better indication of what is happening.  I guess the assumption is it works top 
 
 
-- [ ] **Need a comprehensive list of options available for each visual type**  I have started a list in the docs folder, `Docs/Report_SQL_Guide.md`, but it is not complete.  I'm guessing once I get to see everything that may lead to some more syntax optimizations.
+- [X] **Need a comprehensive list of options available for each visual type**  I have started a list in the docs folder, `Docs/Report_SQL_Guide.md`, but it is not complete.  I'm guessing once I get to see everything that may lead to some more syntax optimizations.
 
-- [ ] **Need a comprehensive list of options available for page**  I have started a list in the docs folder, `Docs/Report_SQL_Guide.md`, but it is not complete.  I'm guessing once I get to see everything that may lead to some more syntax optimizations.
+- [X] **Need a comprehensive list of options available for page**  I have started a list in the docs folder, `Docs/Report_SQL_Guide.md`, but it is not complete.  I'm guessing once I get to see everything that may lead to some more syntax optimizations.
 
 - [ ] **Need to add a way to create a new page/tabs**  Currently its rendered as a single page.  Need to be able to generate multiple pages and then we'll need a new structure that acts as the naviation tabs.  
 ```sql
