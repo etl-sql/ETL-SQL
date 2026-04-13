@@ -8,7 +8,7 @@ Identified during 2026-04-12 documentation structure review against professional
 
 ### Architecture Documents (Planned)
 
-- [ ] **DOC-4** — **Create `Docs/Architecture/Orchestrator.md`.**
+- [x] **DOC-4** — **Create `Docs/Architecture/Orchestrator.md`.**
   Document the `ETL-SQL.Orchestrator` project: `ExecutionSession`, `SchedulerService`, `JobHistoryStore`, `ScriptExecutorAdapter`, session lifecycle (boot → parse → lint → evaluate → dispose), how job concurrency is governed, and how `RUN SCRIPT` nesting / `PARALLEL` blocks are scheduled. Should match the depth of `Architecture/Connectors.md`.
 
 - [ ] **DOC-5** — **Create `Docs/Architecture/Reporting.md`.**
