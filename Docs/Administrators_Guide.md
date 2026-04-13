@@ -82,12 +82,13 @@ Core engine behavior is controlled via `appsettings.json` located in the same di
 | :--- | :--- | :--- |
 | `ReportPlayer:Port` | `5200` | The port for the Report-SQL web dashboard. |
 
-### 2.4 Logging & Retention
+### 2.6 Logging & Retention
 | Key | Default | Description |
 | :--- | :--- | :--- |
 | `Logging:AppLog:Directory` | `logs/system` | Location for internal engine diagnostic logs. |
 | `Logging:AppLog:RetentionDays` | `30` | How many days to keep system logs. |
 | `Logging:AppLog:FileSizeLimitMb` | `50` | Max size of a single system log file before rotation. |
+| `Logging:Scheduler:MetricsIntervalSeconds` | `60` | Frequency of active/queued job status heartbeats in the log. |
 
 ---
 
@@ -101,6 +102,12 @@ ETL-SQL uses an **aggregate streaming model**. While it can process terabytes of
 ### 3.2 Safety Guardrails
 The engine enforces **Runaway Protection**. If a script exceeds the `MaxFileOperationsPerScript`, it will halt with a `SecurityException`. 
 Users can bypass this by adding a comment to their script (e.g., `### ALLOW_GREATER_THAN_100_FILE`), but only if the script is running within an **Approved Safe Zone**.
+
+### 3.3 Performance Monitoring
+Administrators can monitor the efficiency of their ETL pipelines using the job history metrics:
+- **Scheduler Heartbeats**: Every 60 seconds (configurable), the scheduler logs `ActiveJobs` vs `QueuedJobs`.
+- **Resource Audit**: Every job completion records `PeakRAM` and `CPUTime`.
+- **Command**: Run `SHOW JOB HISTORY;` in the TUI to see an audit of which scripts are consuming the most memory and processing time.
 
 ---
 

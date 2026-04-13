@@ -61,9 +61,9 @@ namespace ETL_SQL.Core.Linting.Rules
             }
             else if (statement is ExecutePushdownStatement pushdown)
             {
-                // Pushdown SQL text is a string literal usually, but if it contains variables we should check.
-                // However, Pushdown SQL often involves native dialects where we can't easily track variables.
-                // For now, we skip raw SQL text, but check parameters if any.
+                // Pushdown SQL text is often a string literal, but we should check it for sensitive variables
+                CheckSqlTextLeak(pushdown.SqlText, pushdown, scopes, results, "EXECUTE pushdown SQL text");
+
                 foreach (var p in pushdown.Parameters)
                 {
                     CheckLeak(p, pushdown, scopes, results, "EXECUTE pushdown parameter");
@@ -103,6 +103,26 @@ namespace ETL_SQL.Core.Linting.Rules
         private void CheckLeak(Expression expr, AstNode node, Stack<Dictionary<string, bool>> scopes, List<LintResult> results, string sinkName)
         {
             var sensitiveVars = FindSensitiveVariables(expr, scopes);
+            ReportLeaks(sensitiveVars, node, results, sinkName);
+        }
+
+        private void CheckSqlTextLeak(string sql, AstNode node, Stack<Dictionary<string, bool>> scopes, List<LintResult> results, string sinkName)
+        {
+            var detected = new List<string>();
+            // Use regex to find potential internal variable mentions in the raw SQL text
+            var matches = System.Text.RegularExpressions.Regex.Matches(sql, @"@\w+");
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                if (IsVariableSensitive(match.Value, scopes))
+                {
+                    detected.Add(match.Value);
+                }
+            }
+            ReportLeaks(detected.Distinct().ToList(), node, results, sinkName);
+        }
+
+        private void ReportLeaks(List<string> sensitiveVars, AstNode node, List<LintResult> results, string sinkName)
+        {
             if (sensitiveVars.Any())
             {
                 string varList = string.Join(", ", sensitiveVars);

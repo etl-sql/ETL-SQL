@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ETL_SQL.ReportBuilder
@@ -16,7 +17,9 @@ namespace ETL_SQL.ReportBuilder
     /// </summary>
     public class SnapshotStore
     {
-        private static readonly System.Threading.SemaphoreSlim _writeLock = new(1, 1);
+        private static readonly SemaphoreSlim _readLock = new(1, 1);
+        private static readonly SemaphoreSlim _writeLock = new(1, 1);
+        private static int _readerCount = 0;
 
         private static readonly JsonSerializerOptions _opts = new()
         {
@@ -59,12 +62,26 @@ namespace ETL_SQL.ReportBuilder
 
         /// <summary>
         /// Deserialises a previously saved manifest. Returns null if the file does not exist.
+        /// Supports parallel reads while blocking for writes.
         /// </summary>
         public async Task<ReportManifest?> LoadAsync(string snapshotPath)
         {
-            if (!File.Exists(snapshotPath)) return null;
-            var json = await File.ReadAllTextAsync(snapshotPath);
-            return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
+            await _readLock.WaitAsync();
+            if (++_readerCount == 1) await _writeLock.WaitAsync();
+            _readLock.Release();
+
+            try
+            {
+                if (!File.Exists(snapshotPath)) return null;
+                var json = await File.ReadAllTextAsync(snapshotPath);
+                return JsonSerializer.Deserialize<ReportManifest>(json, _opts);
+            }
+            finally
+            {
+                await _readLock.WaitAsync();
+                if (--_readerCount == 0) _writeLock.Release();
+                _readLock.Release();
+            }
         }
 
         /// <summary>

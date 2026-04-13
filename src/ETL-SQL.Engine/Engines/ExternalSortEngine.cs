@@ -172,9 +172,9 @@ namespace ETL_SQL.Engine.Engines
                 {
                     System.Text.Json.JsonValueKind.Number  => je.TryGetDecimal(out var d) ? d : (object?)je.GetDouble(),
                     System.Text.Json.JsonValueKind.True    => true,
-                    System.Text.Json.JsonValueKind.False  => false,
-                    System.Text.Json.JsonValueKind.String => je.GetString(),
-                    System.Text.Json.JsonValueKind.Null   => null,
+                    System.Text.Json.JsonValueKind.False   => false,
+                    System.Text.Json.JsonValueKind.String  => DateTime.TryParse(je.GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : je.GetString(),
+                    System.Text.Json.JsonValueKind.Null    => null,
                     _                                     => (object?)je.ToString()
                 };
             return val;
@@ -193,7 +193,7 @@ namespace ETL_SQL.Engine.Engines
                     System.Text.Json.JsonValueKind.Number => el.GetDouble(),
                     System.Text.Json.JsonValueKind.True => true,
                     System.Text.Json.JsonValueKind.False => false,
-                    System.Text.Json.JsonValueKind.String => el.GetString(),
+                    System.Text.Json.JsonValueKind.String => DateTime.TryParse(el.GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : el.GetString(),
                     _ => s
                 };
             }

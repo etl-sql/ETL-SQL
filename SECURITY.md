@@ -107,6 +107,13 @@ The engine provides a non-bypassable guard for all network-based connectors (`MS
 - **Wildcards**: Supports `*` at the start of a domain (e.g., `*.google.com` matches `api.google.com` and `translate.google.com`).
 - **Implicit Safety**: `localhost` and loopback IPs are not automatically allowed once strict mode is activated; they must be explicitly added to the list if needed.
 
+### 3.7 Performance Observability & Resource Metrics
+To facilitate monitoring and prevent stealth resource exhaustion, the engine provides high-visibility metrics for all execution sessions.
+
+- **Periodic Emission**: The background `SchedulerService` emits a heart-beat log every 60 seconds containing the count of `ActiveJobs`, `QueuedJobs`, and `AvailableSlots`.
+- **Per-Job Accountability**: Every script execution (spawned or in-process) captures and logs `PeakMemoryBytes` and `CpuTimeSeconds`.
+- **Audit Visibility**: Use the `SHOW JOB HISTORY` command to inspect resource consumption for past executions. This provides an audit trail for spotting runaway scripts that may be staying within security limits but consuming excessive enterprise resources.
+
 ### 3.6 Hardening the Report Dashboard
 The Report-SQL dashboard (`ReportPlayer`) exposes a live web interface that must be protected in multi-tenant environments.
 
@@ -226,4 +233,4 @@ To report a security vulnerability in ETL-SQL, open a confidential issue or cont
 
 **Policy Version**: 0.5
 **Compliance Standard**: Built with reference to NIST SP 800-204 (Microservices Security), NIST SP 800-132 (Password-Based Key Derivation), and OWASP CLI Security Principles.
-**Last Review Date**: 2026-04-12
+**Last Review Date**: 2026-04-13

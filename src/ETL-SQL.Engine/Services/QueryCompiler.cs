@@ -169,10 +169,7 @@ namespace ETL_SQL.Engine.Services
             }
             else
             {
-                var parts = new List<string>();
-                if (t.SchemaName != null) parts.Add(t.SchemaName);
-                parts.Add(t.TableName);
-                sql = string.Join(".", parts);
+                sql = _evaluator.GetSqlTableName(t, d);
             }
 
             if (t.Alias != null) sql += " AS " + t.Alias;
@@ -184,7 +181,7 @@ namespace ETL_SQL.Engine.Services
         /// </summary>
         public string CompileMerge(MergeStatement m, string d)
         {
-            var sql = $"MERGE INTO {m.TargetTable.TableName} AS T";
+            var sql = $"MERGE INTO {_evaluator.GetSqlTableName(m.TargetTable, d)} AS T";
             
             sql += $" USING {m.SourceTable.ToSql()}";
             if (m.SourceTable.Alias == null) sql += " AS S";

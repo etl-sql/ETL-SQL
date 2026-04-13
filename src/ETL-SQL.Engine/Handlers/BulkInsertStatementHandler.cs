@@ -181,7 +181,7 @@ namespace ETL_SQL.Engine.Handlers
                                 {
                                     errorCount++;
                                     _logger.WriteLine($"[ERROR] Row failed: {rowEx.Message}");
-                                    if (errorCount > maxErrors)
+                                    if (errorCount >= maxErrors)
                                     {
                                         throw new ExecutionException($"Max errors ({maxErrors}) exceeded during bulk insert. Last error: {rowEx.Message}", rowEx);
                                     }

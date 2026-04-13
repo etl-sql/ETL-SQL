@@ -28,17 +28,26 @@ namespace ETL_SQL.Orchestrator.Execution
 
         public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, CancellationToken cancellationToken = default)
         {
+            var process = System.Diagnostics.Process.GetCurrentProcess();
+            var startCpu = process.TotalProcessorTime.TotalSeconds;
+            
             try
             {
                 var session = new ExecutionSession(_serviceProvider, _ctx, _logger);
                 var result = await session.ExecuteAsync(scriptText, cancellationToken);
+                
+                process.Refresh();
+                var endCpu = process.TotalProcessorTime.TotalSeconds;
+                
                 return new ScriptExecutionResult(result.Success, result.RowsProcessed,
                     result.Success ? null : string.Join("; ", result.Diagnostics.Select(d => d.Message)),
-                    0, 0); // In-process execution doesn't easily report isolated metrics here
+                    process.PeakWorkingSet64, endCpu - startCpu);
             }
             catch (Exception ex)
             {
-                return new ScriptExecutionResult(false, 0, ex.Message, 0, 0);
+                process.Refresh();
+                var endCpu = process.TotalProcessorTime.TotalSeconds;
+                return new ScriptExecutionResult(false, 0, ex.Message, process.PeakWorkingSet64, endCpu - startCpu);
             }
         }
     }

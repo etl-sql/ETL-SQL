@@ -23,8 +23,8 @@ Design spike complete (`Docs/Strategy/LargeDatasets.md`). Architecture documente
 
 Most infrastructure is already in place (`SchedulerService`, `ProcessJobExecutor`, `JobHistoryStore`). The remaining work is exposing limits and emitting metrics.
 
-- [ ] **8B-1** Periodic metrics emission. Log `SchedulerService.GetMetrics()` (active/queued job counts) every 60 seconds to the structured log sink. Add `GetMetrics()` to `SchedulerService` if not already present.
-- [ ] **8B-2** Per-job CPU/RAM tracking. Capture peak CPU and RSS from each `ProcessJobExecutor` child process on completion; attach to the `JobHistoryStore` entry so it is visible in `SHOW JOB HISTORY`.
+- [x] **8B-1** Periodic metrics emission. Log `SchedulerService.GetMetrics()` (active/queued job counts) every 60 seconds to the structured log sink.
+- [x] **8B-2** Per-job CPU/RAM tracking. Capture peak CPU and RSS from script executions; attach to the `JobHistoryStore` entry so it is visible in `SHOW JOB HISTORY`.
 
 ---
 
@@ -34,13 +34,13 @@ Phases 9A–9D are complete. The following items were deferred as out-of-scope f
 
 ### Dashboard Behavior
 
-- [ ] **Rpt-1** Slicer parameter optimization. `DashboardService.SetParameterAsync` currently does a full script rebuild on every parameter change (noted in code as "Phase 9D simplified: full rebuild"). Upgrade to selective re-evaluation: parse each visual's `SourceSql` at manifest-build time to extract which `@params` it references; on parameter change, only re-query and re-render visuals whose source references that parameter. All other visuals keep their current data.
+- [x] **Rpt-1** Slicer parameter optimization. `DashboardService.SetParameterAsync` upgraded to selective re-evaluation: scans visual `SourceSql` for dependencies; on parameter change, only re-materializes affected visuals.
 - [ ] **Rpt-2** `SnapshotStore` write safety. Two issues: (a) atomic write — serialize to a `.tmp` file, rename to the final path on success; orphaned `.tmp` files from a crash are deleted on startup. (b) Concurrent access — wrap reads/writes in a `ReaderWriterLockSlim` so live dashboard reads and a scheduled `CREATE DATASET` refresh job do not race.
 
 ### Linter Rules
 
-- [ ] **Rpt-3** Report-SQL keyword conflict linter rule. Add a rule that warns when a column alias or variable name shadows a Report-SQL keyword (`VISUAL`, `PAGE`, `DATASET`, `MAPPINGS`, `SOURCE`, `STRUCTURE`, `MAP`, etc.). These are non-reserved and will not cause a parse error, but they will confuse anyone reading the script.
-- [ ] **Rpt-4** `STRUCTURE` string validation. `CreatePageStatementHandler` and the linter should validate the CSS grid template areas string: every letter in the `MAP(...)` must appear in `STRUCTURE`, and every letter in `STRUCTURE` must appear in the map. Mismatches produce a broken layout silently today.
+- [x] **Rpt-3** Report-SQL keyword conflict linter rule. Add a rule that warns when a column alias or variable name shadows a Report-SQL keyword (`VISUAL`, `PAGE`, `DATASET`, `MAPPINGS`, `SOURCE`, `STRUCTURE`, `MAP`, etc.). These are non-reserved and will not cause a parse error, but they will confuse anyone reading the script.
+- [ ] **Rpt-4 HOLD** `STRUCTURE` string validation. `CreatePageStatementHandler` and the linter should validate the CSS grid template areas string: every letter in the `MAP(...)` must appear in `STRUCTURE`, and every letter in `STRUCTURE` must appear in the map. Mismatches produce a broken layout silently today.  Note: I would like to get the structure the way I want it first.  Hold on this item for now.
 
 ### Documentation
 
@@ -120,7 +120,7 @@ These items were identified during the 2026-04-12 security review of `SECURITY.m
 
 ### Medium Severity
 
-- [ ] **SEC-1** — **PBKDF2 iteration count is below current NIST guidance.**
+- [x] **SEC-1** — **PBKDF2 iteration count is below current NIST guidance.**
   `CryptoUtils` uses 10,000 PBKDF2 iterations for AES-256 key derivation. NIST SP 800-132 (2023) recommends ≥ 600,000 for SHA-256. Increase the count and add a migration path so existing `ENC:` strings can be re-encrypted without breaking current scripts.
   - Files: `ETL-SQL.Core/CryptoUtils.cs` (or equivalent key-derivation site)
   - Test: round-trip `Encrypt`/`Decrypt` at new iteration count; verify old count can still decrypt.
@@ -172,19 +172,19 @@ Identified by automated deep review of the current codebase. Verified against so
 - [x] **CR-B4** — **Standardized numeric deserialization to `decimal` for all disk-spilling engines.**
   Updated `ExternalJoinEngine.cs`, `ExternalSortEngine.cs`, and `CompoundKey.cs` to force `decimal` conversion when unwrapping numeric values from `JsonElement`. This resolves join key and sort key mismatches between in-memory decimal values and disk-serialized numbers.
 
-- [ ] **CR-B5** — **Date values stored as strings are not reconverted to `DateTime` after aggregate spill/read.**
+- [x] **CR-B5** — **Date values stored as strings are not reconverted to `DateTime` after aggregate spill/read.**
   `ExternalAggregateEngine.JsonElementToValue` returns dates stored in spilled JSON as plain `string` (they round-trip through `JsonValueKind.String`). When `AggregateEngine` evaluates `MIN`/`MAX` on a date column after a spill, it performs string comparison instead of date ordering, producing wrong results for dates that sort differently as strings (e.g., `"2025-01-10"` < `"2025-09-01"` by string but not in all locales).
   - **Severity:** Medium
   - Files: `src/ETL-SQL.Engine/Engines/ExternalAggregateEngine.cs` ~line 143
   - Fix: In the `JsonValueKind.String` branch of `JsonElementToValue`, attempt `DateTime.TryParse` and return a `DateTime` when successful.
 
-- [ ] **CR-B6** — **`BulkInsertStatementHandler` MAXERRORS condition allows double the error budget.**
+- [x] **CR-B6** — **`BulkInsertStatementHandler` MAXERRORS condition allows double the error budget.**
   The outer fallback condition `if (maxErrors > 0 || errorCount < maxErrors)` short-circuits on `maxErrors > 0`, entering the row-by-row fallback regardless of whether `errorCount` has already reached `maxErrors`. This allows up to `2 × maxErrors` rows to be skipped before aborting.
   - **Severity:** Medium
   - Files: `src/ETL-SQL.Engine/Handlers/BulkInsertStatementHandler.cs` ~line 165
   - Fix: Change the condition to `if (errorCount < maxErrors)` — remove the `maxErrors > 0 ||` clause.
 
-- [ ] **CR-B7** — **`Log()` method writes to `Messages` list without the lock used by the `OnMessage` handler.**
+- [x] **CR-B7** — **`Log()` method writes to `Messages` list without the lock used by the `OnMessage` handler.**
   The constructor's `OnMessage` handler acquires `_messagesLock` before writing to `Messages`. The public `Log(string, ConsoleColor)` method writes to the same list without acquiring the lock. Concurrent calls produce a data race.
   - **Severity:** Low
   - Files: `src/ETL-SQL.Engine/Evaluator.cs` ~line 629
@@ -198,19 +198,19 @@ Identified by automated deep review of the current codebase. Verified against so
   - Files: `src/ETL-SQL.ReportPlayer/DashboardService.cs` ~line 101
   - Fix: Pass parameters directly via `evaluator.DeclareVariable(name, value, ...)` before calling `evaluator.Evaluate(script)`, bypassing the parser entirely for parameter injection.
 
-- [ ] **CR-S2** — **Table names are interpolated unquoted into SQL pushdown strings.**
+- [x] **CR-S2** — **Table names are interpolated unquoted into SQL pushdown strings.**
   `InsertStatementHandler` builds `INSERT INTO {tableName}` by interpolating `GetSqlTableName()` directly into a SQL string without identifier quoting. A table name containing SQL metacharacters (e.g., from a user-supplied variable) produces an injection vector in pushdown queries.
   - **Severity:** Medium
   - Files: `src/ETL-SQL.Engine/Handlers/InsertStatementHandler.cs` ~line 92
   - Fix: Apply dialect-appropriate identifier quoting in `GetSqlTableName` (`[name]` for SQL Server, `"name"` for Postgres/Oracle).
 
-- [ ] **CR-S3** — **Script directory added to `ApprovedSafeZones` without system-path validation.**
+- [x] **CR-S3** — **Script directory added to `ApprovedSafeZones` without system-path validation.**
   `EngineRunner` unconditionally adds the script's containing directory to `SecurityService.ApprovedSafeZones`. If the script path resolves to a system directory (e.g., the working directory is `/etc` or `C:\Windows`), the entire directory becomes an approved override zone.
   - **Severity:** Medium
   - Files: `src/ETL-SQL.App/App/EngineRunner.cs` ~line 183
   - Fix: Validate that `scriptDir` is not under common system paths (or is under a configured workspace root) before adding to `ApprovedSafeZones`.
 
-- [ ] **CR-S4** — **`CredentialLeakRule` does not scan pushdown SQL text or track variable taint.**
+- [x] **CR-S4** — **`CredentialLeakRule` does not scan pushdown SQL text or track variable taint.**
   The linter rule detects credential names in `PRINT`/`SEND EMAIL` but does not scan the raw `SqlText` of `EXECUTE PUSHDOWN` statements. It also has no taint propagation — `SET @conn = @password` does not mark `@conn` as sensitive.
   - **Severity:** Low
   - Files: `src/ETL-SQL.Core/Linting/Rules/CredentialLeakRule.cs` ~line 65
@@ -218,7 +218,7 @@ Identified by automated deep review of the current codebase. Verified against so
 
 ### Concurrency & Resource Management
 
-- [ ] **CR-C1** — **`SessionStateManager` file I/O is non-atomic and unlocked.**
+- [x] **CR-C1** — **`SessionStateManager` file I/O is non-atomic and unlocked.**
   `SaveSession` writes two files (`session.json`, recovery manifest) with bare `File.WriteAllText` — no locking and no atomic write. Concurrent saves for the same session ID (e.g., multi-request web scenario) interleave writes, corrupting both files. `ReapStaleSessions` can also delete files while `LoadSession` is reading them.
   - **Severity:** Medium
   - Files: `src/ETL-SQL.Engine/Services/SessionStateManager.cs` ~line 165
@@ -233,7 +233,7 @@ Identified by automated deep review of the current codebase. Verified against so
   - Files: `src/ETL-SQL.Engine/Evaluator.cs` ~line 49
   - Fix: Remove the unused field; use `Random.Shared` (thread-safe in .NET 6+) if random numbers are ever needed.
 
-- [ ] **CR-C4** — **`EXPLAIN ANALYZE` mutates shared context flags and does not update `LastResultSets`.**
+- [x] **CR-C4** — **`EXPLAIN ANALYZE` mutates shared context flags and does not update `LastResultSets`.**
   `ExplainStatementHandler` sets `context.IsProfiling = true` and `context.RedirectOutput = true` on the shared `Evaluator` instance before running the inner query. These flags affect all concurrent readers of the context during execution. The `finally` block restores them, but the analyzed result is never appended to `context.LastResultSets`, so `@@RESULTSETS` and any test checking `LastResultSets` see stale data.
   - **Severity:** Low
   - Files: `src/ETL-SQL.Engine/Handlers/ExplainStatementHandler.cs` ~line 46
@@ -410,8 +410,9 @@ Hardcoded constants that should be surfaced as `appsettings.json` entries so use
 - [x] **DOC-1**: Update `Grammar.md` and `Report_SQL_Guide.md` with system variables (`@@ERROR`, `@@DATASET`).
 - [x] **CFG-7**: Externalize `SecurityService.DefaultMaxFileOperations` to `appsettings.json`.
 - [x] **CFG-8**: Externalize `SecurityService.DefaultMaxRecursiveDepth` to `appsettings.json`.
-- [ ] **CFG-9**: Implement `ConnectorRetryOptions` in `appsettings.json` (MaxAttempts, BaseDelay).
-- [ ] **CFG-10**: Support `Session:StaleSessionRetentionDays` configuration.
+- [x] **CFG-9**: Implement `ConnectorRetryOptions` in `appsettings.json` (MaxAttempts, BaseDelay).
+- [x] **CFG-10**: Support `Session:StaleSessionRetentionDays` configuration.
+
 - [x] **CFG-11**: Externalize `ReportPlayer` port (`5200`) to `appsettings.json`.
 
 - [ ] **CFG-7** — **`SecurityService.DefaultMaxFileOperations` (default 100) — per-script file-op runaway limit.**

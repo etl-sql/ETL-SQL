@@ -95,6 +95,7 @@ namespace ETL_SQL.Engine.Handlers
             context.ProfileMetrics.Add(metrics);
             
             context.LastResult = plan;
+            context.LastResultSets.Add(plan);
             
             if (!context.RedirectOutput)
             {

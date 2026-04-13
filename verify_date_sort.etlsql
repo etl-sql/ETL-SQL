@@ -1,0 +1,18 @@
+-- Verification: CR-B5 (Date Sorting in Large Datasets)
+-- We generate 150,000 rows with dates to trigger spill-to-disk sorting.
+
+DECLARE @Count = 110000;
+CREATE TABLE #LargeData (ID INT, EventDate DATETIME);
+
+DECLARE @i = 0;
+WHILE @i < @Count
+BEGIN
+  INSERT INTO #LargeData (ID, EventDate)
+  VALUES (@i, DATEADD(DAY, -(@i % 730), GETDATE()));
+  SET @i = @i + 1;
+END
+
+PRINT 'Sorting 150,000 rows by date. This will trigger ExternalSortEngine.';
+
+SELECT TOP 10 * FROM #LargeData ORDER BY EventDate ASC;
+SELECT TOP 10 * FROM #LargeData ORDER BY EventDate DESC;

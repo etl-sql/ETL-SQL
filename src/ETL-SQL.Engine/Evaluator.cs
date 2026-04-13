@@ -674,7 +674,7 @@ namespace ETL_SQL.Engine
                 if (Messages.Count > MaxMessages)
                 {
                     Messages.RemoveAt(0);
-                    if (Messages.Count > 0 && !Messages[0].StartsWith("[TRUNCATED]")) 
+                    if (Messages.Count > 0 && !Messages[0].StartsWith("[TRUNCATED]"))
                         Messages[0] = "[TRUNCATED] " + Messages[0];
                 }
             }

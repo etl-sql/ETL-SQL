@@ -142,7 +142,7 @@ namespace ETL_SQL.Core.Linting.Rules
 
         private void CheckVariable(string name, AstNode node, HashSet<string> declaredVariables, List<LintResult> results)
         {
-            if (name.StartsWith("@") && !declaredVariables.Contains(name))
+            if (name.StartsWith("@") && !name.StartsWith("@@") && !declaredVariables.Contains(name))
             {
                 results.Add(new LintResult
                 {

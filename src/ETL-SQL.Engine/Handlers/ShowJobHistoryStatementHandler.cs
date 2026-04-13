@@ -31,6 +31,8 @@ namespace ETL_SQL.Engine.Handlers
             table.AddColumn("EndTime");
             table.AddColumn("Status");
             table.AddColumn("RowsProcessed");
+            table.AddColumn("PeakRAM_MB");
+            table.AddColumn("CPUTime_s");
             table.AddColumn("ErrorMessage");
 
             foreach (var entry in history)
@@ -42,6 +44,8 @@ namespace ETL_SQL.Engine.Handlers
                 row["EndTime"] = entry.EndTime;
                 row["Status"] = entry.Status;
                 row["RowsProcessed"] = entry.RowsProcessed;
+                row["PeakRAM_MB"] = entry.PeakMemoryBytes / (1024.0 * 1024.0);
+                row["CPUTime_s"] = entry.CpuTimeSeconds;
                 row["ErrorMessage"] = entry.ErrorMessage;
                 await table.AddRowAsync(row);
             }

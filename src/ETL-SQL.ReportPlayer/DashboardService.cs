@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -33,6 +34,7 @@ namespace ETL_SQL.ReportPlayer
         private readonly SemaphoreSlim _lock = new(1, 1);
 
         private ReportManifest? _manifest;
+        private Evaluator? _evaluator; // Cache evaluator to allow partial re-materialization
         private Dictionary<string, string> _parameters = new(StringComparer.OrdinalIgnoreCase);
 
         public DashboardService(string scriptPath)
@@ -51,13 +53,59 @@ namespace ETL_SQL.ReportPlayer
         public IReadOnlyDictionary<string, string> Parameters => _parameters;
 
         /// <summary>
-        /// Updates one parameter and re-evaluates the script so affected visuals
-        /// are refreshed with the new value.
+        /// Updates one parameter and re-evaluates only the affected visuals
+        /// rather than doing a full script rebuild (Tier 1 Optimization).
         /// </summary>
         public async Task<ReportManifest> SetParameterAsync(string name, string value)
         {
             _parameters[name] = value;
+            
+            // If we have an active evaluator and manifest from a previous run, try selective refresh
+            if (_evaluator != null && _manifest != null)
+            {
+                await _lock.WaitAsync();
+                try 
+                {
+                    var varName = name.StartsWith('@') ? name : "@" + name;
+                    _evaluator.DeclareVariable(varName, value, new VariableMetadata { IsInput = true });
+
+                    var builder = new ManifestBuilder(_evaluator);
+                    var affectedCount = 0;
+
+                    foreach (var visualDef in _evaluator.VisualDefinitions.Values)
+                    {
+                        if (DependsOnVariable(visualDef, name))
+                        {
+                            var existingVm = _manifest.Visuals.FirstOrDefault(v => v.Name == visualDef.Name);
+                            if (existingVm != null)
+                            {
+                                await builder.RefreshVisualAsync(visualDef, existingVm);
+                                affectedCount++;
+                            }
+                        }
+                    }
+
+                    if (affectedCount > 0)
+                    {
+                        _manifest.BuiltAt = DateTime.UtcNow;
+                        return _manifest;
+                    }
+                }
+                finally { _lock.Release(); }
+            }
+
             return await RebuildAsync();
+        }
+
+        private bool DependsOnVariable(CreateVisualStatement visual, string variableName)
+        {
+            if (!variableName.StartsWith("@")) variableName = "@" + variableName;
+            
+            string? sql = visual.Source.IsInlineSelect 
+                ? visual.Source.InlineSelect?.ToSql() 
+                : visual.Source.TempTableName;
+                
+            return sql?.Contains(variableName, StringComparison.OrdinalIgnoreCase) ?? false;
         }
 
         /// <summary>Full rebuild: re-evaluate the script and re-snapshot all visuals.</summary>
@@ -88,6 +136,7 @@ namespace ETL_SQL.ReportPlayer
                 await evaluator.Evaluate(script);
 
                 var builder   = new ManifestBuilder(evaluator);
+                _evaluator    = evaluator; // Hold onto evaluator for partial refreshes
                 _manifest     = await builder.BuildAsync(_scriptPath);
                 return _manifest;
             }

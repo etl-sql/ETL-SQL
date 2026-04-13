@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using System.Collections.Concurrent;
+using System.Threading;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
@@ -24,6 +26,9 @@ namespace ETL_SQL.Engine.Services
         private readonly ILogger _logger = logger;
         private const string SessionFileExtension = ".etlsession";
         private const string RecoveryManifestExtension = ".recovery.json";
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
+
+        private SemaphoreSlim GetSessionLock(string sessionId) => _sessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
 
         private static string InitializeSessionRoot(string? customDir)
         {
@@ -167,7 +172,6 @@ namespace ETL_SQL.Engine.Services
             
             File.WriteAllText(sessionFile, CryptoUtils.Protect(fullJson, entropyKey));
 
-            // 6. Save unencrypted recovery manifest (Bug # recovery focus)
             var manifest = new
             {
                 SessionId = sessionId,
@@ -176,7 +180,36 @@ namespace ETL_SQL.Engine.Services
                 TempTables = state.TempTables.Select(t => t.Name).ToList(),
                 Variables = state.GlobalVariables.Keys.ToList()
             };
-            File.WriteAllText(GetRecoveryFilePath(sessionId), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+
+            var sessionLock = GetSessionLock(sessionId);
+            await sessionLock.WaitAsync();
+            try
+            {
+                await WriteAtomicAsync(sessionFile, CryptoUtils.Protect(fullJson, entropyKey));
+                await WriteAtomicAsync(GetRecoveryFilePath(sessionId), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            finally
+            {
+                sessionLock.Release();
+            }
+        }
+
+        private async Task WriteAtomicAsync(string path, string content)
+        {
+            var tmpPath = path + ".tmp";
+            try
+            {
+                await File.WriteAllTextAsync(tmpPath, content);
+                if (File.Exists(path)) File.Delete(path);
+                File.Move(tmpPath, path);
+            }
+            finally
+            {
+                if (File.Exists(tmpPath))
+                {
+                    try { File.Delete(tmpPath); } catch { }
+                }
+            }
         }
 
         private List<TableConstraintInfo> MapConstraints(IEnumerable<TableConstraint> constraints)

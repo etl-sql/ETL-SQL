@@ -16,7 +16,7 @@ namespace ETL_SQL.Common
     public static class CryptoUtils
     {
         private const int KeySize = 256;
-        private const int Iterations = 10000;
+        private const int Iterations = 600000;
         private const int SaltSize = 16;
         private const int IvSize = 16;
 

@@ -8,16 +8,12 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 *Changes staged on `dev` that have not yet been cut into a release.*
 
-- **Configuration & Scaling (CFG-5, CFG-6, CFG-9, CFG-10)**:
-    - **Connector Resilience**: Externalized retry policies (`MaxAttempts`, `BaseDelay`) to `appsettings.json`.
-    - **Hyper-Scale Join Tuning**: Configurable `JoinSpillThreshold` for disk-spilling behavior.
-    - **Hash Partition Optimization**: Externalized `ExternalHashPartitions` for disk-spilling join/aggregate ops.
-    - **Session Lifecycle**: Configurable `StaleSessionRetentionDays` in `EngineRunner`.
-- **Documentation (DOC-1, DOC-2)**:
-    - **Administrators Guide**: Created a central resource for deployment, configuration, and resource governance.
-    - **Security Documentation**: Hardened `SECURITY.md` with configurable limits and dashboard integrity.
-    - **Orchestrators Guide**: Streamlined with pointers to the new administrator resources.
-- **Testing**: Added verification suites for system variables, scaling configuration, and snapshot safety.
+- **Security & Integrity (SEC-1, CR-S4, CR-C4, Rpt-3)**:
+    - **Hardened Connection Encryption**: Increased PBKDF2 iterations to 600,000 for industry-standard brute-force resistance.
+    - **Expanded Credential Protection**: `CredentialLeakRule` now scans native pushdown SQL text for sensitive variable references.
+    - **Engine Isolation**: Fixed context flag mutation in `EXPLAIN ANALYZE` and ensured proper result-set registration for analytical output.
+    - **Dashboard Stability**: New `DashboardKeywordConflictRule` prevents user-defined visuals/datasets from shadowing internal dashboard state.
+- **Testing**: Added verification suites for system variables, scaling configuration, snapshot safety, and security hardening.
 
     - `Security:MaxRecursiveNestingDepth` – Configurable recursion safety limit (formerly hardcoded at 5).
 - **Documentation**:

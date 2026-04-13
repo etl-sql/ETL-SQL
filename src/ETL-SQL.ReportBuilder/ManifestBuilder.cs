@@ -92,7 +92,18 @@ namespace ETL_SQL.ReportBuilder
             return manifest;
         }
 
-        private async Task FetchVisualDataAsync(CreateVisualStatement vStmt, VisualManifest vm)
+        /// <summary>
+        /// Re-queries the data for a specific visual and updates its Row/Column collections.
+        /// Also regenerates the ChartConfig.
+        /// </summary>
+        public async Task RefreshVisualAsync(CreateVisualStatement vStmt, VisualManifest vm)
+        {
+            vm.Rows.Clear();
+            await FetchVisualDataAsync(vStmt, vm);
+            vm.ChartConfig = _renderer.Render(vm);
+        }
+
+        public async Task FetchVisualDataAsync(CreateVisualStatement vStmt, VisualManifest vm)
         {
             Statement queryStmt;
 
