@@ -161,6 +161,9 @@ namespace ETL_SQL.App
 
             int joinSpillThreshold = int.TryParse(configuration["Engine:JoinSpillThreshold"], out var jst) ? jst : 100000;
             int externalHashPartitions = int.TryParse(configuration["Engine:ExternalHashPartitions"], out var ehp) ? ehp : 32;
+            int batchSize = int.TryParse(configuration["Engine:BatchSize"], out var bs) ? bs : 10000;
+            int maxRecursiveDepth = int.TryParse(configuration["Engine:MaxRecursiveDepth"], out var mrd2) ? mrd2 : 10000;
+            int externalSortChunkSize = int.TryParse(configuration["Engine:ExternalSort:ChunkSize"], out var esc) ? esc : 100000;
 
             services.AddTransient<Evaluator>(sp => {
                 var evaluator = ActivatorUtilities.CreateInstance<Evaluator>(sp);
@@ -168,6 +171,9 @@ namespace ETL_SQL.App
                 evaluator.ForeachPageSize = foreachPageSize;
                 evaluator.JoinSpillThreshold = joinSpillThreshold;
                 evaluator.ExternalHashPartitions = externalHashPartitions;
+                evaluator.BatchSize = batchSize;
+                evaluator.MaxRecursiveDepth = maxRecursiveDepth;
+                evaluator.ExternalSortChunkSize = externalSortChunkSize;
                 return evaluator;
             });
 

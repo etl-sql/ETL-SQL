@@ -244,17 +244,9 @@ Identified by automated deep review of the current codebase. Verified against so
 
 ### Test Gaps
 
-- [ ] **CR-T1** — **No test for HAVING clause through the streaming aggregate path.**
-  `SpillToDiskTests.cs` has no test that exercises `HAVING` with the `streamAggregate` path (GROUP BY with no joins, over > 100k rows). The HAVING clause is passed through to `ExternalAggregateEngine` but this combination is completely untested.
-  - Files: `tests/ETL-SQL.Tests/Performance/SpillToDiskTests.cs`
-  - Fix: Add `SELECT category, SUM(value) AS total FROM #large GROUP BY category HAVING SUM(value) > X` test over 150k rows.
-
-- [ ] **CR-T2** — **External sort test data uses unique keys only — duplicate-key crash (CR-B2) is never triggered.**
-  All `SpillToDiskTests` sort by `Id = i` (unique sequential integers). The `SortedList` duplicate-key crash only occurs with repeated sort-key values, so CR-B2 is invisible to the test suite.
-  - Files: `tests/ETL-SQL.Tests/Performance/SpillToDiskTests.cs`
-  - Fix: Add `ORDER BY Val` test where `Val = i % 100` across 250k rows — this exposes the crash immediately.
-
-- [ ] **CR-T3** — **`EXPLAIN ANALYZE`, `ShowVariablesStatementHandler`, and Report-SQL handlers have no dedicated tests.**
+- [x] **CR-T1** — **Test `HAVING` clause through the streaming aggregate path.**
+- [x] **CR-T2** — **External sort test data with duplicate keys.**
+- [ ] **CR-T3** — **`EXPLAIN ANALYZE`, `ShowVariablesStatementHandler`, and Report-SQL handlers dedicated tests.**
   No test files exist for the `EXPLAIN ANALYZE` path, `ShowVariablesStatementHandler`, `CreateVisualStatementHandler`, `CreatePageStatementHandler`, or `CreateDatasetStatementHandler`. New handlers added in recent sessions have no unit or smoke test coverage.
   - Fix: Add at minimum one smoke test per new handler verifying the observable side-effect (result schema, registered definitions, or error on bad input).
 
@@ -375,79 +367,36 @@ Identified by automated deep review of the current codebase. Verified against so
 
 ## Configuration / Tuning (CFG)
 
-Hardcoded constants that should be surfaced as `appsettings.json` entries so users can tune for their hardware without recompiling.
+Hardcoded constants have been surfaced as `appsettings.json` entries for runtime tuning.
 
 ### Engine Performance
 
-- [ ] **CFG-1** — **`BatchSize` (default 10 000) — rows per streaming batch.**
-  Controls how many rows are held per batch during all streaming operations (SELECT, FOREACH, connector reads). Users with more RAM can increase this for fewer I/O round-trips; constrained environments should lower it.
-  - Currently: `Evaluator.BatchSize = 10000` (hard default, CLI `--batch-size` flag exists)
-  - Add: `Engine:BatchSize` in `appsettings.json`; read in `EngineRunner` before `evaluator.BatchSize = ctx.BatchSize`.
-
-- [ ] **CFG-2** — **`MaxInMemoryBatches` (default 100) — batches kept in RAM before `#temp` spills to disk.**
-  Already defined in `LanguageMetadata.DefaultMaxInMemoryBatches` and partly present as `Orchestration:MaxInMemoryBatches` in App appsettings, but only wired for the orchestrator path. The evaluator reads `Evaluator.MaxInMemoryBatches` which defaults from the constant and is never populated from config in the CLI run path.
-  - Add: `Engine:MaxInMemoryBatches` entry and wire it in `EngineRunner` alongside BatchSize.
-
-- [ ] **CFG-3** — **`MaxRecursiveDepth` (default 10 000) — CTE/procedure recursion ceiling.**
-  Affects WITH RECURSIVE depth and nested procedure calls. Deep analytical CTEs (e.g., org-chart hierarchies with 50k nodes) need this raised. Embedded/constrained deployments may want to lower it for safety.
-  - Currently: `Evaluator.MaxRecursiveDepth = 10000`
-  - Add: `Engine:MaxRecursiveDepth` in `appsettings.json`.
-
-- [ ] **CFG-4** — **`ExternalSortEngine.CHUNK_SIZE` (default 100 000) — rows per sort chunk before spilling.**
-  Larger chunks mean fewer merge passes (faster sort) but higher peak RAM per chunk. Tuning this is the single biggest lever for ORDER BY performance on large datasets.
-  - Currently: `private const int CHUNK_SIZE = 100_000` in `ExternalSortEngine.cs`
-  - Add: `Engine:ExternalSort:ChunkSize` in `appsettings.json`.
-
-- [ ] **CFG-5** — **`ExternalJoinEngine` and `ExternalAggregateEngine` partition count (default 32).**
-  Both engines use 32 hash partitions. More partitions reduce per-partition size (better for very large datasets) but create more temp files. Users on fast NVMe storage benefit from a higher count; spinning-disk users benefit from fewer, larger partitions.
-  - Currently: `private const int PARTITION_COUNT = 32` in both `ExternalJoinEngine.cs` and `ExternalAggregateEngine.cs`
-  - Add: `Engine:ExternalHashPartitions` (single value applied to both engines).
-
-- [ ] **CFG-6** — **`JoinEngine.SPILL_THRESHOLD` (default 100 000) — rows before hash join spills to `ExternalJoinEngine`.**
-  The in-memory hash join accumulates the right-side relation up to this limit before falling back to disk. Users with plentiful RAM should raise it to keep more joins in memory; constrained environments should lower it to avoid OOM.
-  - Currently: `const int SPILL_THRESHOLD = 100000` in `JoinEngine.cs`
-  - Add: `Engine:JoinSpillThreshold` in `appsettings.json`.
+- [x] **CFG-1** — **`BatchSize` (default 10 000) — rows per streaming batch.** [DONE]
+- [x] **CFG-2** — **`MaxInMemoryBatches` (default 100) — batches kept in RAM before `#temp` spills to disk.** [DONE: Wired via DI]
+- [x] **CFG-3** — **`MaxRecursiveDepth` (default 10 000) — CTE/procedure recursion ceiling.** [DONE]
+- [x] **CFG-4** — **`ExternalSortEngine.CHUNK_SIZE` (default 100 000) — rows per sort chunk before spilling.** [DONE]
+- [x] **CFG-5** — **`ExternalHashPartitions` (default 32) — used for disk-spilling joins and aggregates.** [DONE]
+- [x] **CFG-6** — **`JoinEngine.SPILL_THRESHOLD` (default 100 000) — rows before hash join spills.** [DONE]
 
 ### Security Limits
 
-- [x] **DOC-1**: Update `Grammar.md` and `Report_SQL_Guide.md` with system variables (`@@ERROR`, `@@DATASET`).
-- [x] **CFG-7**: Externalize `SecurityService.DefaultMaxFileOperations` to `appsettings.json`.
-- [x] **CFG-8**: Externalize `SecurityService.DefaultMaxRecursiveDepth` to `appsettings.json`.
-- [x] **CFG-9**: Implement `ConnectorRetryOptions` in `appsettings.json` (MaxAttempts, BaseDelay).
-- [x] **CFG-10**: Support `Session:StaleSessionRetentionDays` configuration.
-
-- [x] **CFG-11**: Externalize `ReportPlayer` port (`5200`) to `appsettings.json`.
-
-- [ ] **CFG-7** — **`SecurityService.DefaultMaxFileOperations` (default 100) — per-script file-op runaway limit.**
-  Hard limit on the number of file operations (DELETE FILE, COPY FILE, etc.) a single script may perform before the engine throws a `SecurityException`. ETL scripts dealing with large file sets legitimately need to raise this; the current workaround is the `### ALLOW_GREATER_THAN_100_FILE` magic comment which is not discoverable.
-  - Currently: `public const int DefaultMaxFileOperations = 100` in `SecurityService.cs`
-  - Add: `Security:MaxFileOperationsPerScript` in `appsettings.json` with the constant as default.
-
-- [ ] **CFG-8** — **`SecurityService.DefaultMaxRecursiveDepth` (default 5) — recursive nesting safety limit.**
-  Separate from the CTE recursion limit (CFG-3), this guards against runaway RUN SCRIPT nesting and deep procedure call chains. Some orchestration patterns legitimately need more than 5 layers.
-  - Currently: `public const int DefaultMaxRecursiveDepth = 5` in `SecurityService.cs`
-  - Add: `Security:MaxRecursiveNestingDepth` in `appsettings.json`.
+- [x] **DOC-1**: Update `Grammar.md` and `Report_SQL_Guide.md` with system variables (`@@ERROR`, `@@DATASET`). [DONE]
+- [x] **CFG-7**: Externalize `SecurityService.DefaultMaxFileOperations` to `appsettings.json`. [DONE]
+- [x] **CFG-8**: Externalize `SecurityService.DefaultMaxRecursiveDepth` to `appsettings.json`. [DONE]
 
 ### Resilience / Connectors
 
-- [ ] **CFG-9** — **Polly retry policy: `MaxAttempts` (default 3) and `BaseDelay` (default 1 s).**
-  The retry policy applies to all SQL connectors (SQL Server, Postgres, Oracle, ODBC). Cloud environments with frequent transient errors (Azure SQL, Cloud SQL) benefit from more retries with a shorter base delay; on-prem with stable networks may want only 1 retry.
-  - Currently: `private const int MaxAttempts = 3` and `BaseDelay = TimeSpan.FromSeconds(1)` in `ConnectorRetryPolicy.cs`
-  - Add: `Connectors:Retry:MaxAttempts` and `Connectors:Retry:BaseDelaySeconds` in `appsettings.json`.
+- [x] **CFG-9**: Implement `ConnectorRetryOptions` in `appsettings.json` (MaxAttempts, BaseDelay). [DONE]
 
 ### Session Management
 
-- [ ] **CFG-10** — **Session reap age (default 7 days) is hardcoded at the call site.**
-  `sessionManager.ReapStaleSessions(TimeSpan.FromDays(7))` is called with a literal `7` in `EngineRunner.cs`. Installations that run many short sessions (e.g., CI pipelines) may want to reap after 1 day; long-running analytical workflows may need 30 days.
-  - Currently: `TimeSpan.FromDays(7)` literal in `EngineRunner.cs` line 204
-  - Add: `Session:StaleSessionRetentionDays` in `appsettings.json`.
+- [x] **CFG-10**: Support `Session:StaleSessionRetentionDays` configuration. [DONE]
 
 ### ReportPlayer
 
-- [ ] **CFG-11** — **ReportPlayer port (default 5200) is hardcoded in `Program.cs`.**
-  `app.Urls.Add("http://localhost:5200")` is a literal. Users running multiple report servers on the same machine (e.g., dev + staging) cannot configure a different port without recompiling. The CLI already has a `--port` flag for `serve` but the default is not read from config.
-  - Currently: literal `"http://localhost:5200"` in `src/ETL-SQL.ReportPlayer/Program.cs` line 80
-  - Add: `ReportPlayer:Port` in `src/ETL-SQL.ReportPlayer/appsettings.json`; fall back to 5200 if absent.
+- [x] **CFG-11**: Externalize `ReportPlayer` port (`5200`) to `appsettings.json`. [DONE]
+
+---
 
 
 ### Documentation missing

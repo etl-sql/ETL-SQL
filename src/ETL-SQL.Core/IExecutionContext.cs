@@ -119,6 +119,8 @@ namespace ETL_SQL.Core
         int JoinSpillThreshold { get; set; }
         /// <summary>Number of partitions used for external disk-spilling operations (CFG-5).</summary>
         int ExternalHashPartitions { get; set; }
+        /// <summary>Number of rows per sort chunk before spilling to disk (CFG-4).</summary>
+        int ExternalSortChunkSize { get; set; }
     }
 
 

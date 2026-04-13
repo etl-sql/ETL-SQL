@@ -167,6 +167,7 @@ namespace ETL_SQL.Engine
 
         public int JoinSpillThreshold { get; set; } = 100000;
         public int ExternalHashPartitions { get; set; } = 32;
+        public int ExternalSortChunkSize { get; set; } = 100000;
 
 
         /// <summary>The ID of the currently executing node in this task/context.</summary>

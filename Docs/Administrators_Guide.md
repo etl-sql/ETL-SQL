@@ -66,8 +66,11 @@ Core engine behavior is controlled via `appsettings.json` located in the same di
 ### 2.3 Engine Tuning & Scaling
 | Key | Default | Description |
 | :--- | :--- | :--- |
+| `Engine:BatchSize` | `10000` | Size of row batches used during streaming (CFG-1). Lower for low-RAM containers. |
+| `Engine:MaxRecursiveDepth` | `10000` | Maximum stack depth for nested procedure calls and RUN SCRIPT (CFG-3). |
 | `Engine:JoinSpillThreshold` | `100000` | Number of rows in a join before spilling to disk (CFG-6). |
 | `Engine:ExternalHashPartitions` | `32` | Number of partitions used for disk-spilling joins and aggregates (CFG-5). |
+| `Engine:ExternalSort:ChunkSize` | `100000` | Number of rows per sort chunk in ExternalSortEngine (CFG-4). |
 | `Session:StaleSessionRetentionDays` | `7` | How many days to keep inactive session state before reaping (CFG-10). |
 
 ### 2.4 Connector Resilience

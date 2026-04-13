@@ -17,7 +17,7 @@ namespace ETL_SQL.Engine.Engines
         private readonly IExecutionContext _context;
         private readonly ILogger _logger;
         private readonly string _tempDir;
-        private const int CHUNK_SIZE = 100_000;
+        private int ChunkSize => _context.ExternalSortChunkSize;
 
         public ExternalSortEngine(IExecutionContext context, ILogger logger)
         {
@@ -61,9 +61,9 @@ namespace ETL_SQL.Engine.Engines
 
                 // 3. Sort and spill chunks
                 var chunkPaths = new List<string>();
-                for (int offset = 0; offset < keyed.Count; offset += CHUNK_SIZE)
+                for (int offset = 0; offset < keyed.Count; offset += ChunkSize)
                 {
-                    var chunk = keyed.GetRange(offset, Math.Min(CHUNK_SIZE, keyed.Count - offset));
+                    var chunk = keyed.GetRange(offset, Math.Min(ChunkSize, keyed.Count - offset));
                     chunk.Sort(Compare);
 
                     var path = Path.Combine(_tempDir, $"chunk_{chunkPaths.Count}.tmp");
