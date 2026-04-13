@@ -8,68 +8,14 @@
 - [ ] **Settings cleanup** Setting is really messy, it should just need a pointer to where the exe files are and do you want to show debugging or not.  I don't know of any other options needed at this time. 
 - [ ] **Add .rptsql extension** rptsql extension is not supported.  Its really the same as etlsql extension except a button should appear so that the user can preview the report in a new panel.  Should work like Markdown preview.  The report preview is already an option so there shouldn't be much to do here.
 
-## Phase 8 — Scale & Performance (Outstanding)
-
-### Phase 8A — Large Dataset Handling
-
-Design spike complete (`Docs/Strategy/LargeDatasets.md`). Architecture documented in `Docs/Architecture/Engine.md` §Scale & Large Dataset Handling.
-
-- [x] **8A-design** Design spike: profiled bottlenecks, produced `Docs/Strategy/LargeDatasets.md` with streaming, spill-to-disk, and chunked-processing recommendations.
-- [x] **8A-1** Streaming aggregate path in `SelectStatementHandler`. GROUP BY queries without joins/window functions now stream directly to `ExternalAggregateEngine` without buffering all rows into RAM first. WHERE filtering applied inline via `WhereStream`. Fixed `JsonElementToValue` bug in `ExternalAggregateEngine.ReadPartition` (spilled rows were deserializing as `JsonElement` boxes, causing `InvalidCastException` on SUM/AVG). 13 `SpillToDiskTests` pass.
-- [x] **8A-2** Spill-to-disk for `InMemoryDataSource` (`#temp` tables). Added `Orchestration:MaxInMemoryBatches` configuration. Implemented automatic encryption using machine-bound keys and background serialization to disk when memory threshold is met. Reads transparently stream from both disk and RAM. Automatic cleanup on `DROP TABLE`, `TRUNCATE`, or session disposal. Verified with `InMemorySpillTests`.
-- [x] **8A-3** Chunked `FOR` loop pushdown. `FOREACH @row IN (SELECT ... FROM <sql_connector>)` now pushes `OFFSET`/`FETCH` pagination to remote connectors when an `ORDER BY` clause is present. Supported by runtime-adjustable `ForeachPageSize` in `appsettings.json`.
-
-### Phase 8B — Parallel Execution & Resource Throttling
-
-Most infrastructure is already in place (`SchedulerService`, `ProcessJobExecutor`, `JobHistoryStore`). The remaining work is exposing limits and emitting metrics.
-
-- [x] **8B-1** Periodic metrics emission. Log `SchedulerService.GetMetrics()` (active/queued job counts) every 60 seconds to the structured log sink.
-- [x] **8B-2** Per-job CPU/RAM tracking. Capture peak CPU and RSS from script executions; attach to the `JobHistoryStore` entry so it is visible in `SHOW JOB HISTORY`.
-
----
-
 ## Phase 9 Report-SQL — Post-Launch Items
 
 Phases 9A–9D are complete. The following items were deferred as out-of-scope for the initial launch or identified in the Phase 9 risk register as follow-up work.
 
 ### Dashboard Behavior
-
-- [x] **Rpt-1** Slicer parameter optimization. `DashboardService.SetParameterAsync` upgraded to selective re-evaluation: scans visual `SourceSql` for dependencies; on parameter change, only re-materializes affected visuals.
-- [x] **Rpt-2** `SnapshotStore` write safety.
-    - **Atomic write**: Implemented temp-file-then-rename pattern with `File.Move(..., overwrite: true)`.
-    - **Concurrent access**: Implemented path-based `AsyncReaderWriterLock` to ensure live dashboard reads and background refreshes do not race.
-    - **Cleanup**: Automatic removal of orphaned `.tmp` files in `EngineRunner` script-execution lifecycle.
-
-### Linter Rules
-
-- [x] **Rpt-3** Report-SQL keyword conflict linter rule. Add a rule that warns when a column alias or variable name shadows a Report-SQL keyword (`VISUAL`, `PAGE`, `DATASET`, `MAPPINGS`, `SOURCE`, `STRUCTURE`, `MAP`, etc.). These are non-reserved and will not cause a parse error, but they will confuse anyone reading the script.
 - [ ] **Rpt-4 HOLD** `STRUCTURE` string validation. `CreatePageStatementHandler` and the linter should validate the CSS grid template areas string: every letter in the `MAP(...)` must appear in `STRUCTURE`, and every letter in `STRUCTURE` must appear in the map. Mismatches produce a broken layout silently today.  Note: I would like to get the structure the way I want it first.  Hold on this item for now.
 
 ### Documentation
-
-- [x] **Rpt-5** Create `Docs/Engine.md` (Phase 4.4 from Engine_Upgrade_Strategy). Engineering document covering: full project dependency graph, what each project owns, Evaluator statement dispatch loop, `#temp` table scoping, pushdown decision logic, Orchestrator job scheduling, Connector interface contract, and Linting pipeline. This is the onboarding reference for new contributors.
-
-### Syntax modifications
-- [x] **Source equals** I would like to make a slight change to make this consistent with the rest of the system.  Title and subtile are optional but I would like to make a way for the user to be able to format them in the way they want to.  Can we use Markdown syntax for the title and subtitle?  
-```sql
--- Current syntax
-CREATE VISUAL <name> AS <TYPE> (
-  SOURCE = <source>,
-  [MAPPINGS (role = column, ...),]
-  [OPTIONS (key = value, X_AXIS (...), Y_AXIS (...)),]
-  [ACTIONS (ON_CLICK = <action>, ON_CHANGE = <action>)]
-);
-
--- Proposed syntax
-CREATE VISUAL <name> AS <TYPE> (
-  SOURCE (<source query>),
-  [TITLE (<title>)],
-  [SUBTITLE (<subtitle>)],
-  [MAPPINGS (role = column, ...),]
-  [OPTIONS (key = value, X_AXIS (...), Y_AXIS (...)),]
-  [ACTIONS (ON_CLICK = <action>, ON_CHANGE = <action>)]
-);
-```
 - [ ] **Page structure**  I don't think the STRUCTURE option is working. I'm using the example below and everything just went top to bottom in a single column.  I would like to see a 2x3 grid.  Maybe there needs to be better definition of the structure option.  
 ```sql
 CREATE PAGE <name> AS LAYOUT (
@@ -84,11 +30,6 @@ CREATE PAGE <name> AS LAYOUT (
 );
 ```
 My initial draft was that the STRUCTURE option was listed like this 'A A / B C / D E' to represent a 2x3 grid.  I'm not sure if that's the best way to represent it, but it's what I came up with.  Maybe that's hard to implement but it gives you a better indication of what is happening.  I guess the assumption is it works top 
-
-
-- [X] **Need a comprehensive list of options available for each visual type**  I have started a list in the docs folder, `Docs/Report_SQL_Guide.md`, but it is not complete.  I'm guessing once I get to see everything that may lead to some more syntax optimizations.
-
-- [X] **Need a comprehensive list of options available for page**  I have started a list in the docs folder, `Docs/Report_SQL_Guide.md`, but it is not complete.  I'm guessing once I get to see everything that may lead to some more syntax optimizations.
 
 - [ ] **Need to add a way to create a new page/tabs**  Currently its rendered as a single page.  Need to be able to generate multiple pages and then we'll need a new structure that acts as the naviation tabs.  
 ```sql
@@ -156,43 +97,6 @@ These items were identified during the 2026-04-12 security review of `SECURITY.m
   - Files: `SecurityService.cs`, `SessionManager.cs` (or wherever the flag is set).
 
 ---
-
-## Code Review Findings — 2026-04-12 Pass 2
-
-Identified by automated deep review of the current codebase. Verified against source. Ordered by severity within category.
-
-### Bugs
-
-- [x] **CR-B1** — **External join fallback correctly preserves all source rows.**
-  Refactored `SelectStatementHandler` to use a single-pass `IAsyncEnumerator` and a `PrependRows` helper. This ensures the first 100k buffered rows are correctly combined with the remaining stream before passing to the external join engine. Verified with `LargeScaleJoinPersistenceTests`.
-
-- [x] **CR-B2** — **External sort handles duplicate sort-key values successfully.**
-  Replaced `SortedList` with `PriorityQueue` in `ExternalSortEngine.cs`. This allows entries with identical comparison values to be correctly merged during the final sort phase without throwing `ArgumentException`.
-
-- [x] **CR-B3** — **StreamWriter cleanup loop is robust against flush failures.**
-  Wrapped per-writer cleanup in `try/catch` and `finally` blocks in `ExternalAggregateEngine.cs` and `ExternalJoinEngine.cs`. This guarantees that file handles are released even if a specific writer fails to flush due to disk errors.
-
-- [x] **CR-B4** — **Standardized numeric deserialization to `decimal` for all disk-spilling engines.**
-  Updated `ExternalJoinEngine.cs`, `ExternalSortEngine.cs`, and `CompoundKey.cs` to force `decimal` conversion when unwrapping numeric values from `JsonElement`. This resolves join key and sort key mismatches between in-memory decimal values and disk-serialized numbers.
-
-- [x] **CR-B5** — **Date values stored as strings are not reconverted to `DateTime` after aggregate spill/read.**
-  `ExternalAggregateEngine.JsonElementToValue` returns dates stored in spilled JSON as plain `string` (they round-trip through `JsonValueKind.String`). When `AggregateEngine` evaluates `MIN`/`MAX` on a date column after a spill, it performs string comparison instead of date ordering, producing wrong results for dates that sort differently as strings (e.g., `"2025-01-10"` < `"2025-09-01"` by string but not in all locales).
-  - **Severity:** Medium
-  - Files: `src/ETL-SQL.Engine/Engines/ExternalAggregateEngine.cs` ~line 143
-  - Fix: In the `JsonValueKind.String` branch of `JsonElementToValue`, attempt `DateTime.TryParse` and return a `DateTime` when successful.
-
-- [x] **CR-B6** — **`BulkInsertStatementHandler` MAXERRORS condition allows double the error budget.**
-  The outer fallback condition `if (maxErrors > 0 || errorCount < maxErrors)` short-circuits on `maxErrors > 0`, entering the row-by-row fallback regardless of whether `errorCount` has already reached `maxErrors`. This allows up to `2 × maxErrors` rows to be skipped before aborting.
-  - **Severity:** Medium
-  - Files: `src/ETL-SQL.Engine/Handlers/BulkInsertStatementHandler.cs` ~line 165
-  - Fix: Change the condition to `if (errorCount < maxErrors)` — remove the `maxErrors > 0 ||` clause.
-
-- [x] **CR-B7** — **`Log()` method writes to `Messages` list without the lock used by the `OnMessage` handler.**
-  The constructor's `OnMessage` handler acquires `_messagesLock` before writing to `Messages`. The public `Log(string, ConsoleColor)` method writes to the same list without acquiring the lock. Concurrent calls produce a data race.
-  - **Severity:** Low
-  - Files: `src/ETL-SQL.Engine/Evaluator.cs` ~line 629
-  - Fix: Add `lock (_messagesLock)` around the `Messages.Add` / trim logic in `Log()`.
-
 ### Security
 
 - [ ] **CR-S1** — **Dashboard parameter values are injected as ETL-SQL source text (script injection).**
@@ -200,55 +104,6 @@ Identified by automated deep review of the current codebase. Verified against so
   - **Severity:** High
   - Files: `src/ETL-SQL.ReportPlayer/DashboardService.cs` ~line 101
   - Fix: Pass parameters directly via `evaluator.DeclareVariable(name, value, ...)` before calling `evaluator.Evaluate(script)`, bypassing the parser entirely for parameter injection.
-
-- [x] **CR-S2** — **Table names are interpolated unquoted into SQL pushdown strings.**
-  `InsertStatementHandler` builds `INSERT INTO {tableName}` by interpolating `GetSqlTableName()` directly into a SQL string without identifier quoting. A table name containing SQL metacharacters (e.g., from a user-supplied variable) produces an injection vector in pushdown queries.
-  - **Severity:** Medium
-  - Files: `src/ETL-SQL.Engine/Handlers/InsertStatementHandler.cs` ~line 92
-  - Fix: Apply dialect-appropriate identifier quoting in `GetSqlTableName` (`[name]` for SQL Server, `"name"` for Postgres/Oracle).
-
-- [x] **CR-S3** — **Script directory added to `ApprovedSafeZones` without system-path validation.**
-  `EngineRunner` unconditionally adds the script's containing directory to `SecurityService.ApprovedSafeZones`. If the script path resolves to a system directory (e.g., the working directory is `/etc` or `C:\Windows`), the entire directory becomes an approved override zone.
-  - **Severity:** Medium
-  - Files: `src/ETL-SQL.App/App/EngineRunner.cs` ~line 183
-  - Fix: Validate that `scriptDir` is not under common system paths (or is under a configured workspace root) before adding to `ApprovedSafeZones`.
-
-- [x] **CR-S4** — **`CredentialLeakRule` does not scan pushdown SQL text or track variable taint.**
-  The linter rule detects credential names in `PRINT`/`SEND EMAIL` but does not scan the raw `SqlText` of `EXECUTE PUSHDOWN` statements. It also has no taint propagation — `SET @conn = @password` does not mark `@conn` as sensitive.
-  - **Severity:** Low
-  - Files: `src/ETL-SQL.Core/Linting/Rules/CredentialLeakRule.cs` ~line 65
-  - Fix: Extend rule to scan pushdown `SqlText` for credential-name patterns; add single-step taint tracking for assignment statements.
-
-### Concurrency & Resource Management
-
-- [x] **CR-C1** — **`SessionStateManager` file I/O is non-atomic and unlocked.**
-  `SaveSession` writes two files (`session.json`, recovery manifest) with bare `File.WriteAllText` — no locking and no atomic write. Concurrent saves for the same session ID (e.g., multi-request web scenario) interleave writes, corrupting both files. `ReapStaleSessions` can also delete files while `LoadSession` is reading them.
-  - **Severity:** Medium
-  - Files: `src/ETL-SQL.Engine/Services/SessionStateManager.cs` ~line 165
-  - Fix: Serialize per-session operations through a `SemaphoreSlim` keyed by session ID; write via temp-file-then-rename for atomicity.
-
-- [x] **CR-C2** — **Chunk `StreamReader`s in `ExternalSortEngine.MergeChunks` are disposed correctly.**
-  Applied `try/finally` around the heap-merge loop to ensure all open file readers are closed and disposed even if the sort operation is aborted by an exception.
-
-- [x] **CR-C3** — **Dead static `_random` field in `Evaluator` is non-thread-safe.**
-  `Evaluator` declares `private static readonly Random _random = new Random()`. `System.Random` is not thread-safe under concurrent calls from multiple `Evaluator` instances. The field appears to be unused (no `_random.Next()` call exists anywhere), but its `static` presence is a maintenance trap — any future contributor who uses it will introduce a threading bug.
-  - **Severity:** Low
-  - Files: `src/ETL-SQL.Engine/Evaluator.cs` ~line 49
-  - Fix: Remove the unused field; use `Random.Shared` (thread-safe in .NET 6+) if random numbers are ever needed.
-
-- [x] **CR-C4** — **`EXPLAIN ANALYZE` mutates shared context flags and does not update `LastResultSets`.**
-  `ExplainStatementHandler` sets `context.IsProfiling = true` and `context.RedirectOutput = true` on the shared `Evaluator` instance before running the inner query. These flags affect all concurrent readers of the context during execution. The `finally` block restores them, but the analyzed result is never appended to `context.LastResultSets`, so `@@RESULTSETS` and any test checking `LastResultSets` see stale data.
-  - **Severity:** Low
-  - Files: `src/ETL-SQL.Engine/Handlers/ExplainStatementHandler.cs` ~line 46
-  - Fix: Fork a child context for the `ANALYZE` inner execution; append the result table to `LastResultSets` on completion.
-
-### Test Gaps
-
-- [x] **CR-T1** — **Test `HAVING` clause through the streaming aggregate path.**
-- [x] **CR-T2** — **External sort test data with duplicate keys.**
-- [ ] **CR-T3** — **`EXPLAIN ANALYZE`, `ShowVariablesStatementHandler`, and Report-SQL handlers dedicated tests.**
-  No test files exist for the `EXPLAIN ANALYZE` path, `ShowVariablesStatementHandler`, `CreateVisualStatementHandler`, `CreatePageStatementHandler`, or `CreateDatasetStatementHandler`. New handlers added in recent sessions have no unit or smoke test coverage.
-  - Fix: Add at minimum one smoke test per new handler verifying the observable side-effect (result schema, registered definitions, or error on bad input).
 
 ### Quality
 
@@ -364,40 +219,3 @@ Identified by automated deep review of the current codebase. Verified against so
   - Fix: Add a note clarifying that `streamAggregate = true` routes directly to `ExternalAggregateEngine` unconditionally, while the legacy buffered path uses it only after 100k rows are accumulated.
 
 ---
-
-## Configuration / Tuning (CFG)
-
-Hardcoded constants have been surfaced as `appsettings.json` entries for runtime tuning.
-
-### Engine Performance
-
-- [x] **CFG-1** — **`BatchSize` (default 10 000) — rows per streaming batch.** [DONE]
-- [x] **CFG-2** — **`MaxInMemoryBatches` (default 100) — batches kept in RAM before `#temp` spills to disk.** [DONE: Wired via DI]
-- [x] **CFG-3** — **`MaxRecursiveDepth` (default 10 000) — CTE/procedure recursion ceiling.** [DONE]
-- [x] **CFG-4** — **`ExternalSortEngine.CHUNK_SIZE` (default 100 000) — rows per sort chunk before spilling.** [DONE]
-- [x] **CFG-5** — **`ExternalHashPartitions` (default 32) — used for disk-spilling joins and aggregates.** [DONE]
-- [x] **CFG-6** — **`JoinEngine.SPILL_THRESHOLD` (default 100 000) — rows before hash join spills.** [DONE]
-
-### Security Limits
-
-- [x] **DOC-1**: Update `Grammar.md` and `Report_SQL_Guide.md` with system variables (`@@ERROR`, `@@DATASET`). [DONE]
-- [x] **CFG-7**: Externalize `SecurityService.DefaultMaxFileOperations` to `appsettings.json`. [DONE]
-- [x] **CFG-8**: Externalize `SecurityService.DefaultMaxRecursiveDepth` to `appsettings.json`. [DONE]
-
-### Resilience / Connectors
-
-- [x] **CFG-9**: Implement `ConnectorRetryOptions` in `appsettings.json` (MaxAttempts, BaseDelay). [DONE]
-
-### Session Management
-
-- [x] **CFG-10**: Support `Session:StaleSessionRetentionDays` configuration. [DONE]
-
-### ReportPlayer
-
-- [x] **CFG-11**: Externalize `ReportPlayer` port (`5200`) to `appsettings.json`. [DONE]
-
----
-
-
-### Documentation missing
-- [ ] **DOC-1** - **Missing documentation of the @@ variables.**  I don't see any documentation on what @@ variables are available or how to use them. Can we list them all out and have their purpose.  Like the @@dataset we know this is a List<Row> but what about the others?  
