@@ -32,7 +32,7 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
-        public void SetProfiling_On_SetsEvaluatorFlag()
+        public async Task SetProfiling_On_SetsEvaluatorFlag()
         {
             var eval = NewEval();
             eval.IsProfiling = false;
@@ -40,13 +40,13 @@ namespace ETL_SQL.Tests.Statements
             var stmt = (SetProfilingStatement)TestHelpers.Parse("SET PROFILING ON;").Statements[0];
             var handler = new SetProfilingStatementHandler();
             
-            handler.Execute(stmt, eval).Wait();
+            await handler.Execute(stmt, eval);
             
             Assert.True(eval.IsProfiling);
         }
 
         [Fact]
-        public void SetProfiling_Off_SetsEvaluatorFlag()
+        public async Task SetProfiling_Off_SetsEvaluatorFlag()
         {
             var eval = NewEval();
             eval.IsProfiling = true;
@@ -54,25 +54,24 @@ namespace ETL_SQL.Tests.Statements
             var stmt = (SetProfilingStatement)TestHelpers.Parse("SET PROFILE OFF;").Statements[0];
             var handler = new SetProfilingStatementHandler();
             
-            handler.Execute(stmt, eval).Wait();
+            await handler.Execute(stmt, eval);
             
             Assert.False(eval.IsProfiling);
         }
 
         [Fact]
-        public void SetWhatIf_On_SetsEvaluatorFlag()
+        public async Task SetWhatIf_On_SetsEvaluatorFlag()
         {
             var eval = NewEval();
             eval.IsWhatIf = false;
             
             var script = TestHelpers.Parse("SET WHAT_IF ON;");
-            eval.Evaluate(script).Wait();
+            await eval.Evaluate(script);
             
-            // Unfortunately there isn't a handler for SetWhatIf yet in the engine, but the parser supports it.
-            // Wait, does SetWhatIfHandler exist? Let's assume it does or the evaluator handles it.
-            // Actually, we will just test parsing for SET WHAT_IF based on the gaps.
+            // The parser supports SET WHAT_IF and the evaluator handles it via SetWhatIfStatementHandler.
             Assert.IsType<SetWhatIfStatement>(script.Statements[0]);
             Assert.True(((SetWhatIfStatement)script.Statements[0]).Enabled);
+            Assert.True(eval.IsWhatIf);
         }
 
         [Fact]
