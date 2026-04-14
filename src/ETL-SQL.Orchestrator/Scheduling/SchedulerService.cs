@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
@@ -22,16 +23,18 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly IServiceProvider _serviceProvider;
         private readonly IJobHistoryStore _store;
         private readonly ILogger<SchedulerService> _logger;
+        private readonly IConfiguration _configuration;
         private readonly JobThrottle _throttle;
         private CancellationTokenSource? _cts;
 
         public SchedulerService(IServiceProvider serviceProvider, IJobHistoryStore store,
-            ILogger<SchedulerService> logger, JobThrottle throttle)
+            ILogger<SchedulerService> logger, JobThrottle throttle, IConfiguration configuration)
         {
             _serviceProvider = serviceProvider;
             _store           = store;
             _logger          = logger;
             _throttle        = throttle;
+            _configuration   = configuration;
         }
 
         /// <summary>Returns a snapshot of current concurrency metrics.</summary>
@@ -85,27 +88,30 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         }
                     }
 
+                    // Resolve intervals from configuration with safe defaults
+                    int metricsIntervalSeconds = _configuration.GetValue<int>("Scheduler:MetricsIntervalSeconds", 60);
+                    int sleepIntervalSeconds   = _configuration.GetValue<int>("Scheduler:SleepIntervalSeconds", 30);
+
                     // 8B-1: Periodic metrics emission
-                    if (now - _lastMetricsLog >= TimeSpan.FromMinutes(1))
+                    if (now - _lastMetricsLog >= TimeSpan.FromSeconds(metricsIntervalSeconds))
                     {
                         var metrics = GetMetrics();
                         _logger.LogInformation("Orchestrator Metrics: ActiveJobs={Active}, QueuedJobs={Queued}, MaxConcurrent={Max}, AvailableSlots={Slots}", 
                             metrics.ActiveJobs, metrics.QueuedJobs, metrics.MaxJobs, metrics.AvailableSlots);
                         _lastMetricsLog = now;
                     }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error in scheduler loop.");
-                }
 
-                try
-                {
-                    await Task.Delay(TimeSpan.FromSeconds(30), ct);
+                    await Task.Delay(TimeSpan.FromSeconds(sleepIntervalSeconds), ct);
                 }
                 catch (TaskCanceledException)
                 {
                     break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error in scheduler loop.");
+                    // Safety sleep on error to avoid tight loops
+                    await Task.Delay(5000, ct);
                 }
             }
             _logger.LogInformation("Scheduler service stopped.");
