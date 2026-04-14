@@ -26,6 +26,7 @@ namespace ETL_SQL.Tests
     public class MockDatabaseSource : IDatabaseSource
     {
         public List<string> ExecutedSql { get; } = new();
+        public List<DataTable> SeededResults { get; } = new();
         public string Dialect { get; set; } = "MSSQL";
         public bool SupportsSqlPushdown => true;
         public string ConnectionString => "mock://local";
@@ -36,6 +37,12 @@ namespace ETL_SQL.Tests
         public IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
         {
             ExecutedSql.Add(sql);
+            if (SeededResults.Any())
+            {
+                var copy = SeededResults.ToList();
+                SeededResults.Clear(); // Return each once per mock setup
+                return copy.ToAsyncEnumerable();
+            }
             return new[] { new DataTable() }.ToAsyncEnumerable();
         }
 

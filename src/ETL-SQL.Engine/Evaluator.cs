@@ -184,7 +184,7 @@ namespace ETL_SQL.Engine
         public List<string> Messages { get; } = new();
         
         /// <summary>Maximum number of messages to capture.</summary>
-        public int MaxMessages { get; set; } = 100;
+        public int MaxMessages { get; set; } = 1000;
         
         /// <summary>Interface for managing Docker database containers.</summary>
         public IDockerManager DockerManager => _dockerManager;

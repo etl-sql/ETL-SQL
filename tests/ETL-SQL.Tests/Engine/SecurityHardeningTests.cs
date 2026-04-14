@@ -8,6 +8,7 @@ using System.IO;
 using System;
 using System.Linq;
 using ETL_SQL.Services;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests.Engine
 {
@@ -69,17 +70,21 @@ namespace ETL_SQL.Tests.Engine
         [Fact]
         public async Task TestPermissionOverride_AllowsLargeCount()
         {
-            // We need to use ExecutionSession to test ### flags
-            var session = Program.ServiceProvider.GetRequiredService<ETL_SQL.Orchestrator.Execution.ExecutionSession>();
+            // We need to use ExecutionSession to test overrides
+            var session = ETL_SQL.Program.ServiceProvider.GetRequiredService<ETL_SQL.Orchestrator.Execution.ExecutionSession>();
             
             var scriptSql = "DELETE FILE 'test.csv';\n";
-            var fullSql = "### ALLOW_GREATER_THAN_100_FILE\n" + string.Concat(Enumerable.Repeat(scriptSql, 101));
+            var fullSql = "SET WHAT_IF ON;\nSET ALLOW_GREATER_THAN_100_FILE ON;\n" + string.Concat(Enumerable.Repeat(scriptSql, 101));
             
             var result = await session.ExecuteAsync(fullSql);
             
-            // It might fail because the file doesn't exist, but it shouldn't fail with SecurityException 100 limit
-            var securityError = result.Diagnostics.Any(d => d.Message.Contains("Safety limit of 100"));
-            Assert.False(securityError, "Should NOT have triggered 100-file safety limit due to override.");
+            // It should NOT fail with SecurityException 100 limit
+            bool hasSecurityError = result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Safety limit of 100", StringComparison.OrdinalIgnoreCase));
+            Assert.False(hasSecurityError, "Should NOT have triggered 100-file safety limit due to override.");
+            
+            // PROACTIVE CHECK: verify exactly 101 operations were 'performed' in WHAT_IF mode
+            int attemptCount = result.Messages.Count(m => m.Contains("Would perform Delete_FILE", StringComparison.OrdinalIgnoreCase));
+            Assert.Equal(101, attemptCount);
         }
 
         [Fact]

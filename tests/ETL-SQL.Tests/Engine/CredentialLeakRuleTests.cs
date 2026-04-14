@@ -123,20 +123,22 @@ namespace ETL_SQL.Tests
             linter.AddRule(new CredentialLeakRule());
 
             var sql = @"
-                DECLARE @key STRING = 'public-key';
-                PRINT @key; 
+                DECLARE @publicInfo STRING = 'public-data';
+                PRINT @publicInfo; 
                 
                 IF 1=1
                 BEGIN
-                    DECLARE @key STRING = 'private-secret';
-                    PRINT @key; 
+                    DECLARE @secretToken STRING = 'private-secret';
+                    PRINT @secretToken; 
                 END
             ";
             
             var script = Parse(sql);
             var results = (await linter.AnalyzeAsync(script, new DefaultLintContext())).ToList();
 
-            Assert.Equal(2, results.Count);
+            // Only the inner PRINT @secretToken should trigger
+            Assert.Single(results);
+            Assert.Contains("@secretToken", results[0].Message);
         }
     }
 }

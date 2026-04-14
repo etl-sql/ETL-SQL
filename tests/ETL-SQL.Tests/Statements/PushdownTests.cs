@@ -23,12 +23,17 @@ namespace ETL_SQL.Tests
         public async Task TestStandalonePushdown()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            var mock = new MockDatabaseSource();
+            ev.Connections["MyDb"] = mock;
+
             string script = @"
-                CREATE CONNECTION MyDb ON MOCKDB('mock://localhost') WITH (dialect='MSSQL');
                 EXECUTE MyDb BEGIN SELECT UserID, UserName FROM Users END;
             ";
             await ev.Evaluate(Parse(script));
-            // Verification: Logic succeeded if no exception thrown
+            
+            // Verification: Verify the SQL actually hit the mock
+            Assert.Single(mock.ExecutedSql);
+            Assert.Contains("SELECT UserID, UserName FROM Users", mock.ExecutedSql[0]);
         }
 
         [Fact]
@@ -53,13 +58,29 @@ namespace ETL_SQL.Tests
         public async Task TestInsertIntoExecutePushdown()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            string script = @"
-                CREATE CONNECTION MyDb ON MOCKDB('mock://localhost') WITH (dialect='MSSQL');
+            
+            var mock = new MockDatabaseSource();
+            ev.Connections["MyDb"] = mock;
+
+            var dt = new DataTable();
+            dt.SetColumns(new[] { "UserID", "UserName" });
+            
+            var row1 = dt.NewRow();
+            row1["UserID"] = 1;
+            row1["UserName"] = "Alice";
+            dt.Rows.Add(row1);
+            
+            var row2 = dt.NewRow();
+            row2["UserID"] = 2;
+            row2["UserName"] = "Bob";
+            dt.Rows.Add(row2);
+            mock.SeededResults.Add(dt);
+
+            await ev.Evaluate(TestHelpers.Parse(@"
                 CREATE TABLE #TargetUsers (UID INT, UName ANY);
                 INSERT INTO #TargetUsers (UID, UName)
                 EXECUTE MyDb BEGIN SELECT UserID, UserName FROM Users END;
-            ";
-            await ev.Evaluate(Parse(script));
+            "));
             
             // Verify #TargetUsers has data
             var ds = ev.Connections["#TargetUsers"];
@@ -69,7 +90,7 @@ namespace ETL_SQL.Tests
             {
                 rowCount += batch.Rows.Count;
             }
-            Assert.True(rowCount > 0);
+            Assert.Equal(2, rowCount);
         }
 
         [Fact]

@@ -107,6 +107,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 evaluator.IsVerbose  = _ctx.IsVerbose;
                 evaluator.SessionId  = _ctx.SessionId;
                 evaluator.IsProfiling = true;
+                evaluator.RedirectOutput = true;
 
                 if (OnTreeNodeAdded != null)
                     evaluator.ExecutionTree.OnNodeAdded = node => OnTreeNodeAdded.Invoke(node.Name);
