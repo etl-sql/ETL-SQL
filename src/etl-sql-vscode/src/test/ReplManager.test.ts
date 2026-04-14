@@ -604,5 +604,18 @@ describe('ReplManager', () => {
             }));
             spy.mockRestore();
         });
+
+        it('broadcasts variable updates via onVariablesChange event', async () => {
+            const { execPromise, mgr } = await startRepl();
+            const spy = vi.fn();
+            mgr.onVariablesChange(spy);
+            
+            const testVars = [{ name: '@a', value: '1', type: 'int' }];
+            fakeProcess.emitLine({ type: 'variables', data: testVars });
+            fakeProcess.emitLine({ type: 'done', exitCode: 0 });
+            await execPromise;
+
+            expect(spy).toHaveBeenCalledWith(testVars);
+        });
     });
 });

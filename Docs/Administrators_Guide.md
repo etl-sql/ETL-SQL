@@ -45,88 +45,290 @@ WantedBy=multi-user.target
 
 ---
 
-## 2. Configuration Reference (`appsettings.json`)
+## 2. Configuration & Unified Deployment
 
-Core engine behavior is controlled via `appsettings.json` located in the same directory as the executable.
+ETL-SQL uses a **unified configuration model**. In a standard installation, all host processes share a single `appsettings.json` file located in the application root directory.
 
-### 2.1 Security Settings
-| Key | Default | Description |
-| :--- | :--- | :--- |
-| `Security:MaxRecursiveNestingDepth` | `5` | Maximum depth for `RUN SCRIPT` recursion or procedural nesting. |
-| `Security:ApprovedSafeZones` | `[]` | List of directory paths (absolute) where runaway protection (e.g. file operation counts) can be overridden via `SET ALLOW_...` statements. |
-| `Logging:Security:AuditLevel` | `Warning` | Minimum level for security-related logging (overrides, blocks). |
+| Host | Purpose |
+| :--- | :--- |
+| **ETL-SQL.App / TUI** | Interactive REPL, batch script runner, and embedded scheduler |
+| **ETL-SQL.Orchestrator.Service** | Standalone REST-based job scheduler; used in production |
+| **ETL-SQL.ReportPlayer** | Report-SQL dashboard web server |
 
-### 2.2 Orchestration & Performance
-| Key | Default | Description |
-| :--- | :--- | :--- |
-| `Orchestration:MaxInMemoryBatches` | `10` | Number of data batches held in RAM before spilling `#temp` tables to disk. |
-| `Orchestration:ForeachPageSize` | `10000` | Number of rows to fetch per pagination loop for remote `FOREACH` calls. |
-| `Orchestration:JobThrottle:MaxConcurrentJobs` | `0` | Max simultaneous background jobs. `0` = auto (CPU count / 2). |
-
-### 2.3 Engine Tuning & Scaling
-| Key | Default | Description |
-| :--- | :--- | :--- |
-| `Engine:BatchSize` | `10000` | Size of row batches used during streaming (CFG-1). Lower for low-RAM containers. |
-| `Engine:MaxRecursiveDepth` | `10000` | Maximum stack depth for nested procedure calls and RUN SCRIPT (CFG-3). |
-| `Engine:JoinSpillThreshold` | `100000` | Number of rows in a join before spilling to disk (CFG-6). |
-| `Engine:ExternalHashPartitions` | `32` | Number of partitions used for disk-spilling joins and aggregates (CFG-5). |
-| `Engine:ExternalSort:ChunkSize` | `100000` | Number of rows per sort chunk in ExternalSortEngine (CFG-4). |
-| `Session:StaleSessionRetentionDays` | `7` | How many days to keep inactive session state before reaping (CFG-10). |
-
-### 2.4 Connector Resilience
-| Key | Default | Description |
-| :--- | :--- | :--- |
-| `Connectors:Retry:MaxAttempts` | `3` | Max retry attempts for transient SQL errors (CFG-9). |
-| `Connectors:Retry:BaseDelaySeconds` | `1.0` | Base delay for exponential backoff during retries. |
-
-### 2.5 Reporting Dashboard
-
-| Key | Default | Description |
-| :--- | :--- | :--- |
-| `ReportPlayer:Port` | `5200` | The port for the Report-SQL web dashboard. |
-
-### 2.6 Logging & Retention
-| Key | Default | Description |
-| :--- | :--- | :--- |
-| `Logging:AppLog:Directory` | `logs/system` | Location for internal engine diagnostic logs. |
-| `Logging:AppLog:RetentionDays` | `30` | How many days to keep system logs. |
-| `Logging:AppLog:FileSizeLimitMb` | `50` | Max size of a single system log file before rotation. |
-| `Logging:Scheduler:MetricsIntervalSeconds` | `60` | Frequency of active/queued job status heartbeats in the log. |
+All hosts support environment variable overrides (standard .NET `DOTNET_*` / section prefix pattern).
 
 ---
 
-## 3. Resource Governance
+## 3. Configuration Reference
 
-### 3.1 Memory Management
-ETL-SQL uses an **aggregate streaming model**. While it can process terabytes of data, it only holds a "window" of records in memory (`MaxInMemoryBatches`). 
-- **High Memory Usage**: If you see high RAM usage, reduce the `--batch-size` CLI flag or the `MaxInMemoryBatches` config.
-- **Disk Pressure**: Large `#temp` tables spill to the local disk. Ensure your `TEMP` directory has sufficient IOPS and capacity.
+### 3.1 Security
 
-### 3.2 Safety Guardrails
-The engine enforces **Runaway Protection**. If a script exceeds the `MaxFileOperationsPerScript`, it will halt with a `SecurityException`. 
-Users can bypass this by adding a `SET` statement to their script (e.g., `SET ALLOW_GREATER_THAN_100_FILE ON;`), but only if the script is running within an **Approved Safe Zone** (configured in `appsettings.json`).
+Applies to: **All Hosts**
 
-Any bypass attempt within an approved safe zone is logged as an **Audit Warning** in the system logs (SEC-3). 
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `Security:AllowedHosts` | `["*"]` | Whitelist of network hosts scripts may connect to. `["*"]` = unrestricted. Remove `*` and list explicit hosts to enable strict egress control (see [SECURITY.md](../SECURITY.md)). |
+| `Security:ApprovedSafeZones` | `[]` | Absolute paths of directories where `SET ALLOW_...` script overrides are honored. Scripts outside these paths cannot bypass runaway guards. |
+| `Security:MaxFileOperationsPerScript` | `100` | Maximum number of filesystem operations a single script may perform before the engine halts with a `SecurityException`. |
+| `Security:MaxRecursiveNestingDepth` | `5` | Maximum `RUN SCRIPT` / procedural nesting depth before halting. |
 
-Administrators can view all active safe zones by running:
+> [!NOTE]
+> `Security:AllowedEnvVars` (the allow-list for the `ENV()` function) is not currently wired to `appsettings.json`. It must be configured programmatically in the DI setup (`SecurityService.AllowedEnvVars`). By default the set is empty, which means all `ENV()` calls are blocked.
+
+**Example — hardened production configuration:**
+```json
+{
+  "Security": {
+    "AllowedHosts": ["sql-prod.internal.corp", "*.azure.com"],
+    "ApprovedSafeZones": ["D:\\ETL\\scripts\\approved"],
+    "MaxFileOperationsPerScript": 500,
+    "MaxRecursiveNestingDepth": 10
+  }
+}
+```
+
+---
+
+### 3.2 Engine Tuning
+
+Applies to: **All Hosts**
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `Engine:BatchSize` | `10000` | Rows per batch during streaming evaluation. Lower this on memory-constrained hosts. |
+| `Engine:MaxRecursiveDepth` | `10000` | Maximum call stack depth for nested procedures and `RUN SCRIPT`. |
+| `Engine:JoinSpillThreshold` | `100000` | Row count at which a join operation spills to disk instead of holding all data in RAM. |
+| `Engine:ExternalHashPartitions` | `32` | Number of disk partitions used for spilled joins and aggregates. Increase if spill files become very large. |
+| `Engine:ExternalSort:ChunkSize` | `100000` | Rows per chunk in the external sort engine. |
+
+---
+
+### 3.3 Orchestration & Concurrency
+
+Applies to: **All Hosts**
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `Orchestration:MaxInMemoryBatches` | `100` | Maximum number of data batches held in RAM before `#temp` tables begin spilling to disk. |
+| `Orchestration:ForeachPageSize` | `10000` | Rows fetched per page in remote `FOREACH` pagination loops. |
+| `Orchestration:JobThrottle:MaxConcurrentJobs` | `0` | Maximum simultaneous background jobs. `0` = auto (`ProcessorCount / 2`, minimum 1). |
+
+---
+
+### 3.4 Orchestrator Service (Standalone)
+
+Applies to: **ETL-SQL.Orchestrator.Service only**
+
+The standalone Orchestrator runs as an independent HTTP service. Its settings live under a `Jobs` section (not `Orchestration`).
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `Urls` | `http://localhost:5100` | The address the Orchestrator REST API listens on. Change to bind to a specific interface or port in production. |
+| `Jobs:UseProcessSpawning` | `false` | `false` = run jobs in-process (simpler, dev/test). `true` = spawn `ETL-SQL.exe run` as isolated child processes (recommended for production — memory isolation, killable per-job). |
+| `Jobs:ExecutablePath` | `""` | Path to `ETL-SQL.exe`. Required when `UseProcessSpawning` is `true` and the executable is not on `PATH`. Auto-detected when empty. |
+| `Jobs:TimeoutSeconds` | `3600` | Wall-clock timeout for a single spawned job. The child process is killed if it exceeds this. No effect in in-process mode. |
+| `Jobs:MaxConcurrentJobs` | `0` | Maximum simultaneous jobs. `0` = auto (`ProcessorCount / 2`, minimum 1). |
+
+**Orchestrator metrics** are logged every 60 seconds (hardcoded) to the app log: `ActiveJobs`, `QueuedJobs`, `AvailableSlots`. This is not configurable.
+
+**Example — production process-spawning config:**
+```json
+{
+  "Urls": "http://0.0.0.0:5100",
+  "Jobs": {
+    "UseProcessSpawning": true,
+    "ExecutablePath": "/opt/etlsql/ETL-SQL",
+    "TimeoutSeconds": 7200,
+    "MaxConcurrentJobs": 4
+  }
+}
+```
+
+---
+
+### 3.5 Reporting Dashboard
+
+Applies to: **ETL-SQL.ReportPlayer only**
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `ReportPlayer:Port` | `5200` | Port the Report-SQL web dashboard listens on. |
+
+---
+
+### 3.6 Connector Defaults
+
+Applies to: **App / TUI**
+
+These settings provide default credentials for connectors that don't receive inline credentials from a script. In production, replace the placeholder values and use `ENC:` encrypted strings where possible.
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `Connectors:Retry:MaxAttempts` | `3` | Maximum retry attempts for transient SQL/network errors. |
+| `Connectors:Retry:BaseDelaySeconds` | `1.0` | Base delay in seconds for exponential backoff between retries. |
+| `Connectors:Ftp:Host` | `localhost` | Default FTP server hostname. |
+| `Connectors:Ftp:Username` | `anonymous` | Default FTP username. |
+| `Connectors:Ftp:Password` | `""` | Default FTP password. |
+| `Connectors:Sftp:Host` | `localhost` | Default SFTP server hostname. |
+| `Connectors:Sftp:Username` | `user` | Default SFTP username. |
+| `Connectors:Sftp:Password` | `pass` | Default SFTP password. **Change this in production.** |
+| `Connectors:AzureBlob:ConnectionString` | `UseDevelopmentStorage=true` | Azure Blob Storage connection string. `UseDevelopmentStorage=true` targets the local Azurite emulator. |
+| `Connectors:AzureBlob:Container` | `test` | Default Azure Blob container name. |
+
+---
+
+### 3.7 Logging & Retention
+
+Applies to: **App / TUI** (the Orchestrator.Service uses the same keys under `Logging:AppLog`)
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `Logging:AppLog:Directory` | `logs/app` | Directory for internal engine diagnostic logs (relative to the executable). |
+| `Logging:AppLog:RetentionDays` | `30` | Days to retain app log files before auto-deletion. |
+| `Logging:AppLog:FileSizeLimitMb` | `10` | Maximum size of a single app log file before rotation (MB). |
+| `Logging:ScriptLog:Directory` | `logs/scripts` | Directory for per-script execution logs. One log file is created per script name. |
+| `Logging:ScriptLog:DefaultRetentionDays` | `30` | Days to retain script log files. |
+| `Logging:ScriptLog:FileSizeLimitMb` | `10` | Maximum size of a single script log file before rotation (MB). |
+| `Logging:LogLevel:Default` | `Information` | Minimum severity level for the app log. Valid values: `Trace`, `Debug`, `Information`, `Warning`, `Error`, `Critical`. |
+| `Logging:LogLevel:Microsoft` | `Warning` | Minimum level for Microsoft framework noise. |
+
+---
+
+### 3.8 Session Management
+
+Applies to: **App / TUI**
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `Session:StaleSessionRetentionDays` | `7` | Days to keep inactive session state (`.etlsession` files) before the engine reaps them on next startup. |
+
+## 4. Complete Master `appsettings.json`
+ 
+ Use this as a reference when you need to reset to defaults or create a new installation. In a unified deployment, this single file controls all components.
+ 
+ ```json
+ {
+   "Urls": "http://localhost:5100",
+   "AllowedHosts": "*",
+   "Logging": {
+     "LogLevel": {
+       "Default": "Information",
+       "Microsoft": "Warning",
+       "Microsoft.Hosting.Lifetime": "Information",
+       "Microsoft.AspNetCore": "Warning"
+     },
+     "AppLog": {
+       "Directory": "logs/app",
+       "RetentionDays": 30,
+       "FileSizeLimitMb": 10
+     },
+     "ScriptLog": {
+       "Directory": "logs/scripts",
+       "DefaultRetentionDays": 30,
+       "FileSizeLimitMb": 10
+     },
+     "TestLog": {
+       "Directory": "logs/tests",
+       "RetentionDays": 30,
+       "FileSizeLimitMb": 50
+     }
+   },
+   "Security": {
+     "AllowedHosts": ["*"],
+     "ApprovedSafeZones": [],
+     "MaxFileOperationsPerScript": 100,
+     "MaxRecursiveNestingDepth": 5
+   },
+   "Engine": {
+     "BatchSize": 10000,
+     "MaxRecursiveDepth": 10000,
+     "JoinSpillThreshold": 100000,
+     "ExternalHashPartitions": 32,
+     "ExternalSort": {
+       "ChunkSize": 100000
+     }
+   },
+   "Orchestration": {
+     "MaxInMemoryBatches": 100,
+     "ForeachPageSize": 10000,
+     "JobThrottle": {
+       "MaxConcurrentJobs": 0
+     }
+   },
+   "Scheduler": {
+     "MetricsIntervalSeconds": 60,
+     "SleepIntervalSeconds": 30
+   },
+   "Jobs": {
+     "UseProcessSpawning": false,
+     "ExecutablePath": "",
+     "TimeoutSeconds": 3600,
+     "MaxConcurrentJobs": 0
+   },
+   "ReportPlayer": {
+     "Port": 5200
+   },
+   "Session": {
+     "StaleSessionRetentionDays": 7
+   },
+   "Connectors": {
+     "Retry": {
+       "MaxAttempts": 3,
+       "BaseDelaySeconds": 1.0
+     },
+     "Ftp": { "Host": "localhost", "Username": "anonymous", "Password": "" },
+     "Sftp": { "Host": "localhost", "Username": "user", "Password": "pass" },
+     "AzureBlob": { "ConnectionString": "UseDevelopmentStorage=true", "Container": "test" }
+   }
+ }
+ ```
+
+---
+
+## 5. Resource Governance
+
+### 5.1 Memory Management
+ETL-SQL uses an **aggregate streaming model**. While it can process terabytes of data, it only holds a "window" of records in memory (`MaxInMemoryBatches`).
+- **High Memory Usage**: Reduce `Engine:BatchSize` or `Orchestration:MaxInMemoryBatches`. Lower values increase disk I/O but reduce peak RAM.
+- **Disk Pressure**: Large `#temp` tables spill to the local temp directory. Ensure your `TEMP` directory has sufficient IOPS and free space.
+
+### 5.2 Concurrency Tuning
+The default job concurrency (`MaxConcurrentJobs: 0`) auto-selects `ProcessorCount / 2`. For I/O-heavy ETL workloads that spend most of their time waiting on databases or APIs, you can safely set this to 2–4× the CPU count.
+
+### 5.3 Security Guardrails
+The engine enforces **Runaway Protection**. If a script exceeds `MaxFileOperationsPerScript`, it halts with a `SecurityException`.
+
+Users can bypass this by adding a `SET ALLOW_GREATER_THAN_n_FILE ON;` statement, but **only if the script is executing within an Approved Safe Zone** configured in `appsettings.json`.
+
+Any authorized bypass is logged as an **Audit Warning**. Administrators can view active safe zones at runtime:
 ```sql
 SHOW SAFE ZONES;
 ```
 
-### 3.3 Performance Monitoring
-Administrators can monitor the efficiency of their ETL pipelines using the job history metrics:
-- **Scheduler Heartbeats**: Every 60 seconds (configurable), the scheduler logs `ActiveJobs` vs `QueuedJobs`.
-- **Resource Audit**: Every job completion records `PeakRAM` and `CPUTime`.
-- **Command**: Run `SHOW JOB HISTORY;` in the TUI to see an audit of which scripts are consuming the most memory and processing time.
+### 5.4 Performance Monitoring
+- **Orchestrator Heartbeats**: Every 60 seconds, the scheduler logs `ActiveJobs`, `QueuedJobs`, `AvailableSlots`, and `MaxConcurrent` to the app log.
+- **Per-Job Metrics**: Every job completion records `PeakRAM` and `CPUTime`.
+- **Historical Audit**: Run `SHOW JOB HISTORY;` in the TUI to see resource consumption across past executions.
 
 ---
 
-## 4. Troubleshooting
+## 6. Troubleshooting
 
-### 4.1 Log Locations
-- **Script Logs**: `logs/scripts/` (one file per script name).
-- **Scheduler Logs**: `logs/system/` (diagnostics for job firing and persistence).
+### 6.1 Log Locations (Defaults)
 
-### 4.2 Error Codes
-- **CS0103 / CS1061**: Typically indicates a missing dependency or configuration key in `appsettings.json`.
-- **SecurityException**: A script attempted to access a path outside a safe zone or exceeded a safety threshold.
+| Host | Log Directory |
+| :--- | :--- |
+| App / TUI — engine diagnostics | `logs/app/` |
+| App / TUI — per-script execution | `logs/scripts/` |
+| Orchestrator.Service | `logs/orchestrator/` |
+
+### 6.2 Common Errors
+
+| Error | Likely Cause | Fix |
+| :--- | :--- | :--- |
+| `SecurityException: Unauthorized access to protected system directory` | Script is reading a blocked path | Review script paths; add an Approved Safe Zone if the path is legitimate |
+| `SecurityException: File operation count exceeds safety limit of N` | Script is processing too many files | Add `SET ALLOW_GREATER_THAN_N_FILE ON;` to the script **and** register an Approved Safe Zone |
+| `SecurityException: Connection to host 'X' is denied` | `AllowedHosts` is in strict mode and host is not listed | Add the host to `Security:AllowedHosts` |
+| `SecurityException: Access to environment variable 'X' is denied` | `AllowedEnvVars` does not include that variable | Add the variable name to `SecurityService.AllowedEnvVars` in DI setup |
+| `Could not locate ETL-SQL executable` | `Jobs:UseProcessSpawning` is `true` but `Jobs:ExecutablePath` is not set | Set `Jobs:ExecutablePath` to the absolute path of `ETL-SQL.exe` |
+| High memory / OOM | `MaxInMemoryBatches` or `BatchSize` too high for available RAM | Reduce `Orchestration:MaxInMemoryBatches` and/or `Engine:BatchSize` |

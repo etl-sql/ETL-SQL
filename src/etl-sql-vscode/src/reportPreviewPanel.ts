@@ -109,7 +109,7 @@ export class ReportPreviewPanel {
     /** Resolves the path to the etl-sql-report CLI. */
     private _resolveCliPath(): string {
         const config     = vscode.workspace.getConfiguration('etlsql');
-        const configured = config.get<string>('reportCliPath');
+        const configured = config.get<string>('report.executable.path');
         if (configured) return configured;
 
         // Development fallback: dotnet run from the CLI project

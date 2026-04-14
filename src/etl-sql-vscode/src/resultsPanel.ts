@@ -262,7 +262,10 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
                         <div id="results-section" class="section">
                             <div class="results-toolbar">
                                 <div id="results-count" style="font-size: 10px; opacity: 0.6;">0 rows returned</div>
-                                <select id="dataset-selector" style="display: none; background: #222; color: #ccc; border: 1px solid #444; font-size: 10px;"></select>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <select id="dataset-selector" style="display: none; background: #222; color: #ccc; border: 1px solid #444; font-size: 10px;"></select>
+                                    <button id="export-csv" style="background: var(--primary); color: white; border: none; border-radius: 3px; padding: 2px 8px; font-size: 10px; cursor: pointer;">Export CSV</button>
+                                </div>
                             </div>
                             <div id="results-grid-container"></div>
                         </div>
@@ -311,6 +314,12 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
                     });
 
                     document.getElementById('dataset-selector').addEventListener('change', (e) => loadResult(parseInt(e.target.value)));
+
+                    document.getElementById('export-csv').addEventListener('click', () => {
+                        if (grid) {
+                            grid.download("csv", \`results_\${new Date().getTime()}.csv\`);
+                        }
+                    });
 
                     vscode.postMessage({ type: 'ready' });
 

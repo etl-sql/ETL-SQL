@@ -2,11 +2,6 @@
 ## TUI on-going issues
 
 ## VS Code Extension on-going issues
-- [ ] **Execute Tree Clear** Each time I execute either all or selected the execute tree should be cleared an should start over.  Currently it just keeps adding to the tree view.
-- [ ] **Variable Values** Variable values are not displayed on the sidebar.  I think the code is in place but they are not displayed.
-- [ ] **Export to CSV** Export to csv should be added to the results grid context menu. It was but at some point it seems to have disappeared.
-- [ ] **Settings cleanup** Setting is really messy, it should just need a pointer to where the exe files are and do you want to show debugging or not.  I don't know of any other options needed at this time. 
-- [ ] **Add .rptsql extension** rptsql extension is not supported.  Its really the same as etlsql extension except a button should appear so that the user can preview the report in a new panel.  Should work like Markdown preview.  The report preview is already an option so there shouldn't be much to do here.
 
 ## Phase 9 Report-SQL — Post-Launch Items
 
@@ -57,3 +52,25 @@ CREATE NAVIGATION Tabs AS (
 The navigation could be a tab, sidebar, or other layout.  We should be able to define the type of navigation and the layout of the navigation.
 
 ---
+## Architecture Documentation Gaps  ** For Claude only**
+
+The following architecture documents are missing. Identified 2026-04-14.
+
+### High Priority
+- [ ] **LSP Architecture** — `ETL-SQL.LanguageServer` is a full LSP implementation (completions, diagnostics, hover, definition navigation, schema-aware autocomplete) with no architecture doc. Developers extending the engine and the VS Code/JetBrains integrations need this.
+- [ ] **VS Code Extension Architecture** — `etl-sql-vscode` (TypeScript) covers syntax highlighting, inline lint diagnostics, and the `.rptsql` preview panel. Should document the extension/LSP handshake and how the preview panel connects to `ReportPlayer`.
+- [ ] **Variable Scoping, Procedures & Dynamic Execution** — `VariableScopeManager`, `ProcedureExecutor`, `DECLARE`/`EXECUTE` semantics, output parameter binding, and how scope is inherited vs isolated across `RUN SCRIPT` nesting are undocumented.
+- [ ] **Expression Evaluation & Type System** — `ExpressionEvaluator` is large and complex. Operator precedence, `CAST`/coercion rules, `CASE` handling, `NULL` propagation, and batch-row evaluation semantics need an architecture reference.
+
+### Medium Priority
+- [ ] **TUI Interactive Editor Architecture** — `Presentation.md` covers the output/data boundary but not the TUI itself: tab lifecycle, editor buffer, `EtlSqlHighlighter`, autocomplete integration, undo/redo stack, keyboard navigation.
+- [ ] **Parser / Lexer Deep Dive** — `Engine.md` mentions the parser superficially. A developer adding a new statement type needs to understand tokenization strategy, the recursive-descent structure, ambiguous grammar resolution, and CTE/subquery handling.
+
+### Lower Priority
+- [ ] **Docker / Infrastructure Commands** — `DockerContainerManager` and `USE DOCKER` are referenced in the README but the spawn lifecycle, container polling, and session-teardown cleanup are undocumented.
+- [ ] **Window Functions & Advanced Operators** — `WindowEngine` (PARTITION BY, ROW_NUMBER, RANK, etc.) is a footnote in `Engine.md`. Worth a dedicated section given the complexity of streaming window evaluation.
+
+---
+## Engine Tweaks
+- [x] **Missing configuration**  The `Scheduler:MetricsIntervalSeconds` and `SleepIntervalSeconds` are now sourced from `appsettings.json`.
+- [x] **Multiple appsettings**  Consolidated all host configuration into a single master `appsettings.json` in the `src/` root.

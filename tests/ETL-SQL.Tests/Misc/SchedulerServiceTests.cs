@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
+using Microsoft.Extensions.Configuration;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Execution;
@@ -59,11 +60,16 @@ namespace ETL_SQL.Tests.Misc
             var throttleOptions = Options.Create(new JobThrottleOptions { MaxConcurrentJobs = 4 });
             var throttle = new JobThrottle(throttleOptions, new Mock<ILogger<JobThrottle>>().Object);
 
+            var mockConfig = new Mock<IConfiguration>();
+            // Setup default values for intervals if needed by tests
+            mockConfig.Setup(c => c.GetSection(It.IsAny<string>())).Returns(new Mock<IConfigurationSection>().Object);
+
             return new SchedulerService(
                 mockServiceProvider.Object,
                 mockStore.Object,
                 new Mock<ILogger<SchedulerService>>().Object,
-                throttle);
+                throttle,
+                mockConfig.Object);
         }
 
         [Fact]

@@ -36,6 +36,12 @@
           "name": "Connections",
           "visibility": "visible",
           "icon": "media/icon.svg"
+        },
+        {
+          "id": "etlsql-variables",
+          "name": "Variables",
+          "visibility": "visible",
+          "icon": "$(symbol-variable)"
         }
       ],
       "etlsql-panel": [
@@ -71,60 +77,20 @@
       "type": "object",
       "title": "ETL-SQL",
       "properties": {
-        "etlsql.server.path": {
-          "type": "string",
-          "default": "",
-          "description": "Path to the ETL-SQL Language Server executable (ETL-SQL.LanguageServer.exe)."
-        },
         "etlsql.executable.path": {
           "type": "string",
           "default": "ETL-SQL.exe",
           "description": "Path to the ETL-SQL CLI executable (ETL-SQL.exe) for running scripts."
         },
-        "etlsql.verbose": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable verbose output when running scripts."
-        },
-        "etlsql.runMethod": {
-          "type": "string",
-          "enum": [
-            "Terminal",
-            "Output Channel",
-            "Webview (Grid)"
-          ],
-          "default": "Webview (Grid)",
-          "description": "Where to display the output of scripts."
-        },
-        "etlsql.trace.server": {
-          "type": "string",
-          "enum": [
-            "off",
-            "messages",
-            "verbose"
-          ],
-          "default": "off",
-          "description": "Traces the communication between VS Code and the ETL-SQL language server."
-        },
-        "etlsql.debugMode": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable advanced diagnostic popups and extreme console logging for troubleshooting."
-        },
-        "etlsql.enableLogging": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable persistent engine-level logging to a .log file."
-        },
-        "etlsql.logPath": {
-          "type": "string",
-          "default": ".etlsql_logs",
-          "description": "Directory where engine logs will be stored."
-        },
-        "etlsql.reportCliPath": {
+        "etlsql.server.path": {
           "type": "string",
           "default": "",
-          "description": "Full path to the etl-sql-report CLI executable. Leave empty to use dotnet run (development mode)."
+          "description": "Path to the ETL-SQL Language Server executable."
+        },
+        "etlsql.report.executable.path": {
+          "type": "string",
+          "default": "etl-sql-report.exe",
+          "description": "Path to the ETL-SQL Report CLI executable (etl-sql-report.exe) for building reports."
         },
         "etlsql.report.autoOpenPreview": {
           "type": "boolean",

@@ -64,12 +64,14 @@ namespace ETL_SQL.Data
                 if (val == null) return null;
             }
             
-            // Ensure numeric types hash consistently
-            if (val is int i) return (decimal)i;
-            if (val is long l) return (decimal)l;
-            if (val is double d) return (decimal)d;
-            if (val is float f) return (decimal)f;
-            if (val is decimal dec) return dec;
+            // Ensure numeric types hash consistently. 
+            // IMPORTANT: In .NET, different scales of decimal (e.g. 1.0m vs 1m) have different hash codes!
+            // We normalize all decimals by dividing by 1.000... which strips trailing zeros.
+            if (val is int i)    return (decimal)i / 1.00000000000000000000000000000m;
+            if (val is long l)   return (decimal)l / 1.00000000000000000000000000000m;
+            if (val is double d) return (decimal)d / 1.00000000000000000000000000000m;
+            if (val is float f)  return (decimal)f / 1.00000000000000000000000000000m;
+            if (val is decimal dec) return dec / 1.00000000000000000000000000000m;
             
             if (val is DateTime dt) return dt;
             if (val is DateTimeOffset dto) return dto.DateTime;
@@ -78,7 +80,7 @@ namespace ETL_SQL.Data
             if (val is string s)
             {
                 if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var dec2)) 
-                    return dec2;
+                    return dec2 / 1.00000000000000000000000000000m;
                 
                 if (DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt2))
                     return dt2;

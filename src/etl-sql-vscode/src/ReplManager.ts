@@ -11,6 +11,8 @@ export class ReplManager {
     private _outputChannel: vscode.OutputChannel | undefined;
     private _currentSessionId: string | undefined;
     private _debugMode: boolean = false;
+    private _onVariablesChange: vscode.EventEmitter<any[]> = new vscode.EventEmitter<any[]>();
+    public readonly onVariablesChange: vscode.Event<any[]> = this._onVariablesChange.event;
 
     public static getInstance(): ReplManager {
         if (!ReplManager._instance) {
@@ -150,6 +152,10 @@ export class ReplManager {
         if (msg.type === 'message') {
             const prefix = msg.level === 'error' ? '[ERROR] ' : (msg.level === 'warning' ? '[WARN] ' : '');
             this._outputChannel?.appendLine(`${prefix}${msg.text}`);
+        }
+
+        if (msg.type === 'variables') {
+            this._onVariablesChange.fire(msg.data);
         }
 
         if (this._currentHandler) {

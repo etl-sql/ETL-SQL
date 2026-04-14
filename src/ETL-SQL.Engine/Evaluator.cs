@@ -544,13 +544,29 @@ namespace ETL_SQL.Engine
             var parts = new List<string>();
             if (t.DatabaseName != null) parts.Add(t.DatabaseName);
             if (t.SchemaName != null) parts.Add(t.SchemaName);
-            parts.Add(t.TableName);
+            
+            // Handle case where TableName contains a dot (e.g. "schema.table") but SchemaName is null
+            if (t.TableName.Contains(".") && t.SchemaName == null)
+            {
+                parts.AddRange(t.TableName.Split('.'));
+            }
+            else
+            {
+                parts.Add(t.TableName);
+            }
 
             // Security Hardening (CR-S2): Apply dialect-appropriate identifier quoting
-            // MSSQL uses [identifier], others use "identifier"
             Func<string, string> quote = dialect.Equals("MSSQL", StringComparison.OrdinalIgnoreCase)
                 ? s => s.StartsWith("[") ? s : $"[{s.Replace("]", "]]")}]"
-                : s => s.StartsWith("\"") ? s : $"\"{s.Replace("\"", "\"\"")}\"";
+                : s => 
+                {
+                    if (s.StartsWith("\"")) return s;
+                    // For Postgres/Oracle, we only quote if the identifier contains special characters 
+                    // that REQUIRES quoting. 
+                    bool needsQuoting = s.Any(c => !char.IsLetterOrDigit(c) && c != '_');
+
+                    return needsQuoting ? $"\"{s.Replace("\"", "\"\"")}\"" : s;
+                };
 
             return string.Join(".", parts.Select(quote));
         }

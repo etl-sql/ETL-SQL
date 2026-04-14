@@ -89,16 +89,16 @@ namespace ETL_SQL.Tests
                     CREATE CONNECTION db ON POSTGRES('{pg.GetConnectionString()}');
                     
                     EXECUTE db BEGIN
-                        CREATE TABLE Categories (id INT, category VARCHAR(10), amount DECIMAL);
+                        CREATE TABLE categories (id INT, category VARCHAR(10), amount DECIMAL);
                     END;
                     
                     -- CSV to Postgres
-                    INSERT INTO db.Categories SELECT CAST(id AS INT) as id, category, CAST(amount AS DECIMAL) as amount FROM csv_src;
+                    INSERT INTO db.categories SELECT CAST(id AS INT) as id, category, CAST(amount AS DECIMAL) as amount FROM csv_src;
                     
                     CREATE CONNECTION json_dest ON JSON('{jsonOutPath.Replace("\\", "/")}');
                     
                     -- Postgres to JSON
-                    INSERT INTO json_dest SELECT * FROM db.Categories;
+                    INSERT INTO json_dest SELECT * FROM db.categories;
                 ";
 
                 await eval.Evaluate(new Parser(new Lexer(script).Tokenize()).Parse());
@@ -109,7 +109,7 @@ namespace ETL_SQL.Tests
                 Assert.False(string.IsNullOrEmpty(jsonContent), "Final JSON output file is empty.");
                 
                 // Check row count in database to be sure
-                await eval.Evaluate(new Parser(new Lexer("SELECT COUNT(*) as Total FROM db.Categories;").Tokenize()).Parse());
+                await eval.Evaluate(new Parser(new Lexer("SELECT COUNT(*) as Total FROM db.categories;").Tokenize()).Parse());
                 int count = Convert.ToInt32(eval.LastResult?.Rows[0]["TOTAL"] ?? 0);
                 Assert.Equal(3, count);
             }

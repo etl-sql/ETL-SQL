@@ -19,6 +19,8 @@ namespace ETL_SQL.Tests
         [InlineData("'; TRUNCATE src_conn.Table; --", "Connector Target")]
         public async Task SetParameterAsync_PreventsVariousScriptInjections(string maliciousPayload, string scenario)
         {
+            Assert.NotNull(scenario); // Use parameter to satisfy xUnit1026
+            
             // 1. Setup a test script that uses a parameter in a WHERE clause.
             string scriptPath = Path.Combine(Path.GetTempPath(), $"injection_test_{Guid.NewGuid()}.rptsql");
             File.WriteAllText(scriptPath, @"

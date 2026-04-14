@@ -24,7 +24,10 @@ namespace ETL_SQL.Engine.Handlers
             if (!stmt.Source.IsInlineSelect && stmt.Source.TempTableName != null)
             {
                 var tableName = stmt.Source.TempTableName;
-                if (!context.Connections.ContainsKey(tableName) &&
+                bool isQueryString = tableName.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase);
+
+                if (!isQueryString && 
+                    !context.Connections.ContainsKey(tableName) &&
                     !context.LocalSources.ContainsKey(tableName))
                 {
                     throw new ExecutionException(

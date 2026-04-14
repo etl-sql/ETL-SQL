@@ -149,7 +149,7 @@ namespace ETL_SQL.Engine.Engines
             element.ValueKind switch
             {
                 System.Text.Json.JsonValueKind.Number  => element.TryGetDecimal(out var d) ? d : (object?)element.GetDouble(),
-                System.Text.Json.JsonValueKind.String  => DateTime.TryParse(element.GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : (object?)element.GetString(),
+                System.Text.Json.JsonValueKind.String  => decimal.TryParse(element.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d) ? (object?)d : (DateTime.TryParse(element.GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : (object?)element.GetString()),
                 System.Text.Json.JsonValueKind.True    => (object?)true,
                 System.Text.Json.JsonValueKind.False   => (object?)false,
                 System.Text.Json.JsonValueKind.Null    => null,

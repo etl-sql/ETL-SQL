@@ -131,7 +131,7 @@ To facilitate monitoring and prevent stealth resource exhaustion, the engine pro
 - **Per-Job Accountability**: Every script execution (spawned or in-process) captures and logs `PeakMemoryBytes` and `CpuTimeSeconds`.
 - **Audit Visibility**: Use the `SHOW JOB HISTORY` command to inspect resource consumption for past executions. This provides an audit trail for spotting runaway scripts that may be staying within security limits but consuming excessive enterprise resources.
 
-### 3.6 Hardening the Report Dashboard
+### 3.9 Hardening the Report Dashboard
 The Report-SQL dashboard (`ReportPlayer`) exposes a live web interface that must be protected in multi-tenant environments.
 
 - **Port Assignment**: By default, the server listens on `http://localhost:5200`. In production, this can be customized via `ReportPlayer:Port` in `appsettings.json` to avoid conflicts or to bind to specific interfaces.
@@ -155,7 +155,7 @@ Session snapshots (`.etlsession`) and temporary cache data are protected using *
 | Platform | Mechanism | Scope |
 | :--- | :--- | :--- |
 | **Windows** | OS-native **DPAPI** (`ProtectedData.Protect`, `CurrentUser` scope) | Current OS user on current machine |
-| **Linux / macOS** | **Machine-locked AES-256** using a high-entropy key at `~/.etl-sql/machine.key` (generated on first-run, `chmod 600`) | Current machine only |
+| **Linux / macOS** | **Machine-locked AES-256** using a high-entropy key at `$XDG_DATA_HOME/etl-sql/machine.key` (i.e., `~/.local/share/etl-sql/machine.key`), generated on first run | Current machine only |
 
 **Security guarantee:** Session state is strictly non-portable. It cannot be decrypted by a different OS user, on a different machine, or after OS reinstallation.
 
@@ -165,8 +165,8 @@ For connection strings and files intended for cross-machine portability, the eng
 | Property | Value |
 | :--- | :--- |
 | Algorithm | AES-256 (CBC) |
-| Key derivation | PBKDF2 |
-| Iterations | 10,000 (brute-force resistance) |
+| Key derivation | PBKDF2-SHA256 |
+| Iterations | 600,000 (meets NIST SP 800-132 recommendation) |
 | Salt | 16 bytes, cryptographically random per-operation |
 
 **Design consequence**: The same plaintext encrypted twice produces different ciphertexts (unique salts), providing robust protection against rainbow table and known-plaintext attacks.
@@ -185,7 +185,21 @@ CREATE CONNECTION db ON MSSQL('ENC:U2FsdGVkX1+...'); -- decrypted before connect
 
 **`SecurityService.NeedsEncryption()`** — can be called by the IDE or CLI to warn users that a script still contains unencrypted plaintext connection strings before saving or sharing.
 
-### 4.3 Credential Masking
+> [!NOTE]
+> To opt a specific connection out of script encryption, add `ENCRYPT=OFF` to its `WITH()` block. This is recorded in the `NeedsEncryption()` check and will not be flagged as a plaintext credential.
+
+### 4.3 SSH/RSA File Encryption (Public-Key Portability)
+For scenarios requiring asymmetric (key-pair) encryption — such as delivering encrypted files to partners who hold a private key — the engine supports RSA-wrapped AES encryption via SSH key files.
+
+| Property | Value |
+| :--- | :--- |
+| File encryption | AES-256 (random key per operation) |
+| Key transport | RSA-OAEP-SHA256 |
+| Key source | SSH public/private key files (PEM format) |
+
+The AES session key is encrypted with the recipient's RSA public key and prepended to the output file. Decryption requires the corresponding private key (passphrase-protected keys are supported). This provides the portability of the `ENC:` model without sharing a password.
+
+### 4.4 Credential Masking
 Credentials are never allowed to appear in output. The engine enforces:
 - Connection strings containing passwords are masked in all `SHOW CONNECTIONS` output, diagnostics, and exception messages.
 - `ENC:` values are passed as-is to the `SecurityService` for decryption and are **never** logged.
@@ -209,6 +223,8 @@ All of the following trigger an immediate halt with a `SecurityException`:
 - `ValidateFileType()` — blocked extension (`.dll`, `.exe`, etc.)
 - `ValidateWriteAccess()` — write attempt to a logic file (`.etlsql`, etc.)
 - `CheckRunawayProtection()` — operation count or recursion depth exceeded
+- `ValidateHost()` — connection to a host not in `AllowedHosts` (strict mode only)
+- `ValidateEnvVar()` — read of an environment variable not in `AllowedEnvVars`
 
 ### 5.2 What Gets Logged
 | Event | Logged |
@@ -236,7 +252,6 @@ The `SecurityService` has an explicit `IsTestMode` flag used only by the automat
 
 | Risk | Severity | Status |
 | :--- | :--- | :--- |
-| PBKDF2 iteration count of 10,000 is below the current NIST SP 800-132 recommendation of ≥ 600,000 | Medium | Consider increasing; may impact startup latency |
 | `SET ALLOW_...` override flags are purely state-based and not cryptographically signed | Medium | A malicious script author can add these freely in a configured safe zone |
 | No rate-limiting or throttle on `SEND EMAIL` — possible spam amplification | Low | Manual safe zone + operation count limit provides some protection |
 |`.sql` is on the write blocklist but also on the allowed-read whitelist | Note | Deliberate — reading `.sql` is allowed; writing is not |
@@ -248,6 +263,6 @@ To report a security vulnerability in ETL-SQL, open a confidential issue or cont
 
 ---
 
-**Policy Version**: 0.5
+**Policy Version**: 0.6
 **Compliance Standard**: Built with reference to NIST SP 800-204 (Microservices Security), NIST SP 800-132 (Password-Based Key Derivation), and OWASP CLI Security Principles.
-**Last Review Date**: 2026-04-13
+**Last Review Date**: 2026-04-14

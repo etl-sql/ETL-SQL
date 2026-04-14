@@ -29,54 +29,60 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
 
-            // Handle pushdown if applicable (only if no INTO clause)
-            if (statement is SelectStatement selPush && selPush.IntoTable == null && context.IsSqlPushdown(selPush.FromTable.ConnectionName ?? selPush.FromTable.TableName))
+            // Handle pushdown if applicable (only if no INTO clause and ALL tables are on the same pushable connection)
+            if (statement is SelectStatement selPush && selPush.IntoTable == null)
             {
-                var connName = selPush.FromTable.ConnectionName ?? selPush.FromTable.TableName;
-                _logger.Debug("Pushing down SELECT to remote connection: {ConnName}", connName);
-                var conn = (IDatabaseSource)context.Connections[connName];
-                var sql = context.CompileQuery(selPush, conn.Dialect);
-                var pushdownBatches = conn.ExecuteRawSql(sql);
-                var pushdownResult = new DataTable();
-                var sw = System.Diagnostics.Stopwatch.StartNew();
-                bool isFirst = true;
-                long totalRows = 0;
-                bool capped = false;
+                var fromConn = selPush.FromTable.ConnectionName ?? selPush.FromTable.TableName;
+                bool allSameConn = (selPush.Joins == null || selPush.Joins.Count == 0) || 
+                                   selPush.Joins.All(j => (j.Table.ConnectionName ?? j.Table.TableName).Equals(fromConn, StringComparison.OrdinalIgnoreCase));
 
-                await foreach (var batch in pushdownBatches)
+                if (allSameConn && context.IsSqlPushdown(fromConn))
                 {
-                    if (pushdownResult.ColumnNames.Count == 0)
+                    _logger.Debug("Pushing down SELECT to remote connection: {ConnName}", fromConn);
+                    var conn = (IDatabaseSource)context.Connections[fromConn];
+                    var sql = context.CompileQuery(selPush, conn.Dialect);
+                    var pushdownBatches = conn.ExecuteRawSql(sql);
+                    var pushdownResult = new DataTable();
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    bool isFirst = true;
+                    long totalRows = 0;
+                    bool capped = false;
+
+                    await foreach (var batch in pushdownBatches)
                     {
-                        pushdownResult.SetColumns(batch.ColumnNames);
-                    }
-                    foreach (var r in batch.Rows)
-                    {
-                        totalRows++;
-                        if (pushdownResult.Rows.Count < MaxLastResultRows)
-                            await pushdownResult.AddRowAsync(r);
-                        else if (!capped)
+                        if (pushdownResult.ColumnNames.Count == 0)
                         {
-                            capped = true;
-                            _logger.Debug("[SELECT] Result buffer capped at {MaxLastResultRows} rows to prevent memory exhaustion. All rows still counted and streamed to display.", MaxLastResultRows);
+                            pushdownResult.SetColumns(batch.ColumnNames);
+                        }
+                        foreach (var r in batch.Rows)
+                        {
+                            totalRows++;
+                            if (pushdownResult.Rows.Count < MaxLastResultRows)
+                                await pushdownResult.AddRowAsync(r);
+                            else if (!capped)
+                            {
+                                capped = true;
+                                _logger.Debug("[SELECT] Result buffer capped at {MaxLastResultRows} rows to prevent memory exhaustion. All rows still counted and streamed to display.", MaxLastResultRows);
+                            }
+                        }
+
+                        if (!context.RedirectOutput)
+                        {
+                            ResultFormatter.PrintBatch(batch, isFirst);
+                            isFirst = false;
                         }
                     }
-
-                    if (!context.RedirectOutput)
-                    {
-                        ResultFormatter.PrintBatch(batch, isFirst);
-                        isFirst = false;
-                    }
+                    sw.Stop();
+                    pushdownResult.ExecutionTimeMs = sw.ElapsedMilliseconds;
+                    pushdownResult.TotalRowsMatched = (int)Math.Min(totalRows, int.MaxValue);
+                    context.RowsProcessed += totalRows;
+                    context.LastResult = pushdownResult;
+                    context.LastResultSets.Add(pushdownResult);
+                    context.OnResultSet?.Invoke(pushdownResult);
+                    return;
                 }
-                sw.Stop();
-                pushdownResult.ExecutionTimeMs = sw.ElapsedMilliseconds;
-                pushdownResult.TotalRowsMatched = (int)Math.Min(totalRows, int.MaxValue);
-                context.RowsProcessed += totalRows;
-                context.LastResult = pushdownResult;
-                context.LastResultSets.Add(pushdownResult);
-                context.OnResultSet?.Invoke(pushdownResult);
-                return;
             }
-
+ 
             var intoTable = context.GetIntoTable(statement);
             var forClause = context.GetForClause(statement);
 
@@ -254,16 +260,21 @@ namespace ETL_SQL.Engine.Handlers
         /// </summary>
         public async IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt, IExecutionContext context)
         {
-            // Handle pushdown if applicable (only if no INTO clause)
-            if (stmt.IntoTable == null && context.IsSqlPushdown(stmt.FromTable.ConnectionName ?? stmt.FromTable.TableName))
+            // Handle pushdown if applicable (only if no INTO clause and ALL tables are on same pushable connection)
+            if (stmt.IntoTable == null)
             {
-                var connName = stmt.FromTable.ConnectionName ?? stmt.FromTable.TableName;
-                _logger.Debug("[SELECT] Pushing down subquery to remote connection: {ConnName}", connName);
-                
-                var conn = (IDatabaseSource)context.Connections[connName];
-                var sql = context.CompileQuery(stmt, conn.Dialect);
-                await foreach (var batch in conn.ExecuteRawSql(sql)) yield return batch;
-                yield break;
+                var fromConn = stmt.FromTable.ConnectionName ?? stmt.FromTable.TableName;
+                bool allSameConn = (stmt.Joins == null || stmt.Joins.Count == 0) || 
+                                   stmt.Joins.All(j => (j.Table.ConnectionName ?? j.Table.TableName).Equals(fromConn, StringComparison.OrdinalIgnoreCase));
+
+                if (allSameConn && context.IsSqlPushdown(fromConn))
+                {
+                    _logger.Debug("[SELECT] Pushing down subquery to remote connection: {ConnName}", fromConn);
+                    var conn = (IDatabaseSource)context.Connections[fromConn];
+                    var sql = context.CompileQuery(stmt, conn.Dialect);
+                    await foreach (var batch in conn.ExecuteRawSql(sql)) yield return batch;
+                    yield break;
+                }
             }
 
             var joinEngine = new JoinEngine(context, _logger);

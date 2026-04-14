@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -213,9 +214,9 @@ namespace ETL_SQL.Engine.Engines
                         if (f.Arguments.Count == 0) return (decimal)rows.Count;
                         return (decimal)valsByArg[0].Count(v => v != null || (f.Arguments[0] is IdentifierExpression id && id.Name == "*"));
                     case "SUM":
-                        return (decimal)valsByArg[0].Where(v => v != null).Sum(v => Convert.ToDecimal(v));
+                        return (decimal)valsByArg[0].Where(v => v != null).Sum(v => SafeToDecimal(v));
                     case "AVG":
-                        return (decimal)valsByArg[0].Where(v => v != null).Average(v => Convert.ToDecimal(v));
+                        return (decimal)valsByArg[0].Where(v => v != null).Average(v => SafeToDecimal(v));
                     case "MIN":
                         return valsByArg[0].Where(v => v != null).Min();
                     case "MAX":
@@ -255,7 +256,7 @@ namespace ETL_SQL.Engine.Engines
 
         private decimal? CalculateVariance(List<object?> vals, bool population)
         {
-            var numbers = vals.Where(v => v != null).Select(v => Convert.ToDecimal(v)).ToList();
+            var numbers = vals.Where(v => v != null).Select(v => SafeToDecimal(v)).ToList();
             int n = numbers.Count;
             if (n == 0 || (!population && n == 1)) return null;
 
@@ -279,8 +280,8 @@ namespace ETL_SQL.Engine.Engines
             {
                 if (xVals[i] != null && yVals[i] != null)
                 {
-                    xNums.Add(Convert.ToDecimal(xVals[i]));
-                    yNums.Add(Convert.ToDecimal(yVals[i]));
+                    xNums.Add(SafeToDecimal(xVals[i]));
+                    yNums.Add(SafeToDecimal(yVals[i]));
                 }
             }
 
@@ -310,8 +311,8 @@ namespace ETL_SQL.Engine.Engines
             {
                 if (xVals[i] != null && yVals[i] != null)
                 {
-                    xNums.Add(Convert.ToDecimal(xVals[i]));
-                    yNums.Add(Convert.ToDecimal(yVals[i]));
+                    xNums.Add(SafeToDecimal(xVals[i]));
+                    yNums.Add(SafeToDecimal(yVals[i]));
                 }
             }
             
@@ -375,7 +376,7 @@ namespace ETL_SQL.Engine.Engines
             foreach (var r in rows)
             {
                 var v = await _context.EvaluateValue(sortExpr, r);
-                if (v != null) sortedVals.Add(Convert.ToDecimal(v));
+                if (v != null) sortedVals.Add(SafeToDecimal(v));
             }
             if (sortedVals.Count == 0) return null;
 
@@ -411,7 +412,7 @@ namespace ETL_SQL.Engine.Engines
             foreach (var r in rows)
             {
                 var v = await _context.EvaluateValue(sortExpr, r);
-                if (v != null) sortedVals.Add(Convert.ToDecimal(v));
+                if (v != null) sortedVals.Add(SafeToDecimal(v));
             }
             if (sortedVals.Count == 0) return null;
 
@@ -425,6 +426,14 @@ namespace ETL_SQL.Engine.Engines
                 if (cumDist >= p) return sortedVals[i];
             }
             return sortedVals[sortedVals.Count - 1];
+        }
+        private static decimal SafeToDecimal(object? v)
+        {
+            if (v == null) return 0m;
+            if (v is DateTime dt) throw new ExecutionException($"Cannot perform numeric aggregation on a date value: '{dt:yyyy-MM-dd HH:mm:ss}'. Ensure you are not summing a grouping column like 'month'.");
+            if (v is TimeSpan ts) throw new ExecutionException($"Cannot perform numeric aggregation on a time duration: '{ts}'.");
+            try { return Convert.ToDecimal(v, System.Globalization.CultureInfo.InvariantCulture); }
+            catch (Exception ex) { throw new ExecutionException($"Invalid numeric value for aggregation: '{v}'. Details: {ex.Message}"); }
         }
     }
 }

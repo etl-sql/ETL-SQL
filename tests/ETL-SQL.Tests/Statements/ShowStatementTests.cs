@@ -228,7 +228,7 @@ SELECT * FROM #conn_list;";
             var eval = NewEval();
             await handler.Execute(stmt, eval);
 
-            var expectedCols = new[] { "Id", "JobName", "StartTime", "EndTime", "Status", "RowsProcessed", "ErrorMessage" };
+            var expectedCols = new[] { "Id", "JobName", "StartTime", "EndTime", "Status", "RowsProcessed", "PeakRAM_MB", "CPUTime_s", "ErrorMessage" };
             Assert.Equal(expectedCols, eval.LastResult!.ColumnNames.ToArray());
         }
 

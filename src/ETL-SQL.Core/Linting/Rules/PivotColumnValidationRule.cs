@@ -65,7 +65,7 @@ namespace ETL_SQL.Core.Linting.Rules
             }
 
             var connName = tableRef.ConnectionName ?? context.Metadata?.GetConnections().FirstOrDefault() ?? "DEFAULT";
-            var cols = (await context.Metadata?.GetColumnsAsync(connName, tableRef.TableName))?.ToList();
+            var cols = context.Metadata == null ? null : (await context.Metadata.GetColumnsAsync(connName, tableRef.TableName))?.ToList();
             
             if (cols == null || !cols.Any()) return;
             await ValidateTableOperatorsAsync(tableRef, cols, context, results);

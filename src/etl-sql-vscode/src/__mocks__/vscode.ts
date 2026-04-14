@@ -51,12 +51,20 @@ export const env = {
     clipboard: { writeText: vi.fn() }
 };
 
-export const EventEmitter = vi.fn().mockImplementation(() => ({
-    event: vi.fn(),
-    fire: vi.fn(),
-    dispose: vi.fn()
-}));
+export class EventEmitter<T> {
+    private handlers: ((e: T) => any)[] = [];
+    event = vi.fn((handler: (e: T) => any) => {
+        this.handlers.push(handler);
+        return { dispose: () => {} };
+    });
+    fire = vi.fn((e: T) => {
+        this.handlers.forEach(h => h(e));
+    });
+    dispose = vi.fn();
+}
 
-export const TreeItem = vi.fn();
+export class TreeItem {
+    constructor(public label: string, public collapsibleState?: number) {}
+}
 export const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
 export const ThemeIcon = vi.fn();

@@ -14,6 +14,7 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
 
     private connections: Connection[] = [];
     private scriptConnectionsByUri: Map<string, any[]> = new Map();
+    private variables: any[] = [];
     private metadataCache: Map<string, string[]> = new Map();
     public client: any; // Will be set by extension.ts
     public outputChannel?: vscode.OutputChannel;
@@ -39,6 +40,16 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
 
     removeScriptConnections(uri: string) {
         this.scriptConnectionsByUri.delete(uri);
+        this._onDidChangeTreeData.fire();
+    }
+
+    updateVariables(vars: any[]) {
+        this.variables = vars;
+        this._onDidChangeTreeData.fire();
+    }
+
+    clearVariables() {
+        this.variables = [];
         this._onDidChangeTreeData.fire();
     }
 
@@ -90,6 +101,9 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
             const activeEditor = vscode.window.activeTextEditor;
             if (activeEditor && activeEditor.document.languageId === 'etlsql') {
                 all.push(new CategoryItem('Temporary Tables', 'TEMP', {}, vscode.TreeItemCollapsibleState.Collapsed, activeEditor.document.uri.toString()));
+                if (this.variables.length > 0) {
+                    all.push(new CategoryItem('Script Variables', 'VARIABLES', {}, vscode.TreeItemCollapsibleState.Collapsed));
+                }
             }
 
             return all;
@@ -113,6 +127,10 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
                     }
                 }
                 return [new TreeItem("LSP not ready...", vscode.TreeItemCollapsibleState.None)];
+            }
+
+            if (element.category === 'Script Variables') {
+                return this.variables.map(v => new VariableItem(v.name, v.value, v.type));
             }
 
             if (this.client) {
@@ -211,5 +229,18 @@ export class TableItem extends TreeItem {
     ) {
         super(name, collapsibleState, 'table');
         this.iconPath = new vscode.ThemeIcon('table');
+    }
+}
+
+export class VariableItem extends TreeItem {
+    constructor(
+        public readonly name: string,
+        public readonly value: string,
+        public readonly typeName: string
+    ) {
+        super(name, vscode.TreeItemCollapsibleState.None, 'variable');
+        this.description = value;
+        this.tooltip = `Type: ${typeName}\nValue: ${value}`;
+        this.iconPath = new vscode.ThemeIcon('symbol-variable');
     }
 }

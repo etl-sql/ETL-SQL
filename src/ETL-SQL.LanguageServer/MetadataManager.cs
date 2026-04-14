@@ -157,6 +157,12 @@ namespace ETL_SQL.LSP
 
                 var tables = (await connector.GetTablesAsync(conn.ConnectionString)).ToList();
                 
+                // Whitelist virtual DUAL table for all connections to support SELECT @var without FROM
+                if (!tables.Contains("DUAL", StringComparer.OrdinalIgnoreCase))
+                {
+                    tables.Insert(0, "DUAL");
+                }
+
                 // Merge in document-level temp tables if any
                 var normalizedUri = NormalizeUri(uri);
                 if (!string.IsNullOrEmpty(normalizedUri) && _docTempTables.TryGetValue(normalizedUri, out var temps))
@@ -255,6 +261,12 @@ namespace ETL_SQL.LSP
                 {
                     var tempKey = GetTempTableCacheKey(normalizedUri, tableName);
                     if (_columns.TryGetValue(tempKey, out var tempCols)) return tempCols;
+                }
+
+                // 1.1 Check if it's the virtual DUAL table
+                if (tableName.Equals("DUAL", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new[] { "DUMMY" };
                 }
 
                 var conn = GetConnection(connectionName, uri);

@@ -170,6 +170,23 @@ namespace ETL_SQL.Core.Parser
                 return new VisualSourceExpression { InlineSelect = select };
             }
 
+            if (_parser.Match(TokenType.STRING))
+            {
+                var val = _parser.Previous.Value;
+                if (val.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Re-parse the string as a script to extract the SelectStatement
+                    var subLexer = new Lexer(val);
+                    var subParser = new Parser(subLexer.Tokenize(), val);
+                    var subScript = subParser.Parse();
+                    if (subScript.Statements.Count > 0 && subScript.Statements[0] is SelectStatement sel)
+                    {
+                        return new VisualSourceExpression { InlineSelect = sel };
+                    }
+                }
+                return new VisualSourceExpression { TempTableName = val };
+            }
+
             // #temp table reference — may start with # or just be a plain name
             var tableRef = _parser.ConsumeIdentifier("Expected #tableName or SELECT or ( SELECT ... ) after SOURCE").Value;
             return new VisualSourceExpression { TempTableName = tableRef };

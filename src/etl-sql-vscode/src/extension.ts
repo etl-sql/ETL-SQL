@@ -25,11 +25,14 @@ export function activate(context: vscode.ExtensionContext) {
     
     const config = vscode.workspace.getConfiguration('etlsql');
     ReplManager.getInstance().setOutputChannel(outputChannel);
-    ReplManager.getInstance().setDebugMode(config.get<boolean>('debugMode') || false);
 
     connectionsProvider = new ConnectionsProvider(context);
     connectionsProvider.outputChannel = outputChannel;
     vscode.window.registerTreeDataProvider('etlsql-connections', connectionsProvider);
+
+    ReplManager.getInstance().onVariablesChange(vars => {
+        connectionsProvider.updateVariables(vars);
+    });
 
     // Register Results Panel (Bottom Panel)
     const resultsProvider = ResultsPanel.register(context);
@@ -83,7 +86,6 @@ export function activate(context: vscode.ExtensionContext) {
             connectionsProvider.client = client;
             connectionsProvider.refresh();
             syncConnectionsToLsp();
-            syncDebugModeToLsp();
 
             client.onNotification('etlsql/scriptConnections', (params: { uri: string, connections: any[] }) => {
                 const normalizedUri = vscode.Uri.parse(params.uri).toString();
@@ -166,11 +168,7 @@ export function activate(context: vscode.ExtensionContext) {
     }));
 
     vscode.workspace.onDidChangeConfiguration(e => {
-        if (e.affectsConfiguration('etlsql.debugMode')) {
-            const debugMode = vscode.workspace.getConfiguration('etlsql').get<boolean>('debugMode') || false;
-            ReplManager.getInstance().setDebugMode(debugMode);
-            syncDebugModeToLsp();
-        }
+        // Handled as needed
     });
 
     context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(doc => {
@@ -211,12 +209,7 @@ function syncConnectionsToLsp() {
     }
 }
 
-function syncDebugModeToLsp() {
-    if (client && client.state === 2) {
-        const debugMode = vscode.workspace.getConfiguration('etlsql').get<boolean>('debugMode') || false;
-        client.sendNotification('etlsql/setDebugMode', { debugMode });
-    }
-}
+// Removed syncDebugModeToLsp
 
 async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolean = false) {
     const editor = vscode.window.activeTextEditor;
@@ -237,16 +230,19 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
 
     const config = vscode.workspace.getConfiguration('etlsql');
     let exePath = getExecutablePath(config);
-    const runMethod = config.get<string>('runMethod') || 'Webview (Grid)';
-    const verbose = config.get<boolean>('verbose') !== false;
-    const enableLogging = config.get<boolean>('enableLogging') === true;
-    const logPath = config.get<string>('logPath') || '.etlsql_logs';
+    
+    // Defaulting previously user-facing settings to standard defaults for cleaner UI
+    const runMethod = 'Webview (Grid)'; 
+    const verbose = true;
+    const enableLogging = false;
+    const logPath = '.etlsql_logs';
 
     const scriptText = selectionOnly ? editor.document.getText(editor.selection) : editor.document.getText();
     const fileName = path.basename(document.fileName);
 
     if (runMethod === 'Webview (Grid)') {
         ResultsPanel.postMessage({ type: 'clear' });
+        connectionsProvider.clearVariables();
         ResultsPanel.postMessage({ type: 'message', text: `Executing: ${fileName}` });
 
         const sessionId = getSessionId(document);
@@ -265,25 +261,8 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
                 client.sendNotification('etlsql/refreshMetadata', { uri: document.uri.toString() });
             }
         }
-    } else if (runMethod === 'Output Channel') {
-        outputChannel.clear();
-        outputChannel.show();
-        outputChannel.appendLine(`Executing: ${fileName}\n`);
-        let scriptPath = document.fileName;
-        if (selectionOnly || document.isDirty || document.isUntitled) {
-            const tempDir = path.join(os.tmpdir(), 'etlsql_temp');
-            if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-            scriptPath = path.join(tempDir, `temp_${Date.now()}.etlsql`);
-            fs.writeFileSync(scriptPath, scriptText);
-        }
-        const args = ['run', scriptPath];
-        if (verbose) args.push('--verbose');
-        if (enableLogging) { args.push('--log'); args.push(logPath); }
-        const child = cp.spawn(exePath, args, { shell: true });
-        child.stdout.on('data', d => outputChannel.append(d.toString()));
-        child.stderr.on('data', d => outputChannel.append(d.toString()));
-        child.on('close', code => outputChannel.appendLine(`\nFinished with exit code ${code}`));
     } else {
+        // Fallback for non-grid runs if specialized by user commands (retained for architectural consistency)
         const terminal = vscode.window.activeTerminal || vscode.window.createTerminal('ETL-SQL');
         terminal.show();
         let scriptPath = document.fileName;

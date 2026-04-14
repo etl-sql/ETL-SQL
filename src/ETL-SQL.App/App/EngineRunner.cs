@@ -259,9 +259,20 @@ namespace ETL_SQL.App
                                     type = "progress",
                                     data = tree.ToSnapshot()
                                 };
-                                var json = System.Text.Json.JsonSerializer.Serialize(snapshot);
-                                Console.WriteLine(json);
-                                if (evaluator.IsVerbose) evaluator.Log($"[TELEMETRY] {json}", ConsoleColor.DarkGray);
+                                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(snapshot));
+
+                                // Emit variables state
+                                var vars = new {
+                                    type = "variables",
+                                    data = evaluator.CurrentVariables.Select(kv => new {
+                                        name = kv.Key,
+                                        value = kv.Value?.ToString() ?? "null",
+                                        type = kv.Value?.GetType().Name ?? "null"
+                                    }).ToList()
+                                };
+                                Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(vars));
+
+                                if (evaluator.IsVerbose) evaluator.Log($"[TELEMETRY] {System.Text.Json.JsonSerializer.Serialize(snapshot)}", ConsoleColor.DarkGray);
                                 await Task.Delay(500, treeCts.Token); // 2Hz for JSON streaming
                             }
                         }, treeCts.Token);
@@ -279,11 +290,22 @@ namespace ETL_SQL.App
                         // Final flush for fast scripts in JSON mode
                         if (ctx.IsJsonMode && !ctx.IsSilentMode)
                         {
-                            var snapshot = new {
+                            var finalSnapshot = new {
                                 type = "progress",
                                 data = evaluator.ExecutionTree.ToSnapshot()
                             };
-                            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(snapshot));
+                            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(finalSnapshot));
+
+                            // Final variables flush
+                            var finalVars = new {
+                                type = "variables",
+                                data = evaluator.CurrentVariables.Select(kv => new {
+                                    name = kv.Key,
+                                    value = kv.Value?.ToString() ?? "null",
+                                    type = kv.Value?.GetType().Name ?? "null"
+                                }).ToList()
+                            };
+                            Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(finalVars));
 
                             // Emit performance telemetry
                             if (evaluator.IsProfiling)
