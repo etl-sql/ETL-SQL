@@ -1472,6 +1472,18 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
+    public record ShowSafeZonesStatement : Statement
+    {
+        public string? IntoTable { get; init; }
+
+        public ShowSafeZonesStatement(string? intoTable = null)
+        {
+            IntoTable = intoTable;
+        }
+
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
     public record EmailStatement : Statement
     {
         public Expression To { get; }
@@ -1960,6 +1972,19 @@ namespace ETL_SQL.Core
     {
         public bool Enabled { get; }
         public SetShowPasswordStatement(bool enabled) { Enabled = enabled; }
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
+    public enum SecurityOverride
+    {
+        FileTypeAccess,
+        LargeFileCount,
+        DeepRecursion
+    }
+
+    /// <summary>SET ALLOW_... ON/OFF</summary>
+    public record SetSecurityOverrideStatement(SecurityOverride Override, bool Enabled) : Statement
+    {
         public override string ToSql() => AstSerializer.Format(this);
     }
 }

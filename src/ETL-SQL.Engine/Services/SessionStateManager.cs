@@ -20,10 +20,11 @@ namespace ETL_SQL.Engine.Services
     /// Manages saving and loading of session state to allow ad-hoc development (Run Selection)
     /// to maintain state across multiple process runs.
     /// </summary>
-    public class SessionStateManager(ILogger logger, string? customSessionDir = null)
+    public class SessionStateManager(ILogger logger, ETL_SQL.Services.SecurityService securityService, string? customSessionDir = null)
     {
         public string SessionRoot { get; } = InitializeSessionRoot(customSessionDir);
         private readonly ILogger _logger = logger;
+        private readonly ETL_SQL.Services.SecurityService _securityService = securityService;
         private const string SessionFileExtension = ".etlsession";
         private const string RecoveryManifestExtension = ".recovery.json";
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
@@ -181,17 +182,20 @@ namespace ETL_SQL.Engine.Services
                 Variables = state.GlobalVariables.Keys.ToList()
             };
 
-            var sessionLock = GetSessionLock(sessionId);
-            await sessionLock.WaitAsync();
-            try
+            await _securityService.ExecuteInternalAsync(async () =>
             {
-                await WriteAtomicAsync(sessionFile, CryptoUtils.Protect(fullJson, entropyKey));
-                await WriteAtomicAsync(GetRecoveryFilePath(sessionId), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
-            }
-            finally
-            {
-                sessionLock.Release();
-            }
+                var sessionLock = GetSessionLock(sessionId);
+                await sessionLock.WaitAsync();
+                try
+                {
+                    await WriteAtomicAsync(sessionFile, CryptoUtils.Protect(fullJson, entropyKey));
+                    await WriteAtomicAsync(GetRecoveryFilePath(sessionId), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+                }
+                finally
+                {
+                    sessionLock.Release();
+                }
+            });
         }
 
         private async Task WriteAtomicAsync(string path, string content)
@@ -260,7 +264,11 @@ namespace ETL_SQL.Engine.Services
             try
             {
                 _logger.Debug("[SESSION_READ_FILE] Reading {SessionFile}...", sessionFile);
-                string protectedJson = File.ReadAllText(sessionFile);
+                
+                string protectedJson = "";
+                _securityService.ExecuteInternal(() => {
+                    protectedJson = File.ReadAllText(sessionFile);
+                });
                 
                 _logger.Debug("[SESSION_UNPROTECT] Unprotecting state using OS context...");
                 string entropy = GetMachineKey();
@@ -285,14 +293,16 @@ namespace ETL_SQL.Engine.Services
         /// <summary>Clears session files from disk.</summary>
         public void ClearSession(string sessionId)
         {
-            string sessionFile = GetSessionFilePath(sessionId);
-            if (File.Exists(sessionFile)) File.Delete(sessionFile);
+            _securityService.ExecuteInternal(() => {
+                string sessionFile = GetSessionFilePath(sessionId);
+                if (File.Exists(sessionFile)) File.Delete(sessionFile);
 
-            string recoveryFile = GetRecoveryFilePath(sessionId);
-            if (File.Exists(recoveryFile)) File.Delete(recoveryFile);
+                string recoveryFile = GetRecoveryFilePath(sessionId);
+                if (File.Exists(recoveryFile)) File.Delete(recoveryFile);
 
-            string tempDir = GetTempTableDir(sessionId);
-            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+                string tempDir = GetTempTableDir(sessionId);
+                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+            });
         }
 
         /// <summary>Deletes stale session files older than the specified duration.</summary>

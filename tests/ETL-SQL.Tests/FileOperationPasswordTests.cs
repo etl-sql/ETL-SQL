@@ -40,7 +40,7 @@ namespace ETL_SQL.Tests
             _mockLogger = new Mock<ILogger> { CallBase = true };
             _mockServiceProvider = new Mock<IServiceProvider>();
             _mockContext = new Mock<IExecutionContext>();
-            _securityService = new SecurityService { IsTestMode = true };
+            _securityService = new SecurityService(_mockLogger.Object) { IsTestMode = true };
 
             _mockContext.Setup(c => c.SecurityService).Returns(_securityService);
             _mockContext.Setup(c => c.ResolvePath(It.IsAny<string>())).Returns<string>(s => s);
@@ -111,7 +111,7 @@ namespace ETL_SQL.Tests
             serviceCollection.AddSingleton(new Mock<IDockerManager>().Object);
             serviceCollection.AddSingleton(new Mock<IConnectorRegistry>().Object);
             
-            var mockSessionManager = new Mock<SessionStateManager>(_mockLogger.Object, null);
+            var mockSessionManager = new Mock<SessionStateManager>(_mockLogger.Object, _securityService, null);
             serviceCollection.AddSingleton(mockSessionManager.Object);
             
             serviceCollection.AddSingleton(_securityService);

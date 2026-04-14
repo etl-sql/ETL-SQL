@@ -73,7 +73,7 @@ namespace ETL_SQL.Common
             "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT", "VERSION",
             "SETS", "SESSION", "CONNECTIONS", "VARIABLES", "LOCAL", "ANALYZE", "TABLES", "COLUMNS", "TAGS", "TAG", "VALUE", "BITS", "ALGORITHM", "PASSPHRASE", "COMMENT",
             "SUBSTRING", "POSITION", "OVERLAY", "EXTRACT", "TRIM", "PLACING", "LEADING", "TRAILING", "BOTH",
-            "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE", "REQUIRE"
+            "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE", "REQUIRE", "SAFE", "ZONES"
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)

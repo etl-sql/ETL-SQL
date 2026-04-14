@@ -10,6 +10,7 @@ using ETL_SQL.Engine.Services;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Services;
 using Spectre.Console;
 
 namespace ETL_SQL.Tests.Integration
@@ -39,7 +40,8 @@ namespace ETL_SQL.Tests.Integration
             // Simulate a fresh process run
             var services = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = services.GetRequiredService<Evaluator>();
-            var sessionManager = new SessionStateManager(NullLogger.Instance, _sessionDir);
+            var security = services.GetRequiredService<SecurityService>();
+            var sessionManager = new SessionStateManager(NullLogger.Instance, security, _sessionDir);
 
             // 1. Load Session
             var state = await sessionManager.LoadSession(_sessionId, password);

@@ -111,6 +111,38 @@ namespace ETL_SQL.Core.Parser
             return new SetShowPasswordStatement(enabled);
         }
 
+        private Statement ParseSetSecurityOverride()
+        {
+            var startToken = _parser.Previous; // The token after SET that matched ALLOW_...
+            SecurityOverride overrideType;
+            string val = startToken.Value.ToUpperInvariant();
+
+            if (val == "ALLOW_FILE_TYPE_ACCESS")
+            {
+                overrideType = SecurityOverride.FileTypeAccess;
+            }
+            else if (val.StartsWith("ALLOW_GREATER_THAN_") && val.EndsWith("_FILE"))
+            {
+                overrideType = SecurityOverride.LargeFileCount;
+            }
+            else if (val.StartsWith("ALLOW_RECURSIVE_GREATER_THAN_") && val.EndsWith("_LAYERS"))
+            {
+                overrideType = SecurityOverride.DeepRecursion;
+            }
+            else
+            {
+                throw new SyntaxException($"Unknown security override: {startToken.Value}", startToken.Line, startToken.Column);
+            }
+
+            var enabled = true;
+            if (_parser.Match(TokenType.ON)) enabled = true;
+            else if (_parser.Match(TokenType.OFF)) enabled = false;
+            else throw new SyntaxException($"Expected ON or OFF after SET {startToken.Value}", _parser.Current.Line, _parser.Current.Column);
+
+            if (_parser.Match(TokenType.SEMICOLON)) { }
+            return new SetSecurityOverrideStatement(overrideType, enabled);
+        }
+
         private Statement ParseRun()
         {
             var startToken = _parser.Previous;
@@ -296,6 +328,11 @@ namespace ETL_SQL.Core.Parser
             {
                 stmt = new ShowVersionStatement();
             }
+            else if (_parser.Match(TokenType.SAFE))
+            {
+                _parser.Consume(TokenType.ZONES, "Expected ZONES after SHOW SAFE");
+                stmt = new ShowSafeZonesStatement();
+            }
 
             if (stmt == null)
             {
@@ -319,6 +356,7 @@ namespace ETL_SQL.Core.Parser
                     ShowTagsStatement stag => stag with { IntoTable = tempTable },
                     ShowTagValueStatement stv => stv with { IntoTable = tempTable },
                     ShowVariablesStatement svars => svars with { IntoTable = tempTable },
+                    ShowSafeZonesStatement ssz => ssz with { IntoTable = tempTable },
                     _ => stmt
                 };
             }

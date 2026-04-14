@@ -115,7 +115,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public void TestSafeZoneRunawayProtection()
         {
-            var security = new ETL_SQL.Services.SecurityService();
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
             var safePath = "C:\\MyProject";
             var neutralPath = "C:\\Data";
             
@@ -133,7 +133,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public void TestLinuxPathBlocking()
         {
-            var security = new ETL_SQL.Services.SecurityService();
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
             
             // Should block Linux system paths even on Windows
             Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("/etc/passwd"));
@@ -144,7 +144,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public void TestExtensionBlacklistStrictness()
         {
-            var security = new ETL_SQL.Services.SecurityService();
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
             
             // Should block .exe even if allowUnknown (override flag) is TRUE
             Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidateFileType("C:\\Safe\\tool.exe", allowUnknown: true));
@@ -154,7 +154,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public void TestEnvironmentFolderProtection()
         {
-            var security = new ETL_SQL.Services.SecurityService();
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
             
             // Should block sensitive environment folders
             Assert.Throws<ETL_SQL.Services.SecurityException>(() => security.ValidatePath("C:\\Users\\chuck\\.ssh\\id_rsa"));
@@ -164,7 +164,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public void TestInternalBypass()
         {
-            var security = new ETL_SQL.Services.SecurityService();
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
             
             // Enable internal bypass
             security.IsInternalOperation = true;
@@ -199,7 +199,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public void TestScriptImmutability()
         {
-            var security = new ETL_SQL.Services.SecurityService();
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
             
             // Should block writing to native script types
             Assert.Throws<SecurityException>(() => security.ValidateWriteAccess("test.etlsql"));

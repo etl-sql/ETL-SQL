@@ -10,8 +10,8 @@ The engine treats all user-provided scripts as **Untrusted Actors**. Our securit
 
 - **Isolation**: Prevent scripts from exiting the approved workspace or accessing sensitive system assets.
 - **Resource Governance**: Prevent denial-of-service (DoS) via runaway processes or recursive resource exhaustion.
-- **Transparency**: Maintain a non-bypassable audit trail for all security-relevant exceptions.
-- **Credential Hygiene**: Ensure secrets, tokens, and passwords are never exposed in logs, diagnostics, or output streams.
+- **Transparency (Auditability)**: Maintain non-bypassable audit logs for all security threshold overrides and access blocks (SEC-3).
+- **Credential Hygiene**: Ensure secrets, tokens, and passwords are never exposed in logs, diagnostics, or output streams (SEC-4).
 
 ---
 
@@ -56,8 +56,7 @@ The following extensions are explicitly on the **allowed whitelist**:
 .log  .xlsx  .xml  .yaml  .yml  .ini  .md  .zip
 ```
 
-> [!NOTE]
-> Unknown extensions (not on either list) are blocked by default. Use the `### ALLOW_FILE_TYPE_ACCESS` override flag to allow specific unlisted extensions within an approved safe zone.
+> Unknown extensions (not on either list) are blocked by default. Use the `SET ALLOW_FILE_TYPE_ACCESS ON;` override command to allow specific unlisted extensions within an approved safe zone.
 
 ### 3.3 Script Immutability (Human-Centric Control)
 To protect the integrity of the application's control plane, the engine enforces a strict write-block via `ValidateWriteAccess()`. Scripts **cannot write, move, or rename** files with these extensions:
@@ -73,11 +72,11 @@ To maintain host stability, `SecurityService.CheckRunawayProtection()` enforces 
 
 | Guard | Default Limit | Configuration Key | Override Flag |
 | :--- | :--- | :--- | :--- |
-| Filesystem operation count | **100 per script** | `Security:MaxFileOperationsPerScript` | `### ALLOW_GREATER_THAN_n_FILE` |
-| Recursive directory depth | **5 levels** | `Security:MaxRecursiveNestingDepth` | `### ALLOW_RECURSIVE_GREATER_THAN_n_LAYERS` |
+| Filesystem operation count | **100 per script** | `Security:MaxFileOperationsPerScript` | `SET ALLOW_GREATER_THAN_n_FILE ON/OFF` |
+| Recursive directory depth | **5 levels** | `Security:MaxRecursiveNestingDepth` | `SET ALLOW_RECURSIVE_GREATER_THAN_n_LAYERS ON/OFF` |
 
 > [!TIP]
-> Error messages dynamically reflect the current configured limit, ensuring that developers know exactly which override flag (e.g., `### ALLOW_GREATER_THAN_500_FILE`) to use if a limit is increased by an administrator.
+> Error messages dynamically reflect the current configured limit, ensuring that developers know exactly which override command (e.g., `SET ALLOW_GREATER_THAN_500_FILE ON;`) to use if a limit is increased by an administrator.
 
 
 ### 3.5 Network Egress Control (Outbound Hardening)
@@ -123,7 +122,9 @@ The Report-SQL dashboard (`ReportPlayer`) exposes a live web interface that must
 
 
 > [!IMPORTANT]
-> Override flags are **only honored** when the target path resides within a verified **Approved Safe Zone** (registered directories in `ApprovedSafeZones`). Providing an override flag while operating outside a safe zone still throws a `SecurityException` — with a distinct message explaining that the path is outside an authorized workspace.
+> Override commands are **only honored** when the target path resides within a verified **Approved Safe Zone** (configured in `appsettings.json`). Providing an override command while operating outside a safe zone still throws a `SecurityException`.
+>
+> All authorized bypasses are logged as `Warning` audits. Administrators can inspect the active safe zones via `SHOW SAFE ZONES;`.
 
 ---
 
@@ -195,7 +196,7 @@ All of the following trigger an immediate halt with a `SecurityException`:
 | Event | Logged |
 | :--- | :--- |
 | `SecurityException` thrown | Yes — message, path, operation type |
-| Override flag used (`### ALLOW_...`) | Yes — flag name, script line, current safe zone |
+| Override command used (`SET ALLOW_...`) | Yes — command name, script line, current safe zone |
 | `ENC:` decryption failure | Yes — failure recorded; ciphertext is **not** included |
 | Script contains unencrypted credentials (`NeedsEncryption()`) | Warning issued in IDE/CLI |
 
@@ -218,9 +219,7 @@ The `SecurityService` has an explicit `IsTestMode` flag used only by the automat
 | Risk | Severity | Status |
 | :--- | :--- | :--- |
 | PBKDF2 iteration count of 10,000 is below the current NIST SP 800-132 recommendation of ≥ 600,000 | Medium | Consider increasing; may impact startup latency |
-| No per-user or per-script `ApprovedSafeZones` management UI | Medium | Safe zones are currently added programmatically only |
-| `### ALLOW_...` override flags are comment-based and not cryptographically signed | Medium | A malicious script author can add these freely in a safe zone |
-| No network egress controls — any `API`/`SFTP`/`FTP`/`SMTP` connection can reach any endpoint | Medium | **Implemented (SEC-2)** — Configure via `AllowedHosts` in appsettings.json |
+| `SET ALLOW_...` override flags are purely state-based and not cryptographically signed | Medium | A malicious script author can add these freely in a configured safe zone |
 | No rate-limiting or throttle on `SEND EMAIL` — possible spam amplification | Low | Manual safe zone + operation count limit provides some protection |
 |`.sql` is on the write blocklist but also on the allowed-read whitelist | Note | Deliberate — reading `.sql` is allowed; writing is not |
 

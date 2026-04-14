@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Microsoft.Extensions.Configuration;
 using Xunit;
 using ETL_SQL.Services;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests.Misc
 {
@@ -22,7 +23,7 @@ namespace ETL_SQL.Tests.Misc
                 .Build();
 
             // 2. Act: Initialize SecurityService manually mirroring DependencyInjectionSetup
-            var securityService = new SecurityService();
+            var securityService = new SecurityService(NullLogger.Instance);
             securityService.MaxFileOperations = int.TryParse(configuration["Security:MaxFileOperationsPerScript"], out var mfo) ? mfo : SecurityService.DefaultMaxFileOperations;
             securityService.MaxRecursiveDepth = int.TryParse(configuration["Security:MaxRecursiveNestingDepth"], out var mrd) ? mrd : SecurityService.DefaultMaxRecursiveDepth;
 

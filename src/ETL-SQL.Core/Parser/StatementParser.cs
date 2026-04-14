@@ -50,6 +50,13 @@ namespace ETL_SQL.Core.Parser
                 if (_parser.Match(TokenType.PROFILING) || _parser.Match(TokenType.PROFILE)) return ParseSetProfiling();
                 if (_parser.Match(TokenType.WHAT_IF)) return ParseSetWhatIf();
                 if (_parser.Match(TokenType.SHOW_PASSWORD)) return ParseSetShowPassword();
+                
+                if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.StartsWith("ALLOW_", StringComparison.OrdinalIgnoreCase))
+                {
+                    _parser.Advance();
+                    return ParseSetSecurityOverride();
+                }
+
                 return ParseSetVariable();
             }
             if (_parser.Match(TokenType.SHOW)) return ParseShow();

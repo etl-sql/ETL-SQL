@@ -208,6 +208,23 @@ USE PASSWORD = 'visible_for_debugging';
 SET SHOW_PASSWORD OFF;
 ```
 
+### 2.4 Security Overrides
+Formal commands to bypass standard engine safety limits. These are only honored if the path is within an **Approved Safe Zone** (configured in appsettings). All overrides trigger an audit log entry.
+
+| Command | Description |
+| :--- | :--- |
+| `SET ALLOW_FILE_TYPE_ACCESS ON/OFF` | Allows processing files with extensions not in the standard whitelist (e.g., `.custom`). |
+| `SET ALLOW_GREATER_THAN_n_FILE ON/OFF` | Allows more than `n` (default 100) file operations in a single script. |
+| `SET ALLOW_RECURSIVE_GREATER_THAN_n_LAYERS ON/OFF` | Allows directory recursion deeper than `n` (default 5) levels. |
+
+*Example:*
+```sql
+-- Override runaway protection for a large archive operation
+SET ALLOW_GREATER_THAN_100_FILE ON;
+COPY FILE 'C:\SafeZone\*.bak' TO 'D:\Archive\';
+SET ALLOW_GREATER_THAN_100_FILE OFF;
+```
+
 ---
 
 ## 3. Control Flow

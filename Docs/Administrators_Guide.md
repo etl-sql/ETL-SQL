@@ -52,9 +52,9 @@ Core engine behavior is controlled via `appsettings.json` located in the same di
 ### 2.1 Security Settings
 | Key | Default | Description |
 | :--- | :--- | :--- |
-| `Security:AllowedHosts` | `*` | List of allowed target hosts (e.g., `["*.microsoft.com", "localhost"]`). Once a list is provided, all other egress is blocked. |
-| `Security:MaxFileOperationsPerScript` | `100` | Maximum number of destructive file operations allowed in a single script run. |
 | `Security:MaxRecursiveNestingDepth` | `5` | Maximum depth for `RUN SCRIPT` recursion or procedural nesting. |
+| `Security:ApprovedSafeZones` | `[]` | List of directory paths (absolute) where runaway protection (e.g. file operation counts) can be overridden via `SET ALLOW_...` statements. |
+| `Logging:Security:AuditLevel` | `Warning` | Minimum level for security-related logging (overrides, blocks). |
 
 ### 2.2 Orchestration & Performance
 | Key | Default | Description |
@@ -104,7 +104,14 @@ ETL-SQL uses an **aggregate streaming model**. While it can process terabytes of
 
 ### 3.2 Safety Guardrails
 The engine enforces **Runaway Protection**. If a script exceeds the `MaxFileOperationsPerScript`, it will halt with a `SecurityException`. 
-Users can bypass this by adding a comment to their script (e.g., `### ALLOW_GREATER_THAN_100_FILE`), but only if the script is running within an **Approved Safe Zone**.
+Users can bypass this by adding a `SET` statement to their script (e.g., `SET ALLOW_GREATER_THAN_100_FILE ON;`), but only if the script is running within an **Approved Safe Zone** (configured in `appsettings.json`).
+
+Any bypass attempt within an approved safe zone is logged as an **Audit Warning** in the system logs (SEC-3). 
+
+Administrators can view all active safe zones by running:
+```sql
+SHOW SAFE ZONES;
+```
 
 ### 3.3 Performance Monitoring
 Administrators can monitor the efficiency of their ETL pipelines using the job history metrics:

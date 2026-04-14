@@ -69,6 +69,14 @@ namespace ETL_SQL.Core.Linting.Rules
                     CheckLeak(p, pushdown, scopes, results, "EXECUTE pushdown parameter");
                 }
             }
+            else if (statement is SetVariableStatement setStmt)
+            {
+                // SEC-4: Taint tracking - if RHS has sensitive variables, LHS becomes sensitive
+                bool rhsSensitive = FindSensitiveVariables(setStmt.Value, scopes).Any();
+                bool nameSensitive = SensitiveKeywords.Any(k => setStmt.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
+                
+                scopes.Peek()[setStmt.VariableName] = rhsSensitive || nameSensitive;
+            }
             else if (statement is BlockStatement block)
             {
                 scopes.Push(new Dictionary<string, bool>(StringComparer.OrdinalIgnoreCase));

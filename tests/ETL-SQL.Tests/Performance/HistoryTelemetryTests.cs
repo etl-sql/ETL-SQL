@@ -30,29 +30,25 @@ namespace ETL_SQL.Tests.Performance
             // Clean/Initialize
             await store.InitializeAsync();
             
-            var entry = new JobHistoryEntry
-            {
-                JobName = "TelemetryTestJob",
-                Status = "Success",
-                StartTime = DateTime.Now.AddMinutes(-5),
-                EndTime = DateTime.Now,
-                PeakMemoryBytes = 1024 * 1024 * 150, // 150 MB
-                CpuTimeSeconds = 12.5,
-                RowsProcessed = 500000,
-                ErrorMessage = null
-            };
-
-            _output.WriteLine("Saving telemetry entry...");
-            await store.LogJobEndAsync(entry);
+            // 1. Log Start
+            _output.WriteLine("Logging job start...");
+            var entryId = await store.LogJobStartAsync("TelemetryTestJob");
+            
+            // 2. Log End with telemetry
+            _output.WriteLine("Logging job end with telemetry...");
+            const long rows = 500000;
+            const long ram = 1024 * 1024 * 150;
+            const double cpu = 12.5;
+            await store.LogJobEndAsync(entryId, "Success", null, rows, ram, cpu);
 
             _output.WriteLine("Retrieving history...");
-            var history = await store.GetHistoryAsync(10);
-            var saved = history.FirstOrDefault(h => h.JobName == "TelemetryTestJob");
+            var history = await store.GetHistoryAsync("TelemetryTestJob", 10);
+            var saved = history.FirstOrDefault();
 
             Assert.NotNull(saved);
-            Assert.Equal(entry.PeakMemoryBytes, saved.PeakMemoryBytes);
-            Assert.Equal(entry.CpuTimeSeconds, saved.CpuTimeSeconds);
-            Assert.Equal(entry.RowsProcessed, saved.RowsProcessed);
+            Assert.Equal(ram, saved.PeakMemoryBytes);
+            Assert.Equal(cpu, saved.CpuTimeSeconds);
+            Assert.Equal(rows, saved.RowsProcessed);
             
             _output.WriteLine($"Verified Telemetry: RAM={saved.PeakMemoryBytes / (1024 * 1024):N0} MB, CPU={saved.CpuTimeSeconds:N1} s");
         }

@@ -34,7 +34,7 @@ namespace ETL_SQL.TUI.UI
         internal readonly InputHandler _input;
         private readonly Dictionary<string, IDataSource> _connections;
         
-        private readonly SecurityService _security = new();
+        private readonly SecurityService _security;
         private readonly EditorFileHandler _fileHandler;
         private string? _promptResult;
         private bool _promptResolved;
@@ -53,6 +53,7 @@ namespace ETL_SQL.TUI.UI
             _filePath = filePath;
             _connections = connections;
             _logger = Program.ServiceProvider.GetRequiredService<ILogger>();
+            _security = new SecurityService(_logger);
             _evaluator = Program.ServiceProvider.GetRequiredService<Evaluator>();
             _evaluator.RedirectOutput = true;
             foreach (var conn in connections) _evaluator.Connections[conn.Key] = conn.Value;

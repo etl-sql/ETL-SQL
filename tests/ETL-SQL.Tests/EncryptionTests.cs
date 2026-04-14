@@ -1,5 +1,6 @@
 using Xunit;
 using ETL_SQL.Services;
+using ETL_SQL.Common;
 using System;
 using System.Threading.Tasks;
 
@@ -10,7 +11,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public void TestEncryption_Basic()
         {
-            var security = new SecurityService { MasterPassword = "StrongPassword" };
+            var security = new SecurityService(NullLogger.Instance) { MasterPassword = "StrongPassword" };
             
             var original = "CREATE CONNECTION my_mock ON MOCKDB('dummy_conn_str');";
             var encrypted = security.EncryptScript(original, "StrongPassword");
@@ -26,7 +27,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public void TestEncryption_WithOverride()
         {
-            var security = new SecurityService { MasterPassword = "StrongPassword" };
+            var security = new SecurityService(NullLogger.Instance) { MasterPassword = "StrongPassword" };
             
             // Explicitly disable encryption
             var original = "CREATE CONNECTION my_mock ON MOCKDB('dummy_conn_str') WITH (ENCRYPT=OFF);";
@@ -40,7 +41,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public void TestEncryption_PartialScript()
         {
-            var security = new SecurityService();
+            var security = new SecurityService(NullLogger.Instance);
             
             var original = @"
                 -- This should be encrypted

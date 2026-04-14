@@ -86,7 +86,7 @@ namespace ETL_SQL.App
             services.AddSingleton<IDockerManager, DockerContainerManager>();
             services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>();
             
-            var securityService = new ETL_SQL.Services.SecurityService();
+            var securityService = new ETL_SQL.Services.SecurityService(loggerService);
             // Automatically enable TestMode if we are running in a Unit Test context
             if (AppDomain.CurrentDomain.GetAssemblies().Any(a => a.FullName?.Contains("xunit") == true || a.FullName?.Contains("Test") == true))
             {
@@ -99,6 +99,13 @@ namespace ETL_SQL.App
             {
                 securityService.AllowedHosts.Clear();
                 securityService.AllowedHosts.UnionWith(allowedHosts);
+            }
+
+            // SEC-5: Load approved safe zones from configuration
+            var safeZones = configuration.GetSection("Security:ApprovedSafeZones").Get<string[]>();
+            if (safeZones != null && safeZones.Length > 0)
+            {
+                securityService.ApprovedSafeZones.AddRange(safeZones);
             }
 
             securityService.MaxFileOperations = int.TryParse(configuration["Security:MaxFileOperationsPerScript"], out var mfo) ? mfo : SecurityService.DefaultMaxFileOperations;

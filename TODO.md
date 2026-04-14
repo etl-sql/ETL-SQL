@@ -57,53 +57,10 @@ CREATE NAVIGATION Tabs AS (
 The navigation could be a tab, sidebar, or other layout.  We should be able to define the type of navigation and the layout of the navigation.
 
 ---
-
-## Security Hardening (SEC)
-
-These items were identified during the 2026-04-12 security review of `SECURITY.md` and `SecurityService.cs`. Ordered by severity.
-
-### Medium Severity
-
-- [x] **SEC-1** — **PBKDF2 iteration count is below current NIST guidance.**
-  `CryptoUtils` uses 10,000 PBKDF2 iterations for AES-256 key derivation. NIST SP 800-132 (2023) recommends ≥ 600,000 for SHA-256. Increase the count and add a migration path so existing `ENC:` strings can be re-encrypted without breaking current scripts.
-  - Files: `ETL-SQL.Core/CryptoUtils.cs` (or equivalent key-derivation site)
-  - Test: round-trip `Encrypt`/`Decrypt` at new iteration count; verify old count can still decrypt.
-
-- [x] **SEC-2** — **Network Egress Controls.**
-  Implemented `AllowedHosts` allow-list. Unrestricted (`*`) by default for backward compatibility. Hardening can be enabled via `appsettings.json` under `Security:AllowedHosts`.
-  - Files: `DatabaseConnectors.cs`, `SecurityService.cs`, `CreateConnectionStatementHandler.cs`, `DependencyInjectionSetup.cs`, and multiple connectors.
-  - Support: Wildcard domains and host matches.
-
-- [ ] **SEC-3** — **`### ALLOW_...` override flags are unauthenticated free-text comments.**
-  Any script in a safe zone can self-grant elevated limits. At minimum, log every override activation as a `Warning`-level audit entry (script path, flag used, operator identity). Longer-term: consider a session-level opt-in (`SET ALLOW_LARGE_FILE_OPS ON`) that requires a privilege check rather than a comment.
-  - Files: `SecurityService.CheckRunawayProtection()`, override-flag parsing in `ExecutionSession` / `Evaluator`.
-
-- [ ] **SEC-4** — **No linter rule detecting credentials written to `PRINT` or `SEND EMAIL BODY`.**
-  A developer can accidentally write `PRINT @password` or embed a token in an email body. Add `CredentialLeakRule`: warn when a `PRINT` or `BODY` clause references a variable whose name contains `password`, `secret`, `token`, `key`, `pwd`, `apikey`, or whose declared type is `ENCRYPTED`. Warn only — do not block.
-  - Files: `ETL-SQL.Core/Linting/CredentialLeakRule.cs` (new).
-
-### Low Severity / Operational Gaps
-
-- [ ] **SEC-5** — **`ApprovedSafeZones` has no user-facing management.**
-  Safe zones are added programmatically only. Add a `SHOW SAFE ZONES` introspection command and document how an administrator configures them via `appsettings.json`. Without visibility, operators cannot verify which paths allow override flags.
-  - Files: `SecurityService.cs`, `appsettings.json` schema, `ShowSafeZonesStatementHandler.cs` (new).
-
-- [ ] **SEC-6** — **`NeedsEncryption()` is not wired into the IDE or VS Code extension save path.**
-  `SecurityService.NeedsEncryption()` detects plaintext connection strings but is never called on save. Wire it into the `TerminalIdeWindow` and VS Code extension save event: show a non-blocking warning when plaintext credentials are detected, with an "Encrypt Now" action.
-  - Files: `ETL-SQL.App/TerminalIdeWindow.cs` save handler, `etl-sql-vscode` save event.
-
-- [ ] **SEC-7** — **`IsInternalOperation` bypass is not guarded against accidental leakage.**
-  `IsInternalOperation = true` disables the entire sandbox. Wrap every internal operation in a `try/finally` that resets it to `false`. Add a unit test asserting that `ValidatePath()` against a protected path still throws immediately after a legitimate internal operation completes.
-  - Files: `SecurityService.cs`, `SessionManager.cs` (or wherever the flag is set).
-
----
 ### Security
 
-- [ ] **CR-S1** — **Dashboard parameter values are injected as ETL-SQL source text (script injection).**
-  `DashboardService.BuildParameterHeader` escapes single quotes in user-supplied parameter values and embeds them in `DECLARE @name = 'value';` statements that are prepended to the script source. Single-quote escaping prevents string literals from breaking out, but it does not prevent statement injection — a value of `'; DROP TABLE #data; DECLARE @x = '` will parse as three separate statements. Any user who can POST to `/api/parameter` can execute arbitrary ETL-SQL statements.
-  - **Severity:** High
-  - Files: `src/ETL-SQL.ReportPlayer/DashboardService.cs` ~line 101
-  - Fix: Pass parameters directly via `evaluator.DeclareVariable(name, value, ...)` before calling `evaluator.Evaluate(script)`, bypassing the parser entirely for parameter injection.
+- [x] **CR-S1** — **Dashboard parameter values are injected as ETL-SQL source text (script injection).**
+  Verified fix via `DashboardInjectionTests.cs`. Parameters are injected directly into scope.
 
 ### Quality
 

@@ -108,14 +108,6 @@ namespace ETL_SQL.Orchestrator.Execution
                 evaluator.SessionId  = _ctx.SessionId;
                 evaluator.IsProfiling = true;
 
-                // Security override flags embedded in the script source
-                if (source.Contains("### ALLOW_FILE_TYPE_ACCESS", StringComparison.OrdinalIgnoreCase))
-                    evaluator.AllowUnknownFileTypes = true;
-                if (source.Contains("### ALLOW_GREATER_THAN_100_FILE", StringComparison.OrdinalIgnoreCase))
-                    evaluator.AllowLargeFileOperationCount = true;
-                if (source.Contains("### ALLOW_RECURSIVE_GREATER_THAN_5_LAYERS", StringComparison.OrdinalIgnoreCase))
-                    evaluator.AllowDeepRecursion = true;
-
                 if (OnTreeNodeAdded != null)
                     evaluator.ExecutionTree.OnNodeAdded = node => OnTreeNodeAdded.Invoke(node.Name);
 

@@ -9,8 +9,14 @@ namespace ETL_SQL.Services
 {
     public class SecurityService
     {
+        private readonly ILogger _logger;
         private static readonly Regex ConnRegex = new Regex(@"(CREATE\s+CONNECTION\s+\w+\s+ON\s+\w+\s*\(\s*(['""]))([^'""\(\)]+)(\2\s*\))(?:\s+WITH\s*\((.*?)\))?", RegexOptions.IgnoreCase | RegexOptions.Singleline);
         private static readonly Regex EncRegex = new Regex(@"(['""])ENC:[A-Za-z0-9+/=]*\1", RegexOptions.Compiled);
+
+        public SecurityService(ILogger logger)
+        {
+            _logger = logger;
+        }
 
         private static readonly string[] AllowedExtensions = { ".csv", ".json", ".parquet", ".avro", ".db", ".enc", ".gz", ".7z", ".txt", ".sql", ".log", ".xlsx", ".xml", ".yaml", ".yml", ".ini", ".md", ".zip" };
         private static readonly string[] BlockedExtensions = { ".dll", ".exe", ".bat", ".cmd", ".sh", ".msi", ".sys", ".com", ".pfx", ".cer" };
@@ -206,7 +212,7 @@ namespace ETL_SQL.Services
             // 2. Check whitelist
             if (!AllowedExtensions.Contains(ext) && !allowUnknown)
             {
-                throw new SecurityException($"File type '{ext}' is not in the allowed data-connector whitelist. Use ### ALLOW_FILE_TYPE_ACCESS override if necessary.");
+                throw new SecurityException($"File type '{ext}' is not in the allowed data-connector whitelist. Use 'SET ALLOW_FILE_TYPE_ACCESS ON;' override if necessary.");
             }
         }
 
@@ -243,19 +249,61 @@ namespace ETL_SQL.Services
             {
                 string msg = allowLargeCount && !isSafeZone 
                     ? $"Runaway protection: Safety overrides for operation count are only permitted within approved user workspaces. Path '{path}' is outside a safe zone."
-                    : $"Runaway protection: File operation count ({count}) exceeds the safety limit of {MaxFileOperations}. Use ### ALLOW_GREATER_THAN_{MaxFileOperations}_FILE override.";
+                    : $"Runaway protection: File operation count ({count}) exceeds the safety limit of {MaxFileOperations}. Use 'SET ALLOW_GREATER_THAN_{MaxFileOperations}_FILE ON;' override.";
                 throw new SecurityException(msg);
             }
 
+            if (count > MaxFileOperations && allowLargeCount && isSafeZone)
+            {
+                _logger.Warning("Security Override: Large file operation count ({Count}) authorized via safe zone '{Path}'.", count, path);
+            }
 
             if (depth > MaxRecursiveDepth && (!allowDeepRecursion || !isSafeZone))
             {
                  string msg = allowDeepRecursion && !isSafeZone 
                     ? $"Runaway protection: Safety overrides for recursive depth are only permitted within approved user workspaces. Path '{path}' is outside a safe zone."
-                    : $"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {MaxRecursiveDepth}. Use ### ALLOW_RECURSIVE_GREATER_THAN_{MaxRecursiveDepth}_LAYERS override.";
+                    : $"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {MaxRecursiveDepth}. Use 'SET ALLOW_RECURSIVE_GREATER_THAN_{MaxRecursiveDepth}_LAYERS ON;' override.";
                 throw new SecurityException(msg);
             }
 
+            if (depth > MaxRecursiveDepth && allowDeepRecursion && isSafeZone)
+            {
+                _logger.Warning("Security Override: Deep recursion depth ({Depth}) authorized via safe zone '{Path}'.", depth, path);
+            }
+        }
+
+        /// <summary>
+        /// Executes an internal operation with elevated privileges, ensuring the bypass flag is reset.
+        /// </summary>
+        public void ExecuteInternal(Action action)
+        {
+            var wasInternal = IsInternalOperation;
+            IsInternalOperation = true;
+            try
+            {
+                action();
+            }
+            finally
+            {
+                IsInternalOperation = wasInternal;
+            }
+        }
+
+        /// <summary>
+        /// Executes an internal operation with elevated privileges, ensuring the bypass flag is reset.
+        /// </summary>
+        public async Task ExecuteInternalAsync(Func<Task> action)
+        {
+            var wasInternal = IsInternalOperation;
+            IsInternalOperation = true;
+            try
+            {
+                await action();
+            }
+            finally
+            {
+                IsInternalOperation = wasInternal;
+            }
         }
 
         /// <summary>
