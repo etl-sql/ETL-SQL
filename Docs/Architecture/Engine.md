@@ -442,7 +442,7 @@ Source.ReadBatches()
       → return List<Row> of group results
 ```
 
-This means a 50M-row CSV with `SELECT region, SUM(revenue) GROUP BY region` never holds all 50M rows in RAM. The `ExternalAggregateEngine` streams them into 32 partition files and processes one partition at a time.
+This means a 50M-row CSV with `SELECT region, SUM(revenue) GROUP BY region` never holds all 50M rows in RAM. The `ExternalAggregateEngine` streams them into 32 partition files and processes one partition at a time. **Crucially, this path iterates the source once and is used regardless of row count (always uses disk to ensure O(1) memory usage).**
 
 Queries that cannot use this path (and still buffer first):
 - Queries with JOINs — the join engine buffers the left side
@@ -473,10 +473,10 @@ Sorted chunks are written as newline-delimited JSON, then merged in a single pas
 
 | Trigger | Partition count | Algorithm |
 |---|---|---|
-| Always used for streaming aggregate path | 32 | Hash partitioning + in-memory aggregate per partition |
-| `allBufferedRows.Count > 100,000` in legacy path | 32 | Same |
+| **Streaming path (no joins)** | 32 | Always used (unconditional disk spill) |
+| **Buffered path (with joins/TC)** | 32 | Activated only when buffered input > 100,000 rows |
 
-Rows are routed to one of 32 partition files by the hash of their GROUP BY key(s). Each partition is then aggregated in-memory by `AggregateEngine`. Because partitioning is always done via file I/O, `TotalSpilledBytes` always increases when `ExternalAggregateEngine` runs, which makes it a reliable signal in tests.
+Rows are routed to one of 32 partition files by the hash of their GROUP BY key(s). Each partition is then aggregated in-memory by `AggregateEngine`. Because partitioning is always done via file I/O, `TotalSpilledBytes` always increases when `ExternalAggregateEngine` runs.
 
 ### Batch size and spill configuration
 

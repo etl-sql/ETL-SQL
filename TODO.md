@@ -74,77 +74,11 @@ The navigation could be a tab, sidebar, or other layout.  We should be able to d
   - Files: `src/ETL-SQL.Engine/Handlers/ExplainStatementHandler.cs` ~line 239
   - Fix: Use `select.IsDistinct` (AST property) directly.
 
-- [ ] **CR-Q3** — **Engine.md does not distinguish streaming aggregate (always external) from buffered aggregate (external only at 100k rows).**
+- [x] **CR-Q3** — **Engine.md does not distinguish streaming aggregate (always external) from buffered aggregate (external only at 100k rows).**
   The architecture doc implies both paths use the same threshold. The streaming aggregate path bypasses the threshold check entirely and always uses `ExternalAggregateEngine` regardless of row count, which is not documented.
   - Files: `Docs/Architecture/Engine.md`
 
 ---
-
-## Test Review Findings — 2026-04-13
-
-### Test Quality / Correctness Issues (TQ)
-
-- [x] **TQ-1** — **`UnitTest1.cs` in `ETL-SQL.LanguageServer.Tests` is empty.**
-  Contains a single empty `Test1()` method with no assertions. It passes vacuously and provides zero coverage signal. CI counts it as a passing test, which is misleading.
-  - Files: `tests/ETL-SQL.LanguageServer.Tests/UnitTest1.cs`
-  - Fix: Deleted the file.
-
-- [x] **TQ-2** — **`ExternalAggregateEngineTests.ApplyAggregationExternal_SpillsToTemp` uses only 60 rows — nowhere near the spill threshold.**
-  The test asserts `TotalSpilledBytes > spillBefore` but `ApplyAggregationExternal` is always called directly — it writes to disk unconditionally. The assertion will be true, but the test name implies this is the "spill path" while normal SELECT goes through a different code path with a 100k-row threshold. The test is valid but the comment/name is misleading.
-  - Files: `tests/ETL-SQL.Tests/Engine/ExternalAggregateEngineTests.cs`
-  - Fix: Rename to `ApplyAggregationExternal_AlwaysWritesToDisk` and update the comment to clarify it calls the engine directly rather than triggering via the 100k threshold.
-
-- [x] **TQ-3** — **`ConcurrentEvaluators_DoNotShareConnectionNames` barrier can hang forever if either task throws.**
-  Uses `SemaphoreSlim(0, 2)` with `Release(); await WaitAsync();`. If one task throws before calling `Release()`, the other task blocks on `WaitAsync()` with no timeout, and the test run hangs indefinitely.
-  - Files: `tests/ETL-SQL.Tests/Engine/ConcurrentEvaluatorTests.cs`
-  - Fix: Add `CancellationTokenSource` with 10s timeout to the `WaitAsync` call: `await barrier.WaitAsync(cts.Token)`.
-
-- [x] **TQ-4** — **`WaitForPollingTests.TestWaitFor_PollingCondition` mutates evaluator state from a background thread while `Evaluate()` is running.**
-  The test starts a `Task.Run` that calls `eval.SetVariable("@ready", 1)` on the same evaluator that is actively executing on the main thread. This is a data race unless `SetVariable` is explicitly thread-safe.
-  - Files: `tests/ETL-SQL.Tests/Engine/WaitForPollingTests.cs`
-  - Fix: Verify `SetVariable` acquires the variable lock; add a comment explaining why the concurrent write is safe.
-
-- [x] **TQ-5** — **`EdgeCaseTests` and `JoinTests` write temp files to the current working directory.**
-  `TestNestedRunScript` creates `child.sql` / `parent.sql`; `TestRightJoin` / `TestFullJoin` create `rj1.csv` / `rj2.csv` in the working directory. Parallel test runner invocations on the same machine can read stale files from a prior run, and a failed test can leave artifacts that corrupt the next run.
-  - Files: `tests/ETL-SQL.Tests/Engine/EdgeCaseTests.cs`, `tests/ETL-SQL.Tests/Statements/JoinTests.cs`
-  - Fix: Use `Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString(), "child.sql")` and clean up in `try/finally`.
-
-- [x] **TQ-6** — **`VersioningTests` and `RecursiveCteProfiling` use the global static `Program.ServiceProvider`.**
-  Both classes call `ETL_SQL.Program.ServiceProvider` which is the application's singleton DI container. If another test modifies global state via this container, these tests see that state. They should use `DependencyInjectionSetup.BuildServiceProvider()` to get an isolated container, matching the pattern used everywhere else.
-  - Files: `tests/ETL-SQL.Tests/Engine/VersioningTests.cs`, `tests/ETL-SQL.Tests/Performance/RecursiveCteProfiling.cs`
-  - Fix: Replaced `ETL_SQL.Program.ServiceProvider` with `DependencyInjectionSetup.BuildServiceProvider()`.
-
-- [x] **TQ-7** — **`WaitForPollingTests.TestWaitFor_Cancellation` may be flaky — cancels after 500ms but polling interval may exceed that.**
-  - Files: `tests/ETL-SQL.Tests/Engine/WaitForPollingTests.cs`
-  - Fix: Documented the expected polling interval and verified robust cancellation checks.
-
-### Missing Coverage (TC)
-
-- [x] **TC-1** — **No tests for `ExternalSortEngine` whatsoever.**
-  - Fix: Created `tests/ETL-SQL.Tests/Engine/ExternalSortTests.cs` covering basic sort, duplicates, multi-column, and empty input.
-
-- [x] **TC-2** — **No tests for `ExternalJoinEngine`.**
-  - Fix: Created `tests/ETL-SQL.Tests/Engine/ExternalJoinTests.cs` covering INNER/LEFT joins with disk spilling.
-
-- [x] **TC-3** — **`ExternalAggregateEngineTests` only tests COUNT — no coverage for SUM, MIN, MAX, AVG or multi-column GROUP BY.**
-  - Fix: Expanded `ExternalAggregateEngineTests.cs` with Theory for all aggregation types and multi-column groups.
-
-- [x] **TC-4** — **`ReportSqlTests` only tests `CreateVisual` parsing — no tests for `CreatePage` or `CreateDataset`.**
-  - Fix: Added parser round-trip tests in `ReportSqlTests.cs` for pages and datasets.
-
-- [x] **TC-5** — **No tests for `ManifestBuilder` — the component that queries visuals and materializes data.**
-  - Fix: Created `ReportingEndToEndTests.cs` and `VisualMappingTests.cs` verifying full manifest materialization.
-
-- [x] **TC-6** — **No test for the DashboardService parameter injection path (security concern CR-S1).**
-  - Fix: Expanded `DashboardInjectionTests.cs` with multiple malicious payloads verifying secure literal injection.
-
-- [x] **TC-7** — **`ErrorTests` is thin — missing @@ERROR, error codes, and nested TRY/CATCH propagation.**
-  - Fix: Expanded `ErrorTests.cs` to cover syntax errors, type-cast failures, and boundary conditions in BULK INSERT.
-
-- [x] **TC-8** — **`ReportSqlTests` async methods don't actually await anything — false `async Task` signatures.**
-  `TestCreateVisual_SubtitleAndSourceNoEquals`, `TestCreateVisual_SourceParenthesesNoEquals`, and `TestExplainInto_Serialization` are declared `async Task` but contain no `await` expressions. The compiler generates a warning; xUnit runs them as sync tests. These should be `void` or genuinely async.
-  - Files: `tests/ETL-SQL.Tests/Engine/ReportSqlTests.cs`
-  - Fix: Change all three to `void` test methods (parser tests don't need async).
 
 ### Test Design Concerns (TD)
 
