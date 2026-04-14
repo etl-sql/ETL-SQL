@@ -64,7 +64,7 @@ The navigation could be a tab, sidebar, or other layout.  We should be able to d
 
 ### Quality
 
-- [ ] **CR-Q1** — **`JsonFunctions.cs` uses bare `catch {}` blocks that swallow fatal exceptions.**
+- [x] **CR-Q1** — **`JsonFunctions.cs` uses bare `catch {}` blocks that swallow fatal exceptions.**
   Multiple `catch { return null; }` and `catch { return 0m; }` blocks in JSON scalar functions catch all exceptions, including `OutOfMemoryException` and `StackOverflowException`.
   - Files: `src/ETL-SQL.Engine/Functions/JsonFunctions.cs` lines 69, 93, 116, 131, 150, 209, 248
   - Fix: Replace with `catch (Exception ex) when (ex is not OutOfMemoryException)` to allow fatal exceptions to propagate.

@@ -66,7 +66,7 @@ namespace ETL_SQL.Engine.Functions
                     _ => null
                 };
             }
-            catch { return null; }
+            catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException) { return null; }
         }
 
         /// <summary>
@@ -90,7 +90,7 @@ namespace ETL_SQL.Engine.Functions
                     ? element.Value.GetRawText()
                     : null;
             }
-            catch { return null; }
+            catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException) { return null; }
         }
 
         /// <summary>
@@ -113,7 +113,7 @@ namespace ETL_SQL.Engine.Functions
                 SetPath(node, path ?? "$", newValue);
                 return node.ToJsonString();
             }
-            catch { return json; }
+            catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException) { return json; }
         }
 
         /// <summary>
@@ -128,7 +128,7 @@ namespace ETL_SQL.Engine.Functions
                 JsonDocument.Parse(args[0]!.ToString()!);
                 return 1m;
             }
-            catch { return 0m; }
+            catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException) { return 0m; }
         }
 
         /// <summary>
@@ -147,7 +147,7 @@ namespace ETL_SQL.Engine.Functions
                 using var doc = JsonDocument.Parse(json);
                 return NavigatePath(doc.RootElement, path ?? "$") != null ? 1m : 0m;
             }
-            catch { return 0m; }
+            catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException) { return 0m; }
         }
 
         /// <summary>
@@ -206,7 +206,7 @@ namespace ETL_SQL.Engine.Functions
                 await dt.AddRowAsync(new Row { ["VALUE"] = ScalarFromElement(element.Value) });
                 return dt;
             }
-            catch { return new DataTable(); }
+            catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException) { return new DataTable(); }
         }
 
         /// <summary>
@@ -245,7 +245,7 @@ namespace ETL_SQL.Engine.Functions
 
                 return new DataTable();
             }
-            catch { return new DataTable(); }
+            catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException) { return new DataTable(); }
         }
 
         // ── Table-building helpers ────────────────────────────────────────────
@@ -413,7 +413,7 @@ namespace ETL_SQL.Engine.Functions
             if (value is double dbl) return JValue.Create(dbl);
             if (value is int n) return JValue.Create(n);
             if (value is long l) return JValue.Create(l);
-            try { return JNode.Parse(value.ToString()!); } catch { }
+            try { return JNode.Parse(value.ToString()!); } catch (Exception ex) when (ex is not OutOfMemoryException && ex is not StackOverflowException) { }
             return JValue.Create(value.ToString());
         }
 
