@@ -54,7 +54,8 @@
           "etlsql"
         ],
         "extensions": [
-          ".etlsql"
+          ".etlsql",
+          ".rptsql"
         ],
         "configuration": "./language-configuration.json"
       }
@@ -124,6 +125,11 @@
           "type": "string",
           "default": "",
           "description": "Full path to the etl-sql-report CLI executable. Leave empty to use dotnet run (development mode)."
+        },
+        "etlsql.report.autoOpenPreview": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically open the Report Preview panel when opening an .rptsql file."
         }
       }
     },
@@ -196,6 +202,11 @@
           "command": "etlsql.browseFile",
           "group": "etlsql",
           "when": "resourceLangId == etlsql"
+        },
+        {
+          "command": "etlsql.previewReport",
+          "group": "etlsql",
+          "when": "resourceLangId == etlsql && resourceExtname == .rptsql"
         }
       ],
       "editor/title": [
@@ -208,6 +219,11 @@
           "command": "etlsql.runSelection",
           "group": "navigation",
           "when": "resourceLangId == etlsql && editorHasSelection"
+        },
+        {
+          "command": "etlsql.previewReport",
+          "group": "navigation",
+          "when": "resourceLangId == etlsql && resourceExtname == .rptsql"
         }
       ],
       "view/title": [

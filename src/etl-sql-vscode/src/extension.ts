@@ -174,8 +174,18 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(vscode.workspace.onDidCloseTextDocument(doc => {
-        if (doc.languageId === 'etlsql') {
+        if (doc.languageId === 'etlsql' || doc.uri.fsPath.endsWith('.rptsql')) {
             connectionsProvider.removeScriptConnections(doc.uri.toString());
+        }
+    }));
+
+    // Auto-open Report Preview if configured
+    context.subscriptions.push(vscode.workspace.onDidOpenTextDocument(doc => {
+        if (doc.uri.fsPath.endsWith('.rptsql')) {
+            const config = vscode.workspace.getConfiguration('etlsql');
+            if (config.get<boolean>('report.autoOpenPreview') === true) {
+                vscode.commands.executeCommand('etlsql.previewReport');
+            }
         }
     }));
 

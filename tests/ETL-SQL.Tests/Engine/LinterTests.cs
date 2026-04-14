@@ -268,6 +268,46 @@ SELECT * FROM MyTable WHERE Id = @param2; -- Should error
             Assert.Single(resultsInvalid);
             Assert.Contains("Unpivot source column 'Q3' not found", resultsInvalid[0].Message);
         }
+
+        [Fact]
+        public async Task TestPivotColumnValidationRule_WithSubquery_IsWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new PivotColumnValidationRule());
+
+            // Subquery only SELECTs Region and Amount. Year is missing.
+            var sqlInvalid = @"
+                SELECT * FROM (SELECT Region, Amount FROM Sales) 
+                PIVOT (SUM(Amount) FOR Year IN (2023, 2024)) AS pvt;
+            ";
+            
+            var script = Parse(sqlInvalid);
+            var context = new DefaultLintContext { Metadata = new MockMetadataProvider() };
+            var results = (await linter.AnalyzeAsync(script, context)).ToList();
+
+            Assert.Single(results);
+            Assert.Contains("Pivot column 'Year' not found in source subquery", results[0].Message);
+        }
+
+        [Fact]
+        public async Task TestUnpivotColumnValidationRule_WithSubquery_IsWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new PivotColumnValidationRule());
+
+            // Subquery only SELECTs Region and Q1. Q2 is missing.
+            var sqlInvalid = @"
+                SELECT * FROM (SELECT Region, Q1 FROM Sales) 
+                UNPIVOT (Val FOR Q IN (Q1, Q2)) AS upvt;
+            ";
+            
+            var script = Parse(sqlInvalid);
+            var context = new DefaultLintContext { Metadata = new MockMetadataProvider() };
+            var results = (await linter.AnalyzeAsync(script, context)).ToList();
+
+            Assert.Single(results);
+            Assert.Contains("Unpivot source column 'Q2' not found in source subquery", results[0].Message);
+        }
     }
 
     public class MockMetadataProvider : IMetadataProvider

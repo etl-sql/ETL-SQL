@@ -91,8 +91,6 @@ The engine provides a non-bypassable guard for all network-based connectors (`MS
 {
   "Security": {
     "AllowedHosts": [
-      "localhost",
-      "127.0.0.1",
       "api.github.com",
       "*.microsoft.com",
       "sql-prod.internal.corp"
@@ -104,9 +102,29 @@ The engine provides a non-bypassable guard for all network-based connectors (`MS
 **Validation Rules:**
 - **Exact Match**: Matches the host string exactly (case-insensitive).
 - **Wildcards**: Supports `*` at the start of a domain (e.g., `*.google.com` matches `api.google.com` and `translate.google.com`).
-- **Implicit Safety**: `localhost` and loopback IPs are not automatically allowed once strict mode is activated; they must be explicitly added to the list if needed.
+- **Implicit Loopback Safety**: `localhost`, `127.0.0.1`, and `::1` (IPv6 loopback) are **always permitted**, even in strict mode. They do not need to be added to `AllowedHosts`.
 
-### 3.7 Performance Observability & Resource Metrics
+### 3.6 Environment Variable Access Control
+The `ENV('VAR_NAME')` function is gated by `SecurityService.ValidateEnvVar()`. This prevents scripts from reading sensitive host environment variables (API keys, credentials, etc.).
+
+**Default Behavior**: All environment variable access is **blocked by default**. An empty `AllowedEnvVars` set means no `ENV()` calls will succeed.
+
+**Configuration**: Administrators populate `AllowedEnvVars` at startup (via `appsettings.json`). Use `*` to allow all (not recommended in multi-tenant environments).
+
+```json
+{
+  "Security": {
+    "AllowedEnvVars": ["APP_ENV", "BUILD_NUMBER", "DEPLOY_TARGET"]
+  }
+}
+```
+
+**Rationale**: Prevents a malicious or mistaken script from exfiltrating host secrets via `ENV('AWS_SECRET_ACCESS_KEY')` or similar.
+
+### 3.7 Safe Zone Registration Guard (`IsSystemPath`)
+To prevent administrators from accidentally registering critical system directories as approved safe zones, `SecurityService.IsSystemPath()` is called before any path is added to `ApprovedSafeZones`. Drive roots, `Windows`, `System32`, `etc`, `bin`, `sbin`, `usr`, `var`, and `Boot` are all rejected as safe zone candidates.
+
+### 3.8 Performance Observability & Resource Metrics
 To facilitate monitoring and prevent stealth resource exhaustion, the engine provides high-visibility metrics for all execution sessions.
 
 - **Periodic Emission**: The background `SchedulerService` emits a heart-beat log every 60 seconds containing the count of `ActiveJobs`, `QueuedJobs`, and `AvailableSlots`.
