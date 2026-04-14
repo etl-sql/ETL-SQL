@@ -29,13 +29,13 @@ This document describes the internal mechanics of the `ETL-SQL.Orchestrator` pro
 │                           │                                        │
 │            ┌──────────────┴──────────────────┐                     │
 │            ▼                                 ▼                     │
-│  ┌────────────────────┐        ┌─────────────────────────────┐     │
+│  ┌──────────────────────┐      ┌─────────────────────────────┐     │
 │  │ ScriptExecutorAdapter│      │ ProcessJobExecutor          │     │
-│  │ (default / in-proc)│       │ (optional / out-of-proc)     │     │
-│  │                    │       │                              │     │
-│  │ wraps              │       │ spawns ETL-SQL.exe run <f>   │     │
-│  │ ExecutionSession   │       │ --json as child process      │     │
-│  └────────────────────┘        └─────────────────────────────┘     │
+│  │ (default / in-proc)  │      │ (optional / out-of-proc)    │     │
+│  │                      │      │                             │     │
+│  │ wraps                │      │ spawns ETL-SQL.exe run <f>  │     │
+│  │ ExecutionSession     |      │ --json as child process     │     │
+│  └──────────────────────┘      └─────────────────────────────┘     │
 │            │                                                       │
 │            ▼                                                       │
 │  ┌────────────────────────────────────────────────────────────┐    │
@@ -218,7 +218,7 @@ ExecuteJobAsync(job):
 | `MINUTE` | `now + Interval minutes` |
 | `HOUR` | `now + Interval hours` |
 | `DAY` | `now + Interval days`, then snapped to `AtTime` if specified |
-| *(unrecognised)* | `now + 1 hour` (safe fallback) |
+| *(unrecognized)* | `now + 1 hour` (safe fallback) |
 
 When `AtTime` is set (e.g., `'22:00'`) and `Unit = DAY`, the next run is calculated as midnight of the next day + the AtTime offset, ensuring daily jobs always fire at the correct wall-clock time even if the previous run ended late.
 

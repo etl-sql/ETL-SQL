@@ -8,7 +8,7 @@ Report-SQL extends ETL-SQL with three new statement types — `CREATE DATASET`, 
 
 ```
 ┌─────────────────────┐    build / serve      ┌─────────────────────┐
-│   your_report.rptsql│ ───────────────────▶  │  etl-sql-report CLI │
+│ your_report.rptsql  │ ───────────────────▶  │ etl-sql-report CLI  │
 │  (report script)    │                       │  (ReportBuilder.CLI)│
 └─────────────────────┘                       └──────────┬──────────┘
                                                          │ evaluates script
@@ -29,8 +29,8 @@ Report-SQL extends ETL-SQL with three new statement types — `CREATE DATASET`, 
                                       └──────────┬───────────────────┘
                                                  │
                               ┌──────────────────┴──────────────────┐
-                              │                                      │
-                              ▼                                      ▼
+                              │                                     │
+                              ▼                                     ▼
                   ┌───────────────────────┐           ┌──────────────────────┐
                   │  MarkdownRenderer     │           │  ReportPlayer        │
                   │  → .report.md         │           │  (ASP.NET Kestrel)   │

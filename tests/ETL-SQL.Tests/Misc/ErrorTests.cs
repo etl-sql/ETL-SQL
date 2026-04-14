@@ -66,5 +66,28 @@ namespace ETL_SQL.Tests
             await Assert.ThrowsAsync<ExecutionException>(async () => await eval.Evaluate(new Lexer("SET @X = 2; THROW 'Stop'; SET @X = 3;").TokenizeToScript()));
             Assert.Equal(2, Convert.ToInt32(eval.Variables["@X"]));
         }
+
+        [Fact]
+        public async Task TestSyntaxError_ThrowsExecutionException()
+        {
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            // Missing semicolon or malformed statement
+            await Assert.ThrowsAsync<ExecutionException>(async () => await eval.Evaluate(new Lexer("SELECT * FROM WHERE 1=1").TokenizeToScript()));
+        }
+
+        [Fact]
+        public async Task TestUndeclaredVariable_ThrowsExecutionException()
+        {
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await Assert.ThrowsAsync<ExecutionException>(async () => await eval.Evaluate(new Lexer("SET @Undeclared = 1;").TokenizeToScript()));
+        }
+
+        [Fact]
+        public async Task TestInvalidCast_ThrowsExecutionException()
+        {
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await eval.Evaluate(new Lexer("DECLARE @S STRING = 'NotANumber';").TokenizeToScript());
+            await Assert.ThrowsAsync<ExecutionException>(async () => await eval.Evaluate(new Lexer("DECLARE @I INT = CAST(@S AS INT);").TokenizeToScript()));
+        }
     }
 }

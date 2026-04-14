@@ -52,7 +52,7 @@ The shared kernel. Nothing depends on this except what it pulls in from NuGet.
 - **Interfaces** — `IConnector`, `IConnectorRegistry`, `IDataSource`, `IDatabaseSource`, `IStatementHandler`, `IExecutionContext`, `IScriptExecutor`, `IJobHistoryStore`, `ILintRule`, `ILintContext`.
 - **Data model** — `Row`, `DataTable`, `ColumnDefinition`, `JobDefinition`, `JobHistoryEntry`, `SessionState`.
 - **Linting** — `ILintRule`, `Linter`, `LinterFactory`, and all 17 built-in rules under `Linting/Rules/`.
-- **Common utilities** — `ILogger` façade (ETL_SQL.Common), `ExecutionException`, `ExecutionTree`, `LineageTracker`.
+- **Common utilities** — `ILogger` facade (ETL_SQL.Common), `ExecutionException`, `ExecutionTree`, `LineageTracker`.
 - **InMemoryDataSource** — the in-process table implementation used for `#temp` tables and MOCKDB.
 - **Crypto / security** — `ICryptoService`, `ISecurityService`, DPAPI-backed key management.
 

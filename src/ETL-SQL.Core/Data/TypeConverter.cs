@@ -58,7 +58,7 @@ namespace ETL_SQL.Core.Data
             var baseType = typeName.Split('(')[0].ToUpperInvariant();
             if (_converters.TryGetValue(baseType, out var converter))
             {
-                try { return converter(value); } catch { return null; }
+                return converter(value);
             }
             return value;
         }

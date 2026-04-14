@@ -103,7 +103,8 @@ INSERT INTO #T{id} (V) VALUES ({id});
 ");
                 // Signal we've created our table and wait for the other task
                 barrier.Release();
-                await barrier.WaitAsync();
+                bool waitSuccessful = await barrier.WaitAsync(TimeSpan.FromSeconds(10));
+                Assert.True(waitSuccessful, $"Barrier wait timed out for session {id}");
 
                 // Each evaluator should only see its own table
                 bool hasOwn  = ev.Connections.ContainsKey($"#T{id}");
@@ -129,18 +130,24 @@ INSERT INTO #T{id} (V) VALUES ({id});
             var tasks = Enumerable.Range(0, concurrency).Select(i => Task.Run(async () =>
             {
                 var ev = BuildEvaluator($"throughput-{i}");
+                // More intensive operations: loop and multiple variable hits
                 await RunScript(ev, @"
-DECLARE @a INT = 1;
-DECLARE @b INT = 2;
-DECLARE @c INT = @a + @b;
+DECLARE @i INT = 0;
+DECLARE @sum INT = 0;
+WHILE @i < 100
+BEGIN
+    SET @sum = @sum + @i;
+    SET @i = @i + 1;
+END
 ");
-                return Convert.ToInt32(ev.Variables["@c"]);
+                return Convert.ToInt32(ev.Variables["@sum"]);
             }, cts.Token));
 
             var results = await Task.WhenAll(tasks);
 
             Assert.Equal(concurrency, results.Length);
-            Assert.All(results, v => Assert.Equal(3, v));
+            // Sum of 0..99 is (99*100)/2 = 4950
+            Assert.All(results, v => Assert.Equal(4950, v));
         }
 
         // ── Auto-generated SessionId (CQ-5.4) ────────────────────────────────

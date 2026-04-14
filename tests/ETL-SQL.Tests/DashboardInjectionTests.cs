@@ -11,8 +11,13 @@ namespace ETL_SQL.Tests
 {
     public class DashboardInjectionTests
     {
-        [Fact]
-        public async Task SetParameterAsync_PreventsScriptInjection()
+        [Theory]
+        [InlineData("'; PRINT 'INJECTION_SUCCESSFUL'; --", "Statement Termination")]
+        [InlineData("'; DROP TABLE #SourceTable; --", "Destructive Suffix")]
+        [InlineData("' OR '1'='1", "Tautology")]
+        [InlineData("'); EXEC sp_help; --", "Parentheses Escape")]
+        [InlineData("'; TRUNCATE src_conn.Table; --", "Connector Target")]
+        public async Task SetParameterAsync_PreventsVariousScriptInjections(string maliciousPayload, string scenario)
         {
             // 1. Setup a test script that uses a parameter in a WHERE clause.
             string scriptPath = Path.Combine(Path.GetTempPath(), $"injection_test_{Guid.NewGuid()}.rptsql");
@@ -27,33 +32,19 @@ CREATE PAGE Main AS LAYOUT (STRUCTURE = 'grid:1x1', MAP('A' = InjectionResult));
             {
                 var service = new DashboardService(scriptPath);
                 
-                // 2. Initial build with safe value
-                await service.SetParameterAsync("Category", "Direct");
-                var manifest1 = await service.GetManifestAsync();
-                var visual1 = manifest1.Visuals.First(v => v.Name == "InjectionResult");
-                // MOCK() typically has 100 rows, 'Direct' might have some or zero depending on mock implementation.
-                // But we know 'Direct' is safe.
+                // 2. Initial build is implicit or explicit
+                await service.GetManifestAsync();
 
                 // 3. Attempt script injection
-                // This payload attempts to close the quote, run a separate PRINT, and comment out the rest.
-                // If it were concatenated like: DECLARE @Category = '...';
-                // It would become: DECLARE @Category = ''; PRINT 'INJECTION_SUCCESSFULL'; --';
-                string maliciousPayload = "'; PRINT 'INJECTION_SUCCESSFUL'; --";
-                
-                var manifest2 = await service.SetParameterAsync("Category", maliciousPayload);
-                var visual2 = manifest2.Visuals.First(v => v.Name == "InjectionResult");
+                var manifest = await service.SetParameterAsync("Category", maliciousPayload);
+                var visual = manifest.Visuals.First(v => v.Name == "InjectionResult");
 
                 // 4. Verification
-                // If the injection failed (safe), the visual should simply have 0 rows 
-                // because no record has exactly the malicious string as its category.
-                // If the injection succeeded (vulnerable), it might have rows (due to malformed logic) 
-                // or we might have seen side effects if we could capture them.
+                // The visual should be empty because 'Category' does not equal the malicious string
+                // AND most importantly, the engine should not have crashed or executed the secondary statements.
+                Assert.Empty(visual.Rows); 
                 
-                // Most importantly, the engine should NOT have interpreted the PRINT statement.
-                // Since DashboardService is secure, the variable @Category literally contains the payload.
-                Assert.Empty(visual2.Rows); 
-                
-                // We can also verify that the parameter state in the service is the literal malicious string
+                // Verify parameter was stored literally
                 Assert.Equal(maliciousPayload, service.Parameters["Category"]);
             }
             finally

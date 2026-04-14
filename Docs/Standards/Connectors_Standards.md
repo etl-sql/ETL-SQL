@@ -135,7 +135,7 @@ public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10_000)
     if (batch.Rows.Count > 0) yield return batch;
 }
 
-// INCORRECT — full materialisation defeats the entire memory model
+// INCORRECT — full materialization defeats the entire memory model
 public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10_000)
 {
     var allRows = await LoadAllRowsAsync();   // MEMORY EXHAUSTION RISK
@@ -206,7 +206,7 @@ For every provider SDK exception type that the connector can receive, there must
 
 ### Rule T5: The Regression Gate Must Pass Before Any Merge
 
-The full test suite must pass — including integration tests that exercise the connector in a real or containerised environment — before a connector change is considered complete. A connector that compiles but breaks integration tests is not shippable.
+The full test suite must pass — including integration tests that exercise the connector in a real or containerized environment — before a connector change is considered complete. A connector that compiles but breaks integration tests is not shippable.
 
 ---
 
@@ -266,9 +266,9 @@ When a connector invokes a `ALLOW_*` permission override (e.g., `ALLOW_FILE_TYPE
 
 ## Part V — Platform Consistency Standards
 
-### Rule C1: Connector Behaviour Must Be Source-Agnostic
+### Rule C1: Connector Behavior Must Be Source-Agnostic
 
-A connector must behave identically whether it is used from the Terminal IDE, the VS Code extension, the `etl-sql` CLI, or the `etl-sql-report` build tool. Connectors must not branch on the calling context. Platform-specific behaviour belongs in the presentation layer, not the connector.
+A connector must behave identically whether it is used from the Terminal IDE, the VS Code extension, the `etl-sql` CLI, or the `etl-sql-report` build tool. Connectors must not branch on the calling context. Platform-specific behavior belongs in the presentation layer, not the connector.
 
 ### Rule C2: Connector Metadata Must Support Both IDE and CLI Contexts
 

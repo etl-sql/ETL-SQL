@@ -32,7 +32,8 @@ namespace ETL_SQL.Tests
         {
             var eval = await GetEvaluator();
             
-            // Background task to update a variable after 1.5 seconds
+            // Background task to update a variable after 1.5 seconds.
+            // Note: This relies on Evaluator variable thread-safety (resolved in TQ-4).
             _ = Task.Run(async () =>
             {
                 await Task.Delay(1500);
@@ -88,11 +89,11 @@ namespace ETL_SQL.Tests
 
             var evalTask = eval.Evaluate(Parse(sql), cts.Token);
             
-            await Task.Delay(500);
+            await Task.Delay(2000); // Increase wait to 2s to ensure polling logic has started (TQ-7)
             cts.Cancel();
 
-            // The task should return or throw OperationCanceledException
-            await Assert.ThrowsAsync<OperationCanceledException>(async () => await evalTask);
+            // The task should return or throw TaskCanceledException (which inherits from OperationCanceledException)
+            await Assert.ThrowsAsync<TaskCanceledException>(async () => await evalTask);
         }
     }
 }

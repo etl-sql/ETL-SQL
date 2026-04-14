@@ -15,21 +15,28 @@ namespace ETL_SQL.Tests
         [Fact]
         public async Task TestNestedRunScript()
         {
-            string childPath = "child.sql";
-            string parentPath = "parent.sql";
+            string testDir = Path.Combine(Path.GetTempPath(), "ETL_SQL_Tests", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(testDir);
             
-            // Child script declares @p as OUTPUT
-            File.WriteAllText(childPath, "DECLARE @p INT = @in * 2 OUTPUT;");
-            File.WriteAllText(parentPath, $"DECLARE @p INT = 5; RUN SCRIPT '{childPath}' WITH (@in = @p);");
+            string childPath = Path.Combine(testDir, "child.sql");
+            string parentPath = Path.Combine(testDir, "parent.sql");
+            
+            try
+            {
+                // Child script declares @p as OUTPUT
+                File.WriteAllText(childPath, "DECLARE @p INT = @in * 2 OUTPUT;");
+                File.WriteAllText(parentPath, $"DECLARE @p INT = 5; RUN SCRIPT '{childPath.Replace("\\", "/")}' WITH (@in = @p);");
 
-            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            await ev.Evaluate(TestHelpers.Parse(File.ReadAllText(parentPath)));
+                var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                await ev.Evaluate(TestHelpers.Parse(File.ReadAllText(parentPath)));
 
-            Assert.True(ev.Variables.ContainsKey("@p"), "Variable @p should be in scope");
-            Assert.Equal(10m, Convert.ToDecimal(ev.Variables["@p"]));
-
-            File.Delete(childPath);
-            File.Delete(parentPath);
+                Assert.True(ev.Variables.ContainsKey("@p"), "Variable @p should be in scope");
+                Assert.Equal(10m, Convert.ToDecimal(ev.Variables["@p"]));
+            }
+            finally
+            {
+                if (Directory.Exists(testDir)) Directory.Delete(testDir, true);
+            }
         }
 
         [Fact]
@@ -98,16 +105,24 @@ namespace ETL_SQL.Tests
         [Fact]
         public async Task TestDirectoryDeleteRecursive()
         {
-            string root = "test_dir_delete";
-            string sub = Path.Combine(root, "sub");
+            string testRoot = Path.Combine(Path.GetTempPath(), "ETL_SQL_Tests", Guid.NewGuid().ToString("N"));
+            string inner = Path.Combine(testRoot, "to_delete");
+            string sub = Path.Combine(inner, "sub");
             Directory.CreateDirectory(sub);
             File.WriteAllText(Path.Combine(sub, "file.txt"), "data");
 
-            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            
-            await ev.Evaluate(TestHelpers.Parse($"DELETE_DIRECTORY('{root.Replace("\\", "/")}');"));
-            
-            Assert.False(Directory.Exists(root));
+            try
+            {
+                var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                
+                await ev.Evaluate(TestHelpers.Parse($"DELETE_DIRECTORY('{inner.Replace("\\", "/")}');"));
+                
+                Assert.False(Directory.Exists(inner));
+            }
+            finally
+            {
+                if (Directory.Exists(testRoot)) Directory.Delete(testRoot, true);
+            }
         }
     }
 }

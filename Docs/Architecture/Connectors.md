@@ -26,12 +26,12 @@ This document describes the internal mechanics of the ETL-SQL data access layer.
 └────────────────────────────┬────────────────────────────────────────┘
                              │
               ┌──────────────┼──────────────────────────┐
-              ▼              ▼                           ▼
-        IConnector       IConnector                 IConnector
-        (MSSQL)         (POSTGRES)                 (FLATFILE)
-         (factory)       (factory)                 (factory)      ...
-              │              │                           │
-              └──────────────┼───────────────────────────┘
+              ▼              ▼                          ▼
+        IConnector       IConnector                IConnector
+         (MSSQL)         (POSTGRES)                (FLATFILE)
+        (factory)        (factory)                 (factory)      ...
+              │              │                          │
+              └──────────────┼──────────────────────────┘
                              │ .CreateDataSource(connectionString, options)
                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -442,7 +442,7 @@ SELECT * FROM sales.Orders WHERE amount > 100
 
 ### 4.2 `INSERT INTO` / `MERGE` pipeline (cross-source)
 
-This is the core data-movement pattern. The engine never materialises the full source into memory.
+This is the core data-movement pattern. The engine never materializes the full source into memory.
 
 ```
 INSERT INTO sql.TargetTable SELECT * FROM pg.SourceTable;

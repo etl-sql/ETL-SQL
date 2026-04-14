@@ -126,7 +126,14 @@ namespace ETL_SQL.Core.Data
         public static object? CastToType(object? value, string type)
         {
             if (value == null) return null;
-            return TypeConverter.Cast(value, type);
+            try
+            {
+                return TypeConverter.Cast(value, type);
+            }
+            catch (Exception ex)
+            {
+                throw new ExecutionException($"Failed to cast value '{value}' to type '{type}': {ex.Message}", ex);
+            }
         }
     }
 }

@@ -116,7 +116,7 @@ Ttl             — time-to-live advisory
 Compress        — store compressed
 Encrypt         — encrypt on disk (requires KeyFile)
 KeyFile         — path to encryption key
-SourceQuery     — SelectStatement materialised into TempTableName
+SourceQuery     — SelectStatement materialized into TempTableName
 ```
 
 #### Visual Action sub-nodes
@@ -329,7 +329,7 @@ A `Slicer` visual executes a `SELECT` query to populate its options and binds to
 
 Invoked as `etl-sql-report <command>`.
 
-| Command | Flags | Behaviour |
+| Command | Flags | Behavior |
 |---|---|---|
 | `build <script.rptsql>` | `--output <file>`, `--format md\|json` | Lex → Parse → Evaluate → Manifest → write output file and `.snapshot.json` |
 | `refresh <script.rptsql>` | | Re-execute script, overwrite `.snapshot.json` |

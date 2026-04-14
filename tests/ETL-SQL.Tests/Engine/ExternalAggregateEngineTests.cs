@@ -85,13 +85,15 @@ namespace ETL_SQL.Tests.Engine
         }
 
         [Fact]
-        public async Task ApplyAggregationExternal_SpillsToTemp_IncrementsTotalSpilledBytes()
+        public async Task ApplyAggregationExternal_AlwaysWritesToDisk_IncrementsTotalSpilledBytes()
         {
             var (eval, logger) = BuildContext();
             var engine = new ExternalAggregateEngine(eval, logger);
 
             long spillBefore = eval.TotalSpilledBytes;
 
+            // ApplyAggregationExternal always spills to disk unconditionally for batch processing,
+            // regardless of the 100k row memory threshold used by the higher-level SelectStatementHandler.
             var rows = MakeRows(60, new[] { "X", "Y" });
             var groupByExpr = new IdentifierExpression("category");
             var countExpr = new FunctionCallExpression("COUNT", new List<Expression>
@@ -137,6 +139,43 @@ namespace ETL_SQL.Tests.Engine
 
             // Empty input with GROUP BY → empty result
             Assert.Empty(result);
+        }
+
+        [Fact]
+        public async Task ApplyAggregationExternal_AllAggregates_ProducesCorrectResults()
+        {
+            var (eval, logger) = BuildContext();
+            var engine = new ExternalAggregateEngine(eval, logger);
+
+            // Setup rows with mixed values
+            var rows = new List<Row>
+            {
+                new Row { ["cat"] = "A", ["sub"] = 1, ["val"] = 10m },
+                new Row { ["cat"] = "A", ["sub"] = 1, ["val"] = 20m },
+                new Row { ["cat"] = "B", ["sub"] = 2, ["val"] = 30m },
+                new Row { ["cat"] = "B", ["sub"] = 2, ["val"] = 40m },
+            }.ToAsyncEnumerable();
+
+            var groupBy = new List<Expression> { new IdentifierExpression("cat"), new IdentifierExpression("sub") };
+            var columns = new List<SelectColumn>
+            {
+                new SelectColumn(new IdentifierExpression("cat"), "cat"),
+                new SelectColumn(new IdentifierExpression("sub"), "sub"),
+                new SelectColumn(new FunctionCallExpression("SUM", new List<Expression>{ new IdentifierExpression("val") }), "s"),
+                new SelectColumn(new FunctionCallExpression("MIN", new List<Expression>{ new IdentifierExpression("val") }), "mi"),
+                new SelectColumn(new FunctionCallExpression("MAX", new List<Expression>{ new IdentifierExpression("val") }), "ma"),
+                new SelectColumn(new FunctionCallExpression("AVG", new List<Expression>{ new IdentifierExpression("val") }), "av")
+            };
+            var names = new List<string> { "cat", "sub", "s", "mi", "ma", "av" };
+
+            var result = await engine.ApplyAggregationExternal(rows, groupBy, columns, names);
+
+            Assert.Equal(2, result.Count);
+            var a = result.First(r => r["cat"]?.ToString() == "A");
+            Assert.Equal(30m, Convert.ToDecimal(a["s"]));
+            Assert.Equal(10m, Convert.ToDecimal(a["mi"]));
+            Assert.Equal(20m, Convert.ToDecimal(a["ma"]));
+            Assert.Equal(15m, Convert.ToDecimal(a["av"]));
         }
 
         [Fact]

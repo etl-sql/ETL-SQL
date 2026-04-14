@@ -98,13 +98,13 @@ namespace ETL_SQL.Engine.Engines
             finally
             {
                 int usedPartitions = 0;
-                foreach (var w in writers) 
+                for (int i = 0; i < writers.Length; i++) 
                 { 
                     try
                     {
-                        if (w.BaseStream.Length > 0) usedPartitions++;
-                        w.Flush(); 
-                        w.Close(); 
+                        writers[i].Flush();
+                        if (writers[i].BaseStream.Length > 0) usedPartitions++;
+                        writers[i].Close(); 
                     }
                     catch { /* Best effort cleanup */ }
                 }

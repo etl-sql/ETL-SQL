@@ -43,20 +43,20 @@ system does but why it is built the way it is.
 │  - Collects ProfileMetrics if IsProfiling = true                    │
 └──────────────────────────┬──────────────────────────────────────────┘
                            │
-         ┌─────────────────┼──────────────────────────┐
+         ┌─────────────────┼───────────────────────────┐
          ▼                 ▼                           ▼
    IOutputSink      ExecutionTree             ScriptOutput
    (live stream)    (live events)            (batch at end)
          │                 │                           │
     ─────┼─────────────────┼─────────────────────────────────────
-         │                 │                           │
+         │                 │                          │
     ┌────▼────┐       ┌────▼────┐                ┌────▼────┐
     │  TUI    │       │  TUI    │                │  TUI    │
     │ Sink    │       │ Tree    │                │ Display │
     │(MainLoop│       │ ListView│                │(Results,│
     │.Invoke) │       │(live)   │                │ Perf)   │
     └─────────┘       └─────────┘                └─────────┘
-         │                 │                           │
+         │                 │                          │
     ┌────▼────┐       ┌────▼────┐                ┌────▼────┐
     │ JSON    │       │ JSON    │                │ JSON    │
     │ Sink    │       │progress │                │resultset│
@@ -633,7 +633,7 @@ This history is preserved so future engineers do not repeat it.
 | `TerminalIdeWindow.ProcessKey` override | Window.ProcessKey is BYPASSED for Tab. Toplevel dispatches Tab directly to `deepestFocusedView.OnKeyDown` (the editor) and then calls `FocusNext()` if not handled. The Window override is never in the call chain. |
 | `_editor.KeyDown` event + `args.Handled = true` | Architecturally correct to prevent FocusNext, but `AcceptSuggestion` used custom text manipulation (backspace simulation or `_editor.Text =` assignment) which left blue selection artifacts and cursor in wrong position. |
 | `_editor.Text = newText; _editor.CursorPosition = (col, row)` | Setting `Text` resets cursor to (0,0). Setting `CursorPosition` while `Selecting=true` creates a visual selection from (0,0) to new cursor, painting the word with blue selection background. |
-| `ProcessKey(Backspace)` × N + `InsertText` | Text was correct but cursor positioning was unreliable in real terminal; `AllowsTab=false` behaviour interacted badly with manually called `ProcessKey`. |
+| `ProcessKey(Backspace)` × N + `InsertText` | Text was correct but cursor positioning was unreliable in real terminal; `AllowsTab=false` behavior interacted badly with manually called `ProcessKey`. |
 | **Built-in `TextViewAutocomplete`** | **Correct.** `Autocomplete.ProcessKey` runs inside `TextView.ProcessKey` before any other handling. `InsertSelection` / `DeleteTextBackwards` / `InsertText` are the framework's own well-tested text ops. No cursor or selection state to manage. |
 
 ---
