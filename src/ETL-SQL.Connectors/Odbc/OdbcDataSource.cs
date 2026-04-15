@@ -20,15 +20,21 @@ namespace ETL_SQL.Connectors.Odbc
         private readonly string? _tableName;
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
+        private readonly IExecutionContext? _context;
         private OdbcConnection? _transactionalConnection;
         private OdbcTransaction? _activeTransaction;
 
-        public OdbcDataSource(string connectionString, string? tableName = null, Dictionary<string, string>? options = null, ILogger? logger = null)
+        public OdbcDataSource(IExecutionContext context, string connectionString, string? tableName = null, Dictionary<string, string>? options = null)
         {
+            _context = context;
+            _logger = context.Logger;
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
-            _logger = logger ?? NullLogger.Instance;
+
+            // Security Hardening: egress control
+            var host = OdbcConnector.GetHostStatic(connectionString, options);
+            if (host != null) context.SecurityService.ValidateHost(host);
         }
 
         public string ConnectionString => _connectionString;
@@ -38,7 +44,7 @@ namespace ETL_SQL.Connectors.Odbc
         public string ConnectorType => "ODBC";
         public Dictionary<string, string>? Options => _options;
 
-        public IDataSource WithTable(string tableName) => new OdbcDataSource(_connectionString, tableName, _options, _logger);
+        public IDataSource WithTable(string tableName) => new OdbcDataSource(_context!, _connectionString, tableName, _options);
 
         public async Task<string> GetVersionAsync()
         {

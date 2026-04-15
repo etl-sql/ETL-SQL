@@ -12,7 +12,7 @@ namespace ETL_SQL.Connectors.MockDb
         public string Name => "MOCKDB";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
         
-        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null) => Task.FromResult("Mock SQL Server 2022 v16.0");
+        public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) => Task.FromResult("Mock SQL Server 2022 v16.0");
         
         public HashSet<string> GetSupportedFunctions() => MockDbSyntax.GetSupportedFunctions();
         public HashSet<string> GetSupportedKeywords() => MockDbSyntax.GetSupportedKeywords();
@@ -23,20 +23,20 @@ namespace ETL_SQL.Connectors.MockDb
         
         public string GetHelp() => "Mock DB Connector: Used for testing database interactions without a real server.";
         
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null) 
-            => new MockSqlDataSource(connectionString, "MockDB", logger);
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) 
+            => new MockSqlDataSource(context, connectionString, "MockDB", new MockDataSeeder());
 
-        public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null)
+        public async Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) 
         {
-            var ds = new MockSqlDataSource(connectionString, "MockDB", logger);
-            return ds.GetTablesAsync();
+            var ds = new MockSqlDataSource(context, connectionString, "MockDB", new MockDataSeeder());
+            return await ds.GetTablesAsync();
         }
-        public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null)
+        public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public async Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) 
         {
-            var ds = new MockSqlDataSource(connectionString, "MockDB", logger);
-            return await ds.GetColumnsAsync(tableName);
+             var ds = new MockSqlDataSource(context, connectionString, "MockDB", new MockDataSeeder());
+             return await ds.GetColumnsAsync(tableName);
         }
-        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
     }
 }

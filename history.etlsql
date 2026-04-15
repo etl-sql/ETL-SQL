@@ -1,2 +1,0 @@
-SHOW JOB HISTORY INTO #history;
-SELECT TOP 10 * FROM #history;

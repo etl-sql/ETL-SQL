@@ -16,8 +16,12 @@ namespace ETL_SQL.Connectors.Oracle
         public string Name => "ORACLE";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
         
-        public async Task<string> GetVersionAsync(string connectionString, ILogger? logger = null)
+        public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
+            // Security constraint: validate host before connecting
+            var host = GetHost(connectionString);
+            if (host != null) context.SecurityService.ValidateHost(host);
+
             using var conn = new OracleConnection(connectionString);
             await conn.OpenAsync();
             using var cmd = new OracleCommand("SELECT version FROM v$instance", conn);
@@ -57,49 +61,23 @@ namespace ETL_SQL.Connectors.Oracle
 
         public Dictionary<string, string[]> GetOptionValues() => new();
 
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null) 
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) 
         {
             string? table = null;
             options?.TryGetValue("TABLE", out table);
-            return new OracleDataSource(connectionString, table, options, logger);
+            return new OracleDataSource(context, connectionString, table, options);
         }
 
-        public async Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null)
-        {
-            var tables = new List<string>();
-            try {
-                using var conn = new OracleConnection(connectionString);
-                await conn.OpenAsync();
-                using var cmd = new OracleCommand("SELECT owner || '.' || table_name FROM all_tables WHERE owner != 'SYS'", conn);
-                using var reader = await cmd.ExecuteReaderAsync();
-                while (await reader.ReadAsync()) tables.Add(reader.GetString(0));
-            }
-            catch (Exception ex)
-            {
-                (logger ?? NullLogger.Instance).Debug($"[OracleConnector.GetTablesAsync] Failed to retrieve tables: {ex.Message}");
-            }
-            return tables;
-        }
+        public async Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");
+        public async Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetViewsAsync instead.");
+        public async Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => throw new NotSupportedException("Use IDataSource.GetColumnsAsync instead.");
 
-        public async Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null)
+        public async Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString)
         {
-            var views = new List<string>();
-            using var conn = new OracleConnection(connectionString);
-            await conn.OpenAsync();
-            using var cmd = new OracleCommand("SELECT owner || '.' || view_name FROM all_views WHERE owner != 'SYS'", conn);
-            using var reader = await cmd.ExecuteReaderAsync();
-            while (await reader.ReadAsync()) views.Add(reader.GetString(0));
-            return views;
-        }
+            // Security constraint: validate host before connecting
+            var host = GetHost(connectionString);
+            if (host != null) context.SecurityService.ValidateHost(host);
 
-        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null)
-        {
-            var ds = new OracleDataSource(connectionString, tableName, null, logger);
-            return await ds.GetColumnsAsync();
-        }
-
-        public async Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null)
-        {
             var procs = new List<string>();
             using var conn = new OracleConnection(connectionString);
             await conn.OpenAsync();
@@ -112,7 +90,9 @@ namespace ETL_SQL.Connectors.Oracle
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
 
-        public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
+        public string? GetHost(string connectionString, Dictionary<string, string>? options = null) => GetHostStatic(connectionString, options);
+
+        public static string? GetHostStatic(string connectionString, Dictionary<string, string>? options = null)
         {
             if (options != null && options.TryGetValue("HOST", out var host)) return host;
             if (options != null && options.TryGetValue("TNS_NAME", out var tns)) return tns;

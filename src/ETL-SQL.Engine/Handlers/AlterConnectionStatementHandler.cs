@@ -81,7 +81,7 @@ namespace ETL_SQL.Engine.Handlers
                 catch (Exception ex) { throw new ExecutionException($"Failed to build connection string: {ex.Message}"); }
             }
 
-            var newDs = connector.CreateDataSource(target, interpolatedOptions, null);
+            var newDs = connector.CreateDataSource(context, target, interpolatedOptions);
 
             if (context.IsWhatIf)
             {

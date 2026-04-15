@@ -121,6 +121,10 @@ namespace ETL_SQL.Core
         int ExternalHashPartitions { get; set; }
         /// <summary>Number of rows per sort chunk before spilling to disk (CFG-4).</summary>
         int ExternalSortChunkSize { get; set; }
+        /// <summary>Number of rows before window functions spill to disk (CFG-7).</summary>
+        int WindowSpillThreshold { get; set; }
+        /// <summary>Maximum number of batches held in RAM for #temp tables before spilling.</summary>
+        int MaxInMemoryBatches { get; set; }
     }
 
 
@@ -146,7 +150,7 @@ namespace ETL_SQL.Core
         int MaxRecursiveDepth { get; set; }
         int CurrentRecursiveDepth { get; set; }
         int BatchSize { get; set; }
-        int ForeachPageSize { get; }
+        int ForeachPageSize { get; set; }
         int? PreviewLimit { get; set; }
         bool FunctionExists(string name);
         bool ProcedureExists(string name);

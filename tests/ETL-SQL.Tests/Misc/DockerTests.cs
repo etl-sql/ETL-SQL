@@ -89,6 +89,9 @@ namespace ETL_SQL.Tests
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             try
             {
+                // Initialize the container and variable once
+                await evaluator.Evaluate(Parse(sqlPrefix));
+
                 // We'll try to connect a few times because Oracle start is slow
                 int retries = 5;
                 Exception? lastEx = null;
@@ -96,7 +99,7 @@ namespace ETL_SQL.Tests
                 {
                     try
                     {
-                        var script = Parse(sqlPrefix + "CREATE CONNECTION ds ON ORACLE(@conn);");
+                        var script = Parse("CREATE CONNECTION ds ON ORACLE(@conn);");
                         await evaluator.Evaluate(script);
 
                         var connStr = evaluator.GetVariable("@conn")?.ToString();

@@ -50,6 +50,15 @@ namespace ETL_SQL.Core.Parser
                 if (_parser.Match(TokenType.PROFILING) || _parser.Match(TokenType.PROFILE)) return ParseSetProfiling();
                 if (_parser.Match(TokenType.WHAT_IF)) return ParseSetWhatIf();
                 if (_parser.Match(TokenType.SHOW_PASSWORD)) return ParseSetShowPassword();
+                if (_parser.Match(TokenType.JOIN_SPILL_THRESHOLD)) return ParseSetThreshold(ThresholdType.JoinSpill);
+                if (_parser.Match(TokenType.WINDOW_SPILL_THRESHOLD)) return ParseSetThreshold(ThresholdType.WindowSpill);
+                if (_parser.Match(TokenType.EXTERNAL_HASH_PARTITIONS)) return ParseSetThreshold(ThresholdType.ExternalHashPartitions);
+                if (_parser.Match(TokenType.EXTERNAL_SORT_CHUNK_SIZE)) return ParseSetThreshold(ThresholdType.ExternalSortChunkSize);
+                if (_parser.Match(TokenType.BATCHSIZE)) return ParseSetThreshold(ThresholdType.BatchSize);
+                if (_parser.Match(TokenType.MAX_RECURSIVE_DEPTH)) return ParseSetThreshold(ThresholdType.MaxRecursiveDepth);
+                if (_parser.Match(TokenType.MAX_IN_MEMORY_BATCHES)) return ParseSetThreshold(ThresholdType.MaxInMemoryBatches);
+                if (_parser.Match(TokenType.FOREACH_PAGE_SIZE)) return ParseSetThreshold(ThresholdType.ForeachPageSize);
+                if (_parser.Match(TokenType.MAX_MESSAGES)) return ParseSetThreshold(ThresholdType.MaxMessages);
                 
                 if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.StartsWith("ALLOW_", StringComparison.OrdinalIgnoreCase))
                 {

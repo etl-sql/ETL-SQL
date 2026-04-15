@@ -8,6 +8,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
+using ETL_SQL.Services;
 
 [assembly: CollectionBehavior(DisableTestParallelization = true)]
 
@@ -34,6 +35,11 @@ namespace ETL_SQL.Tests
 
                 // Force initialization of ConnectorRegistry.Instance
                 sp.GetService<IConnectorRegistry>();
+
+                // ── Security Hardening for Tests ──────────────────────────────
+                // Explicitly enable TestMode to allow access to the bin/debug folder
+                var securityService = sp.GetRequiredService<SecurityService>();
+                securityService.IsTestMode = true;
 
                 // Suppress console noise (ETL-SQL.Common.Logger)
                 if (loggerService is LoggerService ls) ls.SuppressConsole = true;

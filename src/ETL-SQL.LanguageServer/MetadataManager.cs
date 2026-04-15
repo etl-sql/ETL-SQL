@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.LSP
@@ -155,7 +156,7 @@ namespace ETL_SQL.LSP
                 var connector = connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
 
-                var tables = (await connector.GetTablesAsync(conn.ConnectionString)).ToList();
+                var tables = (await connector.GetTablesAsync(SystemExecutionContext.Instance, conn.ConnectionString)).ToList();
                 
                 // Whitelist virtual DUAL table for all connections to support SELECT @var without FROM
                 if (!tables.Contains("DUAL", StringComparer.OrdinalIgnoreCase))
@@ -193,7 +194,7 @@ namespace ETL_SQL.LSP
                 var connector = connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
 
-                var views = (await connector.GetViewsAsync(conn.ConnectionString)).ToList();
+                var views = (await connector.GetViewsAsync(SystemExecutionContext.Instance, conn.ConnectionString)).ToList();
                 _views[key] = views;
                 return views;
             }
@@ -282,7 +283,7 @@ namespace ETL_SQL.LSP
                 var connector = connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
 
-                var columns = (await connector.GetColumnsAsync(conn.ConnectionString, tableName)).ToList();
+                var columns = (await connector.GetColumnsAsync(SystemExecutionContext.Instance, conn.ConnectionString, tableName)).ToList();
                 _columns[key] = columns;
                 return columns;
             }

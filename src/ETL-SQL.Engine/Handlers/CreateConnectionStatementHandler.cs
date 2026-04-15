@@ -134,7 +134,7 @@ namespace ETL_SQL.Engine.Handlers
                     }
                 }
 
-                ds = connector.CreateDataSource(target, interpolatedOptions, templateSchema);
+                ds = connector.CreateDataSource(context, target, interpolatedOptions, templateSchema);
 
                 // Security Hardening: Validate host for network-based connectors
                 var host = connector.GetHost(target, interpolatedOptions);

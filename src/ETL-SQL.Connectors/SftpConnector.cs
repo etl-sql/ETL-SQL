@@ -19,6 +19,7 @@ namespace ETL_SQL.Connectors
         private readonly string? _keyFilePath;
         private readonly string? _passphrase;
         private readonly ILogger _logger;
+        private readonly IExecutionContext? _context;
         private readonly Func<string, string, string?, string?, string?, SftpClient>? _clientFactory;
 
         public string Name => "SFTP";
@@ -29,22 +30,43 @@ namespace ETL_SQL.Connectors
             _logger = NullLogger.Instance;
         }
 
-        public SftpConnector(string host, string username, string? password = null, string? keyFilePath = null, string? passphrase = null, ILogger? logger = null)
-            : this(host, username, password, keyFilePath, passphrase, logger,
+        public SftpConnector(string host, string username, string? password = null, string? keyFilePath = null, string? passphrase = null)
+             : this(null!, host, username, password, keyFilePath, passphrase,
+                   (h, u, p, k, pp) => !string.IsNullOrEmpty(k) ? new SftpClient(h, u, new PrivateKeyFile(k, pp)) : new SftpClient(h, u, p ?? ""))
+        {
+            _logger = NullLogger.Instance;
+            // Note: _context will be null here, so path resolution and security validation are deferred.
+        }
+
+        public SftpConnector(IExecutionContext context, string host, string username, string? password = null, string? keyFilePath = null, string? passphrase = null)
+            : this(context, host, username, password, keyFilePath, passphrase,
                   (h, u, p, k, pp) => !string.IsNullOrEmpty(k) ? new SftpClient(h, u, new PrivateKeyFile(k, pp)) : new SftpClient(h, u, p ?? ""))
         {
         }
 
-        internal SftpConnector(string host, string username, string? password, string? keyFilePath, string? passphrase, ILogger? logger,
+        internal SftpConnector(IExecutionContext? context, string host, string username, string? password, string? keyFilePath, string? passphrase,
             Func<string, string, string?, string?, string?, SftpClient> clientFactory)
         {
+            _context = context;
             _host = host;
             _username = username;
             _password = password;
-            _keyFilePath = keyFilePath;
+            _keyFilePath = (string.IsNullOrEmpty(keyFilePath) || context == null) ? keyFilePath : context.ResolvePath(keyFilePath);
             _passphrase = passphrase;
-            _logger = logger ?? NullLogger.Instance;
+            _logger = context?.Logger ?? NullLogger.Instance;
             _clientFactory = clientFactory;
+
+            // Security Hardening: egress control
+            if (context != null)
+            {
+                context.SecurityService.ValidateHost(host);
+                
+                // Validate key file path if provided
+                if (_keyFilePath != null)
+                {
+                    context.SecurityService.ValidatePath(_keyFilePath);
+                }
+            }
         }
 
         private SftpClient Client
@@ -65,7 +87,13 @@ namespace ETL_SQL.Connectors
         public Dictionary<string, string>? Options => null;
         public string ConnectorType => "SFTP";
 
-        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null) => Task.FromResult("SFTP Server");
+        public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
+        {
+            // Security constraint: validate host before connecting
+            var host = GetHost(connectionString);
+            if (host != null) context.SecurityService.ValidateHost(host);
+            return await Task.FromResult("SFTP Server");
+        }
         public HashSet<string> GetSupportedFunctions() => new();
         public HashSet<string> GetSupportedKeywords() => new();
         public Dictionary<string, string[]> GetSupportedOptions() => new() 
@@ -78,19 +106,19 @@ namespace ETL_SQL.Connectors
         public Dictionary<string, string[]> GetOptionValues() => new();
         public string GetHelp() => "SFTP Connector for remote file operations over SSH.";
 
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null)
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
             string user = options?.GetValueOrDefault("USER") ?? "";
             string? pass = options?.GetValueOrDefault("PASSWORD");
             string? keyFile = options?.GetValueOrDefault("KEYFILE");
             string? passphrase = options?.GetValueOrDefault("PASSPHRASE");
-            return new SftpConnector(connectionString, user, pass, keyFile, passphrase, logger);
+            return new SftpConnector(context, connectionString, user, pass, keyFile, passphrase);
         }
 
-        public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");
+        public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetViewsAsync instead.");
+        public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => throw new NotSupportedException("Use IDataSource.GetColumnsAsync instead.");
+        public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);

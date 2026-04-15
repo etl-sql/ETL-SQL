@@ -16,9 +16,8 @@ namespace ETL_SQL.Connectors
     /// </summary>
     public class AzureBlobConnector : IRemoteFileSystem, IDataSource, IConnector
     {
-        private readonly BlobServiceClient _client;
-        private readonly string _containerName;
         private readonly ILogger _logger;
+        private readonly IExecutionContext? _context;
 
         public string Name => "AZURE_BLOB";
         public IReadOnlyList<string> Aliases => new[] { "BLOB" };
@@ -26,14 +25,39 @@ namespace ETL_SQL.Connectors
         public Dictionary<string, string>? Options => null;
         public string ConnectorType => "AZURE_BLOB";
 
-        public AzureBlobConnector(string connectionString, string containerName, ILogger? logger = null)
+        private readonly BlobServiceClient? _client; 
+        private readonly string? _containerName;
+
+        public AzureBlobConnector()
         {
-            _client = new BlobServiceClient(connectionString);
-            _containerName = containerName;
-            _logger = logger ?? NullLogger.Instance;
+            _logger = NullLogger.Instance;
+            _containerName = "default";
         }
 
-        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null) => Task.FromResult("Azure Blob Storage");
+        public AzureBlobConnector(string connectionString, string containerName)
+        {
+            _logger = NullLogger.Instance;
+            _client = new BlobServiceClient(connectionString);
+            _containerName = containerName;
+        }
+
+        public AzureBlobConnector(IExecutionContext context, string connectionString, string containerName)
+        {
+            _context = context;
+            _logger = context.Logger;
+            _client = new BlobServiceClient(connectionString);
+            _containerName = containerName;
+
+            // Security Hardening: egress control
+            var host = GetHostStatic(connectionString);
+            if (host != null) context.SecurityService.ValidateHost(host);
+        }
+    
+
+        public async Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
+        {
+            return "Azure Blob Storage SDK 12.18.0";
+        }
 
         public HashSet<string> GetSupportedFunctions() => new();
         public HashSet<string> GetSupportedKeywords() => new();
@@ -51,22 +75,30 @@ namespace ETL_SQL.Connectors
             "Options:\n" +
             "  CONTAINER: The name of the storage container to use.";
 
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null)
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
             string? container = null;
             options?.TryGetValue("CONTAINER", out container);
-            return new AzureBlobConnector(connectionString, container ?? "default", logger);
+            return new AzureBlobConnector(context, connectionString, container ?? "default");
         }
 
-        public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null)
+        {
+             throw new NotSupportedException("Use IDataSource.GetTablesAsync instead or provide a context via a specialized internal call.");
+        }
+        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
 
-        private BlobContainerClient GetContainer() => _client.GetBlobContainerClient(_containerName);
+        private BlobContainerClient GetContainer() 
+        {
+            if (_client == null || _containerName == null) throw new InvalidOperationException("Connector not initialized with connection details.");
+            return _client.GetBlobContainerClient(_containerName);
+        }
 
         public async Task<IEnumerable<FileMetaData>> ListFilesAsync(string path)
         {
@@ -138,7 +170,9 @@ namespace ETL_SQL.Connectors
         public IDataSource WithTable(string tableName) => this;
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 
-        public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
+        public string? GetHost(string connectionString, Dictionary<string, string>? options = null) => GetHostStatic(connectionString);
+
+        public static string? GetHostStatic(string connectionString)
         {
             var parts = connectionString.Split(';', StringSplitOptions.RemoveEmptyEntries)
                 .Select(p => p.Split('=', 2))

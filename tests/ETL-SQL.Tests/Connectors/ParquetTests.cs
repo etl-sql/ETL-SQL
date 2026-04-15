@@ -8,6 +8,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Connectors.Parquet;
 using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests
 {
@@ -28,7 +29,7 @@ namespace ETL_SQL.Tests
             string path = "test_data.parquet";
             if (File.Exists(path)) File.Delete(path);
 
-            var ds = new ParquetDataSource(path);
+            var ds = new ParquetDataSource(SystemExecutionContext.Instance, path);
             var batch = new DataTable();
             batch.ColumnNames.AddRange(new[] { "ID", "Name", "Score" });
             
@@ -41,7 +42,7 @@ namespace ETL_SQL.Tests
 
             Assert.True(File.Exists(path), "Parquet file should be created");
 
-            var dsRead = new ParquetDataSource(path);
+            var dsRead = new ParquetDataSource(SystemExecutionContext.Instance, path);
             var batches = await dsRead.ReadBatches().ToListAsync();
             
             Assert.Single(batches);

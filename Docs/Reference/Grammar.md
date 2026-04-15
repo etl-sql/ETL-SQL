@@ -39,10 +39,10 @@ The engine provides built-in variables for session-level state. All system varia
 | :--- | :--- |
 | `@@VERSION` | Full engine version and build metadata string. |
 | `@@TRANCOUNT` | Current transaction nesting level (0 = no active transaction). |
-| `@@RESULTSETS` | Collection (LIST) of result sets produced by the last executed statement. Can be iterated via `FOREACH` or counted via `@@RESULTSETS.COUNT`. |
-| `@@ROWCOUNT` | The number of rows processed or affected by the **absolute last executed statement**. For SELECT statements, this is the count of rows fetched. |
-| `@@ERROR` | The integer error code of the **preceding statement**. If the last statement was successful, `@@ERROR` returns `0`. Capturing this value immediately into a variable (e.g., `SET @err = @@ERROR`) is recommended inside `CATCH` blocks. |
-| `@@DATASET` | (Report-Builder Only) A reference to the current data set being processed or manually assigned for visual rendering. |
+| `@@RESULTSETS` | The number of result sets produced by the last executed multi-statement block or query. |
+| `@@ROWCOUNT` | The number of rows processed or affected by the **absolute last executed statement**. |
+| `@@ERROR` | The integer error code of the **preceding statement** (0 = success). |
+| `@@DATASET` | (Report-Builder Only) A reference to the current data set being processed. |
 
 
 ### 1.4 `INPUT` and `OUTPUT` Variables
@@ -223,6 +223,29 @@ Formal commands to bypass standard engine safety limits. These are only honored 
 SET ALLOW_GREATER_THAN_100_FILE ON;
 COPY FILE 'C:\SafeZone\*.bak' TO 'D:\Archive\';
 SET ALLOW_GREATER_THAN_100_FILE OFF;
+```
+
+### 2.5 Performance & Spilling Thresholds
+
+These commands allow fine-tuning how the engine manages memory and disk during high-scale operations. These settings override the `appsettings.json` defaults for the current session.
+
+| Command | Default | Description |
+| :--- | :--- | :--- |
+| `SET JOIN_SPILL_THRESHOLD = n` | 100,000 | Rows held in memory before an internal join spills to a disk-based hash join. |
+| `SET WINDOW_SPILL_THRESHOLD = n` | 100,000 | Rows held in memory before window functions spill to a disk-based partitioned stream. |
+| `SET EXTERNAL_HASH_PARTITIONS = n` | 32 | Number of discrete partitions used when spilling joins/windows to disk. |
+| `SET EXTERNAL_SORT_CHUNK_SIZE = n` | 50,000 | Rows per sort-block during external disk-sorting operations. |
+| `SET BATCHSIZE = n` | 10,000 | Number of rows processed per batch in the engine pipeline. |
+| `SET MAX_RECURSIVE_DEPTH = n` | 10,000 | Maximum allowed call depth for recursive CTEs or procedures. |
+| `SET MAX_IN_MEMORY_BATCHES = n` | 100 | Maximum number of batches held in memory for `#temp` tables before automatic spilling. |
+| `SET FOREACH_PAGE_SIZE = n` | 10,000 | Number of items fetched per page when iterating over large collections. |
+| `SET MAX_MESSAGES = n` | 1,000 | Limit on the number of captured log/print messages in the session buffer. |
+
+```sql
+-- Tuning for ultra-large join
+SET JOIN_SPILL_THRESHOLD = 10000;
+SET EXTERNAL_HASH_PARTITIONS = 128;
+SELECT * INTO #big_join FROM src.A JOIN src.B ON A.id = B.id;
 ```
 
 ---
@@ -959,3 +982,45 @@ EXEC ( <statement1>; <statement2>; ... );
 EXEC ( PRINT 'Hello'; SET @x = 1; );
 ```
 
+---
+
+## 14. Display Commands (`SHOW`)
+
+Display commands are used to inspect metadata, session state, and performance logs. Most `SHOW` commands can be directed into an `@variable` or into a `#temp` table using the `INTO` clause.
+
+### 14.1 Database Metadata
+
+| Syntax | Description |
+| :--- | :--- |
+| `SHOW TABLES [ON connector]` | Lists all tables found on the specified connection (or current session). |
+| `SHOW COLUMNS FOR table` | Displays the schema (names, types, nullability) for the specified table. |
+| `SHOW CONNECTIONS` | Lists all active data source connections and their status. |
+
+### 14.2 Session & Environment
+
+| Syntax | Description |
+| :--- | :--- |
+| `SHOW VARIABLES [LOCAL]` | Lists all variables in the global or local scope. |
+| `SHOW VERSION` | Displays the detailed engine and assembly version information. |
+| `SHOW SAFE ZONES` | Lists all directory paths approved for file/directory operations. |
+
+### 14.3 Performance & Lineage
+
+| Syntax | Description |
+| :--- | :--- |
+| `SHOW PROFILE` | Displays a millisecond-level execution breakdown of previous statements. |
+| `SHOW LINEAGE FOR table` | Traces the source-to-target movement for the specified table's data. |
+| `SHOW TAGS FOR TABLE tbl [COLUMN c]` | Lists all metadata tags applied to a specific table or column. |
+
+### 14.4 Job Management
+
+| Syntax | Description |
+| :--- | :--- |
+| `SHOW JOBS` | Lists all currently scheduled and running background jobs. |
+| `SHOW JOB HISTORY [name]` | Displays execution logs for a specific job or all jobs. |
+
+*Example:*
+```sql
+SHOW COLUMNS FOR my_connector.customers INTO #schema;
+SELECT Column_Name, Type FROM #schema WHERE IsNullable = 1;
+```

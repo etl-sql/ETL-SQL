@@ -171,6 +171,7 @@ namespace ETL_SQL.App
             int batchSize = int.TryParse(configuration["Engine:BatchSize"], out var bs) ? bs : 10000;
             int maxRecursiveDepth = int.TryParse(configuration["Engine:MaxRecursiveDepth"], out var mrd2) ? mrd2 : 10000;
             int externalSortChunkSize = int.TryParse(configuration["Engine:ExternalSort:ChunkSize"], out var esc) ? esc : 100000;
+            int windowSpillThreshold = int.TryParse(configuration["Engine:WindowSpillThreshold"], out var wst) ? wst : 100000;
 
             services.AddTransient<Evaluator>(sp => {
                 var evaluator = ActivatorUtilities.CreateInstance<Evaluator>(sp);
@@ -181,6 +182,7 @@ namespace ETL_SQL.App
                 evaluator.BatchSize = batchSize;
                 evaluator.MaxRecursiveDepth = maxRecursiveDepth;
                 evaluator.ExternalSortChunkSize = externalSortChunkSize;
+                evaluator.WindowSpillThreshold = windowSpillThreshold;
                 return evaluator;
             });
 

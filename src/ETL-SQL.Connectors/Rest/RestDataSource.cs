@@ -21,14 +21,19 @@ namespace ETL_SQL.Connectors.Rest
         private readonly string _url;
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
+        private readonly IExecutionContext? _context;
         private static readonly HttpClient _httpClient = new HttpClient();
 
-        public RestDataSource(string url, Dictionary<string, string>? options = null, ILogger? logger = null)
+        public RestDataSource(IExecutionContext context, string url, Dictionary<string, string>? options = null)
         {
+            _context = context;
             _url = url;
             _options = options;
-            _logger = logger ?? NullLogger.Instance;
+            _logger = context.Logger;
             
+            // Security Hardening: egress control
+            context.SecurityService.ValidateHost(new Uri(url).Host);
+
             // Set default User-Agent as many APIs (like GitHub) require it
             if (!_httpClient.DefaultRequestHeaders.UserAgent.Any())
             {

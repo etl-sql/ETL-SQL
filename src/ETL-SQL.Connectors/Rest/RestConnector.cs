@@ -15,18 +15,18 @@ namespace ETL_SQL.Connectors.Rest
         public string Name => "API";
         public IReadOnlyList<string> Aliases => new[] { "REST", "HTTP" };
 
-        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null)
+        public Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
-            var ds = new RestDataSource(connectionString, null, logger);
+            var ds = new RestDataSource(context, connectionString, null);
             return ds.GetVersionAsync();
         }
 
         public HashSet<string> GetSupportedFunctions() => new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> GetSupportedKeywords() => new(StringComparer.OrdinalIgnoreCase);
 
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null)
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
-            return new RestDataSource(connectionString, options, logger);
+            return new RestDataSource(context, connectionString, options);
         }
 
         public string BuildConnectionString(Dictionary<string, string> properties)
@@ -77,21 +77,10 @@ Supported Options:
   PAG_LIMIT   - Batch size for pagination.";
         }
 
-        public async Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null)
-        {
-            var ds = new RestDataSource(connectionString, null, logger);
-            return await ds.GetTablesAsync();
-        }
-
-        public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-
-        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null)
-        {
-            var ds = new RestDataSource(connectionString, null, logger);
-            return await ds.GetColumnsAsync();
-        }
-
-        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");
+        public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => throw new NotSupportedException("Use IDataSource.GetColumnsAsync instead.");
+        public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
         public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
         {

@@ -9,6 +9,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests
 {
@@ -36,7 +37,7 @@ namespace ETL_SQL.Tests
                     { "HEADER", "OFF" }
                 };
 
-                var ds = new FlatFileDataSource(fwFile, options, schema);
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, fwFile, options, schema);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Single(batches);
@@ -74,7 +75,7 @@ namespace ETL_SQL.Tests
                     { "HEADER", "OFF" }
                 };
 
-                var ds = new FlatFileDataSource(fwFile, options, schema);
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, fwFile, options, schema);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Equal("001", batches[0].Rows[0]["ID"]?.ToString());
@@ -99,7 +100,7 @@ namespace ETL_SQL.Tests
                     { "TRIM", "OFF" }
                 };
 
-                var ds = new FlatFileDataSource(fwFile, options, schema);
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, fwFile, options, schema);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Equal("Chuck     ", batches[0].Rows[0]["Name"]?.ToString());
@@ -129,7 +130,7 @@ namespace ETL_SQL.Tests
                     { "HEADER", "ON" }
                 };
 
-                var ds = new FlatFileDataSource(fwFile, options, schema);
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, fwFile, options, schema);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Single(batches[0].Rows);
@@ -147,7 +148,7 @@ namespace ETL_SQL.Tests
             try
             {
                 var options = new Dictionary<string, string> { { "FORMAT", "FIXED" } };
-                Assert.Throws<ExecutionException>(() => new FlatFileDataSource(fwFile, options));
+                Assert.Throws<ExecutionException>(() => new FlatFileDataSource(SystemExecutionContext.Instance, fwFile, options));
             }
             finally { if (File.Exists(fwFile)) File.Delete(fwFile); }
         }

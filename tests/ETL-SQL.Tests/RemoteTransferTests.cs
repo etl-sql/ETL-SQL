@@ -76,17 +76,17 @@ namespace ETL_SQL.Tests
             public object? Snapshot() => null;
             public void Restore(object? snapshot) { }
             public IDataSource WithTable(string tableName) => this;
-            public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null) => Task.FromResult("Mock 1.0");
+            public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) => Task.FromResult("Mock 1.0");
             public HashSet<string> GetSupportedFunctions() => new();
             public HashSet<string> GetSupportedKeywords() => new();
             public Dictionary<string, string[]> GetSupportedOptions() => new();
             public Dictionary<string, string[]> GetOptionValues() => new();
             public string GetHelp() => "Mock Remote File System";
-            public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null) => this;
-            public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-            public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-            public Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-            public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+            public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) => this;
+            public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+            public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+            public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => Task.FromResult(Enumerable.Empty<string>());
+            public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
             public ValueTask DisposeAsync() => ValueTask.CompletedTask;
         }

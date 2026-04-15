@@ -20,6 +20,8 @@ namespace ETL_SQL.Connectors.Oracle
         private readonly string? _tableName;
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
+        private readonly IExecutionContext? _context;
+        private readonly IConnector? _connector; // Store for host extraction
 
         public string ConnectionString => _connectionString;
         public string Path => "ORACLE";
@@ -28,15 +30,20 @@ namespace ETL_SQL.Connectors.Oracle
         public Dictionary<string, string>? Options => _options;
         public string ConnectorType => "ORACLE";
 
-        public OracleDataSource(string connectionString, string? tableName = null, Dictionary<string, string>? options = null, ILogger? logger = null)
+        public OracleDataSource(IExecutionContext context, string connectionString, string? tableName = null, Dictionary<string, string>? options = null)
         {
+            _context = context;
+            _logger = context.Logger;
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
-            _logger = logger ?? NullLogger.Instance;
+
+            // Security Hardening: egress control
+            var host = OracleConnector.GetHostStatic(connectionString, options);
+            if (host != null) context.SecurityService.ValidateHost(host);
         }
 
-        public IDataSource WithTable(string tableName) => new OracleDataSource(_connectionString, tableName, _options, _logger);
+        public IDataSource WithTable(string tableName) => new OracleDataSource(_context!, _connectionString, tableName, _options);
 
         private async Task<OracleConnection> OpenConnectionAsync()
         {

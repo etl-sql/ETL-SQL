@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Data;
 using ETL_SQL.Connectors.MockDb;
 using Spectre.Console;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests
 {
@@ -129,7 +130,7 @@ END";
         public async Task TestExecuteAtConnectionIntoTemp()
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            var mockDb = new MockSqlDataSource("mock://", "MSSQL");
+            var mockDb = new MockSqlDataSource(SystemExecutionContext.Instance, "mock://", "MSSQL");
             evaluator.Connections["mock"] = mockDb;
 
             // EXECUTE (@stmt) AT connection INTO #temp — VS Code bug #5
@@ -151,7 +152,7 @@ SELECT * FROM #emp;";
         public async Task TestExecuteAtConnectionIntoExistingTemp()
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            var mockDb = new MockSqlDataSource("mock://", "MSSQL");
+            var mockDb = new MockSqlDataSource(SystemExecutionContext.Instance, "mock://", "MSSQL");
             evaluator.Connections["mock"] = mockDb;
 
             // Pre-create the temp table, then load into it

@@ -111,6 +111,16 @@ namespace ETL_SQL.Core.Parser
             return new SetShowPasswordStatement(enabled);
         }
 
+        private Statement ParseSetThreshold(ThresholdType type)
+        {
+            var startToken = _parser.Previous;
+            _parser.Consume(TokenType.EQUALS, $"Expected '=' after SET {startToken.Value}");
+            var value = _parser.ParseExpression();
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+
+            return new SetThresholdStatement(type, value) { Line = startToken.Line, Column = startToken.Column };
+        }
+
         private Statement ParseSetSecurityOverride()
         {
             var startToken = _parser.Previous; // The token after SET that matched ALLOW_...

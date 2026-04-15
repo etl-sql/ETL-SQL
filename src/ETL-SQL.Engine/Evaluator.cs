@@ -168,6 +168,7 @@ namespace ETL_SQL.Engine
         public int JoinSpillThreshold { get; set; } = 100000;
         public int ExternalHashPartitions { get; set; } = 32;
         public int ExternalSortChunkSize { get; set; } = 100000;
+        public int WindowSpillThreshold { get; set; } = LanguageMetadata.DefaultWindowSpillThreshold;
 
 
         /// <summary>The ID of the currently executing node in this task/context.</summary>
@@ -414,7 +415,7 @@ namespace ETL_SQL.Engine
                 var connector = _connectorRegistry.GetConnector(conn.Type);
                 if (connector != null)
                 {
-                    var ds = connector.CreateDataSource(conn.ConnectionString, conn.Options);
+                    var ds = connector.CreateDataSource(this, conn.ConnectionString, conn.Options);
                     _connections[conn.Name] = ds;
                 }
             }

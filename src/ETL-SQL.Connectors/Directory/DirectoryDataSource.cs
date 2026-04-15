@@ -12,17 +12,22 @@ namespace ETL_SQL.Connectors.Directory
     {
         private readonly string _directoryPath;
         private readonly ILogger _logger;
+        private readonly IExecutionContext? _context;
         public string Path => _directoryPath;
         public IDataSource WithTable(string tableName) => this;
         public Dictionary<string, string>? Options { get; }
         public string ConnectorType => "DIRECTORY";
 
-        public DirectoryDataSource(string path, Dictionary<string, string>? options = null, ILogger? logger = null)
+        public DirectoryDataSource(IExecutionContext context, string path, Dictionary<string, string>? options = null)
         {
-            if (string.IsNullOrEmpty(path)) throw new ArgumentException("Directory path cannot be empty.");
-            _directoryPath = path;
+            _context = context;
+            _logger = context.Logger;
+            _directoryPath = context.ResolvePath(path.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
+
+            // Security Hardening: Defense in depth
+            context.SecurityService.ValidatePath(_directoryPath);
+
             Options = options;
-            _logger = logger ?? NullLogger.Instance;
         }
 
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "FileName", "Path", "Extension", "Size", "LastModified", "IsReadOnly", "CreationTime" });

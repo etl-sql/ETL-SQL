@@ -16,6 +16,7 @@ namespace ETL_SQL.Connectors.Email
     {
         private readonly Dictionary<string, string> _options;
         private readonly ILogger _logger;
+        private readonly IExecutionContext? _context;
 
         /// <summary>Gets the SMTP host from the connection options.</summary>
         public string Path => _options.TryGetValue("HOST", out var h) ? h : "localhost";
@@ -30,10 +31,17 @@ namespace ETL_SQL.Connectors.Email
         /// </summary>
         /// <param name="options">SMTP configuration options (HOST, PORT, USERNAME, etc.).</param>
         /// <param name="logger">The logger instance.</param>
-        public SmtpDataSource(Dictionary<string, string> options, ILogger? logger = null)
+        public SmtpDataSource(IExecutionContext context, Dictionary<string, string> options)
         {
+            _context = context;
             _options = options;
-            _logger = logger ?? NullLogger.Instance;
+            _logger = context.Logger;
+
+            // Security Hardening: egress control
+            if (_options.TryGetValue("HOST", out var host))
+            {
+                context.SecurityService.ValidateHost(host);
+            }
         }
 
         /// <summary>Reading batches is not supported for SMTP.</summary>

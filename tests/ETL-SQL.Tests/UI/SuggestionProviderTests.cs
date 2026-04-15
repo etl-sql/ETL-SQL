@@ -11,6 +11,7 @@ using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Connectors.SqlServer;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests
 {
@@ -48,7 +49,7 @@ namespace ETL_SQL.Tests
         public async Task AliasColumnProvider_ResolvesAlias()
         {
             var provider = new AliasColumnProvider();
-            var ds = new MockSqlDataSource("dummy", "MSSQL");
+            var ds = new MockSqlDataSource(SystemExecutionContext.Instance, "dummy", "MSSQL");
             var context = new SuggestionContext
             {
                 Prefix = "A.",
@@ -67,7 +68,7 @@ namespace ETL_SQL.Tests
         public async Task AliasColumnProvider_ResolvesConnection()
         {
             var provider = new AliasColumnProvider();
-            var ds = new MockSqlDataSource("dummy", "MSSQL");
+            var ds = new MockSqlDataSource(SystemExecutionContext.Instance, "dummy", "MSSQL");
             var context = new SuggestionContext
             {
                 Prefix = "Conn.",
@@ -144,7 +145,7 @@ namespace ETL_SQL.Tests
         public async Task AliasColumnProvider_StarExpansion_ReturnsJoinedColumnList()
         {
             var provider = new AliasColumnProvider();
-            var ds = new MockSqlDataSource("dummy", "MSSQL");
+            var ds = new MockSqlDataSource(SystemExecutionContext.Instance, "dummy", "MSSQL");
             var context = new SuggestionContext
             {
                 Prefix = "A.*",
@@ -167,7 +168,7 @@ namespace ETL_SQL.Tests
         public async Task SuggestionEngine_StarExpansion_NotFilteredByPrefixCheck()
         {
             var engine = new SuggestionEngine();
-            var ds = new MockSqlDataSource("dummy", "MSSQL");
+            var ds = new MockSqlDataSource(SystemExecutionContext.Instance, "dummy", "MSSQL");
             var context = new SuggestionContext
             {
                 Prefix = "A.*",
@@ -193,7 +194,7 @@ namespace ETL_SQL.Tests
         {
             // Provide a live MockDB data source in the context so the provider can resolve tables.
             // Without this, the regex fallback returns only the connection name "m", not tables.
-            var mockDs = new MockSqlDataSource("mock", "MOCKDB");
+            var mockDs = new MockSqlDataSource(SystemExecutionContext.Instance, "mock", "MOCKDB");
             var provider = new DatabaseSchemaProvider();
             var context = new SuggestionContext
             {

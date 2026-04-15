@@ -18,7 +18,8 @@ namespace ETL_SQL.Data
         /// <summary>Alternative names or aliases for the connector.</summary>
         IReadOnlyList<string> Aliases { get; }
         /// <summary>Returns the version of the remote database engine.</summary>
-        Task<string> GetVersionAsync(string connectionString, ILogger? logger = null);
+        /// <summary>Returns the version of the remote database engine.</summary>
+        Task<string> GetVersionAsync(IExecutionContext context, string connectionString);
         /// <summary>Returns a set of SQL functions supported by this connector.</summary>
         HashSet<string> GetSupportedFunctions();
         /// <summary>Returns a set of keywords supported by this connector.</summary>
@@ -33,17 +34,17 @@ namespace ETL_SQL.Data
         /// <summary>Returns a help string for using this connector.</summary>
         string GetHelp();
         /// <summary>Creates a new <see cref="IDataSource"/> instance for the specified connection string.</summary>
-        IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null);
+        IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null);
         /// <summary>Creates a new <see cref="IDataSource"/> instance for the specified connection string with a template schema.</summary>
-        IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options, IEnumerable<ColumnDefinition>? templateSchema, ILogger? logger = null) => CreateDataSource(connectionString, options, logger);
+        IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options, IEnumerable<ColumnDefinition>? templateSchema) => CreateDataSource(context, connectionString, options);
         /// <summary>Returns a list of tables available in the database.</summary>
-        Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null);
+        Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString);
         /// <summary>Returns a list of views available in the database.</summary>
-        Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null);
+        Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString);
         /// <summary>Returns a list of columns for the specified table.</summary>
-        Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null);
+        Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName);
         /// <summary>Returns a list of stored procedures available in the database.</summary>
-        Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null);
+        Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString);
         /// <summary>Builds a provider-specific connection string from a dictionary of properties.</summary>
         string BuildConnectionString(Dictionary<string, string> properties) => string.Empty;
 

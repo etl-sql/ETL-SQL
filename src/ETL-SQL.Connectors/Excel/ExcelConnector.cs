@@ -13,7 +13,7 @@ namespace ETL_SQL.Connectors.Excel
         public string Name => "EXCEL";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
 
-        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null) => Task.FromResult("Excel Connector 1.0");
+        public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) => Task.FromResult("Excel Engine 1.0");
 
         public HashSet<string> GetSupportedFunctions() => new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> GetSupportedKeywords() => new(StringComparer.OrdinalIgnoreCase);
@@ -45,17 +45,13 @@ namespace ETL_SQL.Connectors.Excel
             "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption";
 
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null) 
-            => new ExcelDataSource(connectionString, options, logger);
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) 
+            => new ExcelDataSource(context, connectionString, options);
 
-        public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null)
-        {
-            var ds = new ExcelDataSource(connectionString, null, logger);
-            return await ds.GetColumnsAsync();
-        }
-        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
         /// <summary>Builds an Excel file path from named properties.</summary>
         public string BuildConnectionString(Dictionary<string, string> properties) => 

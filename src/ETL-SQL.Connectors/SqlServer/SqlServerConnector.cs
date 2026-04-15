@@ -16,9 +16,9 @@ namespace ETL_SQL.Connectors.SqlServer
         public string Name => "MSSQL";
         public IReadOnlyList<string> Aliases => new[] { "SQLSERVER" };
         
-        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null)
+        public Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
-            var ds = new SqlServerDataSource(connectionString, null, null, logger);
+            var ds = new SqlServerDataSource(context, connectionString, null, null);
             return ds.GetVersionAsync();
         }
         
@@ -63,36 +63,26 @@ namespace ETL_SQL.Connectors.SqlServer
 
         public Dictionary<string, string[]> GetOptionValues() => new();
 
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null) 
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) 
         {
             string? table = null;
             options?.TryGetValue("TABLE", out table);
-            return new SqlServerDataSource(connectionString, table, options, logger);
+            return new SqlServerDataSource(context, connectionString, table, options);
         }
 
-        public async Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null)
-        {
-            var ds = new SqlServerDataSource(connectionString, null, null, logger);
-            return await ds.GetTablesAsync();
-        }
+        public async Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");
+        public async Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetViewsAsync instead.");
+        public async Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => throw new NotSupportedException("Use IDataSource.GetColumnsAsync instead.");
 
-        public async Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null)
+        public async Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString)
         {
-            var ds = new SqlServerDataSource(connectionString, null, null, logger);
-            return await ds.GetViewsAsync();
-        }
+            // Security constraint: validate host before connecting
+            var host = GetHost(connectionString);
+            if (host != null) context.SecurityService.ValidateHost(host);
 
-        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null)
-        {
-            var ds = new SqlServerDataSource(connectionString, tableName, null, logger);
-            return await ds.GetColumnsAsync();
-        }
-
-        public async Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null)
-        {
-            var procs = new List<string>();
             await using var conn = new SqlConnection(connectionString);
             await conn.OpenAsync();
+            var procs = new List<string>();
             await using var cmd = new SqlCommand("SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE ROUTINE_TYPE = 'PROCEDURE'", conn);
             await using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync()) procs.Add(reader.GetString(0));
@@ -102,7 +92,9 @@ namespace ETL_SQL.Connectors.SqlServer
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);
 
-        public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
+        public string? GetHost(string connectionString, Dictionary<string, string>? options = null) => GetHostStatic(connectionString, options);
+
+        public static string? GetHostStatic(string connectionString, Dictionary<string, string>? options = null)
         {
             if (options != null && options.TryGetValue("SERVER", out var server)) return server;
             

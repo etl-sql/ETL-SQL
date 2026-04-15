@@ -11,6 +11,7 @@ using Spectre.Console;
 using ETL_SQL.Common;
 using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests
 {
@@ -27,7 +28,7 @@ namespace ETL_SQL.Tests
 
             try
             {
-                var ds = new JsonDataSource(jsonFile);
+                var ds = new JsonDataSource(SystemExecutionContext.Instance, jsonFile);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Single(batches);
@@ -54,7 +55,7 @@ namespace ETL_SQL.Tests
             try
             {
                 var options = new Dictionary<string, string> { { "ROOT_PATH", "data.items" } };
-                var ds = new JsonDataSource(jsonFile, options);
+                var ds = new JsonDataSource(SystemExecutionContext.Instance, jsonFile, options);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Single(batches);

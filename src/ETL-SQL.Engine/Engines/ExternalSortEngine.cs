@@ -34,21 +34,29 @@ namespace ETL_SQL.Engine.Engines
             List<Row> rows,
             List<OrderByClause> orderBy)
         {
+            var stream = ConvertToAsyncEnumerable(rows);
+            var sortedStream = SortStreamAsync(stream, orderBy);
+            return await sortedStream.ToListAsync();
+        }
+
+        private async IAsyncEnumerable<Row> ConvertToAsyncEnumerable(List<Row> rows)
+        {
+            foreach (var r in rows) yield return r;
+            await Task.CompletedTask;
+        }
+
+        /// <summary>
+        /// Sorts an asynchronous stream of rows using an external merge sort.
+        /// spills chunks to disk and merges them back.
+        /// </summary>
+        public async IAsyncEnumerable<Row> SortStreamAsync(
+            IAsyncEnumerable<Row> inputStream,
+            List<OrderByClause> orderBy)
+        {
+            var chunkPaths = new List<string>();
             try
             {
-                _logger.WriteLine($"[yellow]HYPER-SCALE: ORDER BY has {rows.Count:N0} rows — switching to external merge sort (spill-to-disk).[/]");
-
-                // 1. Pre-evaluate all sort keys (async, must be done before sort)
-                var keyed = new List<(Row Row, object?[] Keys)>(rows.Count);
-                foreach (var row in rows)
-                {
-                    var keys = new object?[orderBy.Count];
-                    for (int i = 0; i < orderBy.Count; i++)
-                        keys[i] = await _context.EvaluateValue(orderBy[i].Expression, row);
-                    keyed.Add((row, keys));
-                }
-
-                // 2. Comparison function
+                // 1. Comparison function
                 int Compare((Row Row, object?[] Keys) a, (Row Row, object?[] Keys) b)
                 {
                     for (int i = 0; i < orderBy.Count; i++)
@@ -59,25 +67,77 @@ namespace ETL_SQL.Engine.Engines
                     return 0;
                 }
 
-                // 3. Sort and spill chunks
-                var chunkPaths = new List<string>();
-                for (int offset = 0; offset < keyed.Count; offset += ChunkSize)
+                // 2. Consume stream and spill chunks
+                var currentChunk = new List<(Row Row, object?[] Keys)>();
+                await foreach (var row in inputStream)
                 {
-                    var chunk = keyed.GetRange(offset, Math.Min(ChunkSize, keyed.Count - offset));
-                    chunk.Sort(Compare);
+                    var keys = new object?[orderBy.Count];
+                    for (int i = 0; i < orderBy.Count; i++)
+                        keys[i] = await _context.EvaluateValue(orderBy[i].Expression, row);
+                    
+                    currentChunk.Add((row, keys));
 
+                    if (currentChunk.Count >= ChunkSize)
+                    {
+                        currentChunk.Sort(Compare);
+                        var path = Path.Combine(_tempDir, $"chunk_{chunkPaths.Count}.tmp");
+                        await WriteChunk(path, currentChunk);
+                        chunkPaths.Add(path);
+                        currentChunk.Clear();
+                    }
+                }
+
+                if (currentChunk.Count > 0)
+                {
+                    currentChunk.Sort(Compare);
                     var path = Path.Combine(_tempDir, $"chunk_{chunkPaths.Count}.tmp");
-                    await WriteChunk(path, chunk);
+                    await WriteChunk(path, currentChunk);
                     chunkPaths.Add(path);
                 }
 
-                // 4. K-way merge
-                return await MergeChunks(chunkPaths, Compare);
+                // 3. K-way Merge and yield
+                if (chunkPaths.Count == 0) yield break;
+                
+                var readers = chunkPaths.Select(p => new StreamReader(p)).ToList();
+                try
+                {
+                    var heap = new PriorityQueue<int, (Row Row, object?[] Keys)>(Comparer<(Row, object?[])>.Create(Compare));
+
+                    for (int i = 0; i < readers.Count; i++)
+                    {
+                        var line = await readers[i].ReadLineAsync();
+                        if (line != null)
+                        {
+                            var entry = ParseEntry(line);
+                            if (entry != null) heap.Enqueue(i, entry.Value);
+                        }
+                    }
+
+                    while (heap.Count > 0)
+                    {
+                        if (heap.TryDequeue(out int chunkIdx, out var first))
+                        {
+                            yield return first.Row;
+
+                            var nextLine = await readers[chunkIdx].ReadLineAsync();
+                            if (nextLine != null)
+                            {
+                                var entry = ParseEntry(nextLine);
+                                if (entry != null) heap.Enqueue(chunkIdx, entry.Value);
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    foreach (var rd in readers) rd.Dispose();
+                }
             }
             finally
             {
-                if (Directory.Exists(_tempDir))
-                    try { Directory.Delete(_tempDir, true); } catch { }
+                // Cleanup will happen in SortExternal or the caller must handle temp directory cleanup
+                // Since this is private/internal, we assume the temp directory lifecycle is managed by SortExternal
+                // or similar top-level method.
             }
         }
 

@@ -10,6 +10,7 @@ using ETL_SQL.TUI.UI;
 using ETL_SQL.Data;
 using ETL_SQL.Connectors.MockDb;
 using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests.UI
 {
@@ -20,7 +21,7 @@ namespace ETL_SQL.Tests.UI
         public TuiAutocompleteVariationsTests()
         {
             // Set up a mock database environment
-            var mockDb = new MockSqlDataSource("MOCKDB", "MOCKDB");
+            var mockDb = new MockSqlDataSource(SystemExecutionContext.Instance, "MOCKDB", "MOCKDB");
             // Note: In real MockSqlDataSource, tables are predefined or created via script.
             // For these tests, we assume a few tables exist.
             _mockConnections = new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase)
@@ -93,8 +94,8 @@ namespace ETL_SQL.Tests.UI
             // Should ONLY contain u. columns
             Assert.Contains("u.UserID", expansion);
             Assert.Contains("u.UserName", expansion);
-            Assert.DoesNotContain("o.OrderID", expansion);
-            Assert.DoesNotContain("o.TotalAmount", expansion);
+            Assert.DoesNotContain("o.SaleID", expansion);
+            Assert.DoesNotContain("o.Total", expansion);
         }
 
         [Fact]
@@ -113,8 +114,8 @@ namespace ETL_SQL.Tests.UI
             // Should contain BOTH u. and o. columns
             Assert.Contains("u.UserID", expansion);
             Assert.Contains("u.UserName", expansion);
-            Assert.Contains("o.OrderID", expansion);
-            Assert.Contains("o.TotalAmount", expansion);
+            Assert.Contains("o.SaleID", expansion);
+            Assert.Contains("o.Total", expansion);
         }
 
         [Fact]

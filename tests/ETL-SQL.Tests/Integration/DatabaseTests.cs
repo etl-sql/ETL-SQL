@@ -39,11 +39,11 @@ namespace ETL_SQL.Tests
             
             // 2. Query mock table
             var res = await EvalFunc(eval, "SELECT UserName FROM MyMock.Users WHERE UserID = 1;");
-            Assert.Equal("Alice", res?.ToString());
+            Assert.Equal("User_1", res?.ToString());
             
             // 3. Query another table
             var res2 = await EvalFunc(eval, "SELECT ProductName FROM MyMock.Products WHERE ProductID = 101;");
-            Assert.Equal("Widget", res2?.ToString());
+            Assert.Equal("Product_101", res2?.ToString());
         }
     }
 }

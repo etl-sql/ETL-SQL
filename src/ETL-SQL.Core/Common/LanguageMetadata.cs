@@ -73,7 +73,9 @@ namespace ETL_SQL.Common
             "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT", "VERSION",
             "SETS", "SESSION", "CONNECTIONS", "VARIABLES", "LOCAL", "ANALYZE", "TABLES", "COLUMNS", "TAGS", "TAG", "VALUE", "BITS", "ALGORITHM", "PASSPHRASE", "COMMENT",
             "SUBSTRING", "POSITION", "OVERLAY", "EXTRACT", "TRIM", "PLACING", "LEADING", "TRAILING", "BOTH",
-            "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE", "REQUIRE", "SAFE", "ZONES"
+            "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE", "REQUIRE", "SAFE", "ZONES",
+            "JOIN_SPILL_THRESHOLD", "EXTERNAL_HASH_PARTITIONS", "EXTERNAL_SORT_CHUNK_SIZE", "WINDOW_SPILL_THRESHOLD",
+            "MAX_RECURSIVE_DEPTH", "MAX_IN_MEMORY_BATCHES", "FOREACH_PAGE_SIZE", "MAX_MESSAGES"
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -114,6 +116,15 @@ namespace ETL_SQL.Common
         
         /// <summary>Default number of batches held in memory before spilling to disk for #temp tables.</summary>
         public const int DefaultMaxInMemoryBatches = 100;
+        
+        /// <summary>Default number of rows before in-memory joins spill to disk.</summary>
+        public const int DefaultJoinSpillThreshold = 100000;
+        /// <summary>Default number of partitions used for external disk-spilling operations.</summary>
+        public const int DefaultExternalHashPartitions = 16;
+        /// <summary>Default number of rows per sort chunk before spilling to disk.</summary>
+        public const int DefaultExternalSortChunkSize = 50000;
+        /// <summary>Default number of rows before window functions spill to disk.</summary>
+        public const int DefaultWindowSpillThreshold = 100000;
 
         public static bool IsKeyword(string word) => DmlKeywords.Contains(word) || DdlKeywords.Contains(word) || ControlFlowKeywords.Contains(word) || JoinKeywords.Contains(word) || OperatorKeywords.Contains(word) || Keywords.Contains(word) || ConnectorTypes.Contains(word) || Functions.Contains(word);
         public static bool IsFunction(string word) => Functions.Contains(word);

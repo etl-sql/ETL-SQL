@@ -96,7 +96,8 @@ namespace ETL_SQL.Engine.Handlers
             if (connector == null)
                 throw new ExecutionException("FLATFILE connector not found.");
 
-            var source = connector.CreateDataSource(stmt.FilePath, ffOptions);
+            string resolvedPath = context.ResolvePath(stmt.FilePath);
+            var source = connector.CreateDataSource(context, resolvedPath, ffOptions);
 
             try
             {

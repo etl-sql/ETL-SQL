@@ -7,6 +7,7 @@ using ETL_SQL.TUI.UI;
 using ETL_SQL.Data;
 using Moq;
 using ETL_SQL.Tests;
+using ETL_SQL.Core.Common;
 using ETL_SQL.App;
 using ETL_SQL.Common;
 
@@ -50,7 +51,7 @@ namespace ETL_SQL.Tests.UI
             mockDs.Setup(d => d.GetColumnsAsync()).ReturnsAsync(new List<string> { "Id", "Name", "Email" });
 
             var connections = new Dictionary<string, IDataSource> { { "myTable", mockDs.Object } };
-            var metadata = new MetadataManager(connections);
+            var metadata = new MetadataManager(SystemExecutionContext.Instance, connections);
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var renderer = new EditorRenderer(buffer, evaluator);
             var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
@@ -72,7 +73,7 @@ namespace ETL_SQL.Tests.UI
             mockDs.Setup(d => d.GetColumnsAsync()).ReturnsAsync(new List<string> { "Id", "Name" });
 
             var connections = new Dictionary<string, IDataSource> { { "myTable", mockDs.Object } };
-            var metadata = new MetadataManager(connections);
+            var metadata = new MetadataManager(SystemExecutionContext.Instance, connections);
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var renderer = new EditorRenderer(buffer, evaluator);
             var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
@@ -94,7 +95,7 @@ namespace ETL_SQL.Tests.UI
             mockDb.Setup(d => d.GetColumnsAsync("Users")).ReturnsAsync(new List<string> { "UserID", "UserName" });
 
             var connections = new Dictionary<string, IDataSource> { { "myConn", mockDb.Object } };
-            var metadata = new MetadataManager(connections);
+            var metadata = new MetadataManager(SystemExecutionContext.Instance, connections);
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var renderer = new EditorRenderer(buffer, evaluator);
             var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
@@ -115,7 +116,7 @@ namespace ETL_SQL.Tests.UI
             mockDb.Setup(d => d.GetColumnsAsync("Users")).ReturnsAsync(new List<string> { "UserID", "UserName" });
 
             var connections = new Dictionary<string, IDataSource> { { "myConn", mockDb.Object } };
-            var metadata = new MetadataManager(connections);
+            var metadata = new MetadataManager(SystemExecutionContext.Instance, connections);
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var renderer = new EditorRenderer(buffer, evaluator);
             var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);

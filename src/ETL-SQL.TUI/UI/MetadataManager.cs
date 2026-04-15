@@ -13,12 +13,15 @@ namespace ETL_SQL.TUI.UI
     public class MetadataManager
     {
         private string _lastScript = "";
+        private readonly IExecutionContext _context;
         private readonly Dictionary<string, IDataSource> _connections;
 
-        public MetadataManager(Dictionary<string, IDataSource> connections)
+        public MetadataManager(IExecutionContext context, Dictionary<string, IDataSource> connections)
         {
+            _context = context;
             _connections = connections;
         }
+    
 
         public void RefreshConnections(string script, bool force = false)
         {
@@ -49,8 +52,8 @@ namespace ETL_SQL.TUI.UI
                     foreach (Match om in optMatches) options[om.Groups[1].Value] = om.Groups[2].Value.Trim('\'', '\"');
                 }
 
-                if ((type == "FLATFILE" || type == "FILE" || type == "CSV") && File.Exists(path)) _connections[name] = new FlatFileDataSource(path, options);
-                else _connections[name] = new MockSqlDataSource(path, type);
+                if ((type == "FLATFILE" || type == "FILE" || type == "CSV") && File.Exists(path)) _connections[name] = new FlatFileDataSource(_context, path, options, null);
+                else _connections[name] = new MockSqlDataSource(_context, path, type);
             }
 
             // Temp table discovery

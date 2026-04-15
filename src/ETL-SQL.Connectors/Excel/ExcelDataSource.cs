@@ -21,6 +21,7 @@ namespace ETL_SQL.Connectors.Excel
         private readonly string? _range;
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
+        private readonly IExecutionContext? _context;
 
         public string Path => _filePath;
         public Dictionary<string, string>? Options => _options;
@@ -29,11 +30,17 @@ namespace ETL_SQL.Connectors.Excel
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }
 
-        public ExcelDataSource(string filePath, Dictionary<string, string>? options = null, ILogger? logger = null)
+        public ExcelDataSource(IExecutionContext context, string filePath, Dictionary<string, string>? options = null)
         {
-            _filePath = filePath;
+            _context = context;
+            _logger = context.Logger;
+            _filePath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
+
+            // Security Hardening: Defense in depth
+            context.SecurityService.ValidatePath(_filePath);
+            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
+
             _options = options;
-            _logger = logger ?? NullLogger.Instance;
             _hasHeader = true; // Default
 
             if (options != null)

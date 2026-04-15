@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -31,10 +32,47 @@ namespace ETL_SQL.Engine.Engines
         }
 
         /// <summary>Applies aggregation by partitioning the stream into disk files and processing each partition sequentially.</summary>
-        public async Task<List<Row>> ApplyAggregationExternal(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null)
+        public async Task<List<Row>> ApplyAggregationExternal(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null)
         {
             try
             {
+                // When groupingSet is present, expand into multiple aggregate passes.
+                // Note: For hyper-scale, we should ideally partition once and process multiple times,
+                // but for simplicity we'll implement the expansion at the high level.
+                if (groupingSet != null && groupingSet.Type != GroupingSetType.None)
+                {
+                    // If inputStream is not repeatable, we must buffer it to a temp file first
+                    var tempFile = Path.Combine(_tempDir, "agg_source.tmp");
+                    await BufferStream(inputStream, tempFile);
+                    
+                    var expandedSets = ExpandGroupingSets(groupingSet);
+                    var allResults = new List<Row>();
+                    foreach (var activeGroupBy in expandedSets)
+                    {
+                        var setRows = await ApplyAggregationExternal(ReadPartitionStream(tempFile), activeGroupBy, finalColumns, colNames, havingClause, null);
+                        
+                        // Mark which columns were NULL-substituted (GROUPING() support)
+                        var activeKeys = new HashSet<string>(activeGroupBy.Select(e => e.ToSql()), StringComparer.OrdinalIgnoreCase);
+                        foreach (var row in setRows)
+                        {
+                            if (groupBy != null)
+                            {
+                                foreach (var expr in groupBy)
+                                {
+                                    if (!activeKeys.Contains(expr.ToSql()))
+                                    {
+                                        var colName = expr is IdentifierExpression id ? id.Name.Split('.').Last() : expr.ToSql();
+                                        var matchIdx = colNames.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
+                                        if (matchIdx >= 0) row[colNames[matchIdx]] = null;
+                                    }
+                                }
+                            }
+                        }
+                        allResults.AddRange(setRows);
+                    }
+                    return allResults;
+                }
+
                 // 1. Partition Phase
                 var partitionPaths = await PartitionStream(inputStream, groupBy);
 
@@ -45,7 +83,7 @@ namespace ETL_SQL.Engine.Engines
                 {
                     if (!File.Exists(path)) continue;
 
-                    var rows = await ReadPartition(path);
+                    var rows = await ReadPartitionStream(path).ToListAsync();
                     if (rows.Count > 0)
                     {
                         var partResults = await _inMemoryEngine.ApplyAggregation(rows, groupBy, finalColumns, colNames, havingClause);
@@ -122,9 +160,8 @@ namespace ETL_SQL.Engine.Engines
             return paths;
         }
 
-        private async Task<List<Row>> ReadPartition(string path)
+        private async IAsyncEnumerable<Row> ReadPartitionStream(string path)
         {
-            var rows = new List<Row>();
             using var reader = new StreamReader(path);
             string? line;
             while ((line = await reader.ReadLineAsync()) != null)
@@ -134,10 +171,47 @@ namespace ETL_SQL.Engine.Engines
                 {
                     var row = new Row();
                     foreach (var kvp in cols) row[kvp.Key] = JsonElementToValue(kvp.Value);
-                    rows.Add(row);
+                    yield return row;
                 }
             }
-            return rows;
+        }
+
+
+        private async Task BufferStream(IAsyncEnumerable<Row> stream, string path)
+        {
+            using var writer = new StreamWriter(path);
+            await foreach (var row in stream)
+            {
+                var json = System.Text.Json.JsonSerializer.Serialize(row.Columns);
+                await writer.WriteLineAsync(json);
+            }
+        }
+
+        private static List<List<Expression>> ExpandGroupingSets(GroupingSetClause clause)
+        {
+            var cols = clause.GroupSets[0];
+            int n = cols.Count;
+
+            if (clause.Type == GroupingSetType.Rollup)
+            {
+                var result = new List<List<Expression>>();
+                for (int i = n; i >= 0; i--) result.Add(cols.Take(i).ToList());
+                return result;
+            }
+
+            if (clause.Type == GroupingSetType.Cube)
+            {
+                var result = new List<List<Expression>>();
+                for (int mask = (1 << n) - 1; mask >= 0; mask--)
+                {
+                    var subset = new List<Expression>();
+                    for (int bit = 0; bit < n; bit++) if ((mask & (1 << bit)) != 0) subset.Add(cols[bit]);
+                    result.Add(subset);
+                }
+                return result;
+            }
+
+            return clause.GroupSets.Select(s => s.ToList()).ToList();
         }
 
         /// <summary>

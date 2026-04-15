@@ -10,6 +10,7 @@ using ETL_SQL.Core;
 using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests
 {
@@ -22,7 +23,7 @@ namespace ETL_SQL.Tests
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var renderer = new EditorRenderer(buffer, evaluator);
             var connections = new Dictionary<string, IDataSource>();
-            var metadata = new MetadataManager(connections);
+            var metadata = new MetadataManager(SystemExecutionContext.Instance, connections);
             var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
             
             buffer.Load(new[] { "SEL" });
@@ -42,7 +43,7 @@ namespace ETL_SQL.Tests
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var renderer = new EditorRenderer(buffer, evaluator);
             var connections = new Dictionary<string, IDataSource>();
-            var metadata = new MetadataManager(connections);
+            var metadata = new MetadataManager(SystemExecutionContext.Instance, connections);
             var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
             
             buffer.Load(new[] { "S" });
@@ -67,7 +68,7 @@ namespace ETL_SQL.Tests
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             var renderer = new EditorRenderer(buffer, evaluator);
             var connections = new Dictionary<string, IDataSource>();
-            var metadata = new MetadataManager(connections);
+            var metadata = new MetadataManager(SystemExecutionContext.Instance, connections);
             var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
             var sp = DependencyInjectionSetup.BuildServiceProvider();
             ETL_SQL.Program.ServiceProvider = sp;
@@ -90,7 +91,7 @@ namespace ETL_SQL.Tests
         public void MetadataManager_RefreshesConnections()
         {
             var connections = new Dictionary<string, IDataSource>();
-            var manager = new MetadataManager(connections);
+            var manager = new MetadataManager(SystemExecutionContext.Instance, connections);
             string script = "CREATE CONNECTION C ON MOCKDB('dummy');";
             
             manager.RefreshConnections(script, force: true);

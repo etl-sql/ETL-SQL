@@ -98,8 +98,10 @@ Applies to: **All Hosts**
 | `Engine:BatchSize` | `10000` | Rows per batch during streaming evaluation. Lower this on memory-constrained hosts. |
 | `Engine:MaxRecursiveDepth` | `10000` | Maximum call stack depth for nested procedures and `RUN SCRIPT`. |
 | `Engine:JoinSpillThreshold` | `100000` | Row count at which a join operation spills to disk instead of holding all data in RAM. |
+| `Engine:WindowSpillThreshold` | `100000` | Row count at which window function processing spills to disk. |
 | `Engine:ExternalHashPartitions` | `32` | Number of disk partitions used for spilled joins and aggregates. Increase if spill files become very large. |
 | `Engine:ExternalSort:ChunkSize` | `100000` | Rows per chunk in the external sort engine. |
+| `Engine:MaxMessages` | `1000` | Maximum number of print/log messages held in a session's message buffer. |
 
 ---
 
@@ -243,10 +245,12 @@ Applies to: **App / TUI**
      "BatchSize": 10000,
      "MaxRecursiveDepth": 10000,
      "JoinSpillThreshold": 100000,
+     "WindowSpillThreshold": 100000,
      "ExternalHashPartitions": 32,
      "ExternalSort": {
        "ChunkSize": 100000
-     }
+     },
+     "MaxMessages": 1000
    },
    "Orchestration": {
      "MaxInMemoryBatches": 100,
@@ -309,6 +313,27 @@ SHOW SAFE ZONES;
 - **Orchestrator Heartbeats**: Every 60 seconds, the scheduler logs `ActiveJobs`, `QueuedJobs`, `AvailableSlots`, and `MaxConcurrent` to the app log.
 - **Per-Job Metrics**: Every job completion records `PeakRAM` and `CPUTime`.
 - **Historical Audit**: Run `SHOW JOB HISTORY;` in the TUI to see resource consumption across past executions.
+
+### 5.5 Dynamic Overrides & Hierarchy
+
+ETL-SQL supports a three-tier configuration hierarchy, allowing administrators to set global boundaries while giving script authors the flexibility to optimize for specific workloads.
+
+| Level | Mechanism | Scope | Change Frequency |
+| :--- | :--- | :--- | :--- |
+| **Global** | `appsettings.json` | System-wide (all scripts) | Deployment-time only |
+| **Environment** | `CREATE SETS` / `USE SETS` | Cross-script (Project/Env) | Weekly / Environmental |
+| **Session** | `SET <KNOB> = <Value>` | Current Script Session | Per-execution |
+
+#### When to Override Globally vs Sessionally
+- **Globally**: Lower `BatchSize` if your server typically runs many concurrent small jobs and you want to prevent overall RAM exhaustion.
+- **Sessionally**: Increase `JOIN_SPILL_THRESHOLD` or `EXTERNAL_HASH_PARTITIONS` in a specific script that you know processes a massive outlier dataset (petabytes) where the default spilling strategy might be too eager or create too few partitions.
+
+```sql
+-- Example: Overriding global defaults for a session-critical massive join
+SET BATCHSIZE = 25000;
+SET JOIN_SPILL_THRESHOLD = 500000;
+SET EXTERNAL_HASH_PARTITIONS = 128;
+```
 
 ---
 

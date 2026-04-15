@@ -39,6 +39,7 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly bool _trim = true;
         private readonly CultureInfo _culture;
         private readonly ILogger _logger;
+        private readonly IExecutionContext? _context; // Optional for backward compatibility, but required for security enforcement
 
         private class FixedWidthColumn
         {
@@ -52,11 +53,17 @@ namespace ETL_SQL.Connectors.FlatFile
         public IDataSource WithTable(string tableName) => this;
         public string ConnectorType => "FLATFILE";
 
-        public FlatFileDataSource(string filePath, Dictionary<string, string>? options = null, IEnumerable<ColumnDefinition>? templateSchema = null, ILogger? logger = null)
+        public FlatFileDataSource(IExecutionContext context, string filePath, Dictionary<string, string>? options = null, IEnumerable<ColumnDefinition>? templateSchema = null)
         {
-            _filePath = filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n');
+            _context = context;
+            _logger = context.Logger;
+            _filePath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
+            
+            // Security Hardening: Defense in depth
+            context.SecurityService.ValidatePath(_filePath);
+            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
+
             _options = options;
-            _logger = logger ?? NullLogger.Instance; // Fallback to global for backward compatibility during transition
             _hasHeader = true;
             _delimiter = ',';
             _encoding = Encoding.UTF8;

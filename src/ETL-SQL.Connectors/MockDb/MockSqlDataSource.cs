@@ -15,6 +15,7 @@ namespace ETL_SQL.Connectors.MockDb
         private readonly string _dialect; 
         private readonly Dictionary<string, DataTable> _mockTables = new(StringComparer.OrdinalIgnoreCase);
         private readonly ILogger _logger;
+        private readonly IExecutionContext _context;
         public string Path => "MOCK";
         public Dictionary<string, string>? Options => null;
         public string ConnectorType => "MOCKDB";
@@ -26,50 +27,27 @@ namespace ETL_SQL.Connectors.MockDb
         private string? _activeTable;
 
         public string Dialect => _dialect;
-        public bool SupportsSqlPushdown => true;
+        public bool SupportsSqlPushdown => false;
 
-        public MockSqlDataSource(string connectionString, string dialect, ILogger? logger = null)
+        private readonly IMockDataSeeder _seeder;
+        private readonly Task _initTask;
+
+        public MockSqlDataSource(IExecutionContext context, string connectionString, string dialect, IMockDataSeeder? seeder = null)
         {
+            _context = context;
             _connectionString = connectionString;
             _dialect = dialect;
-            _logger = logger ?? NullLogger.Instance;
-            InitializeMockData();
+            _logger = context.Logger;
+            _seeder = seeder ?? new MockDataSeeder();
+            
+            // Correctly capture and await the async seeding task
+            _initTask = _seeder.SeedDataAsync(_mockTables, new Random(42));
         }
 
-        private void InitializeMockData()
+
+        private async Task EnsureInitialized()
         {
-            var users = new DataTable();
-            users.SetColumns(new[] { "UserID", "UserName", "Email" });
-            users.AddRowAsync(new Row { ["UserID"] = 1, ["UserName"] = "Alice", ["Email"] = "alice@example.com" }).GetAwaiter().GetResult();
-            users.AddRowAsync(new Row { ["UserID"] = 2, ["UserName"] = "Bob", ["Email"] = "bob@example.com" }).GetAwaiter().GetResult();
-            _mockTables["Users"] = users;
-
-            var products = new DataTable();
-            products.SetColumns(new[] { "ProductID", "ProductName", "Price" });
-            products.AddRowAsync(new Row { ["ProductID"] = 101, ["ProductName"] = "Widget", ["Price"] = 19.99m }).GetAwaiter().GetResult();
-            products.AddRowAsync(new Row { ["ProductID"] = 102, ["ProductName"] = "Gadget", ["Price"] = 29.99m }).GetAwaiter().GetResult();
-            _mockTables["Products"] = products;
-            
-            var orders = new DataTable();
-            orders.SetColumns(new[] { "OrderID", "OrderDate", "TotalAmount" });
-            orders.AddRowAsync(new Row { ["OrderID"] = 1, ["OrderDate"] = DateTime.Now, ["TotalAmount"] = 150.0m }).GetAwaiter().GetResult();
-            _mockTables["Orders"] = orders;
-
-            var employees = new DataTable();
-            employees.SetColumns(new[] { "ID", "Name", "column1", "column2", "Status", "Active", "first_name", "last_name" });
-            employees.AddRowAsync(new Row { ["ID"] = 1, ["Name"] = "Alice Boss", ["column1"] = "Test", ["column2"] = "Initial", ["Status"] = 0, ["Active"] = 1, ["first_name"] = "Alice", ["last_name"] = "Boss" }).GetAwaiter().GetResult();
-            employees.AddRowAsync(new Row { ["ID"] = 2, ["Name"] = "Bob Worker", ["column1"] = "Other", ["column2"] = "Changed", ["Status"] = 1, ["Active"] = 1, ["first_name"] = "Bob", ["last_name"] = "Worker" }).GetAwaiter().GetResult();
-            _mockTables["Employee"] = employees;
-            _mockTables["Employee_Log"] = employees.Clone();
-            _mockTables["DemoDb.dbo.Employee"] = employees;
-            _mockTables["DemoDb.dbo.Employee_Log"] = employees.Clone();
-
-            var depts = new DataTable();
-            depts.SetColumns(new[] { "column1", "column2", "column3" });
-            depts.AddRowAsync(new Row { ["column1"] = "Test", ["column2"] = "HR", ["column3"] = 100 }).GetAwaiter().GetResult();
-            depts.AddRowAsync(new Row { ["column1"] = "Other", ["column2"] = "IT", ["column3"] = 50 }).GetAwaiter().GetResult();
-            _mockTables["departments"] = depts;
-            _mockTables["hr.departments"] = depts;
+            if (!_initTask.IsCompleted) await _initTask;
         }
 
         public Task<string> GetVersionAsync() => Task.FromResult("Mock SQL Server 2022 v16.0");
@@ -77,6 +55,7 @@ namespace ETL_SQL.Connectors.MockDb
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
+            await EnsureInitialized();
             if (!string.IsNullOrEmpty(_activeTable) && _mockTables.TryGetValue(_activeTable, out var table))
             {
                 yield return table;
@@ -100,6 +79,7 @@ namespace ETL_SQL.Connectors.MockDb
 
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
+            await EnsureInitialized();
             var enumerator = ReadBatches(1).GetAsyncEnumerator();
             if (await enumerator.MoveNextAsync())
             {
@@ -109,6 +89,7 @@ namespace ETL_SQL.Connectors.MockDb
         }
         public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) 
         {
+             await EnsureInitialized();
              string processedSql = sql;
              if (parameters != null && parameters.Any())
              {
@@ -124,8 +105,10 @@ namespace ETL_SQL.Connectors.MockDb
              
              if (normSql.Contains("Users", StringComparison.OrdinalIgnoreCase)) _mockTables.TryGetValue("Users", out source);
              else if (normSql.Contains("Products", StringComparison.OrdinalIgnoreCase)) _mockTables.TryGetValue("Products", out source);
-             else if (normSql.Contains("Orders", StringComparison.OrdinalIgnoreCase)) _mockTables.TryGetValue("Orders", out source);
+             else if (normSql.Contains("Sales", StringComparison.OrdinalIgnoreCase)) _mockTables.TryGetValue("Sales", out source);
+             else if (normSql.Contains("Orders", StringComparison.OrdinalIgnoreCase)) _mockTables.TryGetValue("Sales", out source);
              else if (normSql.Contains("Employee", StringComparison.OrdinalIgnoreCase)) _mockTables.TryGetValue("Employee", out source);
+             else if (normSql.Contains("AuditTrail", StringComparison.OrdinalIgnoreCase)) _mockTables.TryGetValue("AuditTrail", out source);
 
              if (source != null)
              {
@@ -174,15 +157,20 @@ namespace ETL_SQL.Connectors.MockDb
                  yield return new DataTable { ColumnNames = { "ID", "Name" } };
              }
         }
-        public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult(_mockTables.Keys.Where(k => !k.Contains(".")).AsEnumerable());
-        public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult(Enumerable.Empty<string>());
-        public Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+        public async Task<IEnumerable<string>> GetTablesAsync()
         {
+            await EnsureInitialized();
+            return _mockTables.Keys.Where(k => !k.Contains(".")).AsEnumerable();
+        }
+        public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult(Enumerable.Empty<string>());
+        public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+        {
+            await EnsureInitialized();
             if (_mockTables.TryGetValue(tableName, out var dt)) 
             {
-                return Task.FromResult((IEnumerable<string>)dt.ColumnNames);
+                return dt.ColumnNames;
             }
-            return Task.FromResult(Enumerable.Empty<string>());
+            return Enumerable.Empty<string>();
         }
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }

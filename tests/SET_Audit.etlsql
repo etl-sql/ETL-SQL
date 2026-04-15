@@ -1,0 +1,16 @@
+-- Verification of expanded SET threshold commands
+PRINT 'Starting SET Audit...';
+
+SET JOIN_SPILL_THRESHOLD = 50001;
+SET WINDOW_SPILL_THRESHOLD = 50002;
+SET EXTERNAL_HASH_PARTITIONS = 64;
+SET EXTERNAL_SORT_CHUNK_SIZE = 4000;
+SET BATCHSIZE = 5000;
+SET MAX_RECURSIVE_DEPTH = 500;
+SET MAX_IN_MEMORY_BATCHES = 200;
+SET FOREACH_PAGE_SIZE = 5000;
+SET MAX_MESSAGES = 2000;
+
+-- Verification: We can't directly SHOW these yet (unless we check @@ variables if exposed)
+-- But if the parser didn't throw and the handler didn't crash, it works.
+PRINT 'SET Audit complete. All thresholds accepted.';

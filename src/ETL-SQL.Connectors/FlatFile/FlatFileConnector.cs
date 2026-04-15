@@ -18,7 +18,7 @@ namespace ETL_SQL.Connectors.FlatFile
         public string Name => "FLATFILE";
         public IReadOnlyList<string> Aliases => new[] { "CSV", "FILE" };
 
-        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null) => Task.FromResult("FlatFile Connector 1.0");
+        public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) => Task.FromResult("FlatFile Engine 1.0");
 
         public HashSet<string> GetSupportedFunctions() => new(StringComparer.OrdinalIgnoreCase);
         public HashSet<string> GetSupportedKeywords() => new(StringComparer.OrdinalIgnoreCase);
@@ -77,19 +77,20 @@ namespace ETL_SQL.Connectors.FlatFile
             "  ENCRYPT: ON | OFF (AES encryption for the file)\n" +
             "  PASSWORD: Password for encryption/decryption";
 
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null)
-             => CreateDataSource(connectionString, options, null, logger);
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
+             => CreateDataSource(context, connectionString, options, null);
 
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options, IEnumerable<ColumnDefinition>? templateSchema, ILogger? logger = null)
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options, IEnumerable<ColumnDefinition>? templateSchema)
         {
             if (connectionString.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                return new JsonDataSource(connectionString, options, logger);
+                return new JsonDataSource(context, connectionString, options);
             if (connectionString.EndsWith(".xml", StringComparison.OrdinalIgnoreCase))
-                return new XmlDataSource(connectionString, options, logger);
-            return new FlatFileDataSource(connectionString, options, templateSchema, logger);
+                return new XmlDataSource(context, connectionString, options);
+            return new FlatFileDataSource(context, connectionString, options, templateSchema);
         }
 
-        public Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null)
+
+        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString)
         {
             var path = connectionString.Trim('\'', '\"', ' ', '(', ')');
             var fileName = System.IO.Path.GetFileNameWithoutExtension(path);
@@ -97,15 +98,11 @@ namespace ETL_SQL.Connectors.FlatFile
             return Task.FromResult<IEnumerable<string>>(new[] { fileName, "FILE" });
         }
 
-        public Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
-        
-        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null)
-        {
-            var ds = new FlatFileDataSource(connectionString, null, null, logger);
-            return await ds.GetColumnsAsync();
-        }
+        public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
-        public Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => throw new NotSupportedException("Use IDataSource.GetColumnsAsync instead.");
+
+        public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
 
         public string BuildConnectionString(Dictionary<string, string> properties) => 
             ConnectionStringBuilder.Build(Name, properties);

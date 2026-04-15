@@ -11,6 +11,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Connectors.Avro;
 using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests
 {
@@ -32,7 +33,7 @@ namespace ETL_SQL.Tests
             string path = "test_data.avro";
             if (File.Exists(path)) File.Delete(path);
 
-            var ds = new AvroDataSource(path);
+            var ds = new AvroDataSource(SystemExecutionContext.Instance, path);
             var batch = new DataTable();
             batch.SetColumns(new[] { "ID", "Name", "Active" });
             
@@ -45,7 +46,7 @@ namespace ETL_SQL.Tests
 
             Assert.True(File.Exists(path), "Avro file should be created");
 
-            var dsRead = new AvroDataSource(path);
+            var dsRead = new AvroDataSource(SystemExecutionContext.Instance, path);
             var batches = await dsRead.ReadBatches().ToListAsync();
             
             Assert.True(batches.Count == 1, "Should read 1 batch");

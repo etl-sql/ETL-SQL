@@ -12,6 +12,7 @@ using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Common;
 using ETL_SQL.TUI.UI;
 using Spectre.Console;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests
 {
@@ -43,7 +44,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public async Task TestGeneralSuggestions()
         {
-            var connections = new Dictionary<string, IDataSource> { { "MyConn", new MockSqlDataSource("", "MSSQL") } };
+            var connections = new Dictionary<string, IDataSource> { { "MyConn", new MockSqlDataSource(SystemExecutionContext.Instance, "", "MSSQL") } };
             var suggestions = await ETLSuggestEngine.GetSuggestionsAsync("SEL", "SEL", connections);
             Assert.Contains(suggestions, s => s.Text == "SELECT");
 
@@ -124,7 +125,7 @@ namespace ETL_SQL.Tests
             var options = new Dictionary<string, string> { { "DELIMITER", "PIPE" } };
             // We can't easily mock the file system here for FlatFileDataSource without temp files, 
             // but we can mock the IDataSource return
-            var mock = new MockSqlDataSource("dummy", "CSV"); 
+            var mock = new MockSqlDataSource(SystemExecutionContext.Instance, "dummy", "CSV"); 
             // InternalMockSqlDataSource.GetColumns is currently hardcoded dummy
             await Task.CompletedTask;
         }
@@ -161,7 +162,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public async Task TestOracleSuggestions()
         {
-            var ds = new MockSqlDataSource("DataSource=:memory:", "ORACLE");
+            var ds = new MockSqlDataSource(SystemExecutionContext.Instance, "DataSource=:memory:", "ORACLE");
             var connections = new Dictionary<string, IDataSource> { { "OraConn", ds } };
             
             // 1. Test table suggestion
@@ -177,7 +178,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public async Task TestSqlServerSuggestions()
         {
-            var ds = new MockSqlDataSource("DataSource=:memory:", "MSSQL");
+            var ds = new MockSqlDataSource(SystemExecutionContext.Instance, "DataSource=:memory:", "MSSQL");
             var connections = new Dictionary<string, IDataSource> { { "SqlConn", ds } };
             
             // 1. Test table suggestion
@@ -193,7 +194,7 @@ namespace ETL_SQL.Tests
         [Fact]
         public async Task TestPostgresSuggestions()
         {
-            var ds = new MockSqlDataSource("DataSource=:memory:", "POSTGRES");
+            var ds = new MockSqlDataSource(SystemExecutionContext.Instance, "DataSource=:memory:", "POSTGRES");
             var connections = new Dictionary<string, IDataSource> { { "PgConn", ds } };
             
             // 1. Test table suggestion

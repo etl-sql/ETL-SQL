@@ -27,7 +27,8 @@ namespace ETL_SQL.Connectors.SqlServer
         /// <summary>ETL-SQL baseline keywords not supported in T-SQL pushdown queries.</summary>
         public static readonly HashSet<string> Exclusions = new(System.StringComparer.OrdinalIgnoreCase)
         {
-            "LIMIT"   // SQL Server uses TOP instead
+            "LIMIT",  // SQL Server uses TOP instead
+            "ROWNUM"  // Oracle-specific
         };
 
         /// <summary>Returns all T-SQL keywords (additions only — baseline is in LanguageMetadata).</summary>

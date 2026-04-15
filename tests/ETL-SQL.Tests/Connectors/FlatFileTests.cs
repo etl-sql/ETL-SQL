@@ -10,6 +10,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Connectors.FlatFile;
 using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests
 {
@@ -23,7 +24,7 @@ namespace ETL_SQL.Tests
 
             try
             {
-                var ds = new FlatFileDataSource(csvFile);
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Single(batches);
@@ -42,7 +43,7 @@ namespace ETL_SQL.Tests
             try
             {
                 var options = new Dictionary<string, string> { { "DELIMITER", "PIPE" } };
-                var ds = new FlatFileDataSource(csvFile, options);
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Equal("Alpha", batches[0].Rows[0]["name"]?.ToString());
@@ -58,7 +59,7 @@ namespace ETL_SQL.Tests
 
             try
             {
-                var ds = new FlatFileDataSource(csvFile);
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Equal("Alpha, One", batches[0].Rows[0]["name"]?.ToString());
@@ -75,7 +76,7 @@ namespace ETL_SQL.Tests
             try
             {
                 var options = new Dictionary<string, string> { { "START_AT", "2" } };
-                var ds = new FlatFileDataSource(csvFile, options);
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Single(batches[0].Rows);
@@ -93,7 +94,7 @@ namespace ETL_SQL.Tests
             try
             {
                 var options = new Dictionary<string, string> { { "COUNT_AT_END", "Total Rows: COUNT" } };
-                var ds = new FlatFileDataSource(csvFile, options);
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 int rowCount = batches.Sum(b => b.Rows.Count);
@@ -128,7 +129,7 @@ namespace ETL_SQL.Tests
                     { "DELIMITER", name == "PIPE" ? "COMMA" : "PIPE" },
                     { "ROW_DELIMITER", delim }
                 };
-                var ds = new FlatFileDataSource(csvFile, options);
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options);
                 var batches = await ds.ReadBatches().ToListAsync();
                 Assert.NotEmpty(batches);
                 Assert.Equal(2, batches[0].Rows.Count);
@@ -145,13 +146,13 @@ namespace ETL_SQL.Tests
             {
                 // Test Single Quote
                 await File.WriteAllTextAsync(csvFile, "id,name\n1,'Alpha, One'\n2,Beta");
-                var ds1 = new FlatFileDataSource(csvFile, new Dictionary<string, string> { { "TEXT_QUALIFIER", "SINGLEQUOTE" } });
+                var ds1 = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, new Dictionary<string, string> { { "TEXT_QUALIFIER", "SINGLEQUOTE" } });
                 var b1 = await ds1.ReadBatches().ToListAsync();
                 Assert.Equal("Alpha, One", b1[0].Rows[0]["name"]?.ToString());
 
                 // Test Double Quote (explicit)
                 await File.WriteAllTextAsync(csvFile, "id,name\n1,\"Alpha, One\"\n2,Beta");
-                var ds2 = new FlatFileDataSource(csvFile, new Dictionary<string, string> { { "TEXT_QUALIFIER", "DOUBLEQUOTE" } });
+                var ds2 = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, new Dictionary<string, string> { { "TEXT_QUALIFIER", "DOUBLEQUOTE" } });
                 var b2 = await ds2.ReadBatches().ToListAsync();
                 Assert.Equal("Alpha, One", b2[0].Rows[0]["name"]?.ToString());
             }
@@ -168,28 +169,28 @@ namespace ETL_SQL.Tests
                 // Test semicolon delimiter
                 await File.WriteAllTextAsync(csvFile, "id;name\n1;Alpha\n2;Beta");
                 var options1 = new Dictionary<string, string> { { "DELIMITER", "SEMICOLON" } };
-                var ds1 = new FlatFileDataSource(csvFile, options1);
+                var ds1 = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options1);
                 var b1 = await ds1.ReadBatches().ToListAsync();
                 Assert.Equal("Alpha", b1[0].Rows[0]["name"]?.ToString());
 
                 // Test colon delimiter
                 await File.WriteAllTextAsync(csvFile, "id:name\n1:Alpha\n2:Beta");
                 var options2 = new Dictionary<string, string> { { "DELIMITER", "COLON" } };
-                var ds2 = new FlatFileDataSource(csvFile, options2);
+                var ds2 = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options2);
                 var b2 = await ds2.ReadBatches().ToListAsync();
                 Assert.Equal("Alpha", b2[0].Rows[0]["name"]?.ToString());
 
                 // Test tilde delimiter
                 await File.WriteAllTextAsync(csvFile, "id~name\n1~Alpha\n2~Beta");
                 var options3 = new Dictionary<string, string> { { "DELIMITER", "TILDE" } };
-                var ds3 = new FlatFileDataSource(csvFile, options3);
+                var ds3 = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options3);
                 var b3 = await ds3.ReadBatches().ToListAsync();
                 Assert.Equal("Alpha", b3[0].Rows[0]["name"]?.ToString());
 
                 // Test tab delimiter
                 await File.WriteAllTextAsync(csvFile, "id\tname\n1\tAlpha\n2\tBeta");
                 var options4 = new Dictionary<string, string> { { "DELIMITER", "TAB" } };
-                var ds4 = new FlatFileDataSource(csvFile, options4);
+                var ds4 = new FlatFileDataSource(SystemExecutionContext.Instance, csvFile, options4);
                 var b4 = await ds4.ReadBatches().ToListAsync();
                 Assert.Equal("Alpha", b4[0].Rows[0]["name"]?.ToString());
             }

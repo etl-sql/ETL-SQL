@@ -9,6 +9,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Connectors.FlatFile;
 using Spectre.Console;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Tests
 {
@@ -23,7 +24,7 @@ namespace ETL_SQL.Tests
             try
             {
                 // In this implementation, ExcelConnector creates a FlatFileDataSource as a placeholder
-                var ds = new FlatFileDataSource(excelPlaceholder);
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, excelPlaceholder);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Single(batches);
@@ -51,7 +52,7 @@ namespace ETL_SQL.Tests
                 };
                 
                 // FlatFileDataSource handles START_AT, which simulates finding a sheet/header offset
-                var ds = new FlatFileDataSource(excelPlaceholder, options);
+                var ds = new FlatFileDataSource(SystemExecutionContext.Instance, excelPlaceholder, options);
                 var batches = await ds.ReadBatches().ToListAsync();
 
                 Assert.Equal("val1", batches[0].Rows[0]["col1"]?.ToString());

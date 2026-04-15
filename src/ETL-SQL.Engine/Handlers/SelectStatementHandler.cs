@@ -239,11 +239,7 @@ namespace ETL_SQL.Engine.Handlers
         /// <summary>Evaluates a query statement and returns a stream of row batches.</summary>
         public async IAsyncEnumerable<DataTable> EvaluateQuery(Statement query, IExecutionContext context)
         {
-            // Handle CTEs at the query level to support UNION/EXCEPT and subqueries
-            if (query.Ctes != null && query.Ctes.Count > 0)
-            {
-                await RegisterCtes(query.Ctes, context);
-            }
+            if (query.Ctes != null && query.Ctes.Count > 0) await RegisterCtes(query.Ctes, context);
 
             if (query is SelectStatement select)
             {
@@ -251,16 +247,17 @@ namespace ETL_SQL.Engine.Handlers
             }
             else if (query is SetOperationStatement setOp)
             {
-                await foreach (var batch in EvaluateSetOperation(setOp, context)) yield return batch;
+                var setEngine = new SetOperationEngine(context, _logger);
+                await foreach (var batch in setEngine.ApplySetOperation(setOp)) yield return batch;
             }
         }
 
         /// <summary>
-        /// Evaluates a SELECT statement, handling CTEs, column expansion, and choosing between streaming or multi-pass execution.
+        /// Evaluates a SELECT statement, choosing between streaming or heavy multi-pass execution.
         /// </summary>
         public async IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt, IExecutionContext context)
         {
-            // Handle pushdown if applicable (only if no INTO clause and ALL tables are on same pushable connection)
+            // 1. Handle Remote Pushdown (No aggregation/sorting allowed in streaming pushdown here)
             if (stmt.IntoTable == null)
             {
                 var fromConn = stmt.FromTable.ConnectionName ?? stmt.FromTable.TableName;
@@ -269,7 +266,7 @@ namespace ETL_SQL.Engine.Handlers
 
                 if (allSameConn && context.IsSqlPushdown(fromConn))
                 {
-                    _logger.Debug("[SELECT] Pushing down subquery to remote connection: {ConnName}", fromConn);
+                    _logger.Debug("[SELECT] Pushing down subquery to remote: {ConnName}", fromConn);
                     var conn = (IDatabaseSource)context.Connections[fromConn];
                     var sql = context.CompileQuery(stmt, conn.Dialect);
                     await foreach (var batch in conn.ExecuteRawSql(sql)) yield return batch;
@@ -277,390 +274,95 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
 
-            var joinEngine = new JoinEngine(context, _logger);
+            // 2. Prepare Engines
             var aggregateEngine = new AggregateEngine(context, _logger);
             var windowEngine = new WindowEngine(context, aggregateEngine, _logger);
             
-            // Handle CTEs are now in EvaluateQuery or Execute
-            
-            _logger.Debug("Evaluating SELECT FROM {TableName}", stmt.FromTable.TableName);
+            _logger.Debug("[SELECT] Evaluating local engine for {TableName}", stmt.FromTable.TableName);
             var batches = context.ResolveAndApplyOperators(stmt.FromTable);
 
-            // Expand * and alias.*
-            var finalColumns = new List<SelectColumn>();
-            List<string> sourceColumnNames = new();
-
-            // We need to get columns without consuming the enumerator if possible, 
-            // or buffer the first batch to avoid losing data.
+            // 3. Metadata Discovery & Column Expansion
             var enumerator = batches.GetAsyncEnumerator();
             DataTable? firstBatch = null;
-            try
-            {
-                if (await enumerator.MoveNextAsync())
-                {
-                    firstBatch = enumerator.Current;
-                    sourceColumnNames = firstBatch.ColumnNames;
-                }
-            }
-            catch
-            {
-                await enumerator.DisposeAsync();
-                throw;
-            }
+            try { if (await enumerator.MoveNextAsync()) firstBatch = enumerator.Current; }
+            catch { await enumerator.DisposeAsync(); throw; }
 
-            // Create a new enumerable that includes the first batch if we found one
-            // Helper to replay the first buffered batch followed by the remaining stream.
-            async IAsyncEnumerable<DataTable> ReplayBatches(DataTable? first, IAsyncEnumerator<DataTable> e)
-            {
-                try
-                {
-                    if (first != null) yield return first;
-                    while (await e.MoveNextAsync()) yield return e.Current;
-                }
-                finally
-                {
-                    await e.DisposeAsync();
-                }
-            }
-            
             var effectiveBatches = ReplayBatches(firstBatch, enumerator);
+            var (finalColumns, colNames) = await ExpandColumns(stmt, firstBatch?.ColumnNames ?? new List<string>());
 
+            // 4. Strategy Selection
+            bool hasAgg = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || stmt.GroupBy != null;
+            bool hasWindow = stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression));
+            bool isComplex = hasAgg || hasWindow || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null || stmt.Offset != null;
+
+            if (!isComplex)
+            {
+                _logger.Debug("[SELECT] Execution Strategy: Fast Streaming");
+                await foreach (var batch in ExecuteStreamingSelect(stmt, effectiveBatches, finalColumns, colNames, context)) yield return batch;
+            }
+            else
+            {
+                _logger.Debug("[SELECT] Execution Strategy: Multi-Pass Pipeline");
+                var executionEngine = new SelectExecutionEngine(context, _logger);
+                await foreach (var batch in executionEngine.ExecuteHeavyPipeline(stmt, effectiveBatches, finalColumns, colNames)) yield return batch;
+            }
+        }
+
+        private async Task<(List<SelectColumn> Columns, List<string> Names)> ExpandColumns(SelectStatement stmt, List<string> sourceColumns)
+        {
+            var final = new List<SelectColumn>();
             foreach (var col in stmt.Columns)
             {
                 if (col.Expression is IdentifierExpression id && (id.Name == "*" || id.Name.EndsWith(".*")))
                 {
-                    if (sourceColumnNames.Count > 0)
-                    {
-                        foreach (var sc in sourceColumnNames)
-                        {
-                            finalColumns.Add(new SelectColumn(new IdentifierExpression(sc), sc));
-                        }
-                    }
-                    else finalColumns.Add(col);
+                    foreach (var sc in sourceColumns) final.Add(new SelectColumn(new IdentifierExpression(sc), sc));
                 }
-                else finalColumns.Add(col);
+                else final.Add(col);
             }
-
-            var colNames = finalColumns.Select(c => c.Alias ?? (c.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"Expr{finalColumns.IndexOf(c)}")).ToList();
-
-            string fromName = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
-
-            // OPTIMIZATION: Streaming for queries without GROUP BY or WINDOW functions
-            bool hasAggInColumns = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression));
-            bool hasWindowInColumns = stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression));
-            bool hasOrderBy = stmt.OrderBy != null && stmt.OrderBy.Count > 0;
-            bool hasOffset = stmt.Offset != null;
-
-            bool canStream = (stmt.GroupBy == null) && 
-                             !hasWindowInColumns &&
-                             !hasAggInColumns &&
-                             !hasOrderBy &&
-                             !hasOffset;
-
-            if (canStream)
-            {
-                _logger.Debug("Execution Strategy: Streaming (supports Joins)");
-                
-                async IAsyncEnumerable<Row> EnumerateRows(IAsyncEnumerable<DataTable> dataBatches, string alias)
-                {
-                    await foreach (var batch in dataBatches)
-                    {
-                        foreach (var row in batch.Rows)
-                        {
-                            if (!string.IsNullOrEmpty(alias))
-                            {
-                                var evalRow = row.Clone();
-                                var cols = batch.ColumnNames;
-                                for(int i=0; i<cols.Count; i++) evalRow[$"{alias}.{cols[i]}"] = row[i];
-                                yield return evalRow;
-                            }
-                            else yield return row;
-                        }
-                    }
-                }
-
-                var rowStream = EnumerateRows(effectiveBatches, fromName);
-
-                if (stmt.Joins != null && stmt.Joins.Count > 0)
-                {
-                    rowStream = joinEngine.ApplyJoinsStreaming(rowStream, stmt.Joins, stmt);
-                }
-
-                var streamResultBatch = new DataTable();
-                streamResultBatch.SetColumns(colNames);
-
-                await foreach (var evalRow in rowStream)
-                {
-                    if (stmt.WhereClause != null && !await context.EvaluateCondition(stmt.WhereClause, evalRow)) continue;
-                    
-                    var resRow = streamResultBatch.NewRow();
-                    for (int i = 0; i < finalColumns.Count; i++)
-                        resRow[i] = await context.EvaluateValue(finalColumns[i].Expression, evalRow);
-                    
-                    await streamResultBatch.AddRowAsync(resRow);
-                    if (streamResultBatch.Rows.Count >= context.BatchSize)
-                    {
-                        yield return streamResultBatch;
-                        streamResultBatch = new DataTable();
-                        streamResultBatch.SetColumns(colNames);
-                    }
-                }
-                
-                if (streamResultBatch.Rows.Count > 0) yield return streamResultBatch;
-                yield break;
-            }
-
-            // FALLBACK: Heavy execution for complex queries (JOINS, AGGREGATES, WINDOW)
-            _logger.Debug("Execution Strategy: Multi-Pass Engine Pipeline");
-            
-            // To support billion-row scaling, we MUST NOT buffer the primary source here.
-            // We'll preserve the stream and pass it to the engines.
-            var inputStream = effectiveBatches.SelectMany(b => b.Rows.Select(r => {
-                var cloned = r.Clone();
-                foreach (var kv in r.Columns.ToList()) cloned[$"{fromName}.{kv.Key}"] = kv.Value;
-                return cloned;
-            }).ToAsyncEnumerable());
-
-            List<Row> allBufferedRows;
-            bool whereApplied = false;
-
-            // For GROUP BY (or scalar aggregates) with no joins and no GROUPING SETS, stream
-            // the source directly into ExternalAggregateEngine rather than buffering the full
-            // source first. This prevents OOM on large file sources: a 50M-row CSV GROUP BY
-            // no longer requires all rows in a List<Row> before aggregation begins.
-            // Excluded: GROUPING SETS / ROLLUP / CUBE (multi-dimensional — ExternalAgg does
-            // not support them), and window functions (require a full pass first).
-            bool streamAggregate = (stmt.Joins == null || stmt.Joins.Count == 0)
-                && !hasWindowInColumns
-                && stmt.GroupingSet == null
-                && (stmt.GroupBy != null || hasAggInColumns);
-
-            if (stmt.Joins != null && stmt.Joins.Count > 0)
-            {
-                allBufferedRows = new List<Row>();
-                var inputEnumerator = inputStream.GetAsyncEnumerator();
-                try
-                {
-                    int count = 0;
-                    while (await inputEnumerator.MoveNextAsync())
-                    {
-                        allBufferedRows.Add(inputEnumerator.Current);
-                        count++;
-                        if (count > 100000) break;
-                    }
-
-                    if (count > 100000)
-                    {
-                        _logger.WriteLine("[yellow]HYPER-SCALE: Primary source exceeded memory limit. Switching to streaming external join.[/]");
-
-                        var join = stmt.Joins[0];
-                        var leftAlias = stmt.FromTable.Alias ?? fromName;
-                        var rightAlias = join.Table.Alias ?? join.Table.TableName;
-                        var hashKeysLeft = new List<string>();
-                        var hashKeysRight = new List<string>();
-                        
-                        joinEngine.TryExtractEqualityKeys(join.Condition, leftAlias, rightAlias, hashKeysLeft, hashKeysRight);
-
-                        var externalJoin = new ExternalJoinEngine(context, _logger);
-                        var remainingStream = ContinueStream(inputEnumerator); 
-                        var combinedLeftStream = PrependRows(allBufferedRows, remainingStream);
-                        var rightStream = joinEngine.GetJoinRowsAsyncEnumerable(join);
-
-                        allBufferedRows = await externalJoin.ApplyHashJoinExternal(combinedLeftStream, rightStream, join, hashKeysLeft, hashKeysRight);
-                    }
-                    else
-                    {
-                        allBufferedRows = await joinEngine.ApplyJoins(allBufferedRows, stmt.Joins, stmt);
-                    }
-                }
-                finally { await inputEnumerator.DisposeAsync(); }
-            }
-            else if (streamAggregate)
-            {
-                // Stream source rows directly into the aggregate engine — no full-source buffer.
-                // Apply WHERE inline so filtering also avoids any accumulation.
-                IAsyncEnumerable<Row> aggInput = inputStream;
-                if (stmt.WhereClause != null)
-                {
-                    aggInput = WhereStream(inputStream, stmt.WhereClause, context);
-                    whereApplied = true;
-                }
-                _logger.Debug("Execution Strategy (multi-pass): streaming aggregate — source not materialized");
-                var externalAgg = new ExternalAggregateEngine(context, _logger);
-                allBufferedRows = await externalAgg.ApplyAggregationExternal(aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause);
-            }
-            else
-            {
-                allBufferedRows = new List<Row>();
-                await foreach (var r in inputStream) allBufferedRows.Add(r);
-            }
-
-            if (!whereApplied && stmt.WhereClause != null)
-            {
-                var filtered = new List<Row>();
-                foreach (var r in allBufferedRows) if (await context.EvaluateCondition(stmt.WhereClause, r)) filtered.Add(r);
-                allBufferedRows = filtered;
-            }
-
-            // 1. GROUP BY / HAVING  (includes GROUPING SETS / ROLLUP / CUBE)
-            // Skipped when streamAggregate=true — ExternalAggregateEngine already ran above.
-            if (!streamAggregate && (stmt.GroupBy != null || stmt.GroupingSet != null || hasAggInColumns))
-            {
-                if (allBufferedRows.Count > 100000 && stmt.GroupingSet == null)
-                {
-                    _logger.WriteLine($"[yellow]HYPER-SCALE: Aggregate input exceeded memory limit ({allBufferedRows.Count} rows). Switching to external aggregation.[/]");
-                    var externalAgg = new ExternalAggregateEngine(context, _logger);
-                    allBufferedRows = await externalAgg.ApplyAggregationExternal(allBufferedRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause);
-                }
-                else
-                {
-                    allBufferedRows = await aggregateEngine.ApplyAggregation(allBufferedRows, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
-                }
-                _logger.Debug("Aggregation applied: {GroupCount} groups remaining", allBufferedRows.Count);
-            }
-
-            // 2. WINDOW FUNCTIONS
-            if (hasWindowInColumns)
-            {
-                allBufferedRows = await windowEngine.ApplyWindowFunctions(allBufferedRows, stmt);
-                _logger.Debug("Window functions applied");
-            }
-
-            List<(Row Row, object?[] Keys)>? rowSortKeys = null;
-            if (stmt.OrderBy != null && stmt.OrderBy.Count > 0)
-            {
-                if (allBufferedRows.Count > 100_000)
-                {
-                    var externalSort = new ExternalSortEngine(context, _logger);
-                    allBufferedRows = await externalSort.SortExternal(allBufferedRows, stmt.OrderBy);
-                }
-                else
-                {
-                    rowSortKeys = new List<(Row Row, object?[] Keys)>(allBufferedRows.Count);
-                    foreach (var row in allBufferedRows)
-                    {
-                        var keys = new object?[stmt.OrderBy.Count];
-                        for (int i = 0; i < stmt.OrderBy.Count; i++)
-                        {
-                            var expr = stmt.OrderBy[i].Expression;
-                            if (expr is LiteralExpression lit && lit.Type == TokenType.NUMBER && decimal.TryParse(lit.Value?.ToString(), out var num) && num > 0 && num <= colNames.Count)
-                            {
-                                string colName = colNames[(int)num - 1];
-                                keys[i] = row[colName];
-                            }
-                            else
-                            {
-                                keys[i] = await context.EvaluateValue(expr, row);
-                            }
-                        }
-                        rowSortKeys.Add((row, keys));
-                    }
-
-                    context.CompareConstants(null, null); // Ensure sort comparison helper is ready if needed
-                    rowSortKeys.Sort((a, b) =>
-                    {
-                        for (int i = 0; i < stmt.OrderBy.Count; i++)
-                        {
-                            var res = context.CompareConstants(a.Keys[i], b.Keys[i]);
-                            if (res != 0) return stmt.OrderBy[i].Descending ? -res : res;
-                        }
-                        return 0;
-                    });
-
-                    allBufferedRows = rowSortKeys.Select(x => x.Row).ToList();
-                    
-                    // We might need rowSortKeys later for WITH TIES
-                    if (stmt.WithTies && allBufferedRows.Count > 0)
-                    {
-                         // We'll keep rowSortKeys until after the limit application
-                    }
-                    else
-                    {
-                        rowSortKeys = null; // Save memory
-                    }
-                }
-            }
-
-            // 4. OFFSET / LIMIT / TOP
-            if (stmt.Offset != null)
-            {
-                int offset = Convert.ToInt32(await context.EvaluateValue(stmt.Offset, new Row()));
-                if (offset > 0) allBufferedRows = allBufferedRows.Skip(offset).ToList();
-            }
-
-            int finalTake = -1;
-            if (stmt.TopCount != null)
-            {
-                var topVal = await context.EvaluateValue(stmt.TopCount, new Row());
-                finalTake = Convert.ToInt32(topVal);
-                if (stmt.IsTopPercent)
-                {
-                    finalTake = (int)Math.Ceiling(allBufferedRows.Count * finalTake / 100.0);
-                }
-                
-                if (stmt.WithTies)
-                {
-                    if (stmt.OrderBy == null || !stmt.OrderBy.Any())
-                        throw new SyntaxException("TOP WITH TIES requires an ORDER BY clause", stmt.Line, stmt.Column);
-                    
-                    if (finalTake > 0 && finalTake < allBufferedRows.Count && rowSortKeys != null)
-                    {
-                        var lastRowKeys = rowSortKeys[finalTake - 1].Keys;
-                        while (finalTake < rowSortKeys.Count)
-                        {
-                            var nextRowKeys = rowSortKeys[finalTake].Keys;
-                            bool match = true;
-                            for (int i = 0; i < stmt.OrderBy.Count; i++)
-                            {
-                                if (context.CompareConstants(lastRowKeys[i], nextRowKeys[i]) != 0)
-                                {
-                                    match = false;
-                                    break;
-                                }
-                            }
-                            if (match) finalTake++;
-                            else break;
-                        }
-                    }
-                }
-            }
-            else if (stmt.LimitCount != null)
-            {
-                finalTake = Convert.ToInt32(await context.EvaluateValue(stmt.LimitCount, new Row()));
-            }
-
-            if (finalTake >= 0)
-            {
-                allBufferedRows = allBufferedRows.Take(finalTake).ToList();
-            }
-
-            // Final buffered projection
-            var currentResultBatch = new DataTable();
-            currentResultBatch.SetColumns(colNames);
-            foreach (var row in allBufferedRows)
-            {
-                var resRow = currentResultBatch.NewRow();
-                for (int i = 0; i < finalColumns.Count; i++)
-                    resRow[i] = await context.EvaluateValue(finalColumns[i].Expression, row);
-                await currentResultBatch.AddRowAsync(resRow);
-                if (currentResultBatch.Rows.Count >= context.BatchSize)
-                {
-                    yield return currentResultBatch;
-                    currentResultBatch = new DataTable();
-                    currentResultBatch.SetColumns(colNames);
-                }
-            }
-            if (currentResultBatch.Rows.Count > 0) yield return currentResultBatch;
+            var names = final.Select(c => c.Alias ?? (c.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"Expr{final.IndexOf(c)}")).ToList();
+            return (final, names);
         }
 
-        /// <summary>Evaluates a set operation (UNION, EXCEPT, INTERSECT).</summary>
-        public async IAsyncEnumerable<DataTable> EvaluateSetOperation(SetOperationStatement setOp, IExecutionContext context)
+        private async IAsyncEnumerable<DataTable> ExecuteStreamingSelect(
+            SelectStatement stmt, 
+            IAsyncEnumerable<DataTable> batches, 
+            List<SelectColumn> finalColumns, 
+            List<string> colNames, 
+            IExecutionContext context)
         {
-            var setOpEngine = new SetOperationEngine(context, _logger);
-            await foreach (var batch in setOpEngine.ApplySetOperation(setOp))
+            var resultBatch = new DataTable();
+            resultBatch.SetColumns(colNames);
+
+            await foreach (var batch in batches)
             {
-                yield return batch;
+                foreach (var row in batch.Rows)
+                {
+                    if (stmt.WhereClause != null && !await context.EvaluateCondition(stmt.WhereClause, row)) continue;
+                    
+                    var resRow = resultBatch.NewRow();
+                    for (int i = 0; i < finalColumns.Count; i++)
+                        resRow[i] = await context.EvaluateValue(finalColumns[i].Expression, row);
+                    
+                    await resultBatch.AddRowAsync(resRow);
+                    if (resultBatch.Rows.Count >= context.BatchSize)
+                    {
+                        yield return resultBatch;
+                        resultBatch = new DataTable();
+                        resultBatch.SetColumns(colNames);
+                    }
+                }
             }
+            if (resultBatch.Rows.Count > 0) yield return resultBatch;
+        }
+
+        private async IAsyncEnumerable<DataTable> ReplayBatches(DataTable? first, IAsyncEnumerator<DataTable> e)
+        {
+            try
+            {
+                if (first != null) yield return first;
+                while (await e.MoveNextAsync()) yield return e.Current;
+            }
+            finally { await e.DisposeAsync(); }
         }
 
         private async Task RegisterCtes(List<CteDefinition> ctes, IExecutionContext context)
@@ -772,39 +474,6 @@ namespace ETL_SQL.Engine.Handlers
             }
         }
 
-        /// <summary>
-        /// Yields rows from <paramref name="source"/> that satisfy <paramref name="whereClause"/>
-        /// without buffering. Used by the streaming aggregate path so WHERE filtering does not
-        /// force full source materialization.
-        /// </summary>
-        private static async IAsyncEnumerable<Row> WhereStream(
-            IAsyncEnumerable<Row> source, Expression whereClause, IExecutionContext context)
-        {
-            await foreach (var r in source)
-                if (await context.EvaluateCondition(whereClause, r))
-                    yield return r;
-        }
-
-        /// <summary>
-        /// Concatenates a list of already-read rows with the remainder of an async stream.
-        /// Essential for hyper-scale fallback where we've already peeked/buffered X rows.
-        /// </summary>
-        private static async IAsyncEnumerable<Row> PrependRows(IEnumerable<Row> buffered, IAsyncEnumerable<Row> remaining)
-        {
-            foreach (var r in buffered) yield return r;
-            await foreach (var r in remaining) yield return r;
-        }
-
-        /// <summary>
-        /// Wraps an existing, already-advanced enumerator into an async stream.
-        /// Essential for pivoting mid-stream without re-reading from the beginning.
-        /// </summary>
-        private static async IAsyncEnumerable<Row> ContinueStream(IAsyncEnumerator<Row> enumerator)
-        {
-            // Note: We do NOT dispose the enumerator here; the caller's try/finally block
-            // handles the shared enumerator resource.
-            while (await enumerator.MoveNextAsync()) yield return enumerator.Current;
-        }
 
         private bool IsRecursive(CteDefinition cte, out Statement? anchor, out Statement? recursive, out bool isDistinct)
         {

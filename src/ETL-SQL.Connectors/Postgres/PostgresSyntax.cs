@@ -31,7 +31,9 @@ namespace ETL_SQL.Connectors.Postgres
         {
             "TOP",     // Postgres uses LIMIT instead
             "ISNULL",  // Postgres uses COALESCE or IS NULL
-            "CONVERT"  // Postgres uses CAST
+            "CONVERT", // Postgres uses CAST
+            "ROWNUM",  // Oracle-specific
+            "PERCENT"  // T-SQL TOP PERCENT
         };
 
         /// <summary>Returns PostgreSQL dialect keywords (additions only — baseline is in LanguageMetadata).</summary>

@@ -119,6 +119,7 @@ namespace ETL_SQL.Core.Formatting
             // ── Profiling / what-if ──
             SetProfilingStatement          s => $"SET PROFILING {(s.Enabled ? "ON" : "OFF")}",
             SetWhatIfStatement             s => $"SET WHAT_IF {(s.Enabled ? "ON" : "OFF")}",
+            SetThresholdStatement          s => FormatSetThreshold(s),
             ShowProfileStatement           s => "SHOW PROFILE" + (s.IntoTable != null ? $" INTO {s.IntoTable}" : ""),
             ShowVersionStatement           s => "SHOW VERSION" + (s.IntoTable != null ? $" INTO {s.IntoTable};" : ";"),
 
@@ -736,6 +737,18 @@ namespace ETL_SQL.Core.Formatting
             
             var result = sb.ToString().TrimEnd().TrimEnd(',');
             return result + "\n);";
+        }
+
+        private static string FormatSetThreshold(SetThresholdStatement s)
+        {
+            string name = s.Type switch
+            {
+                ThresholdType.JoinSpill => "JOIN_SPILL_THRESHOLD",
+                ThresholdType.ExternalHashPartitions => "EXTERNAL_HASH_PARTITIONS",
+                ThresholdType.ExternalSortChunkSize => "EXTERNAL_SORT_CHUNK_SIZE",
+                _ => "UNKNOWN"
+            };
+            return $"SET {name} = {s.Value.ToSql()};";
         }
     }
 }

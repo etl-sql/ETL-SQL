@@ -19,6 +19,7 @@ namespace ETL_SQL.Connectors.Postgres
         private readonly string? _tableName;
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
+        private readonly IExecutionContext? _context;
         private NpgsqlConnection? _transactionalConnection;
         private NpgsqlTransaction? _activeTransaction;
 
@@ -29,12 +30,17 @@ namespace ETL_SQL.Connectors.Postgres
         /// <param name="tableName">The target table name (optional for raw SQL).</param>
         /// <param name="options">The options used to create this data source.</param>
         /// <param name="logger">The logger instance.</param>
-        public PostgresDataSource(string connectionString, string? tableName = null, Dictionary<string, string>? options = null, ILogger? logger = null)
+        public PostgresDataSource(IExecutionContext context, string connectionString, string? tableName = null, Dictionary<string, string>? options = null)
         {
+            _context = context;
+            _logger = context.Logger;
             _connectionString = connectionString;
             _tableName = tableName;
             _options = options;
-            _logger = logger ?? NullLogger.Instance;
+
+            // Security Hardening: egress control
+            var host = PostgresConnector.GetHostStatic(connectionString, options);
+            if (host != null) context.SecurityService.ValidateHost(host);
         }
 
         public string ConnectionString => _connectionString;
@@ -44,7 +50,7 @@ namespace ETL_SQL.Connectors.Postgres
         public Dictionary<string, string>? Options => _options;
         public string ConnectorType => "POSTGRES";
 
-        public IDataSource WithTable(string tableName) => new PostgresDataSource(_connectionString, tableName, _options, _logger);
+        public IDataSource WithTable(string tableName) => new PostgresDataSource(_context!, _connectionString, tableName, _options);
 
         public async Task<string> GetVersionAsync()
         {

@@ -61,21 +61,6 @@ namespace ETL_SQL.Tests
             Assert.Contains("BEGIN PRIVATE KEY", privateKey);
         }
 
-        [Fact(Skip = "Ed25519 support is currently disabled due to missing SDK types in this environment.")]
-        public async Task TestGenerateEd25519Key()
-        {
-            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
-            string scriptDir = Path.Combine(_testDir, "ed25519");
-            string script = $"CREATE SSH_KEY_PAIR('{scriptDir.Replace("\\", "\\\\")}', 0, 'ED25519');";
-            
-            await evaluator.Evaluate(Parse(script));
-
-            Assert.True(File.Exists(Path.Combine(scriptDir, "id_ed25519")), "Private key not found");
-            Assert.True(File.Exists(Path.Combine(scriptDir, "id_ed25519.pub")), "Public key not found");
-            
-            string privateKey = File.ReadAllText(Path.Combine(scriptDir, "id_ed25519"));
-            Assert.Contains("BEGIN PRIVATE KEY", privateKey);
-        }
 
         [Fact]
         public async Task TestGenerateEncryptedRsaKey()

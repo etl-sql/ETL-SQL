@@ -16,20 +16,20 @@ namespace ETL_SQL.Connectors.Odbc
         public string Name => "ODBC";
         public IReadOnlyList<string> Aliases => new[] { "ODBC_BRIDGE" };
 
-        public Task<string> GetVersionAsync(string connectionString, ILogger? logger = null)
+        public Task<string> GetVersionAsync(IExecutionContext context, string connectionString)
         {
-            var ds = new OdbcDataSource(connectionString, null, null, logger);
+            var ds = new OdbcDataSource(context, connectionString, null, null);
             return ds.GetVersionAsync();
         }
 
         public HashSet<string> GetSupportedFunctions() => OdbcSyntax.GetSupportedFunctions();
         public HashSet<string> GetSupportedKeywords() => OdbcSyntax.GetSupportedKeywords();
 
-        public IDataSource CreateDataSource(string connectionString, Dictionary<string, string>? options = null, ILogger? logger = null)
+        public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null)
         {
             string? table = null;
             options?.TryGetValue("TABLE", out table);
-            return new OdbcDataSource(connectionString, table, options, logger);
+            return new OdbcDataSource(context, connectionString, table, options);
         }
 
         public string BuildConnectionString(Dictionary<string, string> properties)
@@ -52,26 +52,16 @@ namespace ETL_SQL.Connectors.Odbc
 
         public Dictionary<string, string[]> GetOptionValues() => new();
 
-        public async Task<IEnumerable<string>> GetTablesAsync(string connectionString, ILogger? logger = null)
-        {
-            var ds = new OdbcDataSource(connectionString, null, null, logger);
-            return await ds.GetTablesAsync();
-        }
+        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetTablesAsync instead.");
+        public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => throw new NotSupportedException("Use IDataSource.GetViewsAsync instead.");
+        public Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) => throw new NotSupportedException("Use IDataSource.GetColumnsAsync instead.");
 
-        public async Task<IEnumerable<string>> GetViewsAsync(string connectionString, ILogger? logger = null)
+        public async Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString)
         {
-            var ds = new OdbcDataSource(connectionString, null, null, logger);
-            return await ds.GetViewsAsync();
-        }
+            // Security constraint: validate host before connecting
+            var host = GetHost(connectionString);
+            if (host != null) context.SecurityService.ValidateHost(host);
 
-        public async Task<IEnumerable<string>> GetColumnsAsync(string connectionString, string tableName, ILogger? logger = null)
-        {
-            var ds = new OdbcDataSource(connectionString, tableName, null, logger);
-            return await ds.GetColumnsAsync();
-        }
-
-        public async Task<IEnumerable<string>> GetProceduresAsync(string connectionString, ILogger? logger = null)
-        {
             var procs = new List<string>();
             try {
                 using var conn = new OdbcConnection(connectionString);
@@ -110,7 +100,9 @@ Supported Options:
   TABLE            - Default table for reading.";
         }
 
-        public string? GetHost(string connectionString, Dictionary<string, string>? options = null)
+        public string? GetHost(string connectionString, Dictionary<string, string>? options = null) => GetHostStatic(connectionString, options);
+
+        public static string? GetHostStatic(string connectionString, Dictionary<string, string>? options = null)
         {
             if (options != null && options.TryGetValue("SERVER", out var server)) return server;
             

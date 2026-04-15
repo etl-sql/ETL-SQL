@@ -56,29 +56,40 @@ namespace ETL_SQL.Common
             if (string.IsNullOrEmpty(cipherText)) return cipherText;
             if (!cipherText.StartsWith("ENC:")) return cipherText;
 
-            var hashAlgo = algo ?? HashAlgorithmName.SHA256;
-            byte[] fullBytes = Convert.FromBase64String(cipherText.Substring(4));
-            
-            if (fullBytes.Length < SaltSize + IvSize)
-                throw new ExecutionException("Invalid encrypted connection string format.");
+            try
+            {
+                var hashAlgo = algo ?? HashAlgorithmName.SHA256;
+                byte[] fullBytes = Convert.FromBase64String(cipherText.Substring(4));
 
-            byte[] salt = new byte[SaltSize];
-            byte[] iv = new byte[IvSize];
-            byte[] encrypted = new byte[fullBytes.Length - SaltSize - IvSize];
+                if (fullBytes.Length < SaltSize + IvSize)
+                    throw new ExecutionException("Invalid encrypted connection string format.");
 
-            Buffer.BlockCopy(fullBytes, 0, salt, 0, SaltSize);
-            Buffer.BlockCopy(fullBytes, SaltSize, iv, 0, IvSize);
-            Buffer.BlockCopy(fullBytes, SaltSize + IvSize, encrypted, 0, encrypted.Length);
+                byte[] salt = new byte[SaltSize];
+                byte[] iv = new byte[IvSize];
+                byte[] encrypted = new byte[fullBytes.Length - SaltSize - IvSize];
 
-            byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
+                Buffer.BlockCopy(fullBytes, 0, salt, 0, SaltSize);
+                Buffer.BlockCopy(fullBytes, SaltSize, iv, 0, IvSize);
+                Buffer.BlockCopy(fullBytes, SaltSize + IvSize, encrypted, 0, encrypted.Length);
 
-            using var aes = Aes.Create();
-            using var decryptor = aes.CreateDecryptor(key, iv);
-            using var ms = new MemoryStream(encrypted);
-            using var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read);
-            using var sr = new StreamReader(cs, Encoding.UTF8);
-            
-            return sr.ReadToEnd();
+                byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
+
+                using var aes = Aes.Create();
+                using var decryptor = aes.CreateDecryptor(key, iv);
+                using var ms = new MemoryStream(encrypted);
+                using var cs = new CryptoStream(ms, decryptor, CryptoStreamMode.Read);
+                using var sr = new StreamReader(cs, Encoding.UTF8);
+
+                return sr.ReadToEnd();
+            }
+            catch (CryptographicException)
+            {
+                throw new ExecutionException("Failed to decrypt: Invalid password or corrupted data.");
+            }
+            catch (Exception ex) when (!(ex is ExecutionException))
+            {
+                throw new ExecutionException($"Decryption error: {ex.Message}");
+            }
         }
         /// <summary>
         /// Encrypts a file on disk using a password.

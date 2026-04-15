@@ -14,7 +14,7 @@ namespace ETL_SQL.Core.Linting.Rules
         public string Name => "CredentialLeak";
         public string Description => "Detects potential credential leaks in output statements (PRINT, EMAIL, RAISERROR).";
 
-        private static readonly string[] SensitiveKeywords = { "password", "secret", "token", "key", "pwd", "apikey", "connectionstring", "conn", "connection", "accesskey" };
+        private static readonly string[] SensitiveKeywords = { "password", "secret", "token", "key", "pwd", "apikey", "connectionstring", "conn", "connection", "accesskey", "bearer", "auth", "cert", "privatekey", "passphrase", "pat", "credential", "auth_type", "accountkey", "sshkey", "fingerprint", "access_token", "refresh_token", "client_secret", "client_id", "credentials", "authorization", "proxy_info", "keyfile", "hostkey" };
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {

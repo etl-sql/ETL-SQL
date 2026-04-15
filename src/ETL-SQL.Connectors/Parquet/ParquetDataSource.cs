@@ -24,6 +24,7 @@ namespace ETL_SQL.Connectors.Parquet
         private readonly EncryptionOptions _encryption;
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
+        private readonly IExecutionContext? _context; 
 
         public string Path => _filePath;
         public Dictionary<string, string>? Options => _options;
@@ -31,11 +32,17 @@ namespace ETL_SQL.Connectors.Parquet
         public IDataSource WithTable(string tableName) => this;
         public string ConnectorType => "PARQUET";
 
-        public ParquetDataSource(string filePath, Dictionary<string, string>? options = null, ILogger? logger = null)
+        public ParquetDataSource(IExecutionContext context, string filePath, Dictionary<string, string>? options = null)
         {
-            _filePath = filePath;
+            _context = context;
+            _logger = context.Logger;
+            _filePath = context.ResolvePath(filePath.Trim('\'', '\"', ' ', '\t', '\r', '\n'));
+            
+            // Security Hardening: Defense in depth
+            context.SecurityService.ValidatePath(_filePath);
+            context.SecurityService.ValidateFileType(_filePath, context.AllowUnknownFileTypes);
+
             _options = options;
-            _logger = logger ?? NullLogger.Instance;
             _compression = options != null && options.TryGetValue("COMPRESSION", out var c) ? c.ToUpperInvariant() : "SNAPPY";
             _encryption = new EncryptionOptions(options);
         }
@@ -189,6 +196,15 @@ namespace ETL_SQL.Connectors.Parquet
             {
                 TempFileHelper.SafeDelete(tempFile, _logger);
             }
+        }
+
+        public async Task TruncateAsync()
+        {
+            if (System.IO.File.Exists(_filePath))
+            {
+                System.IO.File.Delete(_filePath);
+            }
+            await Task.CompletedTask;
         }
 
         private object? CastValue(object? val, DataField field)
