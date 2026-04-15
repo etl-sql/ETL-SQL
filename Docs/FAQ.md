@@ -44,7 +44,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > - **SQL style** (preferred): `SEND EMAIL TO '...' FROM '...' SUBJECT '...' BODY '...' AT conn;`
 > - **Function style**: `SEND_EMAIL(conn, 'to', 'from', 'subject', 'body');`
 >
-> SQL style is preferred in new scripts — it's more readable and closer to natural language. Function style was the original syntax and is kept for backward compatibility.
+> SQL style is preferred in new scripts — it's more readable and closer to natural language.  Function style is available to those who feel more comfortable with this style.
 
 **Q: Can I use `WAITFOR (SELECT ...)` to poll until a condition is true?**
 > No — that form does **not** exist in ETL-SQL. The parser only accepts `WAITFOR DELAY 'hh:mm:ss'` (fixed pause) and `WAITFOR TIME 'hh:mm:ss'` (wait until wall-clock time).
@@ -74,18 +74,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > ```
 
 **Q: My script uses `PIVOT`. Will it work?**
-> Not yet — `PIVOT` / `UNPIVOT` are on the roadmap (ENG-3) but are not currently implemented in the engine. Remove `PIVOT` from scripts and rewrite as a manual `CASE`-based cross-tab for now:
-> ```sql
-> -- Instead of PIVOT:
-> SELECT
->     Category,
->     SUM(CASE WHEN Quarter = 'Q1' THEN Amount ELSE 0 END) AS Q1,
->     SUM(CASE WHEN Quarter = 'Q2' THEN Amount ELSE 0 END) AS Q2,
->     SUM(CASE WHEN Quarter = 'Q3' THEN Amount ELSE 0 END) AS Q3,
->     SUM(CASE WHEN Quarter = 'Q4' THEN Amount ELSE 0 END) AS Q4
-> FROM #MonthlySales
-> GROUP BY Category;
-> ```
+> Yes, PIVOT/UNPIVOT has been implemented in the engine.
 
 ---
 

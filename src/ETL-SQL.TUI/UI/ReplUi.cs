@@ -205,10 +205,14 @@ namespace ETL_SQL.TUI.UI
                         memoryMb = memUsageMb,
                         rowsProcessed = _evaluator.RowsProcessed,
                         rowsPerSecond = rowsPerSec,
-                        statements = _evaluator.ProfileMetrics.Select(m => new {
-                            type = m.Sql.Split(' ', 2)[0].ToUpper(), // Use first word of SQL as type
-                            count = 1,
-                            totalMs = m.DurationMs
+                        statements = _evaluator.ProfileMetrics.Select(m => {
+                            string sqlClean = m.Sql?.Trim() ?? "";
+                            string type = sqlClean.Length > 0 ? sqlClean.Split(' ', 2)[0].ToUpper() : "UNKNOWN";
+                            return new {
+                                type = type,
+                                count = 1,
+                                totalMs = m.DurationMs
+                            };
                         }).ToList()
                     }
                 });

@@ -25,6 +25,7 @@ namespace ETL_SQL.TUI.UI
         public bool ResultsFocus { get; set; } = false;
         public int ResultScrollRow { get; set; } = 0;
         public int ResultScrollCol { get; set; } = 0;
+        public int MessageScrollRow { get; set; } = 0;
         public int ActiveResultSetIndex { get; set; } = 0;
         public bool IsBottomMaximized { get; set; } = false;
         private bool _forceFullRepaintPending = false;
@@ -107,6 +108,9 @@ namespace ETL_SQL.TUI.UI
             int maxScroll = Math.Max(0, totalItems - (resultAreaHeight - 4));
             ResultScrollRow = Math.Clamp(ResultScrollRow, 0, maxScroll);
 
+            int maxMessageScroll = Math.Max(0, evaluator.Messages.Count - (messageAreaHeight - 2));
+            MessageScrollRow = Math.Clamp(MessageScrollRow, 0, maxMessageScroll);
+
             if (ActiveResultSetIndex >= evaluator.LastResultSets.Count) 
                 ActiveResultSetIndex = Math.Max(0, evaluator.LastResultSets.Count - 1);
 
@@ -129,7 +133,7 @@ namespace ETL_SQL.TUI.UI
             if (!Headless)
             {
                 _editorPanel.Render(_console, 0, editorAreaTop, totalWidth, editorAreaHeight);
-                _messagePanel.Render(_console, 0, editorAreaTop + editorAreaHeight, totalWidth, messageAreaHeight);
+                _messagePanel.Render(_console, 0, editorAreaTop + editorAreaHeight, totalWidth, messageAreaHeight, MessageScrollRow);
                 
                 int lowerY = editorAreaTop + editorAreaHeight + messageAreaHeight;
                 if (TreeVisible)

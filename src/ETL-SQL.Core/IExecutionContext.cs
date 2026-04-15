@@ -100,6 +100,12 @@ namespace ETL_SQL.Core
         long RowsProcessed { get; set; }
         long TotalSpilledBytes { get; set; }
         int PartitionsCount { get; set; }
+        long AggregateGroupsCount { get; set; }
+        double AggregateExpansionRatio { get; set; }
+        long LastExecutionTimeMs { get; set; }
+        long SubqueryCacheHits { get; set; }
+        long SubqueryCacheMisses { get; set; }
+        int SortSpillCount { get; set; }
         Action<DataTable>? OnResultSet { get; set; }
         bool IsSqlPushdown(string connName);
         /// <summary>Named environment sets created by CREATE SETS.</summary>

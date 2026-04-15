@@ -50,7 +50,13 @@ namespace ETL_SQL.Core.Common
         public object ToSnapshot()
         {
             var result = new List<object>();
-            foreach (var rootId in RootNodeIds)
+            List<Guid> ids;
+            lock (RootNodeIds)
+            {
+                ids = new List<Guid>(RootNodeIds);
+            }
+
+            foreach (var rootId in ids)
             {
                 var root = GetNode(rootId);
                 if (root != null) result.Add(NodeToSnapshot(root));
@@ -61,7 +67,13 @@ namespace ETL_SQL.Core.Common
         private object NodeToSnapshot(ExecutionNode node)
         {
             var children = new List<object>();
-            foreach (var childId in node.ChildIds)
+            List<Guid> childIds;
+            lock (node.ChildIds)
+            {
+                childIds = new List<Guid>(node.ChildIds);
+            }
+
+            foreach (var childId in childIds)
             {
                 var child = GetNode(childId);
                 if (child != null) children.Add(NodeToSnapshot(child));

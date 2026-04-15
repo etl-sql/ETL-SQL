@@ -322,7 +322,13 @@ Session metrics can be queried at any time using system variables. These are par
 | :--- | :--- |
 | `@@ROWCOUNT` | Number of rows processed by the last statement. |
 | `@@TOTAL_SPILLED_BYTES` | Total data written to disk for temporary spill-to-disk operations. |
-| `@@PARTITIONS_COUNT` | Number of partitions created during the last spilled operation (join/window/sort). |
+| `@@PARTITIONS_COUNT` | Number of partitions created during the last spilled operation (join/window/aggregate/sort). |
+| `@@AGGREGATE_GROUPS_COUNT` | Number of unique grouping keys found during aggregation. |
+| `@@AGGREGATE_EXPANSION_RATIO` | Multiplier for Grouping Set expansion (e.g. 8.0 for a 3-column CUBE). |
+| `@@LAST_EXEC_MS` | Milliseconds taken by the last executed statement. |
+| `@@PEAK_MEMORY_MB` | Peak memory (Working Set) of the engine process in MB. |
+| `@@SUBQUERY_CACHE_HITS` | Total scalar subquery hits in the result cache. |
+| `@@SORT_SPILLS` | Number of external sort runs that spilled to disk. |
 | `@@TRANCOUNT` | Active transaction nesting level (0 = auto-commit). |
 
 Example script for logging spill metrics:
@@ -350,10 +356,18 @@ ETL-SQL supports a three-tier configuration hierarchy, allowing administrators t
 - **Sessionally**: Increase `JOIN_SPILL_THRESHOLD` or `EXTERNAL_HASH_PARTITIONS` in a specific script that you know processes a massive outlier dataset (petabytes) where the default spilling strategy might be too eager or create too few partitions.
 
 ```sql
--- Example: Overriding global defaults for a session-critical massive join
+-- Example: Overriding global defaults for a session-critical massive join or cube
 SET BATCHSIZE = 25000;
 SET JOIN_SPILL_THRESHOLD = 500000;
 SET EXTERNAL_HASH_PARTITIONS = 128;
+
+-- Monitoring expansion for a hyper-scale CUBE
+SELECT Region, Category, Product, SUM(Sales)
+FROM #massive_input
+GROUP BY CUBE(Region, Category, Product);
+
+PRINT 'Intermediate Rows: ' + (@@ROWCOUNT * @@AGGREGATE_EXPANSION_RATIO);
+PRINT 'Total Unique Groups: ' + @@AGGREGATE_GROUPS_COUNT;
 ```
 
 ---

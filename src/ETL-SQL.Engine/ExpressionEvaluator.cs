@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Text.RegularExpressions;
+using System.Diagnostics;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
@@ -337,7 +338,12 @@ namespace ETL_SQL.Engine
         private async Task<object?> EvaluateSubquery(SubqueryExpression subq, Row context)
         {
             object? result = null;
-            if (_context.SubqueryCache.TryGetValue(subq.Query, out var cached)) return cached;
+            if (_context.SubqueryCache.TryGetValue(subq.Query, out var cached))
+            {
+                _context.SubqueryCacheHits++;
+                return cached;
+            }
+            _context.SubqueryCacheMisses++;
             _context.OuterRowStack.Push(context);
             await foreach (var batch in _context.ExecuteQuery(subq.Query))
             {
@@ -379,6 +385,12 @@ namespace ETL_SQL.Engine
             if (v.Name.Equals("@@ERROR", StringComparison.OrdinalIgnoreCase)) return _context.PreviousErrorNumber;
             if (v.Name.Equals("@@TOTAL_SPILLED_BYTES", StringComparison.OrdinalIgnoreCase)) return _context.TotalSpilledBytes;
             if (v.Name.Equals("@@PARTITIONS_COUNT", StringComparison.OrdinalIgnoreCase)) return _context.PartitionsCount;
+            if (v.Name.Equals("@@AGGREGATE_GROUPS_COUNT", StringComparison.OrdinalIgnoreCase)) return _context.AggregateGroupsCount;
+            if (v.Name.Equals("@@AGGREGATE_EXPANSION_RATIO", StringComparison.OrdinalIgnoreCase)) return _context.AggregateExpansionRatio;
+            if (v.Name.Equals("@@LAST_EXEC_MS", StringComparison.OrdinalIgnoreCase)) return _context.LastExecutionTimeMs;
+            if (v.Name.Equals("@@PEAK_MEMORY_MB", StringComparison.OrdinalIgnoreCase)) return Process.GetCurrentProcess().PeakWorkingSet64 / (1024 * 1024);
+            if (v.Name.Equals("@@SUBQUERY_CACHE_HITS", StringComparison.OrdinalIgnoreCase)) return _context.SubqueryCacheHits;
+            if (v.Name.Equals("@@SORT_SPILLS", StringComparison.OrdinalIgnoreCase)) return (long)_context.SortSpillCount;
             if (v.Name.Equals("@@DATASET", StringComparison.OrdinalIgnoreCase)) return _context.ContainsVariable("@@DATASET") ? _context.GetVariable("@@DATASET") : null;
 
 

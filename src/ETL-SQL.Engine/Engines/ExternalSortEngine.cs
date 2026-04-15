@@ -83,6 +83,8 @@ namespace ETL_SQL.Engine.Engines
                         var path = Path.Combine(_tempDir, $"chunk_{chunkPaths.Count}.tmp");
                         await WriteChunk(path, currentChunk);
                         chunkPaths.Add(path);
+                        _context.SortSpillCount++;
+                        _context.PartitionsCount++;
                         currentChunk.Clear();
                     }
                 }
@@ -93,6 +95,8 @@ namespace ETL_SQL.Engine.Engines
                     var path = Path.Combine(_tempDir, $"chunk_{chunkPaths.Count}.tmp");
                     await WriteChunk(path, currentChunk);
                     chunkPaths.Add(path);
+                    _context.SortSpillCount++;
+                    _context.PartitionsCount++;
                 }
 
                 // 3. K-way Merge and yield

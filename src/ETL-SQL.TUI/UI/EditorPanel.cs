@@ -16,7 +16,7 @@ namespace ETL_SQL.TUI.UI
             _renderer = renderer;
         }
 
-        public void Render(IConsoleInterface console, int x, int y, int width, int height)
+        public void Render(IConsoleInterface console, int x, int y, int width, int height, int scrollRow = 0)
         {
             var aliases = ETLSuggestEngine.ParseAliases(_buffer.GetText());
             int gutterWidth = (_buffer.Lines.Count).ToString().Length + 2;

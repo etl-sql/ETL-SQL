@@ -14,6 +14,8 @@ namespace ETL_SQL.Engine.Services
     {
         private readonly Evaluator _evaluator = evaluator;
         private long _lastMemoryUsage;
+        private long _lastSpilledBytes;
+        private int _lastPartitionsCount;
 
         /// <summary>
         /// Captures baseline metrics before a statement begins execution.
@@ -22,6 +24,8 @@ namespace ETL_SQL.Engine.Services
         {
             if (!_evaluator.IsProfiling) return;
             _lastMemoryUsage = GC.GetTotalMemory(false);
+            _lastSpilledBytes = _evaluator.TotalSpilledBytes;
+            _lastPartitionsCount = _evaluator.PartitionsCount;
         }
 
         /// <summary>
@@ -39,8 +43,8 @@ namespace ETL_SQL.Engine.Services
                 RowsProcessed = _evaluator.LastStatementRowsProcessed,
                 IndexName = _evaluator.LastIndexUsedName,
                 Timestamp = DateTime.Now,
-                SpilledBytes = _evaluator.TotalSpilledBytes,
-                PartitionsCount = _evaluator.PartitionsCount,
+                SpilledBytes = _evaluator.TotalSpilledBytes - _lastSpilledBytes,
+                PartitionsCount = _evaluator.PartitionsCount - _lastPartitionsCount,
                 RecursiveDepth = _evaluator.MaxRecursiveDepth
             });
         }

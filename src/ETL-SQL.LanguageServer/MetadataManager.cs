@@ -156,7 +156,8 @@ namespace ETL_SQL.LSP
                 var connector = connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
 
-                var tables = (await connector.GetTablesAsync(SystemExecutionContext.Instance, conn.ConnectionString)).ToList();
+                await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
+                var tables = (await source.GetTablesAsync()).ToList();
                 
                 // Whitelist virtual DUAL table for all connections to support SELECT @var without FROM
                 if (!tables.Contains("DUAL", StringComparer.OrdinalIgnoreCase))
@@ -194,8 +195,14 @@ namespace ETL_SQL.LSP
                 var connector = connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
 
-                var views = (await connector.GetViewsAsync(SystemExecutionContext.Instance, conn.ConnectionString)).ToList();
-                _views[key] = views;
+                await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
+                var views = Enumerable.Empty<string>();
+                if (source is IDatabaseSource db)
+                {
+                    views = (await db.GetViewsAsync()).ToList();
+                }
+                
+                _views[key] = views.ToList();
                 return views;
             }
             catch (Exception ex)
@@ -283,8 +290,19 @@ namespace ETL_SQL.LSP
                 var connector = connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
 
-                var columns = (await connector.GetColumnsAsync(SystemExecutionContext.Instance, conn.ConnectionString, tableName)).ToList();
-                _columns[key] = columns;
+                await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
+                var columns = Enumerable.Empty<string>();
+                
+                if (source is IDatabaseSource db)
+                {
+                    columns = (await db.GetColumnsAsync(tableName)).ToList();
+                }
+                else
+                {
+                    columns = (await source.GetColumnsAsync()).ToList();
+                }
+
+                _columns[key] = columns.ToList();
                 return columns;
             }
             catch (Exception ex)

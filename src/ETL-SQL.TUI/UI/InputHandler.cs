@@ -114,6 +114,15 @@ namespace ETL_SQL.TUI.UI
                 if (key.Key == ConsoleKey.PageDown) { _renderer.ResultScrollRow += 10; return; }
             }
 
+            // ── Message Panel Scrolling (Shift) ──
+            if (key.Modifiers.HasFlag(ConsoleModifiers.Shift))
+            {
+                if (key.Key == ConsoleKey.UpArrow) { _renderer.MessageScrollRow = Math.Max(0, _renderer.MessageScrollRow - 1); return; }
+                if (key.Key == ConsoleKey.DownArrow) { _renderer.MessageScrollRow++; return; }
+                if (key.Key == ConsoleKey.PageUp) { _renderer.MessageScrollRow = Math.Max(0, _renderer.MessageScrollRow - 5); return; }
+                if (key.Key == ConsoleKey.PageDown) { _renderer.MessageScrollRow += 5; return; }
+            }
+
             // F3 - Focus Toggle
             if (key.Key == ConsoleKey.F3)
             {

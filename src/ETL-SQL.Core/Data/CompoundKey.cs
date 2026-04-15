@@ -12,14 +12,19 @@ namespace ETL_SQL.Data
     public readonly struct CompoundKey : IEquatable<CompoundKey>, IComparable<CompoundKey>
     {
         private readonly object?[] _values;
+        private readonly int _setIndex;
         private readonly int _hashCode;
 
-        public CompoundKey(params object?[] values)
+        public CompoundKey(params object?[] values) : this(0, values) { }
+
+        public CompoundKey(int setIndex, params object?[] values)
         {
             _values = values ?? Array.Empty<object?>();
+            _setIndex = setIndex;
             
             // Pre-calculate hash code for performance in dictionary lookups
             var hash = new HashCode();
+            hash.Add(_setIndex);
             foreach (var val in _values)
             {
                 hash.Add(NormalizeValue(val));
@@ -29,6 +34,7 @@ namespace ETL_SQL.Data
 
         public bool Equals(CompoundKey other)
         {
+            if (_setIndex != other._setIndex) return false;
             if (_values.Length != other._values.Length) return false;
             for (int i = 0; i < _values.Length; i++)
             {
@@ -104,6 +110,9 @@ namespace ETL_SQL.Data
 
         public int CompareTo(CompoundKey other)
         {
+            int setCmp = _setIndex.CompareTo(other._setIndex);
+            if (setCmp != 0) return setCmp;
+
             int len = Math.Min(_values.Length, other._values.Length);
             for (int i = 0; i < len; i++)
             {

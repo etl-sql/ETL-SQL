@@ -13,7 +13,7 @@ namespace ETL_SQL.TUI.UI
             _evaluator = evaluator;
         }
 
-        public void Render(IConsoleInterface console, int x, int y, int width, int height)
+        public void Render(IConsoleInterface console, int x, int y, int width, int height, int scrollRow = 0)
         {
             for (int i = 0; i < height; i++)
             {
@@ -21,13 +21,16 @@ namespace ETL_SQL.TUI.UI
                 console.Write(new string(' ', width));
             }
 
-            var messages = _evaluator.Messages.TakeLast(height - 2).ToList();
+            var messages = _evaluator.Messages.Skip(scrollRow).Take(height - 2).ToList();
             var content = string.Join("\n", messages.Select(m => Markup.Escape(m)));
             if (string.IsNullOrEmpty(content)) content = "[grey]No system messages.[/]";
 
+            string headerTitle = "[yellow]Messages[/]";
+            if (scrollRow > 0) headerTitle += $" [grey](Scrolled: {scrollRow})[/]";
+
             var panel = new Panel(content)
             {
-                Header = new PanelHeader("[yellow]Messages[/]"),
+                Header = new PanelHeader(headerTitle),
                 Height = height,
                 Width = width,
                 Border = BoxBorder.Rounded,

@@ -64,6 +64,12 @@ namespace ETL_SQL.Core.Common
         public long RowsProcessed { get; set; }
         public long TotalSpilledBytes { get; set; }
         public int PartitionsCount { get; set; }
+        public long AggregateGroupsCount { get; set; }
+        public double AggregateExpansionRatio { get; set; }
+        public long LastExecutionTimeMs { get; set; }
+        public long SubqueryCacheHits { get; set; }
+        public long SubqueryCacheMisses { get; set; }
+        public int SortSpillCount { get; set; }
         public Action<DataTable>? OnResultSet { get; set; }
         
         public bool IsProfiling { get; set; }

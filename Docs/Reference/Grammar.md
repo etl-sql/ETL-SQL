@@ -42,8 +42,14 @@ The engine provides built-in variables for session-level state. All system varia
 | `@@RESULTSETS` | The number of result sets produced by the last executed multi-statement block or query. |
 | `@@ROWCOUNT` | The number of rows processed or affected by the **absolute last executed statement**. |
 | `@@ERROR` | The integer error code of the **preceding statement** (0 = success). |
-| `@@TOTAL_SPILLED_BYTES` | Total bytes written to disk for temporary spill-to-disk operations (joins, windows, sorts). |
+| `@@TOTAL_SPILLED_BYTES` | Total bytes written to disk for temporary spill-to-disk operations (joins, aggregates, windows, sorts). |
 | `@@PARTITIONS_COUNT` | The number of discrete disk partitions created during the last spilled operation. |
+| `@@AGGREGATE_GROUPS_COUNT` | Total number of unique grouping keys identified during the last aggregation. |
+| `@@AGGREGATE_EXPANSION_RATIO` | The multiplier of intermediate rows generated for Grouping Sets (e.g., 4.0 for CUBE on 2 columns). |
+| `@@LAST_EXEC_MS` | Total milliseconds taken by the absolute last statement executed. |
+| `@@PEAK_MEMORY_MB` | Peak working set memory used by the current engine process. |
+| `@@SUBQUERY_CACHE_HITS` | Total number of scalar subquery results retrieved from the session cache. |
+| `@@SORT_SPILLS` | Number of external sort runs that spilled to disk during the session. |
 | `@@DATASET` | (Report-Builder Only) A reference to the current data set being processed. |
 
 

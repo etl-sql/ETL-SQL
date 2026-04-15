@@ -16,7 +16,7 @@ namespace ETL_SQL.TUI.UI
             _renderer = renderer;
         }
 
-        public void Render(IConsoleInterface console, int x, int y, int width, int height)
+        public void Render(IConsoleInterface console, int x, int y, int width, int height, int scrollRow = 0)
         {
             for (int i = 0; i < height; i++)
             {

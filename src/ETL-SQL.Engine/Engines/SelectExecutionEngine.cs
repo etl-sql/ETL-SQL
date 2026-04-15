@@ -57,8 +57,7 @@ namespace ETL_SQL.Engine.Engines
             // Optimization for streaming aggregates
             bool streamAggregate = (stmt.Joins == null || stmt.Joins.Count == 0)
                 && !hasWindowInColumns
-                && stmt.GroupingSet == null
-                && (stmt.GroupBy != null || hasAggInColumns);
+                && (stmt.GroupBy != null || stmt.GroupingSet != null || hasAggInColumns);
 
             if (stmt.Joins != null && stmt.Joins.Count > 0)
             {
@@ -104,7 +103,7 @@ namespace ETL_SQL.Engine.Engines
                     whereApplied = true;
                 }
                 var externalAgg = new ExternalAggregateEngine(_context, _logger);
-                allRows = await externalAgg.ApplyAggregationExternal(aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause);
+                allRows = await externalAgg.ApplyAggregationExternal(aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet).ToListAsync();
             }
             else
             {
@@ -123,10 +122,10 @@ namespace ETL_SQL.Engine.Engines
             // 2. GROUP BY
             if (!streamAggregate && (stmt.GroupBy != null || stmt.GroupingSet != null || hasAggInColumns))
             {
-                if (allRows.Count > 100000 && stmt.GroupingSet == null)
+                if (allRows.Count > 100000)
                 {
                     var externalAgg = new ExternalAggregateEngine(_context, _logger);
-                    allRows = await externalAgg.ApplyAggregationExternal(allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause);
+                    allRows = await externalAgg.ApplyAggregationExternal(allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet).ToListAsync();
                 }
                 else
                 {

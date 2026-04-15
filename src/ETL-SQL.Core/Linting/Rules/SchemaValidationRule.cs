@@ -123,6 +123,15 @@ namespace ETL_SQL.Core.Linting.Rules
             var connName = tableRef.ConnectionName ?? context.Metadata!.GetConnections().FirstOrDefault() ?? "DEFAULT";
             var connType = context.Metadata!.GetConnectionType(connName);
             
+            // Skip validation for engine-side temporary tables (#) or built-in DUAL
+            if ((tableRef.ConnectionName == null && tableRef.TableName.StartsWith("#")) || 
+                string.Equals(tableRef.TableName, "DUAL", StringComparison.OrdinalIgnoreCase))
+            {
+                // We use the table name as the connection identity for engine-side tables
+                tablesInScope.Add((tableRef.TableName, tableRef.TableName, tableRef.Alias));
+                return;
+            }
+
             // Skip validation for DOCKER (b1)
             if (connType == "DOCKER")
             {
@@ -163,6 +172,13 @@ namespace ETL_SQL.Core.Linting.Rules
                     bool found = false;
                     foreach (var scope in tablesInScope)
                     {
+                        // Skip validation for engine-managed temporary tables (#)
+                        if (scope.Table.StartsWith("#"))
+                        {
+                            found = true;
+                            break;
+                        }
+
                         var cols = await context.Metadata!.GetColumnsAsync(scope.Conn, scope.Table);
                         if (cols.Any(c => string.Equals(c, parts[0], StringComparison.OrdinalIgnoreCase)))
                         {
@@ -193,6 +209,9 @@ namespace ETL_SQL.Core.Linting.Rules
 
                     if (scope != default)
                     {
+                        // Skip validation for engine-managed temporary tables (#)
+                        if (scope.Table.StartsWith("#")) return;
+
                         var cols = await context.Metadata!.GetColumnsAsync(scope.Conn, scope.Table);
                         if (!cols.Any(c => string.Equals(c, colName, StringComparison.OrdinalIgnoreCase)))
                         {

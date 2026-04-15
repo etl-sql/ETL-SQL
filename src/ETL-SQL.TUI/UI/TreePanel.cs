@@ -14,7 +14,7 @@ namespace ETL_SQL.TUI.UI
         private readonly Evaluator _evaluator = evaluator;
         private readonly EditorRenderer _renderer = renderer;
 
-        public void Render(IConsoleInterface console, int x, int y, int width, int height)
+        public void Render(IConsoleInterface console, int x, int y, int width, int height, int scrollRow = 0)
         {
             if (height <= 0 || width <= 0) return;
 

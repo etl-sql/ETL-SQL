@@ -32,30 +32,68 @@ namespace ETL_SQL.Engine.Engines
         }
 
         /// <summary>Applies aggregation by partitioning the stream into disk files and processing each partition sequentially.</summary>
-        public async Task<List<Row>> ApplyAggregationExternal(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null)
+        public async IAsyncEnumerable<Row> ApplyAggregationExternal(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null)
         {
             try
             {
-                // When groupingSet is present, expand into multiple aggregate passes.
-                // Note: For hyper-scale, we should ideally partition once and process multiple times,
-                // but for simplicity we'll implement the expansion at the high level.
+                // 1. Partition Phase (supports one-pass expansion for grouping sets)
+                string[] partitionPaths;
+                List<List<Expression>> expandedSets = null;
+                
                 if (groupingSet != null && groupingSet.Type != GroupingSetType.None)
                 {
-                    // If inputStream is not repeatable, we must buffer it to a temp file first
-                    var tempFile = Path.Combine(_tempDir, "agg_source.tmp");
-                    await BufferStream(inputStream, tempFile);
-                    
-                    var expandedSets = ExpandGroupingSets(groupingSet);
-                    var allResults = new List<Row>();
-                    foreach (var activeGroupBy in expandedSets)
+                    expandedSets = ExpandGroupingSets(groupingSet);
+                    partitionPaths = await PartitionStreamMultiSet(inputStream, expandedSets);
+                }
+                else
+                {
+                    partitionPaths = await PartitionStream(inputStream, groupBy);
+                }
+
+                // 2. Aggregate Phase (one partition at a time)
+                foreach (var path in partitionPaths)
+                {
+                    if (!File.Exists(path)) continue;
+
+                    var stream = ReadPartitionStream(path);
+                    var groups = new Dictionary<CompoundKey, (List<Row> Rows, int SetIndex)>();
+
+                    await foreach (var row in stream)
                     {
-                        var setRows = await ApplyAggregationExternal(ReadPartitionStream(tempFile), activeGroupBy, finalColumns, colNames, havingClause, null);
-                        
-                        // Mark which columns were NULL-substituted (GROUPING() support)
-                        var activeKeys = new HashSet<string>(activeGroupBy.Select(e => e.ToSql()), StringComparer.OrdinalIgnoreCase);
-                        foreach (var row in setRows)
+                        // Extract metadata (SetIndex) stored in the partition row
+                        int setIndex = Convert.ToInt32(row["__SET_IDX"] ?? 0);
+                        var activeGroupBy = expandedSets != null ? expandedSets[setIndex] : groupBy;
+
+                        CompoundKey key;
+                        if (activeGroupBy != null && activeGroupBy.Count > 0)
                         {
-                            if (groupBy != null)
+                            var vals = new object?[activeGroupBy.Count];
+                            for (int i = 0; i < activeGroupBy.Count; i++)
+                                vals[i] = row.Columns.TryGetValue(activeGroupBy[i].ToSql(), out var v) ? v : await _context.EvaluateValue(activeGroupBy[i], row);
+                            key = new CompoundKey(setIndex, vals);
+                        }
+                        else key = new CompoundKey(setIndex, "GLOBAL");
+
+                        if (!groups.TryGetValue(key, out var bucket)) 
+                        { 
+                            bucket = (new List<Row>(), setIndex); 
+                            groups[key] = bucket; 
+                        }
+                        bucket.Rows.Add(row);
+                    }
+
+                    foreach (var bucket in groups.Values)
+                    {
+                        var activeGroupBy = expandedSets != null ? expandedSets[bucket.SetIndex] : groupBy;
+                        var partResults = await _inMemoryEngine.ApplyAggregation(bucket.Rows, activeGroupBy, finalColumns, colNames, havingClause);
+                        
+                        _context.AggregateGroupsCount += partResults.Count;
+
+                        // Handle GROUPING() / NULL substitution for sub-sets
+                        if (expandedSets != null && groupBy != null)
+                        {
+                            var activeKeys = new HashSet<string>(activeGroupBy.Select(e => e.ToSql()), StringComparer.OrdinalIgnoreCase);
+                            foreach (var resRow in partResults)
                             {
                                 foreach (var expr in groupBy)
                                 {
@@ -63,42 +101,27 @@ namespace ETL_SQL.Engine.Engines
                                     {
                                         var colName = expr is IdentifierExpression id ? id.Name.Split('.').Last() : expr.ToSql();
                                         var matchIdx = colNames.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
-                                        if (matchIdx >= 0) row[colNames[matchIdx]] = null;
+                                        if (matchIdx >= 0) resRow[colNames[matchIdx]] = null;
                                     }
                                 }
+                                yield return resRow;
                             }
                         }
-                        allResults.AddRange(setRows);
+                        else
+                        {
+                            foreach (var resRow in partResults) yield return resRow;
+                        }
                     }
-                    return allResults;
-                }
 
-                // 1. Partition Phase
-                var partitionPaths = await PartitionStream(inputStream, groupBy);
-
-                var finalResults = new List<Row>();
-
-                // 2. Aggregate Phase (one partition at a time)
-                foreach (var path in partitionPaths)
-                {
-                    if (!File.Exists(path)) continue;
-
-                    var rows = await ReadPartitionStream(path).ToListAsync();
-                    if (rows.Count > 0)
-                    {
-                        var partResults = await _inMemoryEngine.ApplyAggregation(rows, groupBy, finalColumns, colNames, havingClause);
-                        finalResults.AddRange(partResults);
-                    }
                     File.Delete(path);
                 }
 
                 // Handle global aggregation if no rows were found but aggregates exist
-                if (finalResults.Count == 0 && finalColumns.Any(c => _inMemoryEngine.IsAggregate(c.Expression)) && (groupBy == null || groupBy.Count == 0))
+                if (finalColumns.Any(c => _inMemoryEngine.IsAggregate(c.Expression)) && (groupBy == null || groupBy.Count == 0) && (groupingSet == null || groupingSet.Type == GroupingSetType.None))
                 {
-                    return await _inMemoryEngine.ApplyAggregation(new List<Row>(), groupBy, finalColumns, colNames, havingClause);
+                    var globals = await _inMemoryEngine.ApplyAggregation(new List<Row>(), groupBy, finalColumns, colNames, havingClause);
+                    foreach (var g in globals) yield return g;
                 }
-
-                return finalResults;
             }
             finally
             {
@@ -117,7 +140,6 @@ namespace ETL_SQL.Engine.Engines
                 writers[i] = new StreamWriter(paths[i]);
             }
 
-
             try
             {
                 await foreach (var row in stream)
@@ -134,29 +156,74 @@ namespace ETL_SQL.Engine.Engines
                         pIdx = Math.Abs(hash % PartitionCount);
                     }
 
-
+                    row["__SET_IDX"] = 0;
                     var json = System.Text.Json.JsonSerializer.Serialize(row.Columns);
-                    var bytes = System.Text.Encoding.UTF8.GetByteCount(json) + 2; // + newline
-                    _context.TotalSpilledBytes += bytes;
+                    _context.TotalSpilledBytes += System.Text.Encoding.UTF8.GetByteCount(json) + 2;
                     await writers[pIdx].WriteLineAsync(json);
                 }
             }
             finally
             {
-                int usedPartitions = 0;
-                foreach (var w in writers) 
-                { 
-                    try
-                    {
-                        if (w.BaseStream.Length > 0) usedPartitions++;
-                        w.Flush(); 
-                        w.Close(); 
-                    }
-                    catch { /* Best effort cleanup */ }
-                }
-                _context.PartitionsCount += usedPartitions;
+                int used = 0;
+                foreach (var w in writers) { if (w.BaseStream.Length > 0) used++; w.Flush(); w.Close(); }
+                _context.PartitionsCount += used;
+            }
+            return paths;
+        }
+
+        private async Task<string[]> PartitionStreamMultiSet(IAsyncEnumerable<Row> stream, List<List<Expression>> sets)
+        {
+            var paths = new string[PartitionCount];
+            var writers = new StreamWriter[PartitionCount];
+            for (int i = 0; i < PartitionCount; i++)
+            {
+                paths[i] = Path.Combine(_tempDir, $"agg_{i}.tmp");
+                writers[i] = new StreamWriter(paths[i]);
             }
 
+            long totalInput = 0;
+            long totalExpanded = 0;
+
+            try
+            {
+                await foreach (var row in stream)
+                {
+                    totalInput++;
+                    for (int sIdx = 0; sIdx < sets.Count; sIdx++)
+                    {
+                        totalExpanded++;
+                        var activeGroupBy = sets[sIdx];
+                        int pIdx = 0;
+
+                        if (activeGroupBy.Count > 0)
+                        {
+                            int hash = 17;
+                            hash = hash * 31 + sIdx; // Include set index in hash to distribute sets better
+                            foreach (var g in activeGroupBy)
+                            {
+                                var val = await _context.EvaluateValue(g, row);
+                                hash = hash * 31 + (val?.GetHashCode() ?? 0);
+                            }
+                            pIdx = Math.Abs(hash % PartitionCount);
+                        }
+                        else pIdx = Math.Abs(sIdx % PartitionCount);
+
+                        // Attach SetIndex to the row so it can be identified during merge phase
+                        row["__SET_IDX"] = sIdx;
+                        var json = System.Text.Json.JsonSerializer.Serialize(row.Columns);
+                        _context.TotalSpilledBytes += System.Text.Encoding.UTF8.GetByteCount(json) + 2;
+                        await writers[pIdx].WriteLineAsync(json);
+                    }
+                }
+            }
+            finally
+            {
+                int used = 0;
+                foreach (var w in writers) { if (w.BaseStream.Length > 0) used++; w.Flush(); w.Close(); }
+                _context.PartitionsCount += used;
+                if (totalInput > 0) _context.AggregateExpansionRatio = (double)totalExpanded / totalInput;
+                _logger.Debug("[HYPER-SCALE] Expanded {Input} rows into {Expanded} intermediate rows for GroupingSets (Ratio: {Ratio:F2}).", totalInput, totalExpanded, _context.AggregateExpansionRatio);
+            }
             return paths;
         }
 
@@ -173,17 +240,6 @@ namespace ETL_SQL.Engine.Engines
                     foreach (var kvp in cols) row[kvp.Key] = JsonElementToValue(kvp.Value);
                     yield return row;
                 }
-            }
-        }
-
-
-        private async Task BufferStream(IAsyncEnumerable<Row> stream, string path)
-        {
-            using var writer = new StreamWriter(path);
-            await foreach (var row in stream)
-            {
-                var json = System.Text.Json.JsonSerializer.Serialize(row.Columns);
-                await writer.WriteLineAsync(json);
             }
         }
 
@@ -214,11 +270,6 @@ namespace ETL_SQL.Engine.Engines
             return clause.GroupSets.Select(s => s.ToList()).ToList();
         }
 
-        /// <summary>
-        /// Converts a <see cref="System.Text.Json.JsonElement"/> to the closest .NET primitive.
-        /// Required because deserializing to <c>object?</c> yields boxed JsonElement values
-        /// that cannot be used by AggregateEngine's Convert.ToDecimal / ToString calls.
-        /// </summary>
         private static object? JsonElementToValue(System.Text.Json.JsonElement element) =>
             element.ValueKind switch
             {
@@ -230,4 +281,5 @@ namespace ETL_SQL.Engine.Engines
                 _                                      => element.GetRawText()
             };
     }
+
 }

@@ -16,7 +16,7 @@ namespace ETL_SQL.TUI.UI
             _renderer = renderer;
         }
 
-        public void Render(IConsoleInterface console, int x, int y, int width, int height)
+        public void Render(IConsoleInterface console, int x, int y, int width, int height, int scrollRow = 0)
         {
             for (int i = 0; i < height; i++)
             {
@@ -47,8 +47,17 @@ namespace ETL_SQL.TUI.UI
             var statsTable = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey);
             statsTable.AddColumn("Metric");
             statsTable.AddColumn("Value");
-            statsTable.AddRow("Rows/s", (lastMetrics.DurationMs > 0 ? (lastMetrics.RowsProcessed * 1000 / lastMetrics.DurationMs) : 0).ToString("N0"));
-            statsTable.AddRow("Memory", $"{Math.Round((double)GC.GetTotalMemory(false) / (1024 * 1024), 2)} MB");
+            
+            // Safety check for DurationMs to avoid divide-by-zero
+            long rps = 0;
+            if (lastMetrics.DurationMs > 0)
+                rps = lastMetrics.RowsProcessed * 1000 / lastMetrics.DurationMs;
+            
+            statsTable.AddRow("Rows/s", rps.ToString("N0"));
+            
+            // Show peak memory consistent with @@PEAK_MEMORY_MB
+            double peakMem = Math.Round((double)System.Diagnostics.Process.GetCurrentProcess().PeakWorkingSet64 / (1024 * 1024), 2);
+            statsTable.AddRow("Memory (Peak)", $"{peakMem} MB");
             
             if (lastMetrics.SpilledBytes > 0)
                 statsTable.AddRow("Disk Spilled", $"[yellow]{Math.Round((double)lastMetrics.SpilledBytes / (1024 * 1024), 2)} MB[/]");

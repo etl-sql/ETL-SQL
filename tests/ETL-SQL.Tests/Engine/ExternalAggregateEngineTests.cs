@@ -73,7 +73,7 @@ namespace ETL_SQL.Tests.Engine
             var colNames = new List<string> { "category", "cnt" };
 
             var result = await engine.ApplyAggregationExternal(rows, new List<Expression> { groupByExpr },
-                finalColumns, colNames);
+                finalColumns, colNames).ToListAsync();
 
             // Three groups: A, B, C
             Assert.Equal(3, result.Count);
@@ -107,7 +107,7 @@ namespace ETL_SQL.Tests.Engine
             };
 
             await engine.ApplyAggregationExternal(rows, new List<Expression> { groupByExpr },
-                finalColumns, new List<string> { "category", "cnt" });
+                finalColumns, new List<string> { "category", "cnt" }).ToListAsync();
 
             // Spilling 60 rows should have written bytes to temp
             Assert.True(eval.TotalSpilledBytes > spillBefore,
@@ -135,7 +135,7 @@ namespace ETL_SQL.Tests.Engine
                 Array.Empty<Row>().ToAsyncEnumerable(),
                 new List<Expression> { groupByExpr },
                 finalColumns,
-                new List<string> { "category", "cnt" });
+                new List<string> { "category", "cnt" }).ToListAsync();
 
             // Empty input with GROUP BY → empty result
             Assert.Empty(result);
@@ -168,7 +168,7 @@ namespace ETL_SQL.Tests.Engine
             };
             var names = new List<string> { "cat", "sub", "s", "mi", "ma", "av" };
 
-            var result = await engine.ApplyAggregationExternal(rows, groupBy, columns, names);
+            var result = await engine.ApplyAggregationExternal(rows, groupBy, columns, names).ToListAsync();
 
             Assert.Equal(2, result.Count);
             var a = result.First(r => r["cat"]?.ToString() == "A");
@@ -195,7 +195,7 @@ namespace ETL_SQL.Tests.Engine
             };
 
             var result = await engine.ApplyAggregationExternal(
-                rows, null, finalColumns, new List<string> { "cnt" });
+                rows, null, finalColumns, new List<string> { "cnt" }).ToListAsync();
 
             // Global aggregate (no group by) should return a single row with count = 50
             Assert.Single(result);
@@ -225,7 +225,7 @@ namespace ETL_SQL.Tests.Engine
                     new SelectColumn(new IdentifierExpression("category"), "category"),
                     new SelectColumn(countExpr, "cnt")
                 },
-                new List<string> { "category", "cnt" });
+                new List<string> { "category", "cnt" }).ToListAsync();
 
             // No new temp dirs should remain after completion (the engine's finally block deletes them)
             if (System.IO.Directory.Exists(tempRoot))

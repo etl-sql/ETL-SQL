@@ -178,7 +178,6 @@ namespace ETL_SQL.Core.Parser
                 catch (SyntaxException ex)
                 {
                     script.Diagnostics.Add(new Diagnostic(ex.Message, ex.Line, ex.Column, DiagnosticSeverity.Error, "SYNTAX"));
-                    Console.Error.WriteLine($"LSP: Syntax error in Parser: {ex.Message} at {ex.Line}:{ex.Column}");
                     // Error recovery: skip to next semicolon or EOF
                     while (Current.Type != TokenType.EOF && Current.Type != TokenType.SEMICOLON)
                     {
@@ -189,7 +188,6 @@ namespace ETL_SQL.Core.Parser
                 catch (Exception ex)
                 {
                     script.Diagnostics.Add(new Diagnostic(ex.Message, Current.Line, Current.Column, DiagnosticSeverity.Error, "INTERNAL"));
-                    Console.Error.WriteLine($"LSP: Unexpected error in Parser: {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
                      // Fallback for unexpected errors
                      if (Current.Type != TokenType.EOF) Advance();
                 }
@@ -331,9 +329,8 @@ namespace ETL_SQL.Core.Parser
                     intoTable = ParseTableReference();
                 }
             }
-            catch (SyntaxException ex)
+            catch (SyntaxException)
             {
-                Console.Error.WriteLine($"LSP: Column list parsing resilience: {ex.Message}");
                 // Skip tokens until we find FROM or end of statement
                 while (Current.Type != TokenType.EOF && Current.Type != TokenType.FROM && Current.Type != TokenType.SEMICOLON)
                 {

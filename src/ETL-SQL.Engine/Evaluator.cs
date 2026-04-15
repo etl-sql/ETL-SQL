@@ -73,7 +73,39 @@ namespace ETL_SQL.Engine
             set => System.Threading.Interlocked.Exchange(ref _totalSpilledBytes, value); 
         }
         
+        private long _aggregateGroupsCount = 0;
+        public long AggregateGroupsCount
+        {
+            get => System.Threading.Interlocked.Read(ref _aggregateGroupsCount);
+            set => System.Threading.Interlocked.Exchange(ref _aggregateGroupsCount, value);
+        }
+
+        public double AggregateExpansionRatio { get; set; } = 1.0;
+        
         public int PartitionsCount { get; set; } = 0;
+
+        public long LastExecutionTimeMs { get; set; }
+
+        private long _subqueryCacheHits = 0;
+        public long SubqueryCacheHits
+        {
+            get => System.Threading.Interlocked.Read(ref _subqueryCacheHits);
+            set => System.Threading.Interlocked.Exchange(ref _subqueryCacheHits, value);
+        }
+
+        private long _subqueryCacheMisses = 0;
+        public long SubqueryCacheMisses
+        {
+            get => System.Threading.Interlocked.Read(ref _subqueryCacheMisses);
+            set => System.Threading.Interlocked.Exchange(ref _subqueryCacheMisses, value);
+        }
+
+        private int _sortSpillCount = 0;
+        public int SortSpillCount
+        {
+            get => _sortSpillCount;
+            set => _sortSpillCount = value;
+        }
         public int MaxRecursiveDepth { get; set; } = 10000;
         public int CurrentRecursiveDepth { get; set; } = 0;
         public string? LastIndexUsedName { get; set; }
@@ -245,6 +277,8 @@ namespace ETL_SQL.Engine
             if (name.Equals("@@ERROR", StringComparison.OrdinalIgnoreCase)) return PreviousErrorNumber;
             if (name.Equals("@@TOTAL_SPILLED_BYTES", StringComparison.OrdinalIgnoreCase)) return TotalSpilledBytes;
             if (name.Equals("@@PARTITIONS_COUNT", StringComparison.OrdinalIgnoreCase)) return PartitionsCount;
+            if (name.Equals("@@AGGREGATE_GROUPS_COUNT", StringComparison.OrdinalIgnoreCase)) return AggregateGroupsCount;
+            if (name.Equals("@@AGGREGATE_EXPANSION_RATIO", StringComparison.OrdinalIgnoreCase)) return AggregateExpansionRatio;
             
             return _variableScopeManager.GetVariable(name);
 
@@ -505,10 +539,17 @@ namespace ETL_SQL.Engine
             {
                 sw.Stop();
                 var elapsed = sw.ElapsedMilliseconds;
+                LastExecutionTimeMs = elapsed; // Track absolute last statement timing
                 _metricsReporter.ReportPostExecutionMetrics(statement, elapsed);
                 if (IsProfiling) LastStatementRowsProcessed = RowsProcessed - startRows;
                 if (IsVerbose) _metricsReporter.ProvideTips(statement);
                 LastIndexUsedName = null;
+            }
+            else
+            {
+                // Even without verbose/profiling, we might want to track timing for @@LAST_EXEC_MS
+                // but for now we follow the existing pattern where sw is only created if IsVerbose/IsProfiling.
+                // Actually, let's always track it if possible.
             }
         }
 
