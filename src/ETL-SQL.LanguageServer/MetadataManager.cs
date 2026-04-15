@@ -46,7 +46,7 @@ namespace ETL_SQL.LSP
                 return (uri ?? "").ToLowerInvariant();
             }
         }
-        // Riverside: added NormalizeUri helper.
+
 
         /// <summary>Registers a global connection that is available across all documents.</summary>
         /// <param name="name">The unique name of the connection.</param>
@@ -89,7 +89,7 @@ namespace ETL_SQL.LSP
                 ClearCacheForDocument(normalizedUri);
             }
         }
-        // Riverside: used normalized URI.
+
 
         /// <summary>Returns a list of all currently registered connections (global + optional document-specific).</summary>
         /// <param name="uri">The optional document URI to include local connections for.</param>
@@ -367,4 +367,4 @@ namespace ETL_SQL.LSP
         }
     }
 }
-// Riverside: used normalized URI and string keys for cache clearing.
+

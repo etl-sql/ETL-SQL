@@ -25,11 +25,11 @@ namespace ETL_SQL.Engine.Handlers
             
             _logger.Debug("Executing THROW");
 
+            const string defaultMessage = "An explicit error was thrown.";
+
             if (stmt.Message == null && stmt.ErrorNumber == null && stmt.State == null)
             {
                 // Bare THROW; (re-throw)
-                // In a real T-SQL CATCH block, this would re-raise the last error.
-                // For now, if we have a LastError recorded, we re-raise it.
                 if (context.LastError != null)
                 {
                     throw new ExecutionException(
@@ -41,11 +41,11 @@ namespace ETL_SQL.Engine.Handlers
                         context.LastError.Severity, 
                         context.LastError.State);
                 }
-                throw new ExecutionException("An explicit error was thrown.");
+                throw new ExecutionException(defaultMessage);
             }
 
             int number = stmt.ErrorNumber != null ? Convert.ToInt32(await context.EvaluateValue(stmt.ErrorNumber, new Row())) : 50000;
-            string message = stmt.Message != null ? (await context.EvaluateValue(stmt.Message, new Row()))?.ToString() ?? "An explicit error was thrown." : "An explicit error was thrown.";
+            string message = stmt.Message != null ? (await context.EvaluateValue(stmt.Message, new Row()))?.ToString() ?? defaultMessage : defaultMessage;
             int state = stmt.State != null ? Convert.ToInt32(await context.EvaluateValue(stmt.State, new Row())) : 1;
 
             throw new ExecutionException(message, null, 0, 0, number, 16, state);

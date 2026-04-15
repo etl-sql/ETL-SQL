@@ -73,8 +73,9 @@ namespace ETL_SQL.LanguageServer.Tests
             var tables = await _manager.GetTablesAsync(connName);
 
             // Assert
-            Assert.Equal(2, tables.Count());
+            Assert.Equal(3, tables.Count()); // 2 from mock + 1 virtual DUAL table
             Assert.Contains("Table1", tables);
+            Assert.Contains("DUAL", tables);
             _registryMock.Verify(r => r.GetConnector(connType), Times.Once);
         }
 
