@@ -42,6 +42,8 @@ The engine provides built-in variables for session-level state. All system varia
 | `@@RESULTSETS` | The number of result sets produced by the last executed multi-statement block or query. |
 | `@@ROWCOUNT` | The number of rows processed or affected by the **absolute last executed statement**. |
 | `@@ERROR` | The integer error code of the **preceding statement** (0 = success). |
+| `@@TOTAL_SPILLED_BYTES` | Total bytes written to disk for temporary spill-to-disk operations (joins, windows, sorts). |
+| `@@PARTITIONS_COUNT` | The number of discrete disk partitions created during the last spilled operation. |
 | `@@DATASET` | (Report-Builder Only) A reference to the current data set being processed. |
 
 
@@ -247,6 +249,25 @@ SET JOIN_SPILL_THRESHOLD = 10000;
 SET EXTERNAL_HASH_PARTITIONS = 128;
 SELECT * INTO #big_join FROM src.A JOIN src.B ON A.id = B.id;
 ```
+
+### 2.6 Diagnostic & Metadata Commands (`SHOW`)
+
+`SHOW` commands provide visibility into the active session, background jobs, and data catalog. All `SHOW` commands support an optional `INTO #tempTable` clause to capture their output for further processing.
+
+| Command | Description |
+| :--- | :--- |
+| `SHOW VERSION` | Displays the current engine version and build information. |
+| `SHOW CONNECTIONS` | Lists all active data connections and their types. |
+| `SHOW TABLES [ON conn]` | Lists tables in the default or specified connection. |
+| `SHOW COLUMNS FOR [table]` | Displays the schema (name, type, nullability) for the target table. |
+| `SHOW VARIABLES` | Lists all variables and their current values in the global scope. |
+| `SHOW LOCAL VARIABLES` | Lists variables in the current procedural/block scope. |
+| `SHOW JOBS` | Lists all background jobs currently managed by the scheduler. |
+| `SHOW JOB HISTORY [name]` | Displays execution logs and performance metrics for past jobs. |
+| `SHOW PROFILE` | Displays statement-level performance metrics (requires `SET PROFILING ON`). |
+| `SHOW LINEAGE [FOR table]` | Displays dependency metadata for the target table or the entire session. |
+| `SHOW SAFE ZONES` | Lists the absolute paths where security overrides are permitted. |
+| `SHOW TAGS FOR TABLE t [COLUMN c]` | Lists all lineage tags/metadata associated with a table or column. |
 
 ---
 

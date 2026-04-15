@@ -39,27 +39,24 @@ namespace ETL_SQL.Engine.Engines
             public virtual bool Equals(WindowSignature? other)
             {
                 if (other == null) return false;
-                if (!AreListsEqual(PartitionBy, other.PartitionBy)) return false;
-                if (!AreListsEqual(OrderBy, other.OrderBy)) return false;
+                
+                string thisPartition = PartitionBy == null ? "" : string.Join(",", PartitionBy.Select(e => e.ToSql()));
+                string otherPartition = other.PartitionBy == null ? "" : string.Join(",", other.PartitionBy.Select(e => e.ToSql()));
+                if (thisPartition != otherPartition) return false;
+
+                string thisOrder = OrderBy == null ? "" : string.Join(",", OrderBy.Select(o => o.ToSql()));
+                string otherOrder = other.OrderBy == null ? "" : string.Join(",", other.OrderBy.Select(o => o.ToSql()));
+                if (thisOrder != otherOrder) return false;
+
                 return true;
             }
 
             public override int GetHashCode()
             {
                 int hash = 17;
-                if (PartitionBy != null) foreach (var p in PartitionBy) hash = hash * 31 + p.GetHashCode();
-                if (OrderBy != null) foreach (var o in OrderBy) hash = hash * 31 + o.GetHashCode();
+                if (PartitionBy != null) foreach (var p in PartitionBy) hash = hash * 31 + p.ToSql().GetHashCode();
+                if (OrderBy != null) foreach (var o in OrderBy) hash = hash * 31 + o.ToSql().GetHashCode();
                 return hash;
-            }
-
-            private static bool AreListsEqual<T>(List<T>? a, List<T>? b)
-            {
-                if (a == null && b == null) return true;
-                if (a == null || b == null) return false;
-                if (a.Count != b.Count) return false;
-                for (int i = 0; i < a.Count; i++)
-                    if (!a[i]!.Equals(b[i])) return false;
-                return true;
             }
         }
 
@@ -70,10 +67,6 @@ namespace ETL_SQL.Engine.Engines
             public WindowGroup(WindowSignature sig) => Signature = sig;
         }
 
-        /// <summary>
-        /// Applies window functions by grouping columns into compatible clusters and processing each group.
-        /// If multiple clusters exist, they are processed sequentially via intermediate spills.
-        /// </summary>
         public async IAsyncEnumerable<Row> ApplyWindowFunctionsExternal(IAsyncEnumerable<Row> inputStream, SelectStatement stmt)
         {
             var windowCols = stmt.Columns.Where(c => c.Expression is FunctionCallExpression f && f.Window != null).ToList();
@@ -83,7 +76,6 @@ namespace ETL_SQL.Engine.Engines
                 yield break;
             }
 
-            // 1. Cluster window functions by signature (PARTITION BY + ORDER BY)
             var groups = new List<WindowGroup>();
             foreach (var col in windowCols)
             {
@@ -104,7 +96,6 @@ namespace ETL_SQL.Engine.Engines
             {
                 IAsyncEnumerable<Row> currentStream = inputStream;
 
-                // 2. Process each group sequentially
                 for (int i = 0; i < groups.Count; i++)
                 {
                     var group = groups[i];
@@ -112,8 +103,6 @@ namespace ETL_SQL.Engine.Engines
 
                     currentStream = ProcessWindowGroup(currentStream, group, stmt);
 
-                    // If not the last group, we might need to spill the intermediate result to a temp file
-                    // because the next group's re-partitioning will re-read the entire stream.
                     if (!isLastGroup)
                     {
                         var intermediatePath = Path.Combine(_tempDir, $"inter_pass_{i}.tmp");
@@ -137,44 +126,162 @@ namespace ETL_SQL.Engine.Engines
         {
             _logger.WriteLine($"[blue]   - Group: {group.Columns.Count} cols, PARTITION BY ({(group.Signature.PartitionBy?.Count ?? 0)} expressions)[/]");
 
-            // Phase A: Partition to Buckets
-            var partitionPaths = await PartitionStream(stream, group.Signature.PartitionBy);
+            var partitionInfos = await PartitionStream(stream, group.Signature.PartitionBy);
 
-            // Phase B: Process each bucket
-            foreach (var path in partitionPaths)
+            foreach (var info in partitionInfos)
             {
-                if (!File.Exists(path)) continue;
+                if (!File.Exists(info.Path)) continue;
 
-                var bucketRows = ReadPartitionStream(path);
+                bool useDeepSpill = info.RowCount > _context.WindowSpillThreshold;
                 
-                // If partition has ORDER BY, we must sort it first.
-                // If the partition is too large for memory, ExternalSortEngine will handle the deep-spilling.
-                if (group.Signature.OrderBy != null && group.Signature.OrderBy.Count > 0)
+                if (useDeepSpill && IsDeepSpillCompatible(group))
                 {
-                    bucketRows = _sortEngine.SortStreamAsync(bucketRows, group.Signature.OrderBy);
+                    _logger.WriteLine($"[magenta]     * DEEP-SPILL: Partition has {info.RowCount:N0} rows (threshold: {_context.WindowSpillThreshold:N0}). Processing via streaming.[/]");
+                    await foreach (var row in ProcessBucketDeepSpill(info.Path, group, stmt))
+                    {
+                        yield return row;
+                    }
+                }
+                else
+                {
+                    var bucketRows = ReadPartitionStream(info.Path);
+                    if (group.Signature.OrderBy != null && group.Signature.OrderBy.Count > 0)
+                    {
+                        bucketRows = _sortEngine.SortStreamAsync(bucketRows, group.Signature.OrderBy);
+                    }
+
+                    var rows = await bucketRows.ToListAsync();
+                    if (rows.Count > 0)
+                    {
+                        var groupStmt = new SelectStatement(group.Columns, null, stmt.FromTable, new List<JoinClause>(), null, null, null, group.Signature.OrderBy);
+                        var processedRows = await _inMemoryEngine.ApplyWindowFunctions(rows, groupStmt);
+                        foreach (var row in processedRows) yield return row;
+                    }
                 }
 
-                // Since window functions typically require the entire partition context (e.g., RANK, MAX over partition),
-                // we load the bucket into memory HERE. 
-                // WARNING: If a SINGLE partition exceeds WindowSpillThreshold, it will still load to memory here.
-                // TODO: Implement window-specific streaming algorithms for ROW_NUMBER etc. (Deep-Spilling task).
-                var rows = await bucketRows.ToListAsync();
-                
-                if (rows.Count > 0)
-                {
-                    // Use a temporary SelectStatement containing ONLY this group's columns to avoid re-evaluating others
-                    var groupStmt = new SelectStatement(group.Columns, null, stmt.FromTable, new List<JoinClause>(), null, null, null, group.Signature.OrderBy);
-                    var processedRows = await _inMemoryEngine.ApplyWindowFunctions(rows, groupStmt);
-                    foreach (var row in processedRows) yield return row;
-                }
-
-                File.Delete(path);
+                File.Delete(info.Path);
             }
         }
 
-        private async Task<string[]> PartitionStream(IAsyncEnumerable<Row> stream, List<Expression>? partitionBy)
+        private record PartitionInfo(string Path, long RowCount);
+
+        private bool IsDeepSpillCompatible(WindowGroup group)
+        {
+            return group.Columns.All(c => 
+                c.Expression is FunctionCallExpression f && 
+                new[] { "ROW_NUMBER", "RANK", "DENSE_RANK" }.Contains(f.FunctionName.ToUpperInvariant()));
+        }
+
+        private async IAsyncEnumerable<Row> ProcessBucketDeepSpill(string path, WindowGroup group, SelectStatement stmt)
+        {
+            var bucketRows = ReadPartitionStream(path);
+            
+            var sortCriteria = new List<OrderByClause>();
+            if (group.Signature.PartitionBy != null)
+            {
+                foreach (var p in group.Signature.PartitionBy)
+                    sortCriteria.Add(new OrderByClause(p, false));
+            }
+            if (group.Signature.OrderBy != null)
+            {
+                sortCriteria.AddRange(group.Signature.OrderBy);
+            }
+
+            if (sortCriteria.Count > 0)
+            {
+                bucketRows = _sortEngine.SortStreamAsync(bucketRows, sortCriteria);
+            }
+
+            int rowNumber = 0;
+            int currentRank = 1;
+            int currentDenseRank = 1;
+            Row? prevRow = null;
+            object?[]? prevPartitionKeys = null;
+            object?[]? prevSortKeys = null;
+
+            await foreach (var row in bucketRows)
+            {
+                object?[] currentPartitionKeys = new object?[group.Signature.PartitionBy?.Count ?? 0];
+                if (group.Signature.PartitionBy != null)
+                {
+                    for (int k = 0; k < group.Signature.PartitionBy.Count; k++)
+                        currentPartitionKeys[k] = await _context.EvaluateValue(group.Signature.PartitionBy[k], row);
+                }
+
+                object?[] currentSortKeys = new object?[group.Signature.OrderBy?.Count ?? 0];
+                if (group.Signature.OrderBy != null)
+                {
+                    for (int k = 0; k < group.Signature.OrderBy.Count; k++)
+                        currentSortKeys[k] = await _context.EvaluateValue(group.Signature.OrderBy[k].Expression, row);
+                }
+
+                bool partitionChanged = false;
+                if (prevRow != null && group.Signature.PartitionBy != null && prevPartitionKeys != null)
+                {
+                    for (int k = 0; k < group.Signature.PartitionBy.Count; k++)
+                    {
+                        if (_context.CompareConstants(currentPartitionKeys[k], prevPartitionKeys[k]) != 0)
+                        {
+                            partitionChanged = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (partitionChanged || prevRow == null)
+                {
+                    rowNumber = 1;
+                    currentRank = 1;
+                    currentDenseRank = 1;
+                }
+                else
+                {
+                    rowNumber++;
+                    if (group.Signature.OrderBy != null && group.Signature.OrderBy.Count > 0)
+                    {
+                        bool samePeer = true;
+                        for (int k = 0; k < group.Signature.OrderBy.Count; k++)
+                        {
+                            if (prevSortKeys != null && _context.CompareConstants(currentSortKeys[k], prevSortKeys[k]) != 0)
+                            {
+                                samePeer = false;
+                                break;
+                            }
+                        }
+
+                        if (!samePeer)
+                        {
+                            currentDenseRank++;
+                            currentRank = rowNumber;
+                        }
+                    }
+                }
+
+                foreach (var col in group.Columns)
+                {
+                    var f = (FunctionCallExpression)col.Expression;
+                    var name = f.FunctionName.ToUpperInvariant();
+                    object? winVal = name switch
+                    {
+                        "ROW_NUMBER" => (decimal)rowNumber,
+                        "RANK" => (decimal)currentRank,
+                        "DENSE_RANK" => (decimal)currentDenseRank,
+                        _ => null
+                    };
+                    row[$"WINDOW_{f.ToSql().ToUpperInvariant()}"] = winVal;
+                }
+
+                yield return row;
+                prevRow = row;
+                prevPartitionKeys = currentPartitionKeys;
+                prevSortKeys = currentSortKeys;
+            }
+        }
+
+        private async Task<PartitionInfo[]> PartitionStream(IAsyncEnumerable<Row> stream, List<Expression>? partitionBy)
         {
             var paths = new string[PartitionCount];
+            var counts = new long[PartitionCount];
             var writers = new StreamWriter[PartitionCount];
 
             for (int i = 0; i < PartitionCount; i++)
@@ -202,6 +309,7 @@ namespace ETL_SQL.Engine.Engines
                     var json = JsonSerializer.Serialize(row.Columns);
                     _context.TotalSpilledBytes += System.Text.Encoding.UTF8.GetByteCount(json) + 1;
                     await writers[pIdx].WriteLineAsync(json);
+                    counts[pIdx]++;
                 }
             }
             finally
@@ -216,7 +324,7 @@ namespace ETL_SQL.Engine.Engines
                 _context.PartitionsCount += usedCount;
             }
 
-            return paths;
+            return paths.Select((p, i) => new PartitionInfo(p, counts[i])).ToArray();
         }
 
         private async Task SpillStreamToDisk(IAsyncEnumerable<Row> stream, string path)

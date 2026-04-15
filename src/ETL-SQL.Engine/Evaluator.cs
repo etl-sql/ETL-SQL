@@ -243,6 +243,8 @@ namespace ETL_SQL.Engine
             if (name.Equals("@@VERSION", StringComparison.OrdinalIgnoreCase)) return LanguageMetadata.GetFullVersionString();
             if (name.Equals("@@ROWCOUNT", StringComparison.OrdinalIgnoreCase)) return RowsProcessed;
             if (name.Equals("@@ERROR", StringComparison.OrdinalIgnoreCase)) return PreviousErrorNumber;
+            if (name.Equals("@@TOTAL_SPILLED_BYTES", StringComparison.OrdinalIgnoreCase)) return TotalSpilledBytes;
+            if (name.Equals("@@PARTITIONS_COUNT", StringComparison.OrdinalIgnoreCase)) return PartitionsCount;
             
             return _variableScopeManager.GetVariable(name);
 

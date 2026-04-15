@@ -309,7 +309,28 @@ Any authorized bypass is logged as an **Audit Warning**. Administrators can view
 SHOW SAFE ZONES;
 ```
 
+Available security overrides:
+- `SET ALLOW_FILE_TYPE_ACCESS ON/OFF`: Bypasses strictly whitelisted extensions.
+- `SET ALLOW_GREATER_THAN_n_FILE ON/OFF`: Bypasses the file operation limit.
+- `SET ALLOW_RECURSIVE_GREATER_THAN_n_LAYERS ON/OFF`: Bypasses script nesting limits.
+
 ### 5.4 Performance Monitoring
+
+Session metrics can be queried at any time using system variables. These are particularly useful for profiling complex ETL pipelines.
+
+| Variable | Description |
+| :--- | :--- |
+| `@@ROWCOUNT` | Number of rows processed by the last statement. |
+| `@@TOTAL_SPILLED_BYTES` | Total data written to disk for temporary spill-to-disk operations. |
+| `@@PARTITIONS_COUNT` | Number of partitions created during the last spilled operation (join/window/sort). |
+| `@@TRANCOUNT` | Active transaction nesting level (0 = auto-commit). |
+
+Example script for logging spill metrics:
+```sql
+SELECT * INTO #big_data FROM src.massive_table;
+PRINT 'Spilled: ' + (@@TOTAL_SPILLED_BYTES / 1024 / 1024) + ' MB across ' + @@PARTITIONS_COUNT + ' partitions.';
+```
+
 - **Orchestrator Heartbeats**: Every 60 seconds, the scheduler logs `ActiveJobs`, `QueuedJobs`, `AvailableSlots`, and `MaxConcurrent` to the app log.
 - **Per-Job Metrics**: Every job completion records `PeakRAM` and `CPUTime`.
 - **Historical Audit**: Run `SHOW JOB HISTORY;` in the TUI to see resource consumption across past executions.
