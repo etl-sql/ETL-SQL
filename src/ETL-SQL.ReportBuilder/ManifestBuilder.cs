@@ -53,6 +53,16 @@ namespace ETL_SQL.ReportBuilder
                 if (vStmt.TypedSeries.Count > 0)
                     vm.SeriesDefs = vStmt.TypedSeries.Select(ts => new SeriesDefManifest { SeriesType = ts.SeriesType, Column = ts.Column }).ToList();
 
+                // Conditional formatting rules (TABLE)
+                if (vStmt.FormattingRules.Count > 0)
+                    vm.FormattingRules = vStmt.FormattingRules.Select(r => new FormattingRuleManifest
+                    {
+                        Column    = r.Column,
+                        Operator  = r.Operator,
+                        Threshold = r.Threshold,
+                        Color     = r.Color
+                    }).ToList();
+
                 // Copy axis options with axis:{x|y}:{key} prefix for the renderer
                 foreach (var axis in vStmt.AxisOptions)
                 {
@@ -113,7 +123,14 @@ namespace ETL_SQL.ReportBuilder
                     SlotMap   = new Dictionary<string, string>(pStmt.SlotMap)
                 };
                 foreach (var param in pStmt.Parameters)
+                {
                     pm.Parameters[param.Name] = param.DefaultValue;
+                    if (param.DataType != null)
+                    {
+                        pm.ParameterTypes ??= new Dictionary<string, string>();
+                        pm.ParameterTypes[param.Name] = param.DataType;
+                    }
+                }
 
                 if (pStmt.Styles.Count > 0)
                     pm.Styles = new Dictionary<string, string>(pStmt.Styles);

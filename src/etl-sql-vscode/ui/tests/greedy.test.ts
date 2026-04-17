@@ -1,4 +1,4 @@
-import { extractPipelineNodes } from '../pipeline_utils';
+import { extractPipelineNodes } from '../src/utils/pipeline_utils';
 
 describe('Greedy Pipeline Extraction', () => {
   test('should extract from standard lowercase "roots"', () => {

@@ -30,12 +30,13 @@ namespace ETL_SQL.Core.Parser
             VisualSourceExpression? source = null;
             string? title = null;
             string? subtitle = null;
-            var mappings    = new List<VisualMapping>();
-            var options     = new List<VisualOption>();
-            var axisOptions = new List<AxisOptions>();
-            var actions     = new List<VisualAction>();
-            var styles      = new Dictionary<string, string>();
-            var typedSeries = new List<TypedSeries>();
+            var mappings       = new List<VisualMapping>();
+            var options        = new List<VisualOption>();
+            var axisOptions    = new List<AxisOptions>();
+            var actions        = new List<VisualAction>();
+            var styles         = new Dictionary<string, string>();
+            var typedSeries    = new List<TypedSeries>();
+            var formattingRules = new List<FormattingRule>();
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
@@ -100,6 +101,12 @@ namespace ETL_SQL.Core.Parser
                     typedSeries.AddRange(ParseTypedSeries());
                     _parser.Consume(TokenType.RPAREN, "Expected ')' to close SERIES");
                 }
+                else if (_parser.Match(TokenType.FORMATTING))
+                {
+                    _parser.Consume(TokenType.LPAREN, "Expected '(' after FORMATTING");
+                    formattingRules.AddRange(ParseFormattingRules());
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' to close FORMATTING");
+                }
                 else
                 {
                     throw new SyntaxException(
@@ -126,19 +133,20 @@ namespace ETL_SQL.Core.Parser
 
             return new CreateVisualStatement
             {
-                Name        = name,
-                VisualType  = visualType,
-                Title       = title,
-                Subtitle    = subtitle,
-                Source      = source,
-                Mappings    = mappings,
-                Options     = options,
-                AxisOptions = axisOptions,
-                Actions     = actions,
-                TypedSeries = typedSeries,
-                Styles      = styles,
-                Line        = startToken.Line,
-                Column      = startToken.Column
+                Name             = name,
+                VisualType       = visualType,
+                Title            = title,
+                Subtitle         = subtitle,
+                Source           = source,
+                Mappings         = mappings,
+                Options          = options,
+                AxisOptions      = axisOptions,
+                Actions          = actions,
+                TypedSeries      = typedSeries,
+                FormattingRules  = formattingRules,
+                Styles           = styles,
+                Line             = startToken.Line,
+                Column           = startToken.Column
             };
         }
 
@@ -163,6 +171,9 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.SLIDER))       return VisualType.Slider;
             if (_parser.Match(TokenType.MULTISELECT))  return VisualType.MultiSelect;
             if (_parser.Match(TokenType.SEARCH))       return VisualType.Search;
+            if (_parser.Match(TokenType.GAUGE))        return VisualType.Gauge;
+            if (_parser.Match(TokenType.FUNNEL))       return VisualType.Funnel;
+            if (_parser.Match(TokenType.WATERFALL))    return VisualType.Waterfall;
 
             // Fallback: visual type may arrive as IDENTIFIER when lexer context is ambiguous
             if (_parser.Current.Type == TokenType.IDENTIFIER)
@@ -189,6 +200,9 @@ namespace ETL_SQL.Core.Parser
                     "SLIDER"      => VisualType.Slider,
                     "MULTISELECT" => VisualType.MultiSelect,
                     "SEARCH"      => VisualType.Search,
+                    "GAUGE"       => VisualType.Gauge,
+                    "FUNNEL"      => VisualType.Funnel,
+                    "WATERFALL"   => VisualType.Waterfall,
                     _ => throw new SyntaxException(
                              $"Unknown visual type '{val}'.",
                              _parser.Previous.Line, _parser.Previous.Column)
@@ -196,7 +210,7 @@ namespace ETL_SQL.Core.Parser
             }
 
             throw new SyntaxException(
-                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, SLIDER, MULTISELECT, SEARCH) but got '{_parser.Current.Value}'",
+                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL) but got '{_parser.Current.Value}'",
                 _parser.Current.Line, _parser.Current.Column);
         }
 
@@ -440,10 +454,26 @@ namespace ETL_SQL.Core.Parser
                 {
                     var paramName = _parser.ConsumeIdentifier("Expected parameter name").Value;
                     if (!paramName.StartsWith("@")) paramName = "@" + paramName;
+                    string? dataType   = null;
                     string? defaultVal = null;
-                    if (_parser.Match(TokenType.EQUALS))
+                    // Support: @param AS DATE DEFAULT 'val'  or legacy: @param = 'val'
+                    if (_parser.Match(TokenType.AS))
+                    {
+                        dataType = _parser.Current.Value.ToUpperInvariant();
+                        _parser.Advance();
+                        // Optional DEFAULT keyword
+                        if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                            _parser.Current.Value.Equals("DEFAULT", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _parser.Advance();
+                            defaultVal = ConsumeReportOptionValue();
+                        }
+                    }
+                    else if (_parser.Match(TokenType.EQUALS))
+                    {
                         defaultVal = ConsumeReportOptionValue();
-                    parameters.Add(new PageParameter { Name = paramName, DefaultValue = defaultVal });
+                    }
+                    parameters.Add(new PageParameter { Name = paramName, DataType = dataType, DefaultValue = defaultVal });
                     _parser.Match(TokenType.COMMA);
                 }
                 _parser.Consume(TokenType.RPAREN, "Expected ')' to close PARAMETERS");
@@ -606,6 +636,39 @@ namespace ETL_SQL.Core.Parser
 
                 var column = _parser.ConsumeIdentifier("Expected column name after series type").Value;
                 result.Add(new TypedSeries { SeriesType = seriesType, Column = column });
+                _parser.Match(TokenType.COMMA);
+            }
+            return result;
+        }
+
+        // ── FORMATTING body helper ────────────────────────────────────────────
+
+        private IEnumerable<FormattingRule> ParseFormattingRules()
+        {
+            var result = new List<FormattingRule>();
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                var column = _parser.ConsumeIdentifier("Expected column name in FORMATTING rule").Value;
+                var opToken = _parser.Current.Type;
+                string op = opToken switch
+                {
+                    TokenType.LESS_THAN      => "<",
+                    TokenType.GREATER_THAN   => ">",
+                    TokenType.LESS_EQUALS    => "<=",
+                    TokenType.GREATER_EQUALS => ">=",
+                    TokenType.EQUALS         => "=",
+                    TokenType.NOT_EQUALS     => "<>",
+                    _ => throw new SyntaxException(
+                        $"Expected comparison operator (<, >, <=, >=, =, <>) in FORMATTING rule but got '{_parser.Current.Value}'",
+                        _parser.Current.Line, _parser.Current.Column)
+                };
+                _parser.Advance();
+                var threshold = _parser.Current.Type is TokenType.NUMBER or TokenType.STRING
+                    ? _parser.Advance().Value
+                    : throw new SyntaxException("Expected threshold value in FORMATTING rule", _parser.Current.Line, _parser.Current.Column);
+                _parser.Consume(TokenType.THEN, "Expected THEN after threshold in FORMATTING rule");
+                var color = _parser.Consume(TokenType.STRING, "Expected color string after THEN").Value;
+                result.Add(new FormattingRule { Column = column, Operator = op, Threshold = threshold, Color = color });
                 _parser.Match(TokenType.COMMA);
             }
             return result;

@@ -1,6 +1,7 @@
 import type { ProtocolMessage } from './types';
 
 export const mockTrace: ProtocolMessage[] = [
+    { type: 'activeEditorChanged', uri: 'mock:///demo.etlsql' },
     { type: 'status', status: 'ready', buildId: 'DEV-SANDBOX-2026' },
     { type: 'message', text: 'Executing: CREATE CONNECTION m ON MOCKDB()', level: 'sys' },
     { type: 'progress', data: { execution_nodes: [
@@ -29,5 +30,17 @@ export const mockTrace: ProtocolMessage[] = [
             { type: 'SELECT', totalMs: 45 }
         ]
     }},
+    { type: 'connections', connections: [
+        { name: 'PROD_DB', type: 'MSSQL', connectionString: 'Server=prod;Database=sales' },
+        { name: 'STAGING_CSV', type: 'FLATFILE', connectionString: 'C:/Data/staging.csv' }
+    ]},
+    { type: 'scriptConnections', uri: 'mock:///demo.etlsql', connections: [
+        { name: 'LOCAL_SCRATCH', type: 'MOCKDB' }
+    ]},
+    { type: 'variables', variables: [
+        { name: '@batch_id', value: '4502', typeName: 'INT' },
+        { name: '@process_date', value: '2026-04-17', typeName: 'DATE' },
+        { name: '@is_active', value: 'true', typeName: 'BIT' }
+    ]},
     { type: 'done', exitCode: 0 }
 ];

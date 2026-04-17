@@ -14,7 +14,13 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
     - **Engine Isolation**: Fixed context flag mutation in `EXPLAIN ANALYZE` and ensured proper result-set registration for analytical output.
     - **Snapshot Safety**: Hardened `SnapshotStore` with atomic file replacements and per-path async reader-writer locks.
     - **Dashboard Stability**: New `DashboardKeywordConflictRule` prevents user-defined visuals/datasets from shadowing internal dashboard state.
-- **Testing**: Added verification suites for system variables, scaling configuration, snapshot safety, and security hardening.
+- **VS Code Extension (Modernization & Stabilization)**:
+    - **Real-Time Variable Discovery**: Added recursive AST scanning to the Language Server. User-declared variables (`DECLARE`, `SET`, `FOR`, `FOREACH`) are now discovered in real-time as you type and broadcast to the Sidebar and Results Panel.
+    - **Theme-Aware Rendering**: Optimized all React UI components to use native VS Code semantic CSS variables. Fixed "invisible text" and high-contrast issues across Light, Dark, and High Contrast themes.
+    - **Protocol Resilience**: Implemented defensive message handling to bridge inconsistencies between the engine and LSP formats (`variables` vs `data` keys).
+    - **Sidebar Enhancements**: Unified variable explorer that merges static (declared) variables with active (runtime) values during execution.
+    - **Results Panel Reliability**: Resolved "white screen" regression caused by ES2022 feature incompatibility and missing view-state injection.
+- **Testing**: Added verification suites for system variables, scaling configuration, snapshot safety, security hardening, and UI protocol resilience (49 total tests).
 
     - `Security:MaxRecursiveNestingDepth` – Configurable recursion safety limit (formerly hardcoded at 5).
 - **Documentation**:

@@ -16,7 +16,8 @@ namespace ETL_SQL.Core
     {
         Bar, Line, Scatter, Pie, Table, Card, Slicer,
         Donut, HorizontalBar, BoxPlot, Treemap, HeatMap, Text, Combo,
-        DatePicker, Slider, MultiSelect, Search
+        DatePicker, Slider, MultiSelect, Search,
+        Gauge, Funnel, Waterfall
     }
 
     public enum DatasetEncryptionMode
@@ -85,8 +86,17 @@ namespace ETL_SQL.Core
     public record PageParameter : AstNode
     {
         public required string Name     { get; init; }
+        public string? DataType         { get; init; }
         public string? DefaultValue     { get; init; }
         public string ToSql() => AstSerializer.Format(this);
+    }
+
+    public record FormattingRule : AstNode
+    {
+        public required new string Column { get; init; }  // hides AstNode.Column intentionally
+        public required string Operator   { get; init; }  // "<", ">", "<=", ">=", "=", "<>"
+        public required string Threshold  { get; init; }
+        public required string Color      { get; init; }
     }
 
     public record TypedSeries : AstNode
@@ -107,6 +117,7 @@ namespace ETL_SQL.Core
         public List<AxisOptions> AxisOptions           { get; init; } = new();
         public List<VisualAction> Actions              { get; init; } = new();
         public List<TypedSeries> TypedSeries           { get; init; } = new();
+        public List<FormattingRule> FormattingRules    { get; init; } = new();
         public Dictionary<string, string> Styles       { get; init; } = new();
         public override string ToSql() => AstSerializer.Format(this);
     }

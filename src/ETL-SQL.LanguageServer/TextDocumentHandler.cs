@@ -131,6 +131,17 @@ namespace ETL_SQL.LSP
                     }).ToList()
                 });
 
+                // Push variables to client sidebar
+                var scriptVariables = new List<object>();
+                foreach (var stmt in script.Statements)
+                    DiscoverVariablesRecursive(stmt, scriptVariables);
+                
+            _server?.SendNotification("etlsql/scriptVariables", new
+                {
+                    uri       = uri.ToString(),
+                    variables = scriptVariables.GroupBy(v => ((dynamic)v).name).Select(g => g.First()).ToList()
+                });
+
                 // Lineage analysis — store result in DocumentStateStore
                 var tracker  = new LineageTracker(NullLogger.Instance);
                 var analyzer = new LineageAnalyzer(tracker);
@@ -298,5 +309,40 @@ namespace ETL_SQL.LSP
                 Change           = TextDocumentSyncKind.Full,
                 Save             = new SaveOptions { IncludeText = true }
             };
+
+        private void DiscoverVariablesRecursive(Statement? stmt, List<object> vars)
+        {
+            if (stmt == null) return;
+
+            if (stmt is DeclareStatement dec)
+                vars.Add(new { name = dec.VariableName, typeName = dec.DataType ?? "scalar", value = dec.InitialValue?.ToSql() });
+            else if (stmt is SetVariableStatement set)
+                vars.Add(new { name = set.VariableName, typeName = "unknown", value = set.Value?.ToSql() });
+            else if (stmt is ForStatement f)
+            {
+                vars.Add(new { name = f.VariableName, typeName = "INT", value = "loop" });
+                DiscoverVariablesRecursive(f.Body, vars);
+            }
+            else if (stmt is ForeachStatement fe)
+            {
+                vars.Add(new { name = fe.VariableName, typeName = "item", value = "loop" });
+                DiscoverVariablesRecursive(fe.Body, vars);
+            }
+            else if (stmt is BlockStatement block)
+                foreach (var s in block.Statements) DiscoverVariablesRecursive(s, vars);
+            else if (stmt is IfStatement ifStmt)
+            {
+                DiscoverVariablesRecursive(ifStmt.IfBody, vars);
+                if (ifStmt.ElseIfClauses != null)
+                    foreach (var ei in ifStmt.ElseIfClauses) DiscoverVariablesRecursive(ei.Body, vars);
+                if (ifStmt.ElseBody != null) DiscoverVariablesRecursive(ifStmt.ElseBody, vars);
+            }
+            else if (stmt is WhileStatement w)   DiscoverVariablesRecursive(w.Body, vars);
+            else if (stmt is TryCatchStatement tc)
+            {
+                DiscoverVariablesRecursive(tc.TryBody, vars);
+                DiscoverVariablesRecursive(tc.CatchBody, vars);
+            }
+        }
     }
 }

@@ -1087,15 +1087,20 @@ CREATE VISUAL <name> AS <type> (
   [OPTIONS   ( key = value [, ...] [, X_AXIS (...)] [, Y_AXIS (...)]
                             [, COLORS ( key = '#hex' [, ...] )]
                             [, LEGEND ( position = top|bottom|left|right )] ),]
-  [STYLE     ( key = value [, ...] ),]
-  [SERIES    ( BAR|LINE column [, ...] ),]
-  [ACTIONS   ( trigger = action [, ...] )]
+  [STYLE      ( key = value [, ...] ),]
+  [SERIES     ( BAR|LINE column [, ...] ),]
+  [FORMATTING ( column op threshold THEN '<color>' [, ...] ),]
+  [ACTIONS    ( trigger = action [, ...] )]
 );
 ```
 
-Valid `<type>` values: `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `TABLE`, `CARD`, `TEXT`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
+Valid `<type>` values: `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `TABLE`, `CARD`, `TEXT`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
 
 `SOURCE` is required for all types except `TEXT`, `DATEPICKER`, `SLIDER`, and `SEARCH`.
+
+Valid `op` values in `FORMATTING`: `<`, `>`, `<=`, `>=`, `=`, `<>`.
+
+`CROSS_FILTER = true` may be specified in `OPTIONS` to enable cross-filtering. Chart visuals broadcast a filter on click; TABLE visuals with this option become filter targets.
 
 Valid action forms:
 ```
@@ -1114,7 +1119,7 @@ CREATE PAGE <name> AS LAYOUT (
   )
   [, STYLE ( key = value [, ...] )]
 )
-[WITH PARAMETERS ( @param [= default] [, ...] )]
+[WITH PARAMETERS ( @param [AS type] [DEFAULT default | = default] [, ...] )]
 ;
 ```
 

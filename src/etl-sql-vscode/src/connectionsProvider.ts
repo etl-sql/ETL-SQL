@@ -14,7 +14,7 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
 
     private connections: Connection[] = [];
     private scriptConnectionsByUri: Map<string, any[]> = new Map();
-    private variables: any[] = [];
+    public variables: any[] = [];
     private metadataCache: Map<string, string[]> = new Map();
     public client: any; // Will be set by extension.ts
     public outputChannel?: vscode.OutputChannel;

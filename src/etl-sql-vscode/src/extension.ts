@@ -12,12 +12,14 @@ import * as cp from 'child_process';
 import { ResultsPanel } from './resultsPanel';
 import { ReplManager } from './ReplManager';
 import { ConnectionsProvider, Connection } from './connectionsProvider';
+import { SidebarProvider } from './sidebarProvider';
 import { ReportPreviewPanel } from './reportPreviewPanel';
 import * as crypto from 'crypto';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
 let connectionsProvider: ConnectionsProvider;
+let sidebarProvider: SidebarProvider;
 
 export function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel("ETL-SQL");
@@ -28,10 +30,22 @@ export function activate(context: vscode.ExtensionContext) {
 
     connectionsProvider = new ConnectionsProvider(context);
     connectionsProvider.outputChannel = outputChannel;
-    vscode.window.registerTreeDataProvider('etlsql-connections', connectionsProvider);
+    // Native tree support removed in favor of webview sidebar
+    // vscode.window.registerTreeDataProvider('etlsql-connections', connectionsProvider);
+
+    sidebarProvider = new SidebarProvider(context.extensionUri, connectionsProvider);
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider(SidebarProvider.viewType, sidebarProvider)
+    );
+
+    // Sync state changes to sidebar
+    connectionsProvider.onDidChangeTreeData(() => {
+        sidebarProvider.postMessage({ type: 'connections', connections: connectionsProvider.getConnections() });
+    });
 
     ReplManager.getInstance().onVariablesChange(vars => {
         connectionsProvider.updateVariables(vars);
+        sidebarProvider.postMessage({ type: 'variables', variables: vars });
     });
 
     // Register Results Panel (Bottom Panel)
@@ -84,6 +98,7 @@ export function activate(context: vscode.ExtensionContext) {
         client.start().then(() => {
             outputChannel.appendLine("Language Client started successfully.");
             connectionsProvider.client = client;
+            sidebarProvider.client = client;
             connectionsProvider.refresh();
             syncConnectionsToLsp();
 
@@ -91,6 +106,13 @@ export function activate(context: vscode.ExtensionContext) {
                 const normalizedUri = vscode.Uri.parse(params.uri).toString();
                 outputChannel.appendLine(`Received ${params.connections.length} connections from script: ${normalizedUri}`);
                 connectionsProvider.updateScriptConnections(normalizedUri, params.connections);
+                sidebarProvider.postMessage({ type: 'scriptConnections', uri: normalizedUri, connections: params.connections });
+            });
+
+            client.onNotification('etlsql/scriptVariables', (params: { uri: string, variables: any[] }) => {
+                const normalizedUri = vscode.Uri.parse(params.uri).toString();
+                // outputChannel.appendLine(`Received ${params.variables.length} variables from script: ${normalizedUri}`);
+                sidebarProvider.postMessage({ type: 'scriptVariables', uri: normalizedUri, variables: params.variables });
             });
         }).catch(err => {
             outputChannel.appendLine(`CRITICAL: Language Client failed to start: ${err}`);
@@ -206,6 +228,7 @@ function syncConnectionsToLsp() {
     if (client && client.state === 2) {
         const connections = connectionsProvider.getConnections();
         client.sendNotification('etlsql/setConnections', { connections });
+        sidebarProvider.postMessage({ type: 'connections', connections });
     }
 }
 

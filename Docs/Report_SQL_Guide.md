@@ -132,7 +132,10 @@ All clauses inside the outer `( )` are separated by commas. The closing `)` ends
 | `BOXPLOT` | Box-and-whisker plot for distribution visualisation. | ECharts |
 | `TREEMAP` | Hierarchical area chart. One rectangle per row, sized by value. | ECharts |
 | `HEATMAP` | Grid heatmap. Requires X, Y, and VALUE mappings. | ECharts |
-| `TABLE` | Paginated, scrollable data grid. | HTML `<table>` |
+| `GAUGE` | Radial KPI gauge. Single VALUE from first data row against a min/max arc. | ECharts |
+| `FUNNEL` | Conversion funnel. Each row is one stage (LABEL + VALUE). | ECharts |
+| `WATERFALL` | Cumulative change chart. Positive values rise, negative values fall. | ECharts |
+| `TABLE` | Paginated, scrollable data grid. Supports `FORMATTING` for conditional cell colors. | HTML `<table>` |
 | `CARD` | Single large KPI number with an optional label. | Styled `<div>` |
 | `TEXT` | Free-form text or HTML block. Uses the `VALUE` option, not a SOURCE query. | `<div>` |
 | `SLICER` | Dropdown parameter selector. SOURCE provides the option list. | `<select>` |
@@ -270,9 +273,59 @@ MAPPINGS (X = hour, Y = weekday, VALUE = count)
 MAPPINGS (LABEL = product, VALUE = revenue)
 ```
 
+#### GAUGE
+
+| Role | Description |
+|------|-------------|
+| `VALUE` | The current gauge reading (numeric, first data row only). |
+| `MAX` | Optional column providing the maximum value for the arc. |
+| `LABEL` | Optional label shown at the center of the gauge. |
+
+```sql
+CREATE VISUAL RevenueKpi AS GAUGE (
+  SOURCE = (SELECT 73 AS pct, 100 AS target, 'Revenue Target' AS lbl),
+  MAPPINGS (VALUE = pct, MAX = target, LABEL = lbl),
+  OPTIONS (MIN = 0, MAX = 100, TITLE = 'Revenue vs Target')
+);
+```
+
+`MIN` and `MAX` options override column-derived bounds. Both default to `0` / `100` when omitted.
+
+#### FUNNEL
+
+| Role | Description |
+|------|-------------|
+| `LABEL` | Stage name column. |
+| `VALUE` | Numeric value for each stage (determines bar width). |
+
+```sql
+CREATE VISUAL SalesFunnel AS FUNNEL (
+  SOURCE = (SELECT Stage, Leads FROM #funnel ORDER BY Leads DESC),
+  MAPPINGS (LABEL = Stage, VALUE = Leads)
+);
+```
+
+#### WATERFALL
+
+| Role | Description |
+|------|-------------|
+| `X` | Category / period column. |
+| `Y` | Numeric delta — positive values rise, negative values fall. |
+
+```sql
+CREATE VISUAL CashFlow AS WATERFALL (
+  SOURCE = (SELECT Period, Delta FROM #cashflow),
+  MAPPINGS (X = Period, Y = Delta)
+);
+```
+
+Use the `COLORS (positive = '#5cb85c', negative = '#d9534f')` option inside `OPTIONS (COLORS (...))` to customise bar colors.
+
 #### TABLE
 
 TABLE visuals use all columns returned by `SOURCE` in definition order. No `MAPPINGS` clause is needed.
+
+See [Conditional Formatting](#conditional-formatting) for applying cell colors to TABLE visuals.
 
 #### COMBO
 
@@ -356,6 +409,53 @@ Controls legend placement.
 ```sql
 LEGEND (position = top)     -- top | bottom | left | right
 ```
+
+### FORMATTING (Conditional Cell Colors) {#conditional-formatting}
+
+Applies CSS colors to TABLE visual cells based on column value comparisons. Each rule specifies a column, a comparison operator, a threshold, and a color:
+
+```sql
+CREATE VISUAL FinancialSummary AS TABLE (
+  SOURCE = (SELECT Category, Revenue, Margin FROM #summary),
+  FORMATTING (
+    Revenue < 0       THEN 'red',
+    Revenue >= 100000 THEN '#28a745',
+    Margin < 0.05     THEN 'orange'
+  )
+);
+```
+
+**Rule syntax:** `column operator threshold THEN 'color'`
+
+| Operator | Meaning |
+|----------|---------|
+| `<` | Less than |
+| `>` | Greater than |
+| `<=` | Less than or equal |
+| `>=` | Greater than or equal |
+| `=` | Equal |
+| `<>` | Not equal |
+
+Multiple rules for the same column are evaluated top-to-bottom; the first matching rule wins. Numeric thresholds use numeric comparison; string thresholds use string equality (`=` / `<>`). `color` may be any CSS color value (`'red'`, `'#ff0000'`, `'rgba(255,0,0,0.5)'`).
+
+### CROSS_FILTER
+
+Setting `CROSS_FILTER = true` in the `OPTIONS` clause of a chart visual makes it act as a cross-filter source. Clicking a data point broadcasts a filter to all TABLE visuals on the same page that also have `CROSS_FILTER = true`. Clicking the same value again clears the filter.
+
+```sql
+CREATE VISUAL SalesByRegion AS BAR (
+  SOURCE = (SELECT Region, Revenue FROM #sales),
+  MAPPINGS (X = Region, Y = Revenue),
+  OPTIONS (CROSS_FILTER = true)
+);
+
+CREATE VISUAL SalesDetail AS TABLE (
+  SOURCE = (SELECT Region, Product, Revenue FROM #sales),
+  OPTIONS (CROSS_FILTER = true)  -- becomes a filter target
+);
+```
+
+When the user clicks "West" in the bar chart, the TABLE is filtered to show only rows where `Region = 'West'`. Cross-filtering operates client-side using the data already in the manifest — no server round-trip is needed.
 
 ### STYLE
 
@@ -534,9 +634,24 @@ STYLE (
 
 Declares page-level parameters with optional default values. These drive dynamic queries when a SLICER or other filter control fires `SET_PARAMETER`.
 
+**Untyped (legacy):**
+
 ```sql
 WITH PARAMETERS (@region = 'All', @year = '2024')
 ```
+
+**Typed declarations** — add `AS type` and the `DEFAULT` keyword:
+
+```sql
+WITH PARAMETERS (
+    @startDate AS DATE    DEFAULT '2024-01-01',
+    @endDate   AS DATE    DEFAULT '2024-12-31',
+    @minSales  AS NUMBER  DEFAULT '0',
+    @region    AS VARCHAR DEFAULT 'All'
+)
+```
+
+Supported types: `DATE`, `DATETIME`, `NUMBER`, `INT`, `DECIMAL`, `VARCHAR`. The declared type is stored in the manifest under `parameterTypes` and can be used by the runtime for type-safe casting before passing to queries. Untyped parameters are treated as `VARCHAR`.
 
 When a parameter changes the DashboardService re-evaluates all visuals whose inline SELECTs reference that parameter. Unaffected visuals are not re-queried.
 
@@ -978,11 +1093,11 @@ CREATE PAGE Trends AS LAYOUT (
 
 | Item | Status |
 |------|--------|
-| Conditional formatting on TABLE visuals | Not implemented |
-| GAUGE visual type (radial KPI gauge) | Not implemented |
-| Funnel chart visual type | Not implemented |
-| Waterfall chart visual type | Not implemented |
+| Conditional formatting on TABLE visuals | Implemented — `FORMATTING (col op val THEN 'color')` clause |
+| GAUGE visual type (radial KPI gauge) | Implemented |
+| Funnel chart visual type | Implemented |
+| Waterfall chart visual type | Implemented |
 | Excel export (`--format xlsx`) | Not implemented |
-| Cross-filtering between visuals | Not implemented |
-| Typed parameter declarations (`PARAMETER @date AS DATE DEFAULT '...'`) | Not implemented |
+| Cross-filtering between visuals | Implemented — `CROSS_FILTER = true` in OPTIONS |
+| Typed parameter declarations | Implemented — `@param AS DATE DEFAULT 'val'` syntax |
 | PIVOT / UNPIVOT statement | Not implemented |

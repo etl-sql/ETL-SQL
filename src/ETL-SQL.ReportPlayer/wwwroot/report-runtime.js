@@ -253,7 +253,50 @@
         container.appendChild(card);
     }
 
-    // ── Chart (ECharts — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP) ──
+    // ── Chart (ECharts — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL) ──
+
+    // Cross-filter state: { filterValue, filterColumn }. Stored per page section.
+    function getPageState(container) {
+        let el = container;
+        while (el && !el.classList.contains('page')) el = el.parentElement;
+        if (!el) return null;
+        if (!el._crossFilterState) el._crossFilterState = {};
+        return el._crossFilterState;
+    }
+
+    function applyPageCrossFilter(container, filterValue, filterColumn) {
+        let pageEl = container;
+        while (pageEl && !pageEl.classList.contains('page')) pageEl = pageEl.parentElement;
+        if (!pageEl) return;
+        const state = pageEl._crossFilterState || (pageEl._crossFilterState = {});
+        // Toggle: clicking same value clears filter
+        if (state.filterValue === filterValue && state.filterColumn === filterColumn) {
+            state.filterValue  = null;
+            state.filterColumn = null;
+        } else {
+            state.filterValue  = filterValue;
+            state.filterColumn = filterColumn;
+        }
+        // Re-render all cross-filter TABLE visuals on this page
+        pageEl.querySelectorAll('[data-cross-filter]').forEach(el => {
+            const visual = el._visualData;
+            if (!visual) return;
+            const wrapper = el.querySelector('.table-wrapper');
+            if (!wrapper) return;
+            const tbody = wrapper.querySelector('tbody');
+            if (!tbody) return;
+            const ci = (visual.columns || []).findIndex(
+                c => c.toLowerCase() === (state.filterColumn || '').toLowerCase());
+            Array.from(tbody.rows).forEach(tr => {
+                if (!state.filterValue || ci < 0) {
+                    tr.style.display = '';
+                } else {
+                    const cellVal = tr.cells[ci] ? tr.cells[ci].textContent : '';
+                    tr.style.display = cellVal === state.filterValue ? '' : 'none';
+                }
+            });
+        });
+    }
 
     function renderChart(container, visual, effectiveTheme) {
         if (!visual.chartConfig) {
@@ -284,12 +327,22 @@
         const chart = echarts.init(wrapper, effectiveTheme || null);
         chart.setOption(option);
 
-        const clickActions = actionsFor(visual, 'ON_CLICK');
-        if (clickActions.length > 0) {
+        const clickActions  = actionsFor(visual, 'ON_CLICK');
+        const crossFilter   = (visual.options || {})['CROSS_FILTER'] === 'true';
+        const xMappingCol   = (visual.options || {})['mapping:x'];
+
+        if (clickActions.length > 0 || crossFilter) {
             chart.on('click', params => {
                 const idx     = params.dataIndex != null ? params.dataIndex : -1;
                 const rowData = idx >= 0 ? (visual.rows || [])[idx] || [] : [];
                 clickActions.forEach(action => executeAction(action, rowData, visual.columns || []));
+                if (crossFilter) {
+                    const clickedValue = params.name || params.value || (rowData.length > 0 ? rowData[0] : null);
+                    const colName = xMappingCol || (visual.columns && visual.columns[0]);
+                    if (clickedValue != null && colName) {
+                        applyPageCrossFilter(container, String(clickedValue), colName);
+                    }
+                }
             });
         }
     }
@@ -302,8 +355,16 @@
             return;
         }
 
-        const clickActions = actionsFor(visual, 'ON_CLICK');
-        const isClickable  = clickActions.length > 0;
+        const clickActions  = actionsFor(visual, 'ON_CLICK');
+        const isClickable   = clickActions.length > 0;
+        const fmtRules      = visual.formattingRules || [];
+        const crossFilter   = (visual.options || {})['CROSS_FILTER'] === 'true';
+
+        // Register as a cross-filter target so applyPageCrossFilter can find it
+        if (crossFilter) {
+            container.setAttribute('data-cross-filter', '1');
+            container._visualData = visual;
+        }
 
         const wrapper = document.createElement('div');
         wrapper.className = 'table-wrapper' + (isClickable ? ' clickable' : '');
@@ -323,9 +384,29 @@
         (visual.rows || []).forEach(row => {
             const tr = document.createElement('tr');
             if (isClickable) tr.style.cursor = 'pointer';
-            visual.columns.forEach((_, ci) => {
+            visual.columns.forEach((col, ci) => {
                 const td = document.createElement('td');
-                td.textContent = row[ci] != null ? String(row[ci]) : '';
+                const cellVal = row[ci] != null ? String(row[ci]) : '';
+                td.textContent = cellVal;
+                // Apply conditional formatting rules for this column
+                for (const rule of fmtRules) {
+                    if (rule.column.toLowerCase() !== col.toLowerCase()) continue;
+                    const num = parseFloat(cellVal);
+                    const thr = parseFloat(rule.threshold);
+                    let match = false;
+                    if (!isNaN(num) && !isNaN(thr)) {
+                        match = rule.operator === '<'  ? num < thr
+                              : rule.operator === '>'  ? num > thr
+                              : rule.operator === '<=' ? num <= thr
+                              : rule.operator === '>=' ? num >= thr
+                              : rule.operator === '='  ? num === thr
+                              : rule.operator === '<>' ? num !== thr : false;
+                    } else {
+                        match = rule.operator === '='  ? cellVal === rule.threshold
+                              : rule.operator === '<>' ? cellVal !== rule.threshold : false;
+                    }
+                    if (match) { td.style.color = rule.color; break; }
+                }
                 tr.appendChild(td);
             });
             if (isClickable) {

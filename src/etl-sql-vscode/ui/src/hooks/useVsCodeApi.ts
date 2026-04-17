@@ -35,6 +35,19 @@ export function useVsCodeApi() {
     useEffect(() => {
         if (isDev) {
             // Simulator for development
+            const params = new URLSearchParams(window.location.search);
+            const view = params.get('view');
+
+            if (view === 'sidebar') {
+                // For sidebar, send metadata immediately
+                const metaMessages = mockTrace.filter(m => 
+                    ['connections', 'scriptConnections', 'variables', 'activeEditorChanged'].includes(m.type)
+                );
+                setMessages(metaMessages);
+                setStatus('ready');
+                return;
+            }
+
             setStatus('running');
             let index = 0;
             const interval = setInterval(() => {

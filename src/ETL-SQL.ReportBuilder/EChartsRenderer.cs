@@ -36,6 +36,9 @@ namespace ETL_SQL.ReportBuilder
                 "TREEMAP"      => RenderTreemap(visual),
                 "HEATMAP"      => RenderHeatMap(visual),
                 "COMBO"        => RenderCombo(visual),
+                "GAUGE"        => RenderGauge(visual),
+                "FUNNEL"       => RenderFunnel(visual),
+                "WATERFALL"    => RenderWaterfall(visual),
                 _              => null   // TABLE, CARD, SLICER, TEXT — rendered client-side
             };
 
@@ -298,6 +301,121 @@ namespace ETL_SQL.ReportBuilder
                 xAxis   = BuildAxisOpts(v, "x", "category", xLabels),
                 yAxis   = BuildAxisOpts(v, "y", "value"),
                 series  = seriesList
+            });
+        }
+
+        // ── GAUGE ────────────────────────────────────────────────────────────────
+        // Roles: value (required), label (optional), max (optional)
+        // Options: MIN (default 0), MAX (default 100), TITLE
+
+        private string RenderGauge(VisualManifest v)
+        {
+            var valueCol = FindRole(v, "value") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var labelCol = FindRole(v, "label") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var maxCol   = FindRole(v, "max");
+
+            int vi = valueCol != null ? v.Columns.IndexOf(valueCol) : 0;
+            int li = labelCol != null ? v.Columns.IndexOf(labelCol) : -1;
+            int mi = maxCol   != null ? v.Columns.IndexOf(maxCol)   : -1;
+
+            var firstRow = v.Rows.Count > 0 ? v.Rows[0] : null;
+            var value    = firstRow != null ? ToDouble(vi >= 0 && vi < firstRow.Count ? firstRow[vi] : null) ?? 0.0 : 0.0;
+            var name     = firstRow != null && li >= 0 && li < firstRow.Count ? firstRow[li] ?? "" : (labelCol ?? "");
+
+            double gaugeMin = 0, gaugeMax = 100;
+            if (v.Options.TryGetValue("MIN", out var minStr) && double.TryParse(minStr, out var mn)) gaugeMin = mn;
+            if (v.Options.TryGetValue("MAX", out var maxStr) && double.TryParse(maxStr, out var mx)) gaugeMax = mx;
+            else if (firstRow != null && mi >= 0 && mi < firstRow.Count)
+            {
+                gaugeMax = ToDouble(firstRow[mi]) ?? 100.0;
+            }
+
+            return Serialize(new
+            {
+                title   = TitleOpt(v),
+                tooltip = new { formatter = "{b}: {c}" },
+                series  = new[]
+                {
+                    new { type = "gauge", min = gaugeMin, max = gaugeMax,
+                          data = new[] { new { value, name } } }
+                }
+            });
+        }
+
+        // ── FUNNEL ───────────────────────────────────────────────────────────────
+        // Roles: label (required), value (required)
+
+        private string RenderFunnel(VisualManifest v)
+        {
+            var labelCol = FindRole(v, "label") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var valueCol = FindRole(v, "value") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+
+            int li = labelCol != null ? v.Columns.IndexOf(labelCol) : 0;
+            int vi = valueCol != null ? v.Columns.IndexOf(valueCol) : 1;
+
+            var data = v.Rows.Select(r => (object)new
+            {
+                name  = li >= 0 && li < r.Count ? r[li] ?? "" : "",
+                value = ToDouble(vi >= 0 && vi < r.Count ? r[vi] : null) ?? 0.0
+            }).ToList();
+
+            return Serialize(new
+            {
+                title   = TitleOpt(v),
+                tooltip = new { trigger = "item", formatter = "{a} <br/>{b}: {c}" },
+                legend  = LegendOpt(v),
+                series  = new[]
+                {
+                    new { type = "funnel", name = v.Name,
+                          label = new { show = true, position = "inside" },
+                          data }
+                }
+            });
+        }
+
+        // ── WATERFALL ────────────────────────────────────────────────────────────
+        // Roles: x (categories), y (values — positive increases, negative decreases)
+        // Rendered as stacked bar: transparent base bar + colored delta bar
+
+        private string RenderWaterfall(VisualManifest v)
+        {
+            var xCol = FindRole(v, "x") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var yCol = FindRole(v, "y") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+
+            int xi = xCol != null ? v.Columns.IndexOf(xCol) : 0;
+            int yi = yCol != null ? v.Columns.IndexOf(yCol) : 1;
+
+            var categories = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").ToList();
+            var rawVals    = v.Rows.Select(r => ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null) ?? 0.0).ToList();
+
+            // Compute running total for transparent base bars
+            var bases  = new List<double>();
+            var deltas = new List<object>();
+            double running = 0;
+            foreach (var val in rawVals)
+            {
+                bases.Add(val >= 0 ? running : running + val);
+                var color = val >= 0
+                    ? (GetColor(v, "positive") ?? "#5cb85c")
+                    : (GetColor(v, "negative") ?? "#d9534f");
+                deltas.Add(new { value = Math.Abs(val), itemStyle = new { color } });
+                running += val;
+            }
+
+            return Serialize(new
+            {
+                title   = TitleOpt(v),
+                tooltip = new { trigger = "axis", axisPointer = new { type = "shadow" } },
+                xAxis   = new { type = "category", data = categories },
+                yAxis   = BuildAxisOpts(v, "y", "value"),
+                series  = new object[]
+                {
+                    new { type = "bar", stack = "total",
+                          itemStyle = new { color = "transparent" },
+                          emphasis  = new { itemStyle = new { color = "transparent" } },
+                          data = bases },
+                    new { type = "bar", stack = "total", name = v.Name, data = deltas }
+                }
             });
         }
 

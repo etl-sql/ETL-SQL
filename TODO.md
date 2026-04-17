@@ -1,8 +1,30 @@
 # ETL-SQL Development Roadmap
-## TUI on-going issues
 
-## VS Code Extension on-going issues
+## VS Code Sidebar Modernization (HTML/React Wrapper)
 
+- [x] **Phase 1: Sidebar Webview Scaffolding**
+  - [x] Implement `SidebarProvider.ts` as a `vscode.WebviewViewProvider`.
+  - [x] Update `package.json` to register the new webview container and view.
+  - [x] Configure Vite to handle a secondary entry point or routing for the sidebar.
+- [x] **Phase 2: Metadata Integration & Bridge**
+  - [x] Create a message protocol for `Connection`, `Table`, `Column`, and `Variable` data.
+  - [x] Bridge existing LSP metadata requests (`getTables`, `getColumns`) to the webview.
+  - [x] Implement incremental variable updates from `ReplManager`.
+- [x] **Phase 4: Rich Explorer UI**
+  - [x] Build a hierarchical tree-view component in React.
+  - [x] Add support for "Drill-down" into columns and data types.
+  - [x] Implement search/filter for sidebar objects.
+- [x] **Phase 5: Drag & Drop Support**
+  - [x] Implement `onDragStart` in React metadata items.
+  - [x] Map dropped items to VS Code's `editor.action.insertSnippet` for easy SQL generation.
+- [x] **Phase 6: Refinement & Portability**
+  - [x] Enable standalone sidebar testing (mocking VS Code API).
+  - [x] Finalize theme-aware styling and smooth animations.
+
+## TUI Performance & Dashboard Issues
+- [x] Integrate script-level performance metrics (Lex/Parse/Exec).
+- [x] Auto-enable profiling in TUI mode.
+- [x] Refactor dashboard to show metrics even when statement history is empty.
 - [ ] **Pipeline execution tree**  When running loops it should just keep restating the same node multiple times rather than print all the iterations.  That really gums up the view when it prints so much.  
 
 ---
@@ -29,14 +51,14 @@ These are capabilities common in production ETL tools that are either absent fro
 
 These are features common in reporting and BI tools that are absent from the Report-SQL language:
 
-- [ ] **Conditional formatting on TABLE visuals** — Ability to highlight cells based on value (e.g., red if negative, green if above target). Standard in every BI tool. Would require a `FORMATTING (column = condition → color)` clause on TABLE visuals.
+- [x] **Conditional formatting on TABLE visuals** — `FORMATTING (col op threshold THEN 'color')` clause. Supports <, >, <=, >=, =, <> operators. Applied client-side in report-runtime.js.
 
-- [ ] **GAUGE visual type** — A radial gauge / speedometer for KPI dashboards (e.g., 73% of target). ECharts has native `gauge` support. Very common alongside CARD visuals for executive dashboards.
+- [x] **GAUGE visual type** — ECharts native `gauge`. MAPPINGS (VALUE, MAX, LABEL); OPTIONS (MIN, MAX). First data row drives the needle.
 
-- [ ] **Funnel chart visual type** — Conversion funnel (e.g., impressions → clicks → purchases). ECharts `funnel` type is built-in. Common in marketing and sales reports.
+- [x] **Funnel chart visual type** — ECharts native `funnel`. MAPPINGS (LABEL, VALUE).
 
-- [ ] **Report parameter type declarations** — Currently parameters are untyped strings. A `PARAMETER @date AS DATE DEFAULT '2024-01-01'` declaration would let the engine validate input types and let DATEPICKER/SLIDER know their expected format.
+- [x] **Report parameter type declarations** — `@param AS DATE DEFAULT 'val'` syntax in WITH PARAMETERS. DataType stored in manifest `parameterTypes`.
 
-- [ ] **Cross-filtering between visuals** — Currently, clicking a chart element only fires explicit ACTIONS (DRILL_DOWN or SET_PARAMETER). A declarative `CROSS_FILTER = true` option that automatically filters all visuals on the same page by the clicked value would reduce boilerplate. Common in Power BI and Tableau.
+- [x] **Cross-filtering between visuals** — `CROSS_FILTER = true` in OPTIONS. Chart clicks filter TABLE visuals on the same page. Client-side; click same value to clear.
 
-- [ ] **Waterfall chart visual type** — Shows cumulative effect of sequential positive/negative values. Common in financial reporting (P&L, cash flow). ECharts supports this via bar chart with custom series.
+- [x] **Waterfall chart visual type** — ECharts stacked bar (transparent base + colored delta). MAPPINGS (X, Y). Customizable colors via COLORS (positive = '...', negative = '...').

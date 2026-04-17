@@ -5,15 +5,41 @@ import { ExecutionConsole } from './components/ExecutionConsole';
 import { ResultGrid } from './components/ResultGrid';
 import { PerformanceTab } from './components/PerformanceTab';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import type { ResultsMessage, PerformanceMessage } from './types';
-import { RefreshCw, BarChart3, Database, Terminal, Activity, GitBranch } from 'lucide-react';
+import type { ResultsMessage, PerformanceMessage, VariablesMessage } from './types';
+import { RefreshCw, BarChart3, Database, Terminal, Activity, GitBranch, Variable as VariableIcon } from 'lucide-react';
 import { extractPipelineNodes } from './utils/pipeline_utils';
+import { extractVariables } from './utils/variable_utils';
+import { SidebarExplorer } from './components/SidebarExplorer';
+import { VariablesTab } from './components/VariablesTab';
 
-type TabId = 'pipeline' | 'results' | 'messages' | 'performance';
+declare global {
+  interface Window {
+    VIEW_TYPE?: 'sidebar' | 'results';
+  }
+}
+
+type TabId = 'pipeline' | 'results' | 'messages' | 'performance' | 'variables';
 
 function App() {
-  const { messages, status } = useVsCodeApi();
+  const { messages, status, postMessage } = useVsCodeApi();
   const [activeTab, setActiveTab] = useState<TabId>('pipeline');
+
+  // Allow switching view mode via query param in browser mode
+  const currentView = useMemo(() => {
+    if (window.VIEW_TYPE) return window.VIEW_TYPE;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('view') as 'sidebar' | 'results' | null;
+  }, []);
+
+  if (currentView === 'sidebar') {
+    return (
+      <ErrorBoundary>
+        <SidebarExplorer messages={messages} postMessage={postMessage} />
+      </ErrorBoundary>
+    );
+  }
+
+  // Rest of Results Panel code...
 
   // Extract relevant state from messages with defensive checks
   const pipeline = useMemo(() => extractPipelineNodes(messages), [messages]);
@@ -28,6 +54,16 @@ function App() {
     return perfMessages.length > 0 ? perfMessages[perfMessages.length - 1].metrics : null;
   }, [messages]);
 
+  const runtimeVars = useMemo(() => {
+    const runtimeMsg = [...messages].reverse().find(m => (m as any).type === 'variables');
+    return extractVariables(runtimeMsg as VariablesMessage);
+  }, [messages]);
+
+  const scriptVars = useMemo(() => {
+    const scriptMsg = [...messages].reverse().find(m => (m as any).type === 'scriptVariables');
+    return extractVariables(scriptMsg as VariablesMessage);
+  }, [messages]);
+
   const statusConfig = {
     ready: { label: 'Ready', color: 'bg-indigo-500', shadow: 'shadow-indigo-500/20' },
     running: { label: 'Executing', color: 'bg-blue-500 animate-pulse', shadow: 'shadow-blue-500/40' },
@@ -40,6 +76,7 @@ function App() {
     { id: 'results', label: 'Results', icon: Database, badge: latestResult?.rows.length },
     { id: 'messages', label: 'Messages', icon: Terminal },
     { id: 'performance', label: 'Performance', icon: Activity },
+    { id: 'variables', label: 'Variables', icon: VariableIcon, badge: runtimeVars.length + scriptVars.length },
   ];
 
   const formatDuration = (ms: number) => {
@@ -95,6 +132,7 @@ function App() {
           )}
           {activeTab === 'messages' && <ExecutionConsole messages={messages} />}
           {activeTab === 'performance' && <PerformanceTab metrics={perf} />}
+          {activeTab === 'variables' && <VariablesTab messages={messages} />}
         </main>
       </div>
 

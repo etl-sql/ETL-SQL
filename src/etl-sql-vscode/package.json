@@ -32,16 +32,10 @@
     "views": {
       "etlsql-explorer": [
         {
-          "id": "etlsql-connections",
-          "name": "Connections",
-          "visibility": "visible",
-          "icon": "media/icon.svg"
-        },
-        {
-          "id": "etlsql-variables",
-          "name": "Variables",
-          "visibility": "visible",
-          "icon": "$(symbol-variable)"
+          "type": "webview",
+          "id": "etlsql-sidebar",
+          "name": "Metadata Explorer",
+          "visibility": "visible"
         }
       ],
       "etlsql-panel": [

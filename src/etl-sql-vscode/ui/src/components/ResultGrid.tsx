@@ -91,7 +91,7 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}
-                    className="px-2 py-0.5 border-b border-[var(--border)] whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px] text-[var(--text)] opacity-70 group-hover:opacity-100 transition-opacity"
+                    className="px-2 py-0.5 border-b border-[var(--border)] whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px] text-[var(--text-primary)] opacity-90 group-hover:opacity-100 transition-opacity"
                   >
                     <span className="font-mono">{flexRender(cell.column.columnDef.cell, cell.getContext())}</span>
                   </td>

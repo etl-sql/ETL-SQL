@@ -104,7 +104,7 @@ namespace ETL_SQL.Core.Parser
         // All are non-reserved: only treated as keywords inside CREATE VISUAL /
         // CREATE DASHBOARD / CREATE PAGE context.
         VISUAL, DASHBOARD, THEME, LAYOUT, REFRESH,
-        BAR, LINE, PIE, GAUGE, RADAR, SCATTER, HEATMAP, TABLE_VISUAL,
+        BAR, LINE, PIE, GAUGE, RADAR, SCATTER, HEATMAP, TABLE_VISUAL, FUNNEL, WATERFALL, FORMATTING,
         DONUT, HBAR, BOXPLOT, TREEMAP, COLORS,
         BOTTOM,  // position keyword (TOP/LEFT/RIGHT already registered via LanguageMetadata)
         TITLE, SUBTITLE,

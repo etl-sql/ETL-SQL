@@ -98,7 +98,8 @@ All nodes are C# records (immutable value types).
 ```
 Name         — identifier used in page slot maps and container VISUALS lists
 VisualType   — Bar | Line | Scatter | Pie | Donut | HorizontalBar | BoxPlot |
-               Treemap | HeatMap | Combo | Table | Card | Text |
+               Treemap | HeatMap | Combo | Gauge | Funnel | Waterfall |
+               Table | Card | Text |
                Slicer | DatePicker | Slider | MultiSelect | Search
 Title        — optional display title string
 Subtitle     — optional display subtitle string
@@ -107,9 +108,10 @@ Source       — VisualSourceExpression (inline SELECT or #temp reference)
 Mappings     — List<VisualMapping> (role → column, e.g. X → Region)
 Options      — List<VisualOption> flat key-value pairs (stacked, smooth, FORMAT, etc.)
 AxisOptions  — List<AxisOptions> per-axis X_AXIS / Y_AXIS config blocks
-TypedSeries  — List<TypedSeries> for COMBO charts (BAR col, LINE col)
-Styles       — Dictionary<string, string> (THEME, HEIGHT, WIDTH, BACKGROUND, BORDER)
-Actions      — List<VisualAction> (ON_CLICK, ON_CHANGE triggers)
+TypedSeries      — List<TypedSeries> for COMBO charts (BAR col, LINE col)
+FormattingRules  — List<FormattingRule> for TABLE conditional cell colors (column, operator, threshold, color)
+Styles           — Dictionary<string, string> (THEME, HEIGHT, WIDTH, BACKGROUND, BORDER)
+Actions          — List<VisualAction> (ON_CLICK, ON_CHANGE triggers)
 ```
 
 #### `CreatePageStatement`
@@ -118,7 +120,7 @@ Actions      — List<VisualAction> (ON_CLICK, ON_CHANGE triggers)
 Name       — page identifier
 Structure  — CSS grid-template-areas string (e.g. 'A A / B C')
 SlotMap    — Dictionary<string, string>: slot letter → visual/container name
-Parameters — List<PageParameter> (name, default value)
+Parameters — List<PageParameter> (name, optional DataType, optional default value)
 Styles     — Dictionary<string, string> (THEME, BACKGROUND)
 ```
 
@@ -305,7 +307,10 @@ Converts a `VisualManifest` into an [Apache ECharts v5](https://echarts.apache.o
 | BoxPlot | `boxPlot` | x, value distribution |
 | Treemap | `treemap` | label, value |
 | HeatMap | `heatmap` | x, y, value |
-| Table | *(none — HTML table)* | all columns |
+| Gauge | `gauge` | value, max (optional), label (optional) |
+| Funnel | `funnel` | label, value |
+| Waterfall | stacked `bar` (transparent base + delta) | x, y |
+| Table | *(none — HTML table with optional FORMATTING rules)* | all columns |
 | Card | *(none — scalar div)* | label, value |
 | Text | *(none — HTML div)* | VALUE option |
 | Slicer / MultiSelect | *(none — `<select>` / checkboxes)* | value |
@@ -517,6 +522,4 @@ Invoked as `etl-sql-report <command>`.
 | **Rpt-4** | `STRUCTURE` string validation — every slot letter must appear in both `STRUCTURE` and `MAP(...)` |
 | **Drill-down** | `DrillDownAction` defined in AST and partially wired in client runtime; full UX pending |
 | **Scheduled refresh** | `REFRESH EVERY` advisory is stored but requires Orchestrator integration to act on it |
-| **GAUGE / Funnel / Waterfall** | ECharts supports these types; AST and handler extensions needed |
-| **Conditional TABLE formatting** | Cell-level color rules based on value thresholds |
-| **Excel export** | `--format xlsx` via ClosedXML or EPPlus |
+| **Excel export** | `--format xlsx` via ClosedXML or EPPlus — not yet implemented |

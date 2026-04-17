@@ -58,6 +58,64 @@ export interface DoneMessage {
     exitCode: number;
 }
 
+export interface Connection {
+    name: string;
+    type: string;
+    connectionString: string;
+}
+
+export interface Variable {
+    name: string;
+    value: string;
+    typeName: string;
+}
+
+export interface ConnectionsMessage {
+    type: 'connections';
+    connections: Connection[];
+}
+
+export interface ScriptConnectionsMessage {
+    type: 'scriptConnections';
+    uri: string;
+    connections: any[];
+}
+
+export interface VariablesMessage {
+    type: 'variables';
+    variables?: Variable[];
+    data?: any[]; // For backwards compatibility with some engine versions
+}
+
+export interface TablesResponse {
+    type: 'tablesResponse';
+    requestId: string;
+    tables: string[];
+}
+
+export interface ColumnsResponse {
+    type: 'columnsResponse';
+    requestId: string;
+    columns: string[];
+}
+
+export interface TempTablesResponse {
+    type: 'tempTablesResponse';
+    requestId: string;
+    tables: string[];
+}
+
+export interface ActiveEditorChangedMessage {
+    type: 'activeEditorChanged';
+    uri: string;
+}
+
+export interface ScriptVariablesMessage {
+    type: 'scriptVariables';
+    uri: string;
+    variables: any[];
+}
+
 export type ProtocolMessage = 
     | ResultsMessage 
     | ProgressMessage 
@@ -65,4 +123,12 @@ export type ProtocolMessage =
     | PerformanceMessage 
     | ClearMessage 
     | StatusMessage
-    | DoneMessage;
+    | DoneMessage
+    | ConnectionsMessage
+    | ScriptConnectionsMessage
+    | VariablesMessage
+    | ScriptVariablesMessage
+    | TablesResponse
+    | ColumnsResponse
+    | TempTablesResponse
+    | ActiveEditorChangedMessage;

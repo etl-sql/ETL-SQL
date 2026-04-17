@@ -90,6 +90,8 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
             let html = fs.readFileSync(indexPath.fsPath, 'utf8');
 
             // Inject nonce and CSP to maintain "Zero-Trust" standards
+            const inject = `<script nonce="${nonce}">window.VIEW_TYPE = 'results';</script>`;
+            html = html.replace(/<head>/, `<head>${inject}`);
             // 1. Tag the script with the nonce
             html = html.replace(/<script type="module"/g, `<script type="module" nonce="${nonce}"`);
             

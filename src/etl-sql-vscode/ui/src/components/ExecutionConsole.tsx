@@ -52,11 +52,11 @@ export const ExecutionConsole: React.FC<ExecutionConsoleProps> = ({ messages }) 
               {new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
             </span>
             
-            <div className={`mt-0.5 ${config.color} opacity-40 group-hover:opacity-100 transition-opacity`}>
+            <div className={`mt-0.5 ${config.color} opacity-80 group-hover:opacity-100 transition-opacity`}>
               <Icon size={12} />
             </div>
 
-            <div className={`flex-1 break-all leading-relaxed ${msg.level === 'err' ? 'text-[var(--color-err)] font-bold' : 'text-[var(--text)] opacity-80 group-hover:opacity-100'}`}>
+            <div className={`flex-1 break-all leading-relaxed ${msg.level === 'err' ? 'text-[var(--color-err)] font-bold' : 'text-[var(--text-primary)] opacity-90 group-hover:opacity-100'}`}>
               {msg.text}
             </div>
           </div>

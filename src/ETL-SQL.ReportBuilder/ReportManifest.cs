@@ -94,6 +94,10 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("seriesDefs")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<SeriesDefManifest>? SeriesDefs { get; set; }
+
+        [JsonPropertyName("formattingRules")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<FormattingRuleManifest>? FormattingRules { get; set; }
     }
 
     /// <summary>A serialisable representation of one ACTIONS entry (DRILL_DOWN or SET_PARAMETER).</summary>
@@ -139,6 +143,11 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("parameters")]
         public Dictionary<string, string?> Parameters { get; set; } = new();
 
+        /// <summary>Parameter names and their declared types (e.g. "DATE", "NUMBER").</summary>
+        [JsonPropertyName("parameterTypes")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? ParameterTypes { get; set; }
+
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
@@ -161,6 +170,14 @@ namespace ETL_SQL.ReportBuilder
 
         [JsonPropertyName("rowCount")]
         public long RowCount { get; set; }
+    }
+
+    public class FormattingRuleManifest
+    {
+        [JsonPropertyName("column")]    public string Column    { get; set; } = string.Empty;
+        [JsonPropertyName("operator")]  public string Operator  { get; set; } = string.Empty;
+        [JsonPropertyName("threshold")] public string Threshold { get; set; } = string.Empty;
+        [JsonPropertyName("color")]     public string Color     { get; set; } = string.Empty;
     }
 
     public class SeriesDefManifest
