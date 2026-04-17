@@ -1051,3 +1051,94 @@ Display commands are used to inspect metadata, session state, and performance lo
 SHOW COLUMNS FOR my_connector.customers INTO #schema;
 SELECT Column_Name, Type FROM #schema WHERE IsNullable = 1;
 ```
+
+---
+
+## Appendix A: Report-SQL Grammar (`.rptsql` files)
+
+`.rptsql` files are standard ETL-SQL scripts with the following additional statement types. For the full user guide including examples, see [Docs/Report_SQL_Guide.md](../Report_SQL_Guide.md).
+
+### A.1 SET REPORT TITLE / DESCRIPTION
+
+```
+SET REPORT TITLE       = '<string>';
+SET REPORT DESCRIPTION = '<string>';
+```
+
+### A.2 CREATE VISUAL
+
+```
+CREATE VISUAL <name> AS <type> (
+  [SOURCE    = #table | ( SELECT ... ),]
+  [TITLE     = '<string>',]
+  [SUBTITLE  = '<string>',]
+  [MAPPINGS  ( role = column [, ...] ),]
+  [OPTIONS   ( key = value [, ...] [, X_AXIS (...)] [, Y_AXIS (...)]
+                            [, COLORS ( key = '#hex' [, ...] )]
+                            [, LEGEND ( position = top|bottom|left|right )] ),]
+  [STYLE     ( key = value [, ...] ),]
+  [SERIES    ( BAR|LINE column [, ...] ),]
+  [ACTIONS   ( trigger = action [, ...] )]
+);
+```
+
+Valid `<type>` values: `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `TABLE`, `CARD`, `TEXT`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
+
+`SOURCE` is required for all types except `TEXT`, `DATEPICKER`, `SLIDER`, and `SEARCH`.
+
+Valid action forms:
+```
+ON_CLICK  = DRILL_DOWN(Target = <VisualName>, Key = <column>)
+ON_CHANGE = SET_PARAMETER(@paramName, <columnRef>)
+```
+
+### A.3 CREATE PAGE
+
+```
+CREATE PAGE <name> AS LAYOUT (
+  STRUCTURE = '<css-grid-template-areas>',
+  MAP (
+    '<slot>' = <VisualOrContainerName>
+    [, '<slot>' = <name> ...]
+  )
+  [, STYLE ( key = value [, ...] )]
+)
+[WITH PARAMETERS ( @param [= default] [, ...] )]
+;
+```
+
+`STRUCTURE` is a CSS grid-template-areas string: space-separated slot letters within a row, rows separated by `/`. Example: `'A A / B C'`.
+
+### A.4 CREATE DATASET
+
+```
+CREATE DATASET #<name>
+  [REFRESH EVERY '<interval>']
+  [TTL = '<duration>']
+  [COMPRESS = ON|OFF]
+  [ENCRYPT = MACHINE | PASSWORD | KEYFILE]
+  [PASSWORD = '<password>']
+  [KEYFILE  = '<path>']
+AS ( SELECT ... );
+```
+
+Interval format: `<n>s`, `<n>m`, `<n>h`, or `<n>d`.
+
+### A.5 CREATE CONTAINER
+
+```
+CREATE CONTAINER <name> AS BOX|SCROLL (
+  [STYLE   ( key = value [, ...] ),]
+  VISUALS  ( <VisualName> [, ...] )
+);
+```
+
+### A.6 CREATE NAVIGATION
+
+```
+CREATE NAVIGATION <name> AS TAB|BUTTON|LINK (
+  [ORIENTATION = HORIZONTAL|VERTICAL,]
+  [DEFAULT = <PageName>]
+)
+WITH PAGES ( <PageName> [, ...] );
+```

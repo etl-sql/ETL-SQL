@@ -70,7 +70,13 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.DATASET))
                 return ParseCreateDataset(startToken);
 
-            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, or DATASET after CREATE", _parser.Current.Line, _parser.Current.Column);
+            // ── Report-SQL (Phase 9.3) ─────────────────────────────────────
+            if (_parser.Match(TokenType.CONTAINER))
+                return ParseCreateContainer(startToken);
+            if (_parser.Match(TokenType.NAVIGATION))
+                return ParseCreateNavigation(startToken);
+
+            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, or NAVIGATION after CREATE", _parser.Current.Line, _parser.Current.Column);
         }
 
         private Statement ParseCreateSshKeyPair(Token startToken)

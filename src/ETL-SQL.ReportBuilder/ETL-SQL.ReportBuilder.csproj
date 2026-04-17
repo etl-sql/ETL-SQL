@@ -13,5 +13,8 @@
     <ProjectReference Include="..\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="QuestPDF" Version="2024.10.4" />
+  </ItemGroup>
 
 </Project>

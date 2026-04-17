@@ -5,6 +5,16 @@ using System.Text;
 
 namespace ETL_SQL.ReportBuilder
 {
+    /// <summary>Embeds an SVG chart as an HTML img with a base-64 data URI.</summary>
+    file static class SvgEmbed
+    {
+        internal static string ToDataUri(string svg)
+        {
+            var b64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(svg));
+            return $"data:image/svg+xml;base64,{b64}";
+        }
+    }
+
     /// <summary>
     /// Converts a <see cref="ReportManifest"/> into a Markdown string.
     ///
@@ -18,12 +28,20 @@ namespace ETL_SQL.ReportBuilder
     /// </summary>
     public class MarkdownRenderer
     {
+        private readonly SvgChartRenderer _svg = new();
+
         /// <summary>Renders the full manifest as a Markdown document string.</summary>
         public string Render(ReportManifest manifest)
         {
             var sb = new StringBuilder();
-            sb.AppendLine($"# Report — {System.IO.Path.GetFileNameWithoutExtension(manifest.Source)}");
+            string heading = manifest.Title ?? $"Report — {System.IO.Path.GetFileNameWithoutExtension(manifest.Source)}";
+            sb.AppendLine($"# {heading}");
             sb.AppendLine();
+            if (manifest.Description != null)
+            {
+                sb.AppendLine(manifest.Description);
+                sb.AppendLine();
+            }
             sb.AppendLine($"*Generated: {manifest.BuiltAt:yyyy-MM-dd HH:mm:ss} UTC*");
             sb.AppendLine();
 
@@ -76,17 +94,44 @@ namespace ETL_SQL.ReportBuilder
                     sb.AppendLine();
                     break;
 
+                case "TEXT":
+                {
+                    v.Options.TryGetValue("VALUE", out var textContent);
+                    v.Options.TryGetValue("ALIGN", out var align);
+                    if (!string.IsNullOrWhiteSpace(textContent))
+                    {
+                        // Emit as a block-quote to give visual separation; honour alignment hint in HTML
+                        if (align != null && !align.Equals("left", StringComparison.OrdinalIgnoreCase))
+                            sb.AppendLine($"<div align='{align.ToLowerInvariant()}'>");
+                        sb.AppendLine(textContent);
+                        if (align != null && !align.Equals("left", StringComparison.OrdinalIgnoreCase))
+                            sb.AppendLine("</div>");
+                    }
+                    sb.AppendLine();
+                    break;
+                }
+
                 default:
-                    // BAR, LINE, SCATTER, PIE — embed Chart.js config comment
+                {
+                    // Embed ECharts option as a comment for tooling / VS Code preview
                     if (v.ChartConfig != null)
                     {
-                        sb.AppendLine($"<!-- CHART:{v.ChartConfig} -->");
+                        sb.AppendLine($"<!-- ECHART:{v.ChartConfig} -->");
                         sb.AppendLine();
                     }
-                    // Also render a fallback table so the document is readable without JS
+                    // Embed SVG image for static export (GitHub, PDF conversion, etc.)
+                    var svgStr = _svg.Render(v);
+                    if (svgStr != null)
+                    {
+                        var uri = SvgEmbed.ToDataUri(svgStr);
+                        sb.AppendLine($"<img src=\"{uri}\" alt=\"{EscapeCell(v.Name)}\" width=\"600\" height=\"350\" />");
+                        sb.AppendLine();
+                    }
+                    // Fallback data table for readability without images
                     if (v.Rows.Count > 0)
                         RenderTable(sb, v);
                     break;
+                }
             }
         }
 

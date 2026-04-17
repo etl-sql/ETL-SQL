@@ -95,7 +95,10 @@ try
     builder.Services.AddSingleton<ILineageTracker, LineageTracker>();
     builder.Services.AddSingleton<IDockerManager, DockerContainerManager>();
     builder.Services.AddSingleton<SessionStateManager>();
-    builder.Services.AddSingleton<ETL_SQL.Services.SecurityService>();
+    
+    var securityService = new ETL_SQL.Services.SecurityService(loggerService);
+    securityService.UpdateFromConfiguration(cfg);
+    builder.Services.AddSingleton<ETL_SQL.Services.SecurityService>(securityService);
 
     // Connectors
     builder.Services.AddSingleton<IConnector, MockDbConnector>();

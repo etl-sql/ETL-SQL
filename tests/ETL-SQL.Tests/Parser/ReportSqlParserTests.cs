@@ -195,7 +195,7 @@ AS (SELECT Date, SUM(Amount) AS Total FROM orders GROUP BY Date);";
             Assert.Equal("1h", stmt.RefreshInterval);
             Assert.Equal("24h", stmt.Ttl);
             Assert.True(stmt.Compress);
-            Assert.True(stmt.Encrypt);
+            Assert.Equal(DatasetEncryptionMode.MachineBound, stmt.EncryptionMode);
             Assert.Equal("/keys/sales.key", stmt.KeyFile);
             Assert.NotNull(stmt.SourceQuery);
         }
@@ -211,7 +211,7 @@ AS (SELECT Date, SUM(Amount) AS Total FROM orders GROUP BY Date);";
             Assert.Equal("#summary", stmt!.TempTableName);
             Assert.Null(stmt.RefreshInterval);
             Assert.False(stmt.Compress);
-            Assert.False(stmt.Encrypt);
+            Assert.Equal(DatasetEncryptionMode.None, stmt.EncryptionMode);
         }
     }
 }

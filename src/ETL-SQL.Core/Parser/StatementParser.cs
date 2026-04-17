@@ -60,6 +60,8 @@ namespace ETL_SQL.Core.Parser
                 if (_parser.Match(TokenType.FOREACH_PAGE_SIZE)) return ParseSetThreshold(ThresholdType.ForeachPageSize);
                 if (_parser.Match(TokenType.MAX_MESSAGES)) return ParseSetThreshold(ThresholdType.MaxMessages);
                 
+                if (_parser.Match(TokenType.REPORT)) return ParseSetReportMetadata();
+
                 if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.StartsWith("ALLOW_", StringComparison.OrdinalIgnoreCase))
                 {
                     _parser.Advance();

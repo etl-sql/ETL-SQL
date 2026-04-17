@@ -308,6 +308,84 @@ SELECT * FROM MyTable WHERE Id = @param2; -- Should error
             Assert.Single(results);
             Assert.Contains("Unpivot source column 'Q2' not found in source subquery", results[0].Message);
         }
+
+        // ── PageVisualReferencedRule (Rpt-3 / Rpt-4) ────────────────────────
+
+        [Fact]
+        public async Task PageVisualReferenced_ValidPage_NoWarnings()
+        {
+            var linter = new Linter();
+            linter.AddRule(new PageVisualReferencedRule());
+
+            var sql = @"
+CREATE VISUAL ChartA AS BAR (SOURCE (SELECT 1 AS Val));
+CREATE VISUAL ChartB AS TABLE (SOURCE (SELECT 1 AS Val));
+CREATE PAGE Overview AS LAYOUT (
+    STRUCTURE = 'A B'
+    ,MAP ('A' = ChartA, 'B' = ChartB)
+);";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task PageVisualReferenced_MissingVisual_WarnsOnMapSlot()
+        {
+            var linter = new Linter();
+            linter.AddRule(new PageVisualReferencedRule());
+
+            var sql = @"
+CREATE VISUAL ChartA AS BAR (SOURCE (SELECT 1 AS Val));
+CREATE PAGE Overview AS LAYOUT (
+    STRUCTURE = 'A B'
+    ,MAP ('A' = ChartA, 'B' = NonExistent)
+);";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+            Assert.Single(results);
+            Assert.Contains("NonExistent", results.First().Message);
+            Assert.Contains("not defined", results.First().Message);
+        }
+
+        [Fact]
+        public async Task PageVisualReferenced_StructureLetterMissingFromMap_Warns()
+        {
+            var linter = new Linter();
+            linter.AddRule(new PageVisualReferencedRule());
+
+            var sql = @"
+CREATE VISUAL ChartA AS BAR (SOURCE (SELECT 1 AS Val));
+CREATE PAGE Overview AS LAYOUT (
+    STRUCTURE = 'A B'
+    ,MAP ('A' = ChartA)
+);";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+            Assert.Single(results);
+            Assert.Contains("'B'", results.First().Message);
+            Assert.Contains("no entry in MAP", results.First().Message);
+        }
+
+        [Fact]
+        public async Task PageVisualReferenced_MapKeyMissingFromStructure_Warns()
+        {
+            var linter = new Linter();
+            linter.AddRule(new PageVisualReferencedRule());
+
+            var sql = @"
+CREATE VISUAL ChartA AS BAR (SOURCE (SELECT 1 AS Val));
+CREATE VISUAL ChartB AS TABLE (SOURCE (SELECT 1 AS Val));
+CREATE PAGE Overview AS LAYOUT (
+    STRUCTURE = 'A'
+    ,MAP ('A' = ChartA, 'B' = ChartB)
+);";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+            Assert.Single(results);
+            Assert.Contains("'B'", results.First().Message);
+            Assert.Contains("does not appear in STRUCTURE", results.First().Message);
+        }
     }
 
     public class MockMetadataProvider : IMetadataProvider

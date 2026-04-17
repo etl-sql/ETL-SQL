@@ -174,6 +174,16 @@ namespace ETL_SQL.Engine
         public IDictionary<string, CreateVisualStatement> VisualDefinitions { get; } = new Dictionary<string, CreateVisualStatement>(StringComparer.OrdinalIgnoreCase);
         /// <inheritdoc />
         public IDictionary<string, CreatePageStatement> PageDefinitions { get; } = new Dictionary<string, CreatePageStatement>(StringComparer.OrdinalIgnoreCase);
+        /// <inheritdoc />
+        public IDictionary<string, CreateDatasetStatement> DatasetDefinitions { get; } = new Dictionary<string, CreateDatasetStatement>(StringComparer.OrdinalIgnoreCase);
+        /// <inheritdoc />
+        public IDictionary<string, CreateContainerStatement> ContainerDefinitions { get; } = new Dictionary<string, CreateContainerStatement>(StringComparer.OrdinalIgnoreCase);
+        /// <inheritdoc />
+        public IDictionary<string, CreateNavigationStatement> NavigationDefinitions { get; } = new Dictionary<string, CreateNavigationStatement>(StringComparer.OrdinalIgnoreCase);
+        /// <inheritdoc />
+        public string? ReportTitle { get; set; }
+        /// <inheritdoc />
+        public string? ReportDescription { get; set; }
 
         /// <summary>Optional prompt callback for interactive USE SETS WITH_PROMPT. Null = non-interactive (auto-proceed).</summary>
         public Func<string, Task<bool>>? OnPrompt { get; set; }
@@ -190,7 +200,7 @@ namespace ETL_SQL.Engine
 
         /// <summary>The high-level execution tree for visual progress tracking.</summary>
         public ExecutionTree ExecutionTree { get; } = new();
-
+        public IServiceProvider ServiceProvider => _serviceProvider;
         public SecurityService SecurityService => _securityService;
 
         public bool AllowUnknownFileTypes { get; set; }
@@ -644,10 +654,22 @@ namespace ETL_SQL.Engine
         public Task EvaluateDropIndex(DropIndexStatement stmt) => _schemaManager.EvaluateDropIndex(stmt, _connections);
         public Task EvaluateCreateIndex(CreateIndexStatement stmt) => _schemaManager.EvaluateCreateIndex(stmt, _connections);
 
-        public Task EvaluateClearSession(ClearSessionStatement stmt)
+        public async Task EvaluateClearSession(ClearSessionStatement stmt)
         {
-            if (SessionId != null) _sessionStateManager.ClearSession(SessionId);
-            return Task.CompletedTask;
+            if (stmt.SessionId != null)
+            {
+                var targetId = await EvaluateValue(stmt.SessionId, new Row());
+                if (targetId != null)
+                {
+                    _sessionStateManager.ClearSession(targetId.ToString()!);
+                    _logger.Info("Cleared session: {SessionId}", targetId);
+                }
+            }
+            else if (SessionId != null)
+            {
+                _sessionStateManager.ClearSession(SessionId);
+                _logger.Info("Cleared current session: {SessionId}", SessionId);
+            }
         }
 
         public void EvaluateCreateProcedure(CreateProcedureStatement stmt) => _variableScopeManager.SetProcedure(stmt.ProcedureName, stmt);

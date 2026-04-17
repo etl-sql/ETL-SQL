@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using Microsoft.Extensions.Configuration;
 using ETL_SQL.Common;
 
 namespace ETL_SQL.Services
@@ -16,6 +17,46 @@ namespace ETL_SQL.Services
         public SecurityService(ILogger logger)
         {
             _logger = logger;
+        }
+
+        /// <summary>
+        /// Centralized method to update security settings from the 'Security' section of the application configuration.
+        /// </summary>
+        public void UpdateFromConfiguration(IConfiguration configuration)
+        {
+            var section = configuration.GetSection("Security");
+            if (!section.Exists()) return;
+
+            // 1. Allowed Hosts (Egress Control)
+            var hosts = section.GetSection("AllowedHosts").Get<string[]>();
+            if (hosts != null && hosts.Length > 0)
+            {
+                AllowedHosts.Clear();
+                AllowedHosts.UnionWith(hosts);
+                _logger.Info("Security: Loaded {Count} allowed hosts.", hosts.Length);
+            }
+
+            // 2. Approved Safe Zones (Guardrail Bypass Zones)
+            var zones = section.GetSection("ApprovedSafeZones").Get<string[]>();
+            if (zones != null && zones.Length > 0)
+            {
+                ApprovedSafeZones.Clear();
+                ApprovedSafeZones.AddRange(zones);
+                _logger.Info("Security: Loaded {Count} approved safe zones.", zones.Length);
+            }
+
+            // 3. Allowed Environment Variables (ENV() Whitelist)
+            var envVars = section.GetSection("AllowedEnvVars").Get<string[]>();
+            if (envVars != null && envVars.Length > 0)
+            {
+                AllowedEnvVars.Clear();
+                AllowedEnvVars.UnionWith(envVars);
+                _logger.Info("Security: Loaded {Count} authorized environment variables.", envVars.Length);
+            }
+
+            // 4. Runaway Protection Limits
+            MaxFileOperations = int.TryParse(section["MaxFileOperationsPerScript"], out var mfo) ? mfo : DefaultMaxFileOperations;
+            MaxRecursiveDepth = int.TryParse(section["MaxRecursiveNestingDepth"], out var mrd) ? mrd : DefaultMaxRecursiveDepth;
         }
 
         private static readonly string[] AllowedExtensions = { ".csv", ".json", ".parquet", ".avro", ".db", ".enc", ".gz", ".7z", ".txt", ".sql", ".log", ".xlsx", ".xml", ".yaml", ".yml", ".ini", ".md", ".zip" };

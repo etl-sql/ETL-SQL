@@ -22,12 +22,16 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (CreateDatasetStatement)statement;
 
-            // Encryption requires a key file
-            if (stmt.Encrypt && string.IsNullOrWhiteSpace(stmt.KeyFile))
+            switch (stmt.EncryptionMode)
             {
-                throw new ExecutionException(
-                    $"CREATE DATASET '{stmt.TempTableName}': ENCRYPT = ON requires a KEYFILE to be specified.",
-                    null, stmt.Line, stmt.Column);
+                case DatasetEncryptionMode.Password when string.IsNullOrWhiteSpace(stmt.EncryptionPassword):
+                    throw new ExecutionException(
+                        $"CREATE DATASET '{stmt.TempTableName}': ENCRYPT = PASSWORD requires PASSWORD = '...' to be specified.",
+                        null, stmt.Line, stmt.Column);
+                case DatasetEncryptionMode.KeyFile when string.IsNullOrWhiteSpace(stmt.KeyFile):
+                    throw new ExecutionException(
+                        $"CREATE DATASET '{stmt.TempTableName}': ENCRYPT = KEYFILE requires KEYFILE = '...' to be specified.",
+                        null, stmt.Line, stmt.Column);
             }
 
             // Materialise the source query into the named temp table via SELECT INTO
@@ -51,15 +55,14 @@ namespace ETL_SQL.Engine.Handlers
             _logger.Debug("Materialising dataset '{TempTableName}'...", stmt.TempTableName);
             await context.EvaluateStatement(selectInto);
 
-            // Refresh scheduling is advisory at this stage — log a notice and continue
-            if (!string.IsNullOrWhiteSpace(stmt.RefreshInterval))
-            {
-                context.Log($"Dataset '{stmt.TempTableName}' created (refresh every {stmt.RefreshInterval} — scheduling requires ReportPlayer).");
-            }
-            else
-            {
-                context.Log($"Dataset '{stmt.TempTableName}' created.");
-            }
+            // Register AST node so ManifestBuilder / DashboardService can access refresh metadata
+            if (context is IReportContext rc)
+                rc.DatasetDefinitions[stmt.TempTableName] = stmt;
+
+            var intervalNote = string.IsNullOrWhiteSpace(stmt.RefreshInterval)
+                ? string.Empty
+                : $" (refresh every {stmt.RefreshInterval})";
+            context.Log($"Dataset '{stmt.TempTableName}' created{intervalNote}.");
         }
     }
 }

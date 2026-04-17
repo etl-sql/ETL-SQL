@@ -305,6 +305,65 @@ namespace ETL_SQL.Engine.Services
             });
         }
 
+        /// <summary>Returns a list of all managed sessions on disk.</summary>
+        public IEnumerable<SessionSummary> GetSessions()
+        {
+            if (!Directory.Exists(SessionRoot)) yield break;
+
+            var sessionFiles = Directory.GetFiles(SessionRoot, "*" + SessionFileExtension);
+            foreach (var file in sessionFiles)
+            {
+                var sessionId = Path.GetFileNameWithoutExtension(file);
+                var lastModified = File.GetLastWriteTime(file);
+                var createdAt = File.GetCreationTime(file);
+                
+                long totalSize = 0;
+                try
+                {
+                    totalSize += new FileInfo(file).Length;
+                    var recoveryFile = GetRecoveryFilePath(sessionId);
+                    if (File.Exists(recoveryFile)) totalSize += new FileInfo(recoveryFile).Length;
+                    
+                    var tempDir = GetTempTableDir(sessionId);
+                    if (Directory.Exists(tempDir))
+                    {
+                        totalSize += Directory.GetFiles(tempDir, "*", SearchOption.AllDirectories).Sum(t => new FileInfo(t).Length);
+                    }
+                }
+                catch { }
+
+                // Try to get counts from recovery manifest to avoid heavy decryption
+                int tempTables = 0;
+                int variables = 0;
+                string? lastScript = null;
+
+                try
+                {
+                    var recoveryFile = GetRecoveryFilePath(sessionId);
+                    if (File.Exists(recoveryFile))
+                    {
+                        using var doc = JsonDocument.Parse(File.ReadAllText(recoveryFile));
+                        if (doc.RootElement.TryGetProperty("TempTables", out var tt)) tempTables = tt.GetArrayLength();
+                        if (doc.RootElement.TryGetProperty("Variables", out var v)) variables = v.GetArrayLength();
+                        if (doc.RootElement.TryGetProperty("ScriptSource", out var s)) lastScript = s.GetString();
+                        if (doc.RootElement.TryGetProperty("LastModified", out var lm)) lastModified = lm.GetDateTime();
+                    }
+                }
+                catch { }
+
+                yield return new SessionSummary
+                {
+                    SessionId = sessionId,
+                    CreatedAt = createdAt,
+                    LastModifiedAt = lastModified,
+                    TotalSizeBytes = totalSize,
+                    TempTableCount = tempTables,
+                    VariableCount = variables,
+                    LastScriptSource = lastScript
+                };
+            }
+        }
+
         /// <summary>Deletes stale session files older than the specified duration.</summary>
         public void ReapStaleSessions(TimeSpan maxAge)
         {

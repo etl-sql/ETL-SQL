@@ -44,7 +44,18 @@ export class ConnectionsProvider implements vscode.TreeDataProvider<TreeItem> {
     }
 
     updateVariables(vars: any[]) {
-        this.variables = vars;
+        if (!Array.isArray(vars)) return;
+        
+        // Merge variables by name to prevent the "two variables only shows one" bug
+        // This handles both snapshots and incremental updates from the engine.
+        const currentMap = new Map(this.variables.map(v => [v.name, v]));
+        vars.forEach(v => {
+            if (v && v.name) {
+                currentMap.set(v.name, v);
+            }
+        });
+        
+        this.variables = Array.from(currentMap.values());
         this._onDidChangeTreeData.fire();
     }
 

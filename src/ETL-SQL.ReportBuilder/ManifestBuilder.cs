@@ -14,7 +14,7 @@ namespace ETL_SQL.ReportBuilder
     public class ManifestBuilder
     {
         private readonly IExecutionContext _ctx;
-        private readonly ChartJsRenderer _renderer = new();
+        private readonly EChartsRenderer _renderer = new();
 
         public ManifestBuilder(IExecutionContext ctx) => _ctx = ctx;
 
@@ -24,7 +24,13 @@ namespace ETL_SQL.ReportBuilder
         /// </summary>
         public async Task<ReportManifest> BuildAsync(string scriptSource)
         {
-            var manifest = new ReportManifest { Source = scriptSource, BuiltAt = DateTime.UtcNow };
+            var manifest = new ReportManifest
+            {
+                Source      = scriptSource,
+                BuiltAt     = DateTime.UtcNow,
+                Title       = _ctx.ReportTitle,
+                Description = _ctx.ReportDescription
+            };
 
             // ── Visuals ──────────────────────────────────────────────────────
             foreach (var (name, vStmt) in _ctx.VisualDefinitions)
@@ -39,12 +45,59 @@ namespace ETL_SQL.ReportBuilder
                 foreach (var opt in vStmt.Options)
                     vm.Options[opt.Key] = opt.Value;
 
-                // Store mapping role→column hints so ChartJsRenderer can find columns
+                // Styles
+                if (vStmt.Styles.Count > 0)
+                    vm.Styles = new Dictionary<string, string>(vStmt.Styles);
+
+                // Typed series (COMBO)
+                if (vStmt.TypedSeries.Count > 0)
+                    vm.SeriesDefs = vStmt.TypedSeries.Select(ts => new SeriesDefManifest { SeriesType = ts.SeriesType, Column = ts.Column }).ToList();
+
+                // Copy axis options with axis:{x|y}:{key} prefix for the renderer
+                foreach (var axis in vStmt.AxisOptions)
+                {
+                    var prefix = "axis:" + axis.Axis.ToLowerInvariant() + ":";
+                    foreach (var opt in axis.Options)
+                        vm.Options[prefix + opt.Key.ToLowerInvariant()] = opt.Value;
+                }
+
+                // Store mapping role→column hints so the renderer can find columns
                 foreach (var mapping in vStmt.Mappings)
                     vm.Options["mapping:" + mapping.Role.ToLowerInvariant()] = mapping.Column;
 
+                // Copy action bindings
+                foreach (var action in vStmt.Actions)
+                {
+                    vm.Actions.Add(action switch
+                    {
+                        DrillDownAction dd => new VisualActionManifest
+                        {
+                            Type         = "DRILL_DOWN",
+                            Trigger      = dd.Trigger,
+                            TargetVisual = dd.TargetVisual,
+                            KeyColumn    = dd.KeyColumn
+                        },
+                        SetParameterAction sp => new VisualActionManifest
+                        {
+                            Type            = "SET_PARAMETER",
+                            Trigger         = sp.Trigger,
+                            ParameterName   = sp.ParameterName,
+                            ValueExpression = sp.ValueExpression
+                        },
+                        _ => new VisualActionManifest { Type = "UNKNOWN", Trigger = action.Trigger }
+                    });
+                }
+
                 // Materialise data rows
-                await FetchVisualDataAsync(vStmt, vm);
+                try
+                {
+                    await FetchVisualDataAsync(vStmt, vm);
+                    ApplyFormatting(vm);
+                }
+                catch (Exception ex)
+                {
+                    vm.Error = ex.Message;
+                }
 
                 vm.ChartConfig = _renderer.Render(vm);
                 manifest.Visuals.Add(vm);
@@ -62,30 +115,66 @@ namespace ETL_SQL.ReportBuilder
                 foreach (var param in pStmt.Parameters)
                     pm.Parameters[param.Name] = param.DefaultValue;
 
+                if (pStmt.Styles.Count > 0)
+                    pm.Styles = new Dictionary<string, string>(pStmt.Styles);
+
                 manifest.Pages.Add(pm);
             }
 
-            // ── Datasets ─────────────────────────────────────────────────────
-            // Infer from known temp tables that were produced by CREATE DATASET
-            // (we track the AST definitions in VisualDefinitions; datasets themselves
-            //  are just regular temp tables in the context after execution).
-            // For Phase 9B, we enumerate all registered temp sources and report them.
-            foreach (var (tableName, source) in _ctx.Connections)
+            // ── Containers ───────────────────────────────────────────────────
+            if (_ctx.ContainerDefinitions.Count > 0)
             {
-                if (!tableName.StartsWith('#')) continue;
-                var rowCount = 0L;
-                try
+                manifest.Containers = new();
+                foreach (var (name, cStmt) in _ctx.ContainerDefinitions)
                 {
-                    await foreach (var batch in source.ReadBatches())
-                        rowCount += batch.Rows.Count;
+                    manifest.Containers.Add(new ContainerManifest
+                    {
+                        Name          = name,
+                        ContainerType = cStmt.ContainerType,
+                        Visuals       = new List<string>(cStmt.Visuals),
+                        Styles        = cStmt.Styles.Count > 0 ? new Dictionary<string, string>(cStmt.Styles) : null
+                    });
                 }
-                catch { /* source may not support ReadBatches */ }
+            }
+
+            // ── Navigations ──────────────────────────────────────────────────
+            if (_ctx.NavigationDefinitions.Count > 0)
+            {
+                manifest.Navigations = new();
+                foreach (var (name, nStmt) in _ctx.NavigationDefinitions)
+                {
+                    manifest.Navigations.Add(new NavigationManifest
+                    {
+                        Name        = name,
+                        NavType     = nStmt.NavType.ToString().ToUpperInvariant(),
+                        Orientation = nStmt.Orientation.ToString().ToUpperInvariant(),
+                        DefaultPage = nStmt.DefaultPage,
+                        Pages       = new List<string>(nStmt.Pages)
+                    });
+                }
+            }
+
+            // ── Datasets ─────────────────────────────────────────────────────
+            foreach (var (tableName, dStmt) in _ctx.DatasetDefinitions)
+            {
+                var rowCount = 0L;
+                if (_ctx.Connections.TryGetValue(tableName, out var src))
+                {
+                    try
+                    {
+                        await foreach (var batch in src.ReadBatches())
+                            rowCount += batch.Rows.Count;
+                    }
+                    catch { /* source may not support ReadBatches */ }
+                }
 
                 manifest.Datasets.Add(new DatasetManifest
                 {
-                    TempTableName = tableName,
-                    LastRefresh   = DateTime.UtcNow,
-                    RowCount      = rowCount
+                    TempTableName   = tableName,
+                    RefreshInterval = dStmt.RefreshInterval,
+                    Ttl             = dStmt.Ttl,
+                    LastRefresh     = DateTime.UtcNow,
+                    RowCount        = rowCount
                 });
             }
 
@@ -99,8 +188,43 @@ namespace ETL_SQL.ReportBuilder
         public async Task RefreshVisualAsync(CreateVisualStatement vStmt, VisualManifest vm)
         {
             vm.Rows.Clear();
-            await FetchVisualDataAsync(vStmt, vm);
+            vm.Error = null;
+            try
+            {
+                await FetchVisualDataAsync(vStmt, vm);
+            }
+            catch (Exception ex)
+            {
+                vm.Error = ex.Message;
+            }
             vm.ChartConfig = _renderer.Render(vm);
+        }
+
+        /// <summary>
+        /// Applies FORMAT option to the mapped "value" column of each row.
+        /// Format string should be a standard .NET numeric format specifier (N0, C2, P1, etc.).
+        /// </summary>
+        private static void ApplyFormatting(VisualManifest vm)
+        {
+            if (!vm.Options.TryGetValue("FORMAT", out var fmt) || string.IsNullOrWhiteSpace(fmt))
+                return;
+
+            var valueColName = vm.Options.TryGetValue("mapping:value", out var mc) ? mc :
+                               vm.Columns.Count > 0 ? vm.Columns[0] : null;
+            if (valueColName == null) return;
+
+            int colIdx = vm.Columns.IndexOf(valueColName);
+            if (colIdx < 0) return;
+
+            for (int i = 0; i < vm.Rows.Count; i++)
+            {
+                var raw = colIdx < vm.Rows[i].Count ? vm.Rows[i][colIdx] : null;
+                if (raw != null && double.TryParse(raw, System.Globalization.NumberStyles.Any,
+                    System.Globalization.CultureInfo.InvariantCulture, out var d))
+                {
+                    vm.Rows[i][colIdx] = d.ToString(fmt, System.Globalization.CultureInfo.CurrentCulture);
+                }
+            }
         }
 
         public async Task FetchVisualDataAsync(CreateVisualStatement vStmt, VisualManifest vm)

@@ -796,7 +796,12 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
-    public record ClearSessionStatement : Statement
+    public record ClearSessionStatement(Expression? SessionId = null) : Statement
+    {
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
+    public record ShowSessionsStatement(string? IntoTable = null) : Statement
     {
         public override string ToSql() => AstSerializer.Format(this);
     }

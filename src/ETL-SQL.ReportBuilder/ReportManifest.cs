@@ -23,6 +23,16 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("builtAt")]
         public DateTime BuiltAt { get; set; } = DateTime.UtcNow;
 
+        /// <summary>Optional report title (from SET REPORT TITLE = '...').</summary>
+        [JsonPropertyName("title")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Title { get; set; }
+
+        /// <summary>Optional report description (from SET REPORT DESCRIPTION = '...').</summary>
+        [JsonPropertyName("description")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Description { get; set; }
+
         /// <summary>Named visuals in script-definition order.</summary>
         [JsonPropertyName("visuals")]
         public List<VisualManifest> Visuals { get; set; } = new();
@@ -34,6 +44,14 @@ namespace ETL_SQL.ReportBuilder
         /// <summary>Named datasets (materialized #temp tables).</summary>
         [JsonPropertyName("datasets")]
         public List<DatasetManifest> Datasets { get; set; } = new();
+
+        [JsonPropertyName("containers")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<ContainerManifest>? Containers { get; set; }
+
+        [JsonPropertyName("navigations")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<NavigationManifest>? Navigations { get; set; }
     }
 
     /// <summary>A single visual with its data snapshot and Chart.js config.</summary>
@@ -60,6 +78,48 @@ namespace ETL_SQL.ReportBuilder
         /// <summary>Flat options (title, legend, etc.).</summary>
         [JsonPropertyName("options")]
         public Dictionary<string, string> Options { get; set; } = new();
+
+        /// <summary>Set when data fetch fails; causes the runtime to render an error card.</summary>
+        [JsonPropertyName("error")]
+        public string? Error { get; set; }
+
+        /// <summary>Click/change action bindings from the ACTIONS clause.</summary>
+        [JsonPropertyName("actions")]
+        public List<VisualActionManifest> Actions { get; set; } = new();
+
+        [JsonPropertyName("styles")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? Styles { get; set; }
+
+        [JsonPropertyName("seriesDefs")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<SeriesDefManifest>? SeriesDefs { get; set; }
+    }
+
+    /// <summary>A serialisable representation of one ACTIONS entry (DRILL_DOWN or SET_PARAMETER).</summary>
+    public class VisualActionManifest
+    {
+        /// <summary>"DRILL_DOWN" or "SET_PARAMETER".</summary>
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = string.Empty;
+
+        /// <summary>"ON_CLICK" or "ON_CHANGE".</summary>
+        [JsonPropertyName("trigger")]
+        public string Trigger { get; set; } = string.Empty;
+
+        // DRILL_DOWN fields
+        [JsonPropertyName("targetVisual")]
+        public string? TargetVisual { get; set; }
+
+        [JsonPropertyName("keyColumn")]
+        public string? KeyColumn { get; set; }
+
+        // SET_PARAMETER fields
+        [JsonPropertyName("parameterName")]
+        public string? ParameterName { get; set; }
+
+        [JsonPropertyName("valueExpression")]
+        public string? ValueExpression { get; set; }
     }
 
     /// <summary>A layout page with its slot→visual mapping.</summary>
@@ -78,6 +138,10 @@ namespace ETL_SQL.ReportBuilder
         /// <summary>Parameter names and their default values.</summary>
         [JsonPropertyName("parameters")]
         public Dictionary<string, string?> Parameters { get; set; } = new();
+
+        [JsonPropertyName("styles")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? Styles { get; set; }
     }
 
     /// <summary>Metadata for a CREATE DATASET entry.</summary>
@@ -97,5 +161,32 @@ namespace ETL_SQL.ReportBuilder
 
         [JsonPropertyName("rowCount")]
         public long RowCount { get; set; }
+    }
+
+    public class SeriesDefManifest
+    {
+        [JsonPropertyName("seriesType")] public string SeriesType { get; set; } = string.Empty;
+        [JsonPropertyName("column")]     public string Column { get; set; } = string.Empty;
+    }
+
+    public class ContainerManifest
+    {
+        [JsonPropertyName("name")]          public string Name { get; set; } = string.Empty;
+        [JsonPropertyName("containerType")] public string ContainerType { get; set; } = string.Empty;
+        [JsonPropertyName("visuals")]       public List<string> Visuals { get; set; } = new();
+        [JsonPropertyName("styles")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? Styles { get; set; }
+    }
+
+    public class NavigationManifest
+    {
+        [JsonPropertyName("name")]        public string Name { get; set; } = string.Empty;
+        [JsonPropertyName("navType")]     public string NavType { get; set; } = string.Empty;
+        [JsonPropertyName("orientation")] public string Orientation { get; set; } = string.Empty;
+        [JsonPropertyName("defaultPage")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? DefaultPage { get; set; }
+        [JsonPropertyName("pages")]       public List<string> Pages { get; set; } = new();
     }
 }

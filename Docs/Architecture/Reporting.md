@@ -1,7 +1,5 @@
 # ETL-SQL Reporting Architecture & Engineering Reference
 
-**Version 1.0**
-
 This document describes the internal mechanics of the ETL-SQL reporting subsystem — the layer responsible for parsing `.rptsql` files, evaluating their data sources, building serializable manifests, and serving interactive dashboards. It is the primary reference for engineers working on `ETL-SQL.ReportBuilder`, `ETL-SQL.ReportBuilder.CLI`, and `ETL-SQL.ReportPlayer`.
 
 For the user-facing syntax reference, see [Docs/Report_SQL_Guide.md](../Report_SQL_Guide.md).
@@ -17,33 +15,41 @@ For the user-facing syntax reference, see [Docs/Report_SQL_Guide.md](../Report_S
 ┌───────────────────────────────────────────────────────────────┐
 │  ETL-SQL.Core  (shared with all other subsystems)             │
 │  Lexer → Parser → ReportAst nodes                             │
-│  CREATE VISUAL / CREATE PAGE / CREATE DATASET statements      │
+│  CREATE VISUAL / CREATE PAGE / CREATE DATASET                 │
+│  CREATE CONTAINER / CREATE NAVIGATION                         │
+│  SET REPORT TITLE / SET REPORT DESCRIPTION                    │
 └───────────────────────────────┬───────────────────────────────┘
                                 │
                                 ▼
 ┌───────────────────────────────────────────────────────────────┐
 │  ETL-SQL.Engine  (Evaluator)                                  │
-│  CreateVisualStatementHandler  → VisualDefinitions[]          │
-│  CreatePageStatementHandler    → PageDefinitions[]            │
-│  CreateDatasetStatementHandler → SELECT INTO #temp            │
-│  (all other ETL statements execute normally in same context)  │
+│  CreateVisualStatementHandler    → VisualDefinitions[]        │
+│  CreatePageStatementHandler      → PageDefinitions[]          │
+│  CreateDatasetStatementHandler   → SELECT INTO #temp          │
+│  CreateContainerStatementHandler → ContainerDefinitions[]     │
+│  CreateNavigationStatementHandler→ NavigationDefinitions[]    │
+│  SetReportMetadataStatementHandler → ReportTitle/Description  │
 └───────────────────────────────┬───────────────────────────────┘
                                 │
                                 ▼
 ┌───────────────────────────────────────────────────────────────┐
 │  ETL-SQL.ReportBuilder                                        │
-│  ManifestBuilder   — queries visuals, materialises rows       │
-│  ChartJsRenderer   — produces Chart.js config JSON            │
-│  MarkdownRenderer  — produces GFM output with embedded charts │
+│  ManifestBuilder   — queries visuals, materializes rows       │
+│  EChartsRenderer   — produces ECharts option JSON             │
+│  SvgChartRenderer  — server-side SVG for PDF export           │
+│  PdfExporter       — QuestPDF-based PDF generation            │
+│  MarkdownRenderer  — produces GFM output                      │
 │  SnapshotStore     — persists / loads .snapshot.json          │
-└──────────────┬────────────────────────────────────────────────┘
-               │
-       ┌───────┴──────────────────────────────────────┐
-       ▼                                              ▼
+└──────────┬────────────────────────────────────────────────────┘
+           │
+   ┌───────┴─────────────────────────────────────┐
+   ▼                                             ▼
 ETL-SQL.ReportBuilder.CLI              ETL-SQL.ReportPlayer
 build / refresh / serve                Kestrel HTTP + DashboardService
-  .md  .json  .snapshot.json           GET /  POST /api/parameter
-                                       localhost:5200
+  .md  .json  .pdf  .snapshot.json    Single-report: GET /
+                                      Multi-report:  GET /  (catalog)
+                                                     GET /reports/{name}
+                                      localhost:5200
 ```
 
 ---
@@ -53,10 +59,10 @@ build / refresh / serve                Kestrel HTTP + DashboardService
 | Project | Role |
 |---------|------|
 | `ETL-SQL.Core` | Report-SQL lexer tokens, AST nodes (`ReportAst.cs`), parser (`StatementParser.Report.cs`) |
-| `ETL-SQL.Engine` | Statement handlers that register visual/page/dataset definitions into `IExecutionContext` |
-| `ETL-SQL.ReportBuilder` | Manifest building, Chart.js rendering, Markdown rendering, snapshot persistence |
+| `ETL-SQL.Engine` | Statement handlers that register visual/page/dataset/container/navigation definitions into `IExecutionContext` |
+| `ETL-SQL.ReportBuilder` | Manifest building, ECharts rendering, SVG rendering, PDF export, Markdown rendering, snapshot persistence |
 | `ETL-SQL.ReportBuilder.CLI` | `etl-sql-report` CLI — `build`, `refresh`, `serve` sub-commands |
-| `ETL-SQL.ReportPlayer` | Kestrel web server with live parameter binding and on-demand rebuild |
+| `ETL-SQL.ReportPlayer` | Kestrel web server with live parameter binding, selective rebuild, multi-report hosting |
 
 ---
 
@@ -66,7 +72,7 @@ Report-SQL files use the same lexer and parser as standard ETL-SQL scripts. Repo
 
 ### 3.1 Tokenization
 
-`Lexer` in `ETL-SQL.Core/Parser/Lexer.cs` tokenizes `.rptsql` source into a `List<Token>`. Report-SQL keywords (`VISUAL`, `PAGE`, `DATASET`, `MAPPINGS`, `OPTIONS`, `ACTIONS`, `STRUCTURE`, `MAP`, `SOURCE`, `SLICER`, etc.) are defined in `TokenType.cs`.
+`Lexer` in `ETL-SQL.Core/Parser/Lexer.cs` tokenizes `.rptsql` source into a `List<Token>`. Report-SQL keywords (`VISUAL`, `PAGE`, `DATASET`, `MAPPINGS`, `OPTIONS`, `ACTIONS`, `STRUCTURE`, `MAP`, `SOURCE`, `SLICER`, `CONTAINER`, `NAVIGATION`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, etc.) are defined in `TokenType.cs`.
 
 ### 3.2 Parser Dispatch
 
@@ -77,6 +83,9 @@ Report-SQL files use the same lexer and parser as standard ETL-SQL scripts. Repo
 | `CREATE VISUAL` | `ParseCreateVisual()` | `CreateVisualStatement` |
 | `CREATE PAGE` | `ParseCreatePage()` | `CreatePageStatement` |
 | `CREATE DATASET` | `ParseCreateDataset()` | `CreateDatasetStatement` |
+| `CREATE CONTAINER` | `ParseCreateContainer()` | `CreateContainerStatement` |
+| `CREATE NAVIGATION` | `ParseCreateNavigation()` | `CreateNavigationStatement` |
+| `SET REPORT` | `ParseSetReportMetadata()` | `SetReportMetadataStatement` |
 
 Non-report statements (`SELECT`, `INSERT`, `DECLARE`, etc.) parse and execute normally in the same script context, allowing data preparation and visual definition to coexist in a single file.
 
@@ -87,43 +96,76 @@ All nodes are C# records (immutable value types).
 #### `CreateVisualStatement`
 
 ```
-Name         — identifier used in page slot maps
-VisualType   — Bar | Line | Scatter | Pie | Table | Card | Slicer
-Title        — optional display title (Markdown supported)
-Subtitle     — optional display subtitle (Markdown supported)
+Name         — identifier used in page slot maps and container VISUALS lists
+VisualType   — Bar | Line | Scatter | Pie | Donut | HorizontalBar | BoxPlot |
+               Treemap | HeatMap | Combo | Table | Card | Text |
+               Slicer | DatePicker | Slider | MultiSelect | Search
+Title        — optional display title string
+Subtitle     — optional display subtitle string
 Source       — VisualSourceExpression (inline SELECT or #temp reference)
-Mappings     — list of VisualMapping (role → column, e.g. x → Region)
-Options      — flat key-value pairs (legend, colors, stacked, etc.)
-AxisOptions  — per-axis X_AXIS / Y_AXIS config blocks
-Actions      — list of VisualAction (ON_CLICK, ON_CHANGE triggers)
+              (null / empty for Text, DatePicker, Slider, Search)
+Mappings     — List<VisualMapping> (role → column, e.g. X → Region)
+Options      — List<VisualOption> flat key-value pairs (stacked, smooth, FORMAT, etc.)
+AxisOptions  — List<AxisOptions> per-axis X_AXIS / Y_AXIS config blocks
+TypedSeries  — List<TypedSeries> for COMBO charts (BAR col, LINE col)
+Styles       — Dictionary<string, string> (THEME, HEIGHT, WIDTH, BACKGROUND, BORDER)
+Actions      — List<VisualAction> (ON_CLICK, ON_CHANGE triggers)
 ```
 
 #### `CreatePageStatement`
 
 ```
-Name         — page identifier
-Structure    — CSS grid template-areas string (e.g. 'A A / B C')
-SlotMap      — Dictionary<string, string>: slot letter → visual name
-Parameters   — list of PageParameter (name, default value)
+Name       — page identifier
+Structure  — CSS grid-template-areas string (e.g. 'A A / B C')
+SlotMap    — Dictionary<string, string>: slot letter → visual/container name
+Parameters — List<PageParameter> (name, default value)
+Styles     — Dictionary<string, string> (THEME, BACKGROUND)
 ```
 
 #### `CreateDatasetStatement`
 
 ```
-TempTableName   — #name of the resulting temp table
-RefreshInterval — advisory "1 HOUR" / "15 MINUTES" string
-Ttl             — time-to-live advisory
-Compress        — store compressed
-Encrypt         — encrypt on disk (requires KeyFile)
-KeyFile         — path to encryption key
-SourceQuery     — SelectStatement materialized into TempTableName
+TempTableName      — #name of the resulting temp table
+RefreshInterval    — advisory interval string (e.g. '1h', '30m')
+Ttl                — time-to-live advisory
+Compress           — store compressed on disk
+EncryptionMode     — None | MachineBound | Password | KeyFile
+EncryptionPassword — password string (EncryptionMode = Password)
+KeyFile            — path to key file (EncryptionMode = KeyFile)
+SourceQuery        — SelectStatement materialized into TempTableName
+```
+
+#### `CreateContainerStatement`
+
+```
+Name          — identifier used in page MAP entries
+ContainerType — "BOX" | "SCROLL"
+Visuals       — List<string> ordered visual names
+Styles        — Dictionary<string, string> (HEIGHT, WIDTH, BACKGROUND)
+```
+
+#### `CreateNavigationStatement`
+
+```
+Name        — identifier
+NavType     — Tab | Button | Link
+Orientation — Horizontal | Vertical
+DefaultPage — optional page name shown on load (first in Pages if omitted)
+Pages       — List<string> ordered page names
+```
+
+#### `SetReportMetadataStatement`
+
+```
+Key   — "TITLE" or "DESCRIPTION"
+Value — the string value
 ```
 
 #### Visual Action sub-nodes
 
 | Type | Fields | Runtime effect |
 |---|---|---|
-| `SetParameterAction` | trigger, paramName, value | Updates a `@param` and triggers rebuild |
+| `SetParameterAction` | trigger, parameterName, valueExpression | Updates a `@param` and triggers selective rebuild |
 | `DrillDownAction` | trigger, targetVisual, keyColumn | Navigate to target visual with row context |
 
 ---
@@ -133,28 +175,46 @@ SourceQuery     — SelectStatement materialized into TempTableName
 ### 4.1 `CreateVisualStatementHandler`
 
 - Validates that any referenced `#temp` source exists in `IExecutionContext.Connections`
-- Registers the statement: `context.VisualDefinitions[stmt.Name] = stmt`
-- Does **not** query data at this point — data is queried by `ManifestBuilder`
+- Registers: `context.VisualDefinitions[stmt.Name] = stmt`
+- Does **not** query data — data is queried by `ManifestBuilder`
 
 ### 4.2 `CreatePageStatementHandler`
 
-- Validates all slot-mapped visual names exist in `VisualDefinitions`
+- Validates all slot-mapped visual/container names exist in `VisualDefinitions` or `ContainerDefinitions`
 - Registers: `context.PageDefinitions[stmt.Name] = stmt`
 
 ### 4.3 `CreateDatasetStatementHandler`
 
-- Validates encryption key is present if `Encrypt = true`
+- Validates encryption configuration (KEYFILE mode requires a key path; PASSWORD mode requires a password)
 - Rewrites to an equivalent `SELECT INTO #tempName FROM (source)` and executes it
-- Logs a refresh advisory for the scheduler (actual scheduling is deferred — see Rpt-1 in TODO)
+- Registers: `context.DatasetDefinitions[tableName] = stmt` for manifest metadata
 
-### 4.4 `IReportContext` (on `IExecutionContext`)
+### 4.4 `CreateContainerStatementHandler`
+
+- Registers: `context.ContainerDefinitions[stmt.Name] = stmt`
+- No data query at registration time
+
+### 4.5 `CreateNavigationStatementHandler`
+
+- Registers: `context.NavigationDefinitions[stmt.Name] = stmt`
+
+### 4.6 `SetReportMetadataStatementHandler`
+
+- Sets `context.ReportTitle` (Key = "TITLE") or `context.ReportDescription` (Key = "DESCRIPTION")
+
+### 4.7 `IReportContext` (on `IExecutionContext`)
 
 ```csharp
-IDictionary<string, CreateVisualStatement> VisualDefinitions { get; }
-IDictionary<string, CreatePageStatement>   PageDefinitions   { get; }
+IDictionary<string, CreateVisualStatement>    VisualDefinitions     { get; }
+IDictionary<string, CreatePageStatement>      PageDefinitions       { get; }
+IDictionary<string, CreateDatasetStatement>   DatasetDefinitions    { get; }
+IDictionary<string, CreateContainerStatement> ContainerDefinitions  { get; }
+IDictionary<string, CreateNavigationStatement>NavigationDefinitions { get; }
+string? ReportTitle       { get; set; }
+string? ReportDescription { get; set; }
 ```
 
-`ManifestBuilder` reads both dictionaries after script evaluation completes.
+`ManifestBuilder` reads all dictionaries after script evaluation completes.
 
 ---
 
@@ -166,19 +226,27 @@ IDictionary<string, CreatePageStatement>   PageDefinitions   { get; }
 IExecutionContext (post-evaluation)
         │
         ▼
-ManifestBuilder.BuildAsync(context)
+ManifestBuilder.BuildAsync(scriptPath)
         │
         ├─ foreach VisualDefinitions
-        │       │
-        │       ├─ Execute source query → DataTable
+        │       ├─ Execute source query → rows
         │       ├─ Materialize rows → List<List<string?>>
         │       ├─ Copy mapping hints as "mapping:{role}" options
-        │       └─ ChartJsRenderer.Render(vm) → Chart.js JSON
+        │       ├─ Copy axis options as "axis:{x|y}:{key}" options
+        │       ├─ Copy action bindings → List<VisualActionManifest>
+        │       ├─ ApplyFormatting() — apply FORMAT option to value column
+        │       └─ EChartsRenderer.Render(vm) → ECharts option JSON
         │
         ├─ foreach PageDefinitions
-        │       └─ Copy structure, slot map, parameter defaults
+        │       └─ Copy structure, slot map, parameter defaults, styles
         │
-        └─ foreach Connections where key starts with '#'
+        ├─ foreach ContainerDefinitions
+        │       └─ Copy container type, visual list, styles
+        │
+        ├─ foreach NavigationDefinitions
+        │       └─ Copy nav type, orientation, pages list
+        │
+        └─ foreach DatasetDefinitions
                 └─ Count rows → DatasetManifest
 ```
 
@@ -187,8 +255,12 @@ ManifestBuilder.BuildAsync(context)
 ```
 Source      — script file path
 BuiltAt     — UTC timestamp
+Title       — from SET REPORT TITLE
+Description — from SET REPORT DESCRIPTION
 Visuals     — List<VisualManifest>
 Pages       — List<PageManifest>
+Containers  — List<ContainerManifest>?  (null if none defined)
+Navigations — List<NavigationManifest>? (null if none defined)
 Datasets    — List<DatasetManifest>
 ```
 
@@ -196,55 +268,103 @@ Datasets    — List<DatasetManifest>
 
 ```
 Name        — visual identifier
-VisualType  — string ("Bar", "Table", etc.)
-ChartConfig — Chart.js JSON string (null for Table / Card / Slicer)
+VisualType  — string ("Bar", "Donut", "HeatMap", etc.)
+ChartConfig — ECharts option JSON string (null for Table / Card / Text / filter types)
 Columns     — List<string> column names
 Rows        — List<List<string?>> — all data as strings for portability
-Options     — Dictionary<string, string> (includes "mapping:{role}" entries)
+Options     — Dictionary<string, string> (mapping:x, axis:x:label, FORMAT, etc.)
+Styles      — Dictionary<string, string>? (THEME, HEIGHT, etc.)
+Actions     — List<VisualActionManifest>
+SeriesDefs  — List<SeriesDefManifest>? (COMBO charts only)
+Error       — string? (non-null if source query failed)
 ```
 
-All numeric data is serialized as strings in `Rows` to avoid JSON type loss and ensure the client runtime can format values appropriately.
+All numeric data is serialized as strings to avoid JSON type loss.
+
+### 5.4 `ApplyFormatting`
+
+Before `ChartConfig` is generated, `ApplyFormatting(vm)` applies the `FORMAT` option (a .NET numeric format string such as `N0`, `C2`, `P1`) to the value column of each row. This ensures formatted values appear in TABLE renders and CARD displays.
 
 ---
 
 ## 6. Rendering
 
-### 6.1 `ChartJsRenderer`
+### 6.1 `EChartsRenderer`
 
-Converts a `VisualManifest` into a Chart.js configuration JSON string.
+Converts a `VisualManifest` into an [Apache ECharts v5](https://echarts.apache.org/) option JSON string.
 
-| VisualType | Chart.js type | Key roles |
+| VisualType | ECharts series type | Key roles |
 |---|---|---|
 | Bar | `bar` | x, y, series |
+| HorizontalBar | `bar` (yAxis = category) | x, y, series |
 | Line | `line` | x, y, series |
 | Scatter | `scatter` | x, y |
 | Pie | `pie` | label, value |
+| Donut | `pie` (radius inner) | label, value |
+| Combo | `bar` + `line` mixed | x, SERIES block |
+| BoxPlot | `boxPlot` | x, value distribution |
+| Treemap | `treemap` | label, value |
+| HeatMap | `heatmap` | x, y, value |
 | Table | *(none — HTML table)* | all columns |
 | Card | *(none — scalar div)* | label, value |
-| Slicer | *(none — `<select>`)* | value |
+| Text | *(none — HTML div)* | VALUE option |
+| Slicer / MultiSelect | *(none — `<select>` / checkboxes)* | value |
+| DatePicker / Slider / Search | *(none — input controls)* | — |
 
-For multi-series charts, rows are pivoted: unique values in the `series` column become separate Chart.js datasets. Colors are assigned from a built-in palette.
+For multi-series charts, rows with a `series` column are pivoted: each distinct series value becomes a separate ECharts dataset. Colors are assigned from a built-in palette or from `COLORS(...)` option entries (`color:{key}` in `vm.Options`).
 
-### 6.2 `MarkdownRenderer`
+The `LEGEND` option (`legend:position` in `vm.Options`) controls ECharts legend placement.
+
+### 6.2 `SvgChartRenderer`
+
+Server-side SVG generation used by `PdfExporter`. Produces static SVG markup for chart types without requiring a browser.
+
+- `Render(VisualManifest vm, int width, int height) → string`
+- Returns SVG XML; the PDF exporter embeds it via QuestPDF's `SvgImage` element
+
+### 6.3 `PdfExporter`
+
+Uses [QuestPDF](https://www.questpdf.com/) (Community License) to produce PDF output.
+
+```csharp
+public byte[] Export(ReportManifest manifest)
+{
+    QuestPDF.Settings.License = LicenseType.Community;
+    return Document.Create(container => { ... }).GeneratePdf();
+}
+```
+
+Layout:
+- One QuestPDF page per `VisualManifest`
+- Chart types → SVG at 500×292 pt via `SvgChartRenderer`, embedded as `SvgImage`
+- TABLE → native QuestPDF table, capped at 500 rows
+- CARD → label + large-text value
+- TEXT → `VALUE` option rendered as paragraph
+- SLICER / filter types → placeholder paragraph
+
+### 6.4 `MarkdownRenderer`
 
 Produces a static, portable `.md` file:
 
 - Pages become top-level `##` sections
-- Chart visuals: `<!-- CHART:{...config...} -->` comment block + GFM table fallback
+- Chart visuals: GFM table of raw data (ECharts config is not embedded in Markdown output)
 - Table visuals: GFM pipe table
 - Card visuals: blockquote `> **Label** Value`
-- Slicer visuals: italic note *(interactive only — no static representation)*
+- Slicer / filter visuals: italic note *(interactive only — no static representation)*
 
-### 6.3 Client-Side Runtime (`wwwroot/report-runtime.js`)
+### 6.5 Client-Side Runtime (`wwwroot/report-runtime.js`)
 
 Dual-mode JavaScript file:
 
 | Mode | Data source | Activation |
 |---|---|---|
 | VS Code preview | `window.__MANIFEST__` injected by extension | `window.__MANIFEST__` present |
-| Web (ReportPlayer) | `GET /api/manifest` | default |
+| Single-report web | `window.__MANIFEST__` pre-embedded in HTML | `window.__IS_WEB__ = true` |
+| Multi-report web | `GET {apiBase}/manifest` | `window.__IS_WEB__ = true`, no pre-embedded manifest |
 
-Rendering logic per visual type mirrors the server-side renderer but produces live DOM. Chart visuals use `new Chart(canvas, JSON.parse(config))`. Slicer controls post to `POST /api/parameter` on change, which triggers a server-side rebuild and manifest refresh.
+`window.__API_BASE__` is injected in multi-report mode as `/reports/{name}/api`. All API calls use `apiBase` as their prefix so the same script works for both single and multi-report deployments.
+
+Chart visuals use `echarts.init(div)` + `chart.setOption(JSON.parse(config))`. Filter controls (`SLICER`, `MULTISELECT`, `DATEPICKER`, `SLIDER`, `SEARCH`) call `POST {apiBase}/parameters` with a batch payload on change.
 
 ---
 
@@ -259,7 +379,7 @@ Rendering logic per visual type mirrors the server-side renderer but produces li
 | `LoadAsync(path)` | Deserialize JSON → `ReportManifest`; returns `null` if absent |
 | `IsStale(manifest, scriptPath, ttl?)` | True if script file is newer than `BuiltAt`, or TTL elapsed |
 
-**Known gaps (see TODO Rpt-2):**
+**Known gaps:**
 - Writes are not atomic — a crash mid-write can corrupt the file
 - No reader/writer lock; concurrent reads and `CREATE DATASET` refreshes can race
 
@@ -277,8 +397,8 @@ CREATE PAGE Sales AS LAYOUT (
     MAP ( 'A' = RevChart, 'B' = RegionSlicer, 'C' = DetailTable )
 )
 WITH PARAMETERS (
-    @region   = 'North America',
-    @startDate = null
+    @region    = 'All',
+    @startDate = '2024-01-01'
 );
 ```
 
@@ -286,15 +406,32 @@ WITH PARAMETERS (
 
 1. `DashboardService` maintains `Dictionary<string, string> _parameters`
 2. Initial defaults are loaded from `PageParameter.DefaultValue`
-3. On slicer interaction, browser posts `{ name: "@region", value: "Europe" }` to `POST /api/parameter`
-4. `SetParameterAsync(name, value)` updates the dict and calls `RebuildAsync()`
-5. `RebuildAsync()` prepends `DECLARE @region = 'Europe';` statements before the script, then re-executes in a fresh `Evaluator`
+3. On filter interaction, browser posts to `POST /api/parameter` (single) or `POST /api/parameters` (batch)
+4. `SetParameterAsync` / `SetParametersAsync` updates the dict
+5. The service checks which visuals depend on the changed parameter(s) via `DependsOnVariable()` inspection
+6. Only affected visuals are re-queried via `ManifestBuilder.RefreshVisualAsync()`. If no affected visuals are detected, a full `RebuildAsync()` is performed as a fallback.
 
-> **Note:** This is a full rebuild on every parameter change (Phase 9D simplified). Selective re-evaluation (only re-querying visuals whose `SourceSql` references the changed parameter) is tracked as **Rpt-1** in TODO.md.
+### 8.3 Batch Parameter Updates
 
-### 8.3 Slicer Visuals
+`POST /api/parameters` accepts a JSON body:
 
-A `Slicer` visual executes a `SELECT` query to populate its options and binds to a `@param` name via its `ON_CHANGE = SET_PARAMETER(...)` action. In the web runtime it renders as a `<select>` dropdown. In Markdown output it is represented as a text note only.
+```json
+{ "params": [{ "name": "@region", "value": "East" }, { "name": "@year", "value": "2026" }] }
+```
+
+The `report-runtime.js` `postParameters(params)` helper is used by all filter controls to send batch updates, reducing round-trips when multiple parameters change simultaneously.
+
+### 8.4 Slicer and Filter Visuals
+
+| Type | Source | Trigger |
+|---|---|---|
+| `SLICER` | SOURCE query populates `<select>` options | `ON_CHANGE` on selection |
+| `MULTISELECT` | SOURCE query populates checkbox list | `ON_CHANGE` on any checkbox |
+| `DATEPICKER` | No source — calendar picker | `ON_CHANGE` on date input |
+| `SLIDER` | No source — range input | `ON_CHANGE` on slider move |
+| `SEARCH` | No source — text input | `ON_CHANGE` with 350 ms debounce |
+
+All filter types use `SET_PARAMETER` in their `ACTIONS` clause to bind the selected value to a `@param`.
 
 ---
 
@@ -303,25 +440,43 @@ A `Slicer` visual executes a `SELECT` query to populate its options and binds to
 **Project:** `ETL-SQL.ReportPlayer`  
 **Default port:** `localhost:5200`
 
-### 9.1 Routes
+### 9.1 Single-Report Routes
 
 | Route | Method | Behavior |
 |---|---|---|
-| `/` | GET | Returns full HTML page with embedded initial manifest |
-| `/api/manifest` | GET | Returns current `ReportManifest` as JSON |
-| `/api/parameter` | POST | Updates a parameter, triggers rebuild, returns new manifest |
-| `/api/refresh` | GET | Forces full rebuild regardless of staleness |
+| `/` | GET | HTML page with pre-embedded manifest and `window.__IS_WEB__ = true` |
+| `/api/manifest` | GET | Current `ReportManifest` as JSON |
+| `/api/parameter` | POST | Set one parameter, selective rebuild, return new manifest |
+| `/api/parameters` | POST | Set multiple parameters, selective rebuild, return new manifest |
+| `/api/refresh` | GET | Force full rebuild, return new manifest |
 
-### 9.2 Startup
+### 9.2 Multi-Report Routes
 
-`DashboardService` is registered as a singleton. On first request to `/` or `/api/manifest`, `GetManifestAsync()` lex-parses-evaluates the script, builds the manifest, and caches it. Subsequent requests return the cache until a parameter change or refresh invalidates it.
+| Route | Method | Behavior |
+|---|---|---|
+| `/` | GET | Catalog page listing all reports from `reports.json` |
+| `/reports/{name}` | GET | Dashboard HTML for the named report (injects `window.__API_BASE__`) |
+| `/reports/{name}/api/manifest` | GET | Report manifest JSON |
+| `/reports/{name}/api/parameter` | POST | Set one parameter |
+| `/reports/{name}/api/parameters` | POST | Set multiple parameters |
+| `/reports/{name}/api/refresh` | GET | Force rebuild |
 
-### 9.3 Static Assets
+### 9.3 `DashboardServiceFactory` (multi-report)
+
+`DashboardServiceFactory` maintains a `ConcurrentDictionary<string, DashboardService>` keyed by report name. `GetService(name)` uses `GetOrAdd` for lazy, thread-safe service creation. Relative paths in `reports.json` are resolved against the manifest file's directory.
+
+### 9.4 Startup
+
+**Single-report:** `DashboardService` is registered as a singleton. On first request, `GetManifestAsync()` evaluates the script and caches the manifest. Subsequent requests return the cache until a parameter change or refresh invalidates it.
+
+**Multi-report:** `DashboardServiceFactory` is registered as a singleton. Individual `DashboardService` instances are created on first access per report.
+
+### 9.5 Static Assets
 
 `wwwroot/` contains:
 
 - `report-runtime.js` — client-side rendering runtime
-- `chart.js` — Chart.js library (bundled locally for offline use)
+- ECharts is loaded from CDN (no local bundle required)
 
 ---
 
@@ -331,9 +486,10 @@ Invoked as `etl-sql-report <command>`.
 
 | Command | Flags | Behavior |
 |---|---|---|
-| `build <script.rptsql>` | `--output <file>`, `--format md\|json` | Lex → Parse → Evaluate → Manifest → write output file and `.snapshot.json` |
+| `build <script.rptsql>` | `--output <file>`, `--format md\|json\|pdf` | Lex → Parse → Evaluate → Manifest → write output file and `.snapshot.json` |
 | `refresh <script.rptsql>` | | Re-execute script, overwrite `.snapshot.json` |
-| `serve <script.rptsql>` | `--port <n>` | Launch `ETL-SQL.ReportPlayer` on specified port (default 5200) |
+| `serve <script.rptsql>` | | Launch `ETL-SQL.ReportPlayer` in single-report mode, open browser |
+| `serve --manifest <reports.json>` | | Launch `ETL-SQL.ReportPlayer` in multi-report mode, open catalog |
 
 ---
 
@@ -341,10 +497,14 @@ Invoked as `etl-sql-report <command>`.
 
 | Phase | What was built |
 |---|---|
-| **9A** | `ReportAst.cs` — `CreateVisualStatement`, `CreatePageStatement`, `CreateDatasetStatement` records; `StatementParser.Report.cs` |
-| **9B** | `ManifestBuilder`, `ChartJsRenderer`, `MarkdownRenderer`, `SnapshotStore`, `ReportManifest` POCOs |
+| **9A** | `ReportAst.cs` — core AST nodes; `StatementParser.Report.cs` — CREATE VISUAL / PAGE / DATASET |
+| **9B** | `ManifestBuilder`, `EChartsRenderer`, `MarkdownRenderer`, `SnapshotStore`, `ReportManifest` POCOs |
 | **9C** | `report-runtime.js` — dual-mode client runtime for VS Code preview and web |
 | **9D** | `DashboardService`, `ETL-SQL.ReportPlayer` Kestrel server, parameter binding, live rebuild |
+| **9E** | Filter visual types (DATEPICKER, SLIDER, MULTISELECT, SEARCH), batch parameter endpoint, responsive layout, page-level THEME |
+| **9F** | Multi-report hosting (`DashboardServiceFactory`, `reports.json`, catalog page, per-report API prefix) |
+| **9G** | PDF export (`SvgChartRenderer`, `PdfExporter` via QuestPDF), `--format pdf` CLI flag |
+| **9H** | CREATE CONTAINER, CREATE NAVIGATION, SET REPORT TITLE/DESCRIPTION, COMBO visual type, STYLE clause, COLORS/LEGEND options |
 
 ---
 
@@ -352,9 +512,11 @@ Invoked as `etl-sql-report <command>`.
 
 | Item | Description |
 |---|---|
-| **Rpt-1** | Selective re-evaluation on parameter change — only re-query visuals whose source references the changed `@param` |
 | **Rpt-2** | `SnapshotStore` write safety — atomic write via `.tmp` rename; `ReaderWriterLockSlim` for concurrent access |
-| **Rpt-3** | Linter rule warning when column aliases shadow Report-SQL keywords (`VISUAL`, `PAGE`, `DATASET`, etc.) |
+| **Rpt-3** | Linter rule warning when column aliases shadow Report-SQL keywords |
 | **Rpt-4** | `STRUCTURE` string validation — every slot letter must appear in both `STRUCTURE` and `MAP(...)` |
-| **Drill-down** | `DrillDownAction` defined in AST but not wired in client runtime |
-| **Scheduled refresh** | `REFRESH EVERY` advisory is logged but requires external scheduler integration |
+| **Drill-down** | `DrillDownAction` defined in AST and partially wired in client runtime; full UX pending |
+| **Scheduled refresh** | `REFRESH EVERY` advisory is stored but requires Orchestrator integration to act on it |
+| **GAUGE / Funnel / Waterfall** | ECharts supports these types; AST and handler extensions needed |
+| **Conditional TABLE formatting** | Cell-level color rules based on value thresholds |
+| **Excel export** | `--format xlsx` via ClosedXML or EPPlus |

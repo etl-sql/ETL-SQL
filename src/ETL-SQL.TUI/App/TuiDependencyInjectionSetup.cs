@@ -74,7 +74,9 @@ namespace ETL_SQL.TUI
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
             services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>();
-            services.AddSingleton<ETL_SQL.Services.SecurityService>();
+            var securityService = new ETL_SQL.Services.SecurityService(loggerService);
+            securityService.UpdateFromConfiguration(configuration);
+            services.AddSingleton<ETL_SQL.Services.SecurityService>(securityService);
 
             // ── Connectors ─────────────────────────────────────────────────────
             services.AddSingleton<IConnector, MockDbConnector>();

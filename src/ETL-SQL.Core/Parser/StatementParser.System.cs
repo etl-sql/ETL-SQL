@@ -153,6 +153,30 @@ namespace ETL_SQL.Core.Parser
             return new SetSecurityOverrideStatement(overrideType, enabled);
         }
 
+        private Statement ParseSetReportMetadata()
+        {
+            var startToken = _parser.Previous; // REPORT token
+            string key;
+            if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                (_parser.Current.Value.Equals("TITLE", StringComparison.OrdinalIgnoreCase) ||
+                 _parser.Current.Value.Equals("DESCRIPTION", StringComparison.OrdinalIgnoreCase)))
+            {
+                key = _parser.Current.Value.ToUpperInvariant();
+                _parser.Advance();
+            }
+            else
+            {
+                throw new Common.Exceptions.SyntaxException(
+                    "Expected TITLE or DESCRIPTION after SET REPORT",
+                    _parser.Current.Line, _parser.Current.Column);
+            }
+
+            _parser.Consume(TokenType.EQUALS, $"Expected '=' after SET REPORT {key}");
+            var valueToken = _parser.Consume(TokenType.STRING, $"Expected string value after SET REPORT {key} =");
+            _parser.Match(TokenType.SEMICOLON);
+            return new SetReportMetadataStatement { Key = key, Value = valueToken.Value };
+        }
+
         private Statement ParseRun()
         {
             var startToken = _parser.Previous;
@@ -220,8 +244,15 @@ namespace ETL_SQL.Core.Parser
         {
             var startToken = _parser.Previous;
             _parser.Consume(TokenType.SESSION, "Expected SESSION after CLEAR");
-            _parser.Match(TokenType.SEMICOLON);
-            return new ClearSessionStatement { Line = startToken.Line, Column = startToken.Column };
+            
+            Expression? sessionId = null;
+            if (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.EOF)
+            {
+                sessionId = _parser.ParseExpression();
+            }
+
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+            return new ClearSessionStatement(sessionId) { Line = startToken.Line, Column = startToken.Column };
         }
 
         private Statement ParseHelp()
@@ -343,6 +374,10 @@ namespace ETL_SQL.Core.Parser
                 _parser.Consume(TokenType.ZONES, "Expected ZONES after SHOW SAFE");
                 stmt = new ShowSafeZonesStatement();
             }
+            else if (_parser.Match(TokenType.SESSIONS))
+            {
+                stmt = new ShowSessionsStatement();
+            }
 
             if (stmt == null)
             {
@@ -367,6 +402,7 @@ namespace ETL_SQL.Core.Parser
                     ShowTagValueStatement stv => stv with { IntoTable = tempTable },
                     ShowVariablesStatement svars => svars with { IntoTable = tempTable },
                     ShowSafeZonesStatement ssz => ssz with { IntoTable = tempTable },
+                    ShowSessionsStatement sess => sess with { IntoTable = tempTable },
                     _ => stmt
                 };
             }

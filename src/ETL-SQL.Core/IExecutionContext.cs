@@ -162,13 +162,23 @@ namespace ETL_SQL.Core
         bool ProcedureExists(string name);
     }
 
-    /// <summary>Stores Report-SQL visual and page definitions registered during script execution.</summary>
+    /// <summary>Stores Report-SQL visual, page, and dataset definitions registered during script execution.</summary>
     public interface IReportContext
     {
         /// <summary>Named visual definitions registered by CREATE VISUAL.</summary>
         IDictionary<string, CreateVisualStatement> VisualDefinitions { get; }
         /// <summary>Named page definitions registered by CREATE PAGE.</summary>
         IDictionary<string, CreatePageStatement> PageDefinitions { get; }
+        /// <summary>Named dataset definitions registered by CREATE DATASET (includes refresh metadata).</summary>
+        IDictionary<string, CreateDatasetStatement> DatasetDefinitions { get; }
+        /// <summary>Named container definitions registered by CREATE CONTAINER.</summary>
+        IDictionary<string, CreateContainerStatement> ContainerDefinitions { get; }
+        /// <summary>Named navigation definitions registered by CREATE NAVIGATION.</summary>
+        IDictionary<string, CreateNavigationStatement> NavigationDefinitions { get; }
+        /// <summary>Report-level title set by SET REPORT TITLE = '...'</summary>
+        string? ReportTitle { get; set; }
+        /// <summary>Report-level description set by SET REPORT DESCRIPTION = '...'</summary>
+        string? ReportDescription { get; set; }
     }
 
     /// <summary>
@@ -183,6 +193,7 @@ namespace ETL_SQL.Core
         Stack<Row> OuterRowStack { get; }
         Dictionary<Statement, object?> SubqueryCache { get; }
         System.Threading.CancellationToken CancellationToken { get; }
+        IServiceProvider ServiceProvider { get; }
         
         bool IsProfiling { get; set; }
         bool IsWhatIf { get; set; }

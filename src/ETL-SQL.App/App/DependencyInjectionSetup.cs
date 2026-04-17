@@ -93,23 +93,8 @@ namespace ETL_SQL.App
                 securityService.IsTestMode = true;
             }
 
-            // Load network egress allow-list from configuration (Security:AllowedHosts)
-            var allowedHosts = configuration.GetSection("Security:AllowedHosts").Get<string[]>();
-            if (allowedHosts != null && allowedHosts.Length > 0)
-            {
-                securityService.AllowedHosts.Clear();
-                securityService.AllowedHosts.UnionWith(allowedHosts);
-            }
-
-            // SEC-5: Load approved safe zones from configuration
-            var safeZones = configuration.GetSection("Security:ApprovedSafeZones").Get<string[]>();
-            if (safeZones != null && safeZones.Length > 0)
-            {
-                securityService.ApprovedSafeZones.AddRange(safeZones);
-            }
-
-            securityService.MaxFileOperations = int.TryParse(configuration["Security:MaxFileOperationsPerScript"], out var mfo) ? mfo : SecurityService.DefaultMaxFileOperations;
-            securityService.MaxRecursiveDepth = int.TryParse(configuration["Security:MaxRecursiveNestingDepth"], out var mrd) ? mrd : SecurityService.DefaultMaxRecursiveDepth;
+            // Centralized loading of Security section (Hosts, Safe Zones, Env Vars, and runaway guards)
+            securityService.UpdateFromConfiguration(configuration);
 
             services.AddSingleton<ETL_SQL.Services.SecurityService>(securityService);
 

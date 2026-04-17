@@ -63,13 +63,19 @@ namespace ETL_SQL.ReportBuilder.CLI
             var builder  = new ManifestBuilder(evaluator);
             var manifest = await builder.BuildAsync(scriptPath);
 
+            string ext = format switch { "json" => ".report.json", "pdf" => ".report.pdf", _ => ".report.md" };
             if (outputPath == null)
-                outputPath = Path.ChangeExtension(scriptPath, null) + (format == "json" ? ".report.json" : ".report.md");
+                outputPath = Path.ChangeExtension(scriptPath, null) + ext;
 
             if (format == "json")
             {
                 await File.WriteAllTextAsync(outputPath,
                     JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
+            }
+            else if (format == "pdf")
+            {
+                var pdfBytes = new PdfExporter().Export(manifest);
+                await File.WriteAllBytesAsync(outputPath, pdfBytes);
             }
             else
             {
@@ -145,48 +151,82 @@ namespace ETL_SQL.ReportBuilder.CLI
 
         private static async Task<int> ServeCommand(string[] args)
         {
-            string? scriptPath = null;
-            for (int i = 1; i < args.Length; i++)
-                if (!args[i].StartsWith("-")) scriptPath = args[i];
+            string? scriptPath   = null;
+            string? manifestPath = null;
 
-            if (scriptPath == null) { Console.Error.WriteLine("error: no script path specified."); PrintUsage(); return 1; }
-            if (!File.Exists(scriptPath)) { Console.Error.WriteLine($"error: script file not found: {scriptPath}"); return 1; }
+            for (int i = 1; i < args.Length; i++)
+            {
+                if ((args[i] == "--manifest" || args[i] == "-m") && i + 1 < args.Length)
+                    manifestPath = args[++i];
+                else if (!args[i].StartsWith("-"))
+                    scriptPath = args[i];
+            }
+
+            bool multiMode = manifestPath != null;
+
+            if (!multiMode && scriptPath == null)
+            {
+                Console.Error.WriteLine("error: no script path or --manifest specified.");
+                PrintUsage();
+                return 1;
+            }
+            if (multiMode && !File.Exists(manifestPath!))
+            {
+                Console.Error.WriteLine($"error: manifest file not found: {manifestPath}");
+                return 1;
+            }
+            if (!multiMode && !File.Exists(scriptPath!))
+            {
+                Console.Error.WriteLine($"error: script file not found: {scriptPath}");
+                return 1;
+            }
+
+            // Build the argument string to forward to ReportPlayer
+            string playerArg = multiMode
+                ? $"--manifest \"{Path.GetFullPath(manifestPath!)}\""
+                : $"\"{Path.GetFullPath(scriptPath!)}\"";
 
             // Resolve the ReportPlayer project for dotnet run (development mode)
-            // In production, the ReportPlayer exe lives alongside this binary.
-            var selfDir       = AppContext.BaseDirectory;
-            var playerExe     = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.exe");
-            var playerDll     = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.dll");
-            var usePlayerExe  = File.Exists(playerExe) || File.Exists(playerDll);
+            var selfDir      = AppContext.BaseDirectory;
+            var playerExe    = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.exe");
+            var playerDll    = Path.Combine(selfDir, "ETL-SQL.ReportPlayer.dll");
+            var usePlayerExe = File.Exists(playerExe) || File.Exists(playerDll);
 
             string exe;
             string exeArgs;
             if (usePlayerExe && File.Exists(playerDll))
             {
                 exe     = "dotnet";
-                exeArgs = $"\"{playerDll}\" \"{Path.GetFullPath(scriptPath)}\"";
+                exeArgs = $"\"{playerDll}\" {playerArg}";
             }
             else if (usePlayerExe && File.Exists(playerExe))
             {
                 exe     = playerExe;
-                exeArgs = $"\"{Path.GetFullPath(scriptPath)}\"";
+                exeArgs = playerArg;
             }
             else
             {
-                // Development: find project path relative to this source tree
                 var slnDir     = FindSolutionDir(selfDir) ?? selfDir;
                 var projectDir = Path.Combine(slnDir, "src", "ETL-SQL.ReportPlayer");
                 if (!Directory.Exists(projectDir))
                 {
-                    Console.Error.WriteLine($"error: Cannot locate ETL-SQL.ReportPlayer. Publish etl-sql-report alongside it, or run ETL-SQL.ReportPlayer directly.");
+                    Console.Error.WriteLine($"error: Cannot locate ETL-SQL.ReportPlayer.");
                     return 1;
                 }
                 exe     = "dotnet";
-                exeArgs = $"run --project \"{projectDir}\" -- \"{Path.GetFullPath(scriptPath)}\"";
+                exeArgs = $"run --project \"{projectDir}\" -- {playerArg}";
             }
 
-            Console.WriteLine($"Starting ReportPlayer for: {scriptPath}");
-            Console.WriteLine("Dashboard will be available at http://localhost:5200");
+            if (multiMode)
+            {
+                Console.WriteLine($"Starting ReportPlayer with manifest: {manifestPath}");
+                Console.WriteLine("Catalog will be available at http://localhost:5200");
+            }
+            else
+            {
+                Console.WriteLine($"Starting ReportPlayer for: {scriptPath}");
+                Console.WriteLine("Dashboard will be available at http://localhost:5200");
+            }
 
             var psi = new ProcessStartInfo(exe, exeArgs) { UseShellExecute = false };
             using var proc = Process.Start(psi);
@@ -227,12 +267,15 @@ namespace ETL_SQL.ReportBuilder.CLI
             Console.WriteLine("etl-sql-report — Report-SQL build tool");
             Console.WriteLine();
             Console.WriteLine("Usage:");
-            Console.WriteLine("  etl-sql-report build <script.rptsql> [--output <file>] [--format md|json]");
+            Console.WriteLine("  etl-sql-report build   <script.rptsql> [--output <file>] [--format md|json|pdf]");
             Console.WriteLine("  etl-sql-report refresh <script.rptsql>");
+            Console.WriteLine("  etl-sql-report serve   <script.rptsql>");
+            Console.WriteLine("  etl-sql-report serve   --manifest reports.json");
             Console.WriteLine();
             Console.WriteLine("Options:");
-            Console.WriteLine("  --output, -o   Output file path (defaults to <script>.report.md|json).");
-            Console.WriteLine("  --format, -f   Output format: md (default) or json.");
+            Console.WriteLine("  --output, -o     Output file path (defaults to <script>.report.md|json|pdf).");
+            Console.WriteLine("  --format, -f     Output format: md (default), json, or pdf.");
+            Console.WriteLine("  --manifest, -m   Path to reports.json for multi-report hosting.");
         }
     }
 }

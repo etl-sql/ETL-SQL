@@ -1,6 +1,6 @@
 # Report-SQL Scripting Guide
 
-Report-SQL extends ETL-SQL with three new statement types — `CREATE DATASET`, `CREATE VISUAL`, and `CREATE PAGE` — plus a CLI build tool and a live web dashboard for building and serving interactive reports.
+Report-SQL extends ETL-SQL with dedicated statement types for building interactive dashboards: `SET REPORT TITLE`, `CREATE DATASET`, `CREATE VISUAL`, `CREATE PAGE`, `CREATE CONTAINER`, and `CREATE NAVIGATION` — plus a CLI build tool and a live web dashboard for serving reports.
 
 ---
 
@@ -38,10 +38,11 @@ Report-SQL extends ETL-SQL with three new statement types — `CREATE DATASET`, 
                   └───────────────────────┘           └──────────────────────┘
 ```
 
-A `.rptsql` file is a normal ETL-SQL script that may also contain `CREATE VISUAL`, `CREATE PAGE`, and `CREATE DATASET` statements. The engine evaluates it exactly like any `.etlsql` file; the new statements register visual/page/dataset definitions in the execution context. After evaluation the `ManifestBuilder` snapshots the data and produces a `ReportManifest` — a serialisable JSON structure consumed by both the static Markdown renderer and the live web dashboard.
+A `.rptsql` file is a normal ETL-SQL script that may also contain Report-SQL statements. The engine evaluates it exactly like any `.etlsql` file; the new statements register definitions in the execution context. After evaluation the `ManifestBuilder` snapshots the data and produces a `ReportManifest` — a serialisable JSON structure consumed by both the static Markdown renderer and the live web dashboard.
 
 ### The `@@DATASET` System Variable
-Report-SQL provides the `@@DATASET` system variable which can be used to manually pass data to visuals or capture the result of a `CREATE DATASET` operation. It is treated as a `LIST` of rows. You can manually assign to it before a visual is declared if that visual uses it as a source:
+
+Report-SQL provides the `@@DATASET` system variable which can be used to manually pass data to visuals or capture the result of a `CREATE DATASET` operation. It is treated as a `LIST` of rows:
 
 ```sql
 DECLARE @@DATASET = (('Product A', 100), ('Product B', 250));
@@ -49,7 +50,6 @@ CREATE VISUAL ManualCard AS CARD (SOURCE = @@DATASET, MAPPINGS(VALUE = Col1, LAB
 ```
 
 ---
-
 
 ## Quick start
 
@@ -72,9 +72,9 @@ CREATE VISUAL SalesChart AS BAR (
   )
 );
 
--- 3. Arrange on a page
+-- 3. Arrange on a page (STRUCTURE uses CSS grid-template-areas)
 CREATE PAGE Main AS LAYOUT (
-  STRUCTURE = 'grid:1x1',
+  STRUCTURE = 'A',
   MAP ('A' = SalesChart)
 );
 ```
@@ -88,34 +88,62 @@ etl-sql-report serve report.rptsql        # → opens http://localhost:5200
 
 ---
 
+## SET REPORT TITLE / SET REPORT DESCRIPTION
+
+Sets the report title and description displayed in the dashboard header and catalog page.
+
+```sql
+SET REPORT TITLE = 'Sales Dashboard';
+SET REPORT DESCRIPTION = 'Regional and product-level revenue analysis for Q1 2026.';
+```
+
+Both statements are optional. If omitted the script filename is used as the title.
+
+---
+
 ## CREATE VISUAL
 
 ```
 CREATE VISUAL <name> AS <TYPE> (
-  SOURCE = <source>,
+  [SOURCE = <source>,]
+  [TITLE = '<string>',]
+  [SUBTITLE = '<string>',]
   [MAPPINGS (role = column, ...),]
-  [OPTIONS (key = value, ..., X_AXIS (...), Y_AXIS (...)),]
+  [OPTIONS (key = value, ..., X_AXIS (...), Y_AXIS (...), COLORS (...), LEGEND (...)),]
+  [STYLE (key = value, ...),]
+  [SERIES (type column, ...),]
   [ACTIONS (trigger = action, ...)]
 );
 ```
 
-All clauses inside the outer `( )` are separated by commas. The closing `)` ends the statement. Only `SOURCE` is required; all other clauses are optional.
+All clauses inside the outer `( )` are separated by commas. The closing `)` ends the statement. `SOURCE` is required for all types except `TEXT`, `DATEPICKER`, `SLIDER`, and `SEARCH`.
 
 ### Visual types
 
-| Type | Description | Chart.js type | Rendered as |
-|------|-------------|---------------|-------------|
-| `BAR` | Vertical bar chart. Supports grouping via a `SERIES` mapping. | `bar` | Canvas |
-| `LINE` | Line chart. Supports multiple series and smooth curves. | `line` | Canvas |
-| `SCATTER` | X/Y scatter plot. Each row becomes one point. | `scatter` | Canvas |
-| `PIE` | Pie / doughnut chart. One slice per row. | `pie` | Canvas |
-| `TABLE` | Paginated, scrollable data grid. | — | HTML `<table>` |
-| `CARD` | Single large KPI number with an optional label. | — | Styled `<div>` |
-| `SLICER` | Parameter dropdown. Interactive in the live dashboard; omitted in static markdown. | — | `<select>` |
+| Type | Description | Renderer |
+|------|-------------|----------|
+| `BAR` | Vertical bar chart. Supports grouping via a `SERIES` mapping. | ECharts |
+| `HBAR` | Horizontal bar chart. Same mappings as BAR, bars run left-to-right. | ECharts |
+| `LINE` | Line chart. Supports multiple series and smooth curves. | ECharts |
+| `SCATTER` | X/Y scatter plot. Each row becomes one point. | ECharts |
+| `PIE` | Pie chart. One slice per row. | ECharts |
+| `DONUT` | Donut chart. Same mappings as PIE; center hole rendered. | ECharts |
+| `COMBO` | Combined bar + line chart. Use `SERIES (BAR col, LINE col)` to assign series types. | ECharts |
+| `BOXPLOT` | Box-and-whisker plot for distribution visualisation. | ECharts |
+| `TREEMAP` | Hierarchical area chart. One rectangle per row, sized by value. | ECharts |
+| `HEATMAP` | Grid heatmap. Requires X, Y, and VALUE mappings. | ECharts |
+| `TABLE` | Paginated, scrollable data grid. | HTML `<table>` |
+| `CARD` | Single large KPI number with an optional label. | Styled `<div>` |
+| `TEXT` | Free-form text or HTML block. Uses the `VALUE` option, not a SOURCE query. | `<div>` |
+| `SLICER` | Dropdown parameter selector. SOURCE provides the option list. | `<select>` |
+| `DATEPICKER` | Date input control. No SOURCE required. | `<input type="date">` |
+| `SLIDER` | Numeric range slider. No SOURCE required. | `<input type="range">` |
+| `MULTISELECT` | Multi-value checkbox list. SOURCE provides the option list. | Checkbox list |
+| `SEARCH` | Free-text search box with debounce. No SOURCE required. | `<input type="text">` |
 
 ### SOURCE
 
-The `SOURCE` clause is **required**. It provides the data for the visual. It can be:
+The `SOURCE` clause provides the data for the visual. It can be:
 
 ```sql
 -- a) A pre-populated temp table (set earlier in the same script)
@@ -125,19 +153,34 @@ SOURCE = #my_temp_table
 SOURCE = (SELECT region, SUM(revenue) AS rev FROM #summary GROUP BY region)
 ```
 
-Inline SELECTs are evaluated at build time and their results are snapshotted into the manifest. If you need the visual to refresh independently, use `CREATE DATASET` to define the source table and reference the dataset by name.
+Inline SELECTs are evaluated at build time and their results are snapshotted into the manifest. If you need the visual to refresh independently, use `CREATE DATASET` and reference the dataset by name.
+
+`TEXT`, `DATEPICKER`, `SLIDER`, and `SEARCH` visuals do not require `SOURCE`. `MULTISELECT` requires a `SOURCE` to populate the option list.
+
+### TITLE and SUBTITLE
+
+```sql
+CREATE VISUAL RevenueCard AS CARD (
+  SOURCE = ...,
+  TITLE    = 'Total Revenue',
+  SUBTITLE = 'All regions, YTD',
+  MAPPINGS (VALUE = revenue)
+);
+```
+
+`TITLE` overrides the visual name as the chart heading. `SUBTITLE` appears below the title in smaller text.
 
 ### MAPPINGS
 
 Maps the columns returned by `SOURCE` to semantic **roles** expected by the renderer. Roles are case-insensitive.
 
-#### BAR and LINE
+#### BAR, HBAR, and LINE
 
 | Role | Description |
 |------|-------------|
 | `X` | Category axis column (string or date). Required. |
 | `Y` | Value axis column (numeric). Required. |
-| `SERIES` | Optional grouping column. Each distinct value becomes a separate coloured dataset on the chart. |
+| `SERIES` | Optional grouping column. Each distinct value becomes a separate coloured series. |
 
 ```sql
 -- Simple: single series
@@ -158,7 +201,7 @@ MAPPINGS (X = month, Y = revenue, SERIES = region)
 MAPPINGS (X = score, Y = rank)
 ```
 
-#### PIE
+#### PIE and DONUT
 
 | Role | Description |
 |------|-------------|
@@ -173,7 +216,7 @@ MAPPINGS (LABEL = category, VALUE = total)
 
 | Role | Description |
 |------|-------------|
-| `LABEL` | Small caption rendered above the number. If omitted, the column name is used. |
+| `LABEL` | Small caption rendered above the number. If omitted the column name is used. |
 | `VALUE` | The primary number or string to display large. |
 
 ```sql
@@ -182,19 +225,66 @@ MAPPINGS (VALUE = val, LABEL = lbl)
 
 #### SLICER
 
-| Role | Description |
-|------|-------------|
-| `PARAMETER` | The `@variable` whose value is controlled by this slicer. |
+SLICER uses `SOURCE` to provide option rows and `ACTIONS` to bind the selection to a parameter. The `MAPPINGS` clause specifies which column from the source holds the display value.
 
 ```sql
--- SOURCE should return distinct values for the dropdown
-SOURCE = (SELECT DISTINCT region FROM #summary),
-MAPPINGS (PARAMETER = @region)
+CREATE VISUAL RegionFilter AS SLICER (
+  SOURCE = (SELECT DISTINCT region FROM #summary ORDER BY region),
+  MAPPINGS (VALUE = region),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region))
+);
+```
+
+#### MULTISELECT
+
+Same pattern as SLICER: `SOURCE` provides options, `ACTIONS` binds the selection.
+
+```sql
+CREATE VISUAL CategoryFilter AS MULTISELECT (
+  SOURCE = (SELECT DISTINCT category FROM #products ORDER BY category),
+  MAPPINGS (VALUE = category),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@category, category))
+);
+```
+
+#### HEATMAP
+
+| Role | Description |
+|------|-------------|
+| `X` | Horizontal axis column. |
+| `Y` | Vertical axis column. |
+| `VALUE` | Cell intensity value (numeric). |
+
+```sql
+MAPPINGS (X = hour, Y = weekday, VALUE = count)
+```
+
+#### TREEMAP
+
+| Role | Description |
+|------|-------------|
+| `LABEL` | Rectangle label column. |
+| `VALUE` | Rectangle size column (numeric). |
+
+```sql
+MAPPINGS (LABEL = product, VALUE = revenue)
 ```
 
 #### TABLE
 
 TABLE visuals use all columns returned by `SOURCE` in definition order. No `MAPPINGS` clause is needed.
+
+#### COMBO
+
+COMBO visuals use the `SERIES` block to assign which columns render as bars vs lines. The `X` mapping provides the category axis.
+
+```sql
+CREATE VISUAL SalesCombo AS COMBO (
+  SOURCE = (SELECT month, revenue, units FROM #summary),
+  MAPPINGS (X = month),
+  SERIES (BAR revenue, LINE units)
+);
+```
 
 ### OPTIONS
 
@@ -203,20 +293,30 @@ General key/value options plus optional axis sub-blocks. All are optional:
 ```sql
 OPTIONS (
   -- flat options:
-  title   = 'Revenue Over Time',   -- overrides the default visual name as the chart title
-  stacked = true,                  -- BAR / LINE: stack series (true | false)
-  smooth  = true,                  -- LINE only: use bezier smoothing (true | false)
+  title   = 'Revenue Over Time',
+  stacked = true,
+  smooth  = true,
+  FORMAT  = 'N0',
 
-  -- axis sub-blocks (BAR, LINE, SCATTER only):
+  -- axis sub-blocks (BAR, HBAR, LINE, SCATTER only):
   X_AXIS (
-    label  = 'Month',              -- axis label shown below/beside the axis
-    min    = 0,                    -- minimum axis value (numeric)
-    max    = 100                   -- maximum axis value (numeric)
+    label  = 'Month',
+    min    = 0,
+    max    = 100
   ),
   Y_AXIS (
     label  = 'Revenue ($)',
     min    = 0
-  )
+  ),
+
+  -- color map (any chart type):
+  COLORS (
+    'North' = '#4e79a7',
+    'South' = '#f28e2b'
+  ),
+
+  -- legend position (any chart type):
+  LEGEND (position = bottom)
 )
 ```
 
@@ -224,25 +324,60 @@ OPTIONS (
 
 | Key | Applies to | Values | Description |
 |-----|------------|--------|-------------|
-| `title` | All chart types | Any string | Chart title. Defaults to the visual name. |
-| `stacked` | BAR, LINE | `true` / `false` | Stack series on top of each other. |
-| `smooth` | LINE | `true` / `false` | Smooth curves via bezier interpolation (Chart.js `tension`). |
+| `title` | All chart types | Any string | Chart title. Defaults to the visual name. Prefer the top-level `TITLE` clause. |
+| `stacked` | BAR, HBAR, LINE | `true` / `false` | Stack series on top of each other. |
+| `smooth` | LINE | `true` / `false` | Smooth curves via bezier interpolation. |
+| `FORMAT` | CARD | .NET format string | Applies a numeric format to the VALUE column (e.g. `N0`, `C2`, `P1`). |
 
 #### X_AXIS / Y_AXIS sub-block options
 
 | Key | Values | Description |
 |-----|--------|-------------|
 | `label` | Any string | Human-readable axis label. |
-| `min` | Numeric | Force axis minimum. Useful to prevent the chart from starting above zero. |
+| `min` | Numeric | Force axis minimum. |
 | `max` | Numeric | Force axis maximum. |
+
+#### COLORS
+
+Maps category values to specific hex colors. Key is the category value (quoted if it contains spaces); value is a CSS color string.
+
+```sql
+COLORS (
+  'East'  = '#4e79a7',
+  'West'  = '#f28e2b',
+  'North' = '#76b7b2'
+)
+```
+
+#### LEGEND
+
+Controls legend placement.
+
+```sql
+LEGEND (position = top)     -- top | bottom | left | right
+```
+
+### STYLE
+
+Applies visual-level styling properties. Visual-level STYLE takes precedence over page-level THEME.
+
+```sql
+STYLE (
+  THEME      = dark,          -- dark | light
+  HEIGHT     = 400,           -- pixels
+  WIDTH      = 600,           -- pixels
+  BACKGROUND = '#1a1a2e',
+  BORDER     = '1px solid #333'
+)
+```
 
 ### ACTIONS
 
-Actions wire up interactive behaviour in the live dashboard. Currently two action types are supported:
+Actions wire up interactive behaviour in the live dashboard:
 
 ```sql
 ACTIONS (
-  ON_CLICK = DRILL_DOWN(Target = DetailChart, Key = region),
+  ON_CLICK  = DRILL_DOWN(Target = DetailChart, Key = region),
   ON_CHANGE = SET_PARAMETER(@region, region)
 )
 ```
@@ -250,7 +385,7 @@ ACTIONS (
 | Trigger | Description |
 |---------|-------------|
 | `ON_CLICK` | Fires when the user clicks a chart element (bar, slice, point). |
-| `ON_CHANGE` | Fires when a SLICER selection changes. |
+| `ON_CHANGE` | Fires when a SLICER, MULTISELECT, DATEPICKER, SLIDER, or SEARCH value changes. |
 
 #### DRILL_DOWN
 
@@ -266,7 +401,7 @@ When clicked, passes the selected row's value in `Key` as a filter into the targ
 ON_CHANGE = SET_PARAMETER(@paramName, <columnRef>)
 ```
 
-Sets the named `@param` to the selected value. Any visual whose inline `SELECT` references `@paramName` is automatically re-queried. This is the primary mechanism for making slicers drive other visuals.
+Sets the named `@param` to the selected value. Any visual whose inline `SELECT` references `@paramName` is automatically re-queried.
 
 ---
 
@@ -279,21 +414,44 @@ CREATE DATASET #<name>
   [REFRESH EVERY '<interval>']
   [TTL = '<duration>']
   [COMPRESS = ON|OFF]
-  [ENCRYPT = ON [KEYFILE = '<path>']]
+  [ENCRYPT = MACHINE | PASSWORD | KEYFILE]
+  [PASSWORD = '<password>']
+  [KEYFILE  = '<path>']
 AS ( SELECT ... );
 ```
+
+### Encryption modes
+
+| Mode | Description |
+|------|-------------|
+| `ENCRYPT = MACHINE` | Encrypts using a machine-bound key (DPAPI on Windows; OS keyring on Linux/macOS). No password or key file needed. Snapshot can only be decrypted on the same machine. |
+| `ENCRYPT = PASSWORD, PASSWORD = '...'` | AES encryption with a user-supplied password. Portable — can be decrypted on any machine with the password. |
+| `ENCRYPT = KEYFILE, KEYFILE = '...'` | AES encryption using a key file at the specified path. Portable with the key file. |
 
 ### Full example
 
 ```sql
+-- Machine-bound (simplest — no credentials to manage)
 CREATE DATASET #sales_snap
   REFRESH EVERY '1h'
   TTL = '24h'
   COMPRESS = ON
-  ENCRYPT = ON KEYFILE = 'C:\keys\report.key'
+  ENCRYPT = MACHINE
   AS (SELECT region, product, SUM(revenue) AS revenue
       FROM sales
       GROUP BY region, product);
+
+-- Password-protected (portable)
+CREATE DATASET #sales_secure
+  ENCRYPT = PASSWORD
+  PASSWORD = 'MyS3cretPhrase'
+  AS (SELECT * FROM sensitive_table);
+
+-- Key-file protected
+CREATE DATASET #sales_keyfile
+  ENCRYPT = KEYFILE
+  KEYFILE = 'C:\keys\report.key'
+  AS (SELECT * FROM sales);
 ```
 
 ### CREATE DATASET clause reference
@@ -304,23 +462,25 @@ CREATE DATASET #sales_snap
 | `REFRESH EVERY '<interval>'` | No | Re-compute interval. Format: `<n>s`, `<n>m`, `<n>h`, or `<n>d` (e.g. `'30m'`, `'1h'`, `'7d'`). |
 | `TTL = '<duration>'` | No | How long a snapshot stays valid before `IsStale` returns true. Same interval format. |
 | `COMPRESS = ON` | No | Compress the snapshot file on disk. Default `OFF`. |
-| `ENCRYPT = ON` | No | AES-encrypt the snapshot file. Requires `KEYFILE`. |
-| `KEYFILE = '<path>'` | Required when `ENCRYPT = ON` | Absolute path to the AES key file. Linter raises an error if `ENCRYPT = ON` but `KEYFILE` is absent. |
+| `ENCRYPT = MACHINE\|PASSWORD\|KEYFILE` | No | Encryption mode. See table above. |
+| `PASSWORD = '<password>'` | Required when `ENCRYPT = PASSWORD` | Password for AES encryption. |
+| `KEYFILE = '<path>'` | Required when `ENCRYPT = KEYFILE` | Absolute path to the AES key file. Linter raises an error if `ENCRYPT = KEYFILE` but `KEYFILE` is absent. |
 | `AS ( SELECT ... )` | Yes | The query to execute. Must be the last clause before the semicolon. |
 
 ---
 
 ## CREATE PAGE
 
-Arranges visuals into a named layout. Multiple pages can be defined in one script; the web dashboard renders each as a distinct section.
+Arranges visuals and containers into a named layout. Multiple pages can be defined in one script; the web dashboard renders each as a distinct section.
 
 ```
 CREATE PAGE <name> AS LAYOUT (
-  STRUCTURE = '<layout-string>',
+  STRUCTURE = '<grid-template-areas>',
   MAP (
-    '<slot>' = VisualName,
+    '<slot>' = VisualOrContainerName,
     ...
   )
+  [, STYLE (key = value, ...)]
 )
 [WITH PARAMETERS (@param = default, ...)]
 ;
@@ -328,22 +488,27 @@ CREATE PAGE <name> AS LAYOUT (
 
 ### STRUCTURE string
 
-`STRUCTURE` is a descriptive hint string passed through to the renderer. The ReportPlayer currently reads it to understand the intended layout intent.
+`STRUCTURE` is a CSS grid-template-areas string. Slot letters appear as space-separated names within a row; rows are separated by `/`.
 
-| Value | Effect |
-|-------|--------|
-| `'grid:1x1'` | Single full-width visual. |
-| `'grid:1x2'` | One column, two rows. |
-| `'grid:2x1'` | Two columns, one row. |
-| `'grid:2x2'` | Two columns, two rows. |
-| `'grid:2x3'` | Two columns, three rows. |
-| `'grid:3x2'` | Three columns, two rows. |
+```sql
+-- Single visual filling the full width
+STRUCTURE = 'A'
 
-> **Note (known issue):** The grid layout hint is currently passed to the frontend but the runtime renders visuals in a single flowing column. Full CSS grid rendering is tracked in the roadmap.
+-- Two visuals side by side
+STRUCTURE = 'A B'
+
+-- Two rows: header spanning both columns, then two below
+STRUCTURE = 'A A / B C'
+
+-- Three rows: KPI row, chart row, table row
+STRUCTURE = 'A B C / D D D / E E E'
+```
+
+Each unique letter becomes a grid area. The renderer calculates column count from the maximum number of distinct letters in any single row.
 
 ### MAP
 
-`MAP` assigns each visual to a slot. Slots are single-quoted letter strings (`'A'`, `'B'`, …). Visuals are rendered in ascending alphabetical slot order.
+`MAP` assigns each visual or container to a slot letter. Slot letters must match those used in `STRUCTURE`.
 
 ```sql
 MAP (
@@ -354,40 +519,111 @@ MAP (
 )
 ```
 
+### STYLE on PAGE
+
+Applies page-level styling. The `THEME` key cascades to all charts on the page unless overridden at the visual level.
+
+```sql
+STYLE (
+  THEME      = dark,
+  BACKGROUND = '#0f0f1a'
+)
+```
+
 ### WITH PARAMETERS
 
-Declares page-level parameters with optional default values. These are exposed as slicers in the live dashboard and can be overridden by `SET_PARAMETER` actions.
+Declares page-level parameters with optional default values. These drive dynamic queries when a SLICER or other filter control fires `SET_PARAMETER`.
 
 ```sql
 WITH PARAMETERS (@region = 'All', @year = '2024')
 ```
 
-When a parameter is changed by a slicer or `DRILL_DOWN`, the DashboardService re-evaluates the entire script with `DECLARE @region = '...';` prepended, so every inline SELECT in every visual re-runs automatically.
+When a parameter changes the DashboardService re-evaluates all visuals whose inline SELECTs reference that parameter. Unaffected visuals are not re-queried.
 
 ### Full page example
 
 ```sql
 CREATE PAGE Overview AS LAYOUT (
-  STRUCTURE = 'grid:2x3',
+  STRUCTURE = 'A B / C C / D D',
   MAP (
     'A' = TotalRevenue,
     'B' = RegionFilter,
     'C' = RevenueByRegion,
-    'D' = RevenueByProduct,
-    'E' = UnitsByMonth,
-    'F' = SalesTable
-  )
+    'D' = SalesTable
+  ),
+  STYLE (THEME = dark)
 )
 WITH PARAMETERS (@region = 'All');
 ```
 
-If no `CREATE PAGE` statements exist, all visuals are rendered in definition order.
+---
+
+## CREATE CONTAINER
+
+Groups multiple visuals into a single layout region, optionally with scrolling. Useful when many visuals share one page slot.
+
+```
+CREATE CONTAINER <name> AS BOX|SCROLL (
+  [STYLE (key = value, ...),]
+  VISUALS (VisualA, VisualB, ...)
+);
+```
+
+| Type | Description |
+|------|-------------|
+| `BOX` | Fixed-height container. Visuals are stacked vertically inside. |
+| `SCROLL` | Scrollable container. Overflow visuals scroll within the container. |
+
+```sql
+CREATE CONTAINER KpiRow AS BOX (
+  STYLE (HEIGHT = 200),
+  VISUALS (TotalRevenue, TotalUnits, AvgOrderValue)
+);
+
+-- Reference the container in MAP just like a visual
+CREATE PAGE Main AS LAYOUT (
+  STRUCTURE = 'A A / B C',
+  MAP (
+    'A' = KpiRow,
+    'B' = RevenueChart,
+    'C' = SalesTable
+  )
+);
+```
+
+---
+
+## CREATE NAVIGATION
+
+Adds a navigation bar that controls which page is visible. The bar renders above the page content.
+
+```
+CREATE NAVIGATION <name> AS TAB|BUTTON|LINK (
+  [ORIENTATION = HORIZONTAL|VERTICAL,]
+  [DEFAULT = <PageName>]
+)
+WITH PAGES (Page1, Page2, ...);
+```
+
+| Nav type | Rendering |
+|----------|-----------|
+| `TAB` | Tab-style bar (default). |
+| `BUTTON` | Pill buttons. |
+| `LINK` | Separator-delimited links. |
+
+```sql
+CREATE NAVIGATION MainNav AS TAB (
+  ORIENTATION = HORIZONTAL,
+  DEFAULT = Overview
+)
+WITH PAGES (Overview, Details, Trends);
+```
+
+If `DEFAULT` is omitted, the first page in the list is shown on load.
 
 ---
 
 ## CLI — etl-sql-report
-
-The CLI is the entry point for building and serving reports outside of VS Code.
 
 ### build
 
@@ -397,49 +633,71 @@ Evaluates the script, builds a `ReportManifest`, and writes output files:
 etl-sql-report build report.rptsql
 etl-sql-report build report.rptsql --output out/dashboard.md
 etl-sql-report build report.rptsql --format json
+etl-sql-report build report.rptsql --format pdf
 ```
 
 **Output files produced:**
 
 | File | Description |
 |------|-------------|
-| `<script>.report.md` | GitHub Flavored Markdown document with embedded Chart.js config comments. Default when `--format md`. |
+| `<script>.report.md` | GitHub Flavored Markdown document. Default when `--format md`. |
 | `<script>.report.json` | Raw manifest JSON. Default when `--format json`. |
-| `<script>.snapshot.json` | Snapshot of all visual data rows and metadata, always written alongside the report. |
+| `<script>.report.pdf` | PDF export via QuestPDF. Charts rendered as SVGs, tables capped at 500 rows. Default when `--format pdf`. |
+| `<script>.snapshot.json` | Snapshot of all visual data rows and metadata. Always written alongside the report. |
 
 **Flags:**
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--output`, `-o` | `<script>.report.md` or `.report.json` | Override the output file path. |
-| `--format`, `-f` | `md` | Output format: `md` (Markdown) or `json` (raw manifest). |
-
-**How the Markdown report works:**
-
-- `TABLE` visuals → GFM pipe table (capped at 1,000 rows).
-- `CARD` visuals → Blockquote with bold label and value.
-- `BAR`, `LINE`, `SCATTER`, `PIE` → HTML comment `<!-- CHART:{...} -->` containing the Chart.js JSON config, followed by a fallback GFM table of the raw data. The VS Code preview panel and `etl-sql-report serve` process this comment to render the interactive chart.
-- `SLICER` visuals → Noted as `[Slicer — interactive only]`.
+| `--output`, `-o` | `<script>.report.<ext>` | Override the output file path. |
+| `--format`, `-f` | `md` | Output format: `md`, `json`, or `pdf`. |
 
 ### refresh
 
-Re-evaluates the script and updates the snapshot file without writing a new report document. Use this to keep the snapshot fresh on a schedule:
+Re-evaluates the script and updates the snapshot without writing a new report document:
 
 ```sh
 etl-sql-report refresh report.rptsql
 ```
 
-The snapshot is stored alongside the script as `<script>.snapshot.json`. The ReportPlayer considers the snapshot stale if the script file has been modified since the snapshot was built, or if the TTL (default 24 h) has elapsed. When stale, a banner is shown in the dashboard.
+The snapshot is stored alongside the script as `<script>.snapshot.json`. The ReportPlayer considers the snapshot stale if the script file has been modified since the snapshot was built, or if the TTL (default 24 h) has elapsed.
 
 ### serve
 
 Starts the web dashboard at `http://localhost:5200`:
 
 ```sh
+# Single report
 etl-sql-report serve report.rptsql
+
+# Multi-report catalog (see reports.json below)
+etl-sql-report serve --manifest reports.json
 ```
 
 Internally this launches `ETL-SQL.ReportPlayer` (the Kestrel ASP.NET server) and opens the browser after 2.5 s. Keep the process running; the dashboard is served for as long as the process is alive.
+
+---
+
+## Multi-report hosting
+
+Multiple reports can be hosted together using a `reports.json` manifest file:
+
+```json
+{
+  "reports": [
+    { "name": "sales",     "path": "reports/sales.rptsql",     "description": "Regional sales dashboard" },
+    { "name": "inventory", "path": "reports/inventory.rptsql", "description": "Inventory levels by SKU" }
+  ]
+}
+```
+
+Start the server:
+
+```sh
+etl-sql-report serve --manifest reports.json
+```
+
+The catalog page at `http://localhost:5200` lists all reports. Each report is accessible at `http://localhost:5200/reports/<name>`. API routes are prefixed per-report: `/reports/<name>/api/manifest`, `/reports/<name>/api/refresh`, etc.
 
 ---
 
@@ -447,22 +705,30 @@ Internally this launches `ETL-SQL.ReportPlayer` (the Kestrel ASP.NET server) and
 
 The ReportPlayer is a lightweight ASP.NET Minimal API server that hosts the report as an interactive dashboard.
 
-### Endpoints
+### Endpoints (single-report mode)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/` | Serves the full dashboard HTML shell with embedded manifest. |
+| `GET` | `/` | Serves the full dashboard HTML with pre-embedded manifest. |
 | `GET` | `/api/manifest` | Returns the current `ReportManifest` as JSON. |
-| `GET` | `/api/refresh` | Triggers a full rebuild (re-evaluates the script) and returns `{ rebuilt: true, visuals: N }`. |
-| `POST` | `/api/parameter` | Updates one parameter and triggers a rebuild. Body: `{ "name": "@region", "value": "West" }`. |
+| `GET` | `/api/refresh` | Triggers a full rebuild and returns `{ rebuilt: true, visuals: N }`. |
+| `POST` | `/api/parameter` | Updates one parameter and triggers a selective rebuild. Body: `{ "name": "@region", "value": "West" }`. |
+| `POST` | `/api/parameters` | Updates multiple parameters in a single request. Body: `{ "params": [{ "name": "@region", "value": "West" }, ...] }`. |
 
-### Slicer interactivity
+### Endpoints (multi-report mode)
 
-When a user changes a `SLICER` dropdown in the dashboard:
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/` | Catalog page listing all reports. |
+| `GET` | `/reports/{name}` | Dashboard for the named report. |
+| `GET` | `/reports/{name}/api/manifest` | Report manifest JSON. |
+| `GET` | `/reports/{name}/api/refresh` | Force rebuild. |
+| `POST` | `/reports/{name}/api/parameter` | Set one parameter. |
+| `POST` | `/reports/{name}/api/parameters` | Set multiple parameters. |
 
-1. The browser calls `POST /api/parameter` with the parameter name and selected value.
-2. `DashboardService.SetParameterAsync()` prepends `DECLARE @region = 'West';` to the script source and re-evaluates it.
-3. The updated manifest is returned and the page re-renders all visuals with the new data.
+### Selective refresh
+
+When a parameter changes, `DashboardService` checks which visuals depend on that parameter (by scanning the inline SELECT for variable references) and re-queries only those visuals. Unaffected visuals keep their current data without re-evaluation.
 
 ### Staleness banner
 
@@ -470,16 +736,16 @@ If the manifest was built before the script file was last written, or if more th
 
 > ⚠ Snapshot may be stale — run `etl-sql-report refresh` to update.
 
-You can also hit `/api/refresh` in the browser to force a live rebuild without restarting the server.
+You can also hit `/api/refresh` to force a live rebuild without restarting the server.
 
 ### Dashboard rendering (report-runtime.js)
 
 The dashboard frontend is a single vanilla-JS file (`wwwroot/report-runtime.js`) that works in two modes:
 
 - **VS Code WebviewPanel**: reads `window.__MANIFEST__` injected by the extension.
-- **Web (ReportPlayer)**: fetches `/api/manifest` on load.
+- **Web (ReportPlayer)**: uses pre-embedded manifest (single-report) or fetches from `/api/manifest` (multi-report).
 
-Visual rendering is handled entirely client-side using [Chart.js v4](https://www.chartjs.org/). Chart.js is loaded from CDN; no bundler is required.
+Visual rendering uses [Apache ECharts v5](https://echarts.apache.org/) for all chart types. ECharts is loaded from CDN; no bundler is required.
 
 ---
 
@@ -493,8 +759,6 @@ With a `.rptsql` file open, run **ETL-SQL: Preview Report** from the command pal
 |---------|---------|-------------|
 | `etlsql.reportCliPath` | *(empty)* | Full path to `etl-sql-report.exe`. Leave empty to use `dotnet run` from the source tree in development. |
 
-> **Note:** `.rptsql` extension support (syntax highlighting, linting, preview button) is currently tracked as a roadmap item. The preview command works today; dedicated language association for `.rptsql` is pending.
-
 ---
 
 ## Linter rules (language server)
@@ -505,9 +769,9 @@ The language server checks `.rptsql` files automatically:
 |------|----------|-----------| 
 | `VisualSourceExists` | Warning | `SOURCE = #table` references a temp table not defined earlier in the script. |
 | `VisualMappingColumnExists` | Warning | A `MAPPINGS` role references a column not returned by the `SOURCE` inline SELECT. |
-| `PageVisualReferenced` | Warning | A `MAP` entry references a visual name that is not defined in the script. |
+| `PageVisualReferenced` | Warning | A `MAP` entry references a visual or container name that is not defined in the script. |
 | `DatasetRefreshInterval` | Warning | `REFRESH EVERY` value does not match the `<n>s/m/h/d` format. |
-| `DatasetEncryptWithoutKey` | **Error** | `ENCRYPT = ON` without a `KEYFILE` clause. |
+| `DatasetEncryptWithoutKey` | **Error** | `ENCRYPT = KEYFILE` without a `KEYFILE` clause, or `ENCRYPT = PASSWORD` without a `PASSWORD` clause. |
 | `LayerOrder` | Warning | A visual references a dataset defined later in the script, or a page references a visual defined later. Forward references are not supported. |
 | `InsertColumnCountMismatch` | Warning | `INSERT INTO` omits the column list and the SELECT provides fewer columns than the target table. |
 
@@ -519,30 +783,58 @@ The snapshot and API both return this structure:
 
 ```jsonc
 {
-  "source":  "C:/reports/sales.rptsql",   // script path
-  "builtAt": "2026-04-12T18:00:00Z",       // UTC build timestamp
+  "source":      "C:/reports/sales.rptsql",
+  "builtAt":     "2026-04-12T18:00:00Z",
+  "title":       "Sales Dashboard",
+  "description": "Regional revenue analysis",
 
   "visuals": [
     {
       "name":       "RevenueByRegion",
       "visualType": "Bar",
-      "chartConfig": "{...}",              // Chart.js config JSON string (null for TABLE/CARD/SLICER)
-      "columns":  ["region", "revenue"],   // column headers
-      "rows":     [["East", "12000"], ...], // row data as string arrays
-      "options":  {                        // flat options + mapping hints
-        "title":           "Revenue By Region",
+      "chartConfig": "{ /* ECharts option object JSON */ }",
+      "columns":  ["region", "revenue"],
+      "rows":     [["East", "12000"], ...],
+      "options":  {
         "mapping:x":       "region",
-        "mapping:y":       "revenue"
-      }
+        "mapping:y":       "revenue",
+        "axis:x:label":    "Region",
+        "axis:y:label":    "Revenue ($)"
+      },
+      "styles":   { "THEME": "dark" },
+      "actions":  [
+        { "type": "SET_PARAMETER", "trigger": "ON_CHANGE",
+          "parameterName": "@region", "valueExpression": "region" }
+      ]
     }
   ],
 
   "pages": [
     {
       "name":      "Overview",
-      "structure": "grid:2x3",
-      "slotMap":   { "A": "TotalRevenue", "B": "RevenueByRegion" },
-      "parameters": { "@region": "All" }
+      "structure": "A B / C C",
+      "slotMap":   { "A": "TotalRevenue", "B": "RegionFilter", "C": "RevenueByRegion" },
+      "parameters": { "@region": "All" },
+      "styles":    { "THEME": "dark" }
+    }
+  ],
+
+  "containers": [
+    {
+      "name":          "KpiRow",
+      "containerType": "BOX",
+      "visuals":       ["TotalRevenue", "TotalUnits"],
+      "styles":        { "HEIGHT": "200" }
+    }
+  ],
+
+  "navigations": [
+    {
+      "name":        "MainNav",
+      "navType":     "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "Overview",
+      "pages":       ["Overview", "Details"]
     }
   ],
 
@@ -562,15 +854,19 @@ The snapshot and API both return this structure:
 
 ## Full working example
 
-Source CSV columns: `region`, `product`, `units`, `revenue`, `month`, `date`
+Source CSV columns: `region`, `product`, `units`, `revenue`, `month`
 
 ```sql
+SET REPORT TITLE = 'Sales Dashboard';
+SET REPORT DESCRIPTION = 'Regional and product-level revenue by month.';
+
 DROP CONNECTION IF EXISTS c;
 CREATE CONNECTION c ON FLATFILE('TestData/test_sales.csv');
 
 -- Shared base dataset (refreshed every hour)
 CREATE DATASET #summary
   REFRESH EVERY '1h'
+  ENCRYPT = MACHINE
   AS (SELECT month, region, product,
              SUM(units)   AS units,
              SUM(revenue) AS revenue
@@ -580,7 +876,7 @@ CREATE DATASET #summary
 -- Region filter slicer
 CREATE VISUAL RegionFilter AS SLICER (
   SOURCE = (SELECT DISTINCT region FROM #summary ORDER BY region),
-  MAPPINGS (PARAMETER = @region),
+  MAPPINGS (VALUE = region),
   ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region))
 );
 
@@ -589,66 +885,52 @@ CREATE VISUAL TotalRevenue AS CARD (
   SOURCE = (SELECT SUM(revenue) AS val, 'Total Revenue' AS lbl
             FROM #summary
             WHERE @region = 'All' OR region = @region),
-  MAPPINGS (VALUE = val, LABEL = lbl)
+  TITLE    = 'Total Revenue',
+  MAPPINGS (VALUE = val, LABEL = lbl),
+  OPTIONS  (FORMAT = 'C0')
 );
 
 -- Bar chart: revenue by region
 CREATE VISUAL RevenueByRegion AS BAR (
   SOURCE = (SELECT region, SUM(revenue) AS revenue
             FROM #summary
+            WHERE @region = 'All' OR region = @region
             GROUP BY region),
+  TITLE    = 'Revenue by Region',
   MAPPINGS (X = region, Y = revenue),
   OPTIONS (
-    title = 'Revenue by Region',
     X_AXIS (label = 'Region'),
     Y_AXIS (label = 'Revenue ($)', min = 0)
   )
 );
 
--- Bar chart: multi-series revenue by region and month
+-- Multi-series bar: revenue by region and month
 CREATE VISUAL RevenueByRegionMonth AS BAR (
   SOURCE = (SELECT month, region, SUM(revenue) AS revenue
             FROM #summary
             GROUP BY month, region),
+  TITLE    = 'Revenue by Region (Monthly)',
   MAPPINGS (X = month, Y = revenue, SERIES = region),
-  OPTIONS (
-    title   = 'Revenue by Region (Monthly)',
-    stacked = true,
-    X_AXIS  (label = 'Month'),
-    Y_AXIS  (label = 'Revenue ($)', min = 0)
-  )
+  OPTIONS  (stacked = true, X_AXIS (label = 'Month'), Y_AXIS (label = 'Revenue ($)', min = 0))
 );
 
--- Pie chart: revenue by product
-CREATE VISUAL RevenueByProduct AS PIE (
+-- Donut chart: revenue share by product
+CREATE VISUAL RevenueByProduct AS DONUT (
   SOURCE = (SELECT product, SUM(revenue) AS revenue
             FROM #summary
             GROUP BY product),
-  MAPPINGS (LABEL = product, VALUE = revenue),
-  OPTIONS (title = 'Revenue by Product')
+  TITLE    = 'Revenue by Product',
+  MAPPINGS (LABEL = product, VALUE = revenue)
 );
 
--- Line chart: units by month (smooth)
+-- Line chart: units by month
 CREATE VISUAL UnitsByMonth AS LINE (
   SOURCE = (SELECT month, SUM(units) AS units
             FROM #summary
             GROUP BY month),
+  TITLE    = 'Units Sold by Month',
   MAPPINGS (X = month, Y = units),
-  OPTIONS (
-    title  = 'Units Sold by Month',
-    smooth = true,
-    X_AXIS (label = 'Month'),
-    Y_AXIS (label = 'Units Sold', min = 0)
-  )
-);
-
--- Scatter: units vs revenue per product
-CREATE VISUAL UnitsVsRevenue AS SCATTER (
-  SOURCE = (SELECT SUM(units) AS units, SUM(revenue) AS revenue
-            FROM #summary
-            GROUP BY product),
-  MAPPINGS (X = units, Y = revenue),
-  OPTIONS (title = 'Units vs Revenue')
+  OPTIONS  (smooth = true, X_AXIS (label = 'Month'), Y_AXIS (label = 'Units Sold', min = 0))
 );
 
 -- Detail table: all rows
@@ -656,19 +938,38 @@ CREATE VISUAL SalesTable AS TABLE (
   SOURCE = #summary
 );
 
--- Dashboard page
-CREATE PAGE Main AS LAYOUT (
-  STRUCTURE = 'grid:2x3',
+-- KPI container
+CREATE CONTAINER KpiRow AS BOX (
+  VISUALS (TotalRevenue)
+);
+
+-- Navigation
+CREATE NAVIGATION MainNav AS TAB (
+  ORIENTATION = HORIZONTAL,
+  DEFAULT = Overview
+)
+WITH PAGES (Overview, Trends);
+
+-- Dashboard pages
+CREATE PAGE Overview AS LAYOUT (
+  STRUCTURE = 'A B / C C / D D',
   MAP (
-    'A' = TotalRevenue,
+    'A' = KpiRow,
     'B' = RegionFilter,
     'C' = RevenueByRegion,
-    'D' = RevenueByProduct,
-    'E' = UnitsByMonth,
-    'F' = SalesTable
+    'D' = SalesTable
   )
 )
 WITH PARAMETERS (@region = 'All');
+
+CREATE PAGE Trends AS LAYOUT (
+  STRUCTURE = 'A A / B C',
+  MAP (
+    'A' = RevenueByRegionMonth,
+    'B' = UnitsByMonth,
+    'C' = RevenueByProduct
+  )
+);
 ```
 
 ---
@@ -677,9 +978,11 @@ WITH PARAMETERS (@region = 'All');
 
 | Item | Status |
 |------|--------|
-| CSS grid layout rendering in the web dashboard | Not implemented — visuals currently flow single-column |
-| Multi-page navigation (`CREATE NAVIGATION`) | Roadmap — design draft in TODO.md |
-| `.rptsql` VS Code language ID registration | Pending — preview button and linting already work |
-| Partial rebuild on parameter change (only affected visuals) | Planned — currently triggers a full script re-evaluation |
-| `TABLE` pagination controls in the dashboard | Not implemented — all rows rendered |
-| CARD secondary value / delta / trend indicator | Not implemented |
+| Conditional formatting on TABLE visuals | Not implemented |
+| GAUGE visual type (radial KPI gauge) | Not implemented |
+| Funnel chart visual type | Not implemented |
+| Waterfall chart visual type | Not implemented |
+| Excel export (`--format xlsx`) | Not implemented |
+| Cross-filtering between visuals | Not implemented |
+| Typed parameter declarations (`PARAMETER @date AS DATE DEFAULT '...'`) | Not implemented |
+| PIVOT / UNPIVOT statement | Not implemented |

@@ -85,6 +85,7 @@ namespace ETL_SQL.Core.Common
         public Stack<Row> OuterRowStack { get; } = new();
         public Dictionary<Statement, object?> SubqueryCache { get; } = new();
         public CancellationToken CancellationToken => CancellationToken.None;
+        public IServiceProvider ServiceProvider => null!;
         public List<ExecutionMetrics> ProfileMetrics { get; } = new();
         public ExecutionTree ExecutionTree => new ExecutionTree();
         public Guid? CurrentNodeId { get; set; }
@@ -112,6 +113,11 @@ namespace ETL_SQL.Core.Common
 
         public IDictionary<string, CreateVisualStatement> VisualDefinitions { get; } = new Dictionary<string, CreateVisualStatement>();
         public IDictionary<string, CreatePageStatement> PageDefinitions { get; } = new Dictionary<string, CreatePageStatement>();
+        public IDictionary<string, CreateDatasetStatement> DatasetDefinitions { get; } = new Dictionary<string, CreateDatasetStatement>();
+        public IDictionary<string, CreateContainerStatement> ContainerDefinitions { get; } = new Dictionary<string, CreateContainerStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreateNavigationStatement> NavigationDefinitions { get; } = new Dictionary<string, CreateNavigationStatement>(StringComparer.OrdinalIgnoreCase);
+        public string? ReportTitle { get; set; }
+        public string? ReportDescription { get; set; }
 
         public SystemExecutionContext()
         {

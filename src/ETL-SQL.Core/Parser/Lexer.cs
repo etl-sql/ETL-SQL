@@ -82,6 +82,13 @@ namespace ETL_SQL.Core.Parser
             dict["PIE"]           = TokenType.PIE;
             dict["SLICER"]        = TokenType.SLICER;
             dict["CARD"]          = TokenType.CARD;
+            dict["HEATMAP"]       = TokenType.HEATMAP;
+            dict["DONUT"]         = TokenType.DONUT;
+            dict["HBAR"]          = TokenType.HBAR;
+            dict["BOXPLOT"]       = TokenType.BOXPLOT;
+            dict["TREEMAP"]       = TokenType.TREEMAP;
+            dict["COLORS"]        = TokenType.COLORS;
+            dict["BOTTOM"]        = TokenType.BOTTOM;   // position keyword; TOP/LEFT/RIGHT come from LanguageMetadata
             dict["ON_CLICK"]      = TokenType.ON_CLICK;
             dict["DRILL_DOWN"]    = TokenType.DRILL_DOWN;
             dict["SET_PARAMETER"] = TokenType.SET_PARAMETER;
@@ -92,6 +99,22 @@ namespace ETL_SQL.Core.Parser
             dict["KEYFILE"]       = TokenType.KEYFILE;
             dict["X_AXIS"]        = TokenType.X_AXIS;
             dict["Y_AXIS"]        = TokenType.Y_AXIS;
+            dict["REPORT"]        = TokenType.REPORT;
+
+            // ── Report-SQL keywords (Phase 9.3) ────────────────────────────
+            dict["STYLE"]      = TokenType.STYLE;
+            dict["CONTAINER"]  = TokenType.CONTAINER;
+            dict["BOX"]        = TokenType.BOX;
+            dict["SCROLL"]     = TokenType.SCROLL;
+            dict["NAVIGATION"] = TokenType.NAVIGATION;
+            dict["COMBO"]      = TokenType.COMBO;
+            dict["TAB"]         = TokenType.NAV_TAB;
+            dict["BUTTON"]      = TokenType.BUTTON;
+            dict["LINK"]        = TokenType.LINK_NAV;
+            dict["DATEPICKER"]  = TokenType.DATEPICKER;
+            dict["SLIDER"]      = TokenType.SLIDER;
+            dict["MULTISELECT"] = TokenType.MULTISELECT;
+            dict["SEARCH"]      = TokenType.SEARCH;
 
             return dict;
         }

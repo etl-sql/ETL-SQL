@@ -1,0 +1,112 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  /* VS Code Theme Mapping */
+  --bg: var(--vscode-editor-background, #0b0b0f);
+  --bg-darker: var(--vscode-sideBar-background, #050507);
+  --text: var(--vscode-editor-foreground, #e2e8f0);
+  --muted: var(--vscode-descriptionForeground, #64748b);
+  --border: var(--vscode-panel-border, rgba(255, 255, 255, 0.05));
+  
+  /* Brand Constants */
+  --primary: #6366f1;
+  --primary-glow: rgba(99, 102, 241, 0.4);
+  /* Semantic Colors */
+  --color-info: var(--vscode-debugIcon-breakpointForeground, #6366f1);
+  --color-warn: var(--vscode-problemsWarningIcon-foreground, #fbbf24);
+  --color-err: var(--vscode-problemsErrorIcon-foreground, #f87171);
+  --color-sys: var(--vscode-debugIcon-stepOverForeground, #34d399);
+  
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Outfit', sans-serif;
+}
+
+#root {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.sidebar-nav {
+  padding-top: 8px;
+  gap: 16px;
+}
+
+/* Micro-UI Optimization for small heights */
+@media (max-height: 250px) {
+  :root {
+    --nav-w: 42px;
+    --footer-h: 24px;
+  }
+  
+  footer {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    height: var(--footer-h) !important;
+    min-height: var(--footer-h) !important;
+  }
+  
+  nav {
+    width: var(--nav-w) !important;
+  }
+  
+  nav button {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+  }
+
+  .w-14 { width: 42px !important; }
+
+  
+  /* Squeeze layout padding */
+  .p-6 { padding: 4px !important; }
+  .p-4 { padding: 2px !important; }
+  .p-3 { padding: 2px !important; }
+  .gap-6 { gap: 4px !important; }
+  .gap-4 { gap: 4px !important; }
+  
+  /* Hide secondary metrics in header if very small */
+  header .hidden-micro {
+    display: none !important;
+  }
+
+  .hidden-micro-h {
+    display: none !important;
+  }
+}
+
+/* 75px Ultra-Micro Adjustment */
+@media (max-height: 100px) {
+   :root {
+     --footer-h: 20px;
+     --nav-w: 38px;
+   }
+   
+   nav {
+     width: var(--nav-w) !important;
+     gap: 0px !important;
+     justify-content: space-around !important;
+     padding-top: 0 !important;
+   }
+
+   nav button {
+     padding: 0 !important;
+     height: auto !important;
+   }
+
+   nav button svg {
+     width: 12px !important;
+     height: 12px !important;
+   }
+
+   .glass-card { padding: 2px !important; height: auto !important; }
+}

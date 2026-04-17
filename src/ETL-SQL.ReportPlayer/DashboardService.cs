@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.App;
@@ -34,8 +35,12 @@ namespace ETL_SQL.ReportPlayer
         private readonly SemaphoreSlim _lock = new(1, 1);
 
         private ReportManifest? _manifest;
-        private Evaluator? _evaluator; // Cache evaluator to allow partial re-materialization
+        private Evaluator? _evaluator;
         private Dictionary<string, string> _parameters = new(StringComparer.OrdinalIgnoreCase);
+
+        // Background auto-refresh state
+        private CancellationTokenSource? _refreshCts;
+        private static readonly Regex _intervalPattern = new(@"^(\d+)([smhd])$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public DashboardService(string scriptPath)
         {
@@ -51,6 +56,57 @@ namespace ETL_SQL.ReportPlayer
 
         /// <summary>Current parameter values (set by slicer interactions).</summary>
         public IReadOnlyDictionary<string, string> Parameters => _parameters;
+
+        /// <summary>
+        /// Updates multiple parameters atomically and re-evaluates only the affected visuals.
+        /// More efficient than calling <see cref="SetParameterAsync"/> in sequence when
+        /// several filter controls (e.g. date range start + end) change together.
+        /// </summary>
+        public async Task<ReportManifest> SetParametersAsync(IEnumerable<(string Name, string Value)> updates)
+        {
+            foreach (var (name, value) in updates)
+                _parameters[name] = value;
+
+            if (_evaluator != null && _manifest != null)
+            {
+                await _lock.WaitAsync();
+                try
+                {
+                    var affected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var (name, value) in updates)
+                    {
+                        var varName = name.StartsWith('@') ? name : '@' + name;
+                        _evaluator.DeclareVariable(varName, value, new VariableMetadata { IsInput = true });
+                        affected.Add(name.TrimStart('@'));
+                    }
+
+                    var builder = new ManifestBuilder(_evaluator);
+                    var refreshCount = 0;
+
+                    foreach (var visualDef in _evaluator.VisualDefinitions.Values)
+                    {
+                        if (affected.Any(n => DependsOnVariable(visualDef, n)))
+                        {
+                            var existingVm = _manifest.Visuals.FirstOrDefault(v => v.Name == visualDef.Name);
+                            if (existingVm != null)
+                            {
+                                await builder.RefreshVisualAsync(visualDef, existingVm);
+                                refreshCount++;
+                            }
+                        }
+                    }
+
+                    if (refreshCount > 0)
+                    {
+                        _manifest.BuiltAt = DateTime.UtcNow;
+                        return _manifest;
+                    }
+                }
+                finally { _lock.Release(); }
+            }
+
+            return await RebuildAsync();
+        }
 
         /// <summary>
         /// Updates one parameter and re-evaluates only the affected visuals
@@ -136,8 +192,10 @@ namespace ETL_SQL.ReportPlayer
                 await evaluator.Evaluate(script);
 
                 var builder   = new ManifestBuilder(evaluator);
-                _evaluator    = evaluator; // Hold onto evaluator for partial refreshes
+                _evaluator    = evaluator;
                 _manifest     = await builder.BuildAsync(_scriptPath);
+
+                ScheduleRefresh(_manifest);
                 return _manifest;
             }
             finally
@@ -153,6 +211,65 @@ namespace ETL_SQL.ReportPlayer
         {
             if (_manifest == null) return true;
             return new SnapshotStore().IsStale(_manifest, _scriptPath, ttl);
+        }
+
+        /// <summary>
+        /// Starts (or restarts) a background task that rebuilds the manifest at the shortest
+        /// REFRESH EVERY interval declared across all CREATE DATASET statements.
+        /// Cancels any previously scheduled refresh before starting a new one.
+        /// </summary>
+        private void ScheduleRefresh(ReportManifest manifest)
+        {
+            // Cancel previous timer if any
+            _refreshCts?.Cancel();
+            _refreshCts?.Dispose();
+            _refreshCts = null;
+
+            // Find the minimum non-null refresh interval across all datasets
+            TimeSpan? minInterval = null;
+            foreach (var ds in manifest.Datasets)
+            {
+                if (string.IsNullOrWhiteSpace(ds.RefreshInterval)) continue;
+                var parsed = ParseInterval(ds.RefreshInterval);
+                if (parsed.HasValue && (!minInterval.HasValue || parsed.Value < minInterval.Value))
+                    minInterval = parsed;
+            }
+
+            if (!minInterval.HasValue) return;
+
+            var cts = new CancellationTokenSource();
+            _refreshCts = cts;
+
+            // Fire-and-forget background loop; exceptions are swallowed so the server stays up.
+            _ = Task.Run(async () =>
+            {
+                while (!cts.Token.IsCancellationRequested)
+                {
+                    try { await Task.Delay(minInterval.Value, cts.Token); }
+                    catch (OperationCanceledException) { break; }
+
+                    if (cts.Token.IsCancellationRequested) break;
+
+                    try { await RebuildAsync(); }
+                    catch { /* keep the timer running even if a rebuild fails */ }
+                }
+            }, CancellationToken.None);
+        }
+
+        private static TimeSpan? ParseInterval(string interval)
+        {
+            var m = _intervalPattern.Match(interval.Trim());
+            if (!m.Success) return null;
+
+            var amount = int.Parse(m.Groups[1].Value);
+            return m.Groups[2].Value.ToLowerInvariant() switch
+            {
+                "s" => TimeSpan.FromSeconds(amount),
+                "m" => TimeSpan.FromMinutes(amount),
+                "h" => TimeSpan.FromHours(amount),
+                "d" => TimeSpan.FromDays(amount),
+                _   => null
+            };
         }
     }
 }

@@ -21,12 +21,14 @@ artifacts/
 *.vspx
 *.vspscc
 .vscode/
+trouble/
 
 # Ignore Claude Code personal settings
 .claude/settings.local.json
 
 # Ignore local Claude context files
 CLAUDE.local.md
+CLAUDE.md
 
 # Optional: Ignore the entire .claude directory
 .claude/

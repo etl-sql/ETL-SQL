@@ -14,7 +14,17 @@ namespace ETL_SQL.Core
 
     public enum VisualType
     {
-        Bar, Line, Scatter, Pie, Table, Card, Slicer
+        Bar, Line, Scatter, Pie, Table, Card, Slicer,
+        Donut, HorizontalBar, BoxPlot, Treemap, HeatMap, Text, Combo,
+        DatePicker, Slider, MultiSelect, Search
+    }
+
+    public enum DatasetEncryptionMode
+    {
+        None,
+        MachineBound,   // ENCRYPT = MACHINE  (DPAPI on Windows; machine-unique key on Linux/Mac)
+        Password,       // ENCRYPT = PASSWORD  + PASSWORD = '...'
+        KeyFile         // ENCRYPT = KEYFILE   + KEYFILE  = '...'
     }
 
     // ── Sub-nodes (all must be records since AstNode is a record) ────────────
@@ -79,6 +89,12 @@ namespace ETL_SQL.Core
         public string ToSql() => AstSerializer.Format(this);
     }
 
+    public record TypedSeries : AstNode
+    {
+        public required string SeriesType { get; init; }  // "bar" or "line"
+        public new required string Column { get; init; }
+    }
+
     public record CreateVisualStatement : Statement
     {
         public required string Name                    { get; init; }
@@ -90,6 +106,8 @@ namespace ETL_SQL.Core
         public List<VisualOption> Options              { get; init; } = new();
         public List<AxisOptions> AxisOptions           { get; init; } = new();
         public List<VisualAction> Actions              { get; init; } = new();
+        public List<TypedSeries> TypedSeries           { get; init; } = new();
+        public Dictionary<string, string> Styles       { get; init; } = new();
         public override string ToSql() => AstSerializer.Format(this);
     }
 
@@ -105,6 +123,7 @@ namespace ETL_SQL.Core
         public required string Structure                      { get; init; }
         public Dictionary<string, string> SlotMap             { get; init; } = new();
         public List<PageParameter> Parameters                 { get; init; } = new();
+        public Dictionary<string, string> Styles              { get; init; } = new();
     }
 
     /// <summary>
@@ -116,14 +135,42 @@ namespace ETL_SQL.Core
     ///     KEYFILE = '&lt;path&gt;'
     /// AS ( SELECT ... );
     /// </summary>
+    /// <summary>SET REPORT TITLE = '...' / SET REPORT DESCRIPTION = '...'</summary>
+    public record SetReportMetadataStatement : Statement
+    {
+        public required string Key   { get; init; }  // "TITLE" or "DESCRIPTION"
+        public required string Value { get; init; }
+    }
+
+    public record CreateContainerStatement : Statement
+    {
+        public required string Name { get; init; }
+        public required string ContainerType { get; init; }  // "BOX" or "SCROLL"
+        public List<string> Visuals { get; init; } = new();
+        public Dictionary<string, string> Styles { get; init; } = new();
+    }
+
+    public enum NavigationType { Tab, Button, Link }
+    public enum NavigationOrientation { Horizontal, Vertical }
+
+    public record CreateNavigationStatement : Statement
+    {
+        public required string Name { get; init; }
+        public NavigationType NavType { get; init; }
+        public NavigationOrientation Orientation { get; init; }
+        public string? DefaultPage { get; init; }
+        public List<string> Pages { get; init; } = new();
+    }
+
     public record CreateDatasetStatement : Statement
     {
-        public required string TempTableName         { get; init; }
-        public string? RefreshInterval               { get; init; }
-        public string? Ttl                           { get; init; }
-        public bool Compress                         { get; init; }
-        public bool Encrypt                          { get; init; }
-        public string? KeyFile                       { get; init; }
-        public required SelectStatement SourceQuery  { get; init; }
+        public required string TempTableName          { get; init; }
+        public string? RefreshInterval                { get; init; }
+        public string? Ttl                            { get; init; }
+        public bool Compress                          { get; init; }
+        public DatasetEncryptionMode EncryptionMode   { get; init; }
+        public string? EncryptionPassword             { get; init; }
+        public string? KeyFile                        { get; init; }
+        public required SelectStatement SourceQuery   { get; init; }
     }
 }

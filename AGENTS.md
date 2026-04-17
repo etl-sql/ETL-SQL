@@ -43,6 +43,7 @@ ETL-SQL follows a T-SQL-like dialect with extensions and restrictions. For full 
 | **[Data_Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Data_Connectors.md)** | Every connector token, all `WITH()` options, authentication patterns, aliases, quick-reference table |
 | **[Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md)** | All data types, `CAST`/`TRY_CAST`, string/date/math/regex/window/JSON/XML functions with full signatures and examples |
 | **[Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md)** | File/directory operations, `SEND FILE`/`RECEIVE FILE`, `SEND EMAIL`, lineage/tagging, SSH key generation, Docker integration, profiling |
+| **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** | `.rptsql` file structure, all visual types, MAPPINGS roles, STYLE/THEME, CONTAINER/NAVIGATION syntax, filter visuals, multi-report hosting |
 
 Key syntax facts:
 - **Variables**: `@VariableName` — always prefix with `@`, case-insensitive
@@ -53,6 +54,31 @@ Key syntax facts:
 
 > [!IMPORTANT]
 > There is no `WAITFOR (SELECT ...)` polling syntax. Use a `WHILE` loop with `WAITFOR DELAY` inside it to implement polling.
+
+### 2.5 Report-SQL (`.rptsql`) Key Facts
+
+`.rptsql` files are standard ETL-SQL scripts with additional statement types. Use `Report_SQL_Guide.md` as the full reference. Critical patterns to get right:
+
+- **File structure**: normal ETL-SQL data prep statements first, then `CREATE VISUAL`, `CREATE PAGE`, `CREATE DATASET`, `CREATE CONTAINER`, `CREATE NAVIGATION` at the end
+- **Report metadata**: `SET REPORT TITLE = '...'` and `SET REPORT DESCRIPTION = '...'` (optional, appear before visuals)
+- **Visual types**: `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `TABLE`, `CARD`, `TEXT`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
+- **SLICER pattern** — SOURCE provides the option list; ACTIONS binds to a parameter:
+  ```sql
+  CREATE VISUAL RegionFilter AS SLICER (
+    SOURCE  = (SELECT DISTINCT region FROM #summary ORDER BY region),
+    MAPPINGS (VALUE = region),
+    ACTIONS  (ON_CHANGE = SET_PARAMETER(@region, region))
+  );
+  ```
+- **STRUCTURE** is a CSS grid-template-areas string, not a `grid:NxN` shorthand:
+  ```sql
+  STRUCTURE = 'A A / B C'   -- two rows; A spans both columns; B and C share the second row
+  ```
+- **MAP slots are quoted strings**: `MAP ('A' = VisualName, 'B' = OtherVisual)`
+- **ENCRYPT modes**: `ENCRYPT = MACHINE` (no creds), `ENCRYPT = PASSWORD, PASSWORD = '...'`, or `ENCRYPT = KEYFILE, KEYFILE = '...'`
+- **Filter types** (`DATEPICKER`, `SLIDER`, `SEARCH`) do not require a `SOURCE` clause
+- **MULTISELECT** requires a `SOURCE` clause for its option list
+- **STYLE** cascades: page-level `STYLE (THEME = dark)` applies to all charts; visual-level `STYLE` overrides it
 
 ---
 

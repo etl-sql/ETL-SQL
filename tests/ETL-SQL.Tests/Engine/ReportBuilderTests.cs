@@ -111,7 +111,7 @@ namespace ETL_SQL.Tests.Engine
 
             var md = new MarkdownRenderer().Render(manifest);
 
-            Assert.Contains("<!-- CHART:", md);
+            Assert.Contains("<!-- ECHART:", md);
             Assert.Contains("\"type\":\"bar\"", md);
         }
 
