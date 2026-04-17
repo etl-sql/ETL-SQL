@@ -61,6 +61,7 @@ namespace ETL_SQL.Engine
 
         private readonly Stack<Row> _outerRowStack = new();
         private readonly Dictionary<Statement, object?> _subqueryCache = new(new StatementSqlEqualityComparer());
+        private readonly Dictionary<(Guid? ParentId, Statement Stmt), ExecutionNode> _nodeReuseMap = new();
         private readonly TransactionManager _transactionManager = new();
 
         /// <summary>Current transaction nesting level.</summary>
@@ -209,6 +210,10 @@ namespace ETL_SQL.Engine
 
         /// <summary>The high-level execution tree for visual progress tracking.</summary>
         public ExecutionTree ExecutionTree { get; } = new();
+
+        /// <summary>Whether to reuse execution nodes for identical statements in loops to keep the pipeline view clean.</summary>
+        public bool ReuseLoopNodes { get; set; } = true;
+        
         public IServiceProvider ServiceProvider => _serviceProvider;
         public SecurityService SecurityService => _securityService;
 
@@ -506,13 +511,30 @@ namespace ETL_SQL.Engine
             else if (statement is CreateTableStatement cts) nodeName = $"CREATE TABLE {cts.TargetTable.TableName}";
             else if (statement is InsertStatement inst) nodeName = $"INSERT INTO {inst.TargetTable.TableName}";
             
-            var node = new ExecutionNode { 
-                Name = nodeName,
-                Status = ExecutionStatus.Running,
-                StartTicks = Stopwatch.GetTimestamp()
-            };
+            ExecutionNode node;
+            var cacheKey = (parentId, statement);
             
-            ExecutionTree.AddNode(node, parentId);
+            if (ReuseLoopNodes && _nodeReuseMap.TryGetValue(cacheKey, out var existingNode))
+            {
+                node = existingNode;
+                node.Status = ExecutionStatus.Running;
+                node.IterationCount++;
+                // Note: StartTicks is updated to reflect the CURRENT iteration start,
+                // while Cumulative Duration is implicitly handled by the UI or calculated via snapshot.
+                node.StartTicks = Stopwatch.GetTimestamp();
+                node.ErrorMessage = null;
+            }
+            else
+            {
+                node = new ExecutionNode { 
+                    Name = nodeName,
+                    Status = ExecutionStatus.Running,
+                    StartTicks = Stopwatch.GetTimestamp()
+                };
+                ExecutionTree.AddNode(node, parentId);
+                if (ReuseLoopNodes) _nodeReuseMap[cacheKey] = node;
+            }
+
             CurrentNodeId = node.Id;
 
             Stopwatch? sw = null;

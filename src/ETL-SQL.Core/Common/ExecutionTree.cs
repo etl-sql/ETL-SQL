@@ -86,6 +86,7 @@ namespace ETL_SQL.Core.Common
                 status = node.Status.ToString(),
                 rows = node.RowsProcessed,
                 durationMs = node.GetElapsedMs(),
+                iterationCount = node.IterationCount,
                 velocity = node.GetVelocity(),
                 error = node.ErrorMessage,
                 children = children

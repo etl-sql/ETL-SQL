@@ -6,6 +6,7 @@ export interface ExecutionNode {
     status: 'Pending' | 'Running' | 'Completed' | 'Error';
     rowsProcessed: number;
     durationMs: number;
+    iterationCount?: number;
     children?: ExecutionNode[];
 }
 

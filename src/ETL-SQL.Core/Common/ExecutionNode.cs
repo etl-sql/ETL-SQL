@@ -38,6 +38,9 @@ namespace ETL_SQL.Core.Common
 
         /// <summary>Optional error message if the node faulted.</summary>
         public string? ErrorMessage { get; set; }
+        
+        /// <summary>Number of times this node has been restated (reused) during loops.</summary>
+        public int IterationCount { get; set; } = 1;
 
         /// <summary>Increments the processed row count atomically.</summary>
         public void IncrementRows(long count = 1) => Interlocked.Add(ref _rowsProcessed, count);

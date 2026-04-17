@@ -181,8 +181,13 @@ const NodeItem: React.FC<{ node: ExecutionNode }> = ({ node }) => {
       </div>
       
       <div className="flex-1 min-w-0">
-        <div className="text-[10px] font-bold font-display truncate uppercase tracking-widest text-[var(--text)] opacity-80 group-hover:opacity-100 transition-opacity">
+        <div className="text-[10px] font-bold font-display truncate uppercase tracking-widest text-[var(--text)] opacity-80 group-hover:opacity-100 transition-opacity flex items-center gap-1.5">
           {node.name}
+          {node.iterationCount && node.iterationCount > 1 && (
+            <span className="bg-indigo-500/20 text-indigo-400 px-1 rounded text-[8px] border border-indigo-500/20">
+              x{node.iterationCount}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 mt-0.5 opacity-40 text-[8px] font-mono font-bold">
           <span className="flex items-center gap-0.5"><Clock size={8} />{node.durationMs ?? 0}ms</span>
