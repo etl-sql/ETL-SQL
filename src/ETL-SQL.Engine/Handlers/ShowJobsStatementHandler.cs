@@ -42,6 +42,10 @@ namespace ETL_SQL.Engine.Handlers
                 await table.AddRowAsync(row);
             }
 
+            if (table.Rows.Count == 0)
+            {
+                context.Log("0 rows returned.", ConsoleColor.Cyan);
+            }
             context.LastResult = table;
 
             if (stmt.IntoTable != null)

@@ -14,6 +14,11 @@ namespace ETL_SQL.TUI
     {
         public static async Task<int> Run(CliContext ctx, IServiceProvider serviceProvider)
         {
+            if (!string.Equals(ctx.UiMode, "repl", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.Clear();
+            }
+
             switch (ctx.UiMode?.ToLower())
             {
                 case "repl":

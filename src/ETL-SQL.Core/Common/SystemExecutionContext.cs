@@ -98,6 +98,7 @@ namespace ETL_SQL.Core.Common
         public int? PreviewLimit { get; set; }
 
         public ErrorInfo? LastError { get; set; }
+        public ErrorInfo? ActiveException { get; set; }
         public int PreviousErrorNumber { get; set; }
 
         // Hyper-scale thresholds (defaulting to engine presets)

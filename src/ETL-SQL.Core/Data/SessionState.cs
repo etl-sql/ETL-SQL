@@ -29,6 +29,10 @@ namespace ETL_SQL.Core.Data
 
         // Script context for recovery
         public string? LastScriptSource { get; set; }
+
+        // Auditing
+        public string? OwnerUser { get; set; }
+        public string? OwnerMachine { get; set; }
     }
 
     public class ConnectionInfo

@@ -93,7 +93,7 @@ if (multiMode)
             : "";
         var apiBase = "/reports/" + WebUtility.UrlEncode(name) + "/api";
         return Results.Content(
-            GetDashboardHtml(entry?.Name ?? name, entry?.Description, staleBanner, apiBase),
+            GetDashboardShellHtml(entry?.Name ?? name, entry?.Description, staleBanner, apiBase),
             "text/html");
     });
 
@@ -296,7 +296,7 @@ static string GetDashboardHtml(ReportManifest manifest, string staleBanner)
 }
 
 /// <summary>Multi-report dashboard shell — manifest is fetched via API on load.</summary>
-static string GetDashboardHtml(string reportName, string? description, string staleBanner, string apiBase)
+static string GetDashboardShellHtml(string reportName, string? description, string staleBanner, string apiBase)
 {
     return
         "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n" +

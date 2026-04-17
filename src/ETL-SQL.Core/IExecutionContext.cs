@@ -118,6 +118,8 @@ namespace ETL_SQL.Core
         
         /// <summary>Metadata about the last caught exception in this session.</summary>
         ErrorInfo? LastError { get; set; }
+        /// <summary>The error that caused the current CATCH block to run (persists for the duration of the block).</summary>
+        ErrorInfo? ActiveException { get; set; }
         /// <summary>The error number of the most recently COMPLETED statement (for @@ERROR).</summary>
         int PreviousErrorNumber { get; set; }
 

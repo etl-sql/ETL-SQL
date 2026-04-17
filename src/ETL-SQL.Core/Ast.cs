@@ -796,7 +796,8 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
-    public record ClearSessionStatement(Expression? SessionId = null) : Statement
+    public enum ClearSessionMode { Current, Single, All, Stale }
+    public record ClearSessionStatement(ClearSessionMode Mode = ClearSessionMode.Current, Expression? SessionId = null) : Statement
     {
         public override string ToSql() => AstSerializer.Format(this);
     }
@@ -1040,6 +1041,11 @@ namespace ETL_SQL.Core
             Parameters = parameters ?? new List<Expression>();
         }
 
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
+    public record AssertStatement(Expression Condition, Expression? Message = null) : Statement
+    {
         public override string ToSql() => AstSerializer.Format(this);
     }
 

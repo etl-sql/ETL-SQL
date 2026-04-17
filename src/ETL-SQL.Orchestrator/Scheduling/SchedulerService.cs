@@ -25,29 +25,34 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly ILogger<SchedulerService> _logger;
         private readonly IConfiguration _configuration;
         private readonly JobThrottle _throttle;
+        private readonly ETL_SQL.Engine.Services.SessionStateManager _sessionManager;
         private CancellationTokenSource? _cts;
 
         public SchedulerService(IServiceProvider serviceProvider, IJobHistoryStore store,
-            ILogger<SchedulerService> logger, JobThrottle throttle, IConfiguration configuration)
+            ILogger<SchedulerService> logger, JobThrottle throttle, IConfiguration configuration,
+            ETL_SQL.Engine.Services.SessionStateManager sessionManager)
         {
             _serviceProvider = serviceProvider;
             _store           = store;
             _logger          = logger;
             _throttle        = throttle;
             _configuration   = configuration;
+            _sessionManager  = sessionManager;
         }
 
         /// <summary>Returns a snapshot of current concurrency metrics.</summary>
         public JobThrottleMetrics GetMetrics() => _throttle.GetMetrics();
 
         private DateTime _lastMetricsLog = DateTime.MinValue;
+        private DateTime _lastSessionReap = DateTime.MinValue;
         private Task? _runTask;
 
         /// <summary>Starts the background scheduler loop.</summary>
         public void Start()
         {
             _cts = new CancellationTokenSource();
-            _lastMetricsLog = DateTime.Now;
+            _lastMetricsLog  = DateTime.Now;
+            _lastSessionReap = DateTime.Now;
             _runTask = Task.Run(() => RunAsync(_cts.Token));
             _ = _runTask.ContinueWith(t =>
                 _logger.LogError(t.Exception, "Scheduler background task terminated unexpectedly."),
@@ -99,6 +104,16 @@ namespace ETL_SQL.Orchestrator.Scheduling
                         _logger.LogInformation("Orchestrator Metrics: ActiveJobs={Active}, QueuedJobs={Queued}, MaxConcurrent={Max}, AvailableSlots={Slots}", 
                             metrics.ActiveJobs, metrics.QueuedJobs, metrics.MaxJobs, metrics.AvailableSlots);
                         _lastMetricsLog = now;
+                    }
+
+                    // 8B-2: Periodic session reaping
+                    int reapIntervalMinutes = _configuration.GetValue<int>("Scheduler:SessionReapIntervalMinutes", 60);
+                    if (now - _lastSessionReap >= TimeSpan.FromMinutes(reapIntervalMinutes))
+                    {
+                        int retentionDays = _configuration.GetValue<int>("Session:StaleSessionRetentionDays", 7);
+                        _logger.LogInformation("Orchestrator: Executing periodic session reap (stale_days={Days})", retentionDays);
+                        _sessionManager.ReapStaleSessions(TimeSpan.FromDays(retentionDays));
+                        _lastSessionReap = now;
                     }
 
                     await Task.Delay(TimeSpan.FromSeconds(sleepIntervalSeconds), ct);

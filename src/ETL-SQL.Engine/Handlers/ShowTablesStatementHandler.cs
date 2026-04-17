@@ -59,6 +59,10 @@ namespace ETL_SQL.Engine.Handlers
             }
             else
             {
+                if (table.Rows.Count == 0)
+                {
+                    context.Log("0 rows returned.", ConsoleColor.Cyan);
+                }
                 context.LastResult = table;
             }
         }

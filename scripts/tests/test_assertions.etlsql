@@ -1,0 +1,31 @@
+-- Test Assertions (test_assertions.etlsql)
+USE PASSWORD = 'test';
+
+PRINT 'Starting Assertion Tests...';
+
+-- 1. Success case
+ASSERT 1 = 1, 'Math still works';
+PRINT 'Success test passed.';
+
+DECLARE @val = 10;
+ASSERT @val > 5, 'Variable check passed';
+PRINT 'Variable test passed.';
+
+-- 2. Failure case (commented out to allow script to finish if run sequentially, but useful for manual testing)
+/*
+PRINT 'Testing failure (should throw custom message)...';
+ASSERT 1 = 0, 'Internal consistency error: 1 is not 0';
+*/
+
+-- 3. TRY...CATCH integration
+BEGIN TRY
+    PRINT 'Triggering assertion failure inside TRY...CATCH...';
+    ASSERT 1 = 0, 'Triggered failure';
+    PRINT 'This should NOT be printed';
+END TRY
+BEGIN CATCH
+    PRINT 'Caught expected assertion failure: ' + ERROR_MESSAGE();
+    ASSERT ERROR_MESSAGE() = 'Triggered failure', 'Error message should match';
+END CATCH
+
+PRINT 'Assertion Tests Completed Successfully.';

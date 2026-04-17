@@ -66,8 +66,13 @@ namespace ETL_SQL.LanguageServer.Tests
             string connStr = "...";
             _manager.RegisterConnection(connName, connType, connStr);
 
+            var dataSourceMock = new Mock<IDataSource>();
+            dataSourceMock.Setup(d => d.GetTablesAsync()).ReturnsAsync(new List<string> { "Table1", "Table2" });
+
             var connectorMock = new Mock<IConnector>();
-            connectorMock.Setup(c => c.GetTablesAsync(It.IsAny<IExecutionContext>(), connStr)).ReturnsAsync(new List<string> { "Table1", "Table2" });
+            connectorMock.Setup(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), connStr, It.IsAny<Dictionary<string, string>>()))
+                         .Returns(dataSourceMock.Object);
+            
             _registryMock.Setup(r => r.GetConnector(connType)).Returns(connectorMock.Object);
 
             // Act
@@ -78,6 +83,7 @@ namespace ETL_SQL.LanguageServer.Tests
             Assert.Contains("Table1", tables);
             Assert.Contains("DUAL", tables);
             _registryMock.Verify(r => r.GetConnector(connType), Times.Once);
+            connectorMock.Verify(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), connStr, It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -86,8 +92,14 @@ namespace ETL_SQL.LanguageServer.Tests
             // Arrange
             string connName = "MyConn";
             _manager.RegisterConnection(connName, "MSSQL", "...");
+
+            var dataSourceMock = new Mock<IDataSource>();
+            dataSourceMock.Setup(d => d.GetTablesAsync()).ReturnsAsync(new List<string> { "T1" });
+
             var connectorMock = new Mock<IConnector>();
-            connectorMock.Setup(c => c.GetTablesAsync(It.IsAny<IExecutionContext>(), It.IsAny<string>())).ReturnsAsync(new List<string> { "T1" });
+            connectorMock.Setup(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>()))
+                         .Returns(dataSourceMock.Object);
+            
             _registryMock.Setup(r => r.GetConnector(It.IsAny<string>())).Returns(connectorMock.Object);
 
             // Act
@@ -95,7 +107,7 @@ namespace ETL_SQL.LanguageServer.Tests
             await _manager.GetTablesAsync(connName);
 
             // Assert
-            connectorMock.Verify(c => c.GetTablesAsync(It.IsAny<IExecutionContext>(), It.IsAny<string>()), Times.Once);
+            connectorMock.Verify(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>()), Times.Once);
         }
 
         [Fact]
@@ -121,8 +133,13 @@ namespace ETL_SQL.LanguageServer.Tests
             string connName = "DOC_CONN";
             _manager.RegisterDocumentConnection(uri, connName, "MSSQL", "...");
             
+            var dataSourceMock = new Mock<IDataSource>();
+            dataSourceMock.Setup(d => d.GetTablesAsync()).ReturnsAsync(new List<string> { "T1" });
+
             var connectorMock = new Mock<IConnector>();
-            connectorMock.Setup(c => c.GetTablesAsync(It.IsAny<IExecutionContext>(), It.IsAny<string>())).ReturnsAsync(new List<string> { "T1" });
+            connectorMock.Setup(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>()))
+                         .Returns(dataSourceMock.Object);
+                         
             _registryMock.Setup(r => r.GetConnector(It.IsAny<string>())).Returns(connectorMock.Object);
 
             // Cache it
@@ -133,7 +150,7 @@ namespace ETL_SQL.LanguageServer.Tests
             await _manager.GetTablesAsync(connName, uri);
 
             // Assert
-            connectorMock.Verify(c => c.GetTablesAsync(It.IsAny<IExecutionContext>(), It.IsAny<string>()), Times.Exactly(2));
+            connectorMock.Verify(c => c.CreateDataSource(It.IsAny<IExecutionContext>(), It.IsAny<string>(), It.IsAny<Dictionary<string, string>>()), Times.Exactly(2));
         }
     }
 }

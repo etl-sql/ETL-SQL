@@ -183,7 +183,10 @@ namespace ETL_SQL.TUI.UI
                 {
                     treeCts.Cancel();
                     await heartbeatTask;
-                    execTime.Stop();
+                    var elapsed = execTime.ElapsedMilliseconds;
+                    _evaluator.LastExecTimeMs = elapsed;
+                    _evaluator.LastLexTimeMs = lexTime.ElapsedMilliseconds;
+                    _evaluator.LastParseTimeMs = parseTime.ElapsedMilliseconds;
                     _evaluator.OnResultSet = originalOnResultSet;
                 }
 

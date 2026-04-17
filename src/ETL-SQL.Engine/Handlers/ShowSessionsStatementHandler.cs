@@ -34,6 +34,8 @@ namespace ETL_SQL.Engine.Handlers
             table.AddColumn("TempTables");
             table.AddColumn("Variables");
             table.AddColumn("LastScript");
+            table.AddColumn("User");
+            table.AddColumn("Machine");
 
             var sessions = _sessionManager.GetSessions().OrderByDescending(s => s.LastModifiedAt);
 
@@ -47,6 +49,8 @@ namespace ETL_SQL.Engine.Handlers
                 row["TempTables"] = sess.TempTableCount;
                 row["Variables"] = sess.VariableCount;
                 row["LastScript"] = sess.LastScriptSource ?? "";
+                row["User"] = sess.OwnerUser ?? "";
+                row["Machine"] = sess.OwnerMachine ?? "";
                 await table.AddRowAsync(row);
             }
 
@@ -56,6 +60,10 @@ namespace ETL_SQL.Engine.Handlers
             }
             else
             {
+                if (table.Rows.Count == 0)
+                {
+                    context.Log("0 rows returned.", ConsoleColor.Cyan);
+                }
                 context.LastResult = table;
             }
         }

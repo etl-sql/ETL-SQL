@@ -408,6 +408,17 @@ DECLARE @pause = '00:00:02';
 WAITFOR DELAY @pause;
 ```
 
+### 3.10 `ASSERT`
+Enforces data quality rules. If the boolean condition evaluates to `FALSE` or `NULL`, an `ExecutionException` is thrown, halting the script (unless trapped by a `TRY...CATCH` block).
+
+```sql
+-- Simple data quality check
+ASSERT (SELECT COUNT(*) FROM #staging) > 0, 'Staging table must not be empty';
+
+-- Business logic validation
+ASSERT @total_amount >= 0, 'Negative balances are not allowed';
+```
+
 ---
 
 ## 4. Querying (`SELECT`)

@@ -57,7 +57,7 @@ namespace ETL_SQL.TUI.UI
             _evaluator = Program.ServiceProvider.GetRequiredService<Evaluator>();
             _evaluator.RedirectOutput = true;
             foreach (var conn in connections) _evaluator.Connections[conn.Key] = conn.Value;
-            
+            _evaluator.IsProfiling = true;
             _renderer = new EditorRenderer(_buffer, _evaluator);
             _fileHandler = new EditorFileHandler(new PhysicalFileSystem(), _security);
             _metadata = new MetadataManager(_evaluator, _connections);
@@ -284,11 +284,17 @@ namespace ETL_SQL.TUI.UI
         {
             try 
             { 
-                _renderer.TreeVisible = true;
-                _renderer.PerformanceVisible = false;
+                var totalSw = System.Diagnostics.Stopwatch.StartNew();
                 
+                var lexSw = System.Diagnostics.Stopwatch.StartNew();
                 var tokens = new Lexer(source).Tokenize();
+                lexSw.Stop();
+                _evaluator.LastLexTimeMs = lexSw.ElapsedMilliseconds;
+
+                var parseSw = System.Diagnostics.Stopwatch.StartNew();
                 var script = new Parser(tokens).Parse();
+                parseSw.Stop();
+                _evaluator.LastParseTimeMs = parseSw.ElapsedMilliseconds;
                 
                 // 1. Show Parser Diagnostics
                 foreach (var diag in script.Diagnostics)
@@ -326,8 +332,14 @@ namespace ETL_SQL.TUI.UI
                     return;
                 }
 
-                await _evaluator.Evaluate(script); 
-                _renderer.ShowStatus("Query finished.");
+                var execSw = System.Diagnostics.Stopwatch.StartNew();
+                _evaluator.IsProfiling = true; // Enable profiling by default in IDE mode for Performance Dashboard
+                await _evaluator.Evaluate(script);
+                execSw.Stop();
+                _evaluator.LastExecTimeMs = execSw.ElapsedMilliseconds;
+
+                totalSw.Stop();
+                _renderer.ShowStatus($"Query finished in {totalSw.ElapsedMilliseconds}ms.");
             }
             catch (Exception ex) { _renderer.ShowStatus($"Error: {ex.Message}"); }
             finally

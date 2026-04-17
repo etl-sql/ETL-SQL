@@ -34,6 +34,7 @@ namespace ETL_SQL.Engine.Engines
         /// <summary>Applies aggregation by partitioning the stream into disk files and processing each partition sequentially.</summary>
         public async IAsyncEnumerable<Row> ApplyAggregationExternal(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null)
         {
+            bool yieldedAny = false;
             try
             {
                 // 1. Partition Phase (supports one-pass expansion for grouping sets)
@@ -44,6 +45,15 @@ namespace ETL_SQL.Engine.Engines
                 {
                     expandedSets = ExpandGroupingSets(groupingSet);
                     partitionPaths = await PartitionStreamMultiSet(inputStream, expandedSets);
+                    
+                    // Ensure we have a reference list of ALL participating columns for NULL substitution later
+                    if (groupBy == null || groupBy.Count == 0)
+                    {
+                        groupBy = expandedSets.SelectMany(s => s)
+                            .GroupBy(e => e.ToSql().ToLower())
+                            .Select(g => g.First())
+                            .ToList();
+                    }
                 }
                 else
                 {
@@ -104,12 +114,17 @@ namespace ETL_SQL.Engine.Engines
                                         if (matchIdx >= 0) resRow[colNames[matchIdx]] = null;
                                     }
                                 }
+                                yieldedAny = true;
                                 yield return resRow;
                             }
                         }
                         else
                         {
-                            foreach (var resRow in partResults) yield return resRow;
+                            foreach (var resRow in partResults) 
+                            { 
+                                yieldedAny = true; 
+                                yield return resRow; 
+                            }
                         }
                     }
 
@@ -117,7 +132,9 @@ namespace ETL_SQL.Engine.Engines
                 }
 
                 // Handle global aggregation if no rows were found but aggregates exist
-                if (finalColumns.Any(c => _inMemoryEngine.IsAggregate(c.Expression)) && (groupBy == null || groupBy.Count == 0) && (groupingSet == null || groupingSet.Type == GroupingSetType.None))
+                // Bug Fix: Only yield if we haven't already produced rows (avoids duplicates in partitioned external agg)
+                if (!yieldedAny && finalColumns.Any(c => _inMemoryEngine.IsAggregate(c.Expression)) 
+                    && (groupBy == null || groupBy.Count == 0) && (groupingSet == null || groupingSet.Type == GroupingSetType.None))
                 {
                     var globals = await _inMemoryEngine.ApplyAggregation(new List<Row>(), groupBy, finalColumns, colNames, havingClause);
                     foreach (var g in globals) yield return g;

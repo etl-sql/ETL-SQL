@@ -95,6 +95,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.WAITFOR)) return ParseWaitFor();
             if (_parser.Match(TokenType.WAIT)) return ParseWait();
             if (_parser.Match(TokenType.RAISEERROR)) return ParseRaiseError();
+            if (_parser.Match(TokenType.ASSERT)) return ParseAssert();
             if (_parser.Match(TokenType.EXEC) || _parser.Match(TokenType.EXECUTE)) return ParseExecute();
             if (_parser.Match(TokenType.PARALLEL)) return ParseParallel();
             if (_parser.Match(TokenType.THROW)) return ParseThrow();

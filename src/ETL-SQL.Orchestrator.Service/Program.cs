@@ -94,7 +94,14 @@ try
 
     builder.Services.AddSingleton<ILineageTracker, LineageTracker>();
     builder.Services.AddSingleton<IDockerManager, DockerContainerManager>();
-    builder.Services.AddSingleton<SessionStateManager>();
+    builder.Services.AddSingleton<SessionStateManager>(sp => 
+    {
+        var scfg = sp.GetRequiredService<IConfiguration>();
+        var slog = sp.GetRequiredService<ETL_SQL.Common.ILogger>();
+        var ssec = sp.GetRequiredService<ETL_SQL.Services.SecurityService>();
+        var customDir = scfg["Session:Root"];
+        return new SessionStateManager(slog, ssec, customDir);
+    });
     
     var securityService = new ETL_SQL.Services.SecurityService(loggerService);
     securityService.UpdateFromConfiguration(cfg);

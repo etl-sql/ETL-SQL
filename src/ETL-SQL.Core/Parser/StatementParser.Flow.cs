@@ -219,5 +219,25 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
             return new ThrowStatement(errorNumber, message, state);
         }
+
+        private Statement ParseAssert()
+        {
+            var startToken = _parser.Previous; // ASSERT already consumed
+            var condition = _parser.ParseExpression();
+            Expression? message = null;
+
+            if (_parser.Match(TokenType.COMMA))
+            {
+                message = _parser.ParseExpression();
+            }
+
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+
+            return new AssertStatement(condition, message)
+            {
+                Line = startToken.Line,
+                Column = startToken.Column
+            };
+        }
     }
 }

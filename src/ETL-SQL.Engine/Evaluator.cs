@@ -17,6 +17,7 @@ using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Services;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Engine
 {
@@ -110,7 +111,15 @@ namespace ETL_SQL.Engine
         public int CurrentRecursiveDepth { get; set; } = 0;
         public string? LastIndexUsedName { get; set; }
         public ErrorInfo? LastError { get; set; }
+        public ErrorInfo? ActiveException { get; set; }
         public int PreviousErrorNumber { get; set; } = 0;
+        
+        /// <summary>Last script lexing duration in milliseconds.</summary>
+        public long LastLexTimeMs { get; set; }
+        /// <summary>Last script parsing duration in milliseconds.</summary>
+        public long LastParseTimeMs { get; set; }
+        /// <summary>Last script total execution duration in milliseconds.</summary>
+        public long LastExecTimeMs { get; set; }
 
         
         /// <summary>Size of row batches used during streaming operations.</summary>
@@ -250,7 +259,9 @@ namespace ETL_SQL.Engine
             get => _sessionId;
             set
             {
+                if (_sessionId != null) _sessionStateManager.UnregisterActiveSession(_sessionId);
                 _sessionId = value;
+                if (_sessionId != null) _sessionStateManager.RegisterActiveSession(_sessionId);
                 _logger.SessionId = value;
             }
         }
@@ -656,19 +667,54 @@ namespace ETL_SQL.Engine
 
         public async Task EvaluateClearSession(ClearSessionStatement stmt)
         {
-            if (stmt.SessionId != null)
+            switch (stmt.Mode)
             {
-                var targetId = await EvaluateValue(stmt.SessionId, new Row());
-                if (targetId != null)
-                {
-                    _sessionStateManager.ClearSession(targetId.ToString()!);
-                    _logger.Info("Cleared session: {SessionId}", targetId);
-                }
-            }
-            else if (SessionId != null)
-            {
-                _sessionStateManager.ClearSession(SessionId);
-                _logger.Info("Cleared current session: {SessionId}", SessionId);
+                case ClearSessionMode.Current:
+                    if (SessionId != null)
+                    {
+                        // Note: Self-clearing is allowed even though it's "in-use" 
+                        // because we want scripts to be able to cleanup themselves.
+                        _sessionStateManager.UnregisterActiveSession(SessionId);
+                        _sessionStateManager.ClearSession(SessionId);
+                        _logger.Info("Cleared current session: {SessionId}", SessionId);
+                        SessionId = null; // Prevent future saves
+                    }
+                    break;
+
+                case ClearSessionMode.Single:
+                    if (stmt.SessionId != null)
+                    {
+                        var targetId = await EvaluateValue(stmt.SessionId, new Row());
+                        if (targetId != null)
+                        {
+                            _sessionStateManager.ClearSession(targetId.ToString()!);
+                            _logger.Info("Cleared specific session: {SessionId}", targetId);
+                        }
+                    }
+                    break;
+
+                case ClearSessionMode.All:
+                    var sessions = _sessionStateManager.GetSessions().ToList();
+                    int clearedCount = 0;
+                    foreach (var s in sessions)
+                    {
+                        if (s.SessionId != SessionId) // Don't self-destruct in "ALL" mode unless current
+                        {
+                            if (!_sessionStateManager.IsSessionInUse(s.SessionId))
+                            {
+                                _sessionStateManager.ClearSession(s.SessionId);
+                                clearedCount++;
+                            }
+                        }
+                    }
+                    _logger.Info("Cleared {Count} inactive sessions.", clearedCount);
+                    break;
+
+                case ClearSessionMode.Stale:
+                    var retentionDays = _serviceProvider.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>().GetValue<int>("Session:StaleSessionRetentionDays", 7);
+                    _sessionStateManager.ReapStaleSessions(TimeSpan.FromDays(retentionDays));
+                    _logger.Info("Reaped stale sessions older than {Days} days.", retentionDays);
+                    break;
             }
         }
 
@@ -807,6 +853,7 @@ namespace ETL_SQL.Engine
 
         public async ValueTask DisposeAsync()
         {
+            if (_sessionId != null) _sessionStateManager.UnregisterActiveSession(_sessionId);
             foreach (var conn in _connections.Values) await conn.DisposeAsync();
             await DockerManager.DisposeAsync();
             _connections.Clear();

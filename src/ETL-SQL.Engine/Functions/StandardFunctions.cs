@@ -117,11 +117,11 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("VAR", Variance, "VAR(expression): Returns the statistical variance.");
 
             // ENG-5 - Error Functions
-            registry.RegisterWithHelp("ERROR_NUMBER", (args, ctx) => ctx.LastError?.Number ?? 0, "ERROR_NUMBER(): Returns the error number of the error that caused the CATCH block to run.");
-            registry.RegisterWithHelp("ERROR_MESSAGE", (args, ctx) => ctx.LastError?.Message, "ERROR_MESSAGE(): Returns the message text of the error that caused the CATCH block to run.");
-            registry.RegisterWithHelp("ERROR_SEVERITY", (args, ctx) => ctx.LastError?.Severity ?? 0, "ERROR_SEVERITY(): Returns the severity of the error that caused the CATCH block to run.");
-            registry.RegisterWithHelp("ERROR_STATE", (args, ctx) => ctx.LastError?.State ?? 0, "ERROR_STATE(): Returns the state number of the error that caused the CATCH block to run.");
-            registry.RegisterWithHelp("ERROR_LINE", (args, ctx) => ctx.LastError?.Line ?? 0, "ERROR_LINE(): Returns the line number where the error occurred.");
+            registry.RegisterWithHelp("ERROR_NUMBER", (args, ctx) => (ctx.ActiveException ?? ctx.LastError)?.Number ?? 0, "ERROR_NUMBER(): Returns the error number of the error that caused the CATCH block to run.");
+            registry.RegisterWithHelp("ERROR_MESSAGE", (args, ctx) => (ctx.ActiveException ?? ctx.LastError)?.Message, "ERROR_MESSAGE(): Returns the message text of the error that caused the CATCH block to run.");
+            registry.RegisterWithHelp("ERROR_SEVERITY", (args, ctx) => (ctx.ActiveException ?? ctx.LastError)?.Severity ?? 0, "ERROR_SEVERITY(): Returns the severity of the error that caused the CATCH block to run.");
+            registry.RegisterWithHelp("ERROR_STATE", (args, ctx) => (ctx.ActiveException ?? ctx.LastError)?.State ?? 0, "ERROR_STATE(): Returns the state number of the error that caused the CATCH block to run.");
+            registry.RegisterWithHelp("ERROR_LINE", (args, ctx) => (ctx.ActiveException ?? ctx.LastError)?.Line ?? 0, "ERROR_LINE(): Returns the line number where the error occurred.");
 
             // ENG-6 - Env Var Expansion
             registry.RegisterWithHelp("ENV", (args, ctx) => {

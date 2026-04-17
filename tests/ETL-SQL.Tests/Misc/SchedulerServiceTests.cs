@@ -12,6 +12,8 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.Engine.Services;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Tests.Misc
 {
@@ -64,12 +66,17 @@ namespace ETL_SQL.Tests.Misc
             // Setup default values for intervals if needed by tests
             mockConfig.Setup(c => c.GetSection(It.IsAny<string>())).Returns(new Mock<IConfigurationSection>().Object);
 
+            var mockSessLogger = new Mock<ETL_SQL.Common.ILogger>();
+            var securityService = new SecurityService(mockSessLogger.Object);
+            var sessionManager = new SessionStateManager(mockSessLogger.Object, securityService);
+
             return new SchedulerService(
                 mockServiceProvider.Object,
                 mockStore.Object,
                 new Mock<ILogger<SchedulerService>>().Object,
                 throttle,
-                mockConfig.Object);
+                mockConfig.Object,
+                sessionManager);
         }
 
         [Fact]

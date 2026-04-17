@@ -28,6 +28,11 @@ namespace ETL_SQL.Engine.Services
         private const string SessionFileExtension = ".etlsession";
         private const string RecoveryManifestExtension = ".recovery.json";
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
+        private readonly ConcurrentDictionary<string, byte> _activeSessions = new();
+
+        public void RegisterActiveSession(string sessionId) => _activeSessions.TryAdd(sessionId, 0);
+        public void UnregisterActiveSession(string sessionId) => _activeSessions.TryRemove(sessionId, out _);
+        public bool IsSessionInUse(string sessionId) => _activeSessions.ContainsKey(sessionId);
 
         private SemaphoreSlim GetSessionLock(string sessionId) => _sessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
 
@@ -73,7 +78,9 @@ namespace ETL_SQL.Engine.Services
                 CreatedAt = DateTime.Now, // Should preserve if exists
                 LastModifiedAt = DateTime.Now,
                 LastScriptSource = scriptSource,
-                LastDockerConnectionString = evaluator.DockerManager.LastConnectionString
+                LastDockerConnectionString = evaluator.DockerManager.LastConnectionString,
+                OwnerUser = Environment.UserName,
+                OwnerMachine = Environment.MachineName
             };
 
             // 1. Capture Variables (only primitives for now)
@@ -179,7 +186,9 @@ namespace ETL_SQL.Engine.Services
                 LastModified = state.LastModifiedAt,
                 ScriptSource = scriptSource,
                 TempTables = state.TempTables.Select(t => t.Name).ToList(),
-                Variables = state.GlobalVariables.Keys.ToList()
+                Variables = state.GlobalVariables.Keys.ToList(),
+                OwnerUser = state.OwnerUser,
+                OwnerMachine = state.OwnerMachine
             };
 
             await _securityService.ExecuteInternalAsync(async () =>
@@ -293,6 +302,12 @@ namespace ETL_SQL.Engine.Services
         /// <summary>Clears session files from disk.</summary>
         public void ClearSession(string sessionId)
         {
+            if (IsSessionInUse(sessionId))
+            {
+                _logger.Warning("[SESSION] Cannot clear session {SessionId} because it is currently in use by an active evaluator.", sessionId);
+                return;
+            }
+
             _securityService.ExecuteInternal(() => {
                 string sessionFile = GetSessionFilePath(sessionId);
                 if (File.Exists(sessionFile)) File.Delete(sessionFile);
@@ -336,6 +351,8 @@ namespace ETL_SQL.Engine.Services
                 int tempTables = 0;
                 int variables = 0;
                 string? lastScript = null;
+                string? ownerUser = null;
+                string? ownerMachine = null;
 
                 try
                 {
@@ -347,6 +364,8 @@ namespace ETL_SQL.Engine.Services
                         if (doc.RootElement.TryGetProperty("Variables", out var v)) variables = v.GetArrayLength();
                         if (doc.RootElement.TryGetProperty("ScriptSource", out var s)) lastScript = s.GetString();
                         if (doc.RootElement.TryGetProperty("LastModified", out var lm)) lastModified = lm.GetDateTime();
+                        if (doc.RootElement.TryGetProperty("OwnerUser", out var ou)) ownerUser = ou.GetString();
+                        if (doc.RootElement.TryGetProperty("OwnerMachine", out var om)) ownerMachine = om.GetString();
                     }
                 }
                 catch { }
@@ -359,7 +378,9 @@ namespace ETL_SQL.Engine.Services
                     TotalSizeBytes = totalSize,
                     TempTableCount = tempTables,
                     VariableCount = variables,
-                    LastScriptSource = lastScript
+                    LastScriptSource = lastScript,
+                    OwnerUser = ownerUser,
+                    OwnerMachine = ownerMachine
                 };
             }
         }
@@ -375,7 +396,10 @@ namespace ETL_SQL.Engine.Services
                     try
                     {
                         string sessionId = Path.GetFileNameWithoutExtension(file);
-                        ClearSession(sessionId);
+                        if (!IsSessionInUse(sessionId))
+                        {
+                            ClearSession(sessionId);
+                        }
                     }
                     catch { }
                 }

@@ -243,16 +243,32 @@ namespace ETL_SQL.Core.Parser
         private Statement ParseClear()
         {
             var startToken = _parser.Previous;
-            _parser.Consume(TokenType.SESSION, "Expected SESSION after CLEAR");
+            bool isPlural = _parser.Match(TokenType.SESSIONS);
+            if (!isPlural) _parser.Consume(TokenType.SESSION, "Expected SESSION or SESSIONS after CLEAR");
             
+            ClearSessionMode mode = ClearSessionMode.Current;
             Expression? sessionId = null;
+
             if (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.EOF)
             {
-                sessionId = _parser.ParseExpression();
+                if (_parser.Match(TokenType.ALL))
+                {
+                    mode = ClearSessionMode.All;
+                }
+                else if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("STALE", StringComparison.OrdinalIgnoreCase))
+                {
+                    _parser.Advance();
+                    mode = ClearSessionMode.Stale;
+                }
+                else
+                {
+                    sessionId = _parser.ParseExpression();
+                    mode = ClearSessionMode.Single;
+                }
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
-            return new ClearSessionStatement(sessionId) { Line = startToken.Line, Column = startToken.Column };
+            return new ClearSessionStatement(mode, sessionId) { Line = startToken.Line, Column = startToken.Column };
         }
 
         private Statement ParseHelp()

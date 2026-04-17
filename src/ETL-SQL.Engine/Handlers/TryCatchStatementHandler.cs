@@ -48,7 +48,11 @@ namespace ETL_SQL.Engine.Handlers
                     line = ee.Line;
                 }
 
-                context.LastError = new ErrorInfo(number, message, severity, state, line, null);
+                var errorInfo = new ErrorInfo(number, message, severity, state, line, null);
+                context.LastError = errorInfo;
+
+                var oldActive = context.ActiveException;
+                context.ActiveException = errorInfo;
 
                 if (!context.ContainsVariable("@ERROR_MESSAGE"))
                 {
@@ -59,7 +63,14 @@ namespace ETL_SQL.Engine.Handlers
                     context.SetVariable("@ERROR_MESSAGE", message);
                 }
 
-                await context.EvaluateStatement(stmt.CatchBody);
+                try
+                {
+                    await context.EvaluateStatement(stmt.CatchBody);
+                }
+                finally
+                {
+                    context.ActiveException = oldActive;
+                }
             }
         }
     }

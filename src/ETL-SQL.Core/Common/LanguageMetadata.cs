@@ -25,7 +25,7 @@ namespace ETL_SQL.Common
         public static readonly HashSet<string> ControlFlowKeywords = new(StringComparer.OrdinalIgnoreCase)
         {
             "IF", "ELSE", "WHILE", "FOR", "FOREACH", "EACH", "BEGIN", "END", "TRY", "CATCH", "THROW",
-            "RAISEERROR", "RAISERROR", "EXEC", "EXECUTE", "RETURN", "BREAK", "CONTINUE", "CASE", "WHEN", "THEN", "SEND_EMAIL"
+            "RAISEERROR", "RAISERROR", "ASSERT", "EXEC", "EXECUTE", "RETURN", "BREAK", "CONTINUE", "CASE", "WHEN", "THEN", "SEND_EMAIL"
         };
 
         public static readonly HashSet<string> JoinKeywords = new(StringComparer.OrdinalIgnoreCase)
