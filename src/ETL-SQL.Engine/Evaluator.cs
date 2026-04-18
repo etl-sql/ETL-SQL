@@ -207,6 +207,8 @@ namespace ETL_SQL.Engine
         /// <inheritdoc />
         public IDictionary<string, CreateNavigationStatement> NavigationDefinitions { get; } = new Dictionary<string, CreateNavigationStatement>(StringComparer.OrdinalIgnoreCase);
         /// <inheritdoc />
+        public IDictionary<string, CreateStyleStatement> StyleDefinitions { get; } = new Dictionary<string, CreateStyleStatement>(StringComparer.OrdinalIgnoreCase);
+        /// <inheritdoc />
         public string? ReportTitle { get; set; }
         /// <inheritdoc />
         public string? ReportDescription { get; set; }

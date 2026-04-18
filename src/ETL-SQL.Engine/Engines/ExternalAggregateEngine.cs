@@ -18,7 +18,7 @@ namespace ETL_SQL.Engine.Engines
         private readonly IExecutionContext _context;
         private readonly ILogger _logger;
         private readonly AggregateEngine _inMemoryEngine;
-        public int PartitionCount => _context.ExternalHashPartitions;
+        public int PartitionCount => Math.Max(1, _context.ExternalHashPartitions);
 
 
         public ExternalAggregateEngine(IExecutionContext context, ILogger logger)

@@ -127,6 +127,7 @@ namespace ETL_SQL.Core.Common
         public IDictionary<string, CreateDatasetStatement> DatasetDefinitions { get; } = new Dictionary<string, CreateDatasetStatement>();
         public IDictionary<string, CreateContainerStatement> ContainerDefinitions { get; } = new Dictionary<string, CreateContainerStatement>(StringComparer.OrdinalIgnoreCase);
         public IDictionary<string, CreateNavigationStatement> NavigationDefinitions { get; } = new Dictionary<string, CreateNavigationStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreateStyleStatement> StyleDefinitions { get; } = new Dictionary<string, CreateStyleStatement>(StringComparer.OrdinalIgnoreCase);
         public string? ReportTitle { get; set; }
         public string? ReportDescription { get; set; }
 

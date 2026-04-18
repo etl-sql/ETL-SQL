@@ -54,13 +54,6 @@ CREATE VISUAL KpiCard AS CARD (SOURCE = #kpi, MAPPINGS(VALUE = Value, LABEL = La
 
 Temp tables are reusable across multiple visuals, debuggable with a plain `SELECT`, and consistent with the rest of ETL-SQL.
 
-> **Legacy shorthand — `@@DATASET`**: An older `@@DATASET` system variable exists and remains supported. Avoid it in new reports; prefer named temp tables instead.
->
-> ```sql
-> -- Legacy (not recommended):
-> DECLARE @@DATASET = (('Product A', 100), ('Product B', 250));
-> CREATE VISUAL ManualCard AS CARD (SOURCE = @@DATASET, MAPPINGS(VALUE = Col1, LABEL = Col0));
-> ```
 
 ---
 
@@ -759,13 +752,78 @@ WITH PARAMETERS (@region = 'All');
 
 ---
 
+## CREATE STYLE
+
+Defines a named, reusable style that can be applied to any `CREATE VISUAL`, `CREATE PAGE`, or `CREATE CONTAINER` statement. Properties defined in the named style act as defaults; any inline `STYLE (...)` block on the target overrides them.
+
+```
+CREATE STYLE <name> (
+  key = value,
+  ...
+);
+```
+
+Style properties are CSS-like key/value pairs (strings, numbers, or identifiers). Common keys:
+
+| Key | Example | Applies to |
+|-----|---------|------------|
+| `background-color` | `'#1a1a2e'` | Any |
+| `color` | `'#ffffff'` | Any |
+| `border` | `'1px solid #444'` | Any |
+| `border-radius` | `'8px'` | Any |
+| `font-size` | `'14px'` | Any |
+| `padding` | `'12px'` | Any |
+| `HEIGHT` | `200` | Container |
+| `WIDTH` | `'100%'` | Any |
+
+```sql
+-- Define shared styles once
+CREATE STYLE DarkCard (
+  background-color = '#1e1e2e',
+  color = '#cdd6f4',
+  border-radius = '8px',
+  padding = '16px'
+);
+
+CREATE STYLE PanelBorder (
+  border = '1px solid #444',
+  border-radius = '4px'
+);
+
+-- Reference by name in CREATE VISUAL
+CREATE VISUAL RevenueKpi AS CARD (
+  SOURCE = #kpis,
+  STYLE = DarkCard,
+  MAPPINGS (VALUE = revenue, LABEL = label)
+);
+
+-- Inline overrides take precedence over the named style
+CREATE VISUAL AlertKpi AS CARD (
+  SOURCE = #kpis,
+  STYLE = DarkCard,
+  STYLE (color = '#f38ba8'),   -- override color only
+  MAPPINGS (VALUE = alerts, LABEL = label)
+);
+
+-- Apply to pages and containers too
+CREATE PAGE Main AS LAYOUT (
+  STRUCTURE = 'A B',
+  STYLE = PanelBorder,
+  MAP ('A' = RevenueKpi, 'B' = AlertKpi)
+);
+```
+
+> Named styles are resolved at manifest build time and merged into the target's final style map. They are not emitted as a separate entity in the manifest.
+
+---
+
 ## CREATE CONTAINER
 
 Groups multiple visuals into a single layout region, optionally with scrolling. Useful when many visuals share one page slot.
 
 ```
 CREATE CONTAINER <name> AS BOX|SCROLL (
-  [STYLE (key = value, ...),]
+  [STYLE = <styleName> | STYLE (key = value, ...),]
   VISUALS (VisualA, VisualB, ...)
 );
 ```

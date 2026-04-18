@@ -46,9 +46,10 @@ namespace ETL_SQL.ReportBuilder
                 foreach (var opt in vStmt.Options)
                     vm.Options[opt.Key] = opt.Value;
 
-                // Styles
-                if (vStmt.Styles.Count > 0)
-                    vm.Styles = new Dictionary<string, string>(vStmt.Styles);
+                // Styles — named style is the base; inline styles override
+                var resolvedStyles = ResolveStyles(vStmt.StyleName, vStmt.Styles);
+                if (resolvedStyles.Count > 0)
+                    vm.Styles = resolvedStyles;
 
                 // Typed series (COMBO)
                 if (vStmt.TypedSeries.Count > 0)
@@ -144,8 +145,9 @@ namespace ETL_SQL.ReportBuilder
                     }
                 }
 
-                if (pStmt.Styles.Count > 0)
-                    pm.Styles = new Dictionary<string, string>(pStmt.Styles);
+                var resolvedPageStyles = ResolveStyles(pStmt.StyleName, pStmt.Styles);
+                if (resolvedPageStyles.Count > 0)
+                    pm.Styles = resolvedPageStyles;
 
                 manifest.Pages.Add(pm);
             }
@@ -156,12 +158,13 @@ namespace ETL_SQL.ReportBuilder
                 manifest.Containers = new();
                 foreach (var (name, cStmt) in _ctx.ContainerDefinitions)
                 {
+                    var resolvedContainerStyles = ResolveStyles(cStmt.StyleName, cStmt.Styles);
                     manifest.Containers.Add(new ContainerManifest
                     {
                         Name          = name,
                         ContainerType = cStmt.ContainerType,
                         Visuals       = new List<string>(cStmt.Visuals),
-                        Styles        = cStmt.Styles.Count > 0 ? new Dictionary<string, string>(cStmt.Styles) : null
+                        Styles        = resolvedContainerStyles.Count > 0 ? resolvedContainerStyles : null
                     });
                 }
             }
@@ -254,6 +257,31 @@ namespace ETL_SQL.ReportBuilder
                     vm.Rows[i][colIdx] = d.ToString(fmt, System.Globalization.CultureInfo.CurrentCulture);
                 }
             }
+        }
+
+        /// <summary>
+        /// Merges a named style (base) with inline styles (override). Named style values are
+        /// applied first; any key also present in inlineStyles takes the inline value.
+        /// </summary>
+        private Dictionary<string, string> ResolveStyles(string? styleName, Dictionary<string, string> inlineStyles)
+        {
+            if (string.IsNullOrEmpty(styleName) && inlineStyles.Count == 0)
+                return new Dictionary<string, string>();
+
+            var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrEmpty(styleName) &&
+                _ctx is IReportContext rc &&
+                rc.StyleDefinitions.TryGetValue(styleName, out var namedStyle))
+            {
+                foreach (var kv in namedStyle.Styles)
+                    merged[kv.Key] = kv.Value;
+            }
+
+            foreach (var kv in inlineStyles)
+                merged[kv.Key] = kv.Value;
+
+            return merged;
         }
 
         public async Task FetchVisualDataAsync(CreateVisualStatement vStmt, VisualManifest vm)

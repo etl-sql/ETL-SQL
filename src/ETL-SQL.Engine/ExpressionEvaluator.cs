@@ -399,7 +399,6 @@ namespace ETL_SQL.Engine
             if (v.Name.Equals("@@PEAK_MEMORY_MB", StringComparison.OrdinalIgnoreCase)) return Process.GetCurrentProcess().PeakWorkingSet64 / (1024 * 1024);
             if (v.Name.Equals("@@SUBQUERY_CACHE_HITS", StringComparison.OrdinalIgnoreCase)) return _context.SubqueryCacheHits;
             if (v.Name.Equals("@@SORT_SPILLS", StringComparison.OrdinalIgnoreCase)) return (long)_context.SortSpillCount;
-            if (v.Name.Equals("@@DATASET", StringComparison.OrdinalIgnoreCase)) return _context.ContainsVariable("@@DATASET") ? _context.GetVariable("@@DATASET") : null;
 
 
             

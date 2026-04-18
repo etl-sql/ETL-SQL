@@ -31,6 +31,7 @@ namespace ETL_SQL.Core.Parser
             string? title = null;
             string? subtitle = null;
             string? defaultValue = null;
+            string? styleName = null;
             var mappings       = new List<VisualMapping>();
             var options        = new List<VisualOption>();
             var axisOptions    = new List<AxisOptions>();
@@ -93,9 +94,7 @@ namespace ETL_SQL.Core.Parser
                 }
                 else if (_parser.Match(TokenType.STYLE))
                 {
-                    _parser.Consume(TokenType.LPAREN, "Expected '(' after STYLE");
-                    ParseStyleBody(styles);
-                    _parser.Consume(TokenType.RPAREN, "Expected ')' to close STYLE");
+                    ParseStyleClause(styles, ref styleName);
                 }
                 else if (_parser.Match(TokenType.SERIES))
                 {
@@ -168,6 +167,7 @@ namespace ETL_SQL.Core.Parser
                 FormattingRules  = formattingRules,
                 Overlays         = overlays,
                 Styles           = styles,
+                StyleName        = styleName,
                 Line             = startToken.Line,
                 Column           = startToken.Column
             };
@@ -451,6 +451,7 @@ namespace ETL_SQL.Core.Parser
             _parser.Consume(TokenType.LPAREN, "Expected '(' after LAYOUT");
 
             string? structure = null;
+            string? pageStyleName = null;
             var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var pageStyles = new Dictionary<string, string>();
 
@@ -476,9 +477,7 @@ namespace ETL_SQL.Core.Parser
                 }
                 else if (_parser.Match(TokenType.STYLE))
                 {
-                    _parser.Consume(TokenType.LPAREN, "Expected '(' after STYLE");
-                    ParseStyleBody(pageStyles);
-                    _parser.Consume(TokenType.RPAREN, "Expected ')' to close STYLE");
+                    ParseStyleClause(pageStyles, ref pageStyleName);
                 }
                 else
                 {
@@ -537,6 +536,7 @@ namespace ETL_SQL.Core.Parser
                 SlotMap    = slotMap,
                 Parameters = parameters,
                 Styles     = pageStyles,
+                StyleName  = pageStyleName,
                 Line       = startToken.Line,
                 Column     = startToken.Column
             };
@@ -633,6 +633,39 @@ namespace ETL_SQL.Core.Parser
             return value.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
                    value.Equals("TRUE", StringComparison.OrdinalIgnoreCase) ||
                    value == "1";
+        }
+
+        // ── CREATE STYLE ──────────────────────────────────────────────────────
+
+        private Statement ParseCreateStyle(Token startToken)
+        {
+            var name = _parser.ConsumeIdentifier("Expected style name after CREATE STYLE").Value;
+            _parser.Consume(TokenType.LPAREN, "Expected '(' after style name");
+            var styles = new Dictionary<string, string>();
+            ParseStyleBody(styles);
+            _parser.Consume(TokenType.RPAREN, "Expected ')' to close CREATE STYLE");
+            _parser.Match(TokenType.SEMICOLON);
+            return new CreateStyleStatement
+            {
+                Name   = name,
+                Styles = styles,
+                Line   = startToken.Line,
+                Column = startToken.Column
+            };
+        }
+
+        // Helper: parse STYLE clause that can be either STYLE = <name> or STYLE (...).
+        // Sets styleName when a named reference is used, populates styles dict for inline.
+        private void ParseStyleClause(Dictionary<string, string> styles, ref string? styleName)
+        {
+            if (_parser.Match(TokenType.EQUALS))
+                styleName = _parser.ConsumeIdentifier("Expected style name after STYLE =").Value;
+            else
+            {
+                _parser.Consume(TokenType.LPAREN, "Expected '(' or '=' after STYLE");
+                ParseStyleBody(styles);
+                _parser.Consume(TokenType.RPAREN, "Expected ')' to close STYLE");
+            }
         }
 
         // ── STYLE body helper ──────────────────────────────────────────────────
@@ -831,6 +864,7 @@ namespace ETL_SQL.Core.Parser
 
             _parser.Consume(TokenType.LPAREN, "Expected '(' after container type");
 
+            string? containerStyleName = null;
             var styles  = new Dictionary<string, string>();
             var visuals = new List<string>();
 
@@ -838,9 +872,7 @@ namespace ETL_SQL.Core.Parser
             {
                 if (_parser.Match(TokenType.STYLE))
                 {
-                    _parser.Consume(TokenType.LPAREN, "Expected '(' after STYLE");
-                    ParseStyleBody(styles);
-                    _parser.Consume(TokenType.RPAREN, "Expected ')' to close STYLE");
+                    ParseStyleClause(styles, ref containerStyleName);
                 }
                 else if (_parser.Current.Type == TokenType.IDENTIFIER &&
                          _parser.Current.Value.Equals("VISUALS", StringComparison.OrdinalIgnoreCase))
@@ -872,6 +904,7 @@ namespace ETL_SQL.Core.Parser
                 ContainerType = containerType,
                 Visuals       = visuals,
                 Styles        = styles,
+                StyleName     = containerStyleName,
                 Line          = startToken.Line,
                 Column        = startToken.Column
             };

@@ -121,6 +121,14 @@ namespace ETL_SQL.Core
         public new required string Column { get; init; }
     }
 
+    /// <summary>CREATE STYLE &lt;name&gt; (key = value, ...)</summary>
+    public record CreateStyleStatement : Statement
+    {
+        public required string Name                  { get; init; }
+        public Dictionary<string, string> Styles     { get; init; } = new();
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
     public record CreateVisualStatement : Statement
     {
         public required string Name                    { get; init; }
@@ -137,6 +145,8 @@ namespace ETL_SQL.Core
         public List<FormattingRule> FormattingRules    { get; init; } = new();
         public List<VisualOverlay> Overlays            { get; init; } = new();
         public Dictionary<string, string> Styles       { get; init; } = new();
+        /// <summary>Name of a CREATE STYLE to inherit. Merged before inline Styles (inline wins).</summary>
+        public string? StyleName                       { get; init; }
         public override string ToSql() => AstSerializer.Format(this);
     }
 
@@ -153,6 +163,7 @@ namespace ETL_SQL.Core
         public Dictionary<string, string> SlotMap             { get; init; } = new();
         public List<PageParameter> Parameters                 { get; init; } = new();
         public Dictionary<string, string> Styles              { get; init; } = new();
+        public string? StyleName                              { get; init; }
     }
 
     /// <summary>
@@ -177,6 +188,7 @@ namespace ETL_SQL.Core
         public required string ContainerType { get; init; }  // "BOX" or "SCROLL"
         public List<string> Visuals { get; init; } = new();
         public Dictionary<string, string> Styles { get; init; } = new();
+        public string? StyleName { get; init; }
     }
 
     public enum NavigationType { Tab, Button, Link }

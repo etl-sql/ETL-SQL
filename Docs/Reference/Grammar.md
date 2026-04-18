@@ -50,7 +50,6 @@ The engine provides built-in variables for session-level state. All system varia
 | `@@PEAK_MEMORY_MB` | Peak working set memory used by the current engine process. |
 | `@@SUBQUERY_CACHE_HITS` | Total number of scalar subquery results retrieved from the session cache. |
 | `@@SORT_SPILLS` | Number of external sort runs that spilled to disk during the session. |
-| `@@DATASET` | **(Deprecated)** Legacy Report-Builder shorthand for inline data. Use a named temp table (`#name`) instead. |
 
 
 ### 1.4 `INPUT` and `OUTPUT` Variables

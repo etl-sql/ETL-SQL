@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
@@ -20,6 +21,12 @@ namespace ETL_SQL.Engine.Handlers
             context.SecurityService.ValidateThresholdOverride(s.Type, val, context);
 
             int intVal = Convert.ToInt32(val);
+            
+            if (s.Type == ThresholdType.ExternalHashPartitions && intVal < 1)
+            {
+                throw new ExecutionException("EXTERNAL_HASH_PARTITIONS must be at least 1.");
+            }
+
 
             switch (s.Type)
             {

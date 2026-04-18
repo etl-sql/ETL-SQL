@@ -21,7 +21,7 @@ namespace ETL_SQL.Engine.Engines
         private readonly WindowEngine _inMemoryEngine;
         private readonly ExternalSortEngine _sortEngine;
         private readonly ILogger _logger;
-        public int PartitionCount => _context.ExternalHashPartitions;
+        public int PartitionCount => Math.Max(1, _context.ExternalHashPartitions);
 
         public ExternalWindowEngine(IExecutionContext context, WindowEngine inMemoryEngine, ILogger logger)
         {

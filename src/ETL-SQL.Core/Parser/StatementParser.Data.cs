@@ -75,8 +75,10 @@ namespace ETL_SQL.Core.Parser
                 return ParseCreateContainer(startToken);
             if (_parser.Match(TokenType.NAVIGATION))
                 return ParseCreateNavigation(startToken);
+            if (_parser.Match(TokenType.STYLE))
+                return ParseCreateStyle(startToken);
 
-            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, or NAVIGATION after CREATE", _parser.Current.Line, _parser.Current.Column);
+            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, or STYLE after CREATE", _parser.Current.Line, _parser.Current.Column);
         }
 
         private Statement ParseCreateSshKeyPair(Token startToken)

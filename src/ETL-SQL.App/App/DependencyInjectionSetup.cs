@@ -152,7 +152,7 @@ namespace ETL_SQL.App
             services.AddSingleton<SchedulerService>();
 
             int joinSpillThreshold = int.TryParse(configuration["Engine:JoinSpillThreshold"], out var jst) ? jst : 100000;
-            int externalHashPartitions = int.TryParse(configuration["Engine:ExternalHashPartitions"], out var ehp) ? ehp : 32;
+            int externalHashPartitions = int.TryParse(configuration["Engine:ExternalHashPartitions"], out var ehp) ? Math.Max(1, ehp) : 32;
             int batchSize = int.TryParse(configuration["Engine:BatchSize"], out var bs) ? bs : 10000;
             int maxRecursiveDepth = int.TryParse(configuration["Engine:MaxRecursiveDepth"], out var mrd2) ? mrd2 : 10000;
             int externalSortChunkSize = int.TryParse(configuration["Engine:ExternalSort:ChunkSize"], out var esc) ? esc : 100000;

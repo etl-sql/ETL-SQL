@@ -189,6 +189,8 @@ namespace ETL_SQL.Core
         IDictionary<string, CreateContainerStatement> ContainerDefinitions { get; }
         /// <summary>Named navigation definitions registered by CREATE NAVIGATION.</summary>
         IDictionary<string, CreateNavigationStatement> NavigationDefinitions { get; }
+        /// <summary>Named style definitions registered by CREATE STYLE.</summary>
+        IDictionary<string, CreateStyleStatement> StyleDefinitions { get; }
         /// <summary>Report-level title set by SET REPORT TITLE = '...'</summary>
         string? ReportTitle { get; set; }
         /// <summary>Report-level description set by SET REPORT DESCRIPTION = '...'</summary>

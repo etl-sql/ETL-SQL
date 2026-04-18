@@ -48,24 +48,6 @@ END CATCH");
             Assert.Equal(0, Convert.ToInt32(val2));
         }
 
-        [Fact]
-        public async Task TestDatasetVariable_ManualUsage()
-        {
-            var provider = DependencyInjectionSetup.BuildServiceProvider();
-            var eval = provider.GetRequiredService<Evaluator>();
-
-            // 1. Initial state should be null
-            var val1 = eval.GetVariable("@@DATASET");
-            Assert.Null(val1);
-
-            // 2. Set it manually
-            await TestHelpers.Execute(eval, "DECLARE @@DATASET = (1, 2, 3);");
-            
-            // 3. Retrieve it
-            var val2 = eval.GetVariable("@@DATASET");
-            Assert.NotNull(val2);
-            Assert.IsType<System.Collections.Generic.List<object>>(val2);
-        }
         
         [Fact]
         public async Task TestRowCountVariable()
