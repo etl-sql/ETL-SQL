@@ -29,7 +29,7 @@ namespace ETL_SQL.Engine.Functions
         /// </summary>
         private static Task<object?> GetTags(List<object?> args, IExecutionContext context)
         {
-            if (args.Count < 1) throw new ExecutionException("GET_TAGS requires at least a table name.");
+            if (args.Count < 1 || args[0] == null) return Task.FromResult<object?>(null);
             
             string table = args[0]?.ToString() ?? "";
             string? column = args.Count > 1 ? args[1]?.ToString() : null;
@@ -50,7 +50,7 @@ namespace ETL_SQL.Engine.Functions
         /// </summary>
         private static Task<object?> GetTagValue(List<object?> args, IExecutionContext context)
         {
-            if (args.Count < 3) throw new ExecutionException("GET_TAG_VALUE requires table name, column name, and tag name.");
+            if (args.Count < 3 || args[0] == null || args[1] == null || args[2] == null) return Task.FromResult<object?>(null);
             
             string table = args[0]?.ToString() ?? "";
             string column = args[1]?.ToString() ?? "";
@@ -58,7 +58,7 @@ namespace ETL_SQL.Engine.Functions
 
             var metadata = context.LineageTracker.GetColumnMetadata(table, column);
             
-            if (metadata.TryGetValue(tag, out var val))
+            if (metadata != null && metadata.TryGetValue(tag, out var val))
             {
                 return Task.FromResult<object?>(val);
             }

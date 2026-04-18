@@ -57,14 +57,16 @@ namespace ETL_SQL.Engine.Functions
 
         private static Task<object?> FileExists(List<object?> args, IExecutionContext context)
         {
-            var res = args.Count >= 1 && args[0] != null ? File.Exists(context.ResolvePath(args[0]?.ToString() ?? "")) : false;
-            return Task.FromResult<object?>(res);
+            if (args.Count < 1 || args[0] == null) return Task.FromResult<object?>(null);
+            var res = File.Exists(context.ResolvePath(args[0]?.ToString() ?? ""));
+            return Task.FromResult<object?>((object?)(res ? 1m : 0m));
         }
 
         private static Task<object?> DirectoryExists(List<object?> args, IExecutionContext context)
         {
-            var res = args.Count >= 1 && args[0] != null ? Directory.Exists(context.ResolvePath(args[0]?.ToString() ?? "")) : false;
-            return Task.FromResult<object?>(res);
+            if (args.Count < 1 || args[0] == null) return Task.FromResult<object?>(null);
+            var res = Directory.Exists(context.ResolvePath(args[0]?.ToString() ?? ""));
+            return Task.FromResult<object?>((object?)(res ? 1m : 0m));
         }
 
         private static async Task<object?> FileList(List<object?> args, IExecutionContext context)

@@ -52,14 +52,56 @@ namespace ETL_SQL.Core.Data
 
         public static int CompareConstants(object? a, object? b)
         {
-            if (a == null && b == null) return 0;
-            if (a == null) return -1;
-            if (b == null) return 1;
+            if ((a == null || a == DBNull.Value) && (b == null || b == DBNull.Value)) return 0;
+            if (a == null || a == DBNull.Value) return -1;
+            if (b == null || b == DBNull.Value) return 1;
 
-            if (decimal.TryParse(a.ToString(), out var da) && decimal.TryParse(b.ToString(), out var db)) return da.CompareTo(db);
-            if (DateTime.TryParse(a.ToString(), out var dta) && DateTime.TryParse(b.ToString(), out var dta2)) return dta.CompareTo(dta2);
+            string sa = a.ToString() ?? "";
+            string sb = b.ToString() ?? "";
 
-            return string.Compare(a.ToString(), b.ToString(), StringComparison.OrdinalIgnoreCase);
+            if (decimal.TryParse(sa, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var da) && 
+                decimal.TryParse(sb, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var db)) 
+                return da.CompareTo(db);
+
+            if (SafeTryParseDate(sa, out var dta) && SafeTryParseDate(sb, out var dtb)) 
+                return dta.CompareTo(dtb);
+
+            return string.Compare(sa, sb, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool SafeTryParseDate(string s, out DateTime dt)
+        {
+            s = s?.Trim() ?? "";
+            if (string.IsNullOrEmpty(s)) { dt = default; return false; }
+
+            // 1. Try ISO first
+            if (DateTime.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt)) return true;
+
+            // 2. Try dd/MM/yyyy specifically (PRIORITY)
+            if (DateTime.TryParseExact(s, "dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt)) return true;
+            if (DateTime.TryParseExact(s, "d/M/yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt)) return true;
+
+            // 3. Manual fallback for dd/MM/yyyy
+            if (s.Contains("/"))
+            {
+                var parts = s.Split('/');
+                if (parts.Length == 3 && int.TryParse(parts[0], out int d) && int.TryParse(parts[1], out int m) && int.TryParse(parts[2], out int y))
+                {
+                    if (y < 100) y += 2000;
+                    if (m >= 1 && m <= 12 && d >= 1 && d <= DateTime.DaysInMonth(y, m))
+                    {
+                        dt = new DateTime(y, m, d);
+                        return true;
+                    }
+                }
+            }
+
+            // 4. Fallback to others
+            string[] otherFormats = { "MM/dd/yyyy", "M/d/yyyy", "yyyy/MM/dd", "yyyy-MM-dd HH:mm:ss" };
+            if (DateTime.TryParseExact(s, otherFormats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AllowWhiteSpaces, out dt)) return true;
+
+            if (DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AllowWhiteSpaces, out dt)) return true;
+            return false;
         }
 
         public static object? MathOp(object? a, object? b, string op)

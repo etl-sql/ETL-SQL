@@ -122,7 +122,7 @@ namespace ETL_SQL.Engine.Functions
         /// </summary>
         private static object? IsJson(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 1 || args[0] == null) return 0m;
+            if (args.Count < 1 || args[0] == null) return null;
             try
             {
                 JsonDocument.Parse(args[0]!.ToString()!);
@@ -137,10 +137,10 @@ namespace ETL_SQL.Engine.Functions
         /// </summary>
         private static object? JsonExists(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 2) return 0m;
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
             string? json = args[0]?.ToString();
             string? path = args[1]?.ToString();
-            if (string.IsNullOrEmpty(json)) return 0m;
+            if (string.IsNullOrEmpty(json)) return null;
 
             try
             {

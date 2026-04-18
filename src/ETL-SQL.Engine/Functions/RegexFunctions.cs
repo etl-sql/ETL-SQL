@@ -45,33 +45,40 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Returns true if the input matches the pattern.</summary>
         private static object? RegexpLike(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 2) return false;
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
             string input = args[0]?.ToString() ?? "";
             string pattern = args[1]?.ToString() ?? "";
             string? flags = args.Count >= 3 ? args[2]?.ToString() : null;
 
             try
             {
-                return Regex.IsMatch(input, pattern, GetOptions(flags));
+                return Regex.IsMatch(input, pattern, GetOptions(flags)) ? 1m : 0m;
             }
             catch
             {
-                return false;
+                return 0m;
             }
         }
 
         /// <summary>Returns the matched substring.</summary>
         private static object? RegexpSubstr(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 2) return null;
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
             string input = args[0]?.ToString() ?? "";
             string pattern = args[1]?.ToString() ?? "";
-            int pos = args.Count >= 3 ? Convert.ToInt32(args[2]) : 1;
-            int occ = args.Count >= 4 ? Convert.ToInt32(args[3]) : 1;
+            
+            if (args.Count >= 3 && args[2] == null) return null;
+            if (args.Count >= 4 && args[3] == null) return null;
+
+            int pos = 1;
+            if (args.Count >= 3 && !int.TryParse(args[2]?.ToString(), out pos)) pos = 1;
+            int occ = 1;
+            if (args.Count >= 4 && !int.TryParse(args[3]?.ToString(), out occ)) occ = 1;
             string? flags = args.Count >= 5 ? args[4]?.ToString() : null;
 
             if (pos < 1) pos = 1;
             if (occ < 1) occ = 1;
+            if (pos > input.Length) return null;
 
             try
             {
@@ -91,15 +98,22 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Returns the string with matches replaced.</summary>
         private static object? RegexpReplace(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 3) return args.FirstOrDefault();
+            if (args.Count < 3 || args[0] == null || args[1] == null || args[2] == null) return null;
             string input = args[0]?.ToString() ?? "";
             string pattern = args[1]?.ToString() ?? "";
             string replacement = args[2]?.ToString() ?? "";
-            int pos = args.Count >= 4 ? Convert.ToInt32(args[3]) : 1;
-            int occ = args.Count >= 5 ? Convert.ToInt32(args[4]) : 0; // 0 means all
+            
+            if (args.Count >= 4 && args[3] == null) return null;
+            if (args.Count >= 5 && args[4] == null) return null;
+
+            int pos = 1;
+            if (args.Count >= 4 && !int.TryParse(args[3]?.ToString(), out pos)) pos = 1;
+            int occ = 0; // 0 means all
+            if (args.Count >= 5 && !int.TryParse(args[4]?.ToString(), out occ)) occ = 0;
             string? flags = args.Count >= 6 ? args[5]?.ToString() : null;
 
             if (pos < 1) pos = 1;
+            if (pos > input.Length + 1) return input;
 
             try
             {
@@ -130,15 +144,22 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Returns the 1-based start position of the match.</summary>
         private static object? RegexpInstr(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 2) return 0m;
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
             string input = args[0]?.ToString() ?? "";
             string pattern = args[1]?.ToString() ?? "";
-            int pos = args.Count >= 3 ? Convert.ToInt32(args[2]) : 1;
-            int occ = args.Count >= 4 ? Convert.ToInt32(args[3]) : 1;
+            
+            if (args.Count >= 3 && args[2] == null) return null;
+            if (args.Count >= 4 && args[3] == null) return null;
+
+            int pos = 1;
+            if (args.Count >= 3 && !int.TryParse(args[2]?.ToString(), out pos)) pos = 1;
+            int occ = 1;
+            if (args.Count >= 4 && !int.TryParse(args[3]?.ToString(), out occ)) occ = 1;
             string? flags = args.Count >= 5 ? args[4]?.ToString() : null;
 
             if (pos < 1) pos = 1;
             if (occ < 1) occ = 1;
+            if (pos > input.Length) return 0m;
 
             try
             {
@@ -158,13 +179,18 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Returns the number of matches.</summary>
         private static object? RegexpCount(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 2) return 0m;
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
             string input = args[0]?.ToString() ?? "";
             string pattern = args[1]?.ToString() ?? "";
-            int pos = args.Count >= 3 ? Convert.ToInt32(args[2]) : 1;
+            
+            if (args.Count >= 3 && args[2] == null) return null;
+
+            int pos = 1;
+            if (args.Count >= 3 && !int.TryParse(args[2]?.ToString(), out pos)) pos = 1;
             string? flags = args.Count >= 4 ? args[3]?.ToString() : null;
 
             if (pos < 1) pos = 1;
+            if (pos > input.Length) return 0m;
 
             try
             {
@@ -179,7 +205,7 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Returns a list of all matched substrings.</summary>
         private static object? RegexpMatches(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 2) return new List<object?>();
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
             string input = args[0]?.ToString() ?? "";
             string pattern = args[1]?.ToString() ?? "";
             string? flags = args.Count >= 3 ? args[2]?.ToString() : null;
@@ -193,14 +219,14 @@ namespace ETL_SQL.Engine.Functions
             }
             catch
             {
-                return new List<object?>();
+                return null;
             }
         }
 
         /// <summary>Splits the input into a table based on the pattern.</summary>
         private static async Task<object?> RegexpSplitToTable(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 2) return new DataTable();
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
             string input = args[0]?.ToString() ?? "";
             string pattern = args[1]?.ToString() ?? "";
 
@@ -217,7 +243,7 @@ namespace ETL_SQL.Engine.Functions
             }
             catch
             {
-                return new DataTable();
+                return null;
             }
         }
     }

@@ -234,17 +234,25 @@ namespace ETL_SQL.Engine
             {
                 await foreach (var row in EvaluateStream(inExp.Right, context))
                 {
-                    if (row.Schema?.ColumnCount > 0)
+                if (row.Schema?.ColumnCount > 0)
+                {
+                    var rowVal = row[0];
+                    if (l != null && l != DBNull.Value && rowVal != null && rowVal != DBNull.Value)
                     {
-                        if (IsSoftEqual(l, row[0])) { found = true; break; }
+                        if (IsSoftEqual(l, rowVal)) { found = true; break; }
                     }
+                }
                 }
             }
             else if (inExp.Right is ListExpression list)
             {
                 foreach (var item in list.Items)
                 {
-                    if (IsSoftEqual(l, await EvaluateInternal(item, context))) { found = true; break; }
+                    var itemVal = await EvaluateInternal(item, context);
+                    if (l != null && l != DBNull.Value && itemVal != null && itemVal != DBNull.Value)
+                    {
+                        if (IsSoftEqual(l, itemVal)) { found = true; break; }
+                    }
                 }
             }
             return inExp.IsNot ? !found : found;
@@ -473,24 +481,42 @@ namespace ETL_SQL.Engine
         {
             if (bin.Operator == TokenType.AND)
             {
-                var l = await EvaluateInternal(bin.Left, context);
-                if (l == null || l == DBNull.Value || !Convert.ToBoolean(l)) return false;
-                var r = await EvaluateInternal(bin.Right, context);
-                return r != null && r != DBNull.Value && Convert.ToBoolean(r);
+                var lVal = await EvaluateInternal(bin.Left, context);
+                // IF L is FALSE, result is FALSE (Short-circuit)
+                if (lVal != null && lVal != DBNull.Value && !Convert.ToBoolean(lVal)) return false;
+
+                var rVal = await EvaluateInternal(bin.Right, context);
+                // IF R is FALSE, result is FALSE
+                if (rVal != null && rVal != DBNull.Value && !Convert.ToBoolean(rVal)) return false;
+
+                // IF either is NULL, result is NULL (UNKNOWN)
+                if (lVal == null || lVal == DBNull.Value || rVal == null || rVal == DBNull.Value) return null;
+
+                // Both must be TRUE
+                return true;
             }
             if (bin.Operator == TokenType.OR)
             {
-                var l = await EvaluateInternal(bin.Left, context);
-                if (l != null && l != DBNull.Value && Convert.ToBoolean(l)) return true;
-                var r = await EvaluateInternal(bin.Right, context);
-                return r != null && r != DBNull.Value && Convert.ToBoolean(r);
+                var lVal = await EvaluateInternal(bin.Left, context);
+                // IF L is TRUE, result is TRUE (Short-circuit)
+                if (lVal != null && lVal != DBNull.Value && Convert.ToBoolean(lVal)) return true;
+
+                var rVal = await EvaluateInternal(bin.Right, context);
+                // IF R is TRUE, result is TRUE
+                if (rVal != null && rVal != DBNull.Value && Convert.ToBoolean(rVal)) return true;
+
+                // IF either is NULL, result is NULL (UNKNOWN)
+                if (lVal == null || lVal == DBNull.Value || rVal == null || rVal == DBNull.Value) return null;
+
+                // Both must be FALSE
+                return false;
             }
 
-            var lVal = await EvaluateInternal(bin.Left, context);
-            var rVal = await EvaluateInternal(bin.Right, context);
+            var leftVal = await EvaluateInternal(bin.Left, context);
+            var rightVal = await EvaluateInternal(bin.Right, context);
 
             // Use the registry for arithmetic and simple logical operators
-            var result = BinaryOperatorFactory.Execute(bin.Operator, lVal, rVal);
+            var result = BinaryOperatorFactory.Execute(bin.Operator, leftVal, rightVal);
             if (result != null) return result;
 
             // Arithmetic operators don't fall back to soft equality if null
@@ -500,14 +526,14 @@ namespace ETL_SQL.Engine
 
             return bin.Operator switch
             {
-                TokenType.EQUALS => (lVal != null && lVal != DBNull.Value && rVal != null && rVal != DBNull.Value) && IsSoftEqual(lVal, rVal),
-                TokenType.NOT_EQUALS => (lVal != null && lVal != DBNull.Value && rVal != null && rVal != DBNull.Value) && !IsSoftEqual(lVal, rVal),
-                TokenType.GREATER_THAN => (lVal != null && rVal != null) && CompareConstants(lVal, rVal) > 0,
-                TokenType.LESS_THAN => (lVal != null && rVal != null) && CompareConstants(lVal, rVal) < 0,
-                TokenType.GREATER_EQUALS => (lVal != null && rVal != null) && CompareConstants(lVal, rVal) >= 0,
-                TokenType.LESS_EQUALS => (lVal != null && rVal != null) && CompareConstants(lVal, rVal) <= 0,
-                TokenType.LIKE => EvaluateLike(lVal, rVal),
-                _ => IsSoftEqual(lVal, rVal)
+                TokenType.EQUALS => (leftVal != null && leftVal != DBNull.Value && rightVal != null && rightVal != DBNull.Value) && IsSoftEqual(leftVal, rightVal),
+                TokenType.NOT_EQUALS => (leftVal != null && leftVal != DBNull.Value && rightVal != null && rightVal != DBNull.Value) && !IsSoftEqual(leftVal, rightVal),
+                TokenType.GREATER_THAN => (leftVal != null && rightVal != null) && CompareConstants(leftVal, rightVal) > 0,
+                TokenType.LESS_THAN => (leftVal != null && rightVal != null) && CompareConstants(leftVal, rightVal) < 0,
+                TokenType.GREATER_EQUALS => (leftVal != null && rightVal != null) && CompareConstants(leftVal, rightVal) >= 0,
+                TokenType.LESS_EQUALS => (leftVal != null && rightVal != null) && CompareConstants(leftVal, rightVal) <= 0,
+                TokenType.LIKE => EvaluateLike(leftVal, rightVal),
+                _ => IsSoftEqual(leftVal, rightVal)
             };
         }
 
@@ -555,21 +581,25 @@ namespace ETL_SQL.Engine
             if (startVal == null) return null;
             int start = Convert.ToInt32(startVal);
             
-            // SQL SUBSTRING is 1-indexed
-            if (start < 1) start = 1;
-            int dotNetStart = start - 1;
-            if (dotNetStart >= s.Length) return "";
-            
+            int? len = null;
             if (sub.Length != null)
             {
                 var lenVal = await EvaluateInternal(sub.Length, context);
                 if (lenVal == null) return null;
-                int len = Convert.ToInt32(lenVal);
+                len = Convert.ToInt32(lenVal);
                 if (len <= 0) return "";
-                if (dotNetStart + len > s.Length) len = s.Length - dotNetStart;
-                return s.Substring(dotNetStart, len);
             }
-            return s.Substring(dotNetStart);
+
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < s.Length; i++)
+            {
+                int pos = i + 1;
+                if (pos >= start && (len == null || pos < start + len))
+                {
+                    sb.Append(s[i]);
+                }
+            }
+            return sb.ToString();
         }
 
         private async Task<object?> EvaluatePosition(PositionExpression pos, Row context)

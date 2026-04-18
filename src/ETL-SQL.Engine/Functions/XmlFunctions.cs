@@ -93,10 +93,10 @@ namespace ETL_SQL.Engine.Functions
         /// </summary>
         private static object? XmlExists(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 2) return 0m;
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
             string? xml = args[0]?.ToString();
             string? xpath = args[1]?.ToString();
-            if (string.IsNullOrEmpty(xml) || string.IsNullOrEmpty(xpath)) return 0m;
+            if (string.IsNullOrEmpty(xml) || string.IsNullOrEmpty(xpath)) return null;
 
             try
             {

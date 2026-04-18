@@ -20,21 +20,30 @@ namespace ETL_SQL.Engine.Functions
         {
             registry.RegisterWithHelp("UPPER", (args, ctx) => args[0]?.ToString()?.ToUpper(), "UPPER(str): Returns the string in all-caps.");
             registry.RegisterWithHelp("LOWER", (args, ctx) => args[0]?.ToString()?.ToLower(), "LOWER(str): Returns the string in all-lowercase.");
-            registry.RegisterWithHelp("LEN", Len, "LEN(string): Returns the character count of the string.");
-            registry.RegisterWithHelp("LENGTH", Len, "LENGTH(string|list): Returns the character count of a string or the number of items in a list.");
+            registry.RegisterWithHelp("LEN", Len, "LEN(string): Returns the character count of the string. Returns NULL if input is NULL.");
+            registry.RegisterWithHelp("LENGTH", Len, "LENGTH(string|list): Returns the character count of a string or the number of items in a list. Returns NULL if input is NULL.");
             registry.RegisterWithHelp("APPEND_TO_LIST", AddToList, "APPEND_TO_LIST(@list, value): Adds an item to a list variable. Returns the new list.");
             registry.RegisterWithHelp("ADD_TO_LIST", AddToList, "ADD_TO_LIST(@list, value): Alias for APPEND_TO_LIST.");
             registry.RegisterWithHelp("REMOVE_FROM_LIST", RemoveFromList, "REMOVE_FROM_LIST(@list, value): Removes all occurrences of a value from a list variable.");
             registry.RegisterWithHelp("SORT_LIST", SortList, "SORT_LIST(list[, 'ASC'|'DESC']): Returns a sorted version of the list.");
-            registry.RegisterWithHelp("TRIM", (args, ctx) => args[0]?.ToString()?.Trim(), "TRIM(str): Removes leading and trailing whitespaces.");
-            registry.RegisterWithHelp("LTRIM", (args, ctx) => args[0]?.ToString()?.TrimStart(), "LTRIM(str): Removes leading whitespaces.");
-            registry.RegisterWithHelp("RTRIM", (args, ctx) => args[0]?.ToString()?.TrimEnd(), "RTRIM(str): Removes trailing whitespaces.");
-            registry.RegisterWithHelp("REVERSE", (args, ctx) => new string((args[0]?.ToString() ?? "").Reverse().ToArray()), "REVERSE(str): Reverses the characters in the string.");
-            registry.RegisterWithHelp("ABS", (args, ctx) => args[0] == null ? null : Math.Abs(Convert.ToDecimal(args[0])), "ABS(n): Returns the absolute value of a number.");
+            registry.RegisterWithHelp("TRIM", (args, ctx) => args[0] == null ? null : args[0].ToString()?.Trim(), "TRIM(str): Removes leading and trailing whitespaces.");
+            registry.RegisterWithHelp("LTRIM", (args, ctx) => args[0] == null ? null : args[0].ToString()?.TrimStart(), "LTRIM(str): Removes leading whitespaces.");
+            registry.RegisterWithHelp("RTRIM", (args, ctx) => args[0] == null ? null : args[0].ToString()?.TrimEnd(), "RTRIM(str): Removes trailing whitespaces.");
+            registry.RegisterWithHelp("REVERSE", (args, ctx) => args[0] == null ? null : new string((args[0].ToString() ?? "").Reverse().ToArray()), "REVERSE(str): Reverses the characters in the string.");
+            registry.RegisterWithHelp("ABS", (args, ctx) => {
+                if (args[0] == null || args[0] == DBNull.Value) return null;
+                if (!decimal.TryParse(args[0]?.ToString(), out var n)) return null;
+                return Math.Abs(n);
+            }, "ABS(n): Returns the absolute value of a number. Returns NULL on non-numeric input.");
             registry.RegisterWithHelp("ROUND", Round, "ROUND(numeric, decimals): Rounds a numeric value to a specified number of decimal places.");
-            registry.RegisterWithHelp("CEILING", (args, ctx) => args[0] == null ? null : Math.Ceiling(Convert.ToDecimal(args[0])), "CEILING(n): Returns the smallest integer greater than or equal to the number.");
-            registry.RegisterWithHelp("FLOOR", (args, ctx) => args[0] == null ? null : Math.Floor(Convert.ToDecimal(args[0])), "FLOOR(n): Returns the largest integer less than or equal to the number.");
-            registry.RegisterWithHelp("SQRT", (args, ctx) => args[0] == null ? null : (decimal)Math.Sqrt(Convert.ToDouble(args[0])), "SQRT(n): Returns the square root of a number.");
+            registry.RegisterWithHelp("CEILING", (args, ctx) => args[0] == null ? null : (decimal.TryParse(args[0]?.ToString(), out var n) ? Math.Ceiling(n) : null), "CEILING(n): Returns the smallest integer greater than or equal to the number.");
+            registry.RegisterWithHelp("FLOOR", (args, ctx) => args[0] == null ? null : (decimal.TryParse(args[0]?.ToString(), out var n) ? Math.Floor(n) : null), "FLOOR(n): Returns the largest integer less than or equal to the number.");
+            registry.RegisterWithHelp("SQRT", (args, ctx) => {
+                if (args[0] == null) return null;
+                if (!double.TryParse(args[0]?.ToString(), out var d)) return null;
+                if (d < 0) return null; // Defensive return NULL for negative SQRT
+                return (decimal)Math.Sqrt(d);
+            }, "SQRT(n): Returns the square root of a number. Returns NULL for negative inputs.");
             registry.RegisterWithHelp("CONCAT", (args, ctx) => string.Join("", args.Select(a => a?.ToString() ?? "")), "CONCAT(str1, str2, ...): Concatenates multiple strings into one.");
             registry.RegisterWithHelp("SUBSTRING", Substring, "SUBSTRING(str, start, length): Extracts a substring using 1-based indexing.");
             registry.RegisterWithHelp("SUBSTR", Substring, "SUBSTR(str, start[, length]): Extracts a substring (Oracle-style).");
@@ -42,19 +51,25 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("RIGHT", Right, "RIGHT(str, n): Extracts n characters from the right side of the string.");
             registry.RegisterWithHelp("CHARINDEX", CharIndex, "CHARINDEX(sub, str): Returns the 1-based index of a substring within a string.");
             registry.RegisterWithHelp("INSTR", InStr, "INSTR(str, sub): Returns the 1-based index of a substring within a string.");
-            registry.RegisterWithHelp("POWER", (args, ctx) => args.Count >= 2 ? (decimal)Math.Pow(Convert.ToDouble(args[0]), Convert.ToDouble(args[1])) : args.FirstOrDefault(), "POWER(base, exp): Returns the result of a base raised to an exponent.");
+            registry.RegisterWithHelp("POWER", (args, ctx) => {
+                if (args.Count < 2 || args[0] == null || args[1] == null) return null;
+                if (!double.TryParse(args[0]?.ToString(), out var b)) return null;
+                if (!double.TryParse(args[1]?.ToString(), out var p)) return null;
+                if (b == 0 && p < 0) return null; // Defensive return NULL for divide-by-zero
+                return (decimal)Math.Pow(b, p);
+            }, "POWER(base, exp): Returns the result of a base raised to an exponent.");
             registry.RegisterWithHelp("DATENAME", DateName, "DATENAME(datepart, date): Returns a string representing the specified date part (e.g. 'January').");
             registry.RegisterWithHelp("DATEPART", DatePart, "DATEPART(datepart, date): Returns an integer representing the specified date part.");
             registry.RegisterWithHelp("DATEDIFF", DateDiff, "DATEDIFF(datepart, start, end): Returns the count of specified datepart boundaries crossed between two dates.");
-            registry.RegisterWithHelp("ISDATE", (args, ctx) => DateTime.TryParse(args[0]?.ToString(), out _) ? 1 : 0, "ISDATE(expr): Returns 1 if the expression is a valid date, 0 otherwise.");
+            registry.RegisterWithHelp("ISDATE", (args, ctx) => EvaluationUtils.SafeTryParseDate(args[0]?.ToString() ?? "", out _) ? 1 : 0, "ISDATE(expr): Returns 1 if the expression is a valid date, 0 otherwise.");
             registry.RegisterWithHelp("EOMONTH", EoMonth, "EOMONTH(date[, months_to_add]): Returns the last day of the month containing the date.");
             registry.RegisterWithHelp("REPLACE", (args, ctx) => args.Count >= 3 ? args[0]?.ToString()?.Replace(args[1]?.ToString() ?? "", args[2]?.ToString() ?? "") : args[0], "REPLACE(str, old, new): Replaces occurrences of a substring.");
             registry.RegisterWithHelp("INITCAP", (args, ctx) => args[0]?.ToString() == null ? null : System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(args[0]!.ToString()!.ToLower()), "INITCAP(str): Capitalizes the first letter of each word.");
-            registry.RegisterWithHelp("MOD", (args, ctx) => args.Count >= 2 && args[0] != null && args[1] != null ? Convert.ToDecimal(args[0]) % Convert.ToDecimal(args[1]) : args.FirstOrDefault(), "MOD(n, d): Returns the remainder of a division.");
-            registry.RegisterWithHelp("YEAR", (args, ctx) => args[0]?.ToString() == null ? null : (decimal)DateTime.Parse(args[0]!.ToString()!).Year, "YEAR(date): Returns the year part of a date.");
-            registry.RegisterWithHelp("MONTH", (args, ctx) => args[0]?.ToString() == null ? null : (decimal)DateTime.Parse(args[0]!.ToString()!).Month, "MONTH(date): Returns the month part of a date.");
-            registry.RegisterWithHelp("DAY", (args, ctx) => args[0]?.ToString() == null ? null : (decimal)DateTime.Parse(args[0]!.ToString()!).Day, "DAY(date): Returns the day part of a date.");
-            registry.RegisterWithHelp("COALESCE", (args, ctx) => args.FirstOrDefault(a => a != null), "COALESCE(v1, v2, ...): Returns the first non-null value.");
+            registry.RegisterWithHelp("MOD", (args, ctx) => args.Count >= 2 && args[0] != null && args[1] != null ? (decimal.TryParse(args[0]?.ToString(), out var n1) && decimal.TryParse(args[1]?.ToString(), out var n2) && n2 != 0 ? n1 % n2 : null) : null, "MOD(n, d): Returns the remainder of a division.");
+            registry.RegisterWithHelp("YEAR", (args, ctx) => args[0] == null ? null : (EvaluationUtils.SafeTryParseDate(args[0]!.ToString()!, out var dt) ? (decimal)dt.Year : null), "YEAR(date): Returns the year part of a date.");
+            registry.RegisterWithHelp("MONTH", (args, ctx) => args[0] == null ? null : (EvaluationUtils.SafeTryParseDate(args[0]!.ToString()!, out var dt) ? (decimal)dt.Month : null), "MONTH(date): Returns the month part of a date.");
+            registry.RegisterWithHelp("DAY", (args, ctx) => args[0] == null ? null : (EvaluationUtils.SafeTryParseDate(args[0]!.ToString()!, out var dt) ? (decimal)dt.Day : null), "DAY(date): Returns the day part of a date.");
+            registry.RegisterWithHelp("COALESCE", (args, ctx) => args.FirstOrDefault(a => a != null && a != DBNull.Value), "COALESCE(v1, v2, ...): Returns the first non-null value.");
             registry.RegisterWithHelp("ISNULL", IsNull, "ISNULL(v1, v2): Returns v2 if v1 is null.");
             registry.RegisterWithHelp("NVL", IsNull, "NVL(v1, v2): Alias for ISNULL.");
             registry.RegisterWithHelp("NULLIF", (args, ctx) => EvaluationUtils.IsSoftEqual(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1)) ? null : args.ElementAtOrDefault(0), "NULLIF(v1, v2): Returns NULL if v1 equals v2, else v1.");
@@ -66,8 +81,8 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("IS_NOT_NULL", (args, ctx) => args[0] != null && args[0] != DBNull.Value, "IS_NOT_NULL(expr): Returns TRUE if the expression is NOT null.");
             registry.RegisterWithHelp("IIF", (args, ctx) => args.Count >= 3 ? (Convert.ToBoolean(args[0]) ? args[1] : args[2]) : args.FirstOrDefault(), "IIF(cond, true_val, false_val): Returns one of two values depending on a condition.");
             registry.RegisterWithHelp("IFNULL", IsNull, "IFNULL(v1, v2): Alias for ISNULL.");
-            registry.RegisterWithHelp("GREATEST", (args, ctx) => args.Where(a => a != null).OrderByDescending(a => a).FirstOrDefault(), "GREATEST(v1, v2, ...): Returns the largest value in the list.");
-            registry.RegisterWithHelp("LEAST", (args, ctx) => args.Where(a => a != null).OrderBy(a => a).FirstOrDefault(), "LEAST(v1, v2, ...): Returns the smallest value in the list.");
+            registry.RegisterWithHelp("GREATEST", (args, ctx) => args.Where(a => a != null && a != DBNull.Value).OrderByDescending(a => a).FirstOrDefault(), "GREATEST(v1, v2, ...): Returns the largest value in the list.");
+            registry.RegisterWithHelp("LEAST", (args, ctx) => args.Where(a => a != null && a != DBNull.Value).OrderBy(a => a).FirstOrDefault(), "LEAST(v1, v2, ...): Returns the smallest value in the list.");
             registry.RegisterWithHelp("GENERATE_SERIES", GenerateSeries, "GENERATE_SERIES(start, stop[, step]): Generates a series of numbers.");
             registry.RegisterWithHelp("FILE_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.File.Exists(ctx.ResolvePath(args[0]?.ToString() ?? "")) : false, "FILE_EXISTS(path): Returns TRUE if the file exists.");
             registry.RegisterWithHelp("DIRECTORY_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.Directory.Exists(ctx.ResolvePath(args[0]?.ToString() ?? "")) : false, "DIRECTORY_EXISTS(path): Returns TRUE if the directory exists.");
@@ -135,7 +150,8 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Calculates the length of a string or collection.</summary>
         private static object? Len(List<object?> args, IExecutionContext ctx)
         {
-            return args[0] is System.Collections.ICollection coll ? (decimal)coll.Count : (args[0] == null ? 0m : (decimal)(args[0]?.ToString()?.Length ?? 0));
+            if (args[0] == null || args[0] == DBNull.Value) return null;
+            return args[0] is System.Collections.ICollection coll ? (decimal)coll.Count : (decimal)(args[0].ToString()?.Length ?? 0);
         }
 
         /// <summary>Adds an item to a list.</summary>
@@ -156,10 +172,13 @@ namespace ETL_SQL.Engine.Functions
             return args.Count >= 1 && args[0] is List<object?> sl ? sl.OrderBy(x => x).ToList() : args.FirstOrDefault();
         }
 
-        /// <summary>Rounds a numeric value to a specified number of decimal places.</summary>
+        /// <summary>Rounds a numeric value to a specified number decimal places.</summary>
         private static object? Round(List<object?> args, IExecutionContext ctx)
         {
-            return args.Count >= 2 ? Math.Round(Convert.ToDecimal(args[0]), Convert.ToInt32(args[1])) : (args.Count == 1 ? Math.Round(Convert.ToDecimal(args[0])) : null);
+            if (args.Count < 1 || args[0] == null) return null;
+            if (!decimal.TryParse(args[0]?.ToString(), out var n)) return null;
+            int decimals = args.Count >= 2 && int.TryParse(args[1]?.ToString(), out var d) ? d : 0;
+            return Math.Round(n, decimals);
         }
 
         /// <summary>Extracts a substring from a given string based on a 1-based start index and length.</summary>
@@ -171,19 +190,19 @@ namespace ETL_SQL.Engine.Functions
             int start = Convert.ToInt32(args[1]);
             int? len = args.Count >= 3 ? Convert.ToInt32(args[2]) : null;
 
-            // Simple heuristic to detect if we called it as SUBSTR (1-based, potential negative start)
-            // Note: ExpressionEvaluator had some 'fn' checks here, but we can't easily see 'fn' unless we pass it.
-            // Let's assume SUBSTRING/SUBSTR both follow SQL convention (1-based).
-            
-            int csharpStart = start - 1;
-            if (csharpStart < 0) csharpStart = 0; // Negative handling usually specific to SUBSTR in some dialects
-            
-            int csharpLen = len ?? (s.Length - csharpStart);
+            if (len != null && len <= 0) return "";
 
-            if (csharpStart >= s.Length || csharpLen <= 0) return "";
-            if (csharpStart + csharpLen > s.Length) csharpLen = s.Length - csharpStart;
-
-            return s.Substring(csharpStart, csharpLen);
+            ctx.Logger.Error($"[SUBSTRING] start={start}, len={len}");
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < s.Length; i++)
+            {
+                int pos = i + 1;
+                if (pos >= start && (len == null || pos < start + len))
+                {
+                    sb.Append(s[i]);
+                }
+            }
+            return sb.ToString();
         }
 
         /// <summary>Extracts a specified number of characters from the left side of a string.</summary>
@@ -254,17 +273,20 @@ namespace ETL_SQL.Engine.Functions
         {
             if (args.Count < 3 || args[1] == null || args[2] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
-            if (!DateTime.TryParse(args[1]?.ToString(), out var dt1)) throw new ExecutionException($"Invalid start date format for DATEDIFF: {args[1]}");
-            if (!DateTime.TryParse(args[2]?.ToString(), out var dt2)) throw new ExecutionException($"Invalid end date format for DATEDIFF: {args[2]}");
+            if (!EvaluationUtils.SafeTryParseDate(args[1]?.ToString() ?? "", out var dt1)) return null;
+            if (!EvaluationUtils.SafeTryParseDate(args[2]?.ToString() ?? "", out var dt2)) return null;
+            
             var diff = dt2 - dt1;
             return part switch {
                 "YEAR" or "YY" or "YYYY" => (decimal)(dt2.Year - dt1.Year),
                 "QUARTER" or "QQ" or "Q" => (decimal)((dt2.Year - dt1.Year) * 4 + ((dt2.Month - 1) / 3) - ((dt1.Month - 1) / 3)),
                 "MONTH" or "MM" or "M" => (decimal)((dt2.Year - dt1.Year) * 12 + dt2.Month - dt1.Month),
-                "DAY" or "DD" or "D" => (decimal)diff.TotalDays,
-                "HOUR" or "HH" => (decimal)diff.TotalHours,
-                "MINUTE" or "MI" or "N" => (decimal)diff.TotalMinutes,
-                "SECOND" or "SS" or "S" => (decimal)diff.TotalSeconds,
+                "WEEK" or "WK" or "WW" => (decimal)Math.Truncate((dt2.Date - dt1.Date).TotalDays / 7),
+                "DAY" or "DD" or "D" => (decimal)(dt2.Date - dt1.Date).TotalDays,
+                "HOUR" or "HH" => (decimal)Math.Truncate(diff.TotalHours),
+                "MINUTE" or "MI" or "N" => (decimal)Math.Truncate(diff.TotalMinutes),
+                "SECOND" or "SS" or "S" => (decimal)Math.Truncate(diff.TotalSeconds),
+                "MILLISECOND" or "MS" => (decimal)Math.Truncate(diff.TotalMilliseconds),
                 _ => (decimal)0
             };
         }
@@ -273,15 +295,19 @@ namespace ETL_SQL.Engine.Functions
         private static object? EoMonth(List<object?> args, IExecutionContext ctx)
         {
             if (args[0] == null) return null;
-            if (!DateTime.TryParse(args[0]?.ToString(), out var dt)) throw new ExecutionException($"Invalid date format for EOMONTH: {args[0]}");
-            var firstOfNextMonth = new DateTime(dt.Year, dt.Month, 1).AddMonths(1);
+            if (!EvaluationUtils.SafeTryParseDate(args[0]?.ToString() ?? "", out var dt)) return null;
+            var monthsToAdd = args.Count >= 2 && int.TryParse(args[1]?.ToString(), out var m) ? m : 0;
+            var target = dt.AddMonths(monthsToAdd);
+            var firstOfNextMonth = new DateTime(target.Year, target.Month, 1).AddMonths(1);
             return firstOfNextMonth.AddDays(-1);
         }
 
         /// <summary>Returns the second argument if the first is null (COALESCE/ISNULL style).</summary>
         private static object? IsNull(List<object?> args, IExecutionContext ctx)
         {
-            return args.Count >= 2 ? (args[0] ?? args[1]) : args.FirstOrDefault();
+            if (args.Count < 2) return args.FirstOrDefault();
+            var first = args[0];
+            return (first == null || first == DBNull.Value) ? args[1] : first;
         }
 
         /// <summary>Returns the number of elements in a collection or 1 if it's a non-null scalar.</summary>
@@ -486,9 +512,9 @@ namespace ETL_SQL.Engine.Functions
         {
             if (args.Count < 3 || args[2] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
-            double val = Convert.ToDouble(args[1]);
-            if (!DateTime.TryParse(args[2]?.ToString(), out var dt)) throw new ExecutionException($"Invalid date format for DATEADD: {args[2]}");
-
+            if (!double.TryParse(args[1]?.ToString(), out var val)) return null;
+            if (!EvaluationUtils.SafeTryParseDate(args[2]?.ToString() ?? "", out var dt)) return null;
+            
             return part switch {
                 "YEAR" or "YY" or "YYYY" => dt.AddYears((int)val),
                 "QUARTER" or "QQ" or "Q" => dt.AddMonths((int)val * 3),
