@@ -31,12 +31,21 @@ namespace ETL_SQL.Engine.Handlers
             var evaluator = (IEvaluationContext)context;
 
             object? val = null;
-            if (stmt.InitialValue != null)
+            bool hasInjectedValue = variables.CurrentVariables.TryGetValue(stmt.VariableName, out var existing) &&
+                                    existing != null &&
+                                    (!variables.CurrentMetadata.TryGetValue(stmt.VariableName, out var meta) || !meta.IsDeclared);
+
+            if (hasInjectedValue)
+            {
+                // Prioritize value injected by CLI or host
+                val = evaluator.CastToType(existing, stmt.DataType);
+            }
+            else if (stmt.InitialValue != null)
             {
                 val = await evaluator.EvaluateValue(stmt.InitialValue, new Row());
                 val = evaluator.CastToType(val, stmt.DataType);
             }
-            else if ((stmt.IsInput || stmt.IsOutput || stmt.IsSensitive) && variables.CurrentVariables.TryGetValue(stmt.VariableName, out var existing))
+            else if ((stmt.IsInput || stmt.IsOutput || stmt.IsSensitive) && variables.CurrentVariables.TryGetValue(stmt.VariableName, out existing))
             {
                 // Preserve value passed from RUN SCRIPT or EXECUTE
                 val = existing;

@@ -37,8 +37,9 @@ namespace ETL_SQL.ReportBuilder
             {
                 var vm = new VisualManifest
                 {
-                    Name       = name,
-                    VisualType = vStmt.VisualType.ToString()
+                    Name         = name,
+                    VisualType   = vStmt.VisualType.ToString(),
+                    DefaultValue = vStmt.DefaultValue
                 };
 
                 // Copy flat options
@@ -52,6 +53,17 @@ namespace ETL_SQL.ReportBuilder
                 // Typed series (COMBO)
                 if (vStmt.TypedSeries.Count > 0)
                     vm.SeriesDefs = vStmt.TypedSeries.Select(ts => new SeriesDefManifest { SeriesType = ts.SeriesType, Column = ts.Column }).ToList();
+
+                // Overlay definitions
+                if (vStmt.Overlays.Count > 0)
+                    vm.Overlays = vStmt.Overlays.Select(o => new OverlayManifest
+                    {
+                        OverlayType = o.OverlayType.ToString(),
+                        Parameter   = o.Parameter,
+                        LineStyle   = o.LineStyle.ToString().ToLowerInvariant(),
+                        Color       = o.Color,
+                        Label       = o.Label
+                    }).ToList();
 
                 // Conditional formatting rules (TABLE)
                 if (vStmt.FormattingRules.Count > 0)

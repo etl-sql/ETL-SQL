@@ -495,6 +495,12 @@ namespace ETL_SQL.Data
                 {
                     foreach (var row in b.Rows) await ValidateRow(row);
                     
+                    long totalInMemRows = _batches.Sum(batch => (long)batch.Rows.Count);
+                    if (totalInMemRows > 1000000 && totalInMemRows % 1000000 < b.Rows.Count)
+                    {
+                        ExecutionContext?.Logger.WriteLine($"[yellow]Warning: Large in-memory temp table detected ({totalInMemRows:N0} rows). Consider using pushdown or filters.[/]");
+                    }
+
                     if (_batches.Count >= MaxInMemoryBatches && OverflowDirectory != null)
                     {
                         var oldest = _batches[0];

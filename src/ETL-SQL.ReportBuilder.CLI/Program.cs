@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
@@ -37,6 +38,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             string? scriptPath = null;
             string? outputPath = null;
             string  format     = "md";
+            var     parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             for (int i = 1; i < args.Length; i++)
             {
@@ -48,6 +50,13 @@ namespace ETL_SQL.ReportBuilder.CLI
                     case "--format": case "-f":
                         format = i + 1 < args.Length ? args[++i].ToLowerInvariant() : "md";
                         break;
+                    case "--parameter": case "-p":
+                        if (i + 1 < args.Length)
+                        {
+                            var pair = args[++i].Split('=', 2);
+                            parameters[pair[0]] = pair.Length > 1 ? pair[1] : string.Empty;
+                        }
+                        break;
                     default:
                         if (!args[i].StartsWith("-")) scriptPath = args[i];
                         break;
@@ -57,7 +66,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             if (scriptPath == null) { Console.Error.WriteLine("error: no script path specified."); PrintUsage(); return 1; }
             if (!File.Exists(scriptPath)) { Console.Error.WriteLine($"error: script file not found: {scriptPath}"); return 1; }
 
-            var (evaluator, err) = await EvaluateScriptFile(scriptPath);
+            var (evaluator, err) = await EvaluateScriptFile(scriptPath, parameters);
             if (evaluator == null) { Console.Error.WriteLine($"error: {err}"); return 2; }
 
             var builder  = new ManifestBuilder(evaluator);
@@ -102,7 +111,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             if (scriptPath == null) { Console.Error.WriteLine("error: no script path specified."); PrintUsage(); return 1; }
             if (!File.Exists(scriptPath)) { Console.Error.WriteLine($"error: script file not found: {scriptPath}"); return 1; }
 
-            var (evaluator, err) = await EvaluateScriptFile(scriptPath);
+            var (evaluator, err) = await EvaluateScriptFile(scriptPath, null);
             if (evaluator == null) { Console.Error.WriteLine($"error: {err}"); return 2; }
 
             var manifest     = await new ManifestBuilder(evaluator).BuildAsync(scriptPath);
@@ -121,7 +130,7 @@ namespace ETL_SQL.ReportBuilder.CLI
         /// Returns the evaluator (with populated VisualDefinitions etc.) on success,
         /// or (null, error-message) on failure.
         /// </summary>
-        private static async Task<(Evaluator? evaluator, string? error)> EvaluateScriptFile(string scriptPath)
+        private static async Task<(Evaluator? evaluator, string? error)> EvaluateScriptFile(string scriptPath, Dictionary<string, string>? parameters = null)
         {
             string scriptText;
             try { scriptText = await File.ReadAllTextAsync(scriptPath); }
@@ -135,6 +144,16 @@ namespace ETL_SQL.ReportBuilder.CLI
             var provider  = DependencyInjectionSetup.BuildServiceProvider();
             var evaluator = provider.GetRequiredService<Evaluator>();
             evaluator.RedirectOutput = true;
+
+            // Inject parameters before evaluation
+            if (parameters != null)
+            {
+                foreach (var kv in parameters)
+                {
+                    string name = kv.Key.StartsWith("@") ? kv.Key : "@" + kv.Key;
+                    evaluator.DeclareVariable(name, kv.Value);
+                }
+            }
 
             try
             {
@@ -267,15 +286,16 @@ namespace ETL_SQL.ReportBuilder.CLI
             Console.WriteLine("etl-sql-report — Report-SQL build tool");
             Console.WriteLine();
             Console.WriteLine("Usage:");
-            Console.WriteLine("  etl-sql-report build   <script.rptsql> [--output <file>] [--format md|json|pdf]");
+            Console.WriteLine("  etl-sql-report build   <script.rptsql> [--output <file>] [--format md|json|pdf] [--parameter @p=v]");
             Console.WriteLine("  etl-sql-report refresh <script.rptsql>");
             Console.WriteLine("  etl-sql-report serve   <script.rptsql>");
             Console.WriteLine("  etl-sql-report serve   --manifest reports.json");
             Console.WriteLine();
             Console.WriteLine("Options:");
-            Console.WriteLine("  --output, -o     Output file path (defaults to <script>.report.md|json|pdf).");
-            Console.WriteLine("  --format, -f     Output format: md (default), json, or pdf.");
-            Console.WriteLine("  --manifest, -m   Path to reports.json for multi-report hosting.");
+            Console.WriteLine("  --output, -o      Output file path (defaults to <script>.report.md|json|pdf).");
+            Console.WriteLine("  --format, -f      Output format: md (default), json, or pdf.");
+            Console.WriteLine("  --parameter, -p   Pass a variable to the script (e.g. -p @region=West).");
+            Console.WriteLine("  --manifest, -m    Path to reports.json for multi-report hosting.");
         }
     }
 }

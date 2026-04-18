@@ -21,8 +21,7 @@ namespace ETL_SQL.Engine.Engines
         private readonly WindowEngine _inMemoryEngine;
         private readonly ExternalSortEngine _sortEngine;
         private readonly ILogger _logger;
-        private readonly string _tempDir;
-        private int PartitionCount => _context.ExternalHashPartitions;
+        public int PartitionCount => _context.ExternalHashPartitions;
 
         public ExternalWindowEngine(IExecutionContext context, WindowEngine inMemoryEngine, ILogger logger)
         {
@@ -30,8 +29,6 @@ namespace ETL_SQL.Engine.Engines
             _inMemoryEngine = inMemoryEngine;
             _sortEngine = new ExternalSortEngine(context, logger);
             _logger = logger;
-            _tempDir = Path.Combine(Path.GetTempPath(), "ETL-SQL", "WinSpill", Guid.NewGuid().ToString());
-            Directory.CreateDirectory(_tempDir);
         }
 
         private record WindowSignature(List<Expression>? PartitionBy, List<OrderByClause>? OrderBy)
@@ -92,33 +89,27 @@ namespace ETL_SQL.Engine.Engines
 
             _logger.WriteLine($"[yellow]HYPER-SCALE: Processing {windowCols.Count} window functions across {groups.Count} signature groups.[/]");
 
-            try
+            IAsyncEnumerable<Row> currentStream = inputStream;
+
+            for (int i = 0; i < groups.Count; i++)
             {
-                IAsyncEnumerable<Row> currentStream = inputStream;
+                var group = groups[i];
+                bool isLastGroup = (i == groups.Count - 1);
 
-                for (int i = 0; i < groups.Count; i++)
+                currentStream = ProcessWindowGroup(currentStream, group, stmt);
+
+                if (!isLastGroup)
                 {
-                    var group = groups[i];
-                    bool isLastGroup = (i == groups.Count - 1);
-
-                    currentStream = ProcessWindowGroup(currentStream, group, stmt);
-
-                    if (!isLastGroup)
-                    {
-                        var intermediatePath = Path.Combine(_tempDir, $"inter_pass_{i}.tmp");
-                        await SpillStreamToDisk(currentStream, intermediatePath);
-                        currentStream = ReadPartitionStream(intermediatePath);
-                    }
-                }
-
-                await foreach (var row in currentStream)
-                {
-                    yield return row;
+                    var prefix = Guid.NewGuid().ToString("N");
+                    var intermediateName = $"inter_pass_{prefix}_{i}.tmp";
+                    await SpillStreamToDisk(currentStream, intermediateName);
+                    currentStream = ReadPartitionStream(intermediateName);
                 }
             }
-            finally
+
+            await foreach (var row in currentStream)
             {
-                CleanupTempDir();
+                yield return row;
             }
         }
 
@@ -130,40 +121,30 @@ namespace ETL_SQL.Engine.Engines
 
             foreach (var info in partitionInfos)
             {
-                if (!File.Exists(info.Path)) continue;
-
                 bool useDeepSpill = info.RowCount > _context.WindowSpillThreshold;
                 
                 if (useDeepSpill && IsDeepSpillCompatible(group))
                 {
                     _logger.WriteLine($"[magenta]     * DEEP-SPILL: Partition has {info.RowCount:N0} rows (threshold: {_context.WindowSpillThreshold:N0}). Processing via streaming.[/]");
-                    await foreach (var row in ProcessBucketDeepSpill(info.Path, group, stmt))
+                    await foreach (var row in ProcessBucketDeepSpill(info.Name, group, stmt))
                     {
                         yield return row;
                     }
                 }
                 else
                 {
-                    var bucketRows = ReadPartitionStream(info.Path);
-                    if (group.Signature.OrderBy != null && group.Signature.OrderBy.Count > 0)
-                    {
-                        bucketRows = _sortEngine.SortStreamAsync(bucketRows, group.Signature.OrderBy);
-                    }
-
-                    var rows = await bucketRows.ToListAsync();
-                    if (rows.Count > 0)
+                    var bucketRows = await ReadPartitionStream(info.Name).ToListAsync();
+                    if (bucketRows.Count > 0)
                     {
                         var groupStmt = new SelectStatement(group.Columns, null, stmt.FromTable, new List<JoinClause>(), null, null, null, group.Signature.OrderBy);
-                        var processedRows = await _inMemoryEngine.ApplyWindowFunctions(rows, groupStmt);
+                        var processedRows = await _inMemoryEngine.ApplyWindowFunctions(bucketRows, groupStmt);
                         foreach (var row in processedRows) yield return row;
                     }
                 }
-
-                File.Delete(info.Path);
             }
         }
 
-        private record PartitionInfo(string Path, long RowCount);
+        private record PartitionInfo(string Name, long RowCount);
 
         private bool IsDeepSpillCompatible(WindowGroup group)
         {
@@ -172,9 +153,9 @@ namespace ETL_SQL.Engine.Engines
                 new[] { "ROW_NUMBER", "RANK", "DENSE_RANK" }.Contains(f.FunctionName.ToUpperInvariant()));
         }
 
-        private async IAsyncEnumerable<Row> ProcessBucketDeepSpill(string path, WindowGroup group, SelectStatement stmt)
+        private async IAsyncEnumerable<Row> ProcessBucketDeepSpill(string name, WindowGroup group, SelectStatement stmt)
         {
-            var bucketRows = ReadPartitionStream(path);
+            var bucketRows = ReadPartitionStream(name);
             
             var sortCriteria = new List<OrderByClause>();
             if (group.Signature.PartitionBy != null)
@@ -260,8 +241,8 @@ namespace ETL_SQL.Engine.Engines
                 foreach (var col in group.Columns)
                 {
                     var f = (FunctionCallExpression)col.Expression;
-                    var name = f.FunctionName.ToUpperInvariant();
-                    object? winVal = name switch
+                    var name_func = f.FunctionName.ToUpperInvariant();
+                    object? winVal = name_func switch
                     {
                         "ROW_NUMBER" => (decimal)rowNumber,
                         "RANK" => (decimal)currentRank,
@@ -280,14 +261,14 @@ namespace ETL_SQL.Engine.Engines
 
         private async Task<PartitionInfo[]> PartitionStream(IAsyncEnumerable<Row> stream, List<Expression>? partitionBy)
         {
-            var paths = new string[PartitionCount];
+            var names = new string[PartitionCount];
             var counts = new long[PartitionCount];
-            var writers = new StreamWriter[PartitionCount];
+            var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
 
             for (int i = 0; i < PartitionCount; i++)
             {
-                paths[i] = Path.Combine(_tempDir, $"win_part_{Guid.NewGuid():N}.tmp");
-                writers[i] = new StreamWriter(paths[i]);
+                names[i] = $"win_part_{Guid.NewGuid():N}.tmp";
+                writers[i] = await _context.SpillStore.CreateWriterAsync(names[i]);
             }
 
             try
@@ -306,9 +287,7 @@ namespace ETL_SQL.Engine.Engines
                         pIdx = Math.Abs(hash % PartitionCount);
                     }
 
-                    var json = JsonSerializer.Serialize(row.Columns);
-                    _context.TotalSpilledBytes += System.Text.Encoding.UTF8.GetByteCount(json) + 1;
-                    await writers[pIdx].WriteLineAsync(json);
+                    await writers[pIdx].WriteRowAsync(row);
                     counts[pIdx]++;
                 }
             }
@@ -317,39 +296,38 @@ namespace ETL_SQL.Engine.Engines
                 int usedCount = 0;
                 foreach (var w in writers)
                 {
-                    if (w.BaseStream.Length > 0) usedCount++;
-                    w.Flush();
-                    w.Dispose();
+                    if (w != null)
+                    {
+                        usedCount++;
+                        await w.DisposeAsync();
+                    }
                 }
                 _context.PartitionsCount += usedCount;
             }
 
-            return paths.Select((p, i) => new PartitionInfo(p, counts[i])).ToArray();
+            return names.Select((p, i) => new PartitionInfo(p, counts[i])).ToArray();
         }
 
-        private async Task SpillStreamToDisk(IAsyncEnumerable<Row> stream, string path)
+        private async Task SpillStreamToDisk(IAsyncEnumerable<Row> stream, string name)
         {
-            using var writer = new StreamWriter(path);
+            await using var writer = await _context.SpillStore.CreateWriterAsync(name);
             await foreach (var row in stream)
             {
-                var json = JsonSerializer.Serialize(row.Columns);
-                await writer.WriteLineAsync(json);
+                await writer.WriteRowAsync(row);
             }
         }
 
-        private async IAsyncEnumerable<Row> ReadPartitionStream(string path)
+        private async IAsyncEnumerable<Row> ReadPartitionStream(string name)
         {
-            using var reader = new StreamReader(path);
-            string? line;
-            while ((line = await reader.ReadLineAsync()) != null)
+            await using var reader = await _context.SpillStore.CreateReaderAsync(name);
+            await foreach (var row in reader.AsEnumerableAsync())
             {
-                var cols = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(line);
-                if (cols != null)
+                var unwrapped = new Row();
+                foreach (var kvp in row.Columns)
                 {
-                    var row = new Row();
-                    foreach (var kvp in cols) row[kvp.Key] = JsonElementToValue(kvp.Value);
-                    yield return row;
+                    unwrapped[kvp.Key] = kvp.Value is JsonElement je ? JsonElementToValue(je) : kvp.Value;
                 }
+                yield return unwrapped;
             }
         }
 
@@ -364,10 +342,5 @@ namespace ETL_SQL.Engine.Engines
                 _ => element.GetRawText()
             };
 
-        private void CleanupTempDir()
-        {
-            if (Directory.Exists(_tempDir))
-                try { Directory.Delete(_tempDir, true); } catch { }
-        }
     }
 }

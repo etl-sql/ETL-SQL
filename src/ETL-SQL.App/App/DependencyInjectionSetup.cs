@@ -157,6 +157,8 @@ namespace ETL_SQL.App
             int maxRecursiveDepth = int.TryParse(configuration["Engine:MaxRecursiveDepth"], out var mrd2) ? mrd2 : 10000;
             int externalSortChunkSize = int.TryParse(configuration["Engine:ExternalSort:ChunkSize"], out var esc) ? esc : 100000;
             int windowSpillThreshold = int.TryParse(configuration["Engine:WindowSpillThreshold"], out var wst) ? wst : 100000;
+            bool spillEncryptionEnabled = !bool.TryParse(configuration["Security:SpillEncryptionEnabled"], out var see) || see;
+            bool spillCompressionEnabled = !bool.TryParse(configuration["Security:SpillCompressionEnabled"], out var sce) || sce;
 
             services.AddTransient<Evaluator>(sp => {
                 var evaluator = ActivatorUtilities.CreateInstance<Evaluator>(sp);
@@ -168,6 +170,8 @@ namespace ETL_SQL.App
                 evaluator.MaxRecursiveDepth = maxRecursiveDepth;
                 evaluator.ExternalSortChunkSize = externalSortChunkSize;
                 evaluator.WindowSpillThreshold = windowSpillThreshold;
+                evaluator.SpillEncryptionEnabled = spillEncryptionEnabled;
+                evaluator.SpillCompressionEnabled = spillCompressionEnabled;
                 return evaluator;
             });
 

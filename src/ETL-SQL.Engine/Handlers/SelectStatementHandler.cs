@@ -293,7 +293,7 @@ namespace ETL_SQL.Engine.Handlers
             // 4. Strategy Selection
             bool hasAgg = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || stmt.GroupBy != null;
             bool hasWindow = stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression));
-            bool isComplex = hasAgg || hasWindow || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null || stmt.Offset != null;
+            bool isComplex = hasAgg || hasWindow || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null || stmt.Offset != null || stmt.IsDistinct;
 
             if (!isComplex)
             {
@@ -333,6 +333,7 @@ namespace ETL_SQL.Engine.Handlers
             var resultBatch = new DataTable();
             resultBatch.SetColumns(colNames);
 
+            bool yielded = false;
             await foreach (var batch in batches)
             {
                 foreach (var row in batch.Rows)
@@ -347,12 +348,13 @@ namespace ETL_SQL.Engine.Handlers
                     if (resultBatch.Rows.Count >= context.BatchSize)
                     {
                         yield return resultBatch;
+                        yielded = true;
                         resultBatch = new DataTable();
                         resultBatch.SetColumns(colNames);
                     }
                 }
             }
-            if (resultBatch.Rows.Count > 0) yield return resultBatch;
+            if (resultBatch.Rows.Count > 0 || !yielded) yield return resultBatch;
         }
 
         private async IAsyncEnumerable<DataTable> ReplayBatches(DataTable? first, IAsyncEnumerator<DataTable> e)

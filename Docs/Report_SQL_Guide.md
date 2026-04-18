@@ -38,16 +38,29 @@ Report-SQL extends ETL-SQL with dedicated statement types for building interacti
                   └───────────────────────┘           └──────────────────────┘
 ```
 
-A `.rptsql` file is a normal ETL-SQL script that may also contain Report-SQL statements. The engine evaluates it exactly like any `.etlsql` file; the new statements register definitions in the execution context. After evaluation the `ManifestBuilder` snapshots the data and produces a `ReportManifest` — a serialisable JSON structure consumed by both the static Markdown renderer and the live web dashboard.
+A `.rptsql` file is a normal ETL-SQL script that may also contain Report-SQL statements. The engine evaluates it exactly like any `.etlsql` file; the new statements register definitions in the execution context. After evaluation the `ManifestBuilder` snapshots the data and produces a `ReportManifest` — a serializable JSON structure consumed by both the static Markdown renderer and the live web dashboard.
 
-### The `@@DATASET` System Variable
+### Data Sources for Visuals
 
-Report-SQL provides the `@@DATASET` system variable which can be used to manually pass data to visuals or capture the result of a `CREATE DATASET` operation. It is treated as a `LIST` of rows:
+The recommended way to supply data to a visual is a named temp table populated with a `SELECT INTO` or inline `UNION ALL`:
 
 ```sql
-DECLARE @@DATASET = (('Product A', 100), ('Product B', 250));
-CREATE VISUAL ManualCard AS CARD (SOURCE = @@DATASET, MAPPINGS(VALUE = Col1, LABEL = Col0));
+SELECT 'Product A' AS Label, 100 AS Value INTO #kpi
+UNION ALL
+SELECT 'Product B', 250;
+
+CREATE VISUAL KpiCard AS CARD (SOURCE = #kpi, MAPPINGS(VALUE = Value, LABEL = Label));
 ```
+
+Temp tables are reusable across multiple visuals, debuggable with a plain `SELECT`, and consistent with the rest of ETL-SQL.
+
+> **Legacy shorthand — `@@DATASET`**: An older `@@DATASET` system variable exists and remains supported. Avoid it in new reports; prefer named temp tables instead.
+>
+> ```sql
+> -- Legacy (not recommended):
+> DECLARE @@DATASET = (('Product A', 100), ('Product B', 250));
+> CREATE VISUAL ManualCard AS CARD (SOURCE = @@DATASET, MAPPINGS(VALUE = Col1, LABEL = Col0));
+> ```
 
 ---
 
@@ -67,8 +80,8 @@ CREATE VISUAL SalesChart AS BAR (
   SOURCE = #summary,
   MAPPINGS (X = region, Y = revenue),
   OPTIONS (
-    X_AXIS (label = 'Region'),
-    Y_AXIS (label = 'Revenue ($)')
+    X_AXIS (LABEL = 'Region'),
+    Y_AXIS (LABEL = 'Revenue ($)')
   )
 );
 
@@ -129,7 +142,7 @@ All clauses inside the outer `( )` are separated by commas. The closing `)` ends
 | `PIE` | Pie chart. One slice per row. | ECharts |
 | `DONUT` | Donut chart. Same mappings as PIE; center hole rendered. | ECharts |
 | `COMBO` | Combined bar + line chart. Use `SERIES (BAR col, LINE col)` to assign series types. | ECharts |
-| `BOXPLOT` | Box-and-whisker plot for distribution visualisation. | ECharts |
+| `BOXPLOT` | Box-and-whisker plot for distribution visualization. | ECharts |
 | `TREEMAP` | Hierarchical area chart. One rectangle per row, sized by value. | ECharts |
 | `HEATMAP` | Grid heatmap. Requires X, Y, and VALUE mappings. | ECharts |
 | `GAUGE` | Radial KPI gauge. Single VALUE from first data row against a min/max arc. | ECharts |
@@ -232,11 +245,14 @@ SLICER uses `SOURCE` to provide option rows and `ACTIONS` to bind the selection 
 
 ```sql
 CREATE VISUAL RegionFilter AS SLICER (
-  SOURCE = (SELECT DISTINCT region FROM #summary ORDER BY region),
+  SOURCE  = (SELECT DISTINCT region FROM #summary ORDER BY region),
   MAPPINGS (VALUE = region),
-  ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region))
+  ACTIONS  (ON_CHANGE = SET_PARAMETER(@region, region)),
+  DEFAULT  = 'All'
 );
 ```
+
+The `DEFAULT` option on a SLICER pre-selects that value in the dropdown on load. It is cosmetic only — it does not declare the page parameter. The corresponding `WITH PARAMETERS (@region = 'All')` on the `CREATE PAGE` statement is what makes `@region` available to visual queries from the first render.
 
 #### MULTISELECT
 
@@ -346,30 +362,28 @@ General key/value options plus optional axis sub-blocks. All are optional:
 ```sql
 OPTIONS (
   -- flat options:
-  title   = 'Revenue Over Time',
-  stacked = true,
-  smooth  = true,
-  FORMAT  = 'N0',
+  TITLE           = 'Revenue Over Time',
+  STACKED         = ON,
+  SMOOTH          = ON,
+  FORMAT          = 'N0',
+  LEGEND_POSITION = BOTTOM,   -- TOP | BOTTOM | LEFT | RIGHT
 
   -- axis sub-blocks (BAR, HBAR, LINE, SCATTER only):
   X_AXIS (
-    label  = 'Month',
-    min    = 0,
-    max    = 100
+    LABEL = 'Month',
+    MIN   = 0,
+    MAX   = 100
   ),
   Y_AXIS (
-    label  = 'Revenue ($)',
-    min    = 0
+    LABEL = 'Revenue ($)',
+    MIN   = 0
   ),
 
   -- color map (any chart type):
   COLORS (
     'North' = '#4e79a7',
     'South' = '#f28e2b'
-  ),
-
-  -- legend position (any chart type):
-  LEGEND (position = bottom)
+  )
 )
 ```
 
@@ -377,18 +391,19 @@ OPTIONS (
 
 | Key | Applies to | Values | Description |
 |-----|------------|--------|-------------|
-| `title` | All chart types | Any string | Chart title. Defaults to the visual name. Prefer the top-level `TITLE` clause. |
-| `stacked` | BAR, HBAR, LINE | `true` / `false` | Stack series on top of each other. |
-| `smooth` | LINE | `true` / `false` | Smooth curves via bezier interpolation. |
+| `TITLE` | All chart types | Any string | Chart title. Defaults to the visual name. Prefer the top-level `TITLE` clause. |
+| `STACKED` | BAR, HBAR, LINE | `ON` / `OFF` | Stack series on top of each other. Default `OFF`. |
+| `SMOOTH` | LINE | `ON` / `OFF` | Smooth curves via bezier interpolation. Default `OFF`. |
 | `FORMAT` | CARD | .NET format string | Applies a numeric format to the VALUE column (e.g. `N0`, `C2`, `P1`). |
+| `LEGEND_POSITION` | All chart types | `TOP` / `BOTTOM` / `LEFT` / `RIGHT` | Legend placement. Default `BOTTOM`. |
 
 #### X_AXIS / Y_AXIS sub-block options
 
 | Key | Values | Description |
 |-----|--------|-------------|
-| `label` | Any string | Human-readable axis label. |
-| `min` | Numeric | Force axis minimum. |
-| `max` | Numeric | Force axis maximum. |
+| `LABEL` | Any string | Human-readable axis label. |
+| `MIN` | Numeric | Force axis minimum. |
+| `MAX` | Numeric | Force axis maximum. |
 
 #### COLORS
 
@@ -402,12 +417,12 @@ COLORS (
 )
 ```
 
-#### LEGEND
+#### LEGEND_POSITION
 
-Controls legend placement.
+Controls legend placement. Use as a flat key in the `OPTIONS` block:
 
 ```sql
-LEGEND (position = top)     -- top | bottom | left | right
+OPTIONS (LEGEND_POSITION = TOP)     -- TOP | BOTTOM | LEFT | RIGHT
 ```
 
 ### FORMATTING (Conditional Cell Colors) {#conditional-formatting}
@@ -438,20 +453,89 @@ CREATE VISUAL FinancialSummary AS TABLE (
 
 Multiple rules for the same column are evaluated top-to-bottom; the first matching rule wins. Numeric thresholds use numeric comparison; string thresholds use string equality (`=` / `<>`). `color` may be any CSS color value (`'red'`, `'#ff0000'`, `'rgba(255,0,0,0.5)'`).
 
+### OVERLAYS
+
+Adds reference lines and statistical curves on top of BAR, LINE, HBAR, and SCATTER visuals. Each entry specifies an overlay type, a line style, and optional color and label.
+
+```
+OVERLAYS (
+  <type>  AS SOLID|DASHED|DOTTED [WITH (COLOR = '<css>', LABEL = '<text>')],
+  ...
+)
+```
+
+#### Overlay types
+
+| Type | Description | Parameter |
+|------|-------------|-----------|
+| `GOAL(n)` | Horizontal line at a fixed value | `n` — the target value (required) |
+| `AVERAGE` | Horizontal line at the computed mean of the Y column | None |
+| `MOVING_AVG(n)` | Rolling average line smoothed over `n` periods | `n` — window size (required) |
+| `LINEAR` | Straight line fitted by linear regression (least squares) | None |
+| `EXPONENTIAL` | Exponential curve fit (`y = ae^(bx)`) | None |
+| `LOGARITHMIC` | Logarithmic curve fit (`y = a + b·ln(x)`) | None |
+| `POWER` | Power curve fit (`y = a·x^b`) | None |
+| `POLYNOMIAL(n)` | Polynomial curve of degree `n` fitted by least squares | `n` — degree (required) |
+
+`GOAL` and `AVERAGE` render as ECharts `markLine` overlays on the chart — they are always horizontal and do not require additional data points. `MOVING_AVG`, `LINEAR`, and the regression types render as additional line series computed at build time from the Y column values.
+
+#### Line styles
+
+| Style | Description |
+|-------|-------------|
+| `SOLID` | Continuous line |
+| `DASHED` | Evenly dashed line |
+| `DOTTED` | Dotted line |
+
+#### WITH clause
+
+Both `COLOR` and `LABEL` are optional:
+
+- `COLOR` — any CSS color string (`'#e74c3c'`, `'rgb(0,0,0)'`). Defaults to `#888888`.
+- `LABEL` — text shown on the overlay in the chart legend. Defaults to the overlay type name.
+
+#### Examples
+
+```sql
+-- Sales line chart with goal, average, and 3-month moving average
+CREATE VISUAL RevenueByMonth AS LINE (
+  SOURCE   = (SELECT month, SUM(revenue) AS revenue FROM #summary GROUP BY month),
+  MAPPINGS (X = month, Y = revenue),
+  OVERLAYS (
+    GOAL(100000)  AS DASHED WITH (COLOR = '#e74c3c', LABEL = 'Annual Target'),
+    GOAL(80000)   AS DOTTED WITH (COLOR = '#e67e22', LABEL = 'Minimum'),
+    AVERAGE       AS DASHED WITH (COLOR = '#3498db', LABEL = 'Mean'),
+    MOVING_AVG(3) AS SOLID  WITH (COLOR = '#2ecc71', LABEL = '3-Month Avg')
+  )
+);
+
+-- Scatter plot with linear regression and polynomial fit
+CREATE VISUAL ScoreVsRank AS SCATTER (
+  SOURCE   = (SELECT score, rank FROM #results),
+  MAPPINGS (X = score, Y = rank),
+  OVERLAYS (
+    LINEAR      AS DASHED WITH (COLOR = '#9b59b6', LABEL = 'Linear Fit'),
+    POLYNOMIAL(2) AS DOTTED WITH (COLOR = '#e67e22', LABEL = 'Poly Fit')
+  )
+);
+```
+
+Multiple `GOAL` lines are supported — just add additional `GOAL(n)` entries. `OVERLAYS` applies to BAR, HBAR, LINE, and SCATTER visuals; it is ignored on PIE, DONUT, TABLE, CARD, and filter controls.
+
 ### CROSS_FILTER
 
-Setting `CROSS_FILTER = true` in the `OPTIONS` clause of a chart visual makes it act as a cross-filter source. Clicking a data point broadcasts a filter to all TABLE visuals on the same page that also have `CROSS_FILTER = true`. Clicking the same value again clears the filter.
+Setting `CROSS_FILTER = ON` in the `OPTIONS` clause of a chart visual makes it act as a cross-filter source. Clicking a data point broadcasts a filter to all TABLE visuals on the same page that also have `CROSS_FILTER = ON`. Clicking the same value again clears the filter.
 
 ```sql
 CREATE VISUAL SalesByRegion AS BAR (
   SOURCE = (SELECT Region, Revenue FROM #sales),
   MAPPINGS (X = Region, Y = Revenue),
-  OPTIONS (CROSS_FILTER = true)
+  OPTIONS (CROSS_FILTER = ON)
 );
 
 CREATE VISUAL SalesDetail AS TABLE (
   SOURCE = (SELECT Region, Product, Revenue FROM #sales),
-  OPTIONS (CROSS_FILTER = true)  -- becomes a filter target
+  OPTIONS (CROSS_FILTER = ON)  -- becomes a filter target
 );
 ```
 
@@ -473,7 +557,7 @@ STYLE (
 
 ### ACTIONS
 
-Actions wire up interactive behaviour in the live dashboard:
+Actions wire up interactive behavior in the live dashboard:
 
 ```sql
 ACTIONS (
@@ -652,6 +736,8 @@ WITH PARAMETERS (
 ```
 
 Supported types: `DATE`, `DATETIME`, `NUMBER`, `INT`, `DECIMAL`, `VARCHAR`. The declared type is stored in the manifest under `parameterTypes` and can be used by the runtime for type-safe casting before passing to queries. Untyped parameters are treated as `VARCHAR`.
+
+**Defaults are applied immediately at page load** — any visual whose inline SELECT references a page parameter can use it safely from the first render. The engine declares all `WITH PARAMETERS` variables with their default values when the `CREATE PAGE` statement executes, so no slicer interaction is needed for initial data to appear.
 
 When a parameter changes the DashboardService re-evaluates all visuals whose inline SELECTs reference that parameter. Unaffected visuals are not re-queried.
 
@@ -853,14 +939,14 @@ If the manifest was built before the script file was last written, or if more th
 
 You can also hit `/api/refresh` to force a live rebuild without restarting the server.
 
-### Dashboard rendering (report-runtime.js)
+### Dashboard rendering
 
-The dashboard frontend is a single vanilla-JS file (`wwwroot/report-runtime.js`) that works in two modes:
+There are two separate frontends depending on context:
 
-- **VS Code WebviewPanel**: reads `window.__MANIFEST__` injected by the extension.
-- **Web (ReportPlayer)**: uses pre-embedded manifest (single-report) or fetches from `/api/manifest` (multi-report).
+- **VS Code WebviewPanel**: loads the bundled React application (`ui/dist/index.html`). The extension injects the manifest as `window.__INITIAL_STATE__.messages` and sets `window.VIEW_TYPE = 'report'`. The React app reads the initial manifest from that variable and receives subsequent refreshes via `webview.postMessage()` without re-mounting.
+- **Web (ReportPlayer)**: a single vanilla-JS file (`wwwroot/report-runtime.js`). Uses the pre-embedded manifest in single-report mode or fetches from `/api/manifest` in multi-report mode.
 
-Visual rendering uses [Apache ECharts v5](https://echarts.apache.org/) for all chart types. ECharts is loaded from CDN; no bundler is required.
+Both frontends use [Apache ECharts v5](https://echarts.apache.org/) for chart rendering.
 
 ---
 
@@ -872,7 +958,8 @@ With a `.rptsql` file open, run **ETL-SQL: Preview Report** from the command pal
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `etlsql.reportCliPath` | *(empty)* | Full path to `etl-sql-report.exe`. Leave empty to use `dotnet run` from the source tree in development. |
+| `etlsql.report.executable.path` | `etl-sql-report.exe` | Full path to `etl-sql-report.exe`. Leave empty to use `dotnet run` from the source tree in development. |
+| `etlsql.report.autoOpenPreview` | `false` | Automatically open the Report Preview panel when opening an `.rptsql` file. |
 
 ---
 
@@ -990,9 +1077,10 @@ CREATE DATASET #summary
 
 -- Region filter slicer
 CREATE VISUAL RegionFilter AS SLICER (
-  SOURCE = (SELECT DISTINCT region FROM #summary ORDER BY region),
+  SOURCE   = (SELECT DISTINCT region FROM #summary ORDER BY region),
   MAPPINGS (VALUE = region),
-  ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region))
+  ACTIONS  (ON_CHANGE = SET_PARAMETER(@region, region)),
+  DEFAULT  = 'All'
 );
 
 -- KPI card: total revenue
@@ -1014,8 +1102,8 @@ CREATE VISUAL RevenueByRegion AS BAR (
   TITLE    = 'Revenue by Region',
   MAPPINGS (X = region, Y = revenue),
   OPTIONS (
-    X_AXIS (label = 'Region'),
-    Y_AXIS (label = 'Revenue ($)', min = 0)
+    X_AXIS (LABEL = 'Region'),
+    Y_AXIS (LABEL = 'Revenue ($)', MIN = 0)
   )
 );
 
@@ -1026,7 +1114,7 @@ CREATE VISUAL RevenueByRegionMonth AS BAR (
             GROUP BY month, region),
   TITLE    = 'Revenue by Region (Monthly)',
   MAPPINGS (X = month, Y = revenue, SERIES = region),
-  OPTIONS  (stacked = true, X_AXIS (label = 'Month'), Y_AXIS (label = 'Revenue ($)', min = 0))
+  OPTIONS  (STACKED = ON, X_AXIS (LABEL = 'Month'), Y_AXIS (LABEL = 'Revenue ($)', MIN = 0))
 );
 
 -- Donut chart: revenue share by product
@@ -1045,7 +1133,7 @@ CREATE VISUAL UnitsByMonth AS LINE (
             GROUP BY month),
   TITLE    = 'Units Sold by Month',
   MAPPINGS (X = month, Y = units),
-  OPTIONS  (smooth = true, X_AXIS (label = 'Month'), Y_AXIS (label = 'Units Sold', min = 0))
+  OPTIONS  (SMOOTH = ON, X_AXIS (LABEL = 'Month'), Y_AXIS (LABEL = 'Units Sold', MIN = 0))
 );
 
 -- Detail table: all rows
@@ -1088,16 +1176,3 @@ CREATE PAGE Trends AS LAYOUT (
 ```
 
 ---
-
-## Roadmap (known gaps)
-
-| Item | Status |
-|------|--------|
-| Conditional formatting on TABLE visuals | Implemented — `FORMATTING (col op val THEN 'color')` clause |
-| GAUGE visual type (radial KPI gauge) | Implemented |
-| Funnel chart visual type | Implemented |
-| Waterfall chart visual type | Implemented |
-| Excel export (`--format xlsx`) | Not implemented |
-| Cross-filtering between visuals | Implemented — `CROSS_FILTER = true` in OPTIONS |
-| Typed parameter declarations | Implemented — `@param AS DATE DEFAULT 'val'` syntax |
-| PIVOT / UNPIVOT statement | Not implemented |

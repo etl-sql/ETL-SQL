@@ -24,6 +24,21 @@ namespace ETL_SQL.Engine.Engines
         /// <summary>Applies multiple joins to a set of buffered rows, choosing the best algorithm for each join.</summary>
         public async Task<List<Row>> ApplyJoins(List<Row> allBufferedRows, List<JoinClause> joins, SelectStatement stmt)
         {
+            if (joins == null || joins.Count == 0) return allBufferedRows;
+
+            // Ensure the initial left rows are qualified with the base table alias
+            string baseAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
+            if (allBufferedRows.Count > 0)
+            {
+                foreach (var r in allBufferedRows)
+                {
+                    foreach (var kv in r.Columns.ToList())
+                    {
+                        if (!kv.Key.Contains(".")) r[$"{baseAlias}.{kv.Key}"] = kv.Value;
+                    }
+                }
+            }
+
             foreach (var join in joins)
             {
                 if (join.IsApply)
@@ -45,11 +60,14 @@ namespace ETL_SQL.Engine.Engines
                 }
                 else // INNER, LEFT, RIGHT, FULL
                 {
-                    var leftAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
                     var rightAlias = join.Table.Alias ?? join.Table.TableName;
                     var hashKeysLeft = new List<string>();
                     var hashKeysRight = new List<string>();
-                    bool hasEquality = TryExtractEqualityKeys(join.Condition, leftAlias, rightAlias, hashKeysLeft, hashKeysRight);
+                    bool hasEquality = TryExtractEqualityKeys(join.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight);
+                    
+                    // Note: baseAlias is what we've been building up as the Left side
+                    // Update: In multi-joins, TryExtractEqualityKeys needs the specific left-side table mentioned in the ON clause.
+                    // But for simplicity in many cases, we check prefixes in TryExtractEqualityKeys.
 
                     // HYPER-SCALE: Check for disk-spilling threshold
                     if (hasEquality && (allBufferedRows.Count > _context.JoinSpillThreshold || joinRows.Count > _context.JoinSpillThreshold))

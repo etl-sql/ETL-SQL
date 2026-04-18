@@ -7,6 +7,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Services;
+using ETL_SQL.Core.Spill;
 
 namespace ETL_SQL.Core.Common
 {
@@ -107,10 +108,19 @@ namespace ETL_SQL.Core.Common
         public int ExternalSortChunkSize { get; set; } = LanguageMetadata.DefaultExternalSortChunkSize;
         public int WindowSpillThreshold { get; set; } = LanguageMetadata.DefaultWindowSpillThreshold;
         public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
+        public int MaxParallelDegree { get; set; } = LanguageMetadata.DefaultMaxParallelDegree;
+        public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
+        public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
+        public string? CurrentScriptPath { get; set; }
+        public int MaxFileOperations { get; set; } = SecurityService.DefaultMaxFileOperations;
+        public bool SpillEncryptionEnabled { get; set; } = true;
+        public bool SpillCompressionEnabled { get; set; } = true;
+        public ISpillStore SpillStore => null!;
 
         public bool AllowUnknownFileTypes { get; set; }
         public bool AllowLargeFileOperationCount { get; set; }
         public bool AllowDeepRecursion { get; set; }
+        public bool AllowLargeStringResults { get; set; }
 
         public IDictionary<string, CreateVisualStatement> VisualDefinitions { get; } = new Dictionary<string, CreateVisualStatement>();
         public IDictionary<string, CreatePageStatement> PageDefinitions { get; } = new Dictionary<string, CreatePageStatement>();

@@ -21,23 +21,25 @@ namespace ETL_SQL.Core.Linting.Rules
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {
             var results     = new List<LintResult>();
-            var visualNames = new HashSet<string>(
-                script.Statements.OfType<CreateVisualStatement>().Select(v => v.Name),
+            var objectNames = new HashSet<string>(
+                script.Statements.OfType<CreateVisualStatement>().Select(v => v.Name)
+                .Concat(script.Statements.OfType<CreateContainerStatement>().Select(c => c.Name))
+                .Concat(script.Statements.OfType<CreateNavigationStatement>().Select(n => n.Name)),
                 System.StringComparer.OrdinalIgnoreCase);
 
             foreach (var stmt in script.Statements)
             {
                 if (stmt is not CreatePageStatement page) continue;
 
-                // Rpt-3: MAP visual references must exist in the script
-                foreach (var (slot, visualName) in page.SlotMap)
+                // Rpt-3: MAP references must exist in the script
+                foreach (var (slot, objectName) in page.SlotMap)
                 {
-                    if (!visualNames.Contains(visualName))
+                    if (!objectNames.Contains(objectName))
                         results.Add(new LintResult
                         {
                             RuleName     = Name,
                             Severity     = LintSeverity.Warning,
-                            Message      = $"Page '{page.Name}': slot '{slot}' references visual '{visualName}' which is not defined in this script.",
+                            Message      = $"Page '{page.Name}': slot '{slot}' references object '{objectName}' which is not defined in this script.",
                             LineNumber   = page.Line,
                             ColumnNumber = page.Column
                         });

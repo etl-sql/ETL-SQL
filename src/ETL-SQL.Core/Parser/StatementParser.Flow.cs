@@ -239,5 +239,79 @@ namespace ETL_SQL.Core.Parser
                 Column = startToken.Column
             };
         }
+
+        private Statement ParseExpectSchema()
+        {
+            var startToken = _parser.Previous; // EXPECT already consumed
+            _parser.Consume(TokenType.SCHEMA, "Expected SCHEMA after EXPECT");
+
+            var target = _parser.ConsumeIdentifier("Expected table or connection name after EXPECT SCHEMA").Value;
+            if (!target.StartsWith("#") && _parser.Current.Type == TokenType.IDENTIFIER)
+            {
+                // allow INFORMATION_SCHEMA-style dot notation if ever needed — noop for now
+            }
+
+            _parser.Consume(TokenType.LPAREN, "Expected '(' after target name in EXPECT SCHEMA");
+
+            var columns = new List<ExpectedSchemaColumn>();
+            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+            {
+                var colName = _parser.ConsumeIdentifier("Expected column name").Value;
+
+                // Parse data type — mirrors CREATE TABLE column parsing
+                string dataType = "VARCHAR";
+                if (_parser.IsIdentifier(_parser.Current))
+                {
+                    dataType = _parser.Advance().Value;
+                    if (_parser.Match(TokenType.LPAREN))
+                    {
+                        dataType += "(" + _parser.Consume(TokenType.NUMBER, "Expected length").Value;
+                        if (_parser.Match(TokenType.COMMA))
+                            dataType += "," + _parser.Consume(TokenType.NUMBER, "Expected scale").Value;
+                        dataType += ")";
+                        _parser.Consume(TokenType.RPAREN, "Expected ')' after type length");
+                    }
+                }
+
+                bool notNull = false;
+                if (_parser.Match(TokenType.NOT))
+                {
+                    _parser.Consume(TokenType.NULL, "Expected NULL after NOT in column definition");
+                    notNull = true;
+                }
+
+                columns.Add(new ExpectedSchemaColumn { ColumnName = colName, DataType = dataType, NotNull = notNull });
+                _parser.Match(TokenType.COMMA);
+            }
+            _parser.Consume(TokenType.RPAREN, "Expected ')' to close EXPECT SCHEMA column list");
+
+            // Optional: ON DRIFT WARN
+            bool warnOnDrift = false;
+            if (_parser.Match(TokenType.ON))
+            {
+                if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                    _parser.Current.Value.Equals("DRIFT", StringComparison.OrdinalIgnoreCase))
+                {
+                    _parser.Advance(); // consume DRIFT
+                    if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                        _parser.Current.Value.Equals("WARN", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _parser.Advance(); // consume WARN
+                        warnOnDrift = true;
+                    }
+                }
+            }
+
+            _parser.Match(TokenType.SEMICOLON);
+
+            return new ExpectSchemaStatement
+            {
+                Target      = target,
+                Columns     = columns,
+                WarnOnDrift = warnOnDrift,
+                Line        = startToken.Line,
+                Column      = startToken.Column
+            };
+        }
     }
 }

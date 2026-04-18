@@ -52,11 +52,17 @@ namespace ETL_SQL.Engine.Functions
 
             try
             {
-                return Regex.IsMatch(input, pattern, GetOptions(flags)) ? 1m : 0m;
+                var timeout = TimeSpan.FromMilliseconds(ctx.RegexMatchTimeoutMs);
+                return Regex.IsMatch(input, pattern, GetOptions(flags), timeout);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in REGEXP_LIKE.");
+                return null;
             }
             catch
             {
-                return 0m;
+                return false;
             }
         }
 
@@ -82,11 +88,17 @@ namespace ETL_SQL.Engine.Functions
 
             try
             {
-                var matches = Regex.Matches(input.Substring(pos - 1), pattern, GetOptions(flags));
+                var timeout = TimeSpan.FromMilliseconds(ctx.RegexMatchTimeoutMs);
+                var matches = Regex.Matches(input.Substring(pos - 1), pattern, GetOptions(flags), timeout);
                 if (matches.Count >= occ)
                 {
                     return matches[occ - 1].Value;
                 }
+                return null;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in REGEXP_SUBSTR.");
                 return null;
             }
             catch
@@ -117,7 +129,8 @@ namespace ETL_SQL.Engine.Functions
 
             try
             {
-                var regex = new Regex(pattern, GetOptions(flags));
+                var timeout = TimeSpan.FromMilliseconds(ctx.RegexMatchTimeoutMs);
+                var regex = new Regex(pattern, GetOptions(flags), timeout);
                 string prefix = input.Substring(0, pos - 1);
                 string target = input.Substring(pos - 1);
 
@@ -134,6 +147,11 @@ namespace ETL_SQL.Engine.Functions
                         return count == occ ? replacement : m.Value;
                     });
                 }
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in REGEXP_REPLACE.");
+                return input;
             }
             catch
             {
@@ -163,12 +181,18 @@ namespace ETL_SQL.Engine.Functions
 
             try
             {
-                var matches = Regex.Matches(input.Substring(pos - 1), pattern, GetOptions(flags));
+                var timeout = TimeSpan.FromMilliseconds(ctx.RegexMatchTimeoutMs);
+                var matches = Regex.Matches(input.Substring(pos - 1), pattern, GetOptions(flags), timeout);
                 if (matches.Count >= occ)
                 {
                     return (decimal)(matches[occ - 1].Index + pos);
                 }
                 return 0m;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in REGEXP_INSTR.");
+                return null;
             }
             catch
             {
@@ -194,7 +218,13 @@ namespace ETL_SQL.Engine.Functions
 
             try
             {
-                return (decimal)Regex.Matches(input.Substring(pos - 1), pattern, GetOptions(flags)).Count;
+                var timeout = TimeSpan.FromMilliseconds(ctx.RegexMatchTimeoutMs);
+                return (decimal)Regex.Matches(input.Substring(pos - 1), pattern, GetOptions(flags), timeout).Count;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in REGEXP_COUNT.");
+                return null;
             }
             catch
             {
@@ -212,10 +242,16 @@ namespace ETL_SQL.Engine.Functions
 
             try
             {
-                return Regex.Matches(input, pattern, GetOptions(flags))
+                var timeout = TimeSpan.FromMilliseconds(ctx.RegexMatchTimeoutMs);
+                return Regex.Matches(input, pattern, GetOptions(flags), timeout)
                             .Cast<Match>()
                             .Select(m => (object?)m.Value)
                             .ToList();
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in REGEXP_MATCHES.");
+                return null;
             }
             catch
             {
@@ -232,7 +268,8 @@ namespace ETL_SQL.Engine.Functions
 
             try
             {
-                var parts = Regex.Split(input, pattern);
+                var timeout = TimeSpan.FromMilliseconds(ctx.RegexMatchTimeoutMs);
+                var parts = Regex.Split(input, pattern, GetOptions(null), timeout);
                 var dt = new DataTable();
                 dt.SetColumns(new[] { "VALUE" });
                 foreach (var part in parts)
@@ -240,6 +277,11 @@ namespace ETL_SQL.Engine.Functions
                     await dt.AddRowAsync(new Row { ["VALUE"] = part });
                 }
                 return dt;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                ctx.Logger.Warning("Regex timeout exceeded in REGEXP_SPLIT_TO_TABLE.");
+                return null;
             }
             catch
             {

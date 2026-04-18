@@ -20,7 +20,7 @@ namespace ETL_SQL.Core.Linting.Rules
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {
             var results      = new List<LintResult>();
-            var definedVisuals = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            var definedDashboardObjects = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
             var definedDatasets = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
 
             foreach (var stmt in script.Statements)
@@ -53,20 +53,28 @@ namespace ETL_SQL.Core.Linting.Rules
                                 });
                             }
                         }
-                        definedVisuals.Add(visual.Name);
+                        definedDashboardObjects.Add(visual.Name);
+                        break;
+
+                    case CreateContainerStatement container:
+                        definedDashboardObjects.Add(container.Name);
+                        break;
+
+                    case CreateNavigationStatement nav:
+                        definedDashboardObjects.Add(nav.Name);
                         break;
 
                     case CreatePageStatement page:
-                        // All slot visuals should be defined before the page
-                        foreach (var (slot, visualName) in page.SlotMap)
+                        // All slot objects should be defined before the page
+                        foreach (var (slot, objectName) in page.SlotMap)
                         {
-                            if (!definedVisuals.Contains(visualName))
+                            if (!definedDashboardObjects.Contains(objectName))
                             {
                                 results.Add(new LintResult
                                 {
                                     RuleName     = Name,
                                     Severity     = LintSeverity.Warning,
-                                    Message      = $"Page '{page.Name}': slot '{slot}' references visual '{visualName}' before it is defined. Move CREATE VISUAL '{visualName}' above this CREATE PAGE.",
+                                    Message      = $"Page '{page.Name}': slot '{slot}' references dashboard object '{objectName}' before it is defined. Move its CREATE statement above this CREATE PAGE.",
                                     LineNumber   = page.Line,
                                     ColumnNumber = page.Column
                                 });

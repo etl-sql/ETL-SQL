@@ -113,9 +113,9 @@ namespace ETL_SQL.Core.Parser
                 token.Type == TokenType.HOUR || token.Type == TokenType.MINUTE || token.Type == TokenType.SECOND)
                 return true;
 
-            // Report-SQL tokens (Phase 9A) are contextual: they are reserved inside CREATE VISUAL/PAGE/DATASET,
-            // but should be allowed as identifiers elsewhere (and as keys inside report clauses).
-            if (token.Type >= TokenType.VISUAL && token.Type <= TokenType.DATASET)
+            // Report-SQL and overlay tokens are contextual: reserved inside their own clauses,
+            // but should be allowed as identifiers/function names elsewhere.
+            if (token.Type >= TokenType.VISUAL && token.Type <= TokenType.COLOR)
                 return true;
 
             // Symbols and operators should never be identifiers

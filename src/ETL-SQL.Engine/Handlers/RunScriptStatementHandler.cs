@@ -26,6 +26,9 @@ namespace ETL_SQL.Engine.Handlers
         /// <summary>Executes the specified script, resolving parameters and managing the script's scope.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
+            context.CurrentRecursiveDepth++;
+            context.IncrementOperationCount(); // Trigger check against limits
+
             var stmt = (RunScriptStatement)statement;
             
             var pathObj = await context.EvaluateValue(stmt.PathExpression, new Row());
@@ -39,6 +42,9 @@ namespace ETL_SQL.Engine.Handlers
             if (!File.Exists(scriptPath))
                 throw new ExecutionException($"Script file not found: {scriptPath}");
 
+            string? oldPath = context.CurrentScriptPath;
+            context.CurrentScriptPath = Path.GetFullPath(scriptPath);
+            
             var source = await File.ReadAllTextAsync(scriptPath);
             var tokens = new Lexer(source).Tokenize();
             var script = new Parser(tokens).Parse();
@@ -109,6 +115,8 @@ namespace ETL_SQL.Engine.Handlers
                         }
                     }
                 }
+                context.CurrentRecursiveDepth--;
+                context.CurrentScriptPath = oldPath;
             }
         }
     }

@@ -1,4 +1,4 @@
-import type { VariablesMessage, Variable } from '../types';
+import type { Variable } from '../types';
 
 /**
  * Safely extracts variable list from a message, handling both 'variables' and 'data' keys.

@@ -132,4 +132,53 @@ export type ProtocolMessage =
     | TablesResponse
     | ColumnsResponse
     | TempTablesResponse
-    | ActiveEditorChangedMessage;
+    | ActiveEditorChangedMessage
+    | ReportManifest;
+
+export interface VisualManifest {
+    name: string;
+    visualType: string;
+    chartConfig?: string;
+    columns: string[];
+    rows: any[][];
+    options: Record<string, string>;
+    error?: string;
+    actions: any[];
+    styles?: Record<string, string>;
+    defaultValue?: string;
+}
+
+export interface ContainerManifest {
+    name: string;
+    containerType: string;
+    visuals: string[];
+    styles?: Record<string, string>;
+}
+
+export interface NavigationManifest {
+    name: string;
+    navType: string;
+    orientation: string;
+    defaultPage?: string;
+    pages: string[];
+}
+
+export interface PageManifest {
+    name: string;
+    structure: string;
+    slotMap: Record<string, string>;
+    parameters: Record<string, string | null>;
+    styles?: Record<string, string>;
+}
+
+export interface ReportManifest {
+    type: 'reportManifest';
+    source: string;
+    builtAt: string;
+    title?: string;
+    description?: string;
+    visuals: VisualManifest[];
+    pages: PageManifest[];
+    containers?: ContainerManifest[];
+    navigations?: NavigationManifest[];
+}

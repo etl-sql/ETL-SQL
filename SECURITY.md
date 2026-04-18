@@ -74,6 +74,9 @@ To maintain host stability, `SecurityService.CheckRunawayProtection()` enforces 
 | :--- | :--- | :--- | :--- |
 | Filesystem operation count | **100 per script** | `Security:MaxFileOperationsPerScript` | `SET ALLOW_GREATER_THAN_n_FILE ON/OFF` |
 | Recursive directory depth | **5 levels** | `Security:MaxRecursiveNestingDepth` | `SET ALLOW_RECURSIVE_GREATER_THAN_n_LAYERS ON/OFF` |
+| Parallel execution degree | **32 threads** | `Security:MaxParallelDegree` | `SET MAX_PARALLEL_DEGREE = n` |
+| String result memory limit | **100 MB** | `Security:MaxStringResultSize` | `SET MAX_STRING_RESULT_SIZE = n` |
+| Regex match timeout | **1000 ms** | `Security:RegexMatchTimeoutMs` | `SET REGEX_MATCH_TIMEOUT = n` |
 
 > [!TIP]
 > Error messages dynamically reflect the current configured limit, ensuring that developers know exactly which override command (e.g., `SET ALLOW_GREATER_THAN_500_FILE ON;`) to use if a limit is increased by an administrator.
@@ -207,6 +210,19 @@ Credentials are never allowed to appear in output. The engine enforces:
 
 > [!CAUTION]
 > Never include raw credentials, API keys, or database passwords in `PRINT` statements or `BODY` strings in `SEND EMAIL`. These will appear in session logs. Use `ENCRYPTED` typed variables and `ENC:` strings instead.
+
+### 4.5 Session-Bound Spill Hardening (Intermediate Data)
+During high-scale query processing (large joins, aggregations, sorts), the engine spills intermediate row data to the host's temporary directory. To prevent exposure of PII or sensitive transformed data, the engine employs a non-bypassable **Secure Spill Pipeline**.
+
+| Property | Value |
+| :--- | :--- |
+| **Logic** | Handled by the centralized `SpillStore` subsystem |
+| **Encryption** | AES-256 (CBC) |
+| **Key Lifecycle** | Random 256-bit key generated at `Evaluator` initialization; held only in memory; destroyed when the session ends. |
+| **Compression** | GZip (Optimal) — applied before encryption to minimize disk footprint and I/O latency. |
+| **Target Engines** | `ExternalJoinEngine`, `ExternalAggregateEngine`, `ExternalWindowEngine`, `ExternalSortEngine` |
+
+**Security Guarantee**: Even if a malicious actor gains filesystem access to the temporary directory while a query is running, the spilled data is ciphertext and cannot be decrypted without the ephemeral session key. All spill artifacts are aggressively deleted upon session completion.
 
 ---
 

@@ -20,7 +20,9 @@ export class ReportPreviewPanel {
     private _panel: vscode.WebviewPanel;
     private _extensionUri: vscode.Uri;
     private _scriptPath: string;
+    private _parameters: Record<string, string | null> = {};
     private _disposables: vscode.Disposable[] = [];
+    private _initialized = false;
 
     private constructor(
         panel: vscode.WebviewPanel,
@@ -44,6 +46,19 @@ export class ReportPreviewPanel {
             }
         });
         this._disposables.push(watcher);
+
+        // Handle messages from the webview
+        this._panel.webview.onDidReceiveMessage(
+            message => {
+                switch (message.type) {
+                    case 'refreshReport':
+                        this._refreshContent(message.parameters, /* usePostMessage */ true);
+                        break;
+                }
+            },
+            null,
+            this._disposables
+        );
     }
 
     /** Opens (or reveals) the preview for the given .rptsql file. */
@@ -69,13 +84,29 @@ export class ReportPreviewPanel {
         return new ReportPreviewPanel(panel, extensionUri, scriptPath);
     }
 
-    /** Runs the build CLI, parses the manifest JSON, and refreshes the webview HTML. */
-    private _refreshContent(): void {
-        this._panel.webview.html = this._getLoadingHtml();
+    /** Runs the build CLI, parses the manifest JSON, and refreshes the webview.
+     *  usePostMessage=true sends the manifest via postMessage instead of replacing
+     *  the HTML, preserving React state (e.g. slicer selection) across refreshes.
+     */
+    private _refreshContent(parameters?: Record<string, string | null>, usePostMessage = false): void {
+        if (parameters) {
+            this._parameters = { ...this._parameters, ...parameters };
+        }
+
+        const canPostMessage = usePostMessage && this._initialized;
+        if (!canPostMessage) {
+            this._panel.webview.html = this._getLoadingHtml();
+        }
+
         this._buildManifest((err, manifest) => {
             if (err || !manifest) {
                 this._panel.webview.html = this._getErrorHtml(err ?? 'No manifest produced');
+                return;
+            }
+            if (canPostMessage) {
+                this._panel.webview.postMessage(manifest);
             } else {
+                this._initialized = true;
                 this._panel.webview.html = this._getReportHtml(manifest);
             }
         });
@@ -84,8 +115,15 @@ export class ReportPreviewPanel {
     /** Spawns `etl-sql-report build --format json` and returns the parsed manifest. */
     private _buildManifest(callback: (err: string | null, manifest: any | null) => void): void {
         const outputPath = path.join(os.tmpdir(), `etlsql-preview-${Date.now()}.json`);
-        const exe        = this._resolveCliPath();
-        const args       = ['build', this._scriptPath, '--output', outputPath, '--format', 'json'];
+        const { exe, baseArgs } = this._resolveCliCall();
+        const args       = [...baseArgs, 'build', this._scriptPath, '--output', outputPath, '--format', 'json'];
+
+        // Add parameters
+        for (const [key, val] of Object.entries(this._parameters)) {
+            if (val !== null) {
+                args.push('--parameter', `${key}=${val}`);
+            }
+        }
 
         const proc = cp.spawn(exe, args, { shell: false });
         let stderr = '';
@@ -98,7 +136,9 @@ export class ReportPreviewPanel {
             try {
                 const json     = fs.readFileSync(outputPath, 'utf8');
                 const manifest = JSON.parse(json);
-                fs.unlinkSync(outputPath);
+                // In the unified React UI, the protocol expect { type: 'reportManifest', ... }
+                manifest.type  = 'reportManifest';
+                if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
                 callback(null, manifest);
             } catch (e: any) {
                 callback(e.message, null);
@@ -106,64 +146,59 @@ export class ReportPreviewPanel {
         });
     }
 
-    /** Resolves the path to the etl-sql-report CLI. */
-    private _resolveCliPath(): string {
+    /** Resolves the command and base arguments for the etl-sql-report CLI. */
+    private _resolveCliCall(): { exe: string, baseArgs: string[] } {
         const config     = vscode.workspace.getConfiguration('etlsql');
         const configured = config.get<string>('report.executable.path');
-        if (configured) return configured;
+        
+        if (configured && configured.trim() !== '') {
+            return { exe: configured, baseArgs: [] };
+        }
 
-        // Development fallback: dotnet run from the CLI project
-        return process.platform === 'win32' ? 'dotnet' : 'dotnet';
+        // Development fallback: dotnet run from the CLI project if we can find it
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (workspaceFolders) {
+            const cliProjectPath = path.join(workspaceFolders[0].uri.fsPath, 'src', 'ETL-SQL.ReportBuilder.CLI', 'ETL-SQL.ReportBuilder.CLI.csproj');
+            if (fs.existsSync(cliProjectPath)) {
+                return { 
+                    exe: 'dotnet', 
+                    baseArgs: ['run', '--project', cliProjectPath, '--'] 
+                };
+            }
+        }
+
+        return { exe: 'etl-sql-report', baseArgs: [] };
     }
 
     private _getReportHtml(manifest: any): string {
-        const webview      = this._panel.webview;
-        const chartJsUri   = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'chart.min.js'));
-        const runtimeUri   = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'report-runtime.js'));
-        const nonce        = this._nonce();
-        const manifestJson = JSON.stringify(manifest).replace(/</g, '\\u003c');
+        const webview = this._panel.webview;
+        const nonce   = this._nonce();
+        
+        try {
+            // Path to the built React app
+            const indexPath = vscode.Uri.joinPath(this._extensionUri, 'ui', 'dist', 'index.html');
+            let html = fs.readFileSync(indexPath.fsPath, 'utf8');
 
-        return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Content-Security-Policy" content="
-    default-src 'none';
-    img-src ${webview.cspSource} 'self' data:;
-    script-src 'nonce-${nonce}';
-    style-src 'unsafe-inline';
-">
-<title>Report Preview</title>
-<style>
-  body { font-family: var(--vscode-font-family, sans-serif); margin: 0; padding: 16px;
-         color: var(--vscode-editor-foreground); background: var(--vscode-editor-background); }
-  h2   { border-bottom: 1px solid var(--vscode-panel-border); padding-bottom: 4px; }
-  h3   { margin-bottom: 8px; }
-  .visual-card  { margin-bottom: 32px; }
-  .chart-wrapper { max-width: 640px; }
-  .table-wrapper { overflow-x: auto; }
-  table { border-collapse: collapse; width: 100%; }
-  th, td { border: 1px solid var(--vscode-panel-border); padding: 4px 8px; text-align: left; }
-  th { background: var(--vscode-editor-lineHighlightBackground); }
-  .card-value  { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-  .card-label  { font-size: 0.85em; opacity: 0.7; }
-  .card-number { font-size: 2em; font-weight: bold; }
-  .slicer-note { font-style: italic; opacity: 0.6; }
-  .no-data     { opacity: 0.5; font-style: italic; }
-  .error       { color: var(--vscode-errorForeground); }
-  footer       { margin-top: 32px; opacity: 0.5; font-size: 0.8em; }
-</style>
-</head>
-<body>
-<script nonce="${nonce}">window.__MANIFEST__ = ${manifestJson};</script>
-<div id="root"></div>
-<script nonce="${nonce}" src="${chartJsUri}"></script>
-<script nonce="${nonce}" src="${runtimeUri}"></script>
-</body>
-</html>`;
+            // Inject nonce, view type, and initial manifest
+            const manifestJson = JSON.stringify(manifest).replace(/</g, '\\u003c');
+            const inject = `
+                <script nonce="${nonce}">
+                    window.VIEW_TYPE = 'report';
+                    window.__INITIAL_STATE__ = { 
+                        messages: [ ${manifestJson} ]
+                    };
+                </script>`;
+            
+            html = html.replace(/<head>/, `<head>${inject}`);
+            html = html.replace(/<script type="module"/g, `<script type="module" nonce="${nonce}"`);
+            
+            const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} https://fonts.gstatic.com; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">`;
+            html = html.replace(/<head>/, `<head>${csp}`);
+
+            return html;
+        } catch (err) {
+            return this._getErrorHtml(`Failed to load React UI: ${err}`);
+        }
     }
 
     private _getLoadingHtml(): string {

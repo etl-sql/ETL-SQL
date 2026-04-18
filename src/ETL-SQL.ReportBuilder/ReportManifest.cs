@@ -8,8 +8,8 @@ namespace ETL_SQL.ReportBuilder
     // ReportManifest — Phase 9B
     //
     // Serialisable POCOs that describe a fully-evaluated report.
-    // Produced by ManifestBuilder; consumed by ChartJsRenderer,
-    // MarkdownRenderer, SnapshotStore, and the VS Code preview WebviewPanel.
+    // Produced by ManifestBuilder; consumed by EChartsRenderer,
+    // MarkdownRenderer, SvgChartRenderer, SnapshotStore, and the VS Code preview WebviewPanel.
     // ════════════════════════════════════════════════════════════════════════
 
     /// <summary>The root manifest for a single .rptsql report.</summary>
@@ -54,7 +54,7 @@ namespace ETL_SQL.ReportBuilder
         public List<NavigationManifest>? Navigations { get; set; }
     }
 
-    /// <summary>A single visual with its data snapshot and Chart.js config.</summary>
+    /// <summary>A single visual with its data snapshot and ECharts config.</summary>
     public class VisualManifest
     {
         [JsonPropertyName("name")]
@@ -63,9 +63,13 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("visualType")]
         public string VisualType { get; set; } = string.Empty;
 
-        /// <summary>Resolved Chart.js config JSON object (as a pre-serialised string).</summary>
+        /// <summary>Resolved ECharts option JSON object (as a pre-serialised string).</summary>
         [JsonPropertyName("chartConfig")]
         public string? ChartConfig { get; set; }
+
+        [JsonPropertyName("defaultValue")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? DefaultValue { get; set; }
 
         /// <summary>Column headers for TABLE visuals (and raw data access).</summary>
         [JsonPropertyName("columns")]
@@ -98,6 +102,10 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("formattingRules")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<FormattingRuleManifest>? FormattingRules { get; set; }
+
+        [JsonPropertyName("overlays")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<OverlayManifest>? Overlays { get; set; }
     }
 
     /// <summary>A serialisable representation of one ACTIONS entry (DRILL_DOWN or SET_PARAMETER).</summary>
@@ -178,6 +186,19 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("operator")]  public string Operator  { get; set; } = string.Empty;
         [JsonPropertyName("threshold")] public string Threshold { get; set; } = string.Empty;
         [JsonPropertyName("color")]     public string Color     { get; set; } = string.Empty;
+    }
+
+    public class OverlayManifest
+    {
+        [JsonPropertyName("overlayType")] public string OverlayType { get; set; } = string.Empty;
+        [JsonPropertyName("parameter")]   public double? Parameter  { get; set; }
+        [JsonPropertyName("lineStyle")]   public string LineStyle   { get; set; } = "dashed";
+        [JsonPropertyName("color")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Color { get; set; }
+        [JsonPropertyName("label")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Label { get; set; }
     }
 
     public class SeriesDefManifest

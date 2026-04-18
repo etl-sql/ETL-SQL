@@ -9,7 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Data;
 using Spectre.Console;
 
-namespace ETL_SQL.Tests
+namespace ETL_SQL.Tests.Integration
 {
     public class DatabaseTests
     {

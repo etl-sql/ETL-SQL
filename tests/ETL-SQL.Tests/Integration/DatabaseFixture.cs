@@ -4,7 +4,7 @@ using Testcontainers.MsSql;
 using Testcontainers.PostgreSql;
 using Testcontainers.Oracle;
 
-namespace ETL_SQL.Tests
+namespace ETL_SQL.Tests.Integration
 {
     public class DatabaseFixture : IAsyncLifetime
     {

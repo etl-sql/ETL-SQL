@@ -1049,6 +1049,26 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
+    public record ExpectedSchemaColumn
+    {
+        public required string ColumnName { get; init; }
+        public required string DataType   { get; init; }
+        public bool NotNull               { get; init; }
+    }
+
+    /// <summary>
+    /// EXPECT SCHEMA target ( col type [NOT NULL] [, ...] ) [ON DRIFT WARN];
+    /// Validates that the actual schema of a #temp table or connection matches the declared columns.
+    /// Raises ExecutionException (or logs a warning with ON DRIFT WARN) when drift is detected.
+    /// </summary>
+    public record ExpectSchemaStatement : Statement
+    {
+        public required string Target                         { get; init; }
+        public required List<ExpectedSchemaColumn> Columns   { get; init; }
+        public bool WarnOnDrift                              { get; init; }
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
     public record ExecuteParameter
     {
         public Expression Expression { get; }
@@ -1990,7 +2010,8 @@ namespace ETL_SQL.Core
     {
         FileTypeAccess,
         LargeFileCount,
-        DeepRecursion
+        DeepRecursion,
+        LargeStringResults
     }
 
     /// <summary>SET ALLOW_... ON/OFF</summary>

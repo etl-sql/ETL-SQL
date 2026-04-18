@@ -75,7 +75,9 @@ namespace ETL_SQL.Common
             "SUBSTRING", "POSITION", "OVERLAY", "EXTRACT", "TRIM", "PLACING", "LEADING", "TRAILING", "BOTH",
             "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE", "REQUIRE", "SAFE", "ZONES",
             "JOIN_SPILL_THRESHOLD", "EXTERNAL_HASH_PARTITIONS", "EXTERNAL_SORT_CHUNK_SIZE", "WINDOW_SPILL_THRESHOLD",
-            "MAX_RECURSIVE_DEPTH", "MAX_IN_MEMORY_BATCHES", "FOREACH_PAGE_SIZE", "MAX_MESSAGES"
+            "MAX_RECURSIVE_DEPTH", "MAX_IN_MEMORY_BATCHES", "FOREACH_PAGE_SIZE", "MAX_MESSAGES", "MAX_FILE_OPERATIONS",
+            "MAX_PARALLEL_DEGREE", "MAX_STRING_RESULT_SIZE", "REGEX_MATCH_TIMEOUT",
+            "SPILL_ENCRYPTION", "SPILL_COMPRESSION"
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -125,6 +127,11 @@ namespace ETL_SQL.Common
         public const int DefaultExternalSortChunkSize = 50000;
         /// <summary>Default number of rows before window functions spill to disk.</summary>
         public const int DefaultWindowSpillThreshold = 100000;
+        
+        /// <summary>Default maximum concurrency for PARALLEL blocks.</summary>
+        public const int DefaultMaxParallelDegree = 32;
+        /// <summary>Default maximum size in bytes for a single string function result.</summary>
+        public const long DefaultMaxStringResultSize = 100 * 1024 * 1024; // 100 MiB
 
         public static bool IsKeyword(string word) => DmlKeywords.Contains(word) || DdlKeywords.Contains(word) || ControlFlowKeywords.Contains(word) || JoinKeywords.Contains(word) || OperatorKeywords.Contains(word) || Keywords.Contains(word) || ConnectorTypes.Contains(word) || Functions.Contains(word);
         public static bool IsFunction(string word) => Functions.Contains(word);

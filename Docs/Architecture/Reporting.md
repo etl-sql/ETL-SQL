@@ -106,7 +106,7 @@ Subtitle     — optional display subtitle string
 Source       — VisualSourceExpression (inline SELECT or #temp reference)
               (null / empty for Text, DatePicker, Slider, Search)
 Mappings     — List<VisualMapping> (role → column, e.g. X → Region)
-Options      — List<VisualOption> flat key-value pairs (stacked, smooth, FORMAT, etc.)
+Options      — List<VisualOption> flat key-value pairs (STACKED, SMOOTH, FORMAT, LEGEND_POSITION, etc.)
 AxisOptions  — List<AxisOptions> per-axis X_AXIS / Y_AXIS config blocks
 TypedSeries      — List<TypedSeries> for COMBO charts (BAR col, LINE col)
 FormattingRules  — List<FormattingRule> for TABLE conditional cell colors (column, operator, threshold, color)
@@ -318,7 +318,7 @@ Converts a `VisualManifest` into an [Apache ECharts v5](https://echarts.apache.o
 
 For multi-series charts, rows with a `series` column are pivoted: each distinct series value becomes a separate ECharts dataset. Colors are assigned from a built-in palette or from `COLORS(...)` option entries (`color:{key}` in `vm.Options`).
 
-The `LEGEND` option (`legend:position` in `vm.Options`) controls ECharts legend placement.
+The `LEGEND_POSITION` flat option in `vm.Options` controls ECharts legend placement (`TOP`, `BOTTOM`, `LEFT`, `RIGHT`).
 
 ### 6.2 `SvgChartRenderer`
 

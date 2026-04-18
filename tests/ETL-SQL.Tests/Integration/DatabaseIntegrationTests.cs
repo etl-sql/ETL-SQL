@@ -11,7 +11,7 @@ using ETL_SQL.Data;
 using Spectre.Console;
 using ETL_SQL.Core.Parser;
 
-namespace ETL_SQL.Tests
+namespace ETL_SQL.Tests.Integration
 {
     [Collection("Database collection")]
     public class DatabaseIntegrationTests

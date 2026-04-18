@@ -451,7 +451,7 @@ Queries that cannot use this path (and still buffer first):
 
 ### External engines — thresholds and behaviour
 
-Three external engines activate automatically when row counts exceed thresholds. All three write to `%TEMP%\ETL-SQL\` and increment `Evaluator.TotalSpilledBytes`.
+Four external engines activate automatically when row counts exceed thresholds. All write through `ISpillStore` (AES-256 encrypted, GZip compressed by default) to `%TEMP%\ETL-SQL\Spill\<session-guid>\` and increment `Evaluator.TotalSpilledBytes`. See [SpillStore](#spillstore--encrypted-spill-io) below for the security model.
 
 **ExternalSortEngine** (`ETL-SQL.Engine/Engines/ExternalSortEngine.cs`)
 
@@ -459,7 +459,7 @@ Three external engines activate automatically when row counts exceed thresholds.
 |---|---|---|
 | `allBufferedRows.Count > 100,000` in ORDER BY path | 100,000 rows | External k-way merge sort |
 
-Sorted chunks are written as newline-delimited JSON, then merged in a single pass. Called from `SelectStatementHandler` when the ORDER BY input exceeds 100k rows.
+Sorted chunks are written via `SpillStore` (encrypted + compressed), then merged in a single k-way pass. Called from `SelectExecutionEngine` when the ORDER BY input exceeds 100k rows.
 
 **ExternalJoinEngine** (`ETL-SQL.Engine/Engines/ExternalJoinEngine.cs`)
 
@@ -477,6 +477,57 @@ Sorted chunks are written as newline-delimited JSON, then merged in a single pas
 | **Buffered path (with joins/TC)** | 32 | Activated only when buffered input > 100,000 rows |
 
 Rows are routed to one of 32 partition files by the hash of their GROUP BY key(s). Each partition is then aggregated in-memory by `AggregateEngine`. Because partitioning is always done via file I/O, `TotalSpilledBytes` always increases when `ExternalAggregateEngine` runs.
+
+### SpillStore — encrypted spill I/O
+
+All four external engines write and read spill data exclusively through `ISpillStore`, which is exposed on `IExecutionContext` and implemented by `SpillStore` in `ETL-SQL.Engine/Spill/SpillStore.cs`.
+
+**Session key model**
+
+`SpillStore` generates a random 256-bit AES key once at construction (`RandomNumberGenerator.GetBytes(32)`). The key exists only in memory and is never written to disk. It is zeroed via `Array.Clear` in `DisposeAsync`. Because the key is process-scoped, spill files left behind by a crash are unrecoverable by any other process.
+
+**Write path** (`ISpillWriter`)
+
+`SecureSpillWriter` chains the output layers in order:
+
+```
+Row data (JSON line)
+  → GZipStream (if SpillCompressionEnabled)
+  → AES-128-CBC CryptoStream (if SpillEncryptionEnabled)
+  → FileStream (spill file)
+```
+
+A fresh, randomly generated 16-byte IV is written to the start of every spill file before the encrypted payload. Compression before encryption is intentional — encrypting compressed data is safe and maximises space savings.
+
+**Read path** (`ISpillReader`)
+
+`SecureSpillReader` reverses the chain. If the file does not exist (e.g. an empty partition) the reader returns `null` from `ReadRowAsync()` rather than throwing, so engines can skip empty partitions without special-casing.
+
+**Temp directory lifecycle**
+
+`SpillStore` creates a single temp directory at `%TEMP%\ETL-SQL\Spill\<Guid>\` on first write and deletes it recursively on `DisposeAsync`. The `Evaluator` owns the `SpillStore` instance and disposes it at the end of each script execution, guaranteeing cleanup on both normal exit and unhandled exceptions. Individual `SortExternal()` calls also wrap their work in `try/finally` as a secondary safety net.
+
+**File naming**
+
+All spill files use GUID-based names (`sort_chunk_{Guid}_{n}.tmp`, `win_part_{Guid}.tmp`, etc.) — there are no predictable sequential names that a sibling process could enumerate.
+
+**Configuration** (`appsettings.json → Security`)
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `Security:SpillEncryptionEnabled` | `true` | AES-256 encryption on all spill files. |
+| `Security:SpillCompressionEnabled` | `true` | GZip compression before encryption. |
+
+Both default to `true`. Setting either to `false` triggers a linter warning (`SpillSecurityRule`) advising that intermediate data will be exposed on disk in plain text.
+
+**Engine integration summary**
+
+| Engine | Spill files | SpillStore call sites |
+|--------|-------------|-----------------------|
+| `ExternalSortEngine` | One file per sorted chunk | `CreateWriterAsync` / `CreateReaderAsync` in `SortStreamAsync` |
+| `ExternalJoinEngine` | `left_{i}.tmp` / `right_{i}.tmp` per partition | `CreateWriterAsync` / `CreateReaderAsync` in `ApplyHashJoinExternal` |
+| `ExternalAggregateEngine` | One file per GROUP BY partition | `CreateWriterAsync` / `CreateReaderAsync` in `ApplyAggregationExternal` |
+| `ExternalWindowEngine` | One file per PARTITION BY group | `CreateWriterAsync` / `CreateReaderAsync` in `ApplyWindowFunctionsExternal` |
 
 ### Batch size and spill configuration
 

@@ -44,7 +44,11 @@ namespace ETL_SQL.Engine.Functions
                 if (d < 0) return null; // Defensive return NULL for negative SQRT
                 return (decimal)Math.Sqrt(d);
             }, "SQRT(n): Returns the square root of a number. Returns NULL for negative inputs.");
-            registry.RegisterWithHelp("CONCAT", (args, ctx) => string.Join("", args.Select(a => a?.ToString() ?? "")), "CONCAT(str1, str2, ...): Concatenates multiple strings into one.");
+            registry.RegisterWithHelp("CONCAT", (args, ctx) => {
+                long totalLength = args.Sum(a => (long)(a?.ToString()?.Length ?? 0));
+                ctx.SecurityService.ValidateStringSize(totalLength, ctx.MaxStringResultSize, ctx.AllowLargeStringResults, ctx.CurrentScriptPath);
+                return string.Join("", args.Select(a => a?.ToString() ?? ""));
+            }, "CONCAT(str1, str2, ...): Concatenates multiple strings into one.");
             registry.RegisterWithHelp("SUBSTRING", Substring, "SUBSTRING(str, start, length): Extracts a substring using 1-based indexing.");
             registry.RegisterWithHelp("SUBSTR", Substring, "SUBSTR(str, start[, length]): Extracts a substring (Oracle-style).");
             registry.RegisterWithHelp("LEFT", Left, "LEFT(str, n): Extracts n characters from the left side of the string.");
@@ -109,7 +113,14 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("UNICODE", (args, ctx) => args[0]?.ToString() == null || args[0]!.ToString()!.Length == 0 ? null : (decimal)args[0]!.ToString()![0], "UNICODE(str): Returns the Unicode point of the first character.");
             registry.RegisterWithHelp("DATALENGTH", DataLength, "DATALENGTH(val): Returns the number of bytes used to represent any expression.");
             registry.RegisterWithHelp("TO_STR", (args, ctx) => args[0]?.ToString(), "TO_STR(val): Converts a value to a string.");
-            registry.RegisterWithHelp("REPLICATE", (args, ctx) => args.Count >= 2 && args[0] != null ? string.Concat(Enumerable.Repeat(args[0]!.ToString(), Math.Max(0, Convert.ToInt32(args[1])))) : null, "REPLICATE(str, n): Repeats a string n times.");
+            registry.RegisterWithHelp("REPLICATE", (args, ctx) => {
+                if (args.Count < 2 || args[0] == null) return null;
+                string s = args[0]!.ToString()!;
+                int n = Math.Max(0, Convert.ToInt32(args[1]));
+                long totalLength = (long)s.Length * n;
+                ctx.SecurityService.ValidateStringSize(totalLength, ctx.MaxStringResultSize, ctx.AllowLargeStringResults, ctx.CurrentScriptPath);
+                return string.Concat(Enumerable.Repeat(s, n));
+            }, "REPLICATE(str, n): Repeats a string n times.");
             registry.RegisterWithHelp("TRY_CAST", TryCast, "TRY_CAST(expr AS type): Converts to type or returns NULL on failure.");
 
             // Item 13 - Math Extension Suite

@@ -13,7 +13,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Services;
 using Spectre.Console;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.Integration.Integration
 {
     public class SessionPersistenceTests : IDisposable
     {

@@ -1,12 +1,24 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { ProtocolMessage } from '../types';
 import { mockTrace } from '../mock_protocol';
+declare global {
+    interface Window {
+        __INITIAL_STATE__?: {
+            messages?: ProtocolMessage[];
+        };
+    }
+}
 
 /**
  * Hook to handle communication with VS Code webview or use mock data in dev mode.
  */
 export function useVsCodeApi() {
-    const [messages, setMessages] = useState<ProtocolMessage[]>([]);
+    const [messages, setMessages] = useState<ProtocolMessage[]>(() => {
+        if (typeof window !== 'undefined' && window.__INITIAL_STATE__?.messages) {
+            return window.__INITIAL_STATE__.messages;
+        }
+        return [];
+    });
     const [status, setStatus] = useState<'ready' | 'running' | 'finished' | 'error'>('ready');
     const [isDev] = useState(import.meta.env.DEV);
     

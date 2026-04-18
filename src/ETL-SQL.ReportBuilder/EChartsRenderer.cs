@@ -47,6 +47,11 @@ namespace ETL_SQL.ReportBuilder
         private string RenderCartesian(VisualManifest v, string seriesType)
         {
             var (xLabels, series) = ExtractCartesianSeries(v, seriesType);
+            bool stacked = IsOn(v.Options.GetValueOrDefault("STACKED"));
+            bool smooth  = IsOn(v.Options.GetValueOrDefault("SMOOTH")) && seriesType == "line";
+            if (stacked || smooth)
+                series = ApplySeriesFlags(series, stacked, smooth);
+            AppendOverlaySeries(v, series, xLabels, horizontal: false);
             return Serialize(new
             {
                 title   = TitleOpt(v),
@@ -63,6 +68,9 @@ namespace ETL_SQL.ReportBuilder
         private string RenderHorizontalBar(VisualManifest v)
         {
             var (labels, series) = ExtractCartesianSeries(v, "bar");
+            if (IsOn(v.Options.GetValueOrDefault("STACKED")))
+                series = ApplySeriesFlags(series, stacked: true, smooth: false);
+            AppendOverlaySeries(v, series, labels, horizontal: true);
             return Serialize(new
             {
                 title   = TitleOpt(v),
@@ -470,7 +478,7 @@ namespace ETL_SQL.ReportBuilder
 
         private static object TitleOpt(VisualManifest v)
         {
-            var text = v.Options.GetValueOrDefault("title", v.Name);
+            var text = v.Options.GetValueOrDefault("TITLE", v.Name);
             return new { text };
         }
 
@@ -486,17 +494,35 @@ namespace ETL_SQL.ReportBuilder
             };
         }
 
-        /// <summary>Builds an axis option dictionary; includes min/max only when explicitly set.</summary>
+        /// <summary>Builds an axis option dictionary; includes min/max/label only when explicitly set.</summary>
         private static Dictionary<string, object?> BuildAxisOpts(
             VisualManifest v, string axis, string type, object? data = null)
         {
             var opts = new Dictionary<string, object?> { ["type"] = type };
             if (data != null) opts["data"] = data;
-            if (v.Options.TryGetValue($"axis:{axis}:min", out var min))
+            var axisUpper = axis.ToUpperInvariant();
+            if (v.Options.TryGetValue($"AXIS:{axisUpper}:LABEL", out var label))
+                opts["name"] = label;
+            if (v.Options.TryGetValue($"AXIS:{axisUpper}:MIN", out var min))
                 opts["min"] = ParseAxisBound(min);
-            if (v.Options.TryGetValue($"axis:{axis}:max", out var max))
+            if (v.Options.TryGetValue($"AXIS:{axisUpper}:MAX", out var max))
                 opts["max"] = ParseAxisBound(max);
             return opts;
+        }
+
+        private static bool IsOn(string? val) =>
+            val?.ToUpperInvariant() is "ON" or "TRUE" or "1";
+
+        private static List<object> ApplySeriesFlags(List<object> series, bool stacked, bool smooth)
+        {
+            return series.Select(s =>
+            {
+                var json = JsonSerializer.Serialize(s, _json);
+                var dict = JsonSerializer.Deserialize<Dictionary<string, object>>(json)!;
+                if (stacked) dict["stack"] = "total";
+                if (smooth)  dict["smooth"] = (object)true;
+                return (object)dict;
+            }).ToList();
         }
 
         private static object ParseAxisBound(string s) =>
@@ -505,11 +531,11 @@ namespace ETL_SQL.ReportBuilder
                 ? (object)d : s;
 
         private static string? GetColor(VisualManifest v, string key) =>
-            v.Options.TryGetValue("color:" + key, out var c) ? c : null;
+            v.Options.TryGetValue("COLOR:" + key.ToUpperInvariant(), out var c) ? c : null;
 
         private static string? FindRole(VisualManifest v, string role)
         {
-            v.Options.TryGetValue("mapping:" + role, out var col);
+            v.Options.TryGetValue("MAPPING:" + role.ToUpperInvariant(), out var col);
             return col;
         }
 
@@ -527,6 +553,280 @@ namespace ETL_SQL.ReportBuilder
             int lo = (int)idx;
             int hi = Math.Min(lo + 1, sorted.Length - 1);
             return sorted[lo] + (idx - lo) * (sorted[hi] - sorted[lo]);
+        }
+
+        // ── Overlay rendering ───────────────────────────────────────────────────
+        // GOAL / AVERAGE → markLine entries on the first data series.
+        // MOVING_AVG / LINEAR / EXPONENTIAL / LOGARITHMIC / POWER / POLYNOMIAL
+        //   → additional computed line series appended after data series.
+
+        private void AppendOverlaySeries(VisualManifest v, List<object> series,
+            List<string> xLabels, bool horizontal)
+        {
+            if (v.Overlays == null || v.Overlays.Count == 0) return;
+
+            var yCol  = FindRole(v, "y") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            int yi    = yCol != null ? v.Columns.IndexOf(yCol) : 1;
+            var yVals = v.Rows.Select(r => ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null) ?? 0.0).ToList();
+
+            var markLines = new List<object>();
+            var extraSeries = new List<object>();
+
+            foreach (var ov in v.Overlays)
+            {
+                var ls    = EChartsLineStyle(ov.LineStyle);
+                var color = ov.Color ?? "#888888";
+                var label = ov.Label ?? ov.OverlayType;
+
+                switch (ov.OverlayType)
+                {
+                    case "Goal":
+                        var axis = horizontal ? "xAxis" : "yAxis";
+                        markLines.Add(new Dictionary<string, object?>
+                        {
+                            [axis]  = ov.Parameter ?? 0,
+                            ["name"] = label,
+                            ["lineStyle"] = new { type = ls, color },
+                            ["label"] = new { formatter = label, color }
+                        });
+                        break;
+
+                    case "Average":
+                        markLines.Add(new
+                        {
+                            type = "average", name = label,
+                            lineStyle = new { type = ls, color },
+                            label = new { formatter = label, color }
+                        });
+                        break;
+
+                    case "MovingAvg":
+                        int window = (int)(ov.Parameter ?? 3);
+                        var maVals = ComputeMovingAverage(yVals, window);
+                        extraSeries.Add(new
+                        {
+                            type = "line", name = label,
+                            data = maVals.Select((d, i) => (object?)(d.HasValue ? d : null)).ToList(),
+                            smooth = true, symbol = "none",
+                            lineStyle = new { type = ls, color },
+                            itemStyle = new { color },
+                            tooltip = new { valueFormatter = (object?)null }
+                        });
+                        break;
+
+                    case "Linear":
+                        var linVals = ComputeLinearRegression(yVals);
+                        extraSeries.Add(new
+                        {
+                            type = "line", name = label,
+                            data = linVals.Select(d => (object?)d).ToList(),
+                            symbol = "none",
+                            lineStyle = new { type = ls, color },
+                            itemStyle = new { color }
+                        });
+                        break;
+
+                    case "Exponential":
+                        var expVals = ComputeExponentialFit(yVals);
+                        extraSeries.Add(new
+                        {
+                            type = "line", name = label,
+                            data = expVals.Select(d => (object?)d).ToList(),
+                            symbol = "none",
+                            lineStyle = new { type = ls, color },
+                            itemStyle = new { color }
+                        });
+                        break;
+
+                    case "Logarithmic":
+                        var logVals = ComputeLogarithmicFit(yVals);
+                        extraSeries.Add(new
+                        {
+                            type = "line", name = label,
+                            data = logVals.Select(d => (object?)d).ToList(),
+                            symbol = "none",
+                            lineStyle = new { type = ls, color },
+                            itemStyle = new { color }
+                        });
+                        break;
+
+                    case "Power":
+                        var powVals = ComputePowerFit(yVals);
+                        extraSeries.Add(new
+                        {
+                            type = "line", name = label,
+                            data = powVals.Select(d => (object?)d).ToList(),
+                            symbol = "none",
+                            lineStyle = new { type = ls, color },
+                            itemStyle = new { color }
+                        });
+                        break;
+
+                    case "Polynomial":
+                        int degree = (int)(ov.Parameter ?? 2);
+                        var polyVals = ComputePolynomialFit(yVals, degree);
+                        extraSeries.Add(new
+                        {
+                            type = "line", name = label,
+                            data = polyVals.Select(d => (object?)d).ToList(),
+                            smooth = true, symbol = "none",
+                            lineStyle = new { type = ls, color },
+                            itemStyle = new { color }
+                        });
+                        break;
+                }
+            }
+
+            // Attach markLine entries to the first data series
+            if (markLines.Count > 0 && series.Count > 0)
+            {
+                var first = series[0];
+                // Merge markLine into existing anonymous object by rebuilding with markLine property
+                var merged = MergeMarkLine(first, markLines);
+                series[0] = merged;
+            }
+
+            series.AddRange(extraSeries);
+        }
+
+        private static object MergeMarkLine(object series, List<object> markLineData)
+        {
+            var json  = JsonSerializer.Serialize(series, _json);
+            var dict  = JsonSerializer.Deserialize<Dictionary<string, object>>(json)!;
+            dict["markLine"] = new { data = markLineData, silent = true };
+            return dict;
+        }
+
+        private static string EChartsLineStyle(string style) => style switch
+        {
+            "solid"  => "solid",
+            "dotted" => "dotted",
+            _        => "dashed"
+        };
+
+        // ── Regression / smoothing math ─────────────────────────────────────────
+
+        private static List<double?> ComputeMovingAverage(List<double> y, int window)
+        {
+            var result = new List<double?>(y.Count);
+            for (int i = 0; i < y.Count; i++)
+            {
+                if (i < window - 1) { result.Add(null); continue; }
+                result.Add(y.Skip(i - window + 1).Take(window).Average());
+            }
+            return result;
+        }
+
+        private static List<double> ComputeLinearRegression(List<double> y)
+        {
+            int n = y.Count;
+            if (n < 2) return y.ToList();
+            var x  = Enumerable.Range(0, n).Select(i => (double)i).ToList();
+            double xMean = x.Average(), yMean = y.Average();
+            double num = x.Zip(y, (xi, yi) => (xi - xMean) * (yi - yMean)).Sum();
+            double den = x.Sum(xi => (xi - xMean) * (xi - xMean));
+            double slope = den == 0 ? 0 : num / den;
+            double intercept = yMean - slope * xMean;
+            return x.Select(xi => slope * xi + intercept).ToList();
+        }
+
+        private static List<double> ComputeExponentialFit(List<double> y)
+        {
+            int n = y.Count;
+            if (n < 2) return y.ToList();
+            // ln(y) = a + bx  →  y = e^a * e^(bx)
+            var x    = Enumerable.Range(0, n).Select(i => (double)i).ToList();
+            var logY = y.Select(yi => yi > 0 ? Math.Log(yi) : 0.0).ToList();
+            double xMean = x.Average(), lyMean = logY.Average();
+            double num = x.Zip(logY, (xi, li) => (xi - xMean) * (li - lyMean)).Sum();
+            double den = x.Sum(xi => (xi - xMean) * (xi - xMean));
+            double b = den == 0 ? 0 : num / den;
+            double a = lyMean - b * xMean;
+            return x.Select(xi => Math.Exp(a + b * xi)).ToList();
+        }
+
+        private static List<double> ComputeLogarithmicFit(List<double> y)
+        {
+            int n = y.Count;
+            if (n < 2) return y.ToList();
+            // y = a + b*ln(x+1)
+            var x    = Enumerable.Range(0, n).Select(i => (double)i).ToList();
+            var logX = x.Select(xi => Math.Log(xi + 1)).ToList();
+            double lxMean = logX.Average(), yMean = y.Average();
+            double num = logX.Zip(y, (lxi, yi) => (lxi - lxMean) * (yi - yMean)).Sum();
+            double den = logX.Sum(lxi => (lxi - lxMean) * (lxi - lxMean));
+            double b = den == 0 ? 0 : num / den;
+            double a = yMean - b * lxMean;
+            return logX.Select(lxi => a + b * lxi).ToList();
+        }
+
+        private static List<double> ComputePowerFit(List<double> y)
+        {
+            int n = y.Count;
+            if (n < 2) return y.ToList();
+            // ln(y) = a + b*ln(x+1)
+            var x    = Enumerable.Range(0, n).Select(i => (double)i).ToList();
+            var logX = x.Select(xi => Math.Log(xi + 1)).ToList();
+            var logY = y.Select(yi => yi > 0 ? Math.Log(yi) : 0.0).ToList();
+            double lxMean = logX.Average(), lyMean = logY.Average();
+            double num = logX.Zip(logY, (lxi, lyi) => (lxi - lxMean) * (lyi - lyMean)).Sum();
+            double den = logX.Sum(lxi => (lxi - lxMean) * (lxi - lxMean));
+            double b = den == 0 ? 0 : num / den;
+            double a = lyMean - b * lxMean;
+            return logX.Select(lxi => Math.Exp(a + b * lxi)).ToList();
+        }
+
+        private static List<double> ComputePolynomialFit(List<double> y, int degree)
+        {
+            int n = y.Count;
+            degree = Math.Min(degree, n - 1);
+            if (degree < 1) return ComputeLinearRegression(y);
+
+            // Vandermonde matrix least-squares via normal equations (small datasets only)
+            var x  = Enumerable.Range(0, n).Select(i => (double)i).ToArray();
+            int d  = degree + 1;
+            var A  = new double[d, d];
+            var b2 = new double[d];
+
+            for (int i = 0; i < d; i++)
+            {
+                for (int j = 0; j < d; j++)
+                    A[i, j] = x.Sum(xi => Math.Pow(xi, i + j));
+                b2[i] = x.Zip(y, (xi, yi) => yi * Math.Pow(xi, i)).Sum();
+            }
+
+            var coeffs = SolveLinearSystem(A, b2, d);
+            return x.Select(xi => coeffs.Select((c, k) => c * Math.Pow(xi, k)).Sum()).ToList();
+        }
+
+        private static double[] SolveLinearSystem(double[,] A, double[] b, int n)
+        {
+            // Gaussian elimination with partial pivoting
+            var M = (double[,])A.Clone();
+            var r = (double[])b.Clone();
+            for (int col = 0; col < n; col++)
+            {
+                int pivot = col;
+                for (int row = col + 1; row < n; row++)
+                    if (Math.Abs(M[row, col]) > Math.Abs(M[pivot, col])) pivot = row;
+                for (int k = 0; k < n; k++) (M[col, k], M[pivot, k]) = (M[pivot, k], M[col, k]);
+                (r[col], r[pivot]) = (r[pivot], r[col]);
+                if (Math.Abs(M[col, col]) < 1e-12) continue;
+                for (int row = col + 1; row < n; row++)
+                {
+                    double f = M[row, col] / M[col, col];
+                    for (int k = col; k < n; k++) M[row, k] -= f * M[col, k];
+                    r[row] -= f * r[col];
+                }
+            }
+            var x = new double[n];
+            for (int i = n - 1; i >= 0; i--)
+            {
+                x[i] = r[i];
+                for (int j = i + 1; j < n; j++) x[i] -= M[i, j] * x[j];
+                if (Math.Abs(M[i, i]) > 1e-12) x[i] /= M[i, i];
+            }
+            return x;
         }
 
         private static string Serialize(object obj) =>

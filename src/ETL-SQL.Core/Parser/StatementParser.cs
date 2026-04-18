@@ -59,7 +59,14 @@ namespace ETL_SQL.Core.Parser
                 if (_parser.Match(TokenType.MAX_IN_MEMORY_BATCHES)) return ParseSetThreshold(ThresholdType.MaxInMemoryBatches);
                 if (_parser.Match(TokenType.FOREACH_PAGE_SIZE)) return ParseSetThreshold(ThresholdType.ForeachPageSize);
                 if (_parser.Match(TokenType.MAX_MESSAGES)) return ParseSetThreshold(ThresholdType.MaxMessages);
+                if (_parser.Match(TokenType.MAX_FILE_OPERATIONS)) return ParseSetThreshold(ThresholdType.MaxFileOperations);
+                if (_parser.Match(TokenType.MAX_PARALLEL_DEGREE)) return ParseSetThreshold(ThresholdType.MaxParallelDegree);
+                if (_parser.Match(TokenType.MAX_STRING_RESULT_SIZE)) return ParseSetThreshold(ThresholdType.MaxStringResultSize);
+                if (_parser.Match(TokenType.REGEX_MATCH_TIMEOUT)) return ParseSetThreshold(ThresholdType.RegexMatchTimeout);
                 
+                if (_parser.Match(TokenType.SPILL_ENCRYPTION)) return ParseSetSpillOption(SpillOptionType.Encryption);
+                if (_parser.Match(TokenType.SPILL_COMPRESSION)) return ParseSetSpillOption(SpillOptionType.Compression);
+
                 if (_parser.Match(TokenType.REPORT)) return ParseSetReportMetadata();
 
                 if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.StartsWith("ALLOW_", StringComparison.OrdinalIgnoreCase))
@@ -96,6 +103,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.WAIT)) return ParseWait();
             if (_parser.Match(TokenType.RAISEERROR)) return ParseRaiseError();
             if (_parser.Match(TokenType.ASSERT)) return ParseAssert();
+            if (_parser.Match(TokenType.EXPECT)) return ParseExpectSchema();
             if (_parser.Match(TokenType.EXEC) || _parser.Match(TokenType.EXECUTE)) return ParseExecute();
             if (_parser.Match(TokenType.PARALLEL)) return ParseParallel();
             if (_parser.Match(TokenType.THROW)) return ParseThrow();
@@ -232,7 +240,8 @@ namespace ETL_SQL.Core.Parser
         {
             // Most keywords are contextual in ETL-SQL to allow them as identifiers where not ambiguous.
             // Star and operators/literal types are generally not contextual keywords.
-            return type < TokenType.STAR && type != TokenType.IDENTIFIER && type != TokenType.VARIABLE && type != TokenType.STRING && type != TokenType.NUMBER;
+            return (type < TokenType.STAR || (type >= TokenType.VISUAL && type <= TokenType.SEARCH)) 
+                && type != TokenType.IDENTIFIER && type != TokenType.VARIABLE && type != TokenType.STRING && type != TokenType.NUMBER;
         }
     }
 }

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import type { ProtocolMessage, Variable, VariablesMessage } from '../types';
+import type { ProtocolMessage, Variable } from '../types';
 import { extractVariables } from '../utils/variable_utils';
 import { Variable as VariableIcon, Box, Code2 } from 'lucide-react';
 

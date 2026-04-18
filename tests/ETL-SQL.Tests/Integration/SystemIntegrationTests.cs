@@ -11,7 +11,7 @@ using System.Linq;
 using System;
 using System.IO;
 
-namespace ETL_SQL.Tests
+namespace ETL_SQL.Tests.Integration
 {
     public class SystemIntegrationTests
     {

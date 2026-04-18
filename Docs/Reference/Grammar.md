@@ -33,7 +33,7 @@ SET @label = UPPER(@name) + '_PROCESSED';
 ```
 
 ### 1.3 System Variables
-The engine provides built-in variables for session-level state. All system variables are read-only except for `@@DATASET` (which is user-clearable).
+The engine provides built-in variables for session-level state. All system variables are read-only.
 
 | Variable | Description |
 | :--- | :--- |
@@ -50,7 +50,7 @@ The engine provides built-in variables for session-level state. All system varia
 | `@@PEAK_MEMORY_MB` | Peak working set memory used by the current engine process. |
 | `@@SUBQUERY_CACHE_HITS` | Total number of scalar subquery results retrieved from the session cache. |
 | `@@SORT_SPILLS` | Number of external sort runs that spilled to disk during the session. |
-| `@@DATASET` | (Report-Builder Only) A reference to the current data set being processed. |
+| `@@DATASET` | **(Deprecated)** Legacy Report-Builder shorthand for inline data. Use a named temp table (`#name`) instead. |
 
 
 ### 1.4 `INPUT` and `OUTPUT` Variables
@@ -418,6 +418,54 @@ ASSERT (SELECT COUNT(*) FROM #staging) > 0, 'Staging table must not be empty';
 -- Business logic validation
 ASSERT @total_amount >= 0, 'Negative balances are not allowed';
 ```
+
+### 3.11 `EXPECT SCHEMA`
+Detects schema drift by comparing a declared column manifest against the actual schema of a `#temp` table or named connection. Checks column presence and type family compatibility (e.g., `INT` and `BIGINT` are the same family; `INT` and `VARCHAR` are not).
+
+```sql
+EXPECT SCHEMA <target> (
+    <column> <type> [NOT NULL] [, ...]
+) [ON DRIFT WARN];
+```
+
+- By default, a mismatch throws an `ExecutionException` and halts the script.
+- `ON DRIFT WARN` logs a warning instead of throwing, allowing the script to continue.
+- Only the declared columns are checked — extra columns in the actual table are ignored.
+- For connections that do not expose type metadata (REST, FTP, flat file), only column **presence** is verified.
+- `NOT NULL` is parsed and stored but not enforced in v1; it is reserved for future nullable checking.
+
+```sql
+-- Halt on drift (default)
+EXPECT SCHEMA #staging (
+    CustomerId INT,
+    Name       VARCHAR,
+    Amount     DECIMAL(18,2)
+);
+
+-- Warn and continue on drift
+EXPECT SCHEMA #staging (
+    CustomerId INT,
+    Name       VARCHAR
+) ON DRIFT WARN;
+
+-- Works equally well against named connections
+EXPECT SCHEMA myConnection (
+    OrderId    INT,
+    OrderDate  DATE,
+    Total      DECIMAL
+);
+```
+
+**Type families recognized:**
+
+| Family | Types matched |
+| :--- | :--- |
+| Integer | `INT`, `INTEGER`, `BIGINT`, `SMALLINT`, `TINYINT` |
+| Decimal | `DECIMAL`, `NUMERIC`, `MONEY`, `SMALLMONEY`, `FLOAT`, `REAL`, `DOUBLE` |
+| String | `VARCHAR`, `NVARCHAR`, `CHAR`, `NCHAR`, `TEXT`, `NTEXT`, `CLOB`, `STRING` |
+| Date | `DATE`, `DATETIME`, `DATETIME2`, `SMALLDATETIME`, `TIMESTAMP`, `DATETIMEOFFSET` |
+| Boolean | `BIT`, `BOOLEAN`, `BOOL` |
+| Binary | `VARBINARY`, `BINARY`, `BLOB`, `IMAGE` |
 
 ---
 
@@ -922,30 +970,113 @@ If `@author` is omitted, it defaults to the current system user.
 ---
 
 ## 15. Containerized Test Databases (`USE DOCKER`)
-Spins up an isolated containerized database for testing. The container is automatically provisioned and connected.
+
+Spins up an isolated containerized database for integration testing. The container is automatically provisioned, and the engine waits for the database to be ready before returning control. No separate readiness polling is needed.
+
+### 15.1 Spawning a Container
 
 ```sql
--- Start a SQL Server container
-USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS dms;
-DECLARE @conn VARCHAR(500) = dms.CONNECTION_STRING;
+USE DOCKER('<image>') [AS <alias>];
+```
+
+The image name is an expression, so variables are allowed. The optional alias becomes the handle for accessing the connection string and issuing lifecycle commands.
+
+```sql
+USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS mssql_db;
+USE DOCKER('postgres:15-alpine') AS pg_db;
+USE DOCKER('gvenzl/oracle-free:latest') AS ora_db;
+```
+
+After startup, the connection string is available on the alias:
+
+```sql
+DECLARE @conn VARCHAR(500) = mssql_db.CONNECTION_STRING;
 CREATE CONNECTION stage_db ON MSSQL(@conn);
-
--- Load and test
-INSERT INTO stage_db.dbo.TestTable SELECT * FROM #staging;
-
--- Container management
-dms STOP;     -- Pause (state persists)
-dms START;    -- Resume
-dms CLOSE;    -- Destroy container and all state
-DOCKER CLOSE; -- Close ALL active containers
 ```
 
-*Function-style aliases:*
+`DOCKER.CONNECTION_STRING` (without an alias) always returns the most recently started container.
+
+### 15.2 Supported Images and Default Credentials
+
+| Database | Image pattern | Default credentials | Port |
+| :--- | :--- | :--- | :--- |
+| SQL Server | contains `mssql` | `sa` / `Password123!` | 1433 |
+| PostgreSQL | contains `postgres` | `postgres` / `postgres` | 5432 |
+| Oracle | contains `oracle` | `system` / `oracle` | 1521 |
+
+Any image not matching these patterns throws an `ExecutionException` at runtime.
+
+### 15.3 Spawn Lifecycle
+
+1. **Session cache check** — if a container with the same image/alias is already running in this session, the cached connection string is returned immediately (no second container is started).
+2. **System container discovery** — the engine queries the local Docker daemon for a container named `etlsql_<image>`. If found, it re-attaches and returns the existing connection string. This allows container reuse across multiple script runs in the same shell session.
+3. **Container creation** — if no existing container is found, a new one is built using Testcontainers (`MsSqlBuilder`, `PostgreSqlBuilder`, or `OracleBuilder`).
+4. **Readiness wait** — `StartAsync()` blocks until the database accepts connections. No manual `WAITFOR` is needed.
+5. **Registration** — the container handle and connection string are stored in the session cache.
+
+### 15.4 Container Lifecycle Commands
+
+| Syntax | Effect |
+| :--- | :--- |
+| `<alias> STOP;` | Stops the container (state is preserved on disk) |
+| `<alias> START;` | Resumes a stopped container |
+| `<alias> CLOSE;` | Destroys the container and removes all state |
+| `CLOSE_DOCKER;` | Destroys **all** active containers in the session |
+| `CLOSE_DOCKER <alias>;` | Destroys a specific container by alias |
+| `CLOSE_DOCKER ('<image>');` | Destroys all containers matching the image name |
+
+Function-style keyword aliases are also supported:
+
 ```sql
-START_DOCKER('postgres:15-alpine', 'pg_test');
-STOP_DOCKER('pg_test');
-CLOSE_DOCKER('pg_test');
+START_DOCKER 'pg_test';
+STOP_DOCKER  'pg_test';
+CLOSE_DOCKER 'pg_test';
 ```
+
+### 15.5 Container Persistence and Cleanup
+
+**Containers are not automatically closed when a script ends.** This is intentional — it allows a container to be reused across multiple `RUN SCRIPT` calls or interactive sessions without paying the startup cost each time.
+
+Always include an explicit `CLOSE_DOCKER` at the end of tests or wrap the body in a `TRY...CATCH` to ensure cleanup:
+
+```sql
+BEGIN TRY
+    USE DOCKER('postgres:15-alpine') AS pg;
+    DECLARE @conn VARCHAR(500) = pg.CONNECTION_STRING;
+    CREATE CONNECTION testdb ON POSTGRES(@conn);
+
+    CREATE TABLE testdb.orders (id INT, total DECIMAL(10,2));
+    INSERT INTO testdb.orders VALUES (1, 99.99), (2, 149.50);
+
+    ASSERT (SELECT COUNT(*) FROM testdb.orders) = 2, 'Expected 2 orders';
+END TRY
+BEGIN CATCH
+    PRINT 'Test failed: ' + @@ERROR;
+END CATCH
+
+CLOSE_DOCKER pg;
+```
+
+### 15.6 Multiple Containers
+
+Multiple containers can run simultaneously, each with its own alias:
+
+```sql
+USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS src;
+USE DOCKER('postgres:15-alpine') AS dst;
+
+DECLARE @src_conn VARCHAR(500) = src.CONNECTION_STRING;
+DECLARE @dst_conn VARCHAR(500) = dst.CONNECTION_STRING;
+
+CREATE CONNECTION source_db ON MSSQL(@src_conn);
+CREATE CONNECTION target_db ON POSTGRES(@dst_conn);
+
+SELECT * FROM source_db.dbo.Customers INTO #tmp;
+INSERT INTO target_db.public.customers SELECT * FROM #tmp;
+
+CLOSE_DOCKER;  -- close all at once
+```
+
 ---
 
 ## 16. Dynamic SQL & Remote Execution (EXEC)

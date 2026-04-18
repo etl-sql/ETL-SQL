@@ -504,12 +504,17 @@ namespace ETL_SQL.Core.Parser
                     _parser.Consume(TokenType.RPAREN, "Expected ')' after subquery");
                     return new SubqueryExpression(select) { Line = parenToken.Line, Column = parenToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
                 }
+                
                 var exprs = new List<Expression>();
                 exprs.Add(_parser.ParseExpression());
+                
+                // Only treat as a ListExpression if a comma follows and we haven't hit the end of the group.
+                // This prevents over-greedy consumption for simple parenthesized expressions.
                 while (_parser.Match(TokenType.COMMA))
                 {
                     exprs.Add(_parser.ParseExpression());
                 }
+                
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after group expression");
                 return exprs.Count == 1 ? exprs[0] : new ListExpression(exprs) { Line = parenToken.Line, Column = parenToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
@@ -531,7 +536,12 @@ namespace ETL_SQL.Core.Parser
             //  - followed by '(' → function call (e.g. DIRECTORY(...), USE DOCKER(...))
             //  - followed by '.' → identifier prefix (e.g. DOCKER.CONNECTION_STRING)
             //  - followed by other → bare identifier (covers e.g. connector-type names used as table refs)
-            if (_parser.Current.Type < TokenType.STAR)
+            // Identifier fallback: allows keywords like POWER, X_AXIS, or SOLID as identifiers/function names
+            // but explicitly prevents greedy consumption of structural symbols.
+            if (_parser.Current.Type < TokenType.STAR || (_parser.IsIdentifier(_parser.Current) && 
+                _parser.Current.Type != TokenType.RPAREN && 
+                _parser.Current.Type != TokenType.COMMA && 
+                _parser.Current.Type != TokenType.SEMICOLON))
             {
                 var t = _parser.Advance();
                 var name = t.Value;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.Data
 {
@@ -14,6 +15,9 @@ namespace ETL_SQL.Data
         private readonly object?[] _values;
         private readonly int _setIndex;
         private readonly int _hashCode;
+        
+        public int Length => _values.Length;
+        public object? this[int index] => _values[index];
 
         public CompoundKey(params object?[] values) : this(0, values) { }
 
@@ -50,7 +54,7 @@ namespace ETL_SQL.Data
         public static bool operator ==(CompoundKey left, CompoundKey right) => left.Equals(right);
         public static bool operator !=(CompoundKey left, CompoundKey right) => !left.Equals(right);
 
-        private static object? NormalizeValue(object? val)
+        public static object? NormalizeValue(object? val)
         {
             if (val == null || val == DBNull.Value) return null;
 
@@ -88,7 +92,7 @@ namespace ETL_SQL.Data
                 if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var dec2)) 
                     return dec2 / 1.00000000000000000000000000000m;
                 
-                if (DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt2))
+                if (EvaluationUtils.SafeTryParseDate(s, out var dt2))
                     return dt2;
 
                 return s.Trim(); 

@@ -7,7 +7,7 @@ using ETL_SQL.App;
 using ETL_SQL.Core.Parser;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.Integration.Integration
 {
     /// <summary>
     /// Integration tests against the standard test data files in TestData/.

@@ -3,6 +3,7 @@ using ETL_SQL.Common;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using ETL_SQL.Core.Spill;
 
 namespace ETL_SQL.Core
 {
@@ -115,6 +116,7 @@ namespace ETL_SQL.Core
         bool AllowUnknownFileTypes { get; set; }
         bool AllowLargeFileOperationCount { get; set; }
         bool AllowDeepRecursion { get; set; }
+        bool AllowLargeStringResults { get; set; }
         
         /// <summary>Metadata about the last caught exception in this session.</summary>
         ErrorInfo? LastError { get; set; }
@@ -133,6 +135,16 @@ namespace ETL_SQL.Core
         int WindowSpillThreshold { get; set; }
         /// <summary>Maximum number of batches held in RAM for #temp tables before spilling.</summary>
         int MaxInMemoryBatches { get; set; }
+        /// <summary>The maximum number of concurrent tasks allowed in a PARALLEL block.</summary>
+        int MaxParallelDegree { get; set; }
+        /// <summary>The maximum size in bytes allowed for a single string function result.</summary>
+        long MaxStringResultSize { get; set; }
+        /// <summary>Milliseconds to wait before timing out a regular expression match.</summary>
+        int RegexMatchTimeoutMs { get; set; }
+        /// <summary>The absolute path to the script file currently being executed (if any).</summary>
+        string? CurrentScriptPath { get; set; }
+        /// <summary>Maximum number of file operations allowed in a single script.</summary>
+        int MaxFileOperations { get; set; }
     }
 
 
@@ -192,6 +204,9 @@ namespace ETL_SQL.Core
                                         ILoggingContext, IEvaluationContext, IDataContext, IEngineContext,
                                         IReportContext
     {
+        bool SpillEncryptionEnabled { get; set; }
+        bool SpillCompressionEnabled { get; set; }
+        ISpillStore SpillStore { get; }
         Stack<Row> OuterRowStack { get; }
         Dictionary<Statement, object?> SubqueryCache { get; }
         System.Threading.CancellationToken CancellationToken { get; }

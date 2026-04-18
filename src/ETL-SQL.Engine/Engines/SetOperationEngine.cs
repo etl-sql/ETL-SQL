@@ -38,7 +38,9 @@ namespace ETL_SQL.Engine.Engines
             if (leftRows.Count == 0 && rightRows.Count == 0) yield break;
 
             var resultBatch = new DataTable();
-            var targetColumns = leftRows.Count > 0 ? leftRows[0].Columns.Keys.ToList() : rightRows[0].Columns.Keys.ToList();
+            var targetColumns = leftRows.Count > 0 
+                ? leftRows[0].Schema?.ColumnNames.ToList() ?? leftRows[0].Columns.Keys.ToList() 
+                : rightRows[0].Schema?.ColumnNames.ToList() ?? rightRows[0].Columns.Keys.ToList();
             resultBatch.SetColumns(targetColumns);
 
             // case SetOpType.UNION:
@@ -102,17 +104,10 @@ namespace ETL_SQL.Engine.Engines
         private Row Normalize(Row row, List<string> targetColumns)
         {
             var newRow = new Row();
-            var sourceKeys = row.Columns.Keys.ToArray();
+            // IMPORTANT: SQL Set operations are positional.
             for (int i = 0; i < targetColumns.Count; i++)
             {
-                if (i < sourceKeys.Length)
-                {
-                    newRow[targetColumns[i]] = row[sourceKeys[i]];
-                }
-                else
-                {
-                    newRow[targetColumns[i]] = null;
-                }
+                newRow[targetColumns[i]] = row[i];
             }
             return newRow;
         }

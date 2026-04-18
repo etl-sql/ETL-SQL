@@ -18,9 +18,11 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (ParallelStatement)statement;
             
-            // Phase 1: Determine concurrency limit (default to all if 0 or negative)
+            // Phase 1: Determine concurrency limit (default to all if 0 or negative, capped by global MaxParallelDegree)
             int limit = stmt.ConcurrencyLimit > 0 ? stmt.ConcurrencyLimit : stmt.Body.Statements.Count;
-            var semaphore = new System.Threading.SemaphoreSlim(limit);
+            int safetyLimit = Math.Min(limit, context.MaxParallelDegree);
+            
+            var semaphore = new System.Threading.SemaphoreSlim(safetyLimit);
             
             // Phase 2: Launch all statements with throttling
             var tasks = stmt.Body.Statements.Select(async s => {

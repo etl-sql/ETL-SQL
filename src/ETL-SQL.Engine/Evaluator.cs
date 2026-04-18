@@ -18,6 +18,7 @@ using ETL_SQL.Engine.Services;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Services;
 using Microsoft.Extensions.Configuration;
+using ETL_SQL.Core.Spill;
 
 namespace ETL_SQL.Engine
 {
@@ -45,6 +46,7 @@ namespace ETL_SQL.Engine
         private readonly IDockerManager _dockerManager;
         private readonly IConnectorRegistry _connectorRegistry;
         private readonly SessionStateManager _sessionStateManager;
+        public SecurityService SecurityService => _securityService;
         private readonly SecurityService _securityService;
         private readonly ETL_SQL.Common.ILogger _logger;
         private readonly ConcurrentDictionary<string, IDataSource> _connections;
@@ -63,6 +65,9 @@ namespace ETL_SQL.Engine
         private readonly Dictionary<Statement, object?> _subqueryCache = new(new StatementSqlEqualityComparer());
         private readonly Dictionary<(Guid? ParentId, Statement Stmt), ExecutionNode> _nodeReuseMap = new();
         private readonly TransactionManager _transactionManager = new();
+        private readonly ISpillStore _spillStore;
+
+        public ISpillStore SpillStore => _spillStore;
 
         /// <summary>Current transaction nesting level.</summary>
         public int TranCount => _transactionManager.TranCount;
@@ -114,6 +119,17 @@ namespace ETL_SQL.Engine
         public ErrorInfo? LastError { get; set; }
         public ErrorInfo? ActiveException { get; set; }
         public int PreviousErrorNumber { get; set; } = 0;
+        
+        public bool AllowUnknownFileTypes { get; set; }
+        public bool AllowLargeFileOperationCount { get; set; }
+        public bool AllowDeepRecursion { get; set; }
+        public bool AllowLargeStringResults { get; set; }
+
+        public int MaxParallelDegree { get; set; } = LanguageMetadata.DefaultMaxParallelDegree;
+        public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
+        public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
+        public string? CurrentScriptPath { get; set; }
+        public int MaxFileOperations { get; set; } = SecurityService.DefaultMaxFileOperations;
         
         /// <summary>Last script lexing duration in milliseconds.</summary>
         public long LastLexTimeMs { get; set; }
@@ -215,16 +231,13 @@ namespace ETL_SQL.Engine
         public bool ReuseLoopNodes { get; set; } = true;
         
         public IServiceProvider ServiceProvider => _serviceProvider;
-        public SecurityService SecurityService => _securityService;
-
-        public bool AllowUnknownFileTypes { get; set; }
-        public bool AllowLargeFileOperationCount { get; set; }
-        public bool AllowDeepRecursion { get; set; }
 
         public int JoinSpillThreshold { get; set; } = 100000;
         public int ExternalHashPartitions { get; set; } = 32;
         public int ExternalSortChunkSize { get; set; } = 100000;
         public int WindowSpillThreshold { get; set; } = LanguageMetadata.DefaultWindowSpillThreshold;
+        public bool SpillEncryptionEnabled { get; set; } = true;
+        public bool SpillCompressionEnabled { get; set; } = true;
 
 
         /// <summary>The ID of the currently executing node in this task/context.</summary>
@@ -362,6 +375,7 @@ namespace ETL_SQL.Engine
             _queryCompiler = new QueryCompiler(this);
             _metricsReporter = new ExecutionMetricsReporter(this);
             _expressionEvaluator = new ExpressionEvaluator(this);
+            _spillStore = new Spill.SpillStore(this);
             _dataSourceManager = new DataSourceManager(_logger, this, _expressionEvaluator);
             _schemaManager = new SchemaManager(_logger, this, _variableScopeManager);
             _procedureExecutor = new ProcedureExecutor(_variableScopeManager, this);
@@ -390,18 +404,19 @@ namespace ETL_SQL.Engine
             _logger.Info("Evaluator initialized.");
 
             // Standard OnMessage hook for capturing output into the Messages list
-            _logger.OnMessage += (msg, col) =>
-            {
-                if (RedirectOutput)
+                _logger.OnMessage += (msg, col) =>
                 {
-                    lock (_messagesLock)
+                    if (RedirectOutput)
                     {
-                        Messages.Add(msg);
-                        if (Messages.Count > MaxMessages)
-                            Messages.RemoveAt(0);
+                        var scrubbed = Scrub(msg);
+                        lock (_messagesLock)
+                        {
+                            Messages.Add(scrubbed);
+                            if (Messages.Count > MaxMessages)
+                                Messages.RemoveAt(0);
+                        }
                     }
-                }
-            };
+                };
         }
 
         public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)
@@ -545,7 +560,7 @@ namespace ETL_SQL.Engine
                 if (IsVerbose)
                 {
                     string sql = (statement is UsePasswordStatement ups) ? ups.ToSql(!ShowPassword) : statement.ToSql();
-                    _logger.Debug("Executing {Sql}", sql);
+                    _logger.Debug("Executing {Sql}", Scrub(sql));
                 }
                 _metricsReporter.ReportPreExecutionMetrics(statement);
             }
@@ -598,6 +613,15 @@ namespace ETL_SQL.Engine
 
         public Task<IDataSource> ResolveDataSourceAsync(TableReference table) => _dataSourceManager.ResolveDataSourceAsync(table, _connections, _transactionManager);
         public IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table) => _dataSourceManager.ResolveAndApplyOperators(table, _connections, _transactionManager, BatchSize);
+
+        public async Task<object?> ExecuteValue(string expression, Row? context = null)
+        {
+            var lexer = new ETL_SQL.Core.Parser.Lexer(expression);
+            var tokens = lexer.Tokenize();
+            var parser = new ETL_SQL.Core.Parser.Parser(tokens, expression);
+            var expr = parser.ParseExpression();
+            return await EvaluateValue(expr, context ?? new Row());
+        }
 
         public async IAsyncEnumerable<DataTable> ExecuteQuery(Statement stmt)
         {
@@ -819,9 +843,10 @@ namespace ETL_SQL.Engine
 
         public void Log(string message, ConsoleColor color = ConsoleColor.White)
         {
+            var scrubbed = Scrub(message);
             lock (_messagesLock)
             {
-                Messages.Add(message);
+                Messages.Add(scrubbed);
                 if (Messages.Count > MaxMessages)
                 {
                     Messages.RemoveAt(0);
@@ -829,6 +854,16 @@ namespace ETL_SQL.Engine
                         Messages[0] = "[TRUNCATED] " + Messages[0];
                 }
             }
+        }
+
+        public static string Scrub(string message)
+        {
+            if (string.IsNullOrEmpty(message)) return message;
+            // Scrub standard connection string passwords, tokens, etc.
+            var res = System.Text.RegularExpressions.Regex.Replace(message, @"(?i)(password|pwd|token|secret)\s*=\s*[^\s;]+", "$1=********");
+            // Scrub ETL-SQL encrypted constants
+            res = System.Text.RegularExpressions.Regex.Replace(res, @"ENC:[a-zA-Z0-9+/=]+", "ENC:********");
+            return res;
         }
 
         public string ResolvePath(string path)
@@ -876,6 +911,7 @@ namespace ETL_SQL.Engine
         public async ValueTask DisposeAsync()
         {
             if (_sessionId != null) _sessionStateManager.UnregisterActiveSession(_sessionId);
+            _spillStore.Dispose();
             foreach (var conn in _connections.Values) await conn.DisposeAsync();
             await DockerManager.DisposeAsync();
             _connections.Clear();
@@ -945,5 +981,7 @@ namespace ETL_SQL.Engine
             _operationCount++;
             _securityService.CheckRunawayProtection(_operationCount, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, path);
         }
+
+        ETL_SQL.Services.SecurityService IExecutionContext.SecurityService => _securityService;
     }
 }

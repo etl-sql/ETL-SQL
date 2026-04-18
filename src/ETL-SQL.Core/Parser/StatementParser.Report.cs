@@ -30,6 +30,7 @@ namespace ETL_SQL.Core.Parser
             VisualSourceExpression? source = null;
             string? title = null;
             string? subtitle = null;
+            string? defaultValue = null;
             var mappings       = new List<VisualMapping>();
             var options        = new List<VisualOption>();
             var axisOptions    = new List<AxisOptions>();
@@ -37,6 +38,7 @@ namespace ETL_SQL.Core.Parser
             var styles         = new Dictionary<string, string>();
             var typedSeries    = new List<TypedSeries>();
             var formattingRules = new List<FormattingRule>();
+            var overlays       = new List<VisualOverlay>();
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
@@ -107,6 +109,25 @@ namespace ETL_SQL.Core.Parser
                     formattingRules.AddRange(ParseFormattingRules());
                     _parser.Consume(TokenType.RPAREN, "Expected ')' to close FORMATTING");
                 }
+                else if (_parser.Match(TokenType.OVERLAYS))
+                {
+                    _parser.Consume(TokenType.LPAREN, "Expected '(' after OVERLAYS");
+                    overlays.AddRange(ParseOverlays());
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' to close OVERLAYS");
+                }
+                else if (_parser.Match(TokenType.DEFAULT))
+                {
+                    _parser.Match(TokenType.EQUALS); // Optional =
+                    if (_parser.Match(TokenType.LPAREN))
+                    {
+                        defaultValue = ConsumeReportOptionValue();
+                        _parser.Consume(TokenType.RPAREN, "Expected ')' after DEFAULT");
+                    }
+                    else
+                    {
+                        defaultValue = ConsumeReportOptionValue();
+                    }
+                }
                 else
                 {
                     throw new SyntaxException(
@@ -137,6 +158,7 @@ namespace ETL_SQL.Core.Parser
                 VisualType       = visualType,
                 Title            = title,
                 Subtitle         = subtitle,
+                DefaultValue     = defaultValue,
                 Source           = source,
                 Mappings         = mappings,
                 Options          = options,
@@ -144,6 +166,7 @@ namespace ETL_SQL.Core.Parser
                 Actions          = actions,
                 TypedSeries      = typedSeries,
                 FormattingRules  = formattingRules,
+                Overlays         = overlays,
                 Styles           = styles,
                 Line             = startToken.Line,
                 Column           = startToken.Column
@@ -258,7 +281,7 @@ namespace ETL_SQL.Core.Parser
             var result = new List<VisualMapping>();
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
-                var role   = _parser.ConsumeIdentifier("Expected mapping role name").Value;
+                var role   = _parser.ConsumeIdentifier("Expected mapping role name").Value.ToUpperInvariant();
                 _parser.Consume(TokenType.EQUALS, $"Expected '=' after mapping role '{role}'");
                 var column = _parser.ConsumeIdentifier("Expected column name after '='").Value;
                 result.Add(new VisualMapping { Role = role, Column = column });
@@ -271,16 +294,21 @@ namespace ETL_SQL.Core.Parser
         {
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
-                if (_parser.Match(TokenType.X_AXIS))
+                bool isX = _parser.Current.Type == TokenType.X_AXIS || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("X_AXIS", StringComparison.OrdinalIgnoreCase));
+                bool isY = _parser.Current.Type == TokenType.Y_AXIS || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("Y_AXIS", StringComparison.OrdinalIgnoreCase));
+
+                if (isX)
                 {
+                    _parser.Advance(); // Consume X_AXIS
                     var axisOpts = new AxisOptions { Axis = "X" };
                     _parser.Consume(TokenType.LPAREN, "Expected '(' after X_AXIS");
                     ParseAxisOptionBody(axisOpts.Options);
                     _parser.Consume(TokenType.RPAREN, "Expected ')' to close X_AXIS");
                     axisOptions.Add(axisOpts);
                 }
-                else if (_parser.Match(TokenType.Y_AXIS))
+                else if (isY)
                 {
+                    _parser.Advance(); // Consume Y_AXIS
                     var axisOpts = new AxisOptions { Axis = "Y" };
                     _parser.Consume(TokenType.LPAREN, "Expected '(' after Y_AXIS");
                     ParseAxisOptionBody(axisOpts.Options);
@@ -305,10 +333,10 @@ namespace ETL_SQL.Core.Parser
                 }
                 else
                 {
-                    var key = _parser.ConsumeIdentifier("Expected option key").Value;
-                    _parser.Consume(TokenType.EQUALS, $"Expected '=' after option '{key}'");
-                    var val = ConsumeReportOptionValue();
-                    options.Add(new VisualOption { Key = key, Value = val });
+                    var key = _parser.ConsumeIdentifier("Expected option key").Value.ToUpperInvariant();
+                    _parser.Match(TokenType.EQUALS);
+                    var val = _parser.ParseExpression();
+                    options.Add(new VisualOption { Key = key, Value = val.ToString() });
                 }
                 _parser.Match(TokenType.COMMA);
             }
@@ -318,21 +346,31 @@ namespace ETL_SQL.Core.Parser
         {
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
-                var key = _parser.ConsumeIdentifier("Expected axis option key").Value;
-                _parser.Consume(TokenType.EQUALS, "Expected '=' in axis option");
-                var val = ConsumeReportOptionValue();
-                opts.Add(new VisualOption { Key = key, Value = val });
+                var key = _parser.ConsumeIdentifier("Expected axis option key").Value.ToUpperInvariant();
+                _parser.Match(TokenType.EQUALS);
+                var val = _parser.ParseExpression();
+                opts.Add(new VisualOption { Key = key, Value = val.ToString() });
                 _parser.Match(TokenType.COMMA);
             }
         }
+
+        private static readonly HashSet<TokenType> _overlayKeywordTokens = new()
+        {
+            TokenType.LINEAR, TokenType.EXPONENTIAL, TokenType.LOGARITHMIC,
+            TokenType.POLYNOMIAL, TokenType.POWER, TokenType.GOAL, TokenType.AVERAGE,
+            TokenType.MOVING_AVG, TokenType.SOLID, TokenType.DASHED, TokenType.DOTTED,
+            TokenType.OVERLAYS, TokenType.COLOR,
+        };
 
         private string ConsumeReportOptionValue()
         {
             var t = _parser.Current.Type;
             if (t == TokenType.STRING   || t == TokenType.NUMBER  ||
                 t == TokenType.IDENTIFIER || t == TokenType.TRUE  || t == TokenType.FALSE ||
+                t == TokenType.ON       || t == TokenType.OFF     ||
                 t == TokenType.TOP      || t == TokenType.BOTTOM  ||
-                t == TokenType.LEFT     || t == TokenType.RIGHT)
+                t == TokenType.LEFT     || t == TokenType.RIGHT   ||
+                _overlayKeywordTokens.Contains(t))
             {
                 var value = _parser.Current.Value;
                 _parser.Advance();
@@ -342,6 +380,14 @@ namespace ETL_SQL.Core.Parser
                 $"Expected option value but got '{_parser.Current.Value}'",
                 _parser.Current.Line, _parser.Current.Column);
         }
+
+        private static string NormalizeBoolOptionValue(string val) =>
+            val.ToUpperInvariant() switch
+            {
+                "TRUE" or "ON" or "1"  => "ON",
+                "FALSE" or "OFF" or "0" => "OFF",
+                _                      => val
+            };
 
         private IEnumerable<VisualAction> ParseActions()
         {
@@ -669,6 +715,98 @@ namespace ETL_SQL.Core.Parser
                 _parser.Consume(TokenType.THEN, "Expected THEN after threshold in FORMATTING rule");
                 var color = _parser.Consume(TokenType.STRING, "Expected color string after THEN").Value;
                 result.Add(new FormattingRule { Column = column, Operator = op, Threshold = threshold, Color = color });
+                _parser.Match(TokenType.COMMA);
+            }
+            return result;
+        }
+
+        // ── OVERLAYS body helper ──────────────────────────────────────────────
+
+        private IEnumerable<VisualOverlay> ParseOverlays()
+        {
+            var result = new List<VisualOverlay>();
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                // Overlay type + optional parameter
+                OverlayType overlayType;
+                double?     parameter = null;
+
+                if (_parser.Match(TokenType.GOAL))
+                {
+                    overlayType = OverlayType.Goal;
+                    _parser.Consume(TokenType.LPAREN, "Expected '(' after GOAL");
+                    parameter = double.Parse(_parser.Consume(TokenType.NUMBER, "Expected numeric value for GOAL").Value,
+                        System.Globalization.CultureInfo.InvariantCulture);
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' after GOAL value");
+                }
+                else if (_parser.Match(TokenType.AVERAGE))      { overlayType = OverlayType.Average; }
+                else if (_parser.Match(TokenType.MOVING_AVG))
+                {
+                    overlayType = OverlayType.MovingAvg;
+                    _parser.Consume(TokenType.LPAREN, "Expected '(' after MOVING_AVG");
+                    parameter = double.Parse(_parser.Consume(TokenType.NUMBER, "Expected window size for MOVING_AVG").Value,
+                        System.Globalization.CultureInfo.InvariantCulture);
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' after MOVING_AVG window");
+                }
+                else if (_parser.Match(TokenType.LINEAR))       { overlayType = OverlayType.Linear; }
+                else if (_parser.Match(TokenType.EXPONENTIAL))  { overlayType = OverlayType.Exponential; }
+                else if (_parser.Match(TokenType.LOGARITHMIC))  { overlayType = OverlayType.Logarithmic; }
+                else if (_parser.Match(TokenType.POWER))        { overlayType = OverlayType.Power; }
+                else if (_parser.Match(TokenType.POLYNOMIAL))
+                {
+                    overlayType = OverlayType.Polynomial;
+                    _parser.Consume(TokenType.LPAREN, "Expected '(' after POLYNOMIAL");
+                    parameter = double.Parse(_parser.Consume(TokenType.NUMBER, "Expected degree for POLYNOMIAL").Value,
+                        System.Globalization.CultureInfo.InvariantCulture);
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' after POLYNOMIAL degree");
+                }
+                else throw new SyntaxException(
+                    $"Expected overlay type (GOAL, AVERAGE, MOVING_AVG, LINEAR, ...) but got '{_parser.Current.Value}'",
+                    _parser.Current.Line, _parser.Current.Column);
+
+                // AS <style>
+                _parser.Consume(TokenType.AS, "Expected AS after overlay type");
+                OverlayLineStyle lineStyle;
+                if      (_parser.Match(TokenType.SOLID))  lineStyle = OverlayLineStyle.Solid;
+                else if (_parser.Match(TokenType.DASHED)) lineStyle = OverlayLineStyle.Dashed;
+                else if (_parser.Match(TokenType.DOTTED)) lineStyle = OverlayLineStyle.Dotted;
+                else throw new SyntaxException(
+                    $"Expected SOLID, DASHED, or DOTTED after AS in OVERLAYS but got '{_parser.Current.Value}'",
+                    _parser.Current.Line, _parser.Current.Column);
+
+                // Optional WITH (COLOR = '...', LABEL = '...')
+                string? color = null;
+                string? label = null;
+                if (_parser.Match(TokenType.WITH))
+                {
+                    _parser.Consume(TokenType.LPAREN, "Expected '(' after WITH in overlay");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        if (_parser.Match(TokenType.COLOR))
+                        {
+                            _parser.Consume(TokenType.EQUALS, "Expected = after COLOR");
+                            color = _parser.Consume(TokenType.STRING, "Expected color string").Value;
+                        }
+                        else if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("LABEL", StringComparison.OrdinalIgnoreCase))
+                        {
+                            _parser.Advance();
+                            _parser.Consume(TokenType.EQUALS, "Expected = after LABEL");
+                            label = _parser.Consume(TokenType.STRING, "Expected label string").Value;
+                        }
+                        else break;
+                        _parser.Match(TokenType.COMMA);
+                    }
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' to close WITH");
+                }
+
+                result.Add(new VisualOverlay
+                {
+                    OverlayType = overlayType,
+                    Parameter   = parameter,
+                    LineStyle   = lineStyle,
+                    Color       = color,
+                    Label       = label
+                });
                 _parser.Match(TokenType.COMMA);
             }
             return result;

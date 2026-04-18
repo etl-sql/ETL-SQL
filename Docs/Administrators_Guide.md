@@ -71,6 +71,11 @@ Applies to: **All Hosts**
 | `Security:ApprovedSafeZones` | `[]` | Absolute paths of directories where `SET ALLOW_...` script overrides are honored. Scripts outside these paths cannot bypass runaway guards. |
 | `Security:MaxFileOperationsPerScript` | `100` | Maximum number of filesystem operations a single script may perform before the engine halts with a `SecurityException`. |
 | `Security:MaxRecursiveNestingDepth` | `5` | Maximum `RUN SCRIPT` / procedural nesting depth before halting. |
+| `Security:MaxParallelDegree` | `32` | Maximum concurrent tasks allowed in a `PARALLEL` block. |
+| `Security:MaxStringResultSize` | `104857600` | Maximum size (bytes) for a single string function result (default 100MB). |
+| `Security:RegexMatchTimeoutMs` | `1000` | Milliseconds allowed for a single regex match before timing out. |
+| `Security:SpillEncryptionEnabled` | `true` | When `true`, all disk-spilling data (join, sort, window, aggregate) is AES-256 encrypted with a per-session key. |
+| `Security:SpillCompressionEnabled` | `true` | When `true`, spilled disk data is GZip compressed (Optimal level). |
 
 > [!NOTE]
 > `Security:AllowedEnvVars` (the allow-list for the `ENV()` function) is not currently wired to `appsettings.json`. It must be configured programmatically in the DI setup (`SecurityService.AllowedEnvVars`). By default the set is empty, which means all `ENV()` calls are blocked.
@@ -239,7 +244,9 @@ Applies to: **App / TUI**
      "AllowedHosts": ["*"],
      "ApprovedSafeZones": [],
      "MaxFileOperationsPerScript": 100,
-     "MaxRecursiveNestingDepth": 5
+     "MaxRecursiveNestingDepth": 5,
+     "SpillEncryptionEnabled": true,
+     "SpillCompressionEnabled": true
    },
    "Engine": {
      "BatchSize": 10000,
@@ -313,6 +320,11 @@ Available security overrides:
 - `SET ALLOW_FILE_TYPE_ACCESS ON/OFF`: Bypasses strictly whitelisted extensions.
 - `SET ALLOW_GREATER_THAN_n_FILE ON/OFF`: Bypasses the file operation limit.
 - `SET ALLOW_RECURSIVE_GREATER_THAN_n_LAYERS ON/OFF`: Bypasses script nesting limits.
+- `SET MAX_PARALLEL_DEGREE = n`: Sets concurrent task limit (requires Safe Zone if > global limit).
+- `SET MAX_STRING_RESULT_SIZE = n`: Sets string result size ceiling (requires Safe Zone if > global limit).
+- `SET REGEX_MATCH_TIMEOUT = n`: Sets regex timeout in ms (requires Safe Zone if > global limit).
+- `SET SPILL_ENCRYPTION ON/OFF`: Toggles disk spill encryption.
+- `SET SPILL_COMPRESSION ON/OFF`: Toggles disk spill compression.
 
 ### 5.4 Performance Monitoring
 

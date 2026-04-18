@@ -49,14 +49,22 @@ namespace ETL_SQL.Core.Data
             } catch {
                 return op == "+" ? a?.ToString() + b?.ToString() : null;
             }
-            return op switch {
-                "+" => da + db,
-                "-" => da - db,
-                "*" => da * db,
-                "/" => db == 0 ? throw new DivideByZeroException() : da / db,
-                "%" => da % db,
-                _ => null
-            };
+            try
+            {
+                return op switch
+                {
+                    "+" => da + db,
+                    "-" => da - db,
+                    "*" => da * db,
+                    "/" => db == 0 ? throw new DivideByZeroException() : da / db,
+                    "%" => da % db,
+                    _ => null
+                };
+            }
+            catch (OverflowException)
+            {
+                return null;
+            }
         }
 
         /// <summary>Executes a binary operation for the given token type.</summary>

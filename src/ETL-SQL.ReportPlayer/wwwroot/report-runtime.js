@@ -109,7 +109,10 @@
                     if (s) s.style.display = 'none';
                 });
                 const target = pageSections[pageName];
-                if (target) target.style.display = 'block';
+                if (target) {
+                    target.style.display = 'block';
+                    resizeChartsIn(target);
+                }
 
                 // Update active class
                 nav.querySelectorAll('.' + itemClass).forEach(e => e.classList.remove('active'));
@@ -119,10 +122,22 @@
             nav.appendChild(el);
         });
 
-        // Show default page, hide others
+        // Show default page, hide others; resize charts that initialised hidden
         pages.forEach(p => {
             const s = pageSections[p.name];
-            if (s) s.style.display = p.name === defaultPageName ? 'block' : 'none';
+            if (!s) return;
+            if (p.name === defaultPageName) {
+                s.style.display = 'block';
+                resizeChartsIn(s);
+            } else {
+                s.style.display = 'none';
+            }
+        });
+    }
+
+    function resizeChartsIn(section) {
+        section.querySelectorAll('.chart-wrapper').forEach(w => {
+            if (w._echartsInst) w._echartsInst.resize();
         });
     }
 
@@ -326,6 +341,7 @@
         // effectiveTheme: visual-level THEME, falling back to page-level THEME
         const chart = echarts.init(wrapper, effectiveTheme || null);
         chart.setOption(option);
+        wrapper._echartsInst = chart;  // stored so page-show can resize hidden charts
 
         const clickActions  = actionsFor(visual, 'ON_CLICK');
         const crossFilter   = (visual.options || {})['CROSS_FILTER'] === 'true';
@@ -345,6 +361,54 @@
                 }
             });
         }
+    }
+
+    // ── CSV export ──────────────────────────────────────────────────────────
+
+    function exportCsv(visual) {
+        const cols = visual.columns || [];
+        const rows = visual.rows    || [];
+        const escape = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+        const lines  = [cols.map(escape).join(',')];
+        rows.forEach(r => lines.push(cols.map((_, i) => escape(r[i])).join(',')));
+        const blob = new Blob([lines.join('\r\n')], { type: 'text/csv' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = (visual.name || 'export') + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // Lightweight singleton context menu for table right-click export
+    let _ctxMenu = null;
+    function showCtxMenu(x, y, visual) {
+        hideCtxMenu();
+        const menu = document.createElement('div');
+        menu.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1px solid #ccc;' +
+            'border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.18);padding:4px 0;font-size:13px;';
+        menu.style.left = x + 'px';
+        menu.style.top  = y + 'px';
+
+        const item = document.createElement('div');
+        item.textContent = '⬇ Export to CSV';
+        item.style.cssText = 'padding:6px 16px;cursor:pointer;white-space:nowrap;';
+        item.addEventListener('mouseenter', () => item.style.background = '#f0f4ff');
+        item.addEventListener('mouseleave', () => item.style.background = '');
+        item.addEventListener('click', () => { exportCsv(visual); hideCtxMenu(); });
+        menu.appendChild(item);
+
+        document.body.appendChild(menu);
+        _ctxMenu = menu;
+
+        // Close on any outside click
+        setTimeout(() => document.addEventListener('click', hideCtxMenu, { once: true }), 0);
+    }
+
+    function hideCtxMenu() {
+        if (_ctxMenu) { _ctxMenu.remove(); _ctxMenu = null; }
     }
 
     // ── Table ───────────────────────────────────────────────────────────────
@@ -418,6 +482,13 @@
         });
         table.appendChild(tbody);
         wrapper.appendChild(table);
+
+        // Right-click → Export to CSV
+        wrapper.addEventListener('contextmenu', e => {
+            e.preventDefault();
+            showCtxMenu(e.clientX, e.clientY, visual);
+        });
+
         container.appendChild(wrapper);
     }
 

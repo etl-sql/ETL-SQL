@@ -6,7 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Core;
 using ETL_SQL.App;
 
-namespace ETL_SQL.Tests
+namespace ETL_SQL.Tests.Integration
 {
     public class AggregationRegressionTests
     {

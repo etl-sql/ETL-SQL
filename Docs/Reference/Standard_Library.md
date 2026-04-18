@@ -466,42 +466,75 @@ Window functions compute a value for each row based on a related set of rows def
 ```sql
 <function>() OVER (
     [PARTITION BY <cols>]
-    [ORDER BY <col> [ASC|DESC]]
+    [ORDER BY <col> [ASC|DESC], ...]
     [ROWS | RANGE BETWEEN <start> AND <end>]
 )
 ```
 
 **Frame bounds:** `UNBOUNDED PRECEDING`, `n PRECEDING`, `CURRENT ROW`, `n FOLLOWING`, `UNBOUNDED FOLLOWING`
 
+When no frame is specified, aggregate window functions default to the full partition; analytic functions (`LAG`, `LEAD`) default to a single row.
+
 ### 13.2 Ranking Functions
 
 | Function | Returns |
 | :--- | :--- |
 | `ROW_NUMBER()` | Unique sequential integer per partition, starting at 1 |
-| `RANK()` | Rank with gaps (1, 1, 3, 4, …) |
-| `DENSE_RANK()` | Rank without gaps (1, 1, 2, 3, …) |
-| `NTILE(n)` | Bucket number (1 to n) distributed evenly |
+| `RANK()` | Rank with gaps on ties (1, 1, 3, 4, …) — requires `ORDER BY` |
+| `DENSE_RANK()` | Rank without gaps on ties (1, 1, 2, 3, …) — requires `ORDER BY` |
+| `NTILE(n)` | Bucket number 1–n distributed as evenly as possible |
+| `PERCENT_RANK()` | Relative rank as (rank − 1) / (N − 1), range 0–1 |
+| `CUME_DIST()` | Cumulative distribution as peer_end_position / N, range (0, 1] |
 
 ### 13.3 Analytic Functions
 
 | Function | Returns |
 | :--- | :--- |
-| `LAG(col [, offset [, default]])` | Value from a previous row |
-| `LEAD(col [, offset [, default]])` | Value from a subsequent row |
-| `FIRST_VALUE(col)` | First value in the window frame |
-| `LAST_VALUE(col)` | Last value in the window frame |
+| `LAG(col [, offset [, default]])` | Value from a previous row (`offset` default: 1) |
+| `LEAD(col [, offset [, default]])` | Value from a subsequent row (`offset` default: 1) |
+| `FIRST_VALUE(col)` | First value in the partition |
+| `LAST_VALUE(col)` | Last value in the partition |
 | `NTH_VALUE(col, n)` | Value of the Nth row in the window frame |
 
-### 13.4 Distribution Functions
+> **Note:** `FIRST_VALUE` and `LAST_VALUE` always use the full partition, not an explicit frame clause. Explicit frames on these functions are parsed but not applied; use `NTH_VALUE` when frame-scoped first/last is needed.
+
+### 13.4 Aggregate Window Functions
+
+All standard aggregates support an `OVER` clause. When used as window functions they produce per-row values without collapsing the result set.
+
+| Function | Description |
+| :--- | :--- |
+| `SUM(col)` | Running or framed sum |
+| `AVG(col)` | Running or framed average |
+| `COUNT(*) / COUNT(col)` | Row count in the window |
+| `MIN(col)` / `MAX(col)` | Minimum / maximum in the window |
+| `VAR(col)` / `VAR_SAMP(col)` | Sample variance |
+| `VARP(col)` / `VAR_POP(col)` | Population variance |
+| `STDEV(col)` / `STDDEV_SAMP(col)` | Sample standard deviation |
+| `STDEVP(col)` / `STDDEV_POP(col)` | Population standard deviation |
+| `COVAR_SAMP(x, y)` | Sample covariance of two columns |
+| `COVAR_POP(x, y)` | Population covariance of two columns |
+| `CORR(x, y)` | Pearson correlation coefficient |
+| `STRING_AGG(col, sep)` | Concatenate values with separator |
+
+### 13.5 Distribution Functions
 
 | Function | Returns |
 | :--- | :--- |
-| `CUME_DIST()` | Cumulative distribution (0 < value ≤ 1) |
-| `PERCENT_RANK()` | Relative rank as a fraction (0 ≤ value ≤ 1) |
 | `PERCENTILE_CONT(n)` | Continuous percentile; uses `WITHIN GROUP (ORDER BY col)` |
 | `PERCENTILE_DISC(n)` | Discrete percentile; uses `WITHIN GROUP (ORDER BY col)` |
 
-*Examples:*
+### 13.6 Frame Behavior
+
+| Frame type | Behavior |
+| :--- | :--- |
+| `ROWS BETWEEN n PRECEDING AND m FOLLOWING` | Physical row offsets — always fully supported |
+| `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` | Cumulative from partition start to current row |
+| `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` | Extends to all peers of the current row (logical peers share the same `ORDER BY` value) |
+| Other `RANGE` bounds | Parsed; treated as full partition (true range-based peer comparison is not implemented) |
+
+### 13.7 Examples
+
 ```sql
 -- Running total and 3-row moving average
 SELECT
@@ -518,6 +551,42 @@ SELECT
     Category,
     PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY Price) OVER(PARTITION BY Category) AS MedianPrice
 FROM #products;
+
+-- Standard deviation and correlation over a partition
+SELECT
+    Region,
+    SaleDate,
+    Amount,
+    STDEV(Amount)      OVER(PARTITION BY Region) AS RegionStdDev,
+    CORR(Amount, Cost) OVER(PARTITION BY Region) AS PriceCorrelation
+FROM #sales;
+```
+
+### 13.8 Large-Scale Window Processing (ExternalWindowEngine)
+
+When the number of rows in a `SELECT` result exceeds `WINDOW_SPILL_THRESHOLD` (default 100,000), the engine automatically switches from in-memory processing to the `ExternalWindowEngine`. This is transparent — query syntax does not change.
+
+**How it works:**
+
+1. Window functions in the same `SELECT` that share identical `PARTITION BY` + `ORDER BY` are grouped into a single processing pass.
+2. For each group, the input stream is hash-partitioned into `EXTERNAL_HASH_PARTITIONS` (default 32) buckets and written to disk as newline-delimited JSON.
+3. Each bucket is loaded and processed independently, keeping memory bounded regardless of total row count.
+4. If one partition exceeds the threshold and the group contains only `ROW_NUMBER`, `RANK`, or `DENSE_RANK`, a streaming *deep-spill* path is used — the partition is never fully materialized.
+5. When a `SELECT` mixes window functions with different signatures, each signature group is processed in sequence, spilling intermediate results between passes.
+
+**Configuration:**
+
+```sql
+SET WINDOW_SPILL_THRESHOLD   = 50000;  -- lower threshold for tighter memory limits
+SET EXTERNAL_HASH_PARTITIONS = 64;     -- more partitions for larger datasets
+```
+
+Spill metrics are available after a query:
+
+```sql
+SHOW VARIABLES;
+-- @@TOTAL_SPILLED_BYTES  — bytes written to disk
+-- @@PARTITIONS_COUNT     — number of partition files created
 ```
 
 ---

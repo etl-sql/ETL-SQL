@@ -162,7 +162,7 @@ namespace ETL_SQL.Engine.Engines
                 }
                 else
                 {
-                    allRows = await SortInMemory(allRows, stmt.OrderBy, colNames);
+                    allRows = await SortInMemory(allRows, stmt.OrderBy, colNames, finalColumns);
                 }
             }
 
@@ -170,25 +170,62 @@ namespace ETL_SQL.Engine.Engines
             allRows = await ApplyLimits(allRows, stmt);
 
             // Final Projection & Batching
+            var seenRows = stmt.IsDistinct ? new HashSet<string>() : null;
             var batch = new DataTable();
             batch.SetColumns(colNames);
+            bool yielded = false;
             foreach (var row in allRows)
             {
                 var resRow = batch.NewRow();
                 for (int i = 0; i < finalColumns.Count; i++)
-                    resRow[i] = await _context.EvaluateValue(finalColumns[i].Expression, row);
+                {
+                    var col = finalColumns[i];
+                    // If the column (by alias or exact expression match) is already in the row, use it.
+                    // This is essential after Aggregation or Window functions.
+                    if (col.Alias != null && row.HasColumn(col.Alias))
+                    {
+                        resRow[i] = row[col.Alias];
+                    }
+                    else if (row.HasColumn(col.Expression.ToSql()))
+                    {
+                        resRow[i] = row[col.Expression.ToSql()];
+                    }
+                    else if (col.Expression is FunctionCallExpression fce && fce.Window != null && row.HasColumn($"WINDOW_{fce.ToSql().ToUpperInvariant()}"))
+                    {
+                        resRow[i] = row[$"WINDOW_{fce.ToSql().ToUpperInvariant()}"];
+                    }
+                    else
+                    {
+                        resRow[i] = await _context.EvaluateValue(col.Expression, row);
+                    }
+                }
+
+                if (seenRows != null)
+                {
+                    // Fix DISTINCT collapse: Use a unique sentinel for NULL to distinguish it from empty string
+                    var key = string.Join("\0", colNames.Select(c => 
+                    {
+                        var val = resRow[c];
+                        if (val == null || val == DBNull.Value) return "__NULL__";
+                        var s = val.ToString() ?? "";
+                        return s == "__NULL__" ? "__[NULL]__" : s; // Escape literal "__NULL__"
+                    }));
+                    if (!seenRows.Add(key)) continue;
+                }
+
                 await batch.AddRowAsync(resRow);
                 if (batch.Rows.Count >= _context.BatchSize)
                 {
                     yield return batch;
+                    yielded = true;
                     batch = new DataTable();
                     batch.SetColumns(colNames);
                 }
             }
-            if (batch.Rows.Count > 0) yield return batch;
+            if (batch.Rows.Count > 0 || !yielded) yield return batch;
         }
 
-        private async Task<List<Row>> SortInMemory(List<Row> rows, List<OrderByClause> orderBy, List<string> colNames)
+        private async Task<List<Row>> SortInMemory(List<Row> rows, List<OrderByClause> orderBy, List<string> colNames, List<SelectColumn> finalColumns)
         {
             var rowSortKeys = new List<(Row Row, object?[] Keys)>(rows.Count);
             foreach (var row in rows)
@@ -201,7 +238,21 @@ namespace ETL_SQL.Engine.Engines
                     {
                         keys[i] = row[colNames[(int)num - 1]];
                     }
-                    else keys[i] = await _context.EvaluateValue(expr, row);
+                    Row? evalRow = null;
+                    if (expr is IdentifierExpression id && colNames.Contains(id.Name, StringComparer.OrdinalIgnoreCase))
+                    {
+                        keys[i] = row[id.Name];
+                    }
+                    else if (expr is IdentifierExpression idAlias && finalColumns.FirstOrDefault(c => string.Equals(c.Alias, idAlias.Name, StringComparison.OrdinalIgnoreCase)) is SelectColumn col)
+                    {
+                        evalRow = row;
+                        keys[i] = await _context.EvaluateValue(col.Expression, evalRow);
+                    }
+                    else
+                    {
+                        evalRow = row;
+                        keys[i] = await _context.EvaluateValue(expr, evalRow);
+                    }
                 }
                 rowSortKeys.Add((row, keys));
             }

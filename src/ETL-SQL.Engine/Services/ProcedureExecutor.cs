@@ -22,8 +22,14 @@ namespace ETL_SQL.Engine.Services
         public async Task<object?> EvaluateUserDefinedFunction(
             FunctionCallExpression f, System.Collections.Generic.List<object?> args, Row row)
         {
+             _context.CurrentRecursiveDepth++;
+            _context.IncrementOperationCount(); // Trigger check against limits
+
             if (!_scopeManager.TryGetFunction(f.FunctionName, out var funcStmt) || funcStmt == null)
+            {
+                _context.CurrentRecursiveDepth--;
                 return args.Count > 0 ? args[0] : null;
+            }
 
             var localVars = BuildParameterDictionary(funcStmt.Parameters, args);
             _context.PushScope(localVars);
@@ -39,6 +45,7 @@ namespace ETL_SQL.Engine.Services
             finally
             {
                 _context.PopScope();
+                _context.CurrentRecursiveDepth--;
             }
             return result;
         }
@@ -48,8 +55,14 @@ namespace ETL_SQL.Engine.Services
         /// </summary>
         public async Task EvaluateProcedure(string name, List<object?> args)
         {
+            _context.CurrentRecursiveDepth++;
+            _context.IncrementOperationCount(); // Trigger check against limits
+
             if (!_scopeManager.TryGetProcedure(name, out var procStmt) || procStmt == null)
+            {
+                _context.CurrentRecursiveDepth--;
                 throw new ExecutionException($"Procedure not found: {name}");
+            }
 
             var localVars = BuildParameterDictionary(procStmt.Parameters, args);
             _context.PushScope(localVars);
@@ -64,6 +77,7 @@ namespace ETL_SQL.Engine.Services
             finally
             {
                 _context.PopScope();
+                _context.CurrentRecursiveDepth--;
             }
         }
 

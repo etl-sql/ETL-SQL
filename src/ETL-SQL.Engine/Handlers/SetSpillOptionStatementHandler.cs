@@ -1,0 +1,36 @@
+using System;
+using System.Threading.Tasks;
+using ETL_SQL.Core;
+using ETL_SQL.Common;
+
+namespace ETL_SQL.Engine.Handlers
+{
+    /// <summary>
+    /// Handles the SET SPILL_ENCRYPTION/COMPRESSION ON/OFF statements.
+    /// Works in conjunction with the secure SpillStore.
+    /// </summary>
+    public class SetSpillOptionStatementHandler(ILogger logger) : IStatementHandler
+    {
+        private readonly ILogger _logger = logger;
+        public Type SupportedStatementType => typeof(SetSpillOptionStatement);
+
+        /// <summary>Executes the SET SPILL_... statement, updating the context and notifying the user.</summary>
+        public Task Execute(Statement statement, IExecutionContext context)
+        {
+            var stmt = (SetSpillOptionStatement)statement;
+            
+            if (stmt.Option == SpillOptionType.Encryption)
+            {
+                context.SpillEncryptionEnabled = stmt.Enabled;
+                _logger.Info("Disk spill encryption is now {Status}.", stmt.Enabled ? "ENABLED" : "DISABLED");
+            }
+            else if (stmt.Option == SpillOptionType.Compression)
+            {
+                context.SpillCompressionEnabled = stmt.Enabled;
+                _logger.Info("Disk spill compression is now {Status}.", stmt.Enabled ? "ENABLED" : "DISABLED");
+            }
+
+            return Task.CompletedTask;
+        }
+    }
+}

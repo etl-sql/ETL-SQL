@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
+using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -15,84 +16,65 @@ namespace ETL_SQL.Engine.Engines
     {
         private readonly IExecutionContext _context;
         private readonly ILogger _logger;
-        private readonly string _tempDir;
-
-        private int PartitionCount => _context.ExternalHashPartitions;
-
+        public int PartitionCount => _context.ExternalHashPartitions;
 
 
         public ExternalJoinEngine(IExecutionContext context, ILogger logger)
         {
             _context = context;
             _logger = logger;
-            _tempDir = Path.Combine(Path.GetTempPath(), "ETL-SQL", "JoinSpill", Guid.NewGuid().ToString());
-            Directory.CreateDirectory(_tempDir);
         }
-
+    
         /// <summary>Performs an external hash join by partitioning both left and right streams to disk before join processing.</summary>
         public async Task<List<Row>> ApplyHashJoinExternal(IAsyncEnumerable<Row> leftStream, IAsyncEnumerable<Row> rightStream, JoinClause join, List<string> leftKeys, List<string> rightKeys)
         {
-            try
+            // 1. Partition Phase
+            var leftPartitions = await PartitionStream(leftStream, leftKeys, "left");
+            var rightPartitions = await PartitionStream(rightStream, rightKeys, "right");
+    
+            var results = new List<Row>();
+    
+            // 2. Join Phase (one partition at a time)
+            for (int i = 0; i < PartitionCount; i++)
             {
-                // 1. Partition Phase
-                var leftPartitions = await PartitionStream(leftStream, leftKeys, "left");
-                var rightPartitions = await PartitionStream(rightStream, rightKeys, "right");
-
-                var results = new List<Row>();
-
-                // 2. Join Phase (one partition at a time)
-                for (int i = 0; i < PartitionCount; i++)
-
-                {
-                    var leftPath = leftPartitions[i];
-                    var rightPath = rightPartitions[i];
-
-                    if (!File.Exists(leftPath) || !File.Exists(rightPath)) continue;
-
-                    var leftRows = await ReadPartition(leftPath);
-                    var rightRows = await ReadPartition(rightPath);
-
-                    // Perform standard in-memory hash join on this partition
-                    var partResults = await PerformInMemoryHashJoin(leftRows, rightRows, join, leftKeys, rightKeys);
-                    results.AddRange(partResults);
-
-                    // Clean up partition files
-                    File.Delete(leftPath);
-                    File.Delete(rightPath);
-                }
-
-                return results;
+                var leftName = leftPartitions[i];
+                var rightName = rightPartitions[i];
+    
+                await using var leftReader = await _context.SpillStore.CreateReaderAsync(leftName);
+                await using var rightReader = await _context.SpillStore.CreateReaderAsync(rightName);
+                
+                List<Row> leftRows  = await leftReader.AsEnumerableAsync().ToListAsync();
+                List<Row> rightRows = await rightReader.AsEnumerableAsync().ToListAsync();
+                
+                if (leftRows.Count == 0) continue;
+    
+                // Perform standard in-memory hash join on this partition
+                var partResults = await PerformInMemoryHashJoin(leftRows, rightRows, join, leftKeys, rightKeys);
+                results.AddRange(partResults);
             }
-            finally
-            {
-                if (Directory.Exists(_tempDir)) Directory.Delete(_tempDir, true);
-            }
+    
+            return results;
         }
 
         private async Task<string[]> PartitionStream(IAsyncEnumerable<Row> stream, List<string> keys, string prefix)
         {
-            var paths = new string[PartitionCount];
-            var writers = new StreamWriter[PartitionCount];
+            var names = new string[PartitionCount];
+            var writers = new ETL_SQL.Core.Spill.ISpillWriter[PartitionCount];
 
+            var uniquePrefix = Guid.NewGuid().ToString("N");
             for (int i = 0; i < PartitionCount; i++)
-
             {
-                paths[i] = Path.Combine(_tempDir, $"{prefix}_{i}.tmp");
-                writers[i] = new StreamWriter(paths[i]);
+                names[i] = $"{uniquePrefix}_{prefix}_{i}.tmp";
+                writers[i] = await _context.SpillStore.CreateWriterAsync(names[i]);
             }
 
             try
             {
                 await foreach (var row in stream)
                 {
-                    var hash = GetKeyHash(row, keys);
-                    int pIdx = Math.Abs(hash % PartitionCount);
-
-                    var json = System.Text.Json.JsonSerializer.Serialize(row.Columns);
-                    var bytes = System.Text.Encoding.UTF8.GetByteCount(json) + 2; // + newline
-                    _context.TotalSpilledBytes += bytes;
-                    if (prefix == "left" && bytes > 0 && Math.Abs(hash % 20000) == 0) _logger.Debug("[DIAG] Spilled {Bytes} bytes to partition {PartitionIndex}. Total bytes spilled: {TotalSpilledBytes}", bytes, pIdx, _context.TotalSpilledBytes);
-                    await writers[pIdx].WriteLineAsync(json);
+                    int rawHash = GetKeyHash(row, keys);
+                    int pIdx = (rawHash & 0x7FFFFFFF) % PartitionCount;
+                    await writers[pIdx].WriteRowAsync(row);
                 }
             }
             finally
@@ -100,70 +82,66 @@ namespace ETL_SQL.Engine.Engines
                 int usedPartitions = 0;
                 for (int i = 0; i < writers.Length; i++) 
                 { 
-                    try
+                    if (writers[i] != null)
                     {
-                        writers[i].Flush();
-                        if (writers[i].BaseStream.Length > 0) usedPartitions++;
-                        writers[i].Close(); 
+                        usedPartitions++;
+                        await writers[i].DisposeAsync();
                     }
-                    catch { /* Best effort cleanup */ }
                 }
                 _context.PartitionsCount += usedPartitions;
                 _logger.Debug("Finished partitioning {Prefix}. Used {UsedPartitions} partitions. Context PartitionsCount: {PartitionsCount}", prefix, usedPartitions, _context.PartitionsCount);
             }
 
-            return paths;
+            return names;
         }
 
-        private async Task<List<Row>> ReadPartition(string path)
-        {
-            var rows = new List<Row>();
-            using var reader = new StreamReader(path);
-            string? line;
-            while ((line = await reader.ReadLineAsync()) != null)
-            {
-                var cols = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object?>>(line);
-                if (cols != null)
-                {
-                    var row = new Row();
-                    foreach (var kvp in cols) row[kvp.Key] = UnwrapJsonValue(kvp.Value);
-                    rows.Add(row);
-                }
-            }
-            return rows;
-        }
 
         private static object? UnwrapJsonValue(object? val)
         {
+            if (val == null || val == DBNull.Value) return null;
+
             if (val is System.Text.Json.JsonElement je)
-                return je.ValueKind switch
+            {
+                val = je.ValueKind switch
                 {
-                    System.Text.Json.JsonValueKind.Number  => je.TryGetDecimal(out var d) ? d : (object?)je.GetDouble(),
-                    System.Text.Json.JsonValueKind.True    => true,
-                    System.Text.Json.JsonValueKind.False   => false,
-                    System.Text.Json.JsonValueKind.String  => DateTime.TryParse(je.GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : je.GetString(),
-                    System.Text.Json.JsonValueKind.Null    => null,
-                    _                                     => (object?)je.ToString()
+                    System.Text.Json.JsonValueKind.Number when je.TryGetDecimal(out var dv) => dv,
+                    System.Text.Json.JsonValueKind.Number => je.GetDouble(),
+                    System.Text.Json.JsonValueKind.True  => true,
+                    System.Text.Json.JsonValueKind.False => false,
+                    System.Text.Json.JsonValueKind.String => je.GetString(),
+                    System.Text.Json.JsonValueKind.Null  => null,
+                    _                   => (object?)je.ToString()
                 };
+                if (val == null) return null;
+            }
+            
+            if (val is string s)
+            {
+                if (decimal.TryParse(s, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var dec2)) 
+                    return dec2;
+                if (EvaluationUtils.SafeTryParseDate(s, out var dt2))
+                    return dt2;
+                return s.Trim(); 
+            }
+
             return val;
         }
 
         private int GetKeyHash(Row row, List<string> keys)
         {
-            int hash = 17;
-            foreach (var k in keys)
+            var values = new object?[keys.Count];
+            for (int i = 0; i < keys.Count; i++)
             {
-                var val = row[k];
-                hash = hash * 31 + (val?.GetHashCode() ?? 0);
+                values[i] = row[keys[i]];
             }
-            return hash;
+            return new CompoundKey(values).GetHashCode();
         }
 
         private async Task<List<Row>> PerformInMemoryHashJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join, List<string> leftKeys, List<string> rightKeys)
         {
             // Standard Hash Join logic similar to JoinEngine but for a partition
             var results = new List<Row>();
-            var hashTable = new Dictionary<CompoundKey, List<Row>>();
+            var hashTable = new Dictionary<ETL_SQL.Data.CompoundKey, List<Row>>();
             foreach (var r in rightRows)
             {
                 var key = GetHashKey(r, rightKeys);
@@ -174,15 +152,22 @@ namespace ETL_SQL.Engine.Engines
             foreach (var left in leftRows)
             {
                 var key = GetHashKey(left, leftKeys);
+                bool producedMatch = false;
+
                 if (hashTable.TryGetValue(key, out var matches))
                 {
                     foreach (var right in matches)
                     {
                         var combined = CombineRows(left, right);
-                        if (await _context.EvaluateCondition(join.Condition, combined)) results.Add(combined);
+                        if (await _context.EvaluateCondition(join.Condition, combined)) 
+                        {
+                            results.Add(combined);
+                            producedMatch = true;
+                        }
                     }
                 }
-                else if (join.JoinType.Contains("LEFT", StringComparison.OrdinalIgnoreCase))
+
+                if (!producedMatch && join.JoinType.Contains("LEFT", StringComparison.OrdinalIgnoreCase))
                 {
                     results.Add(left.Clone());
                 }
@@ -193,7 +178,11 @@ namespace ETL_SQL.Engine.Engines
         private CompoundKey GetHashKey(Row row, List<string> keys)
         {
             var values = new object?[keys.Count];
-            for (int i = 0; i < keys.Count; i++) values[i] = row[keys[i]];
+            for (int i = 0; i < keys.Count; i++) 
+            {
+                var val = row[keys[i]];
+                values[i] = UnwrapJsonValue(val);
+            }
             return new CompoundKey(values);
         }
 

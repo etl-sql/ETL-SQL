@@ -11,7 +11,7 @@ using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Generic;
 
-namespace ETL_SQL.Tests
+namespace ETL_SQL.Tests.Integration
 {
     public class ConnectionAlterTests : IDisposable
     {

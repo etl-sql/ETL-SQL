@@ -100,6 +100,7 @@ namespace ETL_SQL.Core.Parser
             dict["X_AXIS"]        = TokenType.X_AXIS;
             dict["Y_AXIS"]        = TokenType.Y_AXIS;
             dict["REPORT"]        = TokenType.REPORT;
+            dict["DESCRIPTION"]   = TokenType.DESCRIPTION;
 
             // ── Report-SQL keywords (Phase 9.3) ────────────────────────────
             dict["STYLE"]      = TokenType.STYLE;
@@ -119,6 +120,22 @@ namespace ETL_SQL.Core.Parser
             dict["FUNNEL"]      = TokenType.FUNNEL;
             dict["WATERFALL"]   = TokenType.WATERFALL;
             dict["FORMATTING"]  = TokenType.FORMATTING;
+            dict["EXPECT"]      = TokenType.EXPECT;
+
+            // ── Overlay keywords (Phase 9F) ────────────────────────────────
+            dict["OVERLAYS"]    = TokenType.OVERLAYS;
+            dict["GOAL"]        = TokenType.GOAL;
+            dict["AVERAGE"]     = TokenType.AVERAGE;
+            dict["MOVING_AVG"]  = TokenType.MOVING_AVG;
+            dict["LINEAR"]      = TokenType.LINEAR;
+            dict["EXPONENTIAL"] = TokenType.EXPONENTIAL;
+            dict["LOGARITHMIC"] = TokenType.LOGARITHMIC;
+            dict["POLYNOMIAL"]  = TokenType.POLYNOMIAL;
+            dict["POWER"]       = TokenType.POWER;
+            dict["SOLID"]       = TokenType.SOLID;
+            dict["DASHED"]      = TokenType.DASHED;
+            dict["DOTTED"]      = TokenType.DOTTED;
+            dict["COLOR"]       = TokenType.COLOR;
 
             return dict;
         }

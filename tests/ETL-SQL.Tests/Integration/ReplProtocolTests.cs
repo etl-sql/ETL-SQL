@@ -5,7 +5,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace ETL_SQL.Tests.Integration
+namespace ETL_SQL.Tests.Integration.Integration
 {
     public class ReplProtocolTests : IDisposable
     {

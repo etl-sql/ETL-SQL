@@ -10,7 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Engine;
 using ETL_SQL.ReportBuilder;
 
-namespace ETL_SQL.Tests.Reporting
+namespace ETL_SQL.Tests.Reporting.Reporting
 {
     public class VisualMappingTests
     {

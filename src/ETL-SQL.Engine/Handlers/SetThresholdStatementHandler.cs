@@ -17,6 +17,8 @@ namespace ETL_SQL.Engine.Handlers
             
             if (val == null) return;
 
+            context.SecurityService.ValidateThresholdOverride(s.Type, val, context);
+
             int intVal = Convert.ToInt32(val);
 
             switch (s.Type)
@@ -47,6 +49,18 @@ namespace ETL_SQL.Engine.Handlers
                     break;
                 case ThresholdType.MaxMessages:
                     context.MaxMessages = intVal;
+                    break;
+                case ThresholdType.MaxParallelDegree:
+                    context.MaxParallelDegree = intVal;
+                    break;
+                case ThresholdType.MaxStringResultSize:
+                    context.MaxStringResultSize = Convert.ToInt64(val);
+                    break;
+                case ThresholdType.RegexMatchTimeout:
+                    context.RegexMatchTimeoutMs = intVal;
+                    break;
+                case ThresholdType.MaxFileOperations:
+                    context.MaxFileOperations = intVal;
                     break;
             }
 

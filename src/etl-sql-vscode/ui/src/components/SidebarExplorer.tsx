@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Database, Search, RefreshCw, Layers, Variable, Hash } from 'lucide-react';
-import type { ProtocolMessage, Connection, VariablesMessage, Variable as ScriptVar } from '../types';
+import type { ProtocolMessage, Connection, Variable as ScriptVar } from '../types';
+import { extractVariables } from '../utils/variable_utils';
 import { MetadataItem } from './MetadataItem';
 
 interface SidebarExplorerProps {

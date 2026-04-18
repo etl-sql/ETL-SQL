@@ -13,7 +13,11 @@ namespace ETL_SQL.Core
         MaxRecursiveDepth,
         MaxInMemoryBatches,
         ForeachPageSize,
-        MaxMessages
+        MaxMessages,
+        MaxParallelDegree,
+        MaxStringResultSize,
+        RegexMatchTimeout,
+        MaxFileOperations
     }
 
     public record SetThresholdStatement(ThresholdType Type, Expression Value) : Statement

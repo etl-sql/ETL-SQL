@@ -12,6 +12,22 @@ namespace ETL_SQL.Core
 
     // ── Enumerations ──────────────────────────────────────────────────────────
 
+    public enum OverlayType
+    {
+        Goal, Average, MovingAvg, Linear, Exponential, Logarithmic, Polynomial, Power
+    }
+
+    public enum OverlayLineStyle { Solid, Dashed, Dotted }
+
+    public record VisualOverlay : AstNode
+    {
+        public required OverlayType  OverlayType { get; init; }
+        public double?               Parameter   { get; init; }  // GOAL value, MOVING_AVG window, POLYNOMIAL degree
+        public OverlayLineStyle      LineStyle   { get; init; } = OverlayLineStyle.Dashed;
+        public string?               Color       { get; init; }
+        public string?               Label       { get; init; }
+    }
+
     public enum VisualType
     {
         Bar, Line, Scatter, Pie, Table, Card, Slicer,
@@ -111,6 +127,7 @@ namespace ETL_SQL.Core
         public required VisualType VisualType          { get; init; }
         public string? Title                          { get; init; }
         public string? Subtitle                       { get; init; }
+        public string? DefaultValue                   { get; init; }
         public required VisualSourceExpression Source  { get; init; }
         public List<VisualMapping> Mappings            { get; init; } = new();
         public List<VisualOption> Options              { get; init; } = new();
@@ -118,6 +135,7 @@ namespace ETL_SQL.Core
         public List<VisualAction> Actions              { get; init; } = new();
         public List<TypedSeries> TypedSeries           { get; init; } = new();
         public List<FormattingRule> FormattingRules    { get; init; } = new();
+        public List<VisualOverlay> Overlays            { get; init; } = new();
         public Dictionary<string, string> Styles       { get; init; } = new();
         public override string ToSql() => AstSerializer.Format(this);
     }

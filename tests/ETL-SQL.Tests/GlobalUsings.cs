@@ -1,0 +1,11 @@
+global using Xunit;
+global using ETL_SQL.Core;
+global using ETL_SQL.Data;
+global using ETL_SQL.Engine;
+global using ETL_SQL.Tests.Core;
+global using System;
+global using System.Collections.Generic;
+global using System.Linq;
+global using System.Threading.Tasks;
+global using ETL_SQL.App;
+global using Microsoft.Extensions.DependencyInjection;

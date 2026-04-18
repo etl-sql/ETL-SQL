@@ -139,6 +139,10 @@ namespace ETL_SQL.Core.Parser
             {
                 overrideType = SecurityOverride.DeepRecursion;
             }
+            else if (val == "ALLOW_LARGE_STRING_RESULTS")
+            {
+                overrideType = SecurityOverride.LargeStringResults;
+            }
             else
             {
                 throw new SyntaxException($"Unknown security override: {startToken.Value}", startToken.Line, startToken.Column);
@@ -153,11 +157,30 @@ namespace ETL_SQL.Core.Parser
             return new SetSecurityOverrideStatement(overrideType, enabled);
         }
 
+        private Statement ParseSetSpillOption(SpillOptionType option)
+        {
+            var enabled = true;
+            if (_parser.Match(TokenType.ON)) enabled = true;
+            else if (_parser.Match(TokenType.OFF)) enabled = false;
+            else throw new SyntaxException($"Expected ON or OFF after SET SPILL_{option.ToString().ToUpperInvariant()}", _parser.Current.Line, _parser.Current.Column);
+
+            if (_parser.Match(TokenType.SEMICOLON)) { }
+            return new SetSpillOptionStatement(option, enabled);
+        }
+
         private Statement ParseSetReportMetadata()
         {
             var startToken = _parser.Previous; // REPORT token
             string key;
-            if (_parser.Current.Type == TokenType.IDENTIFIER &&
+            if (_parser.Match(TokenType.TITLE))
+            {
+                key = "TITLE";
+            }
+            else if (_parser.Match(TokenType.DESCRIPTION))
+            {
+                key = "DESCRIPTION";
+            }
+            else if (_parser.Current.Type == TokenType.IDENTIFIER &&
                 (_parser.Current.Value.Equals("TITLE", StringComparison.OrdinalIgnoreCase) ||
                  _parser.Current.Value.Equals("DESCRIPTION", StringComparison.OrdinalIgnoreCase)))
             {

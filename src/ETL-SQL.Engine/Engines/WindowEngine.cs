@@ -36,20 +36,21 @@ namespace ETL_SQL.Engine.Engines
                 var name = f.FunctionName.ToUpperInvariant();
                 var window = f.Window!;
 
-                var partitionKeysOrder = new List<string>();
-                var partitions = new Dictionary<string, List<Row>>(StringComparer.OrdinalIgnoreCase);
+                var partitionKeysOrder = new List<CompoundKey>();
+                var partitions = new Dictionary<CompoundKey, List<Row>>();
                 foreach (var row in allBufferedRows)
                 {
-                    var key = "";
+                    CompoundKey key;
                     if (window.PartitionBy != null && window.PartitionBy.Count > 0)
                     {
-                        foreach (var p in window.PartitionBy)
+                        var partitionValues = new object?[window.PartitionBy.Count];
+                        for (int i = 0; i < window.PartitionBy.Count; i++)
                         {
-                            var val = await _context.EvaluateValue(p, row);
-                            key += (val?.ToString() ?? "NULL") + "|";
+                            partitionValues[i] = await _context.EvaluateValue(window.PartitionBy[i], row);
                         }
+                        key = new CompoundKey(partitionValues);
                     }
-                    else key = "GLOBAL";
+                    else key = new CompoundKey("GLOBAL");
 
                     if (!partitions.ContainsKey(key)) { partitions[key] = new List<Row>(); partitionKeysOrder.Add(key); }
                     partitions[key].Add(row);

@@ -20,6 +20,7 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
     - **Protocol Resilience**: Implemented defensive message handling to bridge inconsistencies between the engine and LSP formats (`variables` vs `data` keys).
     - **Sidebar Enhancements**: Unified variable explorer that merges static (declared) variables with active (runtime) values during execution.
     - **Results Panel Reliability**: Resolved "white screen" regression caused by ES2022 feature incompatibility and missing view-state injection.
+    - **Loop Node Stabilization**: Implemented "restating" node model in the execution pipeline. Loops now reuse existing visual nodes and display an iteration count badge (e.g. `x10`), preventing visual clutter while accumulating total rows and duration.
 - **Testing**: Added verification suites for system variables, scaling configuration, snapshot safety, security hardening, and UI protocol resilience (49 total tests).
 
     - `Security:MaxRecursiveNestingDepth` – Configurable recursion safety limit (formerly hardcoded at 5).

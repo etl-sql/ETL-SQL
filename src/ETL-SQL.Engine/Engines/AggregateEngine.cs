@@ -68,7 +68,16 @@ namespace ETL_SQL.Engine.Engines
                     var vals = new object?[groupBy.Count];
                     for (int i = 0; i < groupBy.Count; i++)
                     {
-                        vals[i] = await _context.EvaluateValue(groupBy[i], row);
+                        var expr = groupBy[i];
+                        // Resolve aliases: If grouping by an identifier, check if it's an alias in the current projection
+                        if (expr is IdentifierExpression id && finalColumns.FirstOrDefault(c => string.Equals(c.Alias, id.Name, StringComparison.OrdinalIgnoreCase)) is SelectColumn col)
+                        {
+                            vals[i] = await _context.EvaluateValue(col.Expression, row);
+                        }
+                        else
+                        {
+                            vals[i] = await _context.EvaluateValue(expr, row);
+                        }
                     }
                     key = new CompoundKey(vals);
                 }
@@ -100,6 +109,8 @@ namespace ETL_SQL.Engine.Engines
                 }
 
                 var resRow = new Row();
+                var key = groups.FirstOrDefault(x => x.Value == groupRows).Key;
+
                 for (int i = 0; i < finalColumns.Count; i++)
                 {
                     if (IsAggregate(finalColumns[i].Expression))
@@ -110,7 +121,32 @@ namespace ETL_SQL.Engine.Engines
                         resRow[$"AGG_{finalColumns[i].Expression.ToSql().ToUpperInvariant()}"] = val;
                     }
                     else
-                        resRow[colNames[i]] = groupRows.Count > 0 ? await _context.EvaluateValue(finalColumns[i].Expression, groupRows[0]) : null;
+                    {
+                        // Optimization: If this column is part of the GROUP BY clause, use the already-calculated 
+                        // and normalized value from the CompoundKey.
+                        int groupIdx = -1;
+                        if (groupBy != null)
+                        {
+                            groupIdx = groupBy.FindIndex(g => g.ToSql().Equals(finalColumns[i].ToSql(), StringComparison.OrdinalIgnoreCase));
+                            if (groupIdx == -1) // check for alias match
+                            {
+                                groupIdx = groupBy.FindIndex(g => g is IdentifierExpression id && string.Equals(id.Name, finalColumns[i].Alias, StringComparison.OrdinalIgnoreCase));
+                            }
+                        }
+
+                        if (groupIdx >= 0 && groupIdx < key.Length)
+                        {
+                            resRow[colNames[i]] = key[groupIdx];
+                        }
+                        else if (IsWindowFunction(finalColumns[i].Expression))
+                        {
+                            // Skip: Window functions are handled after aggregation
+                        }
+                        else
+                        {
+                            resRow[colNames[i]] = groupRows.Count > 0 ? await _context.EvaluateValue(finalColumns[i].Expression, groupRows[0]) : null;
+                        }
+                    }
                 }
                 resultRows.Add(resRow);
             }
@@ -165,6 +201,11 @@ namespace ETL_SQL.Engine.Engines
             }
             if (expr is BinaryExpression b) return IsAggregate(b.Left) || IsAggregate(b.Right);
             return false;
+        }
+
+        public bool IsWindowFunction(Expression expr)
+        {
+            return expr is FunctionCallExpression f && f.Window != null;
         }
 
         private void CollectAggregates(Expression expr, List<FunctionCallExpression> aggs)

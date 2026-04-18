@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.Services
 {
@@ -57,6 +58,9 @@ namespace ETL_SQL.Services
             // 4. Runaway Protection Limits
             MaxFileOperations = int.TryParse(section["MaxFileOperationsPerScript"], out var mfo) ? mfo : DefaultMaxFileOperations;
             MaxRecursiveDepth = int.TryParse(section["MaxRecursiveNestingDepth"], out var mrd) ? mrd : DefaultMaxRecursiveDepth;
+            MaxParallelDegree = int.TryParse(section["MaxParallelDegree"], out var mpd) ? mpd : DefaultMaxParallelDegree;
+            MaxStringResultSize = long.TryParse(section["MaxStringResultSize"], out var msr) ? msr : DefaultMaxStringResultSize;
+            RegexMatchTimeout = int.TryParse(section["RegexMatchTimeoutMs"], out var rmt) ? TimeSpan.FromMilliseconds(rmt) : DefaultRegexMatchTimeout;
         }
 
         private static readonly string[] AllowedExtensions = { ".csv", ".json", ".parquet", ".avro", ".db", ".enc", ".gz", ".7z", ".txt", ".sql", ".log", ".xlsx", ".xml", ".yaml", ".yml", ".ini", ".md", ".zip" };
@@ -81,9 +85,15 @@ namespace ETL_SQL.Services
 
         public const int DefaultMaxFileOperations = 100;
         public const int DefaultMaxRecursiveDepth = 5;
+        public const int DefaultMaxParallelDegree = 32;
+        public const long DefaultMaxStringResultSize = 100 * 1024 * 1024; // 100 MiB
+        public static readonly TimeSpan DefaultRegexMatchTimeout = TimeSpan.FromSeconds(1);
 
         public int MaxFileOperations { get; set; } = DefaultMaxFileOperations;
         public int MaxRecursiveDepth { get; set; } = DefaultMaxRecursiveDepth;
+        public int MaxParallelDegree { get; set; } = DefaultMaxParallelDegree;
+        public long MaxStringResultSize { get; set; } = DefaultMaxStringResultSize;
+        public TimeSpan RegexMatchTimeout { get; set; } = DefaultRegexMatchTimeout;
 
         public string? MasterPassword { get; set; }
 
@@ -163,6 +173,12 @@ namespace ETL_SQL.Services
         public void ValidatePath(string path)
         {
             if (string.IsNullOrWhiteSpace(path)) return;
+
+            // Pre-validation: Block explicit ".." traversal attempts before resolution
+            if (path.Contains(".."))
+            {
+                throw new SecurityException($"Unauthorized path traversal attempt detected via '..': {path}");
+            }
 
             var fullPath = Path.GetFullPath(path);
             
@@ -279,6 +295,9 @@ namespace ETL_SQL.Services
         /// </summary>
         public void CheckRunawayProtection(int count, int depth, bool allowLargeCount = false, bool allowDeepRecursion = false, string? path = null)
         {
+            int maxOps = MaxFileOperations;
+            int maxDepth = MaxRecursiveDepth;
+
             bool isSafeZone = false;
             if (!string.IsNullOrEmpty(path))
             {
@@ -286,31 +305,109 @@ namespace ETL_SQL.Services
                 isSafeZone = ApprovedSafeZones.Any(z => fullPath.StartsWith(z, StringComparison.OrdinalIgnoreCase));
             }
 
-            if (count > MaxFileOperations && (!allowLargeCount || !isSafeZone))
+            if (count > maxOps && !allowLargeCount)
             {
-                string msg = allowLargeCount && !isSafeZone 
-                    ? $"Runaway protection: Safety overrides for operation count are only permitted within approved user workspaces. Path '{path}' is outside a safe zone."
-                    : $"Runaway protection: File operation count ({count}) exceeds the safety limit of {MaxFileOperations}. Use 'SET ALLOW_GREATER_THAN_{MaxFileOperations}_FILE ON;' override.";
-                throw new SecurityException(msg);
+                throw new SecurityException($"Runaway protection: File operation count ({count}) exceeds the safety limit of {maxOps}. Use 'SET ALLOW_GREATER_THAN_{maxOps}_FILE ON;' override.");
             }
 
-            if (count > MaxFileOperations && allowLargeCount && isSafeZone)
+            if (count > maxOps && allowLargeCount && !isSafeZone)
+            {
+                throw new SecurityException($"Runaway protection: File operation count ({count}) override is only permitted within an approved safe zone.");
+            }
+
+            if (count > maxOps && allowLargeCount && isSafeZone)
             {
                 _logger.Warning("Security Override: Large file operation count ({Count}) authorized via safe zone '{Path}'.", count, path);
             }
 
-            if (depth > MaxRecursiveDepth && (!allowDeepRecursion || !isSafeZone))
+            if (depth > maxDepth && !allowDeepRecursion)
             {
-                 string msg = allowDeepRecursion && !isSafeZone 
-                    ? $"Runaway protection: Safety overrides for recursive depth are only permitted within approved user workspaces. Path '{path}' is outside a safe zone."
-                    : $"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {MaxRecursiveDepth}. Use 'SET ALLOW_RECURSIVE_GREATER_THAN_{MaxRecursiveDepth}_LAYERS ON;' override.";
-                throw new SecurityException(msg);
+                throw new SecurityException($"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {maxDepth}. Use 'SET ALLOW_RECURSIVE_GREATER_THAN_{maxDepth}_LAYERS ON;' override.");
             }
 
-            if (depth > MaxRecursiveDepth && allowDeepRecursion && isSafeZone)
+            if (depth > maxDepth && allowDeepRecursion && isSafeZone)
             {
                 _logger.Warning("Security Override: Deep recursion depth ({Depth}) authorized via safe zone '{Path}'.", depth, path);
             }
+        }
+
+        /// <summary>
+        /// Validates that an allocation request does not exceed the memory safety ceiling.
+        /// </summary>
+        public void ValidateStringSize(long length, long maxSize, bool allowLarge = false, string? safeZonePath = null)
+        {
+            if (length <= maxSize) return;
+
+            bool isSafeZone = false;
+            if (!string.IsNullOrEmpty(safeZonePath))
+            {
+                var fullPath = Path.GetFullPath(safeZonePath);
+                isSafeZone = ApprovedSafeZones.Any(z => fullPath.StartsWith(z, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!allowLarge || !isSafeZone)
+            {
+                 throw new SecurityException($"Memory Safety Guardrail: String result size ({length} bytes) exceeds the safety limit of {MaxStringResultSize} bytes. Use a safe zone and 'SET ALLOW_LARGE_STRING_RESULTS ON;' if this is intentional.");
+            }
+
+            _logger.Warning("Security Override: Large string result ({Length} bytes) authorized via safe zone '{Path}'.", length, safeZonePath);
+        }
+
+        /// <summary>
+        /// Validates that a resource limit override (SET MAX_...) is authorized. 
+        /// Overrides that exceed the global administrative limit require the script to be in an Approved Safe Zone.
+        /// </summary>
+        public void ValidateThresholdOverride(ThresholdType type, object newValue, IExecutionContext context)
+        {
+            if (IsInternalOperation || IsTestMode) return;
+
+            bool isExceeding = false;
+            string limitName = type.ToString();
+            object globalLimit = null!;
+
+            switch (type)
+            {
+                case ThresholdType.MaxParallelDegree:
+                    isExceeding = Convert.ToInt32(newValue) > MaxParallelDegree;
+                    globalLimit = MaxParallelDegree;
+                    break;
+                case ThresholdType.MaxStringResultSize:
+                    isExceeding = Convert.ToInt64(newValue) > MaxStringResultSize;
+                    globalLimit = MaxStringResultSize;
+                    break;
+                case ThresholdType.RegexMatchTimeout:
+                    isExceeding = TimeSpan.FromMilliseconds(Convert.ToDouble(newValue)) > RegexMatchTimeout;
+                    globalLimit = (int)RegexMatchTimeout.TotalMilliseconds;
+                    break;
+                case ThresholdType.MaxFileOperations:
+                    isExceeding = Convert.ToInt32(newValue) > MaxFileOperations;
+                    globalLimit = MaxFileOperations;
+                    break;
+                case ThresholdType.MaxRecursiveDepth:
+                    isExceeding = Convert.ToInt32(newValue) > MaxRecursiveDepth;
+                    globalLimit = MaxRecursiveDepth;
+                    break;
+                default:
+                    // Other thresholds (JoinSpill, etc.) are tuning knobs, not security ceilings, 
+                    // and can be changed anywhere.
+                    return;
+            }
+
+            if (!isExceeding) return;
+
+            bool isSafeZone = false;
+            if (!string.IsNullOrEmpty(context.CurrentScriptPath))
+            {
+                var fullPath = Path.GetFullPath(context.CurrentScriptPath);
+                isSafeZone = ApprovedSafeZones.Any(z => fullPath.StartsWith(z, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (!isSafeZone)
+            {
+                throw new SecurityException($"Security Guardrail: Increasing {limitName} to {newValue} exceeds the global limit of {globalLimit}. This override is only permitted for scripts executing within an Approved Safe Zone.");
+            }
+
+            _logger.Warning("Security Override: {Limit} increased to {Value} authorized via safe zone '{Path}'.", limitName, newValue, context.CurrentScriptPath);
         }
 
         /// <summary>

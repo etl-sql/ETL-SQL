@@ -8,7 +8,7 @@ using ETL_SQL.Engine.Functions;
 using ETL_SQL.App;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ETL_SQL.Tests.Functions
+namespace ETL_SQL.Tests.Functions.Functions
 {
     public class JsonHardeningTests
     {

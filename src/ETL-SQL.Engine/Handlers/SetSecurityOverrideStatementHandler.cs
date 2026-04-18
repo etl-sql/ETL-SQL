@@ -35,6 +35,10 @@ namespace ETL_SQL.Engine.Handlers
                     context.AllowDeepRecursion = stmt.Enabled;
                     overrideName = $"ALLOW_RECURSIVE_GREATER_THAN_{context.SecurityService.MaxRecursiveDepth}_LAYERS";
                     break;
+                case SecurityOverride.LargeStringResults:
+                    context.AllowLargeStringResults = stmt.Enabled;
+                    overrideName = "ALLOW_LARGE_STRING_RESULTS";
+                    break;
             }
 
             string state = stmt.Enabled ? "ON" : "OFF";

@@ -5,8 +5,9 @@ import { ExecutionConsole } from './components/ExecutionConsole';
 import { ResultGrid } from './components/ResultGrid';
 import { PerformanceTab } from './components/PerformanceTab';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import type { ResultsMessage, PerformanceMessage, VariablesMessage } from './types';
-import { RefreshCw, BarChart3, Database, Terminal, Activity, GitBranch, Variable as VariableIcon } from 'lucide-react';
+import { ReportTab } from './components/ReportTab';
+import type { ResultsMessage, PerformanceMessage, VariablesMessage, ReportManifest } from './types';
+import { RefreshCw, BarChart3, Database, Terminal, Activity, GitBranch, Variable as VariableIcon, Layout } from 'lucide-react';
 import { extractPipelineNodes } from './utils/pipeline_utils';
 import { extractVariables } from './utils/variable_utils';
 import { SidebarExplorer } from './components/SidebarExplorer';
@@ -14,11 +15,11 @@ import { VariablesTab } from './components/VariablesTab';
 
 declare global {
   interface Window {
-    VIEW_TYPE?: 'sidebar' | 'results';
+    VIEW_TYPE?: 'sidebar' | 'results' | 'report';
   }
 }
 
-type TabId = 'pipeline' | 'results' | 'messages' | 'performance' | 'variables';
+type TabId = 'pipeline' | 'results' | 'messages' | 'performance' | 'variables' | 'report';
 
 function App() {
   const { messages, status, postMessage } = useVsCodeApi();
@@ -28,14 +29,36 @@ function App() {
   const currentView = useMemo(() => {
     if (window.VIEW_TYPE) return window.VIEW_TYPE;
     const params = new URLSearchParams(window.location.search);
-    return params.get('view') as 'sidebar' | 'results' | null;
+    return params.get('view') as 'sidebar' | 'results' | 'report' | null;
   }, []);
+
+  const reportManifest = useMemo(() => {
+    const reportMsg = [...messages].reverse().find(m => m.type === 'reportManifest') as ReportManifest | undefined;
+    return reportMsg;
+  }, [messages]);
 
   if (currentView === 'sidebar') {
     return (
       <ErrorBoundary>
         <SidebarExplorer messages={messages} postMessage={postMessage} />
       </ErrorBoundary>
+    );
+  }
+
+  if (currentView === 'report') {
+    return (
+        <ErrorBoundary>
+            {reportManifest ? (
+                <ReportTab 
+                    manifest={reportManifest} 
+                    onRefresh={(params) => postMessage({ type: 'refreshReport', parameters: params })} 
+                />
+            ) : (
+                <div className="flex-1 flex items-center justify-center bg-[var(--bg-dark)] h-full">
+                    <EmptyState icon={Layout} message="No Report Data Loaded" />
+                </div>
+            )}
+        </ErrorBoundary>
     );
   }
 

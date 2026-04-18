@@ -5,6 +5,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Spill;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -16,20 +18,14 @@ namespace ETL_SQL.Engine.Engines
     {
         private readonly IExecutionContext _context;
         private readonly ILogger _logger;
-        private readonly string _tempDir;
-        private int ChunkSize => _context.ExternalSortChunkSize;
+        public int ChunkSize => _context.ExternalSortChunkSize;
 
         public ExternalSortEngine(IExecutionContext context, ILogger logger)
         {
             _context = context;
             _logger = logger;
-            _tempDir = Path.Combine(Path.GetTempPath(), "ETL-SQL", "SortSpill", Guid.NewGuid().ToString());
-            Directory.CreateDirectory(_tempDir);
         }
 
-        /// <summary>
-        /// Sorts all rows using an external merge sort. Sort keys must be pre-evaluated.
-        /// </summary>
         public async Task<List<Row>> SortExternal(
             List<Row> rows,
             List<OrderByClause> orderBy)
@@ -54,220 +50,153 @@ namespace ETL_SQL.Engine.Engines
             List<OrderByClause> orderBy)
         {
             var chunkPaths = new List<string>();
-            try
+
+            // 1. Comparison function
+            int Compare((Row Row, object?[] Keys) a, (Row Row, object?[] Keys) b)
             {
-                // 1. Comparison function
-                int Compare((Row Row, object?[] Keys) a, (Row Row, object?[] Keys) b)
+                for (int i = 0; i < orderBy.Count; i++)
                 {
-                    for (int i = 0; i < orderBy.Count; i++)
-                    {
-                        var res = _context.CompareConstants(a.Keys[i], b.Keys[i]);
-                        if (res != 0) return orderBy[i].Descending ? -res : res;
-                    }
-                    return 0;
+                    var res = _context.CompareConstants(a.Keys[i], b.Keys[i]);
+                    // For PriorityQueue (Min-Heap), return positive to put it later, negative to put it earlier.
+                    // If descending, invert the comparison: greater values should be "smaller" (returned earlier).
+                    if (res != 0) return orderBy[i].Descending ? -res : res;
                 }
+                return 0;
+            }
 
-                // 2. Consume stream and spill chunks
-                var currentChunk = new List<(Row Row, object?[] Keys)>();
-                await foreach (var row in inputStream)
+            // 2. Consume stream and spill chunks
+            var currentChunk = new List<(Row Row, object?[] Keys)>();
+            int chunkCounter = 0;
+            await foreach (var row in inputStream)
+            {
+                var keys = new object?[orderBy.Count];
+                for (int i = 0; i < orderBy.Count; i++)
                 {
-                    var keys = new object?[orderBy.Count];
-                    for (int i = 0; i < orderBy.Count; i++)
-                        keys[i] = await _context.EvaluateValue(orderBy[i].Expression, row);
-                    
-                    currentChunk.Add((row, keys));
-
-                    if (currentChunk.Count >= ChunkSize)
-                    {
-                        currentChunk.Sort(Compare);
-                        var path = Path.Combine(_tempDir, $"chunk_{chunkPaths.Count}.tmp");
-                        await WriteChunk(path, currentChunk);
-                        chunkPaths.Add(path);
-                        _context.SortSpillCount++;
-                        _context.PartitionsCount++;
-                        currentChunk.Clear();
-                    }
+                    var val = await _context.EvaluateValue(orderBy[i].Expression, row);
+                    keys[i] = ETL_SQL.Data.CompoundKey.NormalizeValue(val);
                 }
+                
+                currentChunk.Add((row, keys));
 
-                if (currentChunk.Count > 0)
+                if (currentChunk.Count >= ChunkSize)
                 {
                     currentChunk.Sort(Compare);
-                    var path = Path.Combine(_tempDir, $"chunk_{chunkPaths.Count}.tmp");
-                    await WriteChunk(path, currentChunk);
-                    chunkPaths.Add(path);
+                    var chunkName = $"sort_chunk_{Guid.NewGuid():N}_{chunkCounter++}.tmp";
+                    chunkPaths.Add(chunkName);
+
+                    await using (var writer = await _context.SpillStore.CreateWriterAsync(chunkName))
+                    {
+                        foreach (var entry in currentChunk)
+                        {
+                            // Attach keys to row for spilling
+                            entry.Row["__SORT_KEYS"] = entry.Keys;
+                            await writer.WriteRowAsync(entry.Row);
+                        }
+                    }
+                    
                     _context.SortSpillCount++;
                     _context.PartitionsCount++;
+                    currentChunk.Clear();
                 }
+            }
 
-                // 3. K-way Merge and yield
-                if (chunkPaths.Count == 0) yield break;
+            if (currentChunk.Count > 0)
+            {
+                currentChunk.Sort(Compare);
+                var prefix = Guid.NewGuid().ToString("N");
+                var chunkName = $"sort_chunk_{prefix}_{chunkCounter++}.tmp";
+                chunkPaths.Add(chunkName);
                 
-                var readers = chunkPaths.Select(p => new StreamReader(p)).ToList();
-                try
+                await using (var writer = await _context.SpillStore.CreateWriterAsync(chunkName))
                 {
-                    var heap = new PriorityQueue<int, (Row Row, object?[] Keys)>(Comparer<(Row, object?[])>.Create(Compare));
-
-                    for (int i = 0; i < readers.Count; i++)
+                    foreach (var entry in currentChunk)
                     {
-                        var line = await readers[i].ReadLineAsync();
-                        if (line != null)
-                        {
-                            var entry = ParseEntry(line);
-                            if (entry != null) heap.Enqueue(i, entry.Value);
-                        }
-                    }
-
-                    while (heap.Count > 0)
-                    {
-                        if (heap.TryDequeue(out int chunkIdx, out var first))
-                        {
-                            yield return first.Row;
-
-                            var nextLine = await readers[chunkIdx].ReadLineAsync();
-                            if (nextLine != null)
-                            {
-                                var entry = ParseEntry(nextLine);
-                                if (entry != null) heap.Enqueue(chunkIdx, entry.Value);
-                            }
-                        }
+                        entry.Row["__SORT_KEYS"] = entry.Keys;
+                        await writer.WriteRowAsync(entry.Row);
                     }
                 }
-                finally
-                {
-                    foreach (var rd in readers) rd.Dispose();
-                }
-            }
-            finally
-            {
-                // Cleanup will happen in SortExternal or the caller must handle temp directory cleanup
-                // Since this is private/internal, we assume the temp directory lifecycle is managed by SortExternal
-                // or similar top-level method.
-            }
-        }
-
-        private async Task WriteChunk(string path, List<(Row Row, object?[] Keys)> chunk)
-        {
-            using var writer = new StreamWriter(path);
-            foreach (var (row, keys) in chunk)
-            {
-                var entry = new SortEntry { Columns = row.Columns, Keys = keys.Select(SerializeKey).ToArray() };
-                var json = System.Text.Json.JsonSerializer.Serialize(entry);
-                _context.TotalSpilledBytes += System.Text.Encoding.UTF8.GetByteCount(json) + 1;
-                await writer.WriteLineAsync(json);
-            }
-        }
-
-        private async Task<List<Row>> MergeChunks(List<string> paths, Comparison<(Row, object?[])> compare)
-        {
-            if (paths.Count == 0) return new List<Row>();
-            if (paths.Count == 1)
-            {
-                var rows = new List<Row>();
-                using var r = new StreamReader(paths[0]);
-                string? line;
-                while ((line = await r.ReadLineAsync()) != null)
-                {
-                    var e = System.Text.Json.JsonSerializer.Deserialize<SortEntry>(line);
-                    if (e?.Columns != null)
-                    {
-                        var row = new Row();
-                        foreach (var kvp in e.Columns) row[kvp.Key] = UnwrapJsonValue(kvp.Value);
-                        rows.Add(row);
-                    }
-                }
-                return rows;
+                _context.SortSpillCount++;
+                _context.PartitionsCount++;
             }
 
-            // Open all chunk readers
-            var readers = paths.Select(p => new StreamReader(p)).ToList();
+            // 3. K-way Merge and yield
+            if (chunkPaths.Count == 0) yield break;
+            
+            var readers = new List<ISpillReader>();
             try
             {
-                var heap = new PriorityQueue<int, (Row Row, object?[] Keys)>(Comparer<(Row, object?[])>.Create(compare));
+                foreach (var path in chunkPaths) 
+                    readers.Add(await _context.SpillStore.CreateReaderAsync(path));
 
-                // Seed heap with first row from each chunk
+                var heap = new PriorityQueue<int, (Row Row, object?[] Keys)>(Comparer<(Row, object?[])>.Create(Compare));
+
                 for (int i = 0; i < readers.Count; i++)
                 {
-                    var line = await readers[i].ReadLineAsync();
-                    if (line != null)
+                    var row = await readers[i].ReadRowAsync();
+                    if (row != null)
                     {
-                        var entry = ParseEntry(line);
-                        if (entry != null) heap.Enqueue(i, entry.Value);
+                        var keysCol = row["__SORT_KEYS"];
+                        object?[] unwrapped;
+                        if (keysCol is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            unwrapped = je.EnumerateArray().Select(x => UnwrapJsonValue(x)).Cast<object?>().ToArray();
+                        }
+                        else
+                        {
+                             var keys = keysCol as IEnumerable<object>;
+                             unwrapped = keys?.Select(x => UnwrapJsonValue(x)).ToArray() ?? Array.Empty<object?>();
+                        }
+                        heap.Enqueue(i, (row, unwrapped));
                     }
                 }
 
-                var result = new List<Row>();
                 while (heap.Count > 0)
                 {
                     if (heap.TryDequeue(out int chunkIdx, out var first))
                     {
-                        result.Add(first.Item1);
+                        yield return first.Row;
 
-                        var nextLine = await readers[chunkIdx].ReadLineAsync();
-                        if (nextLine != null)
+                        var nextRow = await readers[chunkIdx].ReadRowAsync();
+                        if (nextRow != null)
                         {
-                            var entry = ParseEntry(nextLine);
-                            if (entry != null) heap.Enqueue(chunkIdx, entry.Value);
+                            var keysCol = nextRow["__SORT_KEYS"];
+                            object?[] unwrapped;
+                            if (keysCol is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Array)
+                            {
+                                unwrapped = je.EnumerateArray().Select(x => UnwrapJsonValue(x)).Cast<object?>().ToArray();
+                            }
+                            else
+                            {
+                                 var keys = keysCol as IEnumerable<object>;
+                                 unwrapped = keys?.Select(x => UnwrapJsonValue(x)).ToArray() ?? Array.Empty<object?>();
+                            }
+                            heap.Enqueue(chunkIdx, (nextRow, unwrapped));
                         }
                     }
                 }
-
-                return result;
             }
             finally
             {
-                foreach (var rd in readers) rd.Dispose();
+                foreach (var rd in readers) await rd.DisposeAsync();
             }
-        }
-
-        private (Row, object?[])? ParseEntry(string line)
-        {
-            var e = System.Text.Json.JsonSerializer.Deserialize<SortEntry>(line);
-            if (e?.Columns == null) return null;
-            var row = new Row();
-            foreach (var kvp in e.Columns) row[kvp.Key] = UnwrapJsonValue(kvp.Value);
-            var keys = e.Keys?.Select(DeserializeKey).ToArray() ?? Array.Empty<object?>();
-            return (row, keys);
         }
 
         private static object? UnwrapJsonValue(object? val)
         {
             if (val is System.Text.Json.JsonElement je)
-                return je.ValueKind switch
-                {
-                    System.Text.Json.JsonValueKind.Number  => je.TryGetDecimal(out var d) ? d : (object?)je.GetDouble(),
-                    System.Text.Json.JsonValueKind.True    => true,
-                    System.Text.Json.JsonValueKind.False   => false,
-                    System.Text.Json.JsonValueKind.String  => DateTime.TryParse(je.GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : je.GetString(),
-                    System.Text.Json.JsonValueKind.Null    => null,
-                    _                                     => (object?)je.ToString()
-                };
-            return val;
-        }
-
-        private static string? SerializeKey(object? v) => v == null ? null : System.Text.Json.JsonSerializer.Serialize(v);
-
-        private static object? DeserializeKey(string? s)
-        {
-            if (s == null) return null;
-            if (System.Text.Json.JsonSerializer.Deserialize<System.Text.Json.JsonElement>(s) is System.Text.Json.JsonElement el)
             {
-                return el.ValueKind switch
+                val = je.ValueKind switch
                 {
-                    System.Text.Json.JsonValueKind.Number when el.TryGetDecimal(out var d) => d,
-                    System.Text.Json.JsonValueKind.Number => el.GetDouble(),
-                    System.Text.Json.JsonValueKind.True => true,
+                    System.Text.Json.JsonValueKind.Number when je.TryGetDecimal(out var dv) => dv,
+                    System.Text.Json.JsonValueKind.Number => je.GetDouble(),
+                    System.Text.Json.JsonValueKind.True  => true,
                     System.Text.Json.JsonValueKind.False => false,
-                    System.Text.Json.JsonValueKind.String => DateTime.TryParse(el.GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : el.GetString(),
-                    _ => s
+                    System.Text.Json.JsonValueKind.String => je.GetString(),
+                    System.Text.Json.JsonValueKind.Null  => null,
+                    _                   => (object?)je.ToString()
                 };
             }
-            return s;
-        }
-
-        private class SortEntry
-        {
-            public Dictionary<string, object?> Columns { get; set; } = new();
-            public string?[]? Keys { get; set; }
+            return ETL_SQL.Data.CompoundKey.NormalizeValue(val);
         }
     }
 }

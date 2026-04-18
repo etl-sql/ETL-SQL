@@ -9,7 +9,7 @@ using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Engine;
 
-namespace ETL_SQL.Tests.Reporting
+namespace ETL_SQL.Tests.Reporting.Reporting
 {
     public class ReportingEndToEndTests
     {
