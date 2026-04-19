@@ -140,7 +140,9 @@ namespace ETL_SQL.Engine.Handlers
                     if (dest != null)
                     {
                         var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
-                        pwd ??= context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
+                        pwd ??= context.SecurityService.MasterPassword;
+                        if (pwd == null)
+                            throw new ExecutionException("ENCRYPT_FILE requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
                         CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
                     }
                     break;
@@ -148,7 +150,9 @@ namespace ETL_SQL.Engine.Handlers
                     if (dest != null)
                     {
                         var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
-                        pwd ??= context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
+                        pwd ??= context.SecurityService.MasterPassword;
+                        if (pwd == null)
+                            throw new ExecutionException("DECRYPT_FILE requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
                         CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
                     }
                     break;

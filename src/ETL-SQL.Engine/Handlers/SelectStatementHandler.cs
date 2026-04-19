@@ -379,13 +379,19 @@ namespace ETL_SQL.Engine.Handlers
                     _logger.Debug("Evaluating RECURSIVE CTE: {CteName} ({UnionType})", cte.Name, isDistinct ? "UNION" : "UNION ALL");
                     var finalResult = new DataTable();
                     var currentStep = new DataTable();
+                    var seenKeys = isDistinct ? new HashSet<CompoundKey>() : null;
 
                     // 1. Evaluate Anchor Member
                     await foreach (var batch in context.ExecuteQuery(anchor!))
                     {
                         if (finalResult.ColumnNames.Count == 0) finalResult.SetColumns(batch.ColumnNames);
                         if (currentStep.ColumnNames.Count == 0) currentStep.SetColumns(batch.ColumnNames);
-                        foreach (var r in batch.Rows) { await finalResult.AddRowAsync(r); await currentStep.AddRowAsync(r); }
+                        foreach (var r in batch.Rows)
+                        {
+                            await finalResult.AddRowAsync(r);
+                            await currentStep.AddRowAsync(r);
+                            seenKeys?.Add(MakeRowKey(r, finalResult.ColumnNames));
+                        }
                     }
 
                     // 2. Iterative Recursive Member
@@ -437,10 +443,11 @@ namespace ETL_SQL.Engine.Handlers
                                 {
                                     if (isDistinct)
                                     {
-                                        if (!finalResult.Rows.Any(existing => context.IsSoftEqual(existing, r)))
+                                        var key = MakeRowKey(r, nextStep.ColumnNames);
+                                        if (seenKeys!.Add(key))
                                         {
-                                        await finalResult.AddRowAsync(r);
-                                        await nextStep.AddRowAsync(r);
+                                            await finalResult.AddRowAsync(r);
+                                            await nextStep.AddRowAsync(r);
                                         }
                                     }
                                     else
@@ -479,6 +486,14 @@ namespace ETL_SQL.Engine.Handlers
             }
         }
 
+
+        private static CompoundKey MakeRowKey(Row r, IList<string> columnNames)
+        {
+            var values = new object?[columnNames.Count];
+            for (int i = 0; i < columnNames.Count; i++)
+                values[i] = r[columnNames[i]];
+            return new CompoundKey(values);
+        }
 
         private bool IsRecursive(CteDefinition cte, out Statement? anchor, out Statement? recursive, out bool isDistinct)
         {

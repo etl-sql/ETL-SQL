@@ -133,7 +133,9 @@ namespace ETL_SQL.Engine.Handlers
                     if (dest != null)
                     {
                         var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
-                        pwd ??= context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
+                        pwd ??= context.SecurityService.MasterPassword;
+                        if (pwd == null)
+                            throw new ExecutionException("ENCRYPT_DIRECTORY requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
                         EncryptDirectory(path, dest, pwd, overwrite, context);
                         _logger.WriteLine($"Directory encrypted: {path} -> {dest}", ConsoleColor.Green);
                     }
@@ -142,7 +144,9 @@ namespace ETL_SQL.Engine.Handlers
                     if (dest != null)
                     {
                         var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
-                        pwd ??= context.SecurityService.MasterPassword ?? "DefaultETLPass123!";
+                        pwd ??= context.SecurityService.MasterPassword;
+                        if (pwd == null)
+                            throw new ExecutionException("DECRYPT_DIRECTORY requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
                         DecryptDirectory(path, dest, pwd, overwrite, context);
                         _logger.WriteLine($"Directory decrypted: {path} -> {dest}", ConsoleColor.Green);
                     }

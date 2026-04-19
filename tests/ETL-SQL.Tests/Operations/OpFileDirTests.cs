@@ -134,8 +134,8 @@ namespace ETL_SQL.Tests.Operations
             string decDirEsc = decDir.Replace("\\", "\\\\");
 
             string script = $@"
-                ENCRYPT DIRECTORY '{subDirEsc}' TO '{encDirEsc}';
-                DECRYPT DIRECTORY '{encDirEsc}' TO '{decDirEsc}';
+                ENCRYPT DIRECTORY '{subDirEsc}' TO '{encDirEsc}' PASSWORD('TestPass1');
+                DECRYPT DIRECTORY '{encDirEsc}' TO '{decDirEsc}' PASSWORD('TestPass1');
             ";
             
             await RunScriptAsync(script);

@@ -68,7 +68,7 @@ namespace ETL_SQL.Connectors.Oracle
                 throw new ExecutionException("No table specified for Oracle data source read.");
 
             using var conn = await OpenConnectionAsync();
-            using var cmd = new OracleCommand($"SELECT * FROM {_tableName}", conn);
+            using var cmd = new OracleCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
             using var reader = await cmd.ExecuteReaderAsync();
 
             var columns = new List<string>();
@@ -231,7 +231,7 @@ namespace ETL_SQL.Connectors.Oracle
         public async Task<IEnumerable<string>> GetColumnsAsync(string tableName)
         {
             using var conn = await OpenConnectionAsync();
-            using var cmd = new OracleCommand($"SELECT * FROM {tableName} WHERE ROWNUM = 0", conn);
+            using var cmd = new OracleCommand($"SELECT * FROM {QuoteIdentifier(tableName)} WHERE ROWNUM = 0", conn);
             using var reader = await cmd.ExecuteReaderAsync();
             var columns = new List<string>();
             for (int i = 0; i < reader.FieldCount; i++)
@@ -249,7 +249,14 @@ namespace ETL_SQL.Connectors.Oracle
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Oracle truncate.");
 
-            await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {_tableName}")) { }
+            await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {QuoteIdentifier(_tableName)}")) { }
+        }
+
+        private static string QuoteIdentifier(string name)
+        {
+            // Oracle stores unquoted identifiers as uppercase; uppercase when quoting to match
+            var parts = name.Split('.');
+            return string.Join(".", parts.Select(p => $"\"{p.ToUpperInvariant().Replace("\"", "\"\"")}\""));
         }
 
         public async ValueTask DisposeAsync()

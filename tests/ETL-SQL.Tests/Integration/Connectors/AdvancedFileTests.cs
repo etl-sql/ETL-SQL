@@ -95,10 +95,10 @@ namespace ETL_SQL.Tests.Integration
             await eval.Evaluate(new Lexer($"COMPRESS_FILE('{src}', '{zip}');").TokenizeToScript());
             Assert.True(File.Exists(zip), "COMPRESS_FILE failed to create zip");
             
-            await eval.Evaluate(new Lexer($"ENCRYPT_FILE('{src}', '{enc}');").TokenizeToScript());
+            await eval.Evaluate(new Lexer($"ENCRYPT_FILE('{src}', '{enc}', NULL, 'TestPass1');").TokenizeToScript());
             Assert.True(File.Exists(enc), "ENCRYPT_FILE failed to create enc");
-            
-            await eval.Evaluate(new Lexer($"DECRYPT_FILE('{enc}', '{dec}');").TokenizeToScript());
+
+            await eval.Evaluate(new Lexer($"DECRYPT_FILE('{enc}', '{dec}', NULL, 'TestPass1');").TokenizeToScript());
             Assert.True(File.Exists(dec), "DECRYPT_FILE failed to create dec");
             
             string content = await File.ReadAllTextAsync(dec);

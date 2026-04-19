@@ -75,7 +75,7 @@ namespace ETL_SQL.Connectors.SqlServer
 
             var (conn, isShared) = await GetConnectionAsync();
             try {
-                await using var cmd = new SqlCommand($"SELECT * FROM {_tableName}", conn);
+                await using var cmd = new SqlCommand($"SELECT * FROM {QuoteIdentifier(_tableName)}", conn);
                 if (_activeTransaction != null) cmd.Transaction = _activeTransaction;
                 await using var reader = await cmd.ExecuteReaderAsync();
 
@@ -288,7 +288,7 @@ namespace ETL_SQL.Connectors.SqlServer
             if (string.IsNullOrWhiteSpace(_connectionString)) return Enumerable.Empty<string>();
             await using var conn = new SqlConnection(_connectionString);
             await conn.OpenAsync();
-            await using var cmd = new SqlCommand($"SELECT TOP 0 * FROM {tableName}", conn);
+            await using var cmd = new SqlCommand($"SELECT TOP 0 * FROM {QuoteIdentifier(tableName)}", conn);
             await using var reader = await cmd.ExecuteReaderAsync();
             var columns = new List<string>();
             for (int i = 0; i < reader.FieldCount; i++)
@@ -345,7 +345,13 @@ namespace ETL_SQL.Connectors.SqlServer
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for SQL Server truncate.");
 
-            await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {_tableName}")) { }
+            await foreach (var _ in ExecuteRawSql($"TRUNCATE TABLE {QuoteIdentifier(_tableName)}")) { }
+        }
+
+        private static string QuoteIdentifier(string name)
+        {
+            var parts = name.Split('.');
+            return string.Join(".", parts.Select(p => $"[{p.Replace("]", "]]")}]"));
         }
 
         public async ValueTask DisposeAsync()
