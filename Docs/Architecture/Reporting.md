@@ -81,10 +81,16 @@ Report-SQL files use the same lexer and parser as standard ETL-SQL scripts. Repo
 | Token sequence | Parser method | Result |
 |---|---|---|
 | `CREATE VISUAL` | `ParseCreateVisual()` | `CreateVisualStatement` |
+| `CREATE OR ALTER VISUAL` | `ParseCreateVisual()` | `CreateVisualStatement` (Mode=CreateOrAlter) |
 | `CREATE PAGE` | `ParseCreatePage()` | `CreatePageStatement` |
 | `CREATE DATASET` | `ParseCreateDataset()` | `CreateDatasetStatement` |
 | `CREATE CONTAINER` | `ParseCreateContainer()` | `CreateContainerStatement` |
 | `CREATE NAVIGATION` | `ParseCreateNavigation()` | `CreateNavigationStatement` |
+| `CREATE STYLE` | `ParseCreateStyle()` | `CreateStyleStatement` |
+| `CREATE BUTTON` | `ParseCreateButton()` | `CreateButtonStatement` |
+| `CREATE TEMPLATE` | `ParseCreateTemplate()` | `CreateTemplateStatement` |
+| `ALTER <Type>` | `ParseAlterReportObject()` | `AlterReportObjectStatement` |
+| `DROP <Type>` | `ParseDropReportObject()` | `DropReportObjectStatement` |
 | `SET REPORT` | `ParseSetReportMetadata()` | `SetReportMetadataStatement` |
 
 Non-report statements (`SELECT`, `INSERT`, `DECLARE`, etc.) parse and execute normally in the same script context, allowing data preparation and visual definition to coexist in a single file.
@@ -106,12 +112,60 @@ Subtitle     — optional display subtitle string
 Source       — VisualSourceExpression (inline SELECT or #temp reference)
               (null / empty for Text, DatePicker, Slider, Search)
 Mappings     — List<VisualMapping> (role → column, e.g. X → Region)
-Options      — List<VisualOption> flat key-value pairs (STACKED, SMOOTH, FORMAT, LEGEND_POSITION, etc.)
+Options      — List<VisualOption> flat key-value pairs (STACKED, SMOOTH, FORMAT, etc.)
 AxisOptions  — List<AxisOptions> per-axis X_AXIS / Y_AXIS config blocks
 TypedSeries      — List<TypedSeries> for COMBO charts (BAR col, LINE col)
-FormattingRules  — List<FormattingRule> for TABLE conditional cell colors (column, operator, threshold, color)
-Styles           — Dictionary<string, string> (THEME, HEIGHT, WIDTH, BACKGROUND, BORDER)
+FormattingRules  — List<FormattingRule> for TABLE conditional cell colors
+Styles           — Dictionary<string, string> (THEME, WIDTH, HEIGHT, BORDER, etc.)
+StyleName        — optional name of a CREATE STYLE to inherit
 Actions          — List<VisualAction> (ON_CLICK, ON_CHANGE triggers)
+Mode             — Create | Alter | CreateOrAlter
+```
+
+#### `CreateStyleStatement`
+
+```
+Name   — style identifier
+Styles — Dictionary<string, string> of CSS properties
+Mode   — Create | Alter | CreateOrAlter
+```
+
+#### `CreateButtonStatement`
+
+```
+Name       — identifier
+ButtonType — BACK | REFRESH | HELP | LINK | ACTION
+Title      — optional display label
+Tooltip    — optional TooltipDefinition
+Options    — visual options (e.g. ICON)
+Actions    — click behavior (e.g. DRILL_DOWN, SET_PARAMETER)
+Styles     — inline styles
+StyleName  — style reference
+Mode       — Create | Alter | CreateOrAlter
+```
+
+#### `CreateTemplateStatement`
+
+```
+Name    — template identifier
+Options — default options/styles provided by the template
+Mode    — Create | Alter | CreateOrAlter
+```
+
+#### `AlterReportObjectStatement`
+
+```
+ObjectType — Visual | Page | Container | Style | Navigation | Dataset | Template | Button
+Name       — target name
+...        — partial updates for Source, Mappings, Options, Styles, etc.
+```
+
+#### `DropReportObjectStatement`
+
+```
+ObjectType — same as above
+Name       — target name
+IfExists   — boolean (DROP ... IF EXISTS)
 ```
 
 #### `CreatePageStatement`

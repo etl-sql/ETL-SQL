@@ -156,7 +156,7 @@ namespace ETL_SQL.Connectors.Rest
                 foreach (var opt in _options.Where(o => o.Key.StartsWith("HEADER_", StringComparison.OrdinalIgnoreCase)))
                 {
                     var headerName = opt.Key.Substring(7).Replace("_", "-");
-                    request.Headers.TryAddWithoutValidation(headerName, opt.Value);
+                    request.Headers.Add(headerName, opt.Value);
                 }
             }
 

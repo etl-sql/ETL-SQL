@@ -52,19 +52,19 @@
 
   #### 🟡 Medium Priority — Documentation
 
-  - [ ] **`Architecture/Reporting.md` is missing new statement types** — `CREATE STYLE`, `CREATE TEMPLATE`, `CREATE BUTTON`, `ALTER <type>`, `DROP <type>`, and `CREATE OR ALTER` are all implemented but absent from the architecture overview and parser dispatch table. Update the doc to match the current statement set.
+  - [x] **`Architecture/Reporting.md` is missing new statement types** — `CREATE STYLE`, `CREATE TEMPLATE`, `CREATE BUTTON`, `ALTER <type>`, `DROP <type>`, and `CREATE OR ALTER` are all implemented but absent from the architecture overview and parser dispatch table. Update the doc to match the current statement set.
 
-  - [ ] **TEXT visual documentation says "VALUE option" but parser uses `DEFAULT` clause** — `Report_SQL_Guide.md:147` tells users to write `OPTIONS (VALUE = '...')` for TEXT visuals, but the parser stores text content in the `DefaultValue` field via the `DEFAULT` clause. Update the guide with the correct syntax and a working example.
+  - [x] **TEXT visual documentation says "VALUE option" but parser uses `DEFAULT` clause** — `Report_SQL_Guide.md:147` tells users to write `OPTIONS (VALUE = '...')` for TEXT visuals, but the parser stores text content in the `DefaultValue` field via the `DEFAULT` clause. Update the guide with the correct syntax and a working example.
 
   #### 🟢 Low Priority / Simplification
 
-  - [ ] **`BeginTransactionStatementHandler.cs` has duplicate `using System.Threading.Tasks;`** — Remove one.
+  - [x] **`BeginTransactionStatementHandler.cs` has duplicate `using System.Threading.Tasks;`** — Remove one.
 
-  - [ ] **HTTP custom headers use `TryAddWithoutValidation`** — `RestDataSource.cs:154-161` bypasses .NET's header validation. Values containing CRLF could cause header injection. Either validate header values or use the validating `Add()` overload.
+  - [x] **HTTP custom headers use `TryAddWithoutValidation`** — `RestDataSource.cs:154-161` bypasses .NET's header validation. Values containing CRLF could cause header injection. Either validate header values or use the validating `Add()` overload.
 
   - [ ] **`StatementParser` is a 7,000-line partial class across 7 files** — Consider whether the partial split across `StatementParser.Data.cs`, `StatementParser.Report.cs`, `StatementParser.Flow.cs`, etc. should become actual separate classes composited by a thin `StatementParser` dispatcher. The current approach technically works but makes cross-file navigation painful and disguises the true complexity.
 
-  - [ ] **`quote` identifier logic in `Evaluator.GetSqlTableName` is an untestable inline lambda** — `Evaluator.cs:696-706` defines dialect-specific quoting as a local `Func<string,string>`. Extract to `private static string QuoteMssqlIdentifier(string s)` / `QuoteStandardIdentifier(string s)` so they can be unit-tested and reused from `QueryCompiler`.
+  - [x] **`quote` identifier logic in `Evaluator.GetSqlTableName` is an untestable inline lambda** — `Evaluator.cs:696-706` defines dialect-specific quoting as a local `Func<string,string>`. Extract to `private static string QuoteMssqlIdentifier(string s)` / `QuoteStandardIdentifier(string s)` so they can be unit-tested and reused from `QueryCompiler`.
 
   #### 🧪 Linting Gaps
 

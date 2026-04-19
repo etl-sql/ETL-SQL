@@ -734,7 +734,6 @@ namespace ETL_SQL.Engine
             if (t.DatabaseName != null) parts.Add(t.DatabaseName);
             if (t.SchemaName != null) parts.Add(t.SchemaName);
             
-            // Handle case where TableName contains a dot (e.g. "schema.table") but SchemaName is null
             if (t.TableName.Contains(".") && t.SchemaName == null)
             {
                 parts.AddRange(t.TableName.Split('.'));
@@ -744,20 +743,23 @@ namespace ETL_SQL.Engine
                 parts.Add(t.TableName);
             }
 
-            // Security Hardening (CR-S2): Apply dialect-appropriate identifier quoting
             Func<string, string> quote = dialect.Equals("MSSQL", StringComparison.OrdinalIgnoreCase)
-                ? s => s.StartsWith("[") ? s : $"[{s.Replace("]", "]]")}]"
-                : s => 
-                {
-                    if (s.StartsWith("\"")) return s;
-                    // For Postgres/Oracle, we only quote if the identifier contains special characters 
-                    // that REQUIRES quoting. 
-                    bool needsQuoting = s.Any(c => !char.IsLetterOrDigit(c) && c != '_');
-
-                    return needsQuoting ? $"\"{s.Replace("\"", "\"\"")}\"" : s;
-                };
+                ? QuoteIdentifierMssql
+                : QuoteIdentifierStandard;
 
             return string.Join(".", parts.Select(quote));
+        }
+
+        private static string QuoteIdentifierMssql(string s) => 
+            s.StartsWith("[") ? s : $"[{s.Replace("]", "]]")}]";
+
+        private static string QuoteIdentifierStandard(string s)
+        {
+            if (s.StartsWith("\"")) return s;
+            // For Postgres/Oracle, we only quote if the identifier contains special characters 
+            // that REQUIRE quoting. 
+            bool needsQuoting = s.Any(c => !char.IsLetterOrDigit(c) && c != '_');
+            return needsQuoting ? $"\"{s.Replace("\"", "\"\"")}\"" : s;
         }
 
         public IAsyncEnumerable<DataTable> InterceptProgress(IAsyncEnumerable<DataTable> chunks)

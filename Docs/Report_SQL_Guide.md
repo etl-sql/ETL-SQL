@@ -144,7 +144,7 @@ All clauses inside the outer `( )` are separated by commas. The closing `)` ends
 | `WATERFALL` | Cumulative change chart. Positive values rise, negative values fall. | ECharts |
 | `TABLE` | Paginated, scrollable data grid. Supports `FORMATTING` for conditional cell colors. | HTML `<table>` |
 | `CARD` | Single large KPI number with an optional label. | Styled `<div>` |
-| `TEXT` | Free-form text or HTML block. Uses the `VALUE` option, not a SOURCE query. | `<div>` |
+| `TEXT` | Free-form text or HTML block. Uses the `DEFAULT` clause, not a SOURCE query. | `<div>` |
 | `SLICER` | Dropdown parameter selector. SOURCE provides the option list. | `<select>` |
 | `DATEPICKER` | Date input control. No SOURCE required. | `<input type="date">` |
 | `SLIDER` | Numeric range slider. No SOURCE required. | `<input type="range">` |
@@ -290,6 +290,17 @@ MAPPINGS (LABEL = category, VALUE = total)
 
 ```sql
 MAPPINGS (VALUE = val, LABEL = lbl)
+```
+
+#### TEXT
+
+`TEXT` visuals render free-form string content. No `SOURCE` is required; the content is provided via the `DEFAULT` clause.
+
+```sql
+CREATE VISUAL WelcomeText AS TEXT (
+  TITLE   = 'Welcome',
+  DEFAULT = '### Hello, World!\nThis is a *markdown-enabled* text block.'
+);
 ```
 
 #### SLICER
