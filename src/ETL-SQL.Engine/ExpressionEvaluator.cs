@@ -258,7 +258,7 @@ namespace ETL_SQL.Engine
                 if (row.Schema?.ColumnCount > 0)
                 {
                     var rowVal = row[0];
-                    if (l != null && l != DBNull.Value && rowVal != null && rowVal != DBNull.Value)
+                    if (!l.IsNull() && !rowVal.IsNull())
                     {
                         if (IsSoftEqual(l, rowVal)) { found = true; break; }
                     }
@@ -270,7 +270,7 @@ namespace ETL_SQL.Engine
                 foreach (var item in list.Items)
                 {
                     var itemVal = await EvaluateInternal(item, context);
-                    if (l != null && l != DBNull.Value && itemVal != null && itemVal != DBNull.Value)
+                    if (!l.IsNull() && !itemVal.IsNull())
                     {
                         if (IsSoftEqual(l, itemVal)) { found = true; break; }
                     }
@@ -554,12 +554,12 @@ namespace ETL_SQL.Engine
 
             return bin.Operator switch
             {
-                TokenType.EQUALS => (leftVal != null && leftVal != DBNull.Value && rightVal != null && rightVal != DBNull.Value) && IsSoftEqual(leftVal, rightVal),
-                TokenType.NOT_EQUALS => (leftVal != null && leftVal != DBNull.Value && rightVal != null && rightVal != DBNull.Value) && !IsSoftEqual(leftVal, rightVal),
-                TokenType.GREATER_THAN => (leftVal != null && rightVal != null) && CompareConstants(leftVal, rightVal) > 0,
-                TokenType.LESS_THAN => (leftVal != null && rightVal != null) && CompareConstants(leftVal, rightVal) < 0,
-                TokenType.GREATER_EQUALS => (leftVal != null && rightVal != null) && CompareConstants(leftVal, rightVal) >= 0,
-                TokenType.LESS_EQUALS => (leftVal != null && rightVal != null) && CompareConstants(leftVal, rightVal) <= 0,
+                TokenType.EQUALS => (!leftVal.IsNull() && !rightVal.IsNull()) && IsSoftEqual(leftVal, rightVal),
+                TokenType.NOT_EQUALS => (!leftVal.IsNull() && !rightVal.IsNull()) && !IsSoftEqual(leftVal, rightVal),
+                TokenType.GREATER_THAN => (!leftVal.IsNull() && !rightVal.IsNull()) && CompareConstants(leftVal, rightVal) > 0,
+                TokenType.LESS_THAN => (!leftVal.IsNull() && !rightVal.IsNull()) && CompareConstants(leftVal, rightVal) < 0,
+                TokenType.GREATER_EQUALS => (!leftVal.IsNull() && !rightVal.IsNull()) && CompareConstants(leftVal, rightVal) >= 0,
+                TokenType.LESS_EQUALS => (!leftVal.IsNull() && !rightVal.IsNull()) && CompareConstants(leftVal, rightVal) <= 0,
                 TokenType.LIKE => EvaluateLike(leftVal, rightVal),
                 _ => IsSoftEqual(leftVal, rightVal)
             };
