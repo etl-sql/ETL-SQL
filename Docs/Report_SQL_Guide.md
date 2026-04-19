@@ -182,16 +182,62 @@ CREATE VISUAL RevenueCard AS CARD (
 
 ### TOOLTIP
 
-An optional floating help text shown when the user hovers over the visual's title area. This is a top-level clause — not a STYLE property — and applies to all visual types.
+Adds hover-triggered content shown when the user hovers over the visual's title area. Three forms are supported:
+
+**1. Plain text**
+
+```sql
+TOOLTIP = 'Sum of all regional revenue, YTD.'
+```
+
+**2. Named container reference**
+
+References an existing `CREATE CONTAINER` by name. The container's visuals are rendered as a popover panel. The hovered value is injected as a parameter (`@hover_value`) so tooltip visuals can filter to the point being inspected.
+
+```sql
+CREATE VISUAL RegionSparkline AS LINE (
+  SOURCE = (SELECT month, SUM(revenue) AS revenue FROM #summary
+            WHERE region = @hover_value GROUP BY month),
+  MAPPINGS (X = month, Y = revenue)
+);
+
+CREATE CONTAINER RegionTooltip AS BOX (
+  VISUALS (RegionSparkline)
+);
+
+CREATE VISUAL RevenueByRegion AS BAR (
+  SOURCE   = (SELECT region, SUM(revenue) AS revenue FROM #summary GROUP BY region),
+  MAPPINGS (X = region, Y = revenue),
+  TOOLTIP  = RegionTooltip       -- container reference
+);
+```
+
+**3. Inline anonymous container**
+
+Defines tooltip content inline — an optional markdown string followed by a `VISUALS` list. The outer `( )` delimit the inline block; markdown and `VISUALS` are separated by a comma.
+
+```sql
+TOOLTIP = ('**Revenue trend** for the hovered region', VISUALS(RegionSparkline))
+
+-- markdown only (no chart)
+TOOLTIP = ('Click a bar to drill down by month.')
+
+-- visuals only (no markdown)
+TOOLTIP = (VISUALS(RegionSparkline, RegionTable))
+```
+
+Full example:
 
 ```sql
 CREATE VISUAL RevenueCard AS CARD (
   SOURCE   = #kpis,
   TITLE    = 'Total Revenue',
-  TOOLTIP  = 'Sum of all regional revenue, YTD.',
+  TOOLTIP  = ('**Total Revenue** — sum of all regional revenue, YTD.', VISUALS(TrendSparkline)),
   MAPPINGS (VALUE = revenue, LABEL = label)
 );
 ```
+
+`@hover_value` is set to the X-axis or LABEL value of the hovered data point. Tooltip visuals that reference `@hover_value` in their inline `SELECT` are re-queried on each hover. `TOOLTIP` applies to all visual types, `CREATE PAGE`, `CREATE CONTAINER`, and `CREATE BUTTON`.
 
 ### MAPPINGS
 

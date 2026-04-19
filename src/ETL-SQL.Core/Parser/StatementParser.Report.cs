@@ -32,7 +32,7 @@ namespace ETL_SQL.Core.Parser
             string? subtitle = null;
             string? defaultValue = null;
             string? styleName = null;
-            string? tooltip = null;
+            TooltipDefinition? tooltip = null;
             var mappings       = new List<VisualMapping>();
             var options        = new List<VisualOption>();
             var axisOptions    = new List<AxisOptions>();
@@ -59,7 +59,7 @@ namespace ETL_SQL.Core.Parser
                 }
                 else if (_parser.Match(TokenType.TOOLTIP))
                 {
-                    tooltip = ParseVisualProperty("TOOLTIP");
+                    tooltip = ParseTooltipDefinition();
                 }
                 else if (_parser.Match(TokenType.MAPPINGS))
                 {
@@ -167,6 +167,56 @@ namespace ETL_SQL.Core.Parser
                 value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : _parser.Consume(TokenType.STRING, $"Expected string literal for {propertyName}").Value;
             }
             return value;
+        }
+
+        /// <summary>
+        /// Parses one of three tooltip forms after the TOOLTIP keyword has been consumed:
+        ///   TOOLTIP = 'plain text'
+        ///   TOOLTIP = ContainerName
+        ///   TOOLTIP = ('optional markdown', VISUALS(A, B, ...))
+        /// </summary>
+        private TooltipDefinition ParseTooltipDefinition()
+        {
+            _parser.Match(TokenType.EQUALS);
+
+            // Inline form: TOOLTIP = ('markdown', VISUALS(...))
+            if (ReportCheck(TokenType.LPAREN))
+            {
+                _parser.Advance(); // consume '('
+                string? markdown = null;
+                var visuals = new List<string>();
+
+                // Optional leading markdown string
+                if (ReportCheck(TokenType.STRING))
+                {
+                    markdown = _parser.Advance().Value;
+                    _parser.Match(TokenType.COMMA);
+                }
+
+                // VISUALS(name, ...)
+                if (_parser.Current.Value.Equals("VISUALS", StringComparison.OrdinalIgnoreCase))
+                {
+                    _parser.Advance(); // consume VISUALS
+                    _parser.Consume(TokenType.LPAREN, "Expected '(' after VISUALS in TOOLTIP");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        visuals.Add(_parser.ConsumeIdentifier("Expected visual name in TOOLTIP VISUALS").Value);
+                        _parser.Match(TokenType.COMMA);
+                    }
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP VISUALS");
+                }
+
+                _parser.Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP inline block");
+                return TooltipDefinition.Inline(markdown, visuals);
+            }
+
+            // Plain string: TOOLTIP = 'text'
+            if (ReportCheck(TokenType.STRING))
+                return TooltipDefinition.Text(_parser.Advance().Value);
+
+            // Container reference: TOOLTIP = MyContainerName
+            return TooltipDefinition.Container(
+                _parser.ConsumeIdentifier("Expected string, container name, or '(' for TOOLTIP").Value);
         }
 
         private VisualType ParseVisualType()
@@ -1051,7 +1101,7 @@ namespace ETL_SQL.Core.Parser
             _parser.Consume(TokenType.LPAREN, "Expected '(' after button type");
 
             string? title = null;
-            string? tooltip = null;
+            TooltipDefinition? tooltip = null;
             string? styleName = null;
             var options = new List<VisualOption>();
             var actions = new List<VisualAction>();
@@ -1066,8 +1116,7 @@ namespace ETL_SQL.Core.Parser
                 }
                 else if (_parser.Match(TokenType.TOOLTIP))
                 {
-                    _parser.Match(TokenType.EQUALS);
-                    tooltip = _parser.Consume(TokenType.STRING, "Expected button tooltip string").Value;
+                    tooltip = ParseTooltipDefinition();
                 }
                 else if (_parser.Match(TokenType.OPTIONS))
                 {
@@ -1128,7 +1177,7 @@ namespace ETL_SQL.Core.Parser
             string? styleName = null;
             string? title = null;
             string? subtitle = null;
-            string? tooltip = null;
+            TooltipDefinition? tooltip = null;
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
@@ -1149,8 +1198,7 @@ namespace ETL_SQL.Core.Parser
                 }
                 else if (_parser.Match(TokenType.TOOLTIP))
                 {
-                    _parser.Match(TokenType.EQUALS);
-                    tooltip = _parser.Consume(TokenType.STRING, "Expected tooltip string").Value;
+                    tooltip = ParseTooltipDefinition();
                 }
                 else if (_parser.Match(TokenType.MAPPINGS))
                 {

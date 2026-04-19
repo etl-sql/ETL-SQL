@@ -52,6 +52,10 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("navigations")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<NavigationManifest>? Navigations { get; set; }
+
+        [JsonPropertyName("buttons")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<ButtonManifest>? Buttons { get; set; }
     }
 
     /// <summary>A single visual with its data snapshot and ECharts config.</summary>
@@ -70,6 +74,10 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("defaultValue")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? DefaultValue { get; set; }
+
+        [JsonPropertyName("tooltip")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public TooltipManifest? Tooltip { get; set; }
 
         /// <summary>Column headers for TABLE visuals (and raw data access).</summary>
         [JsonPropertyName("columns")]
@@ -226,5 +234,46 @@ namespace ETL_SQL.ReportBuilder
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? DefaultPage { get; set; }
         [JsonPropertyName("pages")]       public List<string> Pages { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Serializable form of a TooltipDefinition.
+    /// type = "text" | "container" | "inline"
+    /// </summary>
+    public class TooltipManifest
+    {
+        [JsonPropertyName("type")]
+        public string Type { get; set; } = "text";
+
+        [JsonPropertyName("text")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Text { get; set; }
+
+        [JsonPropertyName("containerRef")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ContainerRef { get; set; }
+
+        [JsonPropertyName("markdown")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Markdown { get; set; }
+
+        [JsonPropertyName("visuals")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? Visuals { get; set; }
+    }
+
+    public class ButtonManifest
+    {
+        [JsonPropertyName("name")]       public string Name { get; set; } = string.Empty;
+        [JsonPropertyName("buttonType")] public string ButtonType { get; set; } = string.Empty;
+        [JsonPropertyName("title")]      public string? Title { get; set; }
+        [JsonPropertyName("tooltip")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public TooltipManifest? Tooltip { get; set; }
+        [JsonPropertyName("options")]    public Dictionary<string, string> Options { get; set; } = new();
+        [JsonPropertyName("actions")]    public List<VisualActionManifest> Actions { get; set; } = new();
+        [JsonPropertyName("styles")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? Styles { get; set; }
     }
 }

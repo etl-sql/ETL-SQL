@@ -10,8 +10,31 @@ namespace ETL_SQL.Core
     // AstNode and Statement are records, so all derived types must be records too.
     // ════════════════════════════════════════════════════════════════════════════
 
+    // ── Tooltip ───────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// A tooltip that can be plain text, a reference to an existing named container,
+    /// or an inline anonymous container (optional markdown + visual list).
+    /// </summary>
+    public record TooltipDefinition
+    {
+        public string? PlainText     { get; init; }
+        public string? ContainerRef  { get; init; }
+        public string? InlineMarkdown{ get; init; }
+        public List<string>? InlineVisuals { get; init; }
+
+        public static TooltipDefinition Text(string text) =>
+            new() { PlainText = text };
+
+        public static TooltipDefinition Container(string containerName) =>
+            new() { ContainerRef = containerName };
+
+        public static TooltipDefinition Inline(string? markdown, List<string> visuals) =>
+            new() { InlineMarkdown = markdown, InlineVisuals = visuals };
+    }
+
     // ── Enumerations ──────────────────────────────────────────────────────────
-    
+
     public enum ReportObjectType
     {
         Visual,
@@ -147,7 +170,7 @@ namespace ETL_SQL.Core
         public required string Name                    { get; init; }
         public required string ButtonType              { get; init; } // BACK, REFRESH, HELP, etc.
         public string? Title                          { get; init; }
-        public string? Tooltip                        { get; init; }
+        public TooltipDefinition? Tooltip             { get; init; }
         public List<VisualOption> Options              { get; init; } = new();
         public List<VisualAction> Actions              { get; init; } = new();
         public Dictionary<string, string> Styles       { get; init; } = new();
@@ -162,7 +185,7 @@ namespace ETL_SQL.Core
         public required VisualType VisualType          { get; init; }
         public string? Title                          { get; init; }
         public string? Subtitle                       { get; init; }
-        public string? Tooltip                        { get; init; }
+        public TooltipDefinition? Tooltip             { get; init; }
         public string? DefaultValue                   { get; init; }
         public required VisualSourceExpression Source  { get; init; }
         public List<VisualMapping> Mappings            { get; init; } = new();
@@ -195,7 +218,7 @@ namespace ETL_SQL.Core
         public string? StyleName                              { get; init; }
         public string? Title                                  { get; init; }
         public string? Subtitle                               { get; init; }
-        public string? Tooltip                                { get; init; }
+        public TooltipDefinition? Tooltip                     { get; init; }
         public ObjectCreationMode Mode                         { get; init; } = ObjectCreationMode.Create;
     }
 
@@ -224,7 +247,7 @@ namespace ETL_SQL.Core
         public string? StyleName { get; init; }
         public string? Title { get; init; }
         public string? Subtitle { get; init; }
-        public string? Tooltip { get; init; }
+        public TooltipDefinition? Tooltip { get; init; }
         public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
     }
 
@@ -277,7 +300,7 @@ namespace ETL_SQL.Core
         public string? StyleName                       { get; init; }
         public string? Title                           { get; init; }
         public string? Subtitle                        { get; init; }
-        public string? Tooltip                         { get; init; }
+        public TooltipDefinition? Tooltip              { get; init; }
     }
 
     /// <summary>

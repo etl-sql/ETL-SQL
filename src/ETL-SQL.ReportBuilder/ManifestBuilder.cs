@@ -39,7 +39,8 @@ namespace ETL_SQL.ReportBuilder
                 {
                     Name         = name,
                     VisualType   = vStmt.VisualType.ToString(),
-                    DefaultValue = vStmt.DefaultValue
+                    DefaultValue = vStmt.DefaultValue,
+                    Tooltip      = BuildTooltipManifest(vStmt.Tooltip)
                 };
 
                 // Copy flat options
@@ -186,6 +187,50 @@ namespace ETL_SQL.ReportBuilder
                 }
             }
 
+            // ── Buttons ──────────────────────────────────────────────────────
+            if (_ctx.ButtonDefinitions.Count > 0)
+            {
+                manifest.Buttons = new();
+                foreach (var (name, bStmt) in _ctx.ButtonDefinitions)
+                {
+                    var resolvedButtonStyles = ResolveStyles(bStmt.StyleName, bStmt.Styles);
+                    var bm = new ButtonManifest
+                    {
+                        Name       = name,
+                        ButtonType = bStmt.ButtonType,
+                        Title      = bStmt.Title,
+                        Tooltip    = BuildTooltipManifest(bStmt.Tooltip),
+                        Styles     = resolvedButtonStyles.Count > 0 ? resolvedButtonStyles : null
+                    };
+
+                    foreach (var opt in bStmt.Options)
+                        bm.Options[opt.Key] = opt.Value;
+
+                    foreach (var action in bStmt.Actions)
+                    {
+                        bm.Actions.Add(action switch
+                        {
+                            DrillDownAction dd => new VisualActionManifest
+                            {
+                                Type         = "DRILL_DOWN",
+                                Trigger      = dd.Trigger,
+                                TargetVisual = dd.TargetVisual,
+                                KeyColumn    = dd.KeyColumn
+                            },
+                            SetParameterAction sp => new VisualActionManifest
+                            {
+                                Type            = "SET_PARAMETER",
+                                Trigger         = sp.Trigger,
+                                ParameterName   = sp.ParameterName,
+                                ValueExpression = sp.ValueExpression
+                            },
+                            _ => new VisualActionManifest { Type = "UNKNOWN", Trigger = action.Trigger }
+                        });
+                    }
+                    manifest.Buttons.Add(bm);
+                }
+            }
+
             // ── Datasets ─────────────────────────────────────────────────────
             foreach (var (tableName, dStmt) in _ctx.DatasetDefinitions)
             {
@@ -263,6 +308,16 @@ namespace ETL_SQL.ReportBuilder
         /// Merges a named style (base) with inline styles (override). Named style values are
         /// applied first; any key also present in inlineStyles takes the inline value.
         /// </summary>
+        private static TooltipManifest? BuildTooltipManifest(TooltipDefinition? tooltip)
+        {
+            if (tooltip == null) return null;
+            if (tooltip.ContainerRef != null)
+                return new TooltipManifest { Type = "container", ContainerRef = tooltip.ContainerRef };
+            if (tooltip.InlineVisuals != null)
+                return new TooltipManifest { Type = "inline", Markdown = tooltip.InlineMarkdown, Visuals = tooltip.InlineVisuals };
+            return new TooltipManifest { Type = "text", Text = tooltip.PlainText };
+        }
+
         private Dictionary<string, string> ResolveStyles(string? styleName, Dictionary<string, string> inlineStyles)
         {
             if (string.IsNullOrEmpty(styleName) && inlineStyles.Count == 0)
