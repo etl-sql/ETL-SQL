@@ -278,6 +278,7 @@ namespace ETL_SQL.Engine.Engines
             if (stmt.Offset != null)
             {
                 int offset = Convert.ToInt32(await _context.EvaluateValue(stmt.Offset, new Row()));
+                if (offset < 0) throw new ExecutionException("OFFSET must be a non-negative integer.");
                 if (offset > 0) rows = rows.Skip(offset).ToList();
             }
 

@@ -112,9 +112,14 @@ namespace ETL_SQL.Connectors.Email
                     {
                         if (System.IO.File.Exists(path))
                         {
+                            using var fs = System.IO.File.OpenRead(path);
+                            var ms = new System.IO.MemoryStream();
+                            await fs.CopyToAsync(ms);
+                            ms.Position = 0;
+
                             var attachment = new MimePart()
                             {
-                                Content = new MimeContent(System.IO.File.OpenRead(path)),
+                                Content = new MimeContent(ms),
                                 ContentDisposition = new ContentDisposition(ContentDisposition.Attachment),
                                 ContentTransferEncoding = ContentEncoding.Base64,
                                 FileName = System.IO.Path.GetFileName(path)

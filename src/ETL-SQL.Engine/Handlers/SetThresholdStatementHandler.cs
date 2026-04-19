@@ -27,6 +27,14 @@ namespace ETL_SQL.Engine.Handlers
                 throw new ExecutionException("EXTERNAL_HASH_PARTITIONS must be at least 1.");
             }
 
+            if ((s.Type == ThresholdType.BatchSize || 
+                 s.Type == ThresholdType.ForeachPageSize || 
+                 s.Type == ThresholdType.ExternalSortChunkSize || 
+                 s.Type == ThresholdType.MaxMessages) && intVal < 1)
+            {
+                throw new ExecutionException($"{s.Type.ToString().ToUpperInvariant()} must be at least 1.");
+            }
+
 
             switch (s.Type)
             {
