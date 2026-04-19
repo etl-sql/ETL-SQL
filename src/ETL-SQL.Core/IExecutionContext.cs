@@ -1,4 +1,5 @@
 using ETL_SQL.Data;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Common;
 using System;
 using System.Collections.Generic;
@@ -43,8 +44,8 @@ namespace ETL_SQL.Core
 
     public interface ISqlCompilerContext
     {
-        string CompileExpression(Expression e, string dialect = "MSSQL");
-        string CompileQuery(Statement s, string dialect = "MSSQL");
+        CompiledSql CompileExpression(Expression e, string dialect = "MSSQL");
+        CompiledSql CompileQuery(Statement s, string dialect = "MSSQL");
         string GetSqlTableName(TableReference t, string dialect = "MSSQL");
     }
 
@@ -54,6 +55,8 @@ namespace ETL_SQL.Core
         Task CommitTransaction();
         Task RollbackTransaction(string? name = null);
         int TranCount { get; }
+        /// <summary>Whether to automatically rollback open transactions when a script finishes (Zero-Trust safety).</summary>
+        bool AutoRollbackOnFinish { get; set; }
     }
 
     public interface IDockerContext
@@ -100,6 +103,8 @@ namespace ETL_SQL.Core
         List<DataTable> LastResultSets { get; }
         long RowsProcessed { get; set; }
         long TotalSpilledBytes { get; set; }
+        /// <summary>Whether to collect expensive execution metrics (e.g., spill byte counting). Default is ON.</summary>
+        bool TelemetryEnabled { get; set; }
         int PartitionsCount { get; set; }
         long AggregateGroupsCount { get; set; }
         double AggregateExpansionRatio { get; set; }
@@ -145,6 +150,10 @@ namespace ETL_SQL.Core
         string? CurrentScriptPath { get; set; }
         /// <summary>Maximum number of file operations allowed in a single script.</summary>
         int MaxFileOperations { get; set; }
+        /// <summary>Maximum number of grouping sets allowed in a CUBE/ROLLUP operation.</summary>
+        int MaxGroupingSets { get; set; }
+        /// <summary>Maximum size in bytes for a persisted session payload (CFG-G4).</summary>
+        long MaxSessionSize { get; set; }
     }
 
 
@@ -191,6 +200,12 @@ namespace ETL_SQL.Core
         IDictionary<string, CreateNavigationStatement> NavigationDefinitions { get; }
         /// <summary>Named style definitions registered by CREATE STYLE.</summary>
         IDictionary<string, CreateStyleStatement> StyleDefinitions { get; }
+        /// <summary>Named button definitions registered by CREATE BUTTON.</summary>
+        IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; }
+        /// <summary>Named template definitions registered by CREATE TEMPLATE.</summary>
+        IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; }
+        /// <summary>The directory where .json style templates are discovered.</summary>
+        string TemplatePath { get; set; }
         /// <summary>Report-level title set by SET REPORT TITLE = '...'</summary>
         string? ReportTitle { get; set; }
         /// <summary>Report-level description set by SET REPORT DESCRIPTION = '...'</summary>
@@ -206,11 +221,22 @@ namespace ETL_SQL.Core
                                         ILoggingContext, IEvaluationContext, IDataContext, IEngineContext,
                                         IReportContext
     {
+        // Property-based access to sub-contexts for better interface segregation (TODO-91)
+        IVariableContext VarContext => this;
+        IEvaluationContext EvaluationContext => this;
+        IDataContext DataContext => this;
+        IQueryContext QueryContext => this;
+        IEngineContext EngineContext => this;
+        ILoggingContext LoggingContext => this;
+        ITransactionContext TransactionContext => this;
+        ILineageContext LineageContext => this;
+        IReportContext ReportContext => this;
+
         bool SpillEncryptionEnabled { get; set; }
         bool SpillCompressionEnabled { get; set; }
         ISpillStore SpillStore { get; }
         Stack<Row> OuterRowStack { get; }
-        Dictionary<Statement, object?> SubqueryCache { get; }
+        Common.LruCache<Statement, object?> SubqueryCache { get; }
         System.Threading.CancellationToken CancellationToken { get; }
         IServiceProvider ServiceProvider { get; }
         

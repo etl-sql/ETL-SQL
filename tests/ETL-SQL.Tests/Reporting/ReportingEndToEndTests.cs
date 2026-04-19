@@ -46,7 +46,7 @@ CREATE VISUAL InventoryStatus AS CARD (
 );
 
 CREATE PAGE Dashboard AS LAYOUT (
-    STRUCTURE = 'grid:2x2',
+    STRUCTURE = 'A B / C .',
     MAP('A' = HighSales, 'B' = LowSales, 'C' = InventoryStatus)
 );
 ");
@@ -96,7 +96,7 @@ CREATE VISUAL StaticTotal AS CARD (
 );
 
 CREATE PAGE Main AS LAYOUT (
-    STRUCTURE = 'grid:1x1',
+    STRUCTURE = 'A B',
     MAP('A' = RegionSales, 'B' = StaticTotal)
 );
 ");

@@ -19,6 +19,30 @@ namespace ETL_SQL.Core.Parser
         private readonly string _source;
         private readonly ExpressionParser _expressionParser;
         private readonly StatementParser _statementParser;
+        
+        private static readonly HashSet<TokenType> IdentifierTokens = new()
+        {
+            TokenType.IDENTIFIER, TokenType.LINEAGE, TokenType.FILE, TokenType.DIRECTORY, 
+            TokenType.SFTP, TokenType.FTP_CONN, TokenType.FLATFILE, TokenType.JSON, TokenType.XML, 
+            TokenType.EXCEL, TokenType.AZURE_BLOB, TokenType.SYSDATE, TokenType.CURRENT_TIMESTAMP, 
+            TokenType.CURRENT_DATE, TokenType.CURRENT_TIME, TokenType.YEAR, TokenType.MONTH, 
+            TokenType.DAY, TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
+            TokenType.TELEMETRY
+        };
+
+        private static readonly HashSet<TokenType> DataTypeTokens = new()
+        {
+            TokenType.TIME, TokenType.JSON, TokenType.XML, TokenType.DATETIME, TokenType.CHAR,
+            TokenType.INT, TokenType.INTEGER, TokenType.BIGINT, TokenType.SMALLINT, TokenType.TINYINT, 
+            TokenType.BIT, TokenType.BOOLEAN, TokenType.BOOL, TokenType.DECIMAL, TokenType.NUMERIC, 
+            TokenType.MONEY, TokenType.SMALLMONEY, TokenType.FLOAT, TokenType.REAL, TokenType.DOUBLE, 
+            TokenType.DATE, TokenType.DATETIME2, TokenType.SMALLDATETIME, TokenType.DATETIMEOFFSET, 
+            TokenType.TIMESTAMP, TokenType.VARCHAR, TokenType.NCHAR, TokenType.NVARCHAR, 
+            TokenType.TEXT, TokenType.NTEXT, TokenType.BINARY, TokenType.VARBINARY, TokenType.IMAGE, 
+            TokenType.UNIQUEIDENTIFIER, TokenType.UUID, TokenType.GUID, TokenType.GEOMETRY, 
+            TokenType.GEOGRAPHY, TokenType.HIERARCHYID, TokenType.VARIANT, TokenType.SQL_VARIANT, 
+            TokenType.ANY
+        };
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Parser"/> class with the specified tokens.
@@ -95,49 +119,32 @@ namespace ETL_SQL.Core.Parser
 
         public bool IsIdentifier(Token token)
         {
-            if (token.Type == TokenType.IDENTIFIER || token.Type == TokenType.LINEAGE || token.Type == TokenType.FILE ||
-                token.Type == TokenType.DIRECTORY || token.Type == TokenType.SFTP || token.Type == TokenType.FTP_CONN ||
-                token.Type == TokenType.FLATFILE || token.Type == TokenType.JSON || token.Type == TokenType.XML ||
-                token.Type == TokenType.EXCEL || token.Type == TokenType.AZURE_BLOB ||
-                token.Type == TokenType.SYSDATE || token.Type == TokenType.CURRENT_TIMESTAMP || 
-                token.Type == TokenType.CURRENT_DATE || token.Type == TokenType.CURRENT_TIME ||
-                LanguageMetadata.IsConnectorType(token.Value)) return true;
+            if (IdentifierTokens.Contains(token.Type)) return true;
             if (token.Type == TokenType.EOF) return false;
 
-            // Data types are allowed as identifiers in many contexts, or at least shouldn't block parsing
-            if (IsDataType(token.Type)) return true;
+            // Connector types from metadata are always valid identifiers
+            if (LanguageMetadata.IsConnectorType(token.Value)) return true;
 
-            // Date-part tokens act as both standalone functions (YEAR(...)) and bare identifiers
-            // (DATEPART(YEAR, ...), DATEDIFF(DAY, ...)). Treat them as identifiers so both uses parse.
-            if (token.Type == TokenType.YEAR || token.Type == TokenType.MONTH || token.Type == TokenType.DAY ||
-                token.Type == TokenType.HOUR || token.Type == TokenType.MINUTE || token.Type == TokenType.SECOND)
-                return true;
+            // Data types are allowed as identifiers in many contexts
+            if (IsDataType(token.Type)) return true;
 
             // Report-SQL and overlay tokens are contextual: reserved inside their own clauses,
             // but should be allowed as identifiers/function names elsewhere.
             if (token.Type >= TokenType.VISUAL && token.Type <= TokenType.COLOR)
                 return true;
 
-            // Symbols and operators should never be identifiers
-            if (token.Type >= TokenType.STAR) return false;
+            // Symbols and operators should never be identifiers.
+            if (token.Type >= TokenType.STAR && token.Type < TokenType.VISUAL) return false;
 
-            // Keywords can be identifiers if they're not in the restricted set
-            if (token.Value.Equals("VALUE", StringComparison.OrdinalIgnoreCase)) return true;
-            if (token.Value.Equals("EMAIL", StringComparison.OrdinalIgnoreCase)) return true;
+            // Specific keyword exceptions
+            var val = token.Value;
+            if (val.Equals("VALUE", StringComparison.OrdinalIgnoreCase)) return true;
+            if (val.Equals("EMAIL", StringComparison.OrdinalIgnoreCase)) return true;
             
-            return !IsKeyword(token.Value);
+            return !IsKeyword(val);
         }
 
-        public bool IsDataType(TokenType type)
-        {
-            // Main data type range (INT through ANY in the enum)
-            if (type >= TokenType.INT && type <= TokenType.ANY) return true;
-            // Outliers: data types defined outside the INT..ANY enum range
-            if (type == TokenType.TIME || type == TokenType.JSON || type == TokenType.XML || type == TokenType.DATETIME) return true;
-            // CHAR is in the functions section of the enum (TokenType line 33) rather than the data types section
-            if (type == TokenType.CHAR) return true;
-            return false;
-        }
+        public bool IsDataType(TokenType type) => DataTypeTokens.Contains(type);
 
         /// <summary>
         /// Parses the entire token stream into a <see cref="Script"/> object.

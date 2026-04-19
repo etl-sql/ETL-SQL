@@ -1,6 +1,7 @@
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Engine.Engines;
 using System;
 using System.Collections.Generic;
@@ -86,17 +87,18 @@ namespace ETL_SQL.Engine.Handlers
 
             if (destination is IDatabaseSource sqlDest)
             {
-                if (stmt.SelectQuery != null && stmt.SelectQuery is SelectStatement sel && (sel.FromTable.ConnectionName ?? sel.FromTable.TableName).Equals(connName, StringComparison.OrdinalIgnoreCase))
+                if (stmt.SelectQuery != null && stmt.SelectQuery is SelectStatement sel && sel.FromTable != null && (sel.FromTable.ConnectionName ?? sel.FromTable.TableName).Equals(connName, StringComparison.OrdinalIgnoreCase))
                 {
                     _logger.Debug("Strategy: Remote SQL Pushdown (Insert from Select)");
-                    var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable, sqlDest.Dialect)}\n{context.CompileQuery(stmt.SelectQuery, sqlDest.Dialect)}";
+                    var compiledSelect = context.CompileQuery(stmt.SelectQuery, sqlDest.Dialect);
+                    var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable, sqlDest.Dialect)}\n{compiledSelect.Sql}";
                     if (context.IsWhatIf)
                     {
-                        _logger.WriteLine($"WHAT IF: Would execute remote SQL pushdown insert on {connName}:\n{sql}", ConsoleColor.Yellow);
+                        _logger.WriteLine($"WHAT IF: Would execute remote SQL pushdown insert on {connName}:\n{compiledSelect.ToEscapedSql(sqlDest.Dialect)}", ConsoleColor.Yellow);
                     }
                     else
                     {
-                        await foreach (var _ in sqlDest.ExecuteRawSql(sql)) { }
+                        await foreach (var _ in sqlDest.ExecuteRawSql(sql, compiledSelect.Parameters.Values)) { }
                     }
                 }
                 else if (stmt.SelectQuery != null && stmt.SelectQuery is ExecutePushdownStatement pushdown)
@@ -108,7 +110,7 @@ namespace ETL_SQL.Engine.Handlers
                 else if (stmt.Values != null)
                 {
                     _logger.Debug("Strategy: Remote SQL Values ({RowCount} rows)", stmt.Values.Count);
-                    var rowStrings = stmt.Values.Select(row => "(" + string.Join(", ", row.Select(v => context.CompileExpression(v, sqlDest.Dialect))) + ")");
+                    var rowStrings = stmt.Values.Select(row => "(" + string.Join(", ", row.Select(v => context.CompileExpression(v, sqlDest.Dialect).ToEscapedSql(sqlDest.Dialect))) + ")");
                     var colList = stmt.Columns != null ? "(" + string.Join(", ", stmt.Columns) + ") " : "";
                     var sql = $"INSERT INTO {context.GetSqlTableName(stmt.TargetTable, sqlDest.Dialect)} {colList}VALUES {string.Join(", ", rowStrings)}";
                     

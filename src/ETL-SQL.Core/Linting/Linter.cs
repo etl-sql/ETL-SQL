@@ -16,6 +16,9 @@ namespace ETL_SQL.Core.Linting
             _rules.Add(rule);
         }
 
+        /// <summary>Checks if a rule of the specified type exists.</summary>
+        public bool HasRuleOfType(Type type) => _rules.Any(r => r.GetType() == type);
+
         /// <summary>Analyzes the script against all registered rules.</summary>
         public async Task<List<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {

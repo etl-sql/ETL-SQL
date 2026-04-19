@@ -37,10 +37,15 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // Register / overwrite visual definition
+            if (stmt.Mode == ObjectCreationMode.Create && context.VisualDefinitions.ContainsKey(stmt.Name))
+            {
+                 throw new ExecutionException($"Visual '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP VISUAL first.", null, stmt.Line, stmt.Column);
+            }
+
             context.VisualDefinitions[stmt.Name] = stmt;
 
             _logger.Debug("Visual '{VisualName}' ({VisualType}) registered.", stmt.Name, stmt.VisualType);
-            context.Log($"Visual '{stmt.Name}' created.");
+            context.Log($"Visual '{stmt.Name}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}.");
 
             return Task.CompletedTask;
         }

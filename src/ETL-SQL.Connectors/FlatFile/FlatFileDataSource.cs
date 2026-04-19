@@ -37,7 +37,7 @@ namespace ETL_SQL.Connectors.FlatFile
         private readonly Dictionary<string, string>? _options;
         private readonly List<FixedWidthColumn>? _fixedColumns;
         private readonly bool _trim = true;
-        private readonly CultureInfo _culture;
+        private readonly CultureInfo _culture = CultureInfo.InvariantCulture;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context; // Optional for backward compatibility, but required for security enforcement
 
@@ -153,7 +153,7 @@ namespace ETL_SQL.Connectors.FlatFile
                     };
                 }
 
-                _culture = CultureInfo.InvariantCulture;
+                // Culture is already initialized to InvariantCulture
                 if (options.TryGetValue("CULTURE", out var cult))
                 {
                     try { _culture = new CultureInfo(cult); }

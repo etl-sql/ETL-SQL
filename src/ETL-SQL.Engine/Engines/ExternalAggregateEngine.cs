@@ -7,6 +7,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Engine.Spill;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -40,7 +41,7 @@ namespace ETL_SQL.Engine.Engines
                 
                 if (groupingSet != null && groupingSet.Type != GroupingSetType.None)
                 {
-                    expandedSets = ExpandGroupingSets(groupingSet);
+                    expandedSets = _inMemoryEngine.ExpandGroupingSets(groupingSet);
                     partitionPaths = await PartitionStreamMultiSet(inputStream, expandedSets);
                     
                     // Ensure we have a reference list of ALL participating columns for NULL substitution later
@@ -77,7 +78,7 @@ namespace ETL_SQL.Engine.Engines
                             {
                                 var colKey = activeGroupBy[i].ToSql();
                                 var rawVal = row.Columns.TryGetValue(colKey, out var v) ? v : await _context.EvaluateValue(activeGroupBy[i], row);
-                                vals[i] = ETL_SQL.Data.CompoundKey.NormalizeValue(rawVal is System.Text.Json.JsonElement je ? JsonElementToValue(je) : rawVal);
+                                vals[i] = SpillSerializationHelper.UnwrapValue(rawVal);
                             }
                             key = new ETL_SQL.Data.CompoundKey(setIndex, vals);
                         }
@@ -168,7 +169,7 @@ namespace ETL_SQL.Engine.Engines
                             var rawVal = await _context.EvaluateValue(groupBy[i], row);
                             vals[i] = ETL_SQL.Data.CompoundKey.NormalizeValue(rawVal);
                         }
-                        pIdx = Math.Abs(new ETL_SQL.Data.CompoundKey(vals).GetHashCode() % PartitionCount);
+                        pIdx = (new ETL_SQL.Data.CompoundKey(vals).GetHashCode() & 0x7FFFFFFF) % PartitionCount;
                     }
 
                     row["__SET_IDX"] = 0;
@@ -225,9 +226,9 @@ namespace ETL_SQL.Engine.Engines
                                 vals[i] = ETL_SQL.Data.CompoundKey.NormalizeValue(rawVal);
                             }
                             // Include set index in hash to distribute sets better
-                            pIdx = Math.Abs(new ETL_SQL.Data.CompoundKey(sIdx, vals).GetHashCode() % PartitionCount);
+                            pIdx = (new ETL_SQL.Data.CompoundKey(sIdx, vals).GetHashCode() & 0x7FFFFFFF) % PartitionCount;
                         }
-                        else pIdx = Math.Abs(sIdx % PartitionCount);
+                        else pIdx = (sIdx & 0x7FFFFFFF) % PartitionCount;
 
                         // Attach SetIndex to the row so it can be identified during merge phase
                         row["__SET_IDX"] = sIdx;
@@ -254,42 +255,6 @@ namespace ETL_SQL.Engine.Engines
         }
 
 
-        private static List<List<Expression>> ExpandGroupingSets(GroupingSetClause clause)
-        {
-            var cols = clause.GroupSets[0];
-            int n = cols.Count;
 
-            if (clause.Type == GroupingSetType.Rollup)
-            {
-                var result = new List<List<Expression>>();
-                for (int i = n; i >= 0; i--) result.Add(cols.Take(i).ToList());
-                return result;
-            }
-
-            if (clause.Type == GroupingSetType.Cube)
-            {
-                var result = new List<List<Expression>>();
-                for (int mask = (1 << n) - 1; mask >= 0; mask--)
-                {
-                    var subset = new List<Expression>();
-                    for (int bit = 0; bit < n; bit++) if ((mask & (1 << bit)) != 0) subset.Add(cols[bit]);
-                    result.Add(subset);
-                }
-                return result;
-            }
-
-            return clause.GroupSets.Select(s => s.ToList()).ToList();
-        }
-
-        private static object? JsonElementToValue(System.Text.Json.JsonElement element) =>
-            element.ValueKind switch
-            {
-                System.Text.Json.JsonValueKind.Number  => element.TryGetDecimal(out var d) ? d : (object?)element.GetDouble(),
-                System.Text.Json.JsonValueKind.String  => decimal.TryParse(element.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d) ? (object?)d : (DateTime.TryParse(element.GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : (object?)element.GetString()),
-                System.Text.Json.JsonValueKind.True    => (object?)true,
-                System.Text.Json.JsonValueKind.False   => (object?)false,
-                System.Text.Json.JsonValueKind.Null    => null,
-                _                                      => element.GetRawText()
-            };
     }
 }

@@ -96,6 +96,10 @@ namespace ETL_SQL.Engine.Handlers
             // 3. Send via WriteBatches
             _logger.Debug("Sending email to {To} via {ConnName}", row["To"], connName ?? "default SMTP");
             
+            ValidateEmails(row["To"].ToString());
+            if (row.Columns.TryGetValue("Cc", out var cc)) ValidateEmails(cc?.ToString());
+            if (row.Columns.TryGetValue("Bcc", out var bcc)) ValidateEmails(bcc?.ToString());
+
             if (context.IsWhatIf)
             {
                 _logger.WriteLine($"WHAT IF: Would send email to {row["To"]} with subject '{row["Subject"]}'", ConsoleColor.Yellow);
@@ -106,6 +110,20 @@ namespace ETL_SQL.Engine.Handlers
             dt.ColumnNames.AddRange(row.Columns.Keys);
             await dt.AddRowAsync(row);
             await dataSource.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+        }
+
+        private void ValidateEmails(string? emails)
+        {
+            if (string.IsNullOrWhiteSpace(emails)) return;
+            var parts = emails.Split(new[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var email in parts)
+            {
+                var trimmed = email.Trim();
+                if (!System.Text.RegularExpressions.Regex.IsMatch(trimmed, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+                {
+                    throw new ExecutionException($"Invalid email format: '{trimmed}'");
+                }
+            }
         }
     }
 }

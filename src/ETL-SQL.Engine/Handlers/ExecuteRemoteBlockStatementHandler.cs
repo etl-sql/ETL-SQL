@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using System.Linq;
 using ETL_SQL.Data;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Common;
 using System;
 
@@ -35,19 +36,18 @@ namespace ETL_SQL.Engine.Handlers
                 
                 foreach (var innerStmt in stmt.Body.Statements)
                 {
-                    string sql = context.CompileQuery(innerStmt, db.Dialect);
-                    if (string.IsNullOrWhiteSpace(sql)) continue;
+                    var compiled = context.CompileQuery(innerStmt, db.Dialect);
+                    if (string.IsNullOrWhiteSpace(compiled.Sql)) continue;
 
-                    context.Log($"Remote SQL: {sql}");
                     if (context.IsWhatIf)
                     {
-                        _logger.WriteLine($"WHAT IF: Would execute remote block SQL on {connName}:\n{sql}", ConsoleColor.Yellow);
+                        _logger.WriteLine($"WHAT IF: Would execute remote block SQL on {connName}:\n{compiled.ToEscapedSql(db.Dialect)}", ConsoleColor.Yellow);
                         continue;
                     }
 
                     context.LastResultSets.Clear();
                     var sw = System.Diagnostics.Stopwatch.StartNew();
-                    var batches = db.ExecuteRawSql(sql);
+                    var batches = db.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values);
                     
                     var currentKey = -1;
                     DataTable? currentSet = null;

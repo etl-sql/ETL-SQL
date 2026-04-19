@@ -98,6 +98,8 @@ namespace ETL_SQL.Core.Parser
             dict["TTL"]           = TokenType.TTL;
             dict["KEYFILE"]       = TokenType.KEYFILE;
             dict["X_AXIS"]        = TokenType.X_AXIS;
+            dict["TEMPLATE"]      = TokenType.TEMPLATE;
+            dict["TEMPLATE_PATH"] = TokenType.TEMPLATE_PATH;
             dict["Y_AXIS"]        = TokenType.Y_AXIS;
             dict["REPORT"]        = TokenType.REPORT;
             dict["DESCRIPTION"]   = TokenType.DESCRIPTION;
@@ -422,11 +424,18 @@ namespace ETL_SQL.Core.Parser
 
             var text = sb.ToString();
             
-            var token = text.StartsWith("@") ? new Token(TokenType.VARIABLE, text, line, column, _line, _column, startOffset, _position) :
-                        Keywords.TryGetValue(text, out var type) ? new Token(type, text, line, column, _line, _column, startOffset, _position) :
-                        new Token(TokenType.IDENTIFIER, text, line, column, _line, _column, startOffset, _position);
+            // Optimization: Categorized lookup
+            if (text.Length > 0)
+            {
+                char first = text[0];
+                if (first == '@') return new Token(TokenType.VARIABLE, text, line, column, _line, _column, startOffset, _position);
+                
+                // Keywords never start with #
+                if (first != '#' && Keywords.TryGetValue(text, out var type))
+                    return new Token(type, text, line, column, _line, _column, startOffset, _position);
+            }
 
-            return token;
+            return new Token(TokenType.IDENTIFIER, text, line, column, _line, _column, startOffset, _position);
         }
 
         private Token ReadNumber(int line, int column, int startOffset)

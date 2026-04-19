@@ -1,4 +1,5 @@
 using ETL_SQL.Data;
+using ETL_SQL.Core.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -40,8 +41,8 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     _logger.Debug("Pushing down SELECT to remote connection: {ConnName}", fromConn);
                     var conn = (IDatabaseSource)context.Connections[fromConn];
-                    var sql = context.CompileQuery(selPush, conn.Dialect);
-                    var pushdownBatches = conn.ExecuteRawSql(sql);
+                    var compiled = context.CompileQuery(selPush, conn.Dialect);
+                    var pushdownBatches = conn.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values);
                     var pushdownResult = new DataTable();
                     var sw = System.Diagnostics.Stopwatch.StartNew();
                     bool isFirst = true;
@@ -62,6 +63,7 @@ namespace ETL_SQL.Engine.Handlers
                             else if (!capped)
                             {
                                 capped = true;
+                                pushdownResult.IsCapped = true;
                                 _logger.Debug("[SELECT] Result buffer capped at {MaxLastResultRows} rows to prevent memory exhaustion. All rows still counted and streamed to display.", MaxLastResultRows);
                             }
                         }
@@ -209,6 +211,7 @@ namespace ETL_SQL.Engine.Handlers
                         else if (!capped)
                         {
                             capped = true;
+                            result.IsCapped = true;
                             _logger.Debug("[SELECT] Result buffer capped at {MaxLastResultRows} rows to prevent memory exhaustion. All rows still counted and streamed to display.", MaxLastResultRows);
                         }
                     }
@@ -268,8 +271,8 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     _logger.Debug("[SELECT] Pushing down subquery to remote: {ConnName}", fromConn);
                     var conn = (IDatabaseSource)context.Connections[fromConn];
-                    var sql = context.CompileQuery(stmt, conn.Dialect);
-                    await foreach (var batch in conn.ExecuteRawSql(sql)) yield return batch;
+                    var compiled = context.CompileQuery(stmt, conn.Dialect);
+                    await foreach (var batch in conn.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values)) yield return batch;
                     yield break;
                 }
             }

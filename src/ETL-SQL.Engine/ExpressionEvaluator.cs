@@ -30,11 +30,11 @@ namespace ETL_SQL.Engine
 
         private object? ResolveIdentifier(string name, Row? context)
         {
-            // 1. Check immediate context (exact match)
+            // 1. Check immediate context (with ambiguity check)
             if (context != null)
             {
-                var val = context[name];
-                if (val != null || context.HasColumn(name)) return val;
+                var fb = ResolveIdentifierFallback(name, context);
+                if (fb != null) return fb;
             }
 
             // 2. Check outer scopes (exact match)
@@ -47,14 +47,7 @@ namespace ETL_SQL.Engine
                 }
             }
 
-            // 3. Fallback: search for column that ends with "." + name or matches name (immediate context)
-            if (context != null)
-            {
-                var fb = ResolveIdentifierFallback(name, context);
-                if (fb != null) return fb;
-            }
-
-            // 4. Fallback: search for column in outer scopes
+            // 3. Fallback: search for column in outer scopes
             foreach (var outer in _context.OuterRowStack)
             {
                 var fb = ResolveIdentifierFallback(name, outer);
@@ -70,42 +63,54 @@ namespace ETL_SQL.Engine
         private object? ResolveIdentifierFallback(string name, Row context)
         {
             if (string.IsNullOrEmpty(name)) return null;
+            if (context.HasColumn(name)) return context[name];
 
-            // Case 1: name is unqualified ('date'), search for context key ending with '.date'
-            if (!name.Contains("."))
-            {
-                var suffix = "." + name;
-                foreach (var k in context.Columns.Keys) // Still need to iterate keys for fallback, but this is less frequent
-                {
-                    if (k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) return context[k];
-                }
-            }
-            
-            // Case 2: name is qualified ('s.date'), but we only have 'date'
-            // We only do this if it's the ONLY possible match for the basename
             var parts = name.Split('.');
-            if (parts.Length > 1)
+            var baseName = parts.Last();
+            var qualifier = name.Contains(".") ? name.Substring(0, name.LastIndexOf('.')) : null;
+            var suffix = "." + baseName;
+
+            var strongMatches = new List<string>();
+            var weakMatches = new List<string>();
+
+            foreach (var k in context.Columns.Keys)
             {
-                var baseName = parts.Last();
-                // Check if 'baseName' exists unqualified
-                var val = context[baseName];
-                if (val != null || context.HasColumn(baseName))
+                // Case 1: Partial match on baseName or suffix
+                if (k.Equals(baseName, StringComparison.OrdinalIgnoreCase) || k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
                 {
-                    // Only return if no other qualified version of this basename exists in the row
-                    // (to avoid matching rj1.ID to rj2.ID when row has ID and rj2.ID)
-                    var suffix = "." + baseName;
-                    bool hasOther = false;
-                    foreach (var k in context.Columns.Keys)
+                    if (qualifier != null)
                     {
-                        if (k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) && !k.Equals(name, StringComparison.OrdinalIgnoreCase))
+                        // User specified a qualifier (#A.ID)
+                        if (k.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase))
+                            strongMatches.Add(k);
+                        else if (!k.Contains("."))
                         {
-                            hasOther = true;
-                            break;
+                            // If the row contains a strongly qualified version of this unqualified column for a DIFFERENT qualifier,
+                            // then this unqualified column actually belongs to that other block.
+                            bool belongsToAnother = context.Columns.Keys.Any(other => other.EndsWith("." + k, StringComparison.OrdinalIgnoreCase) && !other.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase));
+                            if (!belongsToAnother)
+                            {
+                                weakMatches.Add(k);
+                            }
                         }
                     }
-                    if (!hasOther) return val;
+                    else
+                    {
+                        // User did NOT specify a qualifier (ID)
+                        if (!k.Contains("."))
+                            strongMatches.Add(k); // Strong match: exact unqualified match
+                        else
+                            weakMatches.Add(k); // Weak match: ID matches #A.ID
+                    }
                 }
             }
+
+            var finalMatches = strongMatches.Count > 0 ? strongMatches : weakMatches;
+
+            if (finalMatches.Count > 1)
+                throw new ExecutionException($"Ambiguous identifier '{name}'. Matches: {string.Join(", ", finalMatches)}");
+
+            if (finalMatches.Count == 1) return context[finalMatches[0]];
 
             return null;
         }
@@ -362,9 +367,8 @@ namespace ETL_SQL.Engine
                 break;
             }
             _context.OuterRowStack.Pop();
-            // Limit cache size to prevent unbounded growth in long-running sessions.
-            if (result != null && _context.SubqueryCache.Count < 1000)
-                _context.SubqueryCache[subq.Query] = result;
+            if (result != null)
+                _context.SubqueryCache.Set(subq.Query, result);
             return result;
         }
 

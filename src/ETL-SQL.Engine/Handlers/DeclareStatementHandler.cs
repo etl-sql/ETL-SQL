@@ -27,33 +27,30 @@ namespace ETL_SQL.Engine.Handlers
             
             _logger.Debug("Declaring variable {VariableName} as {DataType}", stmt.VariableName, stmt.DataType);
 
-            var variables = (IVariableContext)context;
-            var evaluator = (IEvaluationContext)context;
-
             object? val = null;
-            bool hasInjectedValue = variables.CurrentVariables.TryGetValue(stmt.VariableName, out var existing) &&
+            bool hasInjectedValue = context.VarContext.CurrentVariables.TryGetValue(stmt.VariableName, out var existing) &&
                                     existing != null &&
-                                    (!variables.CurrentMetadata.TryGetValue(stmt.VariableName, out var meta) || !meta.IsDeclared);
+                                    (!context.VarContext.CurrentMetadata.TryGetValue(stmt.VariableName, out var meta) || !meta.IsDeclared);
 
             if (hasInjectedValue)
             {
                 // Prioritize value injected by CLI or host
-                val = evaluator.CastToType(existing, stmt.DataType);
+                val = context.EvaluationContext.CastToType(existing, stmt.DataType);
             }
             else if (stmt.InitialValue != null)
             {
-                val = await evaluator.EvaluateValue(stmt.InitialValue, new Row());
-                val = evaluator.CastToType(val, stmt.DataType);
+                val = await context.EvaluationContext.EvaluateValue(stmt.InitialValue, new Row());
+                val = context.EvaluationContext.CastToType(val, stmt.DataType);
             }
-            else if ((stmt.IsInput || stmt.IsOutput || stmt.IsSensitive) && variables.CurrentVariables.TryGetValue(stmt.VariableName, out existing))
+            else if ((stmt.IsInput || stmt.IsOutput || stmt.IsSensitive) && context.VarContext.CurrentVariables.TryGetValue(stmt.VariableName, out existing))
             {
                 // Preserve value passed from RUN SCRIPT or EXECUTE
                 val = existing;
             }
 
-            if (variables.ContainsVariableInCurrentScope(stmt.VariableName))
+            if (context.VarContext.ContainsVariableInCurrentScope(stmt.VariableName))
             {
-                if (variables.CurrentMetadata.TryGetValue(stmt.VariableName, out var existingMeta) && existingMeta.IsDeclared)
+                if (context.VarContext.CurrentMetadata.TryGetValue(stmt.VariableName, out var existingMeta) && existingMeta.IsDeclared)
                 {
                     throw new ExecutionException($"Variable {stmt.VariableName} has already been declared in this scope (Line {stmt.Line}, Col {stmt.Column}).");
                 }
@@ -67,7 +64,7 @@ namespace ETL_SQL.Engine.Handlers
                 IsSensitive = stmt.IsSensitive,
                 IsDeclared = true 
             };
-            variables.DeclareVariable(stmt.VariableName, val, metadata);
+            context.VarContext.DeclareVariable(stmt.VariableName, val, metadata);
         }
     }
 }

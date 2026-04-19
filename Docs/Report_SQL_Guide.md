@@ -8,8 +8,8 @@ Report-SQL extends ETL-SQL with dedicated statement types for building interacti
 
 ```
 ┌─────────────────────┐    build / serve      ┌─────────────────────┐
-│ your_report.rptsql  │ ───────────────────▶  │ etl-sql-report CLI  │
 │  (report script)    │                       │  (ReportBuilder.CLI)│
+│ your_report.rptsql  │ ──────────────────▶   etl-sql-report CLI   │
 └─────────────────────┘                       └──────────┬──────────┘
                                                          │ evaluates script
                                                          ▼
@@ -110,13 +110,14 @@ Both statements are optional. If omitted the script filename is used as the titl
 ## CREATE VISUAL
 
 ```
-CREATE VISUAL <name> AS <TYPE> (
+CREATE [OR ALTER] VISUAL <name> AS <TYPE> (
   [SOURCE = <source>,]
   [TITLE = '<string>',]
   [SUBTITLE = '<string>',]
+  [TOOLTIP = '<string>',]
   [MAPPINGS (role = column, ...),]
   [OPTIONS (key = value, ..., X_AXIS (...), Y_AXIS (...), COLORS (...), LEGEND (...)),]
-  [STYLE (key = value, ...),]
+  [STYLE = <styleName> | STYLE (key = value, ...),]
   [SERIES (type column, ...),]
   [ACTIONS (trigger = action, ...)]
 );
@@ -178,6 +179,19 @@ CREATE VISUAL RevenueCard AS CARD (
 ```
 
 `TITLE` overrides the visual name as the chart heading. `SUBTITLE` appears below the title in smaller text.
+
+### TOOLTIP
+
+An optional floating help text shown when the user hovers over the visual's title area. This is a top-level clause — not a STYLE property — and applies to all visual types.
+
+```sql
+CREATE VISUAL RevenueCard AS CARD (
+  SOURCE   = #kpis,
+  TITLE    = 'Total Revenue',
+  TOOLTIP  = 'Sum of all regional revenue, YTD.',
+  MAPPINGS (VALUE = revenue, LABEL = label)
+);
+```
 
 ### MAPPINGS
 
@@ -259,6 +273,62 @@ CREATE VISUAL CategoryFilter AS MULTISELECT (
 );
 ```
 
+#### SLIDER
+
+`SLIDER` is a numeric range control. No `SOURCE` is required. Set bounds and step in `OPTIONS`, then bind the value to a page parameter via `ACTIONS`.
+
+```sql
+CREATE VISUAL YearSlider AS SLIDER (
+  TITLE   = 'Year',
+  TOOLTIP = 'Drag to filter by year',
+  OPTIONS (MIN = 2020, MAX = 2026, STEP = 1, DEFAULT = 2024),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@year, value))
+);
+```
+
+| Option key | Description |
+|------------|-------------|
+| `MIN` | Minimum slider value (numeric). Default `0`. |
+| `MAX` | Maximum slider value (numeric). Default `100`. |
+| `STEP` | Increment between positions. Default `1`. |
+| `DEFAULT` | Initial value when the page loads. |
+
+#### DATEPICKER
+
+`DATEPICKER` is a date input control. No `SOURCE` is required.
+
+```sql
+CREATE VISUAL StartDate AS DATEPICKER (
+  TITLE   = 'Start Date',
+  TOOLTIP = 'Filter results from this date',
+  OPTIONS (MIN = '2020-01-01', MAX = '2026-12-31', DEFAULT = '2024-01-01'),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@startDate, value))
+);
+```
+
+| Option key | Description |
+|------------|-------------|
+| `MIN` | Earliest selectable date (`'YYYY-MM-DD'`). |
+| `MAX` | Latest selectable date (`'YYYY-MM-DD'`). |
+| `DEFAULT` | Initial date when the page loads. |
+
+#### SEARCH
+
+`SEARCH` is a free-text input box with debounce. No `SOURCE` is required.
+
+```sql
+CREATE VISUAL ProductSearch AS SEARCH (
+  TITLE   = 'Search',
+  OPTIONS (PLACEHOLDER = 'Type a product name...', DEFAULT = ''),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@searchTerm, value))
+);
+```
+
+| Option key | Description |
+|------------|-------------|
+| `PLACEHOLDER` | Ghost text shown when the box is empty. |
+| `DEFAULT` | Initial text value when the page loads. |
+
 #### HEATMAP
 
 | Role | Description |
@@ -329,6 +399,25 @@ CREATE VISUAL CashFlow AS WATERFALL (
 ```
 
 Use the `COLORS (positive = '#5cb85c', negative = '#d9534f')` option inside `OPTIONS (COLORS (...))` to customise bar colors.
+
+#### BOXPLOT
+
+| Role | Description |
+|------|-------------|
+| `X` | Category axis column (string). |
+| `Q1` | First quartile (25th percentile) value. |
+| `MEDIAN` | Median (50th percentile) value. |
+| `Q3` | Third quartile (75th percentile) value. |
+| `LOW` | Lower whisker value (e.g. min or 1.5·IQR bound). |
+| `HIGH` | Upper whisker value (e.g. max or 1.5·IQR bound). |
+
+```sql
+CREATE VISUAL PriceDistribution AS BOXPLOT (
+  SOURCE = (SELECT category, low, q1, median, q3, high FROM #price_stats),
+  MAPPINGS (X = category, LOW = low, Q1 = q1, MEDIAN = median, Q3 = q3, HIGH = high),
+  TITLE = 'Price Distribution by Category'
+);
+```
 
 #### TABLE
 
@@ -548,6 +637,24 @@ STYLE (
 )
 ```
 
+### STYLE property reference
+
+| Key | Example | Applies to | Description |
+|-----|---------|------------|-------------|
+| `THEME` | `dark` | Visual, Page | ECharts theme (`dark` or `light`). |
+| `BACKGROUND-COLOR` | `'#1a1a2e'` | Any | Background color of the card/page. |
+| `COLOR` | `'#ffffff'` | Any | Default text color. |
+| `BORDER` | `'1px solid #444'` | Any | CSS border definition. |
+| `BORDER-RADIUS` | `'8px'` | Any | Corner rounding. |
+| `FONT-SIZE` | `'14px'` | Any | Base font size for textual content. |
+| `PADDING` | `'12px'` | Any | Inner spacing. |
+| `HEIGHT` | `200` | Container | Fixed height for SCROLL containers. |
+| `WIDTH` | `'100%'` | Any | Visual width (e.g., `'100%'`, `'400px'`). |
+| `TOOLTIP` | `'Hover text'` | Visual | Floating help text. Prefer the top-level `TOOLTIP` clause; this key is accepted here for backwards compatibility. |
+| `Z-INDEX` | `100` | Any | Layer stacking order. |
+| `SHADOW` | `ON` / `OFF` | Visual | Enable/disable visual card shadow. |
+```
+
 ### ACTIONS
 
 Actions wire up interactive behavior in the live dashboard:
@@ -651,13 +758,15 @@ CREATE DATASET #sales_keyfile
 Arranges visuals and containers into a named layout. Multiple pages can be defined in one script; the web dashboard renders each as a distinct section.
 
 ```
-CREATE PAGE <name> AS LAYOUT (
+CREATE [OR ALTER] PAGE <name> AS LAYOUT (
+  [TITLE = '<string>',]
+  [TOOLTIP = '<string>',]
   STRUCTURE = '<grid-template-areas>',
   MAP (
     '<slot>' = VisualOrContainerName,
     ...
   )
-  [, STYLE (key = value, ...)]
+  [, STYLE = <styleName> | STYLE (key = value, ...)]
 )
 [WITH PARAMETERS (@param = default, ...)]
 ;
@@ -767,22 +876,25 @@ Style properties are CSS-like key/value pairs (strings, numbers, or identifiers)
 
 | Key | Example | Applies to |
 |-----|---------|------------|
-| `background-color` | `'#1a1a2e'` | Any |
-| `color` | `'#ffffff'` | Any |
-| `border` | `'1px solid #444'` | Any |
-| `border-radius` | `'8px'` | Any |
-| `font-size` | `'14px'` | Any |
-| `padding` | `'12px'` | Any |
+| `BACKGROUND-COLOR` | `'#1a1a2e'` | Any |
+| `COLOR` | `'#ffffff'` | Any |
+| `BORDER` | `'1px solid #444'` | Any |
+| `BORDER-RADIUS` | `'8px'` | Any |
+| `FONT-SIZE` | `'14px'` | Any |
+| `PADDING` | `'12px'` | Any |
 | `HEIGHT` | `200` | Container |
 | `WIDTH` | `'100%'` | Any |
+| `TOOLTIP` | `'Hover text'` | Visual |
+| `Z-INDEX` | `100` | Any |
+| `SHADOW` | `ON` | Visual |
 
 ```sql
 -- Define shared styles once
 CREATE STYLE DarkCard (
-  background-color = '#1e1e2e',
-  color = '#cdd6f4',
-  border-radius = '8px',
-  padding = '16px'
+  BACKGROUND-COLOR = '#1e1e2e',
+  COLOR = '#cdd6f4',
+  BORDER-RADIUS = '8px',
+  PADDING = '16px'
 );
 
 CREATE STYLE PanelBorder (
@@ -822,7 +934,10 @@ CREATE PAGE Main AS LAYOUT (
 Groups multiple visuals into a single layout region, optionally with scrolling. Useful when many visuals share one page slot.
 
 ```
-CREATE CONTAINER <name> AS BOX|SCROLL (
+CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL (
+  [TITLE = '<string>',]
+  [SUBTITLE = '<string>',]
+  [TOOLTIP = '<string>',]
   [STYLE = <styleName> | STYLE (key = value, ...),]
   VISUALS (VisualA, VisualB, ...)
 );
@@ -857,7 +972,7 @@ CREATE PAGE Main AS LAYOUT (
 Adds a navigation bar that controls which page is visible. The bar renders above the page content.
 
 ```
-CREATE NAVIGATION <name> AS TAB|BUTTON|LINK (
+CREATE [OR ALTER] NAVIGATION <name> AS TAB|BUTTON|LINK (
   [ORIENTATION = HORIZONTAL|VERTICAL,]
   [DEFAULT = <PageName>]
 )
@@ -879,6 +994,151 @@ WITH PAGES (Overview, Details, Trends);
 ```
 
 If `DEFAULT` is omitted, the first page in the list is shown on load.
+
+---
+
+## CREATE BUTTON
+
+Adds an interactive button to a page. Buttons are placed in `MAP` slots just like visuals.
+
+```
+CREATE [OR ALTER] BUTTON <name> AS BACK|REFRESH|<customType> (
+  [TITLE   = '<string>',]
+  [TOOLTIP = '<string>',]
+  [OPTIONS (key = value, ...),]
+  [ACTIONS (trigger = action, ...),]
+  [STYLE = <styleName> | STYLE (key = value, ...)]
+);
+```
+
+### Button types
+
+| Type | Behavior |
+|------|----------|
+| `BACK` | Navigates to the previous page in the browser history. |
+| `REFRESH` | Forces a full report refresh (equivalent to hitting `/api/refresh`). |
+| `<identifier>` | Custom type — behavior driven entirely by the `ACTIONS` clause. |
+
+### Examples
+
+```sql
+-- Navigation button
+CREATE BUTTON GoBack AS BACK (
+  TITLE   = '← Back',
+  TOOLTIP = 'Return to the previous page'
+);
+
+-- Refresh button
+CREATE BUTTON RefreshData AS REFRESH (
+  TITLE   = 'Refresh',
+  TOOLTIP = 'Reload all visuals from source data',
+  STYLE (BACKGROUND-COLOR = '#2563eb', COLOR = '#ffffff', BORDER-RADIUS = '4px')
+);
+
+-- Custom action button
+CREATE BUTTON ExportBtn AS EXPORT (
+  TITLE   = 'Export CSV',
+  ACTIONS (ON_CLICK = SET_PARAMETER(@export, 'csv'))
+);
+```
+
+Place buttons in a page layout exactly like any visual:
+
+```sql
+CREATE PAGE Dashboard AS LAYOUT (
+  STRUCTURE = 'A B / C C',
+  MAP (
+    'A' = GoBack,
+    'B' = RefreshData,
+    'C' = SalesChart
+  )
+);
+```
+
+---
+
+## ALTER report objects
+
+`ALTER` modifies one or more properties of an existing report object without redefining it. Any clause omitted keeps its current value.
+
+```sql
+-- Change a visual's title and source
+ALTER VISUAL RevenueByRegion (
+  TITLE  = 'Revenue by Region (Updated)',
+  SOURCE = #new_summary
+);
+
+-- Add a tooltip to an existing page
+ALTER PAGE Overview (
+  TOOLTIP = 'Live sales data, refreshed hourly'
+);
+
+-- Update container visuals list
+ALTER CONTAINER KpiRow (
+  VISUALS (TotalRevenue, TotalUnits, AvgOrderValue)
+);
+
+-- Change a button's label
+ALTER BUTTON GoBack (
+  TITLE = '← Return'
+);
+
+-- Rename a style property
+ALTER STYLE DarkCard (
+  BACKGROUND-COLOR = '#2a2a3e'
+);
+```
+
+**Supported object types:** `VISUAL`, `PAGE`, `CONTAINER`, `BUTTON`, `STYLE`, `NAVIGATION`, `DATASET`
+
+---
+
+## CREATE OR ALTER
+
+`CREATE OR ALTER` is equivalent to `ALTER` if the object already exists, or `CREATE` if it does not. This is useful for idempotent scripts that are run repeatedly.
+
+```sql
+CREATE OR ALTER VISUAL TotalRevenue AS CARD (
+  SOURCE   = (SELECT SUM(revenue) AS val FROM #summary),
+  TITLE    = 'Total Revenue',
+  MAPPINGS (VALUE = val)
+);
+
+CREATE OR ALTER STYLE DarkCard (
+  BACKGROUND-COLOR = '#1e1e2e',
+  COLOR            = '#cdd6f4',
+  BORDER-RADIUS    = '8px'
+);
+```
+
+Supported for all report object types: `VISUAL`, `PAGE`, `CONTAINER`, `BUTTON`, `STYLE`, `NAVIGATION`, `DATASET`.
+
+---
+
+## DROP report objects
+
+Permanently removes a report object from the execution context.
+
+```sql
+DROP VISUAL [IF EXISTS] <name>;
+DROP PAGE [IF EXISTS] <name>;
+DROP CONTAINER [IF EXISTS] <name>;
+DROP BUTTON [IF EXISTS] <name>;
+DROP STYLE [IF EXISTS] <name>;
+DROP NAVIGATION [IF EXISTS] <name>;
+DROP DATASET [IF EXISTS] <name>;
+```
+
+`IF EXISTS` suppresses the error when the named object does not exist. Without it, dropping a non-existent object raises an `ExecutionException`.
+
+```sql
+-- Clean up before rebuilding
+DROP VISUAL IF EXISTS TotalRevenue;
+DROP PAGE   IF EXISTS Overview;
+
+-- Error if MyNav does not exist
+DROP NAVIGATION MyNav;
+```
 
 ---
 

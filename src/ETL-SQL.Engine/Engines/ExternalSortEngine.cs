@@ -7,6 +7,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Spill;
+using ETL_SQL.Engine.Spill;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -89,7 +90,7 @@ namespace ETL_SQL.Engine.Engines
                         foreach (var entry in currentChunk)
                         {
                             // Attach keys to row for spilling
-                            entry.Row["__SORT_KEYS"] = entry.Keys;
+                            entry.Row["_SYS_SORT_KEYS_"] = entry.Keys;
                             await writer.WriteRowAsync(entry.Row);
                         }
                     }
@@ -111,7 +112,7 @@ namespace ETL_SQL.Engine.Engines
                 {
                     foreach (var entry in currentChunk)
                     {
-                        entry.Row["__SORT_KEYS"] = entry.Keys;
+                        entry.Row["_SYS_SORT_KEYS_"] = entry.Keys;
                         await writer.WriteRowAsync(entry.Row);
                     }
                 }
@@ -135,16 +136,16 @@ namespace ETL_SQL.Engine.Engines
                     var row = await readers[i].ReadRowAsync();
                     if (row != null)
                     {
-                        var keysCol = row["__SORT_KEYS"];
+                        var keysCol = row["_SYS_SORT_KEYS_"];
                         object?[] unwrapped;
                         if (keysCol is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Array)
                         {
-                            unwrapped = je.EnumerateArray().Select(x => UnwrapJsonValue(x)).Cast<object?>().ToArray();
+                            unwrapped = je.EnumerateArray().Select(x => SpillSerializationHelper.UnwrapValue(x)).Cast<object?>().ToArray();
                         }
                         else
                         {
                              var keys = keysCol as IEnumerable<object>;
-                             unwrapped = keys?.Select(x => UnwrapJsonValue(x)).ToArray() ?? Array.Empty<object?>();
+                             unwrapped = keys?.Select(x => SpillSerializationHelper.UnwrapValue(x)).ToArray() ?? Array.Empty<object?>();
                         }
                         heap.Enqueue(i, (row, unwrapped));
                     }
@@ -159,16 +160,16 @@ namespace ETL_SQL.Engine.Engines
                         var nextRow = await readers[chunkIdx].ReadRowAsync();
                         if (nextRow != null)
                         {
-                            var keysCol = nextRow["__SORT_KEYS"];
+                            var keysCol = nextRow["_SYS_SORT_KEYS_"];
                             object?[] unwrapped;
                             if (keysCol is System.Text.Json.JsonElement je && je.ValueKind == System.Text.Json.JsonValueKind.Array)
                             {
-                                unwrapped = je.EnumerateArray().Select(x => UnwrapJsonValue(x)).Cast<object?>().ToArray();
+                                unwrapped = je.EnumerateArray().Select(x => SpillSerializationHelper.UnwrapValue(x)).Cast<object?>().ToArray();
                             }
                             else
                             {
                                  var keys = keysCol as IEnumerable<object>;
-                                 unwrapped = keys?.Select(x => UnwrapJsonValue(x)).ToArray() ?? Array.Empty<object?>();
+                                 unwrapped = keys?.Select(x => SpillSerializationHelper.UnwrapValue(x)).ToArray() ?? Array.Empty<object?>();
                             }
                             heap.Enqueue(chunkIdx, (nextRow, unwrapped));
                         }
@@ -181,22 +182,5 @@ namespace ETL_SQL.Engine.Engines
             }
         }
 
-        private static object? UnwrapJsonValue(object? val)
-        {
-            if (val is System.Text.Json.JsonElement je)
-            {
-                val = je.ValueKind switch
-                {
-                    System.Text.Json.JsonValueKind.Number when je.TryGetDecimal(out var dv) => dv,
-                    System.Text.Json.JsonValueKind.Number => je.GetDouble(),
-                    System.Text.Json.JsonValueKind.True  => true,
-                    System.Text.Json.JsonValueKind.False => false,
-                    System.Text.Json.JsonValueKind.String => je.GetString(),
-                    System.Text.Json.JsonValueKind.Null  => null,
-                    _                   => (object?)je.ToString()
-                };
-            }
-            return ETL_SQL.Data.CompoundKey.NormalizeValue(val);
-        }
     }
 }

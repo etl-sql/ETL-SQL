@@ -28,17 +28,35 @@ namespace ETL_SQL.Engine.Handlers
             if (connection is IDatabaseSource sqlConn)
             {
                 _logger.Debug("Strategy: Remote SQL UPDATE");
-                var assignments = stmt.Assignments.Select(a => $"{a.ColumnName} = {context.CompileExpression(a.Value, sqlConn.Dialect)}");
+                var allParams = new Dictionary<string, object?>();
+                int paramIdx = 0;
+                
+                string CompileAndMerge(Expression e) {
+                    var compiled = context.CompileExpression(e, sqlConn.Dialect);
+                    string sqlPart = compiled.Sql;
+                    foreach(var p in compiled.Parameters.OrderByDescending(x => x.Key.Length)) {
+                        string newName = $"@up{paramIdx++}";
+                        sqlPart = sqlPart.Replace(p.Key, newName);
+                        allParams[newName] = p.Value;
+                    }
+                    return sqlPart;
+                }
+
+                var assignments = stmt.Assignments.Select(a => $"{a.ColumnName} = {CompileAndMerge(a.Value)}").ToList();
                 var sql = $"UPDATE {context.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)} SET {string.Join(", ", assignments)}";
-                if (stmt.WhereClause != null) sql += $"\nWHERE {context.CompileExpression(stmt.WhereClause, sqlConn.Dialect)}";
+                if (stmt.WhereClause != null) sql += $"\nWHERE {CompileAndMerge(stmt.WhereClause)}";
                 
                 if (context.IsWhatIf)
                 {
-                    _logger.WriteLine($"WHAT IF: Would execute remote SQL update on {connName}:\n{sql}", ConsoleColor.Yellow);
+                    var whatIfAssignments = stmt.Assignments.Select(a => $"{a.ColumnName} = {context.CompileExpression(a.Value, sqlConn.Dialect).ToEscapedSql(sqlConn.Dialect)}");
+                    var whatIfSql = $"UPDATE {context.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)} SET {string.Join(", ", whatIfAssignments)}";
+                    if (stmt.WhereClause != null) whatIfSql += $"\nWHERE {context.CompileExpression(stmt.WhereClause, sqlConn.Dialect).ToEscapedSql(sqlConn.Dialect)}";
+                    
+                    _logger.WriteLine($"WHAT IF: Would execute remote SQL update on {connName}:\n{whatIfSql}", ConsoleColor.Yellow);
                 }
                 else
                 {
-                    await foreach (var _ in sqlConn.ExecuteRawSql(sql)) { }
+                    await foreach (var _ in sqlConn.ExecuteRawSql(sql, allParams.Values)) { }
                 }
                 // Note: Reporting count for remote SQL is 0 for now as ExecuteRawSql doesn't return it
                 context.RowsProcessed = 0; 

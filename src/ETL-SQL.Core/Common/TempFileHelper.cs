@@ -17,11 +17,18 @@ namespace ETL_SQL.Common
             try
             {
                 if (File.Exists(path))
+                {
                     File.Delete(path);
+                    if (logger != null) logger.Debug($"[TempFileHelper] Successfully deleted temp file '{path}'.");
+                }
+                else if (logger != null)
+                {
+                    logger.Debug($"[TempFileHelper] SafeDelete skipped: file '{path}' does not exist.");
+                }
             }
             catch (Exception ex)
             {
-                if (logger != null) logger.Debug($"[TempFileHelper] Could not delete temp file '{path}': {ex.Message}");
+                if (logger != null) logger.Warning($"[TempFileHelper] Could not delete temp file '{path}': {ex.Message}");
             }
         }
     }

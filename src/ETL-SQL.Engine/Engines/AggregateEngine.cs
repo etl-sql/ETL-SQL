@@ -154,10 +154,29 @@ namespace ETL_SQL.Engine.Engines
         }
 
         /// <summary>Expands a GroupingSetClause into a list of effective GROUP BY lists (one per pass).</summary>
-        private static List<List<Expression>> ExpandGroupingSets(GroupingSetClause clause)
+        public List<List<Expression>> ExpandGroupingSets(GroupingSetClause clause)
         {
             var cols = clause.GroupSets[0]; // ROLLUP/CUBE: single list; GroupingSets: N lists
             int n = cols.Count;
+            int limit = _context.MaxGroupingSets;
+
+            int totalSets = clause.Type switch
+            {
+                GroupingSetType.Rollup => n + 1,
+                GroupingSetType.Cube => (int)Math.Pow(2, n),
+                _ => clause.GroupSets.Count
+            };
+
+            if (totalSets > limit)
+            {
+                throw new ExecutionException($"{clause.Type} operation exceeds the maximum grouping sets limit ({limit}). " +
+                    $"It would produce {totalSets:N0} sets. Use SET MAX_GROUPING_SETS to increase if necessary.");
+            }
+
+            if (totalSets > 64)
+            {
+                _logger.Warning("{Type} operation generates {Count:N0} grouping sets, which may impact performance.", clause.Type, totalSets);
+            }
 
             if (clause.Type == GroupingSetType.Rollup)
             {

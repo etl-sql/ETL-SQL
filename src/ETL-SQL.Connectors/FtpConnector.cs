@@ -82,6 +82,7 @@ namespace ETL_SQL.Connectors
 
         private void EnsureConnected()
         {
+            if (_client == null) throw new ExecutionException("FTP Client is not initialized.");
             if (!_client.IsConnected)
             {
                 _client.Connect();
@@ -91,7 +92,7 @@ namespace ETL_SQL.Connectors
         public Task<IEnumerable<FileMetaData>> ListFilesAsync(string path)
         {
             EnsureConnected();
-            var items = _client.GetListing(path);
+            var items = _client!.GetListing(path);
             return Task.FromResult(items.Select(i => new FileMetaData
             {
                 Name = i.Name,
@@ -106,7 +107,7 @@ namespace ETL_SQL.Connectors
         {
             EnsureConnected();
             var existsMode = overwrite ? FtpRemoteExists.Overwrite : FtpRemoteExists.Skip;
-            var status = _client.UploadFile(localPath, remotePath, existsMode);
+            var status = _client!.UploadFile(localPath, remotePath, existsMode);
             if (status == FtpStatus.Skipped && !overwrite) throw new ExecutionException($"Remote file already exists (overwrite=OFF): {remotePath}");
             if (status == FtpStatus.Failed) throw new ExecutionException($"Failed to upload file to FTP: {remotePath}");
             return Task.CompletedTask;
@@ -116,7 +117,7 @@ namespace ETL_SQL.Connectors
         {
             EnsureConnected();
             var existsMode = overwrite ? FtpLocalExists.Overwrite : FtpLocalExists.Skip;
-            var status = _client.DownloadFile(localPath, remotePath, existsMode);
+            var status = _client!.DownloadFile(localPath, remotePath, existsMode);
             if (status == FtpStatus.Skipped && !overwrite) throw new ExecutionException($"Local file already exists (overwrite=OFF): {localPath}");
             if (status == FtpStatus.Failed) throw new ExecutionException($"Failed to download file from FTP: {remotePath}");
             return Task.CompletedTask;
@@ -125,7 +126,7 @@ namespace ETL_SQL.Connectors
         public Task DeleteFileAsync(string remotePath)
         {
             EnsureConnected();
-            _client.DeleteFile(remotePath);
+            _client!.DeleteFile(remotePath);
             return Task.CompletedTask;
         }
 
@@ -156,11 +157,11 @@ namespace ETL_SQL.Connectors
 
         public async ValueTask DisposeAsync()
         {
-            if (_client.IsConnected)
+            if (_client != null && _client.IsConnected)
             {
                 _client.Disconnect();
             }
-            _client.Dispose();
+            _client?.Dispose();
             await Task.CompletedTask;
         }
 

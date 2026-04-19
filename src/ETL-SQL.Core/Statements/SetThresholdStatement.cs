@@ -17,7 +17,10 @@ namespace ETL_SQL.Core
         MaxParallelDegree,
         MaxStringResultSize,
         RegexMatchTimeout,
-        MaxFileOperations
+        MaxFileOperations,
+        MaxGroupingSets,
+        MaxSessionSize,
+        Telemetry
     }
 
     public record SetThresholdStatement(ThresholdType Type, Expression Value) : Statement

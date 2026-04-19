@@ -62,7 +62,7 @@ namespace ETL_SQL.Engine
         private readonly Dictionary<Type, IStatementHandler> _statementHandlers = new();
 
         private readonly Stack<Row> _outerRowStack = new();
-        private readonly Dictionary<Statement, object?> _subqueryCache = new(new StatementSqlEqualityComparer());
+        private readonly ETL_SQL.Core.Common.LruCache<Statement, object?> _subqueryCache = new(500, new StatementSqlEqualityComparer());
         private readonly Dictionary<(Guid? ParentId, Statement Stmt), ExecutionNode> _nodeReuseMap = new();
         private readonly TransactionManager _transactionManager = new();
         private readonly ISpillStore _spillStore;
@@ -72,6 +72,9 @@ namespace ETL_SQL.Engine
         /// <summary>Current transaction nesting level.</summary>
         public int TranCount => _transactionManager.TranCount;
 
+        /// <summary>Whether to automatically rollback open transactions when a script finishes (Zero-Trust safety).</summary>
+        public bool AutoRollbackOnFinish { get; set; } = true;
+
         /// <summary>Total bytes spilled to disk for large joins/sorts.</summary>
         private long _totalSpilledBytes = 0;
         public long TotalSpilledBytes 
@@ -79,6 +82,7 @@ namespace ETL_SQL.Engine
             get => System.Threading.Interlocked.Read(ref _totalSpilledBytes); 
             set => System.Threading.Interlocked.Exchange(ref _totalSpilledBytes, value); 
         }
+        public bool TelemetryEnabled { get; set; } = true;
         
         private long _aggregateGroupsCount = 0;
         public long AggregateGroupsCount
@@ -130,6 +134,8 @@ namespace ETL_SQL.Engine
         public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
         public string? CurrentScriptPath { get; set; }
         public int MaxFileOperations { get; set; } = SecurityService.DefaultMaxFileOperations;
+        public int MaxGroupingSets { get; set; } = LanguageMetadata.DefaultMaxGroupingSets;
+        public long MaxSessionSize { get; set; } = 200 * 1024 * 1024; // 200MB Default
         
         /// <summary>Last script lexing duration in milliseconds.</summary>
         public long LastLexTimeMs { get; set; }
@@ -208,6 +214,12 @@ namespace ETL_SQL.Engine
         public IDictionary<string, CreateNavigationStatement> NavigationDefinitions { get; } = new Dictionary<string, CreateNavigationStatement>(StringComparer.OrdinalIgnoreCase);
         /// <inheritdoc />
         public IDictionary<string, CreateStyleStatement> StyleDefinitions { get; } = new Dictionary<string, CreateStyleStatement>(StringComparer.OrdinalIgnoreCase);
+        /// <inheritdoc />
+        public IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; } = new Dictionary<string, CreateButtonStatement>(StringComparer.OrdinalIgnoreCase);
+        /// <inheritdoc />
+        public IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; } = new Dictionary<string, CreateTemplateStatement>(StringComparer.OrdinalIgnoreCase);
+        /// <inheritdoc />
+        public string TemplatePath { get; set; } = "./Templates";
         /// <inheritdoc />
         public string? ReportTitle { get; set; }
         /// <inheritdoc />
@@ -289,7 +301,7 @@ namespace ETL_SQL.Engine
 
         
         /// <summary>Cache for scalar subquery results to avoid redundant execution.</summary>
-        public Dictionary<Statement, object?> SubqueryCache => _subqueryCache;
+        public ETL_SQL.Core.Common.LruCache<Statement, object?> SubqueryCache => _subqueryCache;
         
         /// <summary>Token used to cancel long-running operations in this context.</summary>
         public System.Threading.CancellationToken CancellationToken { get; private set; } = System.Threading.CancellationToken.None;
@@ -403,6 +415,13 @@ namespace ETL_SQL.Engine
             // Callers can override this after construction if they have a meaningful ID.
             SessionId = Guid.NewGuid().ToString("N")[..8];
 
+            // Initialize TemplatePath from configuration
+            var config = _serviceProvider?.GetService<IConfiguration>();
+            if (config != null)
+            {
+                TemplatePath = config.GetValue<string>("Reporting:TemplatePath") ?? "./Templates";
+            }
+
             _logger.Info("Evaluator initialized.");
 
             // Standard OnMessage hook for capturing output into the Messages list
@@ -478,6 +497,11 @@ namespace ETL_SQL.Engine
             finally
             {
                 _subqueryCache.Clear();
+                if (TranCount > 0 && AutoRollbackOnFinish)
+                {
+                    _logger.Warning("Script execution ended with {Count} open transactions. Performing emergency rollback.", TranCount);
+                    await RollbackAll();
+                }
             }
         }
 
@@ -650,8 +674,8 @@ namespace ETL_SQL.Engine
 
         public Task<object?> EvaluateValue(Expression? expr, Row context) => _expressionEvaluator.Evaluate(expr, context);
         public IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context) => _expressionEvaluator.EvaluateStream(expr, context);
-        public string CompileExpression(Expression e, string d = "MSSQL") => _queryCompiler.CompileExpression(e, d);
-        public string CompileQuery(Statement s, string d = "MSSQL") => _queryCompiler.CompileQuery(s, d);
+        public CompiledSql CompileExpression(Expression e, string d = "MSSQL") => _queryCompiler.CompileExpression(e, d);
+        public CompiledSql CompileQuery(Statement s, string d = "MSSQL") => _queryCompiler.CompileQuery(s, d);
         public string GetSqlTableName(TableReference t, string dialect = "MSSQL")
         {
             var parts = new List<string>();
@@ -948,7 +972,8 @@ namespace ETL_SQL.Engine
                 PreviewLimit = PreviewLimit,
                 ScriptPassword = ScriptPassword,
                 SessionId = SessionId,
-                DisplayExecuteTree = DisplayExecuteTree
+                DisplayExecuteTree = DisplayExecuteTree,
+                MaxGroupingSets = MaxGroupingSets
             };
             // Note: CurrentNodeId is AsyncLocal and will automatically flow to the new thread if Task.Run is used,
             // but for a manual Fork we set it explicitly.
@@ -980,8 +1005,8 @@ namespace ETL_SQL.Engine
         private int _operationCount = 0;
         public void IncrementOperationCount(string? path = null)
         {
-            _operationCount++;
-            _securityService.CheckRunawayProtection(_operationCount, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, path);
+            var count = System.Threading.Interlocked.Increment(ref _operationCount);
+            _securityService.CheckRunawayProtection(count, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, path);
         }
 
         ETL_SQL.Services.SecurityService IExecutionContext.SecurityService => _securityService;

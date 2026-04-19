@@ -64,21 +64,26 @@ namespace ETL_SQL.Core.Parser
 
             // ── Report-SQL (Phase 9A) ──────────────────────────────────────
             if (_parser.Match(TokenType.VISUAL))
-                return ParseCreateVisual(startToken);
+                return ParseCreateVisual(startToken, mode);
             if (_parser.Match(TokenType.PAGE))
-                return ParseCreatePage(startToken);
+                return ParseCreatePage(startToken, mode);
             if (_parser.Match(TokenType.DATASET))
-                return ParseCreateDataset(startToken);
+                return ParseCreateDataset(startToken, mode);
 
             // ── Report-SQL (Phase 9.3) ─────────────────────────────────────
             if (_parser.Match(TokenType.CONTAINER))
-                return ParseCreateContainer(startToken);
+                return ParseCreateContainer(startToken, mode);
             if (_parser.Match(TokenType.NAVIGATION))
-                return ParseCreateNavigation(startToken);
+                return ParseCreateNavigation(startToken, mode);
             if (_parser.Match(TokenType.STYLE))
-                return ParseCreateStyle(startToken);
+                return ParseCreateStyle(startToken, mode);
 
-            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, or STYLE after CREATE", _parser.Current.Line, _parser.Current.Column);
+            if (_parser.Match(TokenType.BUTTON))
+                return ParseCreateButton(startToken, mode);
+            if (_parser.Match(TokenType.TEMPLATE))
+                return ParseCreateTemplate(startToken, mode);
+
+            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, or TEMPLATE after CREATE", _parser.Current.Line, _parser.Current.Column);
         }
 
         private Statement ParseCreateSshKeyPair(Token startToken)
@@ -158,8 +163,17 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.PROCEDURE))  return ParseCreateProcedure(startToken, ObjectCreationMode.Alter);
             if (_parser.Match(TokenType.FUNCTION))   return ParseCreateFunction(startToken, ObjectCreationMode.Alter);
             if (_parser.Match(TokenType.TABLE))       return ParseAlterTable(startToken);
+            
+            // ── Report-SQL ──────────────────────────────────────────────────
+            if (_parser.Match(TokenType.VISUAL))      return ParseAlterReportObject(ReportObjectType.Visual);
+            if (_parser.Match(TokenType.PAGE))        return ParseAlterReportObject(ReportObjectType.Page);
+            if (_parser.Match(TokenType.CONTAINER))   return ParseAlterReportObject(ReportObjectType.Container);
+            if (_parser.Match(TokenType.STYLE))       return ParseAlterReportObject(ReportObjectType.Style);
+            if (_parser.Match(TokenType.NAVIGATION))  return ParseAlterReportObject(ReportObjectType.Navigation);
+            if (_parser.Match(TokenType.DATASET))     return ParseAlterReportObject(ReportObjectType.Dataset);
+            if (_parser.Match(TokenType.TEMPLATE))    return ParseAlterReportObject(ReportObjectType.Template);
 
-            throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, or TABLE after ALTER", _parser.Current.Line, _parser.Current.Column);
+            throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, TABLE, or REPORT object after ALTER", _parser.Current.Line, _parser.Current.Column);
         }
 
         /// <summary>
@@ -668,8 +682,58 @@ namespace ETL_SQL.Core.Parser
                 if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
                 return new DropSetsStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
             }
+            // ── Report-SQL ──────────────────────────────────────────────────
+            else if (_parser.Match(TokenType.VISUAL) || _parser.Match(TokenType.IDENTIFIER) && _parser.Current.Value.Equals("CHART", StringComparison.OrdinalIgnoreCase))
+            {
+                if (_parser.Match(TokenType.IF)) { _parser.Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+                var name = _parser.ConsumeIdentifier("Expected visual name").Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                return new DropReportObjectStatement { ObjectType = ReportObjectType.Visual, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
+            }
+            else if (_parser.Match(TokenType.PAGE))
+            {
+                if (_parser.Match(TokenType.IF)) { _parser.Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+                var name = _parser.ConsumeIdentifier("Expected page name").Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                return new DropReportObjectStatement { ObjectType = ReportObjectType.Page, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
+            }
+            else if (_parser.Match(TokenType.CONTAINER))
+            {
+                if (_parser.Match(TokenType.IF)) { _parser.Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+                var name = _parser.ConsumeIdentifier("Expected container name").Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                return new DropReportObjectStatement { ObjectType = ReportObjectType.Container, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
+            }
+            else if (_parser.Match(TokenType.STYLE))
+            {
+                if (_parser.Match(TokenType.IF)) { _parser.Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+                var name = _parser.ConsumeIdentifier("Expected style name").Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                return new DropReportObjectStatement { ObjectType = ReportObjectType.Style, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
+            }
+            else if (_parser.Match(TokenType.NAVIGATION))
+            {
+                if (_parser.Match(TokenType.IF)) { _parser.Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+                var name = _parser.ConsumeIdentifier("Expected navigation name").Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                return new DropReportObjectStatement { ObjectType = ReportObjectType.Navigation, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
+            }
+            else if (_parser.Match(TokenType.DATASET))
+            {
+                if (_parser.Match(TokenType.IF)) { _parser.Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+                var name = _parser.ConsumeIdentifier("Expected dataset name").Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                return new DropReportObjectStatement { ObjectType = ReportObjectType.Dataset, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
+            }
+            else if (_parser.Match(TokenType.TEMPLATE))
+            {
+                if (_parser.Match(TokenType.IF)) { _parser.Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+                var name = _parser.ConsumeIdentifier("Expected template name").Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+                return new DropReportObjectStatement { ObjectType = ReportObjectType.Template, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
+            }
 
-            throw new SyntaxException("Expected TABLE, CONNECTION, PROCEDURE, FUNCTION, INDEX, or SETS after DROP", _parser.Current.Line, _parser.Current.Column);
+            throw new SyntaxException("Expected TABLE, CONNECTION, PROCEDURE, FUNCTION, INDEX, SETS, or REPORT object after DROP", _parser.Current.Line, _parser.Current.Column);
         }
 
         private Statement ParseTruncate()

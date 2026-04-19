@@ -29,11 +29,13 @@ namespace ETL_SQL.Engine.Handlers
             if (string.IsNullOrEmpty(stmt.Topic))
             {
                 _logger.WriteLine("ETL-SQL Help", ConsoleColor.Cyan);
-                _logger.WriteLine("Available commands: CREATE CONNECTION, CREATE TABLE, SELECT, INSERT, UPDATE, DELETE, etc.");
+                _logger.WriteLine("Available commands: CREATE CONNECTION, CREATE TABLE, SELECT, INSERT, UPDATE, DELETE, CREATE TEMPLATE, etc.");
                 _logger.WriteLine("Use HELP DIRECTORY or HELP FILE for details on file/directory operations.");
                 _logger.WriteLine("Use HELP CONNECTION <type> for details on a specific connection type (e.g. HELP CONNECTION MSSQL).");
+                _logger.WriteLine("Use HELP REPORT for details on dashboard and visual commands (Report-SQL).");
                 _logger.WriteLine("Use HELP DOCKER for details on container operations.");
                 _logger.WriteLine("Use HELP SHOW for details on introspection commands.");
+                _logger.WriteLine("Use HELP SET for details on system configuration (e.g. SET TEMPLATE_PATH).");
                 return;
             }
 
@@ -295,10 +297,102 @@ namespace ETL_SQL.Engine.Handlers
                 _logger.WriteLine("  SHOW PROFILE [INTO #temp]");
                 _logger.WriteLine("  SHOW VERSION [INTO #temp]");
             }
+            else if (stmt.Topic.Equals("REPORT", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrEmpty(stmt.SubTopic))
+                {
+                    _logger.WriteLine("Report-SQL Help Index:", ConsoleColor.Cyan);
+                    _logger.WriteLine("  USE HELP REPORT <sub-topic> for syntax and examples:");
+                    _logger.WriteLine("  - VISUAL:     Charts, cards, and filter controls.");
+                    _logger.WriteLine("  - PAGE:       Layout arrangement and parameters.");
+                    _logger.WriteLine("  - DATASET:    Pre-computed tables with caching/encryption.");
+                    _logger.WriteLine("  - CONTAINER:  Grouping visuals (Box/Scroll).");
+                    _logger.WriteLine("  - STYLE:      Reusable CSS-like property bundles.");
+                    _logger.WriteLine("  - TEMPLATE:   Global dashboard theme definitions.");
+                    _logger.WriteLine("  - NAVIGATION: Menu bars and tab-based routing.");
+                    _logger.WriteLine("\nMetadata:");
+                    _logger.WriteLine("  - SET REPORT TITLE = '...'");
+                    _logger.WriteLine("  - SET REPORT DESCRIPTION = '...'");
+                }
+                else
+                {
+                    var sub = stmt.SubTopic.ToUpperInvariant();
+                    _logger.WriteLine($"HELP: REPORT {sub}", ConsoleColor.Cyan);
+                    switch (sub)
+                    {
+                        case "VISUAL":
+                            _logger.WriteLine("Syntax: CREATE VISUAL <name> AS <TYPE> (SOURCE=..., MAPPINGS(...), OPTIONS(...), STYLE(...))");
+                            _logger.WriteLine("Types: BAR, HBAR, LINE, SCATTER, PIE, DONUT, COMBO, GAUGE, FUNNEL, WATERFALL, TABLE, CARD, TEXT");
+                            _logger.WriteLine("Filters: SLICER, DATEPICKER, SLIDER, MULTISELECT, SEARCH");
+                            _logger.WriteLine("\nExample:");
+                            _logger.WriteLine("  CREATE VISUAL Sales AS BAR (SOURCE=#data, MAPPINGS(X=month, Y=total));");
+                            break;
+                        case "PAGE":
+                            _logger.WriteLine("Syntax: CREATE PAGE <name> AS LAYOUT (STRUCTURE='...', MAP(...)) [WITH PARAMETERS (...)]");
+                            _logger.WriteLine("Structure: 'A A / B C' (CSS grid-template-areas)");
+                            _logger.WriteLine("\nExample:");
+                            _logger.WriteLine("  CREATE PAGE Main AS LAYOUT (STRUCTURE='A', MAP('A'=Chart)) WITH PARAMETERS (@reg='All');");
+                            break;
+                        case "DATASET":
+                            _logger.WriteLine("Syntax: CREATE DATASET #name [REFRESH EVERY '...'] [ENCRYPT = ...] AS (SELECT ...)");
+                            _logger.WriteLine("Options: COMPRESS=ON|OFF, TTL='...', PASSWORD='...'");
+                            _logger.WriteLine("\nExample:");
+                            _logger.WriteLine("  CREATE DATASET #Cache REFRESH EVERY '1h' AS (SELECT * FROM LargeTable);");
+                            break;
+                        case "CONTAINER":
+                            _logger.WriteLine("Syntax: CREATE CONTAINER <name> AS <BOX|SCROLL> (VISUALS = (V1, V2, ...))");
+                            _logger.WriteLine("\nExample:");
+                            _logger.WriteLine("  CREATE CONTAINER Info AS SCROLL (VISUALS = (Chart1, Chart2)) STYLE(HEIGHT=400);");
+                            break;
+                        case "STYLE":
+                            _logger.WriteLine("Syntax: CREATE STYLE <name> (PROPERTY = 'value', ...)");
+                            _logger.WriteLine("Properties: BACKGROUND-COLOR, COLOR, BORDER, BORDER-RADIUS, PADDING, FONT-SIZE, TOOLTIP");
+                            _logger.WriteLine("\nExample:");
+                            _logger.WriteLine("  CREATE STYLE RedCard (BACKGROUND-COLOR='red', COLOR='white', PADDING='10px');");
+                            break;
+                        case "TEMPLATE":
+                            _logger.WriteLine("Syntax: CREATE TEMPLATE <name> AS (key = value, ...)");
+                            _logger.WriteLine("Usage: Global dashboard color schemes. Persisted as JSON in TEMPLATE_PATH.");
+                            break;
+                        case "NAVIGATION":
+                            _logger.WriteLine("Syntax: CREATE NAVIGATION <name> AS <TAB|BUTTON|LINK> (PAGES = (P1, P2, ...), DEFAULT='P1')");
+                            break;
+                        default:
+                            _logger.WriteLine($"No detailed help available for Report-SQL sub-topic '{sub}'.", ConsoleColor.Yellow);
+                            break;
+                    }
+                }
+            }
+            else if (stmt.Topic.Equals("TEMPLATE", StringComparison.OrdinalIgnoreCase))
+            {
+                // Alias to HELP REPORT TEMPLATE
+                _logger.WriteLine("HELP: TEMPLATE", ConsoleColor.Cyan);
+                _logger.WriteLine("Syntax: CREATE TEMPLATE <name> AS (key = value, ...)");
+                _logger.WriteLine("Templates provide global UI overrides for the ReportPlayer dashboard.");
+                _logger.WriteLine("Options: BG_COLOR, TEXT_COLOR, ACCENT_COLOR, FONT_FAMILY");
+                _logger.WriteLine("\nLifecycles: CREATE, ALTER, DROP [IF EXISTS]");
+            }
+            else if (stmt.Topic.Equals("SET", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.WriteLine("System Configuration (SET):", ConsoleColor.Cyan);
+                _logger.WriteLine("\nReporting:", ConsoleColor.Yellow);
+                _logger.WriteLine("  SET TEMPLATE_PATH = 'path'      -- Override dashboard template directory.");
+                _logger.WriteLine("  SET REPORT TITLE = 'string'     -- Set global report header.");
+                
+                _logger.WriteLine("\nEngine Tweaks:", ConsoleColor.Yellow);
+                _logger.WriteLine("  SET BATCHSIZE = n               -- Set rows per batch (default 10000).");
+                _logger.WriteLine("  SET MAX_IN_MEMORY_BATCHES = n    -- Control RAM usage for #temp tables.");
+                _logger.WriteLine("  SET JOIN_SPILL_THRESHOLD = n    -- Rows before join spills to disk.");
+                
+                _logger.WriteLine("\nSecurity & Behavior:", ConsoleColor.Yellow);
+                _logger.WriteLine("  SET WHAT_IF <ON|OFF>            -- Enable/disable dry-run mode.");
+                _logger.WriteLine("  SET SHOW_PASSWORD <ON|OFF>      -- Mask/unmask passwords in logs.");
+                _logger.WriteLine("  SET PROFILE <ON|OFF>            -- Enable/disable execution profiling.");
+            }
             else
             {
                 _logger.WriteLine($"Help for topic '{stmt.Topic}' is not yet implemented.", ConsoleColor.Yellow);
-                _logger.WriteLine("Available topics: CONNECTION, FUNCTION, DIRECTORY, FILE, TRANSFER, EMAIL, SSH_KEY_PAIR, DOCKER, SHOW, VARIABLES, SECURITY, STATEMENT");
+                _logger.WriteLine("Available topics: CONNECTION, FUNCTION, DIRECTORY, FILE, TRANSFER, EMAIL, SSH_KEY_PAIR, DOCKER, SHOW, VARIABLES, SECURITY, STATEMENT, REPORT, SET");
             }
             await Task.CompletedTask;
         }

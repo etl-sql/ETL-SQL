@@ -47,7 +47,12 @@ namespace ETL_SQL.Engine.Engines
 
             var inputStream = sourceBatches.SelectMany(b => b.Rows.Select(r => {
                 var cloned = r.Clone();
-                foreach (var kv in r.Columns.ToList()) cloned[$"{fromName}.{kv.Key}"] = kv.Value;
+                foreach (var kv in r.Columns.ToList())
+                {
+                    // Only qualify if not already qualified
+                    if (!kv.Key.Contains("."))
+                        cloned[$"{fromName}.{kv.Key}"] = kv.Value;
+                }
                 return cloned;
             }).ToAsyncEnumerable());
 

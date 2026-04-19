@@ -57,12 +57,18 @@ namespace ETL_SQL.Engine.Handlers
 
             // Register AST node so ManifestBuilder / DashboardService can access refresh metadata
             if (context is IReportContext rc)
+            {
+                if (stmt.Mode == ObjectCreationMode.Create && rc.DatasetDefinitions.ContainsKey(stmt.TempTableName))
+                {
+                    throw new ExecutionException($"Dataset '{stmt.TempTableName}' already exists. Use CREATE OR ALTER or DROP DATASET first.", null, stmt.Line, stmt.Column);
+                }
                 rc.DatasetDefinitions[stmt.TempTableName] = stmt;
+            }
 
             var intervalNote = string.IsNullOrWhiteSpace(stmt.RefreshInterval)
                 ? string.Empty
                 : $" (refresh every {stmt.RefreshInterval})";
-            context.Log($"Dataset '{stmt.TempTableName}' created{intervalNote}.");
+            context.Log($"Dataset '{stmt.TempTableName}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}{intervalNote}.");
         }
     }
 }

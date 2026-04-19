@@ -71,16 +71,23 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     target = CryptoUtils.Decrypt(target, decryptionKey);
                 }
-                catch (Exception ex)
+                catch
                 {
+                    // Security Hardening: If we have both keys, try the other one, but don't leak which one failed.
                     if (context.MasterPassword != null && context.ScriptPassword != null && context.MasterPassword != context.ScriptPassword)
                     {
-                         try { target = CryptoUtils.Decrypt(target, context.ScriptPassword); }
-                         catch { throw new ExecutionException($"Failed to decrypt connection string with provided passwords: {ex.Message}"); }
+                         try 
+                         { 
+                             target = CryptoUtils.Decrypt(target, context.ScriptPassword); 
+                         }
+                         catch 
+                         { 
+                             throw new ExecutionException("Failed to decrypt connection string. Verify that the correct password has been set via USE PASSWORD or MasterPassword."); 
+                         }
                     }
                     else
                     {
-                        throw new ExecutionException($"Failed to decrypt connection string: {ex.Message}");
+                        throw new ExecutionException("Failed to decrypt connection string. Verify that the correct password has been set via USE PASSWORD or MasterPassword.");
                     }
                 }
             }

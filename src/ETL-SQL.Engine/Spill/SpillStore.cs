@@ -51,7 +51,14 @@ namespace ETL_SQL.Engine.Spill
         {
             if (Directory.Exists(_rootPath))
             {
-                try { Directory.Delete(_rootPath, true); } catch { /* best effort */ }
+                try 
+                { 
+                    Directory.Delete(_rootPath, true); 
+                } 
+                catch (Exception ex)
+                { 
+                    _context.Logger.Warning("Failed to cleanup spill directory {Path}: {Message}", _rootPath, ex.Message);
+                }
             }
         }
 
@@ -108,7 +115,11 @@ namespace ETL_SQL.Engine.Spill
             public async Task WriteRowAsync(Row row)
             {
                 var json = JsonSerializer.Serialize(row.Columns);
-                _context.TotalSpilledBytes += Encoding.UTF8.GetByteCount(json) + 2;
+                if (_context.TelemetryEnabled)
+                {
+                    // Fast approximation (+2 for newline)
+                    _context.TotalSpilledBytes += json.Length + 2; 
+                }
                 await _writer.WriteLineAsync(json);
             }
 

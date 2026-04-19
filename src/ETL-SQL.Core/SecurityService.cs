@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using System.Runtime.InteropServices;
 using Microsoft.Extensions.Configuration;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -14,10 +15,17 @@ namespace ETL_SQL.Services
         private readonly ILogger _logger;
         private static readonly Regex ConnRegex = new Regex(@"(CREATE\s+CONNECTION\s+\w+\s+ON\s+\w+\s*\(\s*(['""]))([^'""\(\)]+)(\2\s*\))(?:\s+WITH\s*\((.*?)\))?", RegexOptions.IgnoreCase | RegexOptions.Singleline);
         private static readonly Regex EncRegex = new Regex(@"(['""])ENC:[A-Za-z0-9+/=]*\1", RegexOptions.Compiled);
+        // On case-sensitive filesystems (Linux), path prefix checks must be case-sensitive.
+        private static readonly StringComparison PathComparison = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
+            ? StringComparison.Ordinal
+            : StringComparison.OrdinalIgnoreCase;
 
         public SecurityService(ILogger logger)
         {
             _logger = logger;
+            ApprovedSafeZones = new HashSet<string>(PathComparison == StringComparison.Ordinal ? StringComparer.Ordinal : StringComparer.OrdinalIgnoreCase);
+            AllowedEnvVars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            AllowedHosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "*" };
         }
 
         /// <summary>
@@ -42,7 +50,7 @@ namespace ETL_SQL.Services
             if (zones != null && zones.Length > 0)
             {
                 ApprovedSafeZones.Clear();
-                ApprovedSafeZones.AddRange(zones);
+                ApprovedSafeZones.UnionWith(zones);
                 _logger.Info("Security: Loaded {Count} approved safe zones.", zones.Length);
             }
 
@@ -98,10 +106,9 @@ namespace ETL_SQL.Services
         public string? MasterPassword { get; set; }
 
         /// <summary>
-        /// Explicit list of directories (Safe Zones) where script safety overrides 
         /// (like ### ALLOW_GREATER_THAN_100_FILE) are permitted.
         /// </summary>
-        public List<string> ApprovedSafeZones { get; } = new();
+        public HashSet<string> ApprovedSafeZones { get; }
 
         /// <summary>
         /// Flag to indicate the current operation is performed by an internal engine component 
@@ -114,14 +121,14 @@ namespace ETL_SQL.Services
         /// Explicit list of environment variable names that scripts are authorized to read via ENV().
         /// Empty by default. Use '*' to allow all (not recommended for multi-tenant envs).
         /// </summary>
-        public HashSet<string> AllowedEnvVars { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public HashSet<string> AllowedEnvVars { get; }
 
         /// <summary>
         /// Explicit list of network hosts that scripts are authorized to connect to.
         /// Supports '*' wildcards at the start (e.g. *.google.com).
         /// Default is '*' (unrestricted). Remove '*' to enable strict egress control.
         /// </summary>
-        public HashSet<string> AllowedHosts { get; } = new(StringComparer.OrdinalIgnoreCase) { "*" };
+        public HashSet<string> AllowedHosts { get; }
 
         /// <summary>
         /// Validates that an environment variable is safe to read.
@@ -181,7 +188,26 @@ namespace ETL_SQL.Services
             }
 
             var fullPath = Path.GetFullPath(path);
-            
+
+            // Security Hardening: Canonicalize symlinks to prevent sandbox escapes.
+            // We resolve the link target to get the REAL path before segment/prefix checks.
+            if (File.Exists(fullPath) || Directory.Exists(fullPath))
+            {
+                try
+                {
+                    FileSystemInfo fsInfo = File.Exists(fullPath) ? new FileInfo(fullPath) : new DirectoryInfo(fullPath);
+                    var target = fsInfo.ResolveLinkTarget(true); // Recursive resolution
+                    if (target != null)
+                    {
+                        fullPath = target.FullName;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.Debug("Failed to resolve symlink for {Path}: {Message}", fullPath, ex.Message);
+                }
+            }
+
             // 0. Internal Bypass: If the engine is managing its own files (SessionManager), bypass safety checks.
             if (IsInternalOperation) return;
 
@@ -192,10 +218,10 @@ namespace ETL_SQL.Services
             if (IsTestMode)
             {
                 var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                if (fullPath.StartsWith(baseDir, StringComparison.OrdinalIgnoreCase)) isAuthorizedTestPath = true;
-                
+                if (fullPath.StartsWith(baseDir, PathComparison)) isAuthorizedTestPath = true;
+
                 // Also allow access to the system temp directory in test mode for isolation tests
-                if (fullPath.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase)) isAuthorizedTestPath = true;
+                if (fullPath.StartsWith(Path.GetTempPath(), PathComparison)) isAuthorizedTestPath = true;
             }
 
             var root = Path.GetPathRoot(fullPath);
@@ -298,12 +324,7 @@ namespace ETL_SQL.Services
             int maxOps = MaxFileOperations;
             int maxDepth = MaxRecursiveDepth;
 
-            bool isSafeZone = false;
-            if (!string.IsNullOrEmpty(path))
-            {
-                var fullPath = Path.GetFullPath(path);
-                isSafeZone = ApprovedSafeZones.Any(z => fullPath.StartsWith(z, StringComparison.OrdinalIgnoreCase));
-            }
+            bool isSafeZone = IsWithinSafeZone(path);
 
             if (count > maxOps && !allowLargeCount)
             {
@@ -338,12 +359,7 @@ namespace ETL_SQL.Services
         {
             if (length <= maxSize) return;
 
-            bool isSafeZone = false;
-            if (!string.IsNullOrEmpty(safeZonePath))
-            {
-                var fullPath = Path.GetFullPath(safeZonePath);
-                isSafeZone = ApprovedSafeZones.Any(z => fullPath.StartsWith(z, StringComparison.OrdinalIgnoreCase));
-            }
+            bool isSafeZone = IsWithinSafeZone(safeZonePath);
 
             if (!allowLarge || !isSafeZone)
             {
@@ -395,12 +411,7 @@ namespace ETL_SQL.Services
 
             if (!isExceeding) return;
 
-            bool isSafeZone = false;
-            if (!string.IsNullOrEmpty(context.CurrentScriptPath))
-            {
-                var fullPath = Path.GetFullPath(context.CurrentScriptPath);
-                isSafeZone = ApprovedSafeZones.Any(z => fullPath.StartsWith(z, StringComparison.OrdinalIgnoreCase));
-            }
+            bool isSafeZone = IsWithinSafeZone(context.CurrentScriptPath);
 
             if (!isSafeZone)
             {
@@ -532,6 +543,21 @@ namespace ETL_SQL.Services
                 return false;
             }
             catch { return true; } // Safety first: if invalid path, treat as system path
+        }
+
+        private bool IsWithinSafeZone(string? path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            var fullPath = Path.GetFullPath(path);
+            var current = fullPath;
+            while (!string.IsNullOrEmpty(current))
+            {
+                if (ApprovedSafeZones.Contains(current)) return true;
+                var parent = Path.GetDirectoryName(current);
+                if (parent == current || string.IsNullOrEmpty(parent)) break;
+                current = parent;
+            }
+            return false;
         }
     }
 

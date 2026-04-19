@@ -141,6 +141,12 @@ namespace ETL_SQL.App
             services.AddSingleton<IConnector>(new AzureBlobConnector(azureConn, azureContainer));
 
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
+
+            // Linter & Security Rules
+            var sensitiveKeywords = configuration.GetSection("Security:SensitiveKeywords").Get<string[]>();
+            services.AddSingleton<ETL_SQL.Core.Linting.Rules.CredentialLeakRule>(new ETL_SQL.Core.Linting.Rules.CredentialLeakRule(sensitiveKeywords));
+            services.AddSingleton<ETL_SQL.Core.Linting.ILintRule>(sp => sp.GetRequiredService<ETL_SQL.Core.Linting.Rules.CredentialLeakRule>());
+
             services.AddTransient<ExecutionSession>();
             
             services.AddSingleton<IJobHistoryStore, SQLiteJobHistoryStore>();

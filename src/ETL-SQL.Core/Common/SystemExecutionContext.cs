@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Services;
 using ETL_SQL.Core.Spill;
@@ -64,6 +65,7 @@ namespace ETL_SQL.Core.Common
         public List<DataTable> LastResultSets { get; } = new();
         public long RowsProcessed { get; set; }
         public long TotalSpilledBytes { get; set; }
+        public bool TelemetryEnabled { get; set; } = true;
         public int PartitionsCount { get; set; }
         public long AggregateGroupsCount { get; set; }
         public double AggregateExpansionRatio { get; set; }
@@ -84,7 +86,7 @@ namespace ETL_SQL.Core.Common
         public Func<string, Task<bool>>? OnPrompt { get; set; }
 
         public Stack<Row> OuterRowStack { get; } = new();
-        public Dictionary<Statement, object?> SubqueryCache { get; } = new();
+        public LruCache<Statement, object?> SubqueryCache { get; } = new(500);
         public CancellationToken CancellationToken => CancellationToken.None;
         public IServiceProvider ServiceProvider => null!;
         public List<ExecutionMetrics> ProfileMetrics { get; } = new();
@@ -92,6 +94,7 @@ namespace ETL_SQL.Core.Common
         public Guid? CurrentNodeId { get; set; }
 
         public int TranCount => 0;
+        public bool AutoRollbackOnFinish { get; set; } = true;
         public int MaxRecursiveDepth { get; set; } = 100;
         public int CurrentRecursiveDepth { get; set; }
         public int BatchSize { get; set; } = 10000;
@@ -113,6 +116,8 @@ namespace ETL_SQL.Core.Common
         public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
         public string? CurrentScriptPath { get; set; }
         public int MaxFileOperations { get; set; } = SecurityService.DefaultMaxFileOperations;
+        public int MaxGroupingSets { get; set; } = LanguageMetadata.DefaultMaxGroupingSets;
+        public long MaxSessionSize { get; set; } = LanguageMetadata.DefaultMaxSessionSize;
         public bool SpillEncryptionEnabled { get; set; } = true;
         public bool SpillCompressionEnabled { get; set; } = true;
         public ISpillStore SpillStore => null!;
@@ -128,6 +133,9 @@ namespace ETL_SQL.Core.Common
         public IDictionary<string, CreateContainerStatement> ContainerDefinitions { get; } = new Dictionary<string, CreateContainerStatement>(StringComparer.OrdinalIgnoreCase);
         public IDictionary<string, CreateNavigationStatement> NavigationDefinitions { get; } = new Dictionary<string, CreateNavigationStatement>(StringComparer.OrdinalIgnoreCase);
         public IDictionary<string, CreateStyleStatement> StyleDefinitions { get; } = new Dictionary<string, CreateStyleStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; } = new Dictionary<string, CreateButtonStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; } = new Dictionary<string, CreateTemplateStatement>(StringComparer.OrdinalIgnoreCase);
+        public string TemplatePath { get; set; } = "./Templates";
         public string? ReportTitle { get; set; }
         public string? ReportDescription { get; set; }
 
@@ -154,8 +162,8 @@ namespace ETL_SQL.Core.Common
         public ForClause? GetForClause(Statement stmt) => null;
         public TableReference? GetIntoTable(Statement stmt) => null;
 
-        public string CompileExpression(Expression e, string dialect = "MSSQL") => throw new NotSupportedException();
-        public string CompileQuery(Statement s, string dialect = "MSSQL") => throw new NotSupportedException();
+        public CompiledSql CompileExpression(Expression e, string dialect = "MSSQL") => CompiledSql.Empty;
+        public CompiledSql CompileQuery(Statement s, string dialect = "MSSQL") => CompiledSql.Empty;
         public string GetSqlTableName(TableReference t, string dialect = "MSSQL") => throw new NotSupportedException();
 
         public Task BeginTransaction() => Task.CompletedTask;

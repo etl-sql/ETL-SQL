@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.Core.Linting.Rules
 {
@@ -23,8 +24,13 @@ namespace ETL_SQL.Core.Linting.Rules
             return Task.FromResult<IEnumerable<LintResult>>(results);
         }
 
-        private void AnalyzeStatement(Statement statement, List<LintResult> results)
+        private void AnalyzeStatement(Statement statement, List<LintResult> results, int depth = 0)
         {
+            if (depth > 50)
+            {
+                throw new SecurityException("Script nesting level exceeds the maximum allowed security depth (50). Refactor the script to use fewer nested blocks.");
+            }
+
             if (statement is SetSpillOptionStatement spill)
             {
                 if (!spill.Enabled)
@@ -43,31 +49,31 @@ namespace ETL_SQL.Core.Linting.Rules
             // Recurse into blocks/containers
             if (statement is BlockStatement block)
             {
-                foreach (var s in block.Statements) AnalyzeStatement(s, results);
+                foreach (var s in block.Statements) AnalyzeStatement(s, results, depth + 1);
             }
             else if (statement is IfStatement ifStmt)
             {
-                AnalyzeStatement(ifStmt.IfBody, results);
+                AnalyzeStatement(ifStmt.IfBody, results, depth + 1);
                 if (ifStmt.ElseIfClauses != null)
-                    foreach (var ei in ifStmt.ElseIfClauses) AnalyzeStatement(ei.Body, results);
-                if (ifStmt.ElseBody != null) AnalyzeStatement(ifStmt.ElseBody, results);
+                    foreach (var ei in ifStmt.ElseIfClauses) AnalyzeStatement(ei.Body, results, depth + 1);
+                if (ifStmt.ElseBody != null) AnalyzeStatement(ifStmt.ElseBody, results, depth + 1);
             }
             else if (statement is WhileStatement whileStmt)
             {
-                AnalyzeStatement(whileStmt.Body, results);
+                AnalyzeStatement(whileStmt.Body, results, depth + 1);
             }
             else if (statement is ForStatement forStmt)
             {
-                AnalyzeStatement(forStmt.Body, results);
+                AnalyzeStatement(forStmt.Body, results, depth + 1);
             }
             else if (statement is ForeachStatement foreachStmt)
             {
-                AnalyzeStatement(foreachStmt.Body, results);
+                AnalyzeStatement(foreachStmt.Body, results, depth + 1);
             }
             else if (statement is TryCatchStatement tryCatch)
             {
-                AnalyzeStatement(tryCatch.TryBody, results);
-                AnalyzeStatement(tryCatch.CatchBody, results);
+                AnalyzeStatement(tryCatch.TryBody, results, depth + 1);
+                AnalyzeStatement(tryCatch.CatchBody, results, depth + 1);
             }
         }
     }

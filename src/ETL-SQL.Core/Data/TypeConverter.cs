@@ -58,7 +58,14 @@ namespace ETL_SQL.Core.Data
             var baseType = typeName.Split('(')[0].ToUpperInvariant();
             if (_converters.TryGetValue(baseType, out var converter))
             {
-                return converter(value);
+                try
+                {
+                    return converter(value);
+                }
+                catch (Exception ex)
+                {
+                    throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"Failed to cast value '{value}' to type '{typeName}': {ex.Message}", ex);
+                }
             }
             return value;
         }

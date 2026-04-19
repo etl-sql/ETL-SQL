@@ -24,6 +24,51 @@ namespace ETL_SQL.Core.Parser
         public StatementParser(IParser parser)
         {
             _parser = parser;
+            InitializeDispatchMap();
+        }
+
+        private readonly Dictionary<TokenType, System.Func<Statement>> _dispatchMap = new();
+
+        private void InitializeDispatchMap()
+        {
+            _dispatchMap[TokenType.WITH] = ParseStatementWithCte;
+            _dispatchMap[TokenType.CREATE] = ParseCreate;
+            _dispatchMap[TokenType.ALTER] = ParseAlter;
+            _dispatchMap[TokenType.EXPLAIN] = ParseExplain;
+            _dispatchMap[TokenType.DROP] = ParseDrop;
+            _dispatchMap[TokenType.CLEAR] = ParseClear;
+            _dispatchMap[TokenType.TRUNCATE] = ParseTruncate;
+            _dispatchMap[TokenType.DELETE] = ParseDelete;
+            _dispatchMap[TokenType.DECLARE] = ParseDeclare;
+            _dispatchMap[TokenType.RUN] = ParseRun;
+            _dispatchMap[TokenType.SHOW] = ParseShow;
+            _dispatchMap[TokenType.COMMIT] = ParseCommitTransaction;
+            _dispatchMap[TokenType.ROLLBACK] = ParseRollbackTransaction;
+            _dispatchMap[TokenType.IF] = ParseIf;
+            _dispatchMap[TokenType.WHILE] = ParseWhile;
+            _dispatchMap[TokenType.FOREACH] = ParseForeach;
+            _dispatchMap[TokenType.INSERT] = ParseInsert;
+            _dispatchMap[TokenType.UPDATE] = ParseUpdate;
+            _dispatchMap[TokenType.MERGE] = ParseMerge;
+            _dispatchMap[TokenType.PRINT] = ParsePrint;
+            _dispatchMap[TokenType.WAITFOR] = ParseWaitFor;
+            _dispatchMap[TokenType.WAIT] = ParseWait;
+            _dispatchMap[TokenType.RAISEERROR] = ParseRaiseError;
+            _dispatchMap[TokenType.ASSERT] = ParseAssert;
+            _dispatchMap[TokenType.EXPECT] = ParseExpectSchema;
+            _dispatchMap[TokenType.PARALLEL] = ParseParallel;
+            _dispatchMap[TokenType.THROW] = ParseThrow;
+            _dispatchMap[TokenType.RETURN] = ParseReturn;
+            _dispatchMap[TokenType.BREAK] = ParseBreak;
+            _dispatchMap[TokenType.CONTINUE] = ParseContinue;
+            _dispatchMap[TokenType.HELP] = ParseHelp;
+            _dispatchMap[TokenType.USE] = ParseUse;
+            _dispatchMap[TokenType.BULK] = ParseBulkInsert;
+            _dispatchMap[TokenType.LINEAGE] = ParseLineage;
+            _dispatchMap[TokenType.LINT] = ParseLint;
+            _dispatchMap[TokenType.REQUIRE] = ParseRequireVersion;
+            _dispatchMap[TokenType.DOCKER] = ParseDocker;
+            _dispatchMap[TokenType.CLOSE_DOCKER] = ParseDockerClose;
         }
 
         /// <summary>
@@ -35,93 +80,42 @@ namespace ETL_SQL.Core.Parser
         {
             while (_parser.Match(TokenType.COLUMN_TAG)) { /* skip tags between statements */ }
 
-            if (_parser.Match(TokenType.WITH)) return ParseStatementWithCte();
-            if (_parser.Match(TokenType.CREATE)) return ParseCreate();
-            if (_parser.Match(TokenType.ALTER)) return ParseAlter();
-            if (_parser.Match(TokenType.EXPLAIN)) return ParseExplain();
-            if (_parser.Match(TokenType.DROP)) return ParseDrop();
-            if (_parser.Match(TokenType.CLEAR)) return ParseClear();
-            if (_parser.Match(TokenType.TRUNCATE)) return ParseTruncate();
-            if (_parser.Match(TokenType.DELETE)) return ParseDelete();
-            if (_parser.Match(TokenType.DECLARE)) return ParseDeclare();
-            if (_parser.Match(TokenType.RUN)) return ParseRun();
-            if (_parser.Match(TokenType.SET)) 
+            var type = _parser.Current.Type;
+
+            // 1. Direct dispatch for fixed keywords
+            if (_dispatchMap.TryGetValue(type, out var handler))
             {
-                if (_parser.Match(TokenType.PROFILING) || _parser.Match(TokenType.PROFILE)) return ParseSetProfiling();
-                if (_parser.Match(TokenType.WHAT_IF)) return ParseSetWhatIf();
-                if (_parser.Match(TokenType.SHOW_PASSWORD)) return ParseSetShowPassword();
-                if (_parser.Match(TokenType.JOIN_SPILL_THRESHOLD)) return ParseSetThreshold(ThresholdType.JoinSpill);
-                if (_parser.Match(TokenType.WINDOW_SPILL_THRESHOLD)) return ParseSetThreshold(ThresholdType.WindowSpill);
-                if (_parser.Match(TokenType.EXTERNAL_HASH_PARTITIONS)) return ParseSetThreshold(ThresholdType.ExternalHashPartitions);
-                if (_parser.Match(TokenType.EXTERNAL_SORT_CHUNK_SIZE)) return ParseSetThreshold(ThresholdType.ExternalSortChunkSize);
-                if (_parser.Match(TokenType.BATCHSIZE)) return ParseSetThreshold(ThresholdType.BatchSize);
-                if (_parser.Match(TokenType.MAX_RECURSIVE_DEPTH)) return ParseSetThreshold(ThresholdType.MaxRecursiveDepth);
-                if (_parser.Match(TokenType.MAX_IN_MEMORY_BATCHES)) return ParseSetThreshold(ThresholdType.MaxInMemoryBatches);
-                if (_parser.Match(TokenType.FOREACH_PAGE_SIZE)) return ParseSetThreshold(ThresholdType.ForeachPageSize);
-                if (_parser.Match(TokenType.MAX_MESSAGES)) return ParseSetThreshold(ThresholdType.MaxMessages);
-                if (_parser.Match(TokenType.MAX_FILE_OPERATIONS)) return ParseSetThreshold(ThresholdType.MaxFileOperations);
-                if (_parser.Match(TokenType.MAX_PARALLEL_DEGREE)) return ParseSetThreshold(ThresholdType.MaxParallelDegree);
-                if (_parser.Match(TokenType.MAX_STRING_RESULT_SIZE)) return ParseSetThreshold(ThresholdType.MaxStringResultSize);
-                if (_parser.Match(TokenType.REGEX_MATCH_TIMEOUT)) return ParseSetThreshold(ThresholdType.RegexMatchTimeout);
-                
-                if (_parser.Match(TokenType.SPILL_ENCRYPTION)) return ParseSetSpillOption(SpillOptionType.Encryption);
-                if (_parser.Match(TokenType.SPILL_COMPRESSION)) return ParseSetSpillOption(SpillOptionType.Compression);
-
-                if (_parser.Match(TokenType.REPORT)) return ParseSetReportMetadata();
-
-                if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.StartsWith("ALLOW_", StringComparison.OrdinalIgnoreCase))
-                {
-                    _parser.Advance();
-                    return ParseSetSecurityOverride();
-                }
-
-                return ParseSetVariable();
+                _parser.Advance();
+                return handler();
             }
-            if (_parser.Match(TokenType.SHOW)) return ParseShow();
-            if (_parser.Match(TokenType.BEGIN))
+
+            // 2. Complex/Conditional dispatch
+            if (_parser.Match(TokenType.SET)) return ParseSetDispatch();
+            
+            if (type == TokenType.BEGIN)
             {
+                _parser.Advance();
                 if (_parser.Match(TokenType.TRY)) return ParseTryCatch();
                 if (_parser.Match(TokenType.TRANSACTION) || _parser.Match(TokenType.TRAN)) return ParseBeginTransaction();
                 return ParseBlock();
             }
-            if (_parser.Match(TokenType.COMMIT)) return ParseCommitTransaction();
-            if (_parser.Match(TokenType.ROLLBACK)) return ParseRollbackTransaction();
-            if (_parser.Match(TokenType.IF)) return ParseIf();
-            if (_parser.Match(TokenType.WHILE)) return ParseWhile();
+
             if (_parser.Match(TokenType.FOR))
             {
                 if (_parser.Match(TokenType.EACH)) return ParseForeach();
                 return ParseFor();
             }
-            if (_parser.Match(TokenType.FOREACH)) return ParseForeach();
-            if (_parser.Match(TokenType.SELECT)) { _parser.Backtrack(); return _parser.ParseQuery(); }
-            if (_parser.Match(TokenType.INSERT)) return ParseInsert();
-            if (_parser.Match(TokenType.UPDATE)) return ParseUpdate();
-            if (_parser.Match(TokenType.MERGE)) return ParseMerge();
-            if (_parser.Match(TokenType.PRINT)) return ParsePrint();
-            if (_parser.Match(TokenType.WAITFOR)) return ParseWaitFor();
-            if (_parser.Match(TokenType.WAIT)) return ParseWait();
-            if (_parser.Match(TokenType.RAISEERROR)) return ParseRaiseError();
-            if (_parser.Match(TokenType.ASSERT)) return ParseAssert();
-            if (_parser.Match(TokenType.EXPECT)) return ParseExpectSchema();
+
+            if (type == TokenType.SELECT) { return _parser.ParseQuery(); }
+
             if (_parser.Match(TokenType.EXEC) || _parser.Match(TokenType.EXECUTE)) return ParseExecute();
-            if (_parser.Match(TokenType.PARALLEL)) return ParseParallel();
-            if (_parser.Match(TokenType.THROW)) return ParseThrow();
-            if (_parser.Match(TokenType.RETURN)) return ParseReturn();
-            if (_parser.Match(TokenType.BREAK)) return ParseBreak();
-            if (_parser.Match(TokenType.CONTINUE)) return ParseContinue();
-            if (_parser.Match(TokenType.HELP)) return ParseHelp();
-            if (_parser.Match(TokenType.USE)) return ParseUse();
-            if (_parser.Match(TokenType.BULK)) return ParseBulkInsert();
-            if (_parser.Match(TokenType.LINEAGE)) return ParseLineage();
-            if (_parser.Match(TokenType.LINT)) return ParseLint();
-            if (_parser.Match(TokenType.REQUIRE)) return ParseRequireVersion();
 
             if (_parser.Match(TokenType.SEND_EMAIL))
             {
                 if (_parser.Current.Type == TokenType.LPAREN) return ParseSendEmail(false);
                 return ParseSendEmail(true);
             }
+
             if (_parser.Match(TokenType.SEND))
             {
                 if (_parser.Current.Type == TokenType.FILE)
@@ -145,41 +139,76 @@ namespace ETL_SQL.Core.Parser
                 }
             }
 
-            if (_parser.Match(TokenType.FILE_SEND) || _parser.Match(TokenType.SEND_FILE)) return ParseFileTransfer(FileTransferType.Send, false);
-            if (_parser.Match(TokenType.FILE_RECEIVE) || _parser.Match(TokenType.RECEIVE_FILE)) return ParseFileTransfer(FileTransferType.Receive, false);
+            if (type == TokenType.FILE_SEND || type == TokenType.SEND_FILE) { _parser.Advance(); return ParseFileTransfer(FileTransferType.Send, false); }
+            if (type == TokenType.FILE_RECEIVE || type == TokenType.RECEIVE_FILE) { _parser.Advance(); return ParseFileTransfer(FileTransferType.Receive, false); }
 
-            if (_parser.Match(TokenType.COPY) || _parser.Match(TokenType.MOVE) || _parser.Match(TokenType.RENAME) || 
-                _parser.Match(TokenType.DELETE) || _parser.Match(TokenType.COMPRESS) || 
-                _parser.Match(TokenType.ENCRYPT) || _parser.Match(TokenType.DECRYPT))
+            if (type == TokenType.COPY || type == TokenType.MOVE || type == TokenType.RENAME || 
+                type == TokenType.DELETE || type == TokenType.COMPRESS || 
+                type == TokenType.ENCRYPT || type == TokenType.DECRYPT)
             {
-                var opToken = _parser.Previous;
+                var opToken = _parser.Advance();
                 if (_parser.Match(TokenType.FILE)) return ParseFileOperation(opToken);
                 if (_parser.Match(TokenType.DIRECTORY)) return ParseDirectoryOperation(opToken);
-                _parser.Backtrack(); // Backtrack to the operation token if not followed by FILE/DIRECTORY
+                _parser.Backtrack(); 
             }
 
-            if (_parser.Current.Type == TokenType.COPY_FILE || _parser.Current.Type == TokenType.MOVE_FILE || 
-                _parser.Current.Type == TokenType.RENAME_FILE || _parser.Current.Type == TokenType.DELETE_FILE ||
-                _parser.Current.Type == TokenType.COMPRESS_FILE || _parser.Current.Type == TokenType.ENCRYPT_FILE || _parser.Current.Type == TokenType.DECRYPT_FILE)
+            if (type == TokenType.COPY_FILE || type == TokenType.MOVE_FILE || 
+                type == TokenType.RENAME_FILE || type == TokenType.DELETE_FILE ||
+                type == TokenType.COMPRESS_FILE || type == TokenType.ENCRYPT_FILE || type == TokenType.DECRYPT_FILE)
             {
                 return ParseFileOperation(_parser.Advance());
             }
 
-            if (_parser.Current.Type == TokenType.CREATE_DIRECTORY || _parser.Current.Type == TokenType.DELETE_DIRECTORY ||
-                _parser.Current.Type == TokenType.RENAME_DIRECTORY || _parser.Current.Type == TokenType.MOVE_DIRECTORY ||
-                _parser.Current.Type == TokenType.COPY_DIRECTORY || _parser.Current.Type == TokenType.DELETE_DIRECTORY_CONTENTS ||
-                _parser.Current.Type == TokenType.COMPRESS_DIRECTORY || _parser.Current.Type == TokenType.ENCRYPT_DIRECTORY || _parser.Current.Type == TokenType.DECRYPT_DIRECTORY)
+            if (type == TokenType.CREATE_DIRECTORY || type == TokenType.DELETE_DIRECTORY ||
+                type == TokenType.RENAME_DIRECTORY || type == TokenType.MOVE_DIRECTORY ||
+                type == TokenType.COPY_DIRECTORY || type == TokenType.DELETE_DIRECTORY_CONTENTS ||
+                type == TokenType.COMPRESS_DIRECTORY || type == TokenType.ENCRYPT_DIRECTORY || type == TokenType.DECRYPT_DIRECTORY)
             {
                 return ParseDirectoryOperation(_parser.Advance());
             }
 
-            if (_parser.Match(TokenType.DOCKER)) return ParseDocker();
-            if (_parser.Match(TokenType.CLOSE_DOCKER)) return ParseDockerClose();
             if (_parser.Match(TokenType.START_DOCKER)) return ParseDockerAction(DockerAction.Start);
             if (_parser.Match(TokenType.STOP_DOCKER)) return ParseDockerAction(DockerAction.Stop);
             if (_parser.Match(TokenType.PAUSE_DOCKER)) return ParseDockerAction(DockerAction.Pause);
 
             throw new SyntaxException($"Unexpected token type {_parser.Current.Type} ('{_parser.Current.Value}') at start of statement", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private Statement ParseSetDispatch()
+        {
+            if (_parser.Match(TokenType.PROFILING) || _parser.Match(TokenType.PROFILE)) return ParseSetProfiling();
+            if (_parser.Match(TokenType.WHAT_IF)) return ParseSetWhatIf();
+            if (_parser.Match(TokenType.SHOW_PASSWORD)) return ParseSetShowPassword();
+            if (_parser.Match(TokenType.JOIN_SPILL_THRESHOLD)) return ParseSetThreshold(ThresholdType.JoinSpill);
+            if (_parser.Match(TokenType.WINDOW_SPILL_THRESHOLD)) return ParseSetThreshold(ThresholdType.WindowSpill);
+            if (_parser.Match(TokenType.EXTERNAL_HASH_PARTITIONS)) return ParseSetThreshold(ThresholdType.ExternalHashPartitions);
+            if (_parser.Match(TokenType.EXTERNAL_SORT_CHUNK_SIZE)) return ParseSetThreshold(ThresholdType.ExternalSortChunkSize);
+            if (_parser.Match(TokenType.BATCHSIZE)) return ParseSetThreshold(ThresholdType.BatchSize);
+            if (_parser.Match(TokenType.MAX_RECURSIVE_DEPTH)) return ParseSetThreshold(ThresholdType.MaxRecursiveDepth);
+            if (_parser.Match(TokenType.MAX_IN_MEMORY_BATCHES)) return ParseSetThreshold(ThresholdType.MaxInMemoryBatches);
+            if (_parser.Match(TokenType.FOREACH_PAGE_SIZE)) return ParseSetThreshold(ThresholdType.ForeachPageSize);
+            if (_parser.Match(TokenType.MAX_MESSAGES)) return ParseSetThreshold(ThresholdType.MaxMessages);
+            if (_parser.Match(TokenType.MAX_FILE_OPERATIONS)) return ParseSetThreshold(ThresholdType.MaxFileOperations);
+            if (_parser.Match(TokenType.MAX_PARALLEL_DEGREE)) return ParseSetThreshold(ThresholdType.MaxParallelDegree);
+            if (_parser.Match(TokenType.MAX_STRING_RESULT_SIZE)) return ParseSetThreshold(ThresholdType.MaxStringResultSize);
+            if (_parser.Match(TokenType.REGEX_MATCH_TIMEOUT)) return ParseSetThreshold(ThresholdType.RegexMatchTimeout);
+            if (_parser.Match(TokenType.MAX_GROUPING_SETS) || _parser.Match(TokenType.SET_CUBE_LIMIT)) return ParseSetThreshold(ThresholdType.MaxGroupingSets);
+            if (_parser.Match(TokenType.MAX_SESSION_SIZE)) return ParseSetThreshold(ThresholdType.MaxSessionSize);
+            if (_parser.Match(TokenType.TELEMETRY)) return ParseSetThreshold(ThresholdType.Telemetry);
+            
+            if (_parser.Match(TokenType.SPILL_ENCRYPTION)) return ParseSetSpillOption(SpillOptionType.Encryption);
+            if (_parser.Match(TokenType.SPILL_COMPRESSION)) return ParseSetSpillOption(SpillOptionType.Compression);
+
+            if ( _parser.Match(TokenType.TEMPLATE_PATH)) return ParseSetTemplatePath();
+            if (_parser.Match(TokenType.REPORT)) return ParseSetReportMetadata();
+
+            if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.StartsWith("ALLOW_", StringComparison.OrdinalIgnoreCase))
+            {
+                _parser.Advance();
+                return ParseSetSecurityOverride();
+            }
+
+            return ParseSetVariable();
         }
 
         private TableReference ParseTableReference(bool allowFunction = true)
@@ -238,10 +267,17 @@ namespace ETL_SQL.Core.Parser
         /// </summary>
         private static bool IsContextualKeyword(TokenType type)
         {
-            // Most keywords are contextual in ETL-SQL to allow them as identifiers where not ambiguous.
-            // Star and operators/literal types are generally not contextual keywords.
-            return (type < TokenType.STAR || (type >= TokenType.VISUAL && type <= TokenType.SEARCH)) 
-                && type != TokenType.IDENTIFIER && type != TokenType.VARIABLE && type != TokenType.STRING && type != TokenType.NUMBER;
+            // Structural/Reserved keywords that should NEVER be identifiers in ETL-SQL
+            if (type <= TokenType.DECLARE || type == TokenType.BEGIN || type == TokenType.END || 
+                type == TokenType.COMMIT || type == TokenType.ROLLBACK || type == TokenType.TRANSACTION ||
+                type == TokenType.IF || type == TokenType.WHILE || type == TokenType.TRY || type == TokenType.CATCH)
+                return false;
+
+            // Report-SQL and Overlay tokens are always contextual
+            if (type >= TokenType.VISUAL && type <= TokenType.COLOR) return true;
+
+            // Everything else before STAR is generally a safe contextual keyword (functions, secondary keywords)
+            return type < TokenType.STAR;
         }
     }
 }

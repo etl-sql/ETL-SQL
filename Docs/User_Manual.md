@@ -77,7 +77,7 @@ CREATE CONNECTION secure_db ON MSSQL('ENC:U2FsdGVkX1+abc...');
 
 ### 2.3 Environment Switching
 
-Use `CREATE SETS` to define named groups of variables for different environments:
+Use `CREATE SETS` to define named groups of variables for different environments or setups:
 
 ```sql
 CREATE SETS !DEV
@@ -303,7 +303,8 @@ WAITFOR DELAY '00:00:00.500';    -- 500 milliseconds
 -- Wait until a specific time today (or tomorrow if already past)
 WAITFOR TIME '02:00:00';
 
--- Polling pattern (WAITFOR (SELECT ...) does NOT exist — use WHILE)
+-- WAITFOR (SELECT ...)
+-- Polling pattern
 DECLARE @ready INT = 0;
 WHILE @ready = 0
 BEGIN

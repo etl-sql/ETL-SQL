@@ -24,14 +24,17 @@ namespace ETL_SQL.Engine.Handlers
             
             var semaphore = new System.Threading.SemaphoreSlim(safetyLimit);
             
-            // Phase 2: Launch all statements with throttling
-            var tasks = stmt.Body.Statements.Select(async s => {
+            // Phase 2: Launch all statements with throttling and index-based tracking
+            var indexedTasks = stmt.Body.Statements.Select(async (s, index) => {
                 await semaphore.WaitAsync();
                 try
                 {
+                    System.Console.WriteLine($"PARALLEL: Launching index {index} statement: {s.GetType().Name}");
                     var fork = context.Fork();
+                    System.Console.WriteLine($"PARALLEL: Fork {index} created. Executing...");
                     await fork.EvaluateStatement(s);
-                    return fork;
+                    System.Console.WriteLine($"PARALLEL: Fork {index} execution complete.");
+                    return (index, fork);
                 }
                 finally
                 {
@@ -40,12 +43,12 @@ namespace ETL_SQL.Engine.Handlers
             }).ToList(); 
 
             // Phase 3: Wait for all to complete
-            var forks = await Task.WhenAll(tasks);
+            var results = await Task.WhenAll(indexedTasks);
 
-            // Phase 4: Sequential merge back to parent
-            foreach (var f in forks)
+            // Phase 4: Strict sequential merge back to parent (sorted by submission index)
+            foreach (var res in results.OrderBy(r => r.index))
             {
-                context.Merge(f);
+                context.Merge(res.fork);
             }
         }
     }

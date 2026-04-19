@@ -11,6 +11,18 @@ namespace ETL_SQL.Core
     // ════════════════════════════════════════════════════════════════════════════
 
     // ── Enumerations ──────────────────────────────────────────────────────────
+    
+    public enum ReportObjectType
+    {
+        Visual,
+        Page,
+        Dataset,
+        Container,
+        Navigation,
+        Style,
+        Button,
+        Template
+    }
 
     public enum OverlayType
     {
@@ -121,11 +133,26 @@ namespace ETL_SQL.Core
         public new required string Column { get; init; }
     }
 
-    /// <summary>CREATE STYLE &lt;name&gt; (key = value, ...)</summary>
+    /// <summary>CREATE STYLE <name> (key = value, ...)</summary>
     public record CreateStyleStatement : Statement
     {
         public required string Name                  { get; init; }
         public Dictionary<string, string> Styles     { get; init; } = new();
+        public ObjectCreationMode Mode               { get; init; } = ObjectCreationMode.Create;
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
+    public record CreateButtonStatement : Statement
+    {
+        public required string Name                    { get; init; }
+        public required string ButtonType              { get; init; } // BACK, REFRESH, HELP, etc.
+        public string? Title                          { get; init; }
+        public string? Tooltip                        { get; init; }
+        public List<VisualOption> Options              { get; init; } = new();
+        public List<VisualAction> Actions              { get; init; } = new();
+        public Dictionary<string, string> Styles       { get; init; } = new();
+        public string? StyleName                       { get; init; }
+        public ObjectCreationMode Mode               { get; init; } = ObjectCreationMode.Create;
         public override string ToSql() => AstSerializer.Format(this);
     }
 
@@ -135,6 +162,7 @@ namespace ETL_SQL.Core
         public required VisualType VisualType          { get; init; }
         public string? Title                          { get; init; }
         public string? Subtitle                       { get; init; }
+        public string? Tooltip                        { get; init; }
         public string? DefaultValue                   { get; init; }
         public required VisualSourceExpression Source  { get; init; }
         public List<VisualMapping> Mappings            { get; init; } = new();
@@ -147,6 +175,7 @@ namespace ETL_SQL.Core
         public Dictionary<string, string> Styles       { get; init; } = new();
         /// <summary>Name of a CREATE STYLE to inherit. Merged before inline Styles (inline wins).</summary>
         public string? StyleName                       { get; init; }
+        public ObjectCreationMode Mode                 { get; init; } = ObjectCreationMode.Create;
         public override string ToSql() => AstSerializer.Format(this);
     }
 
@@ -164,6 +193,10 @@ namespace ETL_SQL.Core
         public List<PageParameter> Parameters                 { get; init; } = new();
         public Dictionary<string, string> Styles              { get; init; } = new();
         public string? StyleName                              { get; init; }
+        public string? Title                                  { get; init; }
+        public string? Subtitle                               { get; init; }
+        public string? Tooltip                                { get; init; }
+        public ObjectCreationMode Mode                         { get; init; } = ObjectCreationMode.Create;
     }
 
     /// <summary>
@@ -189,6 +222,10 @@ namespace ETL_SQL.Core
         public List<string> Visuals { get; init; } = new();
         public Dictionary<string, string> Styles { get; init; } = new();
         public string? StyleName { get; init; }
+        public string? Title { get; init; }
+        public string? Subtitle { get; init; }
+        public string? Tooltip { get; init; }
+        public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
     }
 
     public enum NavigationType { Tab, Button, Link }
@@ -201,6 +238,7 @@ namespace ETL_SQL.Core
         public NavigationOrientation Orientation { get; init; }
         public string? DefaultPage { get; init; }
         public List<string> Pages { get; init; } = new();
+        public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
     }
 
     public record CreateDatasetStatement : Statement
@@ -213,5 +251,43 @@ namespace ETL_SQL.Core
         public string? EncryptionPassword             { get; init; }
         public string? KeyFile                        { get; init; }
         public required SelectStatement SourceQuery   { get; init; }
+        public ObjectCreationMode Mode                { get; init; } = ObjectCreationMode.Create;
+    }
+
+    /// <summary>
+    /// DROP CHART|PAGE|CONTAINER|STYLE|NAVIGATION|DATASET <name>
+    /// </summary>
+    public record DropReportObjectStatement : Statement
+    {
+        public required ReportObjectType ObjectType { get; init; }
+        public required string Name { get; init; }
+        public bool IfExists { get; init; }
+    }
+
+    public record AlterReportObjectStatement : Statement
+    {
+        public required ReportObjectType ObjectType    { get; init; }
+        public required string Name                   { get; init; }
+        public VisualSourceExpression? Source          { get; init; }
+        public List<VisualMapping>? Mappings           { get; init; }
+        public List<VisualOption>? Options             { get; init; }
+        public List<AxisOptions>? AxisOptions          { get; init; }
+        public List<VisualAction>? Actions             { get; init; }
+        public Dictionary<string, string>? Styles      { get; init; }
+        public string? StyleName                       { get; init; }
+        public string? Title                           { get; init; }
+        public string? Subtitle                        { get; init; }
+        public string? Tooltip                         { get; init; }
+    }
+
+    /// <summary>
+    /// CREATE TEMPLATE <name> AS (<options>)
+    /// </summary>
+    public record CreateTemplateStatement : Statement
+    {
+        public required string Name                  { get; init; }
+        public Dictionary<string, string> Options    { get; init; } = new();
+        public ObjectCreationMode Mode               { get; init; } = ObjectCreationMode.Create;
+        public override string ToSql() => AstSerializer.Format(this);
     }
 }

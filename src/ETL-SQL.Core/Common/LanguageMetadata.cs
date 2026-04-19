@@ -11,7 +11,8 @@ namespace ETL_SQL.Common
         {
             "SELECT", "FROM", "WHERE", "GROUP", "BY", "HAVING", "ORDER", "ASC", "DESC",
             "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE", "TRUNCATE", "PIVOT", "UNPIVOT", "MERGE", "USING", "MATCHED", "SOURCE", "TARGET",
-            "DISTINCT", "TOP", "PERCENT", "TIES", "LIMIT", "OFFSET", "ROWS", "ROW", "FETCH", "NEXT", "ONLY", "AS"
+            "DISTINCT", "TOP", "PERCENT", "TIES", "LIMIT", "OFFSET", "ROWS", "ROW", "FETCH", "NEXT", "ONLY", "AS",
+            "ROLLUP", "CUBE", "GROUPING"
         };
 
         public static readonly HashSet<string> DdlKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -19,7 +20,7 @@ namespace ETL_SQL.Common
             "CREATE", "TABLE", "CONNECTION", "DROP", "DECLARE", "ADD", "COLUMN", "INDEX", "UNIQUE",
             "PRIMARY", "KEY", "FOREIGN", "CHECK", "REFERENCES", "CONSTRAINT", "PROCEDURE", "FUNCTION", "RETURNS",
             "DATABASE", "DIRECTORY", "ALTER", "VIEW", "SCHEMA", "TRANSACTION", "TRAN", "COMMIT", "ROLLBACK", "CLEAR", "SSH_KEY_PAIR",
-            "RENAME", "ENCRYPT", "DECRYPT", "DIRECTORY_CONTENTS"
+            "RENAME", "ENCRYPT", "DECRYPT", "DIRECTORY_CONTENTS", "TEMPLATE"
         };
 
         public static readonly HashSet<string> ControlFlowKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -77,7 +78,9 @@ namespace ETL_SQL.Common
             "JOIN_SPILL_THRESHOLD", "EXTERNAL_HASH_PARTITIONS", "EXTERNAL_SORT_CHUNK_SIZE", "WINDOW_SPILL_THRESHOLD",
             "MAX_RECURSIVE_DEPTH", "MAX_IN_MEMORY_BATCHES", "FOREACH_PAGE_SIZE", "MAX_MESSAGES", "MAX_FILE_OPERATIONS",
             "MAX_PARALLEL_DEGREE", "MAX_STRING_RESULT_SIZE", "REGEX_MATCH_TIMEOUT",
-            "SPILL_ENCRYPTION", "SPILL_COMPRESSION"
+            "SPILL_ENCRYPTION", "SPILL_COMPRESSION",
+            "MAX_GROUPING_SETS", "SET_CUBE_LIMIT", "MAX_SESSION_SIZE", "TELEMETRY",
+            "TOOLTIP", "BUTTON", "BACK", "REFRESH", "TEMPLATE_PATH"
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -132,6 +135,11 @@ namespace ETL_SQL.Common
         public const int DefaultMaxParallelDegree = 32;
         /// <summary>Default maximum size in bytes for a single string function result.</summary>
         public const long DefaultMaxStringResultSize = 100 * 1024 * 1024; // 100 MiB
+        
+        /// <summary>Maximum number of grouping sets allowed in an aggregate CUBE/ROLLUP.</summary>
+        public const int DefaultMaxGroupingSets = 1024;
+        /// <summary>Default maximum size in bytes for a persisted session payload.</summary>
+        public const long DefaultMaxSessionSize = 200 * 1024 * 1024; // 200 MiB
 
         public static bool IsKeyword(string word) => DmlKeywords.Contains(word) || DdlKeywords.Contains(word) || ControlFlowKeywords.Contains(word) || JoinKeywords.Contains(word) || OperatorKeywords.Contains(word) || Keywords.Contains(word) || ConnectorTypes.Contains(word) || Functions.Contains(word);
         public static bool IsFunction(string word) => Functions.Contains(word);

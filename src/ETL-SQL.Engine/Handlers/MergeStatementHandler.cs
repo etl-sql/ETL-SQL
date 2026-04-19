@@ -1,6 +1,7 @@
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+using ETL_SQL.Core.Data;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -96,14 +97,14 @@ namespace ETL_SQL.Engine.Handlers
                 string.Equals(targetSql.Path, sourceSql.Path, StringComparison.OrdinalIgnoreCase))
             {
                 _logger.Debug("Strategy: Remote SQL MERGE Pushdown (MSSQL)");
-                var sql = context.CompileQuery(stmt, targetSql.Dialect);
+                var compiled = context.CompileQuery(stmt, targetSql.Dialect);
                 if (context.IsWhatIf)
                 {
-                    _logger.WriteLine($"WHAT IF: Would execute remote SQL pushdown merge on {targetConnName}:\n{sql}", ConsoleColor.Yellow);
+                    _logger.WriteLine($"WHAT IF: Would execute remote SQL pushdown merge on {targetConnName}:\n{compiled.ToEscapedSql(targetSql.Dialect)}", ConsoleColor.Yellow);
                 }
                 else
                 {
-                    await foreach (var _ in targetSql.ExecuteRawSql(sql)) { }
+                    await foreach (var _ in targetSql.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values)) { }
                 }
                 return;
             }

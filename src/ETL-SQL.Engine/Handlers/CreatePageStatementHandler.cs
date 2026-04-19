@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -20,7 +22,31 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (CreatePageStatement)statement;
 
-            // Validate that every visual slot references a known visual or container definition
+            // Phase 1: Validate STRUCTURE vs MAP consistency
+            var structureKeys = stmt.Structure
+                .Split(new[] { '/', ' ', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim())
+                .Where(s => s != ".") // CSS grid empty-cell placeholder
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            foreach (var key in structureKeys)
+            {
+                if (!stmt.SlotMap.ContainsKey(key))
+                    throw new ExecutionException(
+                        $"CREATE PAGE '{stmt.Name}': slot '{key}' is defined in STRUCTURE but is missing from the MAP clause.",
+                        null, stmt.Line, stmt.Column);
+            }
+
+            foreach (var mapKey in stmt.SlotMap.Keys)
+            {
+                if (!structureKeys.Contains(mapKey, StringComparer.OrdinalIgnoreCase))
+                    throw new ExecutionException(
+                        $"CREATE PAGE '{stmt.Name}': slot '{mapKey}' is defined in MAP but does not appear in the STRUCTURE string.",
+                        null, stmt.Line, stmt.Column);
+            }
+
+            // Phase 2: Validate that every visual slot references a known visual or container definition
             foreach (var (slot, visualName) in stmt.SlotMap)
             {
                 bool isVisual = context.VisualDefinitions.ContainsKey(visualName);
@@ -34,7 +60,12 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
 
-            // Register / overwrite page definition
+            // Phase 3: Register / overwrite page definition
+            if (stmt.Mode == ObjectCreationMode.Create && context.PageDefinitions.ContainsKey(stmt.Name))
+            {
+                 throw new ExecutionException($"Page '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP PAGE first.", null, stmt.Line, stmt.Column);
+            }
+
             context.PageDefinitions[stmt.Name] = stmt;
 
             // Declare page parameters with their defaults if not already in scope.
@@ -49,7 +80,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             _logger.Debug("Page '{PageName}' registered with {SlotCount} visual slot(s).", stmt.Name, stmt.SlotMap.Count);
-            context.Log($"Page '{stmt.Name}' created.");
+            context.Log($"Page '{stmt.Name}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}.");
 
             return Task.CompletedTask;
         }

@@ -19,9 +19,16 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (CreateStyleStatement)statement;
 
             if (context is IReportContext rc)
+            {
+                if (stmt.Mode == ObjectCreationMode.Create && rc.StyleDefinitions.ContainsKey(stmt.Name))
+                {
+                    throw new Core.Common.Exceptions.ExecutionException($"Style '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP STYLE first.", null, stmt.Line, stmt.Column);
+                }
                 rc.StyleDefinitions[stmt.Name] = stmt;
+            }
 
             _logger.Debug("Registered style '{StyleName}' with {Count} properties.", stmt.Name, stmt.Styles.Count);
+            context.Log($"Style '{stmt.Name}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "registered")}.");
             return Task.CompletedTask;
         }
     }

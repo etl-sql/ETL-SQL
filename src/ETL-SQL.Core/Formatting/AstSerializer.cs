@@ -106,6 +106,10 @@ namespace ETL_SQL.Core.Formatting
             LineageStatement               s => FormatLineage(s),
             LintStatement                  s => s.ScriptPath != null ? $"LINT '{s.ScriptPath}';" : "LINT;",
             HelpStatement                  s => $"HELP {(s.Topic != null ? s.Topic + (s.SubTopic != null ? " " + s.SubTopic : "") : "")}",
+            DropReportObjectStatement      s => $"DROP {s.ObjectType.ToString().ToUpper()} {(s.IfExists ? "IF EXISTS " : "")}{s.Name};",
+            AlterReportObjectStatement     s => $"ALTER {s.ObjectType.ToString().ToUpper()} {s.Name} ...", // Summarized
+            CreateTemplateStatement        s => FormatCreateTemplate(s),
+            SetTemplatePathStatement       s => s.ToSql(),
 
             // ── SETS ──
             CreateSetsStatement            s => FormatCreateSets(s),
@@ -157,6 +161,10 @@ namespace ETL_SQL.Core.Formatting
             TableUniqueConstraint      n => $"{(n.ConstraintName != null ? $"CONSTRAINT {n.ConstraintName} " : "")}UNIQUE ({string.Join(", ", n.Columns)})",
             TableForeignKeyConstraint  n => $"{(n.ConstraintName != null ? $"CONSTRAINT {n.ConstraintName} " : "")}FOREIGN KEY ({string.Join(", ", n.Columns)}) {n.Reference.ToSql()}",
             TableCheckConstraint       n => $"{(n.ConstraintName != null ? $"CONSTRAINT {n.ConstraintName} " : "")}CHECK ({n.Expression.ToSql()})",
+            ColumnDefinition           n => FormatColumnDefinition(n),
+            OrderByClause              n => n.Expression.ToSql() + (n.Descending ? " DESC" : " ASC"),
+            JoinClause                 n => FormatJoin(n),
+            GroupingSetClause          n => FormatGroupingSet(n),
             Assignment                 n => $"{n.ColumnName} = {n.Value.ToSql()}",
             ParameterDefinition        n => $"{n.Name} {n.DataType}",
             ElseIfClause               n => $"ELSE IF {n.Condition.ToSql()} BEGIN ... END",
@@ -749,6 +757,18 @@ namespace ETL_SQL.Core.Formatting
                 _ => "UNKNOWN"
             };
             return $"SET {name} = {s.Value.ToSql()};";
+        }
+
+        private static string FormatCreateTemplate(CreateTemplateStatement s)
+        {
+            var options = string.Join(", ", s.Options.Select(o => $"{o.Key} = '{o.Value.Replace("'", "''")}'"));
+            var modeStr = s.Mode switch
+            {
+                ObjectCreationMode.Alter => "ALTER",
+                ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
+                _ => "CREATE"
+            };
+            return $"{modeStr} TEMPLATE {s.Name} AS ({options});";
         }
     }
 }

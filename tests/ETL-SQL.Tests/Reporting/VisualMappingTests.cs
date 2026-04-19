@@ -28,7 +28,7 @@ CREATE VISUAL BadMapping AS BAR (
     MAPPINGS (X = FakeColumn, Y = Val)
 );
 CREATE PAGE P AS LAYOUT (
-    STRUCTURE = 'grid:1x1',
+    STRUCTURE = 'A',
     MAP('A' = BadMapping)
 );
 ");
@@ -61,7 +61,7 @@ CREATE VISUAL NullValues AS BAR (
     MAPPINGS (X = Category, Y = Val)
 );
 CREATE PAGE P AS LAYOUT (
-    STRUCTURE = 'grid:1x1',
+    STRUCTURE = 'A',
     MAP('A' = NullValues)
 );
 ");

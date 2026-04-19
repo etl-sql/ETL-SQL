@@ -247,6 +247,7 @@ These commands allow fine-tuning how the engine manages memory and disk during h
 | `SET MAX_IN_MEMORY_BATCHES = n` | 100 | Maximum number of batches held in memory for `#temp` tables before automatic spilling. |
 | `SET FOREACH_PAGE_SIZE = n` | 10,000 | Number of items fetched per page when iterating over large collections. |
 | `SET MAX_MESSAGES = n` | 1,000 | Limit on the number of captured log/print messages in the session buffer. |
+| `SET TELEMETRY = ON/OFF` | ON | Toggles collection of high-cost execution metrics (e.g., precise spill byte counting). |
 
 ```sql
 -- Tuning for ultra-large join

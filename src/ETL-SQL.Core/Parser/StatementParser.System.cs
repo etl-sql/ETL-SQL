@@ -200,6 +200,20 @@ namespace ETL_SQL.Core.Parser
             return new SetReportMetadataStatement { Key = key, Value = valueToken.Value };
         }
 
+        private Statement ParseSetTemplatePath()
+        {
+            var startToken = _parser.Previous; // TEMPLATE_PATH
+            _parser.Consume(TokenType.EQUALS, "Expected '=' after SET TEMPLATE_PATH");
+            var pathExpr = _parser.ParseExpression();
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+
+            return new SetTemplatePathStatement(pathExpr)
+            {
+                Line = startToken.Line,
+                Column = startToken.Column
+            };
+        }
+
         private Statement ParseRun()
         {
             var startToken = _parser.Previous;
@@ -299,10 +313,11 @@ namespace ETL_SQL.Core.Parser
             string? topic = null;
             string? subTopic = null;
 
-            if (_parser.Current.Type == TokenType.IDENTIFIER || IsContextualKeyword(_parser.Current.Type))
+            // Accept any non-terminating token as a help topic word (HELP SEND FILE, HELP CONNECT, etc.)
+            if (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.EOF)
             {
                 topic = _parser.Advance().Value;
-                if (_parser.Current.Type == TokenType.IDENTIFIER || IsContextualKeyword(_parser.Current.Type))
+                if (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.EOF)
                 {
                     subTopic = _parser.Advance().Value;
                 }
@@ -498,7 +513,7 @@ namespace ETL_SQL.Core.Parser
         private Statement ParseBeginTransaction()
         {
             string? name = null;
-            if (_parser.Current.Type == TokenType.IDENTIFIER) name = _parser.Advance().Value;
+            if (_parser.IsIdentifier(_parser.Current)) name = _parser.Advance().Value;
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
             return new BeginTransactionStatement(name);
         }
@@ -507,7 +522,7 @@ namespace ETL_SQL.Core.Parser
         {
             if (_parser.Match(TokenType.TRANSACTION) || _parser.Match(TokenType.TRAN)) { }
             string? name = null;
-            if (_parser.Current.Type == TokenType.IDENTIFIER) name = _parser.Advance().Value;
+            if (_parser.IsIdentifier(_parser.Current)) name = _parser.Advance().Value;
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
             return new CommitTransactionStatement(name);
         }
@@ -516,7 +531,7 @@ namespace ETL_SQL.Core.Parser
         {
             if (_parser.Match(TokenType.TRANSACTION) || _parser.Match(TokenType.TRAN)) { }
             string? name = null;
-            if (_parser.Current.Type == TokenType.IDENTIFIER) name = _parser.Advance().Value;
+            if (_parser.IsIdentifier(_parser.Current)) name = _parser.Advance().Value;
             if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
             return new RollbackTransactionStatement(name);
         }

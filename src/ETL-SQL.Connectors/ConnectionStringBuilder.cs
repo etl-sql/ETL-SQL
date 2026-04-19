@@ -13,9 +13,20 @@ namespace ETL_SQL.Connectors
     /// </summary>
     public static class ConnectionStringBuilder
     {
+        private static readonly HashSet<string> ValidProviders = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "MSSQL", "SQLSERVER", "POSTGRES", "NPSQL", "ORACLE", "ODBC",
+            "API", "REST", "HTTP",
+            "FTP", "SFTP", "SMTP", "AZURE_BLOB", "BLOB", "EMAIL", "SSH",
+            "FLATFILE", "CSV", "EXCEL", "JSON", "XML", "PARQUET", "AVRO", "DIRECTORY", "MOCKDB"
+        };
+
         public static string Build(string provider, Dictionary<string, string> props)
         {
+            if (string.IsNullOrWhiteSpace(provider)) return string.Empty;
             if (props == null || props.Count == 0) return string.Empty;
+
+            ValidateProvider(provider);
 
             return provider.ToUpperInvariant() switch
             {
@@ -25,9 +36,47 @@ namespace ETL_SQL.Connectors
                 "ODBC" => BuildOdbc(props),
                 "API" or "REST" or "HTTP" => BuildRest(props),
                 "FTP" or "SFTP" or "SMTP" or "AZURE_BLOB" or "BLOB" or "EMAIL" or "SSH" => BuildRemote(props),
-                "FLATFILE" or "CSV" or "EXCEL" or "JSON" or "XML" or "PARQUET" or "AVRO" or "DIRECTORY" => BuildFile(props),
+                "FLATFILE" or "CSV" or "EXCEL" or "JSON" or "XML" or "PARQUET" or "AVRO" or "DIRECTORY" or "MOCKDB" => BuildFile(props),
                 _ => throw new ArgumentException($"Structured property building is not yet supported for provider: {provider}")
             };
+        }
+
+        private static void ValidateProvider(string provider)
+        {
+            if (ValidProviders.Contains(provider)) return;
+
+            var suggestion = ValidProviders
+                .Select(p => new { Name = p, Distance = GetDistance(provider.ToUpperInvariant(), p) })
+                .Where(x => x.Distance <= 2)
+                .OrderBy(x => x.Distance)
+                .FirstOrDefault();
+
+            string message = suggestion != null 
+                ? $"Unsupported provider: '{provider}'. Did you mean '{suggestion.Name}'?" 
+                : $"Unsupported provider: '{provider}'. Supported providers include: {string.Join(", ", ValidProviders.Take(10))}...";
+
+            throw new ArgumentException(message);
+        }
+
+        private static int GetDistance(string s, string t)
+        {
+            if (string.IsNullOrEmpty(s)) return t.Length;
+            if (string.IsNullOrEmpty(t)) return s.Length;
+
+            int[,] d = new int[s.Length + 1, t.Length + 1];
+
+            for (int i = 0; i <= s.Length; i++) d[i, 0] = i;
+            for (int j = 0; j <= t.Length; j++) d[0, j] = j;
+
+            for (int j = 1; j <= t.Length; j++)
+            {
+                for (int i = 1; i <= s.Length; i++)
+                {
+                    int cost = (s[i - 1] == t[j - 1]) ? 0 : 1;
+                    d[i, j] = Math.Min(Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1), d[i - 1, j - 1] + cost);
+                }
+            }
+            return d[s.Length, t.Length];
         }
 
         private static string BuildSqlServer(Dictionary<string, string> props)

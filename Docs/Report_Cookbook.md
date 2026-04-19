@@ -914,7 +914,7 @@ CREATE PAGE Overview AS LAYOUT (
        'D' = SummaryTable)
 );
 
-CREATE NAVIGATION MainNav AS TABBAR (
+CREATE NAVIGATION MainNav AS TAB (
   ORIENTATION = HORIZONTAL,
   DEFAULT     = Overview,
   PAGES       (Overview)

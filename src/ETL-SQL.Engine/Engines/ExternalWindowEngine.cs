@@ -8,6 +8,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Engine.Spill;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -31,30 +32,30 @@ namespace ETL_SQL.Engine.Engines
             _logger = logger;
         }
 
-        private record WindowSignature(List<Expression>? PartitionBy, List<OrderByClause>? OrderBy)
+        private record WindowSignature
         {
+            public List<Expression>? PartitionBy { get; }
+            public List<OrderByClause>? OrderBy { get; }
+            public string PartitionKey { get; }
+            public string OrderKey { get; }
+            private readonly int _cachedHash;
+
+            public WindowSignature(List<Expression>? partitionBy, List<OrderByClause>? orderBy)
+            {
+                PartitionBy = partitionBy;
+                OrderBy = orderBy;
+                PartitionKey = partitionBy == null ? "" : string.Join(",", partitionBy.Select(e => e.ToSql()));
+                OrderKey = orderBy == null ? "" : string.Join(",", orderBy.Select(o => o.ToSql()));
+                _cachedHash = HashCode.Combine(PartitionKey, OrderKey);
+            }
+
             public virtual bool Equals(WindowSignature? other)
             {
                 if (other == null) return false;
-                
-                string thisPartition = PartitionBy == null ? "" : string.Join(",", PartitionBy.Select(e => e.ToSql()));
-                string otherPartition = other.PartitionBy == null ? "" : string.Join(",", other.PartitionBy.Select(e => e.ToSql()));
-                if (thisPartition != otherPartition) return false;
-
-                string thisOrder = OrderBy == null ? "" : string.Join(",", OrderBy.Select(o => o.ToSql()));
-                string otherOrder = other.OrderBy == null ? "" : string.Join(",", other.OrderBy.Select(o => o.ToSql()));
-                if (thisOrder != otherOrder) return false;
-
-                return true;
+                return PartitionKey == other.PartitionKey && OrderKey == other.OrderKey;
             }
 
-            public override int GetHashCode()
-            {
-                int hash = 17;
-                if (PartitionBy != null) foreach (var p in PartitionBy) hash = hash * 31 + p.ToSql().GetHashCode();
-                if (OrderBy != null) foreach (var o in OrderBy) hash = hash * 31 + o.ToSql().GetHashCode();
-                return hash;
-            }
+            public override int GetHashCode() => _cachedHash;
         }
 
         private class WindowGroup
@@ -325,22 +326,11 @@ namespace ETL_SQL.Engine.Engines
                 var unwrapped = new Row();
                 foreach (var kvp in row.Columns)
                 {
-                    unwrapped[kvp.Key] = kvp.Value is JsonElement je ? JsonElementToValue(je) : kvp.Value;
+                    unwrapped[kvp.Key] = kvp.Value is JsonElement je ? SpillSerializationHelper.UnwrapJsonElement(je) : kvp.Value;
                 }
                 yield return unwrapped;
             }
         }
-
-        private static object? JsonElementToValue(JsonElement element) =>
-            element.ValueKind switch
-            {
-                JsonValueKind.Number => element.TryGetDecimal(out var d) ? d : (object?)element.GetDouble(),
-                JsonValueKind.String => decimal.TryParse(element.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d) ? (object?)d : (DateTime.TryParse(element.GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : (object?)element.GetString()),
-                JsonValueKind.True => true,
-                JsonValueKind.False => false,
-                JsonValueKind.Null => null,
-                _ => element.GetRawText()
-            };
 
     }
 }

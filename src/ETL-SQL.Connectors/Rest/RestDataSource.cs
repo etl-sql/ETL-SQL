@@ -53,7 +53,7 @@ namespace ETL_SQL.Connectors.Rest
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
             var request = BuildRequest();
-            var response = await _httpClient.SendAsync(request);
+            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
             
             if (!response.IsSuccessStatusCode)
             {
@@ -61,13 +61,12 @@ namespace ETL_SQL.Connectors.Rest
                 throw new ExecutionException($"API request failed with status {response.StatusCode}: {error}");
             }
 
-            var json = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
+            using var stream = await response.Content.ReadAsStreamAsync();
             
             string? rootPath = null;
             _options?.TryGetValue("ROOT_PATH", out rootPath);
 
-            await foreach (var batch in JsonExtractor.ExtractBatches(doc, rootPath, batchSize))
+            await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, rootPath, batchSize))
             {
                 yield return batch;
             }
@@ -81,16 +80,15 @@ namespace ETL_SQL.Connectors.Rest
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
             var request = BuildRequest();
-            var response = await _httpClient.SendAsync(request);
+            var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
             if (!response.IsSuccessStatusCode) return Enumerable.Empty<string>();
 
-            var json = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
+            using var stream = await response.Content.ReadAsStreamAsync();
             
             string? rootPath = null;
             _options?.TryGetValue("ROOT_PATH", out rootPath);
 
-            return JsonExtractor.GetColumns(doc, rootPath);
+            return await JsonExtractor.GetColumnsAsync(stream, rootPath);
         }
 
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "ENDPOINT" });
@@ -119,7 +117,7 @@ namespace ETL_SQL.Connectors.Rest
 
         private HttpRequestMessage BuildRequest()
         {
-            string methodStr = "GET";
+            string? methodStr = "GET";
             _options?.TryGetValue("METHOD", out methodStr);
             var method = new HttpMethod(methodStr ?? "GET");
 

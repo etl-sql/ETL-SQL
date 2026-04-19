@@ -21,7 +21,6 @@ namespace ETL_SQL.Connectors.Oracle
         private readonly Dictionary<string, string>? _options;
         private readonly ILogger _logger;
         private readonly IExecutionContext? _context;
-        private readonly IConnector? _connector; // Store for host extraction
 
         public string ConnectionString => _connectionString;
         public string Path => "ORACLE";

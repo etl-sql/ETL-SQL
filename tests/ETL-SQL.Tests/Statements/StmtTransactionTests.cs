@@ -121,6 +121,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestTranCount()
         {
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            evaluator.AutoRollbackOnFinish = false;
             
             await evaluator.Evaluate(new Lexer("BEGIN TRANSACTION;").TokenizeToScript());
             Assert.Equal(1, Convert.ToInt32(evaluator.GetVariable("@@TRANCOUNT")));

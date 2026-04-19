@@ -40,11 +40,17 @@ namespace ETL_SQL
                 
                 
                 // Start scheduler
-                var scheduler = ServiceProvider.GetRequiredService<SchedulerService>();
-                scheduler.Start();
-                Console.Error.WriteLine("[SCHEDULER_START] Background scheduler is active.");
-                
-                AppDomain.CurrentDomain.ProcessExit += (s, e) => scheduler.Stop();
+                try
+                {
+                    var scheduler = ServiceProvider.GetRequiredService<SchedulerService>();
+                    scheduler.Start();
+                    Console.Error.WriteLine("[SCHEDULER_START] Background scheduler is active.");
+                    AppDomain.CurrentDomain.ProcessExit += (s, e) => scheduler.Stop();
+                }
+                catch (Exception schedEx)
+                {
+                    Console.Error.WriteLine($"[SCHEDULER_WARN] Background scheduler failed to start. Scheduled jobs will not run in this session. Error: {schedEx.Message}");
+                }
 
                 if (args.Length == 0 || (args.Length == 1 && (args[0] == "--help" || args[0] == "-h" || args[0] == "-?")))
                 {

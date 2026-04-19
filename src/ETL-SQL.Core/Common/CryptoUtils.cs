@@ -19,12 +19,14 @@ namespace ETL_SQL.Common
         private const int Iterations = 600000;
         private const int SaltSize = 16;
         private const int IvSize = 16;
+        private const byte CURRENT_VERSION = 1;
 
         /// <summary>
         /// Encrypts a string using the specified password and optional algorithm.
         /// </summary>
         public static string Encrypt(string plainText, string password, HashAlgorithmName? algo = null)
         {
+            if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("Password cannot be null or empty.", nameof(password));
             var hashAlgo = algo ?? HashAlgorithmName.SHA256;
             byte[] salt = RandomNumberGenerator.GetBytes(SaltSize);
             byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
@@ -36,6 +38,7 @@ namespace ETL_SQL.Common
 
             using var encryptor = aes.CreateEncryptor(aes.Key, aes.IV);
             using var ms = new MemoryStream();
+            ms.WriteByte(CURRENT_VERSION);
             ms.Write(salt, 0, SaltSize);
             ms.Write(iv, 0, IvSize);
 
@@ -53,6 +56,7 @@ namespace ETL_SQL.Common
         /// </summary>
         public static string Decrypt(string cipherText, string password, HashAlgorithmName? algo = null)
         {
+            if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("Password cannot be null or empty.", nameof(password));
             if (string.IsNullOrEmpty(cipherText)) return cipherText;
             if (!cipherText.StartsWith("ENC:")) return cipherText;
 
@@ -61,18 +65,29 @@ namespace ETL_SQL.Common
                 var hashAlgo = algo ?? HashAlgorithmName.SHA256;
                 byte[] fullBytes = Convert.FromBase64String(cipherText.Substring(4));
 
-                if (fullBytes.Length < SaltSize + IvSize)
+                int offset = 0;
+                int iterations = Iterations;
+                int keySize = KeySize;
+
+                // Check for version header
+                if (fullBytes.Length > 0 && fullBytes[0] == 1)
+                {
+                    offset = 1;
+                    // In the future, we can change iterations based on fullBytes[0]
+                }
+
+                if (fullBytes.Length < offset + SaltSize + IvSize)
                     throw new ExecutionException("Invalid encrypted connection string format.");
 
                 byte[] salt = new byte[SaltSize];
                 byte[] iv = new byte[IvSize];
-                byte[] encrypted = new byte[fullBytes.Length - SaltSize - IvSize];
+                byte[] encrypted = new byte[fullBytes.Length - offset - SaltSize - IvSize];
 
-                Buffer.BlockCopy(fullBytes, 0, salt, 0, SaltSize);
-                Buffer.BlockCopy(fullBytes, SaltSize, iv, 0, IvSize);
-                Buffer.BlockCopy(fullBytes, SaltSize + IvSize, encrypted, 0, encrypted.Length);
+                Buffer.BlockCopy(fullBytes, offset, salt, 0, SaltSize);
+                Buffer.BlockCopy(fullBytes, offset + SaltSize, iv, 0, IvSize);
+                Buffer.BlockCopy(fullBytes, offset + SaltSize + IvSize, encrypted, 0, encrypted.Length);
 
-                byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, hashAlgo, KeySize / 8);
+                byte[] key = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, hashAlgo, keySize / 8);
 
                 using var aes = Aes.Create();
                 using var decryptor = aes.CreateDecryptor(key, iv);
@@ -96,6 +111,7 @@ namespace ETL_SQL.Common
         /// </summary>
         public static void EncryptFile(string inputFile, string outputFile, string password, bool overwrite, HashAlgorithmName? algo = null)
         {
+            if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("Password cannot be null or empty.", nameof(password));
             if (File.Exists(outputFile) && !overwrite)
                 throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
 
@@ -127,6 +143,7 @@ namespace ETL_SQL.Common
         /// </summary>
         public static void DecryptFile(string inputFile, string outputFile, string password, bool overwrite, HashAlgorithmName? algo = null)
         {
+            if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("Password cannot be null or empty.", nameof(password));
             if (File.Exists(outputFile) && !overwrite)
                 throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
 

@@ -263,6 +263,7 @@ namespace ETL_SQL.Data
         public long ExecutionTimeMs { get; set; }
         public int TotalRowsMatched { get; set; }
         public int ResultSetIndex { get; set; }
+        public bool IsCapped { get; set; }
 
         public IDataValidator? Validator { get; set; }
 

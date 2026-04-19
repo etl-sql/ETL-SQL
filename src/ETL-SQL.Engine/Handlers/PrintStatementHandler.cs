@@ -23,8 +23,8 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (PrintStatement)statement;
             
-            var val = await context.EvaluateValue(stmt.Message, new Row());
-            _logger.WriteLine(val?.ToString() ?? "NULL", ConsoleColor.White);
+            var val = await context.EvaluationContext.EvaluateValue(stmt.Message, new Row());
+            context.LoggingContext.Log(val?.ToString() ?? "NULL", ConsoleColor.White);
         }
     }
 }

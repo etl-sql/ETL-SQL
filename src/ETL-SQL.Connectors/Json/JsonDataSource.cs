@@ -98,28 +98,9 @@ namespace ETL_SQL.Connectors.Json
             try
             {
                 using var stream = System.IO.File.OpenRead(effectivePath);
-                JsonDocument doc;
-                try 
-                { 
-                    if (_encoding != null && _encoding != Encoding.UTF8)
-                    {
-                        using var reader = new StreamReader(stream, _encoding);
-                        string json = await reader.ReadToEndAsync();
-                        doc = JsonDocument.Parse(json);
-                    }
-                    else
-                    {
-                        doc = await JsonDocument.ParseAsync(stream); 
-                    }
-                }
-                catch (Exception ex) { _logger.Debug("[JsonDataSource.ReadBatches] Failed to parse JSON '{FilePath}': {Message}", effectivePath, ex.Message); yield break; }
-
-                using (doc)
+                await foreach (var batch in JsonExtractor.ExtractBatchesAsync(stream, _rootPath, batchSize, _trim))
                 {
-                    await foreach (var batch in JsonExtractor.ExtractBatches(doc, _rootPath, batchSize, _trim))
-                    {
-                        yield return batch;
-                    }
+                    yield return batch;
                 }
             }
             finally
@@ -221,8 +202,7 @@ namespace ETL_SQL.Connectors.Json
             try
             {
                 using var stream = System.IO.File.OpenRead(effectivePath);
-                using var doc = JsonDocument.Parse(stream);
-                return JsonExtractor.GetColumns(doc, _rootPath);
+                return await JsonExtractor.GetColumnsAsync(stream, _rootPath);
             }
             catch (Exception ex) { _logger.Debug("[JsonDataSource.GetColumnsAsync] Failed to read columns from '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
             finally

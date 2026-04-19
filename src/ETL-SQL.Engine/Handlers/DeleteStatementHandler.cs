@@ -1,4 +1,5 @@
 using ETL_SQL.Data;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Common.Exceptions;
 using System;
 using System.Collections.Generic;
@@ -29,15 +30,24 @@ namespace ETL_SQL.Engine.Handlers
             {
                 _logger.Debug("Strategy: Remote SQL DELETE");
                 var sql = $"DELETE FROM {context.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)}";
-                if (stmt.WhereClause != null) sql += $"\nWHERE {context.CompileExpression(stmt.WhereClause, sqlConn.Dialect)}";
+                CompiledSql? compiledWhere = null;
+                if (stmt.WhereClause != null) 
+                {
+                    compiledWhere = context.CompileExpression(stmt.WhereClause, sqlConn.Dialect);
+                    if (compiledWhere != null)
+                        sql += $"\nWHERE {compiledWhere.Sql}";
+                }
                 
                 if (context.IsWhatIf)
                 {
-                    _logger.WriteLine($"WHAT IF: Would execute remote SQL delete on {connName}:\n{sql}", ConsoleColor.Yellow);
+                    var whatIfSql = $"DELETE FROM {context.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)}";
+                    if (stmt.WhereClause != null && compiledWhere != null) 
+                        whatIfSql += $"\nWHERE {compiledWhere.ToEscapedSql(sqlConn.Dialect)}";
+                    _logger.WriteLine($"WHAT IF: Would execute remote SQL delete on {connName}:\n{whatIfSql}", ConsoleColor.Yellow);
                 }
                 else
                 {
-                    await foreach (var _ in sqlConn.ExecuteRawSql(sql)) { }
+                    await foreach (var _ in sqlConn.ExecuteRawSql(sql, compiledWhere?.Parameters.Values)) { }
                 }
                 context.RowsProcessed = 0; // Unknown for remote SQL
             }

@@ -145,6 +145,7 @@ namespace ETL_SQL.Tests.Statements
         public async Task TestTransactions()
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            eval.AutoRollbackOnFinish = false; // Allow transaction state to persist across Execute calls for this test
             await Execute(eval, "CREATE TABLE #t (ID INT);");
             
             // 1. Rollback test

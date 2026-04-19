@@ -60,7 +60,7 @@ namespace ETL_SQL.Engine.Handlers
                     case AlterTableActionType.ADD:
                         sql += $"ADD {stmt.NewColumn!.ColumnName} {stmt.NewColumn.DataType}";
                         if (stmt.NewColumn.DefaultExpression != null)
-                            sql += $" DEFAULT {context.CompileExpression(stmt.NewColumn.DefaultExpression, sqlDest.Dialect)}";
+                            sql += $" DEFAULT {context.CompileExpression(stmt.NewColumn.DefaultExpression, sqlDest.Dialect).ToEscapedSql(sqlDest.Dialect)}";
                         break;
                     case AlterTableActionType.DROP_COLUMN:
                         sql += $"DROP COLUMN {stmt.ColumnToDelete}";

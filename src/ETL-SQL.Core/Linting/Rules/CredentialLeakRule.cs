@@ -11,10 +11,18 @@ namespace ETL_SQL.Core.Linting.Rules
     /// </summary>
     public class CredentialLeakRule : ILintRule
     {
+        private readonly string[] _sensitiveKeywords;
+        private static readonly string[] DefaultKeywords = { "password", "secret", "token", "key", "pwd", "apikey", "connectionstring", "conn", "connection", "accesskey", "bearer", "auth", "cert", "privatekey", "passphrase", "pat", "credential", "auth_type", "accountkey", "sshkey", "fingerprint", "access_token", "refresh_token", "client_secret", "client_id", "credentials", "authorization", "proxy_info", "keyfile", "hostkey" };
+
+        public CredentialLeakRule() : this(null) { }
+
+        public CredentialLeakRule(IEnumerable<string>? customKeywords = null)
+        {
+            _sensitiveKeywords = customKeywords?.ToArray() ?? DefaultKeywords;
+        }
+
         public string Name => "CredentialLeak";
         public string Description => "Detects potential credential leaks in output statements (PRINT, EMAIL, RAISERROR).";
-
-        private static readonly string[] SensitiveKeywords = { "password", "secret", "token", "key", "pwd", "apikey", "connectionstring", "conn", "connection", "accesskey", "bearer", "auth", "cert", "privatekey", "passphrase", "pat", "credential", "auth_type", "accountkey", "sshkey", "fingerprint", "access_token", "refresh_token", "client_secret", "client_id", "credentials", "authorization", "proxy_info", "keyfile", "hostkey" };
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {
@@ -35,7 +43,7 @@ namespace ETL_SQL.Core.Linting.Rules
             if (statement is DeclareStatement declare)
             {
                 bool isSensitive = declare.IsSensitive || declare.DataType.Equals("ENCRYPTED", StringComparison.OrdinalIgnoreCase) ||
-                                 SensitiveKeywords.Any(k => declare.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
+                                 _sensitiveKeywords.Any(k => declare.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
                 scopes.Peek()[declare.VariableName] = isSensitive;
             }
             else if (statement is PrintStatement print)
@@ -73,7 +81,7 @@ namespace ETL_SQL.Core.Linting.Rules
             {
                 // SEC-4: Taint tracking - if RHS has sensitive variables, LHS becomes sensitive
                 bool rhsSensitive = FindSensitiveVariables(setStmt.Value, scopes).Any();
-                bool nameSensitive = SensitiveKeywords.Any(k => setStmt.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
+                bool nameSensitive = _sensitiveKeywords.Any(k => setStmt.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
                 
                 scopes.Peek()[setStmt.VariableName] = rhsSensitive || nameSensitive;
             }
@@ -98,12 +106,12 @@ namespace ETL_SQL.Core.Linting.Rules
             }
             else if (statement is ForStatement forStmt)
             {
-                scopes.Peek()[forStmt.VariableName] = SensitiveKeywords.Any(k => forStmt.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
+                scopes.Peek()[forStmt.VariableName] = _sensitiveKeywords.Any(k => forStmt.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
                 AnalyzeStatement(forStmt.Body, scopes, results);
             }
             else if (statement is ForeachStatement foreachStmt)
             {
-                scopes.Peek()[foreachStmt.VariableName] = SensitiveKeywords.Any(k => foreachStmt.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
+                scopes.Peek()[foreachStmt.VariableName] = _sensitiveKeywords.Any(k => foreachStmt.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
                 AnalyzeStatement(foreachStmt.Body, scopes, results);
             }
         }
@@ -208,7 +216,7 @@ namespace ETL_SQL.Core.Linting.Rules
                 }
             }
             // Fallback: keywords check if declaration was missed (though linter usually walks in order)
-            return SensitiveKeywords.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase));
+            return _sensitiveKeywords.Any(k => name.Contains(k, StringComparison.OrdinalIgnoreCase));
         }
     }
 }

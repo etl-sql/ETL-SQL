@@ -42,7 +42,7 @@ namespace ETL_SQL.Tests.Integration
 
             await evaluator.Evaluate(TestHelpers.Parse(script));
             
-            Assert.Contains(mockDb.ExecutedSql, s => (s.Contains("UPDATE [TargetTable]") || s.Contains("UPDATE TargetTable")) && s.Contains("Val = 200") && s.Contains("ID = 1"));
+            Assert.Contains(mockDb.ExecutedSql, s => (s.Contains("UPDATE [TargetTable]") || s.Contains("UPDATE TargetTable")) && s.Contains("Val = @") && s.Contains("ID = @"));
         }
 
         [Fact]
@@ -56,7 +56,7 @@ namespace ETL_SQL.Tests.Integration
 
             await evaluator.Evaluate(TestHelpers.Parse(script));
             
-            Assert.Contains(mockDb.ExecutedSql, s => (s.Contains("DELETE FROM [TargetTable]") || s.Contains("DELETE FROM TargetTable")) && s.Contains("ID = 1"));
+            Assert.Contains(mockDb.ExecutedSql, s => (s.Contains("DELETE FROM [TargetTable]") || s.Contains("DELETE FROM TargetTable")) && s.Contains("ID = @"));
         }
 
         [Fact]

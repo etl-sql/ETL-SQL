@@ -26,14 +26,11 @@ namespace ETL_SQL.Engine.Handlers
             
             _logger.Debug("Setting variable {VariableName}", stmt.VariableName);
 
-            var variables = (IVariableContext)context;
-            var evaluator = (IEvaluationContext)context;
-
-            if (!variables.ContainsVariable(stmt.VariableName))
+            if (!context.VarContext.ContainsVariable(stmt.VariableName))
                 throw new ExecutionException($"Variable {stmt.VariableName} must be declared before it can be assigned.");
 
-            var val = await evaluator.EvaluateValue(stmt.Value, new Row());
-            variables.SetVariable(stmt.VariableName, val);
+            var val = await context.EvaluationContext.EvaluateValue(stmt.Value, new Row());
+            context.VarContext.SetVariable(stmt.VariableName, val);
         }
     }
 }

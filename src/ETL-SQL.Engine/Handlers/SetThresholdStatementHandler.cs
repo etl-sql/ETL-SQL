@@ -69,6 +69,15 @@ namespace ETL_SQL.Engine.Handlers
                 case ThresholdType.MaxFileOperations:
                     context.MaxFileOperations = intVal;
                     break;
+                case ThresholdType.MaxGroupingSets:
+                    context.MaxGroupingSets = intVal;
+                    break;
+                case ThresholdType.MaxSessionSize:
+                    context.MaxSessionSize = Convert.ToInt64(val);
+                    break;
+                case ThresholdType.Telemetry:
+                    context.TelemetryEnabled = Convert.ToBoolean(val);
+                    break;
             }
 
             if (context.IsVerbose)
