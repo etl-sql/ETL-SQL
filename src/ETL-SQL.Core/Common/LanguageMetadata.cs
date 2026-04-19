@@ -77,7 +77,7 @@ namespace ETL_SQL.Common
             "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE", "REQUIRE", "SAFE", "ZONES",
             "JOIN_SPILL_THRESHOLD", "TEMP_TABLE_SPILL_THRESHOLD", "EXTERNAL_HASH_PARTITIONS", "EXTERNAL_SORT_CHUNK_SIZE", "WINDOW_SPILL_THRESHOLD",
             "MAX_RECURSIVE_DEPTH", "MAX_IN_MEMORY_BATCHES", "FOREACH_PAGE_SIZE", "MAX_MESSAGES", "MAX_FILE_OPERATIONS",
-            "MAX_PARALLEL_DEGREE", "MAX_STRING_RESULT_SIZE", "REGEX_MATCH_TIMEOUT",
+            "MAX_PARALLEL_DEGREE", "MAX_STRING_RESULT_SIZE", "REGEX_MATCH_TIMEOUT", "MAX_LAST_RESULT_ROWS",
             "SPILL_ENCRYPTION", "SPILL_COMPRESSION",
             "MAX_GROUPING_SETS", "SET_CUBE_LIMIT", "MAX_SESSION_SIZE", "TELEMETRY",
             "TOOLTIP", "BUTTON", "BACK", "REFRESH", "TEMPLATE_PATH"
@@ -138,6 +138,9 @@ namespace ETL_SQL.Common
         public const int DefaultMaxParallelDegree = 32;
         /// <summary>Default maximum size in bytes for a single string function result.</summary>
         public const long DefaultMaxStringResultSize = 100 * 1024 * 1024; // 100 MiB
+        
+        /// <summary>Default maximum number of rows held in a SELECT result buffer for display.</summary>
+        public const int DefaultMaxLastResultRows = 50000;
         
         /// <summary>Maximum number of grouping sets allowed in an aggregate CUBE/ROLLUP.</summary>
         public const int DefaultMaxGroupingSets = 1024;

@@ -22,7 +22,6 @@ namespace ETL_SQL.Engine.Handlers
         private readonly ILogger _logger = logger;
         public Type SupportedStatementType => typeof(SelectStatement);
  
-        private const int MaxLastResultRows = 50_000;
 
         /// <summary>
         /// Executes a SELECT statement, handling pushdown to remote sources or local evaluation.
@@ -55,16 +54,41 @@ namespace ETL_SQL.Engine.Handlers
                         {
                             pushdownResult.SetColumns(batch.ColumnNames);
                         }
+
+                        // In pushdown, we still count everything even if we don't buffer it all for display,
+                        // UNLESS we are not redirected and we've reached the cap.
+                        // However, the TODO says "stop consuming batches once MaxLastResultRows is reached".
+                        // If we stop consuming, we save bandwidth/CPU on the remote.
+                        
+                        bool shouldStop = false;
                         foreach (var r in batch.Rows)
                         {
-                            totalRows++;
-                            if (pushdownResult.Rows.Count < MaxLastResultRows)
-                                await pushdownResult.AddRowAsync(r);
-                            else if (!capped)
+                            if (pushdownResult.Rows.Count < context.MaxLastResultRows)
                             {
-                                capped = true;
-                                pushdownResult.IsCapped = true;
-                                _logger.Debug("[SELECT] Result buffer capped at {MaxLastResultRows} rows to prevent memory exhaustion. All rows still counted and streamed to display.", MaxLastResultRows);
+                                totalRows++;
+                                await pushdownResult.AddRowAsync(r);
+                            }
+                            else if (!context.RedirectOutput)
+                            {
+                                // We reached the cap and we are NOT redirected (interactive mode).
+                                // We stop buffering rows. 
+                                if (!capped)
+                                {
+                                    capped = true;
+                                    pushdownResult.IsCapped = true;
+                                    _logger.Debug("[SELECT] Result buffer reached {MaxLastResultRows} rows. Stopping consumption to prevent memory exhaustion.", context.MaxLastResultRows);
+                                }
+                                shouldStop = true;
+                                break; 
+                            }
+                            else 
+                            {
+                                totalRows++;
+                                if (!capped)
+                                {
+                                    capped = true;
+                                    pushdownResult.IsCapped = true;
+                                }
                             }
                         }
 
@@ -73,6 +97,8 @@ namespace ETL_SQL.Engine.Handlers
                             ResultFormatter.PrintBatch(batch, isFirst);
                             isFirst = false;
                         }
+
+                        if (shouldStop) break;
                     }
                     sw.Stop();
                     pushdownResult.ExecutionTimeMs = sw.ElapsedMilliseconds;
@@ -203,16 +229,34 @@ namespace ETL_SQL.Engine.Handlers
                 await foreach (var batch in batches)
                 {
                     if (result.ColumnNames.Count == 0) result.SetColumns(batch.ColumnNames);
+                    
+                    bool shouldStop = false;
                     foreach (var r in batch.Rows)
                     {
-                        totalRows++;
-                        if (result.Rows.Count < MaxLastResultRows)
-                            await result.AddRowAsync(r);
-                        else if (!capped)
+                        if (result.Rows.Count < context.MaxLastResultRows)
                         {
-                            capped = true;
-                            result.IsCapped = true;
-                            _logger.Debug("[SELECT] Result buffer capped at {MaxLastResultRows} rows to prevent memory exhaustion. All rows still counted and streamed to display.", MaxLastResultRows);
+                            totalRows++;
+                            await result.AddRowAsync(r);
+                        }
+                        else if (!context.RedirectOutput)
+                        {
+                            if (!capped)
+                            {
+                                capped = true;
+                                result.IsCapped = true;
+                                _logger.Debug("[SELECT] Result buffer reached {MaxLastResultRows} rows. Stopping consumption to prevent memory exhaustion.", context.MaxLastResultRows);
+                            }
+                            shouldStop = true;
+                            break;
+                        }
+                        else 
+                        {
+                            totalRows++;
+                            if (!capped)
+                            {
+                                capped = true;
+                                result.IsCapped = true;
+                            }
                         }
                     }
 
@@ -228,6 +272,8 @@ namespace ETL_SQL.Engine.Handlers
                             isFirst = false;
                         }
                     }
+
+                    if (shouldStop) break;
                 }
                 sw.Stop();
                 result.ExecutionTimeMs = sw.ElapsedMilliseconds;

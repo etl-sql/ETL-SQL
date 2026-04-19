@@ -244,6 +244,7 @@ These commands allow fine-tuning how the engine manages memory and disk during h
 | `SET EXTERNAL_HASH_PARTITIONS = n` | 32 | Number of discrete partitions used when spilling joins/windows to disk. |
 | `SET EXTERNAL_SORT_CHUNK_SIZE = n` | 50,000 | Rows per sort-block during external disk-sorting operations. |
 | `SET BATCHSIZE = n` | 10,000 | Number of rows processed per batch in the engine pipeline. |
+| `SET MAX_LAST_RESULT_ROWS = n` | 50,000 | Maximum rows held in the session result buffer for interactive display. |
 | `SET MAX_RECURSIVE_DEPTH = n` | 10,000 | Maximum allowed call depth for recursive CTEs or procedures. |
 | `SET MAX_IN_MEMORY_BATCHES = n` | 100 | Maximum number of batches held in memory for `#temp` tables before automatic spilling. |
 | `SET FOREACH_PAGE_SIZE = n` | 10,000 | Number of items fetched per page when iterating over large collections. |

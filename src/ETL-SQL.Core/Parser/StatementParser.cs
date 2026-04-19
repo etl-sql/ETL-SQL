@@ -193,6 +193,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.REGEX_MATCH_TIMEOUT)) return SystemParser.ParseSetThreshold(ThresholdType.RegexMatchTimeout);
             if (_parser.Match(TokenType.MAX_GROUPING_SETS) || _parser.Match(TokenType.SET_CUBE_LIMIT)) return SystemParser.ParseSetThreshold(ThresholdType.MaxGroupingSets);
             if (_parser.Match(TokenType.MAX_SESSION_SIZE)) return SystemParser.ParseSetThreshold(ThresholdType.MaxSessionSize);
+            if (_parser.Match(TokenType.MAX_LAST_RESULT_ROWS)) return SystemParser.ParseSetThreshold(ThresholdType.MaxLastResultRows);
             if (_parser.Match(TokenType.TELEMETRY)) return SystemParser.ParseSetThreshold(ThresholdType.Telemetry);
 
             if (_parser.Match(TokenType.SPILL_ENCRYPTION)) return SystemParser.ParseSetSpillOption(SpillOptionType.Encryption);

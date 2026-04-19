@@ -105,6 +105,7 @@ Applies to: **All Hosts**
 | `Engine:JoinSpillThreshold` | `100000` | Row count at which a join operation spills to disk instead of holding all data in RAM. |
 | `Engine:WindowSpillThreshold` | `100000` | Row count at which window function processing spills to disk. |
 | `Engine:TempTableSpillThresholdRows` | `1000000` | Row count at which #temp tables spill to encrypted disk chunks. |
+| `Engine:MaxLastResultRows` | `50000` | Maximum rows held in the session result buffer for interactive display. |
 | `Engine:ExternalHashPartitions` | `32` | Number of disk partitions used for spilled joins and aggregates. Increase if spill files become very large. |
 | `Engine:ExternalSort:ChunkSize` | `100000` | Rows per chunk in the external sort engine. |
 | `Engine:MaxMessages` | `1000` | Maximum number of print/log messages held in a session's message buffer. |
@@ -259,6 +260,7 @@ Applies to: **App / TUI**
      "JoinSpillThreshold": 100000,
      "WindowSpillThreshold": 100000,
      "TempTableSpillThresholdRows": 1000000,
+      "MaxLastResultRows": 50000,
      "ExternalHashPartitions": 32,
      "ExternalSort": {
        "ChunkSize": 100000
@@ -412,3 +414,5 @@ PRINT 'Total Unique Groups: ' + @@AGGREGATE_GROUPS_COUNT;
 | `SecurityException: Access to environment variable 'X' is denied` | `AllowedEnvVars` does not include that variable | Add the variable name to `SecurityService.AllowedEnvVars` in DI setup |
 | `Could not locate ETL-SQL executable` | `Jobs:UseProcessSpawning` is `true` but `Jobs:ExecutablePath` is not set | Set `Jobs:ExecutablePath` to the absolute path of `ETL-SQL.exe` |
 | High memory / OOM | `MaxInMemoryBatches` or `BatchSize` too high for available RAM | Reduce `Orchestration:MaxInMemoryBatches` and/or `Engine:BatchSize` |
+
+

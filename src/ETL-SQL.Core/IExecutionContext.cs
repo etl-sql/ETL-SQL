@@ -180,6 +180,7 @@ namespace ETL_SQL.Core
         int CurrentRecursiveDepth { get; set; }
         int BatchSize { get; set; }
         long TempTableSpillThresholdRows { get; set; }
+        int MaxLastResultRows { get; set; }
         int ForeachPageSize { get; set; }
         int? PreviewLimit { get; set; }
         bool FunctionExists(string name);

@@ -24,6 +24,9 @@ namespace ETL_SQL.Engine.Services
         public static int BatchSize(IConfiguration? config)
             => config?.GetValue<int?>("Engine:BatchSize") ?? 10000;
 
+        public static int MaxLastResultRows(IConfiguration? config)
+            => config?.GetValue<int?>("Engine:MaxLastResultRows") ?? LanguageMetadata.DefaultMaxLastResultRows;
+
         public static int MaxRecursiveDepth(IConfiguration? config)
             => config?.GetValue<int?>("Engine:MaxRecursiveDepth") ?? 10000;
 

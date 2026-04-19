@@ -89,6 +89,9 @@ namespace ETL_SQL.Engine.Handlers
                 case ThresholdType.TempTableSpill:
                     context.TempTableSpillThresholdRows = Convert.ToInt64(val);
                     break;
+                case ThresholdType.MaxLastResultRows:
+                    context.MaxLastResultRows = intVal;
+                    break;
             }
 
             if (context.IsVerbose)

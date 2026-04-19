@@ -98,6 +98,7 @@ namespace ETL_SQL.Core.Common
         public int MaxRecursiveDepth { get; set; } = 100;
         public int CurrentRecursiveDepth { get; set; }
         public int BatchSize { get; set; } = 10000;
+        public int MaxLastResultRows { get; set; } = LanguageMetadata.DefaultMaxLastResultRows;
         public int ForeachPageSize { get; set; } = 1000;
         public int? PreviewLimit { get; set; }
 

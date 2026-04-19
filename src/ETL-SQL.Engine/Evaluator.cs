@@ -144,6 +144,7 @@ namespace ETL_SQL.Engine
         public int MaxFileOperations { get; set; } = SecurityService.DefaultMaxFileOperations;
         public int MaxGroupingSets { get; set; } = LanguageMetadata.DefaultMaxGroupingSets;
         public long MaxSessionSize { get; set; } = 200 * 1024 * 1024; // 200MB Default
+        public int MaxLastResultRows { get; set; } = LanguageMetadata.DefaultMaxLastResultRows;
         
         /// <summary>Last script lexing duration in milliseconds.</summary>
         public long LastLexTimeMs { get; set; }
@@ -481,6 +482,7 @@ namespace ETL_SQL.Engine
             TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
             SpillEncryptionEnabled = DefaultThresholds.SpillEncryptionEnabled(config);
             SpillCompressionEnabled = DefaultThresholds.SpillCompressionEnabled(config);
+            MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);
 
             _logger.Info("Evaluator initialized.");
 
