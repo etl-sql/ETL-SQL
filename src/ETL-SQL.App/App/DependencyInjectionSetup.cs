@@ -141,6 +141,8 @@ namespace ETL_SQL.App
             services.AddSingleton<IConnector>(new AzureBlobConnector(azureConn, azureContainer));
 
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
+            services.AddTransient<ETL_SQL.Engine.Services.ReportRegistry>();
+            services.AddTransient<IReportContext, ETL_SQL.Engine.Services.ReportRegistry>();
             services.AddTransient<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
 
             // Linter & Security Rules

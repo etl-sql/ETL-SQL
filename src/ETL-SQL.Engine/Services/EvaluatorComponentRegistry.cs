@@ -18,11 +18,12 @@ namespace ETL_SQL.Engine.Services
         public DataSourceManager DataSourceManager { get; private set; } = null!;
         public SchemaManager SchemaManager { get; private set; } = null!;
         public ProcedureExecutor ProcedureExecutor { get; private set; } = null!;
+        public IReportContext ReportContext { get; private set; } = null!;
 
         /// <summary>
         /// Initializes all components with the provided context.
         /// </summary>
-        public void Initialize(Evaluator evaluator, ILogger logger, VariableScopeManager variableScopeManager)
+        public void Initialize(Evaluator evaluator, ILogger logger, VariableScopeManager variableScopeManager, IReportContext? reportContext = null)
         {
             QueryCompiler = new QueryCompiler(evaluator);
             MetricsReporter = new ExecutionMetricsReporter(evaluator);
@@ -31,6 +32,7 @@ namespace ETL_SQL.Engine.Services
             DataSourceManager = new DataSourceManager(logger, evaluator, ExpressionEvaluator);
             SchemaManager = new SchemaManager(logger, evaluator, variableScopeManager);
             ProcedureExecutor = new ProcedureExecutor(variableScopeManager, evaluator);
+            ReportContext = reportContext ?? new ReportRegistry();
         }
     }
 }

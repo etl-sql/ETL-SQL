@@ -40,15 +40,15 @@
 
   #### 🟡 Medium Priority — Maintainability / SRP
 
-  - [ ] **`Evaluator` stores Report-SQL object registries** — `Evaluator.cs:206-220` has `VisualDefinitions`, `PageDefinitions`, `ContainerDefinitions`, etc. as direct properties. The execution engine layer owning UI/report definitions creates a layering violation and makes `Evaluator` a god class (1,000+ lines, 3+ interfaces). Extract to `IReportRegistry` and inject it as a dependency rather than baking it into the evaluator.
+  - [x] **`Evaluator` stores Report-SQL object registries** — `Evaluator.cs:206-220` has `VisualDefinitions`, `PageDefinitions`, `ContainerDefinitions`, etc. as direct properties. The execution engine layer owning UI/report definitions creates a layering violation and makes `Evaluator` a god class (1,000+ lines, 3+ interfaces). Extract to `IReportRegistry` and inject it as a dependency rather than baking it into the evaluator.
 
-  - [ ] **`ManifestBuilder.BuildAsync` is a 230-line method** — Handles visuals, pages, containers, navigations, buttons, and datasets all inline. Split into `BuildVisuals()`, `BuildPages()`, etc. private methods so each report object type can be tested and modified independently.
+  - [x] **`ManifestBuilder.BuildAsync` is a 230-line method** — Handles visuals, pages, containers, navigations, buttons, and datasets all inline. Split into `BuildVisuals()`, `BuildPages()`, etc. private methods so each report object type can be tested and modified independently.
 
-  - [ ] **`DashboardService` duplicates parameter refresh logic** — `SetParametersAsync` (lines 65-109) and `SetParameterAsync` (lines 115-154) duplicate the visual dependency scan and re-query loop. Extract a `RefreshAffectedVisuals(IEnumerable<string> changedParams)` helper called by both.
+  - [x] **`DashboardService` duplicates parameter refresh logic** — `SetParametersAsync` (lines 65-109) and `SetParameterAsync` (lines 115-154) duplicate the visual dependency scan and re-query loop. Extract a `RefreshAffectedVisuals(IEnumerable<string> changedParams)` helper called by both.
 
-  - [ ] **Magic numbers in `Evaluator.cs` without named constants** — `500` (cache size), `10000` (batch size, recursive depth), `100000` (join/sort thresholds), `1000` (max messages), `200 * 1024 * 1024` (session size) are all hardcoded inline. Define them as `const` in a `EngineDefaults` static class so they're tunable in one place and self-documenting.
+  - [x] **Magic numbers in `Evaluator.cs` without named constants** — `500` (cache size), `10000` (batch size, recursive depth), `100000` (join/sort thresholds), `1000` (max messages), `200 * 1024 * 1024` (session size) are all hardcoded inline. Define them as `const` in a `EngineDefaults` static class so they're tunable in one place and self-documenting.
 
-  - [ ] **Inconsistent `DBNull` check pattern** — `ExpressionEvaluator.cs` uses 4 different patterns to check for null/DBNull (`val == null`, `val == DBNull.Value`, combined `&&`, and inverted `||`). Extract `static bool IsDbNull(object? val) => val is null or DBNull` and replace all 9+ call sites.
+  - [x] **Inconsistent `DBNull` check pattern** — `ExpressionEvaluator.cs` uses 4 different patterns to check for null/DBNull (`val == null`, `val == DBNull.Value`, combined `&&`, and inverted `||`). Extract `static bool IsDbNull(object? val) => val is null or DBNull` and replace all 9+ call sites.
 
   #### 🟡 Medium Priority — Documentation
 

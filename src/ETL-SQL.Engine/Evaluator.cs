@@ -210,27 +210,39 @@ namespace ETL_SQL.Engine
 
         // ── IReportContext ──────────────────────────────────────────────────
         /// <inheritdoc />
-        public IDictionary<string, CreateVisualStatement> VisualDefinitions { get; } = new Dictionary<string, CreateVisualStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreateVisualStatement> VisualDefinitions => _registry.ReportContext.VisualDefinitions;
         /// <inheritdoc />
-        public IDictionary<string, CreatePageStatement> PageDefinitions { get; } = new Dictionary<string, CreatePageStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreatePageStatement> PageDefinitions => _registry.ReportContext.PageDefinitions;
         /// <inheritdoc />
-        public IDictionary<string, CreateDatasetStatement> DatasetDefinitions { get; } = new Dictionary<string, CreateDatasetStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreateDatasetStatement> DatasetDefinitions => _registry.ReportContext.DatasetDefinitions;
         /// <inheritdoc />
-        public IDictionary<string, CreateContainerStatement> ContainerDefinitions { get; } = new Dictionary<string, CreateContainerStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreateContainerStatement> ContainerDefinitions => _registry.ReportContext.ContainerDefinitions;
         /// <inheritdoc />
-        public IDictionary<string, CreateNavigationStatement> NavigationDefinitions { get; } = new Dictionary<string, CreateNavigationStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreateNavigationStatement> NavigationDefinitions => _registry.ReportContext.NavigationDefinitions;
         /// <inheritdoc />
-        public IDictionary<string, CreateStyleStatement> StyleDefinitions { get; } = new Dictionary<string, CreateStyleStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreateStyleStatement> StyleDefinitions => _registry.ReportContext.StyleDefinitions;
         /// <inheritdoc />
-        public IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; } = new Dictionary<string, CreateButtonStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreateButtonStatement> ButtonDefinitions => _registry.ReportContext.ButtonDefinitions;
         /// <inheritdoc />
-        public IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; } = new Dictionary<string, CreateTemplateStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreateTemplateStatement> TemplateDefinitions => _registry.ReportContext.TemplateDefinitions;
         /// <inheritdoc />
-        public string TemplatePath { get; set; } = "./Templates";
+        public string TemplatePath
+        {
+            get => _registry.ReportContext.TemplatePath;
+            set => _registry.ReportContext.TemplatePath = value;
+        }
         /// <inheritdoc />
-        public string? ReportTitle { get; set; }
+        public string? ReportTitle
+        {
+            get => _registry.ReportContext.ReportTitle;
+            set => _registry.ReportContext.ReportTitle = value;
+        }
         /// <inheritdoc />
-        public string? ReportDescription { get; set; }
+        public string? ReportDescription
+        {
+            get => _registry.ReportContext.ReportDescription;
+            set => _registry.ReportContext.ReportDescription = value;
+        }
 
         /// <summary>Optional prompt callback for interactive USE SETS WITH_PROMPT. Null = non-interactive (auto-proceed).</summary>
         public Func<string, Task<bool>>? OnPrompt { get; set; }
@@ -395,7 +407,8 @@ namespace ETL_SQL.Engine
             EvaluatorComponentRegistry registry,
             ConcurrentDictionary<string, IDataSource>? connections,
             VariableScopeManager? variableScopeManager,
-            ExecutionTree? executionTree)
+            ExecutionTree? executionTree,
+            IReportContext? reportContext = null)
         {
             _handlers = handlers;
             _serviceProvider = serviceProvider;
@@ -411,7 +424,7 @@ namespace ETL_SQL.Engine
             _variableScopeManager = variableScopeManager ?? new VariableScopeManager();
 
             _registry = registry;
-            _registry.Initialize(this, _logger, _variableScopeManager);
+            _registry.Initialize(this, _logger, _variableScopeManager, reportContext);
             
             _queryCompiler = _registry.QueryCompiler;
             _metricsReporter = _registry.MetricsReporter;
@@ -1000,7 +1013,8 @@ namespace ETL_SQL.Engine
         public IExecutionContext Fork()
         {
             var freshHandlers = _serviceProvider.GetServices<IStatementHandler>();
-            var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _securityService, _logger, _registry, _connections, _variableScopeManager.Fork(), ExecutionTree)
+            var clonedReportContext = (_registry.ReportContext as ReportRegistry)?.Clone() ?? _registry.ReportContext;
+            var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _securityService, _logger, new EvaluatorComponentRegistry(), _connections, _variableScopeManager.Fork(), ExecutionTree, clonedReportContext)
             {
                 IsVerbose = IsVerbose,
                 RedirectOutput = RedirectOutput,
