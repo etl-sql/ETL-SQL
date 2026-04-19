@@ -13,8 +13,8 @@ namespace ETL_SQL.Core.Data
     {
         public static bool IsSoftEqual(object? a, object? b, ILogger? logger = null)
         {
-            if ((a == null || a == DBNull.Value) && (b == null || b == DBNull.Value)) return true;
-            if (a == null || a == DBNull.Value || b == null || b == DBNull.Value) return false;
+            if (a.IsNull() && b.IsNull()) return true;
+            if (a.IsNull() || b.IsNull()) return false;
             
             try {
                 if (a is Row ra && b is Row rb)
@@ -28,8 +28,8 @@ namespace ETL_SQL.Core.Data
                     return true;
                 }
 
-                if (a == null || a == DBNull.Value || b == null || b == DBNull.Value) 
-                    return (a == null || a == DBNull.Value) && (b == null || b == DBNull.Value);
+                if (a.IsNull() || b.IsNull()) 
+                    return a.IsNull() && b.IsNull();
 
                 if (a is decimal da && b is decimal db) return da == db;
                 if (a is int ia && b is int ib) return ia == ib;
@@ -52,9 +52,9 @@ namespace ETL_SQL.Core.Data
 
         public static int CompareConstants(object? a, object? b)
         {
-            if ((a == null || a == DBNull.Value) && (b == null || b == DBNull.Value)) return 0;
-            if (a == null || a == DBNull.Value) return -1;
-            if (b == null || b == DBNull.Value) return 1;
+            if (a.IsNull() && b.IsNull()) return 0;
+            if (a.IsNull()) return -1;
+            if (b.IsNull()) return 1;
 
             string sa = a.ToString() ?? "";
             string sb = b.ToString() ?? "";

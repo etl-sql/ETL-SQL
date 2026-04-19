@@ -52,6 +52,7 @@ namespace ETL_SQL.Engine
         private readonly ConcurrentDictionary<string, IDataSource> _connections;
         private readonly Dictionary<string, IDataSource> _localSources = new(StringComparer.OrdinalIgnoreCase);
         private readonly VariableScopeManager _variableScopeManager;
+        private readonly EvaluatorComponentRegistry _registry;
         private readonly QueryCompiler _queryCompiler;
         private readonly ExecutionMetricsReporter _metricsReporter;
         private readonly DataSourceManager _dataSourceManager;
@@ -68,6 +69,12 @@ namespace ETL_SQL.Engine
         private readonly ISpillStore _spillStore;
 
         public ISpillStore SpillStore => _spillStore;
+        public QueryCompiler QueryCompiler => _registry.QueryCompiler;
+        public ExpressionEvaluator ExpressionEvaluator => _registry.ExpressionEvaluator;
+        public ProcedureExecutor ProcedureExecutor => _registry.ProcedureExecutor;
+        public DataSourceManager DataSourceManager => _registry.DataSourceManager;
+        public SchemaManager SchemaManager => _registry.SchemaManager;
+        public ExecutionMetricsReporter MetricsReporter => _registry.MetricsReporter;
 
         /// <summary>Current transaction nesting level.</summary>
         public int TranCount => _transactionManager.TranCount;
@@ -355,7 +362,22 @@ namespace ETL_SQL.Engine
             SessionStateManager sessionStateManager,
             SecurityService securityService,
             ILogger logger)
-            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, connectorRegistry, sessionStateManager, securityService, logger, null, null, null)
+            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, connectorRegistry, sessionStateManager, securityService, logger, new EvaluatorComponentRegistry())
+        {
+        }
+
+        public Evaluator(
+            IEnumerable<IStatementHandler> handlers,
+            IServiceProvider serviceProvider,
+            Core.Functions.IFunctionRegistry functionRegistry,
+            ILineageTracker lineageTracker,
+            IDockerManager dockerManager,
+            IConnectorRegistry connectorRegistry,
+            SessionStateManager sessionStateManager,
+            SecurityService securityService,
+            ILogger logger,
+            EvaluatorComponentRegistry registry)
+            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, connectorRegistry, sessionStateManager, securityService, logger, registry, null, null, null)
         {
         }
 
@@ -370,6 +392,7 @@ namespace ETL_SQL.Engine
             SessionStateManager sessionStateManager,
             SecurityService securityService,
             ILogger logger,
+            EvaluatorComponentRegistry registry,
             ConcurrentDictionary<string, IDataSource>? connections,
             VariableScopeManager? variableScopeManager,
             ExecutionTree? executionTree)
@@ -386,13 +409,17 @@ namespace ETL_SQL.Engine
             ExecutionTree = executionTree ?? new ExecutionTree();
             _connections = connections ?? new ConcurrentDictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
             _variableScopeManager = variableScopeManager ?? new VariableScopeManager();
-            _queryCompiler = new QueryCompiler(this);
-            _metricsReporter = new ExecutionMetricsReporter(this);
-            _expressionEvaluator = new ExpressionEvaluator(this);
-            _spillStore = new Spill.SpillStore(this);
-            _dataSourceManager = new DataSourceManager(_logger, this, _expressionEvaluator);
-            _schemaManager = new SchemaManager(_logger, this, _variableScopeManager);
-            _procedureExecutor = new ProcedureExecutor(_variableScopeManager, this);
+
+            _registry = registry;
+            _registry.Initialize(this, _logger, _variableScopeManager);
+            
+            _queryCompiler = _registry.QueryCompiler;
+            _metricsReporter = _registry.MetricsReporter;
+            _expressionEvaluator = _registry.ExpressionEvaluator;
+            _spillStore = _registry.SpillStore;
+            _dataSourceManager = _registry.DataSourceManager;
+            _schemaManager = _registry.SchemaManager;
+            _procedureExecutor = _registry.ProcedureExecutor;
 
             Functions.FileFunctions.Register(functionRegistry);
             Functions.LineageFunctions.Register(functionRegistry);
@@ -416,11 +443,23 @@ namespace ETL_SQL.Engine
             SessionId = Guid.NewGuid().ToString("N")[..8];
 
             // Initialize TemplatePath from configuration
-            var config = _serviceProvider?.GetService<IConfiguration>();
+            var config = _serviceProvider?.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
             if (config != null)
             {
                 TemplatePath = config.GetValue<string>("Reporting:TemplatePath") ?? "./Templates";
             }
+
+            // Initialize thresholds from config or defaults
+            MaxInMemoryBatches = DefaultThresholds.MaxInMemoryBatches(config);
+            ForeachPageSize = DefaultThresholds.ForeachPageSize(config);
+            JoinSpillThreshold = DefaultThresholds.JoinSpillThreshold(config);
+            ExternalHashPartitions = DefaultThresholds.ExternalHashPartitions(config);
+            BatchSize = DefaultThresholds.BatchSize(config);
+            MaxRecursiveDepth = DefaultThresholds.MaxRecursiveDepth(config);
+            ExternalSortChunkSize = DefaultThresholds.ExternalSortChunkSize(config);
+            WindowSpillThreshold = DefaultThresholds.WindowSpillThreshold(config);
+            SpillEncryptionEnabled = DefaultThresholds.SpillEncryptionEnabled(config);
+            SpillCompressionEnabled = DefaultThresholds.SpillCompressionEnabled(config);
 
             _logger.Info("Evaluator initialized.");
 
@@ -961,7 +1000,7 @@ namespace ETL_SQL.Engine
         public IExecutionContext Fork()
         {
             var freshHandlers = _serviceProvider.GetServices<IStatementHandler>();
-            var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _securityService, _logger, _connections, _variableScopeManager.Fork(), ExecutionTree)
+            var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _securityService, _logger, _registry, _connections, _variableScopeManager.Fork(), ExecutionTree)
             {
                 IsVerbose = IsVerbose,
                 RedirectOutput = RedirectOutput,

@@ -31,7 +31,7 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("RTRIM", (args, ctx) => args[0] == null ? null : args[0].ToString()?.TrimEnd(), "RTRIM(str): Removes trailing whitespaces.");
             registry.RegisterWithHelp("REVERSE", (args, ctx) => args[0] == null ? null : new string((args[0].ToString() ?? "").Reverse().ToArray()), "REVERSE(str): Reverses the characters in the string.");
             registry.RegisterWithHelp("ABS", (args, ctx) => {
-                if (args[0] == null || args[0] == DBNull.Value) return null;
+                if (args[0].IsNull()) return null;
                 if (!decimal.TryParse(args[0]?.ToString(), out var n)) return null;
                 return Math.Abs(n);
             }, "ABS(n): Returns the absolute value of a number. Returns NULL on non-numeric input.");
@@ -73,7 +73,7 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("YEAR", (args, ctx) => args[0] == null ? null : (EvaluationUtils.SafeTryParseDate(args[0]!.ToString()!, out var dt) ? (decimal)dt.Year : null), "YEAR(date): Returns the year part of a date.");
             registry.RegisterWithHelp("MONTH", (args, ctx) => args[0] == null ? null : (EvaluationUtils.SafeTryParseDate(args[0]!.ToString()!, out var dt) ? (decimal)dt.Month : null), "MONTH(date): Returns the month part of a date.");
             registry.RegisterWithHelp("DAY", (args, ctx) => args[0] == null ? null : (EvaluationUtils.SafeTryParseDate(args[0]!.ToString()!, out var dt) ? (decimal)dt.Day : null), "DAY(date): Returns the day part of a date.");
-            registry.RegisterWithHelp("COALESCE", (args, ctx) => args.FirstOrDefault(a => a != null && a != DBNull.Value), "COALESCE(v1, v2, ...): Returns the first non-null value.");
+            registry.RegisterWithHelp("COALESCE", (args, ctx) => args.FirstOrDefault(a => !a.IsNull()), "COALESCE(v1, v2, ...): Returns the first non-null value.");
             registry.RegisterWithHelp("ISNULL", IsNull, "ISNULL(v1, v2): Returns v2 if v1 is null.");
             registry.RegisterWithHelp("NVL", IsNull, "NVL(v1, v2): Alias for ISNULL.");
             registry.RegisterWithHelp("NULLIF", (args, ctx) => EvaluationUtils.IsSoftEqual(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1)) ? null : args.ElementAtOrDefault(0), "NULLIF(v1, v2): Returns NULL if v1 equals v2, else v1.");
@@ -81,12 +81,12 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("NOW", (args, ctx) => DateTime.Now, "NOW(): Alias for GETDATE.");
             registry.RegisterWithHelp("CAST", (args, ctx) => args.Count >= 2 ? EvaluationUtils.CastToType(args[0], args[1]?.ToString() ?? "STRING") : args[0], "CAST(expr AS type): Converts an expression to a target data type.");
             registry.RegisterWithHelp("COUNT", Count, "COUNT(col): Returns the number of items in a collection.");
-            registry.RegisterWithHelp("IS_NULL", (args, ctx) => args[0] == null || args[0] == DBNull.Value, "IS_NULL(expr): Returns TRUE if the expression is null.");
-            registry.RegisterWithHelp("IS_NOT_NULL", (args, ctx) => args[0] != null && args[0] != DBNull.Value, "IS_NOT_NULL(expr): Returns TRUE if the expression is NOT null.");
+            registry.RegisterWithHelp("IS_NULL", (args, ctx) => args[0].IsNull(), "IS_NULL(expr): Returns TRUE if the expression is null.");
+            registry.RegisterWithHelp("IS_NOT_NULL", (args, ctx) => !args[0].IsNull(), "IS_NOT_NULL(expr): Returns TRUE if the expression is NOT null.");
             registry.RegisterWithHelp("IIF", (args, ctx) => args.Count >= 3 ? (Convert.ToBoolean(args[0]) ? args[1] : args[2]) : args.FirstOrDefault(), "IIF(cond, true_val, false_val): Returns one of two values depending on a condition.");
             registry.RegisterWithHelp("IFNULL", IsNull, "IFNULL(v1, v2): Alias for ISNULL.");
-            registry.RegisterWithHelp("GREATEST", (args, ctx) => args.Where(a => a != null && a != DBNull.Value).OrderByDescending(a => a).FirstOrDefault(), "GREATEST(v1, v2, ...): Returns the largest value in the list.");
-            registry.RegisterWithHelp("LEAST", (args, ctx) => args.Where(a => a != null && a != DBNull.Value).OrderBy(a => a).FirstOrDefault(), "LEAST(v1, v2, ...): Returns the smallest value in the list.");
+            registry.RegisterWithHelp("GREATEST", (args, ctx) => args.Where(a => !a.IsNull()).OrderByDescending(a => a).FirstOrDefault(), "GREATEST(v1, v2, ...): Returns the largest value in the list.");
+            registry.RegisterWithHelp("LEAST", (args, ctx) => args.Where(a => !a.IsNull()).OrderBy(a => a).FirstOrDefault(), "LEAST(v1, v2, ...): Returns the smallest value in the list.");
             registry.RegisterWithHelp("GENERATE_SERIES", GenerateSeries, "GENERATE_SERIES(start, stop[, step]): Generates a series of numbers.");
             registry.RegisterWithHelp("FILE_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.File.Exists(ctx.ResolvePath(args[0]?.ToString() ?? "")) : false, "FILE_EXISTS(path): Returns TRUE if the file exists.");
             registry.RegisterWithHelp("DIRECTORY_EXISTS", (args, ctx) => args.Count >= 1 && args[0] != null ? System.IO.Directory.Exists(ctx.ResolvePath(args[0]?.ToString() ?? "")) : false, "DIRECTORY_EXISTS(path): Returns TRUE if the directory exists.");
@@ -161,7 +161,7 @@ namespace ETL_SQL.Engine.Functions
         /// <summary>Calculates the length of a string or collection.</summary>
         private static object? Len(List<object?> args, IExecutionContext ctx)
         {
-            if (args[0] == null || args[0] == DBNull.Value) return null;
+            if (args[0].IsNull()) return null;
             return args[0] is System.Collections.ICollection coll ? (decimal)coll.Count : (decimal)(args[0].ToString()?.Length ?? 0);
         }
 
@@ -318,7 +318,7 @@ namespace ETL_SQL.Engine.Functions
         {
             if (args.Count < 2) return args.FirstOrDefault();
             var first = args[0];
-            return (first == null || first == DBNull.Value) ? args[1] : first;
+            return (first.IsNull()) ? args[1] : first;
         }
 
         /// <summary>Returns the number of elements in a collection or 1 if it's a non-null scalar.</summary>

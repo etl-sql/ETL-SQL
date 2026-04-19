@@ -141,6 +141,7 @@ namespace ETL_SQL.App
             services.AddSingleton<IConnector>(new AzureBlobConnector(azureConn, azureContainer));
 
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
+            services.AddTransient<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
 
             // Linter & Security Rules
             var sensitiveKeywords = configuration.GetSection("Security:SensitiveKeywords").Get<string[]>();
@@ -150,34 +151,12 @@ namespace ETL_SQL.App
             services.AddTransient<ExecutionSession>();
             
             services.AddSingleton<IJobHistoryStore, SQLiteJobHistoryStore>();
-            int maxInMemoryBatches = int.TryParse(configuration["Orchestration:MaxInMemoryBatches"], out var mb) ? mb : LanguageMetadata.DefaultMaxInMemoryBatches;
-            int foreachPageSize = int.TryParse(configuration["Orchestration:ForeachPageSize"], out var ps) ? ps : 10000;
-            
             services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
             services.AddSingleton<JobThrottle>();
             services.AddSingleton<SchedulerService>();
 
-            int joinSpillThreshold = int.TryParse(configuration["Engine:JoinSpillThreshold"], out var jst) ? jst : 100000;
-            int externalHashPartitions = int.TryParse(configuration["Engine:ExternalHashPartitions"], out var ehp) ? Math.Max(1, ehp) : 32;
-            int batchSize = int.TryParse(configuration["Engine:BatchSize"], out var bs) ? bs : 10000;
-            int maxRecursiveDepth = int.TryParse(configuration["Engine:MaxRecursiveDepth"], out var mrd2) ? mrd2 : 10000;
-            int externalSortChunkSize = int.TryParse(configuration["Engine:ExternalSort:ChunkSize"], out var esc) ? esc : 100000;
-            int windowSpillThreshold = int.TryParse(configuration["Engine:WindowSpillThreshold"], out var wst) ? wst : 100000;
-            bool spillEncryptionEnabled = !bool.TryParse(configuration["Security:SpillEncryptionEnabled"], out var see) || see;
-            bool spillCompressionEnabled = !bool.TryParse(configuration["Security:SpillCompressionEnabled"], out var sce) || sce;
-
             services.AddTransient<Evaluator>(sp => {
                 var evaluator = ActivatorUtilities.CreateInstance<Evaluator>(sp);
-                evaluator.MaxInMemoryBatches = maxInMemoryBatches;
-                evaluator.ForeachPageSize = foreachPageSize;
-                evaluator.JoinSpillThreshold = joinSpillThreshold;
-                evaluator.ExternalHashPartitions = externalHashPartitions;
-                evaluator.BatchSize = batchSize;
-                evaluator.MaxRecursiveDepth = maxRecursiveDepth;
-                evaluator.ExternalSortChunkSize = externalSortChunkSize;
-                evaluator.WindowSpillThreshold = windowSpillThreshold;
-                evaluator.SpillEncryptionEnabled = spillEncryptionEnabled;
-                evaluator.SpillCompressionEnabled = spillCompressionEnabled;
                 return evaluator;
             });
 

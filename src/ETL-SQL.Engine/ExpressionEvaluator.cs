@@ -8,8 +8,9 @@ using System.Diagnostics;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
 using System.Collections.Concurrent;
 using System.Reflection;
 
@@ -510,14 +511,14 @@ namespace ETL_SQL.Engine
             {
                 var lVal = await EvaluateInternal(bin.Left, context);
                 // IF L is FALSE, result is FALSE (Short-circuit)
-                if (lVal != null && lVal != DBNull.Value && !Convert.ToBoolean(lVal)) return false;
+                if (!lVal.IsNull() && !Convert.ToBoolean(lVal)) return false;
 
                 var rVal = await EvaluateInternal(bin.Right, context);
                 // IF R is FALSE, result is FALSE
-                if (rVal != null && rVal != DBNull.Value && !Convert.ToBoolean(rVal)) return false;
+                if (!rVal.IsNull() && !Convert.ToBoolean(rVal)) return false;
 
                 // IF either is NULL, result is NULL (UNKNOWN)
-                if (lVal == null || lVal == DBNull.Value || rVal == null || rVal == DBNull.Value) return null;
+                if (lVal.IsNull() || rVal.IsNull()) return null;
 
                 // Both must be TRUE
                 return true;
@@ -526,14 +527,14 @@ namespace ETL_SQL.Engine
             {
                 var lVal = await EvaluateInternal(bin.Left, context);
                 // IF L is TRUE, result is TRUE (Short-circuit)
-                if (lVal != null && lVal != DBNull.Value && Convert.ToBoolean(lVal)) return true;
+                if (!lVal.IsNull() && Convert.ToBoolean(lVal)) return true;
 
                 var rVal = await EvaluateInternal(bin.Right, context);
                 // IF R is TRUE, result is TRUE
-                if (rVal != null && rVal != DBNull.Value && Convert.ToBoolean(rVal)) return true;
+                if (!rVal.IsNull() && Convert.ToBoolean(rVal)) return true;
 
                 // IF either is NULL, result is NULL (UNKNOWN)
-                if (lVal == null || lVal == DBNull.Value || rVal == null || rVal == DBNull.Value) return null;
+                if (lVal.IsNull() || rVal.IsNull()) return null;
 
                 // Both must be FALSE
                 return false;

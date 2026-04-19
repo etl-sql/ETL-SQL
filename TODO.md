@@ -30,13 +30,13 @@
 
   #### 🟡 Medium Priority — Performance
 
-  - [ ] **Uncached reflection per row in member access evaluation** — `ExpressionEvaluator.cs:436-440` calls `GetType().GetProperty()` and `GetType().GetField()` on every row evaluation when a `MemberAccessExpression` is hit. Cache the `PropertyInfo`/`FieldInfo` keyed by `(type, memberName)` in a static `ConcurrentDictionary`.
+  - [x] **Uncached reflection per row in member access evaluation** — `ExpressionEvaluator.cs:436-440` calls `GetType().GetProperty()` and `GetType().GetField()` on every row evaluation when a `MemberAccessExpression` is hit. Cache the `PropertyInfo`/`FieldInfo` keyed by `(type, memberName)` in a static `ConcurrentDictionary`.
 
-  - [ ] **O(n²) identifier ambiguity check per column reference** — `ExpressionEvaluator.cs:90` runs `.Any(other => ...)` inside a `foreach` over `context.Columns.Keys` to detect ambiguous names. For wide rows this is O(columns²) per identifier resolution. Pre-build a `HashSet<string>` of suffixes (column name without qualifier) once per row and check it in O(1).
+  - [x] **O(n²) identifier ambiguity check per column reference** — `ExpressionEvaluator.cs:90` runs `.Any(other => ...)` inside a `foreach` over `context.Columns.Keys` to detect ambiguous names. For wide rows this is O(columns²) per identifier resolution. Pre-build a `HashSet<string>` of suffixes (column name without qualifier) once per row and check it in O(1).
 
-  - [ ] **`ToSql()` called multiple times per expression in hot loops** — `AggregateEngine.cs:47,234` and `ExpressionEvaluator.cs:289` call `expr.ToSql()` 2–3× for the same expression in tight loops. Cache the result in a local variable at the start of the expression visit.
+  - [x] **`ToSql()` called multiple times per expression in hot loops** — `AggregateEngine.cs:47,234` and `ExpressionEvaluator.cs:289` call `expr.ToSql()` 2–3× for the same expression in tight loops. Cache the result in a local variable at the start of the expression visit.
 
-  - [ ] **TUI results panel `Skip().ToList()` on every render** — `ResultsPanel.cs:38,43` does `res.Rows.Skip(_renderer.ResultScrollRow).Take(...)..ToList()` on each redraw. With 50k+ rows this materializes a large intermediate allocation per keypress. Use indexed access with a page window instead.
+  - [x] **TUI results panel `Skip().ToList()` on every render** — `ResultsPanel.cs:38,43` does `res.Rows.Skip(_renderer.ResultScrollRow).Take(...)..ToList()` on each redraw. With 50k+ rows this materializes a large intermediate allocation per keypress. Use indexed access with a page window instead.
 
   #### 🟡 Medium Priority — Maintainability / SRP
 

@@ -10,7 +10,7 @@ namespace ETL_SQL.Engine.Services
     /// Encapsulates the execution of user-defined functions and stored procedures.
     /// Handles scope isolation, parameter binding, and return value extraction.
     /// </summary>
-    internal sealed class ProcedureExecutor(VariableScopeManager scopeManager, IExecutionContext context)
+    public sealed class ProcedureExecutor(VariableScopeManager scopeManager, IExecutionContext context)
     {
         private readonly VariableScopeManager _scopeManager = scopeManager;
         private readonly IExecutionContext _context = context;

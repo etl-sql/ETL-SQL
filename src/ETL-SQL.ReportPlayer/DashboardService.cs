@@ -72,30 +72,7 @@ namespace ETL_SQL.ReportPlayer
                 await _lock.WaitAsync();
                 try
                 {
-                    var affected = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    foreach (var (name, value) in updates)
-                    {
-                        var varName = name.StartsWith('@') ? name : '@' + name;
-                        _evaluator.DeclareVariable(varName, value, new VariableMetadata { IsInput = true });
-                        affected.Add(name.TrimStart('@'));
-                    }
-
-                    var builder = new ManifestBuilder(_evaluator);
-                    var refreshCount = 0;
-
-                    foreach (var visualDef in _evaluator.VisualDefinitions.Values)
-                    {
-                        if (affected.Any(n => DependsOnVariable(visualDef, n)))
-                        {
-                            var existingVm = _manifest.Visuals.FirstOrDefault(v => v.Name == visualDef.Name);
-                            if (existingVm != null)
-                            {
-                                await builder.RefreshVisualAsync(visualDef, existingVm);
-                                refreshCount++;
-                            }
-                        }
-                    }
-
+                    int refreshCount = await DashboardSharedLogic.RefreshAffectedVisualsAsync(_evaluator, _manifest, updates);
                     if (refreshCount > 0)
                     {
                         _manifest.BuiltAt = DateTime.UtcNow;
@@ -122,26 +99,8 @@ namespace ETL_SQL.ReportPlayer
                 await _lock.WaitAsync();
                 try 
                 {
-                    var varName = name.StartsWith('@') ? name : "@" + name;
-                    _evaluator.DeclareVariable(varName, value, new VariableMetadata { IsInput = true });
-
-                    var builder = new ManifestBuilder(_evaluator);
-                    var affectedCount = 0;
-
-                    foreach (var visualDef in _evaluator.VisualDefinitions.Values)
-                    {
-                        if (DependsOnVariable(visualDef, name))
-                        {
-                            var existingVm = _manifest.Visuals.FirstOrDefault(v => v.Name == visualDef.Name);
-                            if (existingVm != null)
-                            {
-                                await builder.RefreshVisualAsync(visualDef, existingVm);
-                                affectedCount++;
-                            }
-                        }
-                    }
-
-                    if (affectedCount > 0)
+                    int refreshCount = await DashboardSharedLogic.RefreshAffectedVisualsAsync(_evaluator, _manifest, new[] { (name, value) });
+                    if (refreshCount > 0)
                     {
                         _manifest.BuiltAt = DateTime.UtcNow;
                         return _manifest;
@@ -155,19 +114,7 @@ namespace ETL_SQL.ReportPlayer
 
         private bool DependsOnVariable(CreateVisualStatement visual, string variableName)
         {
-            if (!variableName.StartsWith("@")) variableName = "@" + variableName;
-
-            // AST-based scanning: robustly identify @Variable usage in the SelectStatement AST.
-            // This avoids false positives from strings/comments that would occur with raw string.Contains().
-            if (visual.Source.IsInlineSelect && visual.Source.InlineSelect != null)
-            {
-                var usedParams = ParameterScanner.Scan(visual.Source.InlineSelect);
-                return usedParams.Contains(variableName);
-            }
-
-            // For #temp tables, we fallback to checking if the table name itself contains the variable name.
-            // Usually #temp tables don't contain @vars in their names, but this maintains parity with previous logic.
-            return visual.Source.TempTableName?.Contains(variableName, StringComparison.OrdinalIgnoreCase) ?? false;
+            return DashboardSharedLogic.DependsOnVariable(visual, variableName);
         }
 
         /// <summary>Full rebuild: re-evaluate the script and re-snapshot all visuals.</summary>

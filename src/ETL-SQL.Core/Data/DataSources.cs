@@ -503,9 +503,18 @@ namespace ETL_SQL.Data
 
                     if (_batches.Count >= MaxInMemoryBatches && OverflowDirectory != null)
                     {
-                        var oldest = _batches[0];
-                        _batches.RemoveAt(0);
-                        await SpillBatchToDiskAsync(oldest);
+                        if (_batches.Count > 0)
+                        {
+                            var oldest = _batches[0];
+                            _batches.RemoveAt(0);
+                            await SpillBatchToDiskAsync(oldest);
+                        }
+                        else
+                        {
+                            // If max batches is 0, spill the current batch immediately
+                            await SpillBatchToDiskAsync(b);
+                            continue;
+                        }
                     }
 
                     _batches.Add(b);
