@@ -1,32 +1,18 @@
 # ETL-SQL Development Roadmap
 
 ## Up Next
-
-- [ ] **Code review round 2** — findings below, implement separately per priority.
-
-  #### 🧪 Linting Gaps
-
-  - [ ] **No linter rule: `MULTISELECT` / `SLICER` without `SOURCE`** — The parser allows it and silently produces a broken visual. Add `VisualSourceRequiredRule` that flags these as errors (not warnings).
-
-  - [ ] **No linter rule: required `MAPPINGS` per visual type** — `BAR` without X+Y, `PIE` without LABEL+VALUE, `CARD` without VALUE are all accepted by the parser but produce empty/broken charts at runtime. Add `VisualMappingCompletenessRule` to catch these at lint time.
-
-  - [ ] **No linter rule: deprecated connector syntax** — The parser throws immediately on `FILE(...)` (should be `FLATFILE`), but a linter rule would give a friendlier message during development with a suggestion to use the current syntax.
-
-- [ ] **KILL JOB missing** This was referenced several times in different documentations but apparently it was never implemented.  After running SHOW JOBS the user should see the JOB ID and be able to KILL that job if they need to.  The KILL command should do a graceful end to the job, logging that it was killed by user, clean up SESSION, clean up incomplete files, rollback DB transactions if possible.  The KILL is meant to be somewhat immediate so we want to respect that idea as far as how far we go to gracefully cleanup.
 ---
 
 ## Large Dataset Handling — Gaps vs. `Docs/Strategy/LargeDatasets.md`
 
 The spill infrastructure (`SpillStore`, `ExternalSortEngine`, `ExternalJoinEngine`, `ExternalAggregateEngine`, `ExternalWindowEngine`) is complete and wired for query operations. The items below are the remaining unimplemented strategies from the design doc. Without them the acceptance criterion — `SELECT * INTO #SalesData FROM FactSales` (50M rows) on an 8 GB VM without OOM — cannot be met.
 
-  #### 🔴 High Priority — Strategy 2.3: Spill-to-Disk for `#temp` Tables
+  #### [x] Strategy 2.3: Spill-to-Disk for `#temp` Tables
+  Completed: Transparent row-level spilling with multi-chunk management and secure cleanup. Verified via `TempTableSpillTests`.
 
-  - [ ] **`#temp` table accumulation has no spill mechanism** — `InsertStatementHandler` writes every inserted row directly into the in-memory `DataTable` stored in `_tempTables`. There is no threshold check, no `SpillStore` hook, and no overflow path. A script doing `INSERT INTO #big ... ` (millions of rows) or `SELECT * INTO #big FROM large_source` will OOM the host. **Design in `LargeDatasets.md §5`:**
-    - `TempTableInfo` gains a nullable `SpillStore` field (path to GZip-compressed NDJSON spill file — the existing `SpillStore` class already provides the writer/reader).
-    - `InsertStatementHandler` checks row count against `TempTable:SpillThresholdRows` (config, default 1,000,000) after each batch; when exceeded, flushes in-memory rows to the spill file and clears the buffer.
-    - All `#temp` table read paths (SELECT, JOIN probe side, FOREACH source, etc.) must transparently merge spill pages with the in-memory buffer when a spill file is present.
-    - `DROP TABLE` and session disposal must delete the spill file.
-    - `SHOW TABLES` should surface a `(spilled)` indicator when the table has overflow pages on disk.
+    - [ ] Session Metadata: Persist variables, lineage, and temp table schemas to an SQLite or JSON file.
+    - [ ] Spilled Data Persistence: Handle "detaching" spilled `#temp` table chunks from `SpillStore` transient cleanup to allow recovery after restart.
+    - [ ] Key Management: Ensure machine keys are used for encrypting saved session state.
 
   #### 🟡 Medium Priority — Strategy 2.1: Streaming Batch Propagation
 
@@ -38,5 +24,14 @@ The spill infrastructure (`SpillStore`, `ExternalSortEngine`, `ExternalJoinEngin
 
   #### 🟢 Low Priority — Strategy 2.4: Arrow Columnar Format
 
-  - [ ] **`DataTable` (row-oriented, boxed `object[]`) is the core temp-table representation** — Replacing it with Apache Arrow columnar format would yield 10–50× speedup on aggregation-heavy workloads and dramatically lower memory for numeric columns. Explicitly deferred — scope as a separate architectural migration project after strategies 2.1–2.3 are validated in production.
+  - [ ] **`DataTable` (row-oriented, boxed `object[]`) is the core temp-table representation** — Replacing it with Apache Arrow columnar format would yield 10–50× speedup on aggregation-heavy workloads and dramatically lower memory for numeric columns. 
+    - **Benefits Identified:**
+        - **10–50x performance improvement** via SIMD/vectorized processing of columns.
+        - **Memory density:** Avoids overhead of boxed objects; stores primitives in contiguous memory arrays.
+        - **Zero-copy interoperability:** Enables high-speed handoff to Python/R/C++ analytical libraries.
+        - **Native Spilling:** Arrow IPC format is a standard-compliant alternative for Strategy 2.3 spilling.
+    - **Implementation Impact:**
+        - **"Transplant vs. Feature":** Requires refactoring nearly every logic handler (Aggregate, Join, Sort) to use vectorized kernels instead of LINQ-over-Rows.
+        - **Prerequisite:** Streaming (2.1) and Spilling (2.3) should be completed first to solve stability/OOM issues before moving to performance tuning with Arrow.
+        - **Scope:** Treat as a standalone architectural migration project.
 

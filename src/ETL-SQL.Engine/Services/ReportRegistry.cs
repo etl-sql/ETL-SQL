@@ -22,6 +22,7 @@ namespace ETL_SQL.Engine.Services
 
         public string TemplatePath { get; set; } = "./Templates";
         public string? ReportTitle { get; set; }
+        public bool ReportTitleIsMarkdown { get; set; }
         public string? ReportDescription { get; set; }
 
         public ReportRegistry()

@@ -45,14 +45,6 @@ namespace ETL_SQL.Engine.Services
                 mem.Validator = _evaluator;
                 
                 // Configure spill-to-disk protection
-                if (!string.IsNullOrEmpty(_evaluator.SessionId))
-                {
-                    // Using a dedicated overflow sub-directory to avoid collision with session save-files
-                    var sessionTempDir = Path.Combine(_evaluator.SessionStateManager.SessionRoot, _evaluator.SessionId + "_overflow");
-                    mem.OverflowDirectory = sessionTempDir;
-                    mem.OverflowEntropy = _evaluator.SessionStateManager.GetMachineKey();
-                }
-                
                 mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
                 mem.ExecutionContext = _evaluator;
                 

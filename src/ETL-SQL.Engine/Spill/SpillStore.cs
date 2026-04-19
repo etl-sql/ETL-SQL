@@ -47,6 +47,22 @@ namespace ETL_SQL.Engine.Spill
             return await Task.FromResult(new SecureSpillReader(path, chunkName, _sessionKey, encrypt, compress));
         }
 
+        public void DeleteChunk(string chunkName)
+        {
+            var path = Path.Combine(_rootPath, chunkName);
+            if (File.Exists(path))
+            {
+                try
+                {
+                    File.Delete(path);
+                }
+                catch (Exception ex)
+                {
+                    _context.Logger.Warning("Failed to delete spill chunk {ChunkName}: {Message}", chunkName, ex.Message);
+                }
+            }
+        }
+
         public void Cleanup()
         {
             if (Directory.Exists(_rootPath))

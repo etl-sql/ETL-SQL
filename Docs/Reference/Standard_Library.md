@@ -48,6 +48,7 @@ DECLARE @days INT = date2 - date1;      -- Difference in days (decimal)
 | `STRING` | Unicode text, arbitrary length |
 | `VARCHAR(N)` | Unicode text, max N characters |
 | `NVARCHAR(N)` | Synonym for `VARCHAR(N)` |
+| `MARKDOWN` | Specialized string type that enables automatic Markdown rendering in reports |
 | `CHAR(N)` | Fixed-length, N characters (padded with spaces) |
 | `TEXT` | Alias for `STRING`; unbounded |
 
@@ -97,6 +98,7 @@ Safe conversion. Returns `NULL` if conversion fails. Ideal for dirty source data
 ```sql
 -- Numeric
 SELECT CAST('42' AS INT)              AS i;   -- 42
+SELECT CAST('# Title' AS MARKDOWN)    AS md;  -- Evaluated as Markdown in UI
 SELECT CAST('123.456' AS DECIMAL(5,2)) AS d;  -- 123.46 (rounded)
 SELECT CAST('100.00' AS MONEY)        AS m;
 SELECT TRY_CAST('N/A' AS INT)         AS bad; -- NULL (no exception)

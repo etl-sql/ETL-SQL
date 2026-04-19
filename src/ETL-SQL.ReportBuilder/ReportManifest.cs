@@ -27,6 +27,9 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("title")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Title { get; set; }
+        [JsonPropertyName("titleIsMarkdown")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool TitleIsMarkdown { get; set; }
 
         /// <summary>Optional report description (from SET REPORT DESCRIPTION = '...').</summary>
         [JsonPropertyName("description")]
@@ -66,6 +69,18 @@ namespace ETL_SQL.ReportBuilder
 
         [JsonPropertyName("visualType")]
         public string VisualType { get; set; } = string.Empty;
+
+        [JsonPropertyName("titleIsMarkdown")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool TitleIsMarkdown { get; set; }
+
+        [JsonPropertyName("subtitleIsMarkdown")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool SubtitleIsMarkdown { get; set; }
+        
+        [JsonPropertyName("isMarkdown")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool IsMarkdown { get; set; }
 
         /// <summary>Resolved ECharts option JSON object (as a pre-serialised string).</summary>
         [JsonPropertyName("chartConfig")]
@@ -151,6 +166,26 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("structure")]
         public string Structure { get; set; } = string.Empty;
 
+        [JsonPropertyName("title")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Title { get; set; }
+
+        [JsonPropertyName("titleIsMarkdown")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool TitleIsMarkdown { get; set; }
+
+        [JsonPropertyName("subtitle")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Subtitle { get; set; }
+
+        [JsonPropertyName("subtitleIsMarkdown")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool SubtitleIsMarkdown { get; set; }
+        
+        [JsonPropertyName("tooltip")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public TooltipManifest? Tooltip { get; set; }
+
         /// <summary>Slot letter → visual name.</summary>
         [JsonPropertyName("slotMap")]
         public Dictionary<string, string> SlotMap { get; set; } = new();
@@ -219,6 +254,22 @@ namespace ETL_SQL.ReportBuilder
     {
         [JsonPropertyName("name")]          public string Name { get; set; } = string.Empty;
         [JsonPropertyName("containerType")] public string ContainerType { get; set; } = string.Empty;
+        
+        [JsonPropertyName("title")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Title { get; set; }
+
+        [JsonPropertyName("titleIsMarkdown")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool TitleIsMarkdown { get; set; }
+
+        [JsonPropertyName("subtitle")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Subtitle { get; set; }
+
+        [JsonPropertyName("subtitleIsMarkdown")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool SubtitleIsMarkdown { get; set; }
         [JsonPropertyName("visuals")]       public List<string> Visuals { get; set; } = new();
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -260,6 +311,10 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("visuals")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<string>? Visuals { get; set; }
+
+        [JsonPropertyName("isMarkdown")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool IsMarkdown { get; set; }
     }
 
     public class ButtonManifest

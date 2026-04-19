@@ -101,6 +101,10 @@ Sets the report title and description displayed in the dashboard header and cata
 ```sql
 SET REPORT TITLE = 'Sales Dashboard';
 SET REPORT DESCRIPTION = 'Regional and product-level revenue analysis for Q1 2026.';
+
+-- Enable markdown for the report title
+SET REPORT TITLE = '# Quarterly Revenue';
+STYLE (TITLE_MD = ON);
 ```
 
 Both statements are optional. If omitted the script filename is used as the title.
@@ -179,6 +183,9 @@ CREATE VISUAL RevenueCard AS CARD (
 ```
 
 `TITLE` overrides the visual name as the chart heading. `SUBTITLE` appears below the title in smaller text.
+
+> [!NOTE]
+> **Markdown Support**: `TITLE`, `SUBTITLE`, and `TOOLTIP` all support Markdown formatting. This is automatically enabled if the value is a variable of type `MARKDOWN`. Alternatively, it can be forced via `STYLE` properties (e.g., `TITLE_MD = ON`, `SUBTITLE_MD = ON`, or `TOOLTIP_MD = ON`).
 
 ### TOOLTIP
 
@@ -710,6 +717,9 @@ STYLE (
 | `TOOLTIP` | `'Hover text'` | Visual | Floating help text. Prefer the top-level `TOOLTIP` clause; this key is accepted here for backwards compatibility. |
 | `Z-INDEX` | `100` | Any | Layer stacking order. |
 | `SHADOW` | `ON` / `OFF` | Visual | Enable/disable visual card shadow. |
+| `TITLE_MD` | `ON` / `OFF` | Any | Force Markdown resolution for the title. |
+| `SUBTITLE_MD` | `ON` / `OFF` | Any | Force Markdown resolution for the subtitle. |
+| `TOOLTIP_MD` | `ON` / `OFF` | Any | Force Markdown resolution for the tooltip text. |
 ```
 
 ### ACTIONS

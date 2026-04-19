@@ -20,7 +20,8 @@ namespace ETL_SQL.Core
         MaxFileOperations,
         MaxGroupingSets,
         MaxSessionSize,
-        Telemetry
+        Telemetry,
+        TempTableSpill
     }
 
     public record SetThresholdStatement(ThresholdType Type, Expression Value) : Statement

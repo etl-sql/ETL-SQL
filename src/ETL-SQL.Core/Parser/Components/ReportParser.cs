@@ -21,8 +21,8 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.LPAREN, "Expected '(' after visual type");
 
             VisualSourceExpression? source = null;
-            string? title = null;
-            string? subtitle = null;
+            string? title = null, subtitle = null;
+            bool titleMd = false, subtitleMd = false;
             string? defaultValue = null;
             string? styleName = null;
             TooltipDefinition? tooltip = null;
@@ -44,11 +44,11 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 else if (Match(TokenType.TITLE))
                 {
-                    title = ParseVisualProperty("TITLE");
+                    (title, titleMd) = ParseVisualPropertyWithMd("TITLE");
                 }
                 else if (Match(TokenType.SUBTITLE))
                 {
-                    subtitle = ParseVisualProperty("SUBTITLE");
+                    (subtitle, subtitleMd) = ParseVisualPropertyWithMd("SUBTITLE");
                 }
                 else if (Match(TokenType.TOOLTIP))
                 {
@@ -115,7 +115,9 @@ namespace ETL_SQL.Core.Parser.Components
                 if (visualType == VisualType.Text
                     || visualType == VisualType.DatePicker
                     || visualType == VisualType.Slider
-                    || visualType == VisualType.Search)
+                    || visualType == VisualType.Search
+                    || visualType == VisualType.Slicer
+                    || visualType == VisualType.MultiSelect)
                     source = new VisualSourceExpression();
                 else
                     throw new SyntaxException($"CREATE VISUAL '{name}' is missing a SOURCE clause.", startToken.Line, startToken.Column);
@@ -126,7 +128,9 @@ namespace ETL_SQL.Core.Parser.Components
                 Name            = name,
                 VisualType      = visualType,
                 Title           = title,
+                TitleIsMarkdown = titleMd,
                 Subtitle        = subtitle,
+                SubtitleIsMarkdown = subtitleMd,
                 DefaultValue    = defaultValue,
                 Source          = source,
                 Mappings        = mappings,
@@ -156,6 +160,9 @@ namespace ETL_SQL.Core.Parser.Components
 
             string? structure = null;
             string? pageStyleName = null;
+            string? title = null, subtitle = null;
+            bool titleMd = false, subtitleMd = false;
+            TooltipDefinition? tooltip = null;
             var slotMap    = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var pageStyles = new Dictionary<string, string>();
 
@@ -182,6 +189,18 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.STYLE))
                 {
                     ParseStyleClause(pageStyles, ref pageStyleName);
+                }
+                else if (Match(TokenType.TITLE))
+                {
+                    (title, titleMd) = ParseVisualPropertyWithMd("TITLE");
+                }
+                else if (Match(TokenType.SUBTITLE))
+                {
+                    (subtitle, subtitleMd) = ParseVisualPropertyWithMd("SUBTITLE");
+                }
+                else if (Match(TokenType.TOOLTIP))
+                {
+                    tooltip = ParseTooltipDefinition();
                 }
                 else
                 {
@@ -232,15 +251,20 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new CreatePageStatement
             {
-                Name       = name,
-                Structure  = structure,
-                SlotMap    = slotMap,
-                Parameters = parameters,
-                Styles     = pageStyles,
-                StyleName  = pageStyleName,
-                Mode       = mode,
-                Line       = startToken.Line,
-                Column     = startToken.Column
+                Name            = name,
+                Structure       = structure,
+                SlotMap         = slotMap,
+                Parameters      = parameters,
+                Styles          = pageStyles,
+                StyleName       = pageStyleName,
+                Title           = title,
+                TitleIsMarkdown = titleMd,
+                Subtitle        = subtitle,
+                SubtitleIsMarkdown = subtitleMd,
+                Tooltip         = tooltip,
+                Mode            = mode,
+                Line            = startToken.Line,
+                Column          = startToken.Column
             };
         }
 
@@ -399,6 +423,9 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.LPAREN, "Expected '(' after container type");
 
             string? containerStyleName = null;
+            string? title = null, subtitle = null;
+            bool titleMd = false, subtitleMd = false;
+            TooltipDefinition? tooltip = null;
             var styles  = new Dictionary<string, string>();
             var visuals = new List<string>();
 
@@ -407,6 +434,18 @@ namespace ETL_SQL.Core.Parser.Components
                 if (Match(TokenType.STYLE))
                 {
                     ParseStyleClause(styles, ref containerStyleName);
+                }
+                else if (Match(TokenType.TITLE))
+                {
+                    (title, titleMd) = ParseVisualPropertyWithMd("TITLE");
+                }
+                else if (Match(TokenType.SUBTITLE))
+                {
+                    (subtitle, subtitleMd) = ParseVisualPropertyWithMd("SUBTITLE");
+                }
+                else if (Match(TokenType.TOOLTIP))
+                {
+                    tooltip = ParseTooltipDefinition();
                 }
                 else if (_parser.Current.Type == TokenType.IDENTIFIER &&
                          _parser.Current.Value.Equals("VISUALS", StringComparison.OrdinalIgnoreCase))
@@ -434,14 +473,19 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new CreateContainerStatement
             {
-                Name          = name,
-                ContainerType = containerType,
-                Visuals       = visuals,
-                Styles        = styles,
-                StyleName     = containerStyleName,
-                Mode          = mode,
-                Line          = startToken.Line,
-                Column        = startToken.Column
+                Name               = name,
+                ContainerType      = containerType,
+                Visuals            = visuals,
+                Styles             = styles,
+                StyleName          = containerStyleName,
+                Title              = title,
+                TitleIsMarkdown     = titleMd,
+                Subtitle           = subtitle,
+                SubtitleIsMarkdown  = subtitleMd,
+                Tooltip            = tooltip,
+                Mode               = mode,
+                Line               = startToken.Line,
+                Column             = startToken.Column
             };
         }
 
@@ -625,8 +669,8 @@ namespace ETL_SQL.Core.Parser.Components
             var actions     = new List<VisualAction>();
             var styles      = new Dictionary<string, string>();
             string? styleName = null;
-            string? title = null;
-            string? subtitle = null;
+            string? title = null, subtitle = null, defaultValue = null;
+            bool titleMd = false, subtitleMd = false;
             TooltipDefinition? tooltip = null;
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
@@ -684,20 +728,22 @@ namespace ETL_SQL.Core.Parser.Components
 
             return new AlterReportObjectStatement
             {
-                ObjectType  = type,
-                Name        = name,
-                Source      = source,
-                Mappings    = mappings.Count > 0 ? mappings : null,
-                Options     = options.Count > 0 ? options : null,
-                AxisOptions = axisOptions.Count > 0 ? axisOptions : null,
-                Actions     = actions.Count > 0 ? actions : null,
-                Styles      = styles.Count > 0 ? styles : null,
-                StyleName   = styleName,
-                Title       = title,
-                Subtitle    = subtitle,
-                Tooltip     = tooltip,
-                Line        = startToken.Line,
-                Column      = startToken.Column
+                ObjectType         = type,
+                Name               = name,
+                Source             = source,
+                Mappings           = mappings.Count > 0 ? mappings : null,
+                Options            = options.Count > 0 ? options : null,
+                AxisOptions        = axisOptions.Count > 0 ? axisOptions : null,
+                Actions            = actions.Count > 0 ? actions : null,
+                Styles             = styles.Count > 0 ? styles : null,
+                StyleName          = styleName,
+                Title              = title,
+                TitleIsMarkdown     = titleMd,
+                Subtitle           = subtitle,
+                SubtitleIsMarkdown  = subtitleMd,
+                Tooltip            = tooltip,
+                Line               = startToken.Line,
+                Column             = startToken.Column
             };
         }
 
@@ -799,25 +845,44 @@ namespace ETL_SQL.Core.Parser.Components
             return new VisualSourceExpression { TempTableName = tableRef };
         }
 
-        private string? ParseVisualProperty(string propertyName)
+        private (string? Value, bool IsMarkdown) ParseVisualPropertyWithMd(string propertyName)
         {
             Match(TokenType.EQUALS);
             string? value;
+            bool isMarkdown = false;
             if (Match(TokenType.LPAREN))
             {
-                value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : Consume(TokenType.STRING, $"Expected string literal for {propertyName}").Value;
+                isMarkdown = true;
+                if (Match(TokenType.VARIABLE))
+                {
+                    value = _parser.Previous.Value;
+                }
+                else
+                {
+                    value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : Consume(TokenType.STRING, $"Expected string literal or variable for {propertyName}").Value;
+                }
                 Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
             }
             else
             {
-                value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : Consume(TokenType.STRING, $"Expected string literal for {propertyName}").Value;
+                if (Match(TokenType.VARIABLE))
+                {
+                    value = _parser.Previous.Value;
+                }
+                else
+                {
+                    value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : Consume(TokenType.STRING, $"Expected string literal or variable for {propertyName}").Value;
+                }
             }
-            return value;
+            return (value, isMarkdown);
         }
+
+        private string? ParseVisualProperty(string propertyName) => ParseVisualPropertyWithMd(propertyName).Value;
 
         private TooltipDefinition ParseTooltipDefinition()
         {
-            Match(TokenType.EQUALS);
+            // Optional EQUALS. If followed by LPAREN, it's the markdown/visuals block.
+            bool hadEquals = Match(TokenType.EQUALS);
 
             if (ReportCheck(TokenType.LPAREN))
             {

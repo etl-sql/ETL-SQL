@@ -35,6 +35,8 @@ namespace ETL_SQL.Core.Spill
     {
         Task<ISpillWriter> CreateWriterAsync(string chunkName);
         Task<ISpillReader> CreateReaderAsync(string chunkName);
+        /// <summary>Deletes a specific chunk from the store.</summary>
+        void DeleteChunk(string chunkName);
         void Cleanup();
     }
 }

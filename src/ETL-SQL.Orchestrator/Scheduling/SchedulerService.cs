@@ -18,7 +18,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
     /// Concurrency is limited by <see cref="JobThrottle"/> — jobs beyond the cap are queued
     /// and executed as slots become available.
     /// </summary>
-    public class SchedulerService
+    public class SchedulerService : IJobManager
     {
         private readonly IServiceProvider _serviceProvider;
         private readonly IJobHistoryStore _store;
@@ -27,6 +27,7 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly JobThrottle _throttle;
         private readonly ETL_SQL.Engine.Services.SessionStateManager _sessionManager;
         private CancellationTokenSource? _cts;
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<long, CancellationTokenSource> _runningJobs = new();
 
         public SchedulerService(IServiceProvider serviceProvider, IJobHistoryStore store,
             ILogger<SchedulerService> logger, JobThrottle throttle, IConfiguration configuration,
@@ -132,6 +133,19 @@ namespace ETL_SQL.Orchestrator.Scheduling
             _logger.LogInformation("Scheduler service stopped.");
         }
 
+        /// <summary>Kills a running job instance by its HistoryId.</summary>
+        public bool KillJob(long historyId)
+        {
+            if (_runningJobs.TryGetValue(historyId, out var cts))
+            {
+                cts.Cancel();
+                _logger.LogInformation("Cancelled job history record {HistoryId}.", historyId);
+                return true;
+            }
+            _logger.LogWarning("Attempted to kill job {HistoryId} but it was not found as a running job.", historyId);
+            return false;
+        }
+
         private async Task ExecuteJobAsync(JobDefinition job)
         {
             _logger.LogInformation("Executing job: {JobName}", job.Name);
@@ -155,22 +169,32 @@ namespace ETL_SQL.Orchestrator.Scheduling
                 // Inject IScriptExecutor — decoupled from the concrete Evaluator class.
                 var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
 
-                var result = await executor.ExecuteTextAsync(job.Script);
+                using var jobCts = CancellationTokenSource.CreateLinkedTokenSource(_cts?.Token ?? default);
+                if (historyId > 0) _runningJobs[historyId] = jobCts;
 
-                if (result.Success)
+                try
                 {
-                    _logger.LogInformation("Job {JobName} finished successfully. (RAM: {Mem} bytes, CPU: {Cpu}s)", 
-                        job.Name, result.PeakMemoryBytes, result.CpuTimeSeconds);
-                    if (historyId > 0)
-                        await _store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: result.RowsProcessed, 
-                            peakMemoryBytes: result.PeakMemoryBytes, cpuTimeSeconds: result.CpuTimeSeconds);
+                    var result = await executor.ExecuteTextAsync(job.Script, jobCts.Token);
+
+                    if (result.Success)
+                    {
+                        _logger.LogInformation("Job {JobName} finished successfully. (RAM: {Mem} bytes, CPU: {Cpu}s)", 
+                            job.Name, result.PeakMemoryBytes, result.CpuTimeSeconds);
+                        if (historyId > 0)
+                            await _store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: result.RowsProcessed, 
+                                peakMemoryBytes: result.PeakMemoryBytes, cpuTimeSeconds: result.CpuTimeSeconds);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Job {JobName} finished with failure: {Error}", job.Name, result.ErrorMessage);
+                        if (historyId > 0)
+                            await _store.LogJobEndAsync(historyId, "FAILURE", result.ErrorMessage, 
+                                peakMemoryBytes: result.PeakMemoryBytes, cpuTimeSeconds: result.CpuTimeSeconds);
+                    }
                 }
-                else
+                finally
                 {
-                    _logger.LogWarning("Job {JobName} finished with failure: {Error}", job.Name, result.ErrorMessage);
-                    if (historyId > 0)
-                        await _store.LogJobEndAsync(historyId, "FAILURE", result.ErrorMessage, 
-                            peakMemoryBytes: result.PeakMemoryBytes, cpuTimeSeconds: result.CpuTimeSeconds);
+                    if (historyId > 0) _runningJobs.TryRemove(historyId, out _);
                 }
             }
             catch (Exception ex)

@@ -41,8 +41,9 @@ namespace ETL_SQL.ReportBuilder
             {
                 Source      = scriptSource,
                 BuiltAt     = DateTime.UtcNow,
-                Title       = _ctx.ReportTitle,
-                Description = _ctx.ReportDescription
+                Title           = _ctx.ReportTitle,
+                TitleIsMarkdown  = _ctx.ReportTitleIsMarkdown,
+                Description     = _ctx.ReportDescription
             };
 
             // ── Visuals ──────────────────────────────────────────────────────

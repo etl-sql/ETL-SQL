@@ -138,6 +138,8 @@ namespace ETL_SQL.Core.Parser
             if (type == TokenType.FILE_SEND || type == TokenType.SEND_FILE) { _parser.Advance(); return ExtensionParser.ParseFileTransfer(FileTransferType.Send, false); }
             if (type == TokenType.FILE_RECEIVE || type == TokenType.RECEIVE_FILE) { _parser.Advance(); return ExtensionParser.ParseFileTransfer(FileTransferType.Receive, false); }
 
+            if (_parser.Match(TokenType.KILL)) return DataParser.ParseKillJob(_parser.Previous);
+
             if (type == TokenType.COPY || type == TokenType.MOVE || type == TokenType.RENAME ||
                 type == TokenType.DELETE || type == TokenType.COMPRESS ||
                 type == TokenType.ENCRYPT || type == TokenType.DECRYPT)
@@ -176,6 +178,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.WHAT_IF)) return SystemParser.ParseSetWhatIf();
             if (_parser.Match(TokenType.SHOW_PASSWORD)) return SystemParser.ParseSetShowPassword();
             if (_parser.Match(TokenType.JOIN_SPILL_THRESHOLD)) return SystemParser.ParseSetThreshold(ThresholdType.JoinSpill);
+            if (_parser.Match(TokenType.TEMP_TABLE_SPILL_THRESHOLD)) return SystemParser.ParseSetThreshold(ThresholdType.TempTableSpill);
             if (_parser.Match(TokenType.WINDOW_SPILL_THRESHOLD)) return SystemParser.ParseSetThreshold(ThresholdType.WindowSpill);
             if (_parser.Match(TokenType.EXTERNAL_HASH_PARTITIONS)) return SystemParser.ParseSetThreshold(ThresholdType.ExternalHashPartitions);
             if (_parser.Match(TokenType.EXTERNAL_SORT_CHUNK_SIZE)) return SystemParser.ParseSetThreshold(ThresholdType.ExternalSortChunkSize);

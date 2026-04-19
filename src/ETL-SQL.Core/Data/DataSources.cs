@@ -8,9 +8,12 @@ using System.Text.Json;
 using System.Xml.Linq;
 
 using System.Threading;
+using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Spill;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Data
 {
@@ -125,10 +128,10 @@ namespace ETL_SQL.Data
         public List<TableConstraint> TableConstraints { get; private set; } = new();
         public IDataValidator? Validator { get; set; }
 
-        public string? OverflowDirectory { get; set; }
-        public string? OverflowEntropy { get; set; }
         public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
-        private readonly List<string> _spilledFiles = new();
+        
+        private readonly List<string> _spillChunkNames = new();
+        private long _totalRowCount = 0;
         public IExecutionContext? ExecutionContext { get; set; }
 
         public async Task ValidateRow(Row row)
@@ -362,19 +365,23 @@ namespace ETL_SQL.Data
             try
             {
                 _batches.Clear();
+                _totalRowCount = 0;
                 // Clear existing index data while preserving the index definitions
                 foreach (var index in _indexes.Values) index.Clear();
+
+                if (ExecutionContext != null)
+                {
+                    foreach (var chunk in _spillChunkNames)
+                    {
+                        ExecutionContext.SpillStore.DeleteChunk(chunk);
+                    }
+                }
+                _spillChunkNames.Clear();
             }
             finally
             {
                 _lock.Release();
             }
-
-            foreach (var file in _spilledFiles)
-            {
-                if (File.Exists(file)) try { File.Delete(file); } catch { }
-            }
-            _spilledFiles.Clear();
         }
 
         public void CreateIndex(string columnName, bool isUnique = false)
@@ -452,72 +459,85 @@ namespace ETL_SQL.Data
         public IDataSource WithTable(string tableName) => this;
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
-            await _lock.WaitAsync();
-            List<string> spilledCopy;
+            // 1. Yield from disk spill first (if any)
+            List<string> chunks;
             List<DataTable> memoryCopy;
-            try 
-            { 
-                spilledCopy = _spilledFiles.ToList();
-                memoryCopy = _batches.ToList(); 
+            await _lock.WaitAsync();
+            try
+            {
+                chunks = _spillChunkNames.ToList();
+                memoryCopy = _batches.ToList();
             }
             finally { _lock.Release(); }
-            
-            foreach (var file in spilledCopy)
-            {
-                if (!File.Exists(file)) continue;
 
-                var dt = new DataTable();
-                dt.SetColumns(_columnOrder);
-                
-                string encrypted = await File.ReadAllTextAsync(file);
-                string json = CryptoUtils.Unprotect(encrypted, OverflowEntropy ?? "");
-                var rows = JsonSerializer.Deserialize<List<object?[]>>(json);
-                
-                if (rows != null)
+            if (ExecutionContext != null)
+            {
+                foreach (var spillName in chunks)
                 {
-                    foreach (var r in rows) await dt.AddRowAsync(new Row(dt.Schema, r));
+                    if (ExecutionContext.SpillStore == null)
+                        throw new ExecutionException("Spill-to-disk operation failed: IExecutionContext.SpillStore is null but spilled data exists.");
+
+                    await using var reader = await ExecutionContext.SpillStore.CreateReaderAsync(spillName);
+                    var batch = new DataTable();
+                    batch.SetColumns(_columnOrder);
+                    
+                    await foreach (var row in reader.AsEnumerableAsync())
+                    {
+                        await batch.AddRowAsync(row);
+                        if (batch.Rows.Count >= batchSize)
+                        {
+                            yield return batch;
+                            batch = new DataTable();
+                            batch.SetColumns(_columnOrder);
+                        }
+                    }
+
+                    if (batch.Rows.Count > 0)
+                    {
+                        yield return batch;
+                    }
                 }
-                yield return dt;
             }
 
-            foreach (var batch in memoryCopy)
-            {
-                yield return batch;
-            }
+            // 2. Yield from memory buffer
+            foreach (var b in memoryCopy) yield return b;
         }
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
         {
             await foreach (var b in batches)
             {
+                if (_columnOrder.Count == 0) _columnOrder.AddRange(b.ColumnNames);
+                
                 await _lock.WaitAsync();
                 try
                 {
                     foreach (var row in b.Rows) await ValidateRow(row);
-                    
-                    long totalInMemRows = _batches.Sum(batch => (long)batch.Rows.Count);
-                    if (totalInMemRows > 1000000 && totalInMemRows % 1000000 < b.Rows.Count)
-                    {
-                        ExecutionContext?.Logger.WriteLine($"[yellow]Warning: Large in-memory temp table detected ({totalInMemRows:N0} rows). Consider using pushdown or filters.[/]");
-                    }
 
-                    if (_batches.Count >= MaxInMemoryBatches && OverflowDirectory != null)
+                    long threshold = ExecutionContext?.TempTableSpillThresholdRows ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
+                    
+                    if (_totalRowCount + b.Rows.Count > threshold)
                     {
-                        if (_batches.Count > 0)
+                        if (ExecutionContext != null)
                         {
-                            var oldest = _batches[0];
-                            _batches.RemoveAt(0);
-                            await SpillBatchToDiskAsync(oldest);
-                        }
-                        else
-                        {
-                            // If max batches is 0, spill the current batch immediately
-                            await SpillBatchToDiskAsync(b);
+                            var chunkName = $"{Guid.NewGuid():N}.tmp";
+                            await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
+                            {
+                                await writer.WriteRowsAsync(b.Rows);
+                            }
+                            _spillChunkNames.Add(chunkName);
+                            _totalRowCount += b.Rows.Count;
+
+                            if (ExecutionContext.IsProfiling)
+                                ExecutionContext.Logger.Debug("Temp table threshold reached ({Threshold} rows). Spilled batch to chunk: {ChunkName}", threshold, chunkName);
+                            
                             continue;
                         }
                     }
 
                     _batches.Add(b);
+                    _totalRowCount += b.Rows.Count;
+                    
                     if (_indexes.Count > 0)
                     {
                         foreach (var col in _indexes.Keys.ToList())
@@ -530,35 +550,6 @@ namespace ETL_SQL.Data
                 {
                     _lock.Release();
                 }
-            }
-        }
-
-        private async Task SpillBatchToDiskAsync(DataTable batch)
-        {
-            if (OverflowDirectory == null) return;
-            if (!Directory.Exists(OverflowDirectory)) Directory.CreateDirectory(OverflowDirectory);
-
-            var fileName = System.IO.Path.Combine(OverflowDirectory, Guid.NewGuid().ToString() + ".spill");
-            
-            // Extract the raw object arrays from the rows for efficient serialization
-            var rows = batch.Rows.Select(r => {
-                var values = new object?[_columnOrder.Count];
-                for (int i = 0; i < _columnOrder.Count; i++) values[i] = r[_columnOrder[i]];
-                return values;
-            }).ToList();
-
-            var json = JsonSerializer.Serialize(rows);
-            var encrypted = CryptoUtils.Protect(json, OverflowEntropy ?? "");
-            await File.WriteAllTextAsync(fileName, encrypted);
-            
-            lock (_spilledFiles)
-            {
-                _spilledFiles.Add(fileName);
-            }
-
-            if (ExecutionContext != null)
-            {
-                ExecutionContext.TotalSpilledBytes += encrypted.Length; // Rough estimate of disk impact
             }
         }
 
@@ -688,13 +679,14 @@ namespace ETL_SQL.Data
             _indexes.Clear();
             _indexColumnMap.Clear();
 
-            foreach (var file in _spilledFiles)
+            if (ExecutionContext != null)
             {
-                if (File.Exists(file)) try { File.Delete(file); } catch { }
+                foreach (var chunk in _spillChunkNames)
+                {
+                    ExecutionContext.SpillStore.DeleteChunk(chunk);
+                }
             }
-            _spilledFiles.Clear();
-            
-            await Task.CompletedTask;
+            _spillChunkNames.Clear();
         }
     }
 

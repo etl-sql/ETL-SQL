@@ -12,13 +12,21 @@ namespace ETL_SQL.ReportBuilder.Builders
     {
         public async Task<VisualManifest> BuildAsync(string name, CreateVisualStatement vStmt)
         {
+            var (title, titleMd) = styleBuilder.ResolveMarkdown(vStmt.Title, vStmt.TitleIsMarkdown);
+            var (subtitle, subtitleMd) = styleBuilder.ResolveMarkdown(vStmt.Subtitle, vStmt.SubtitleIsMarkdown);
+
             var vm = new VisualManifest
             {
-                Name         = name,
-                VisualType   = vStmt.VisualType.ToString(),
-                DefaultValue = vStmt.DefaultValue,
-                Tooltip      = styleBuilder.BuildTooltipManifest(vStmt.Tooltip)
+                Name            = name,
+                VisualType      = vStmt.VisualType.ToString(),
+                DefaultValue    = vStmt.DefaultValue,
+                TitleIsMarkdown = titleMd,
+                SubtitleIsMarkdown = subtitleMd,
+                Tooltip         = styleBuilder.BuildTooltipManifest(vStmt.Tooltip)
             };
+
+            if (title != null) vm.Options["title"] = title;
+            if (subtitle != null) vm.Options["subtitle"] = subtitle;
 
             // Copy flat options
             foreach (var opt in vStmt.Options)
@@ -133,5 +141,6 @@ namespace ETL_SQL.ReportBuilder.Builders
             }
         }
 
+        private (string? Value, bool IsMarkdown) ResolveMarkdown(string? input, bool parserFlag) => styleBuilder.ResolveMarkdown(input, parserFlag);
     }
 }

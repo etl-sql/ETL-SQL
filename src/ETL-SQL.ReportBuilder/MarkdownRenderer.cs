@@ -34,8 +34,11 @@ namespace ETL_SQL.ReportBuilder
         public string Render(ReportManifest manifest)
         {
             var sb = new StringBuilder();
-            string heading = manifest.Title ?? $"Report — {System.IO.Path.GetFileNameWithoutExtension(manifest.Source)}";
-            sb.AppendLine($"# {heading}");
+            string heading = manifest.Title ?? (manifest.Source != null ? System.IO.Path.GetFileNameWithoutExtension(manifest.Source) : "Report");
+            if (manifest.TitleIsMarkdown)
+                sb.AppendLine($"# {heading}");
+            else
+                sb.AppendLine($"# {EscapeCell(heading)}");
             sb.AppendLine();
             if (manifest.Description != null)
             {
@@ -62,7 +65,17 @@ namespace ETL_SQL.ReportBuilder
 
         private void RenderPage(StringBuilder sb, PageManifest page, ReportManifest manifest)
         {
-            sb.AppendLine($"## {page.Name}");
+            string heading = page.Title ?? page.Name;
+            if (page.TitleIsMarkdown)
+                sb.AppendLine($"## {heading}");
+            else
+                sb.AppendLine($"## {EscapeCell(heading)}");
+
+            if (!string.IsNullOrEmpty(page.Subtitle))
+            {
+                if (page.SubtitleIsMarkdown) sb.AppendLine(page.Subtitle);
+                else sb.AppendLine($"*{EscapeCell(page.Subtitle)}*");
+            }
             sb.AppendLine();
 
             // Emit visuals referenced in slot map in slot order
@@ -76,7 +89,17 @@ namespace ETL_SQL.ReportBuilder
 
         private void RenderVisual(StringBuilder sb, VisualManifest v)
         {
-            sb.AppendLine($"### {v.Name}");
+            string heading = v.Options.TryGetValue("title", out var t) ? t : v.Name;
+            if (v.TitleIsMarkdown)
+                sb.AppendLine($"### {heading}");
+            else
+                sb.AppendLine($"### {EscapeCell(heading)}");
+
+            if (v.Options.TryGetValue("subtitle", out var st))
+            {
+                if (v.SubtitleIsMarkdown) sb.AppendLine(st);
+                else sb.AppendLine($"*{EscapeCell(st)}*");
+            }
             sb.AppendLine();
 
             switch (v.VisualType.ToUpperInvariant())
@@ -103,7 +126,10 @@ namespace ETL_SQL.ReportBuilder
                         // Emit as a block-quote to give visual separation; honour alignment hint in HTML
                         if (align != null && !align.Equals("left", StringComparison.OrdinalIgnoreCase))
                             sb.AppendLine($"<div align='{align.ToLowerInvariant()}'>");
-                        sb.AppendLine(textContent);
+                        
+                        if (v.IsMarkdown) sb.AppendLine(textContent);
+                        else sb.AppendLine(EscapeCell(textContent));
+
                         if (align != null && !align.Equals("left", StringComparison.OrdinalIgnoreCase))
                             sb.AppendLine("</div>");
                     }

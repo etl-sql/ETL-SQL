@@ -9,11 +9,19 @@ namespace ETL_SQL.ReportBuilder.Builders
     {
         public PageManifest Build(string name, CreatePageStatement pStmt)
         {
+            var (title, titleMd) = styleBuilder.ResolveMarkdown(pStmt.Title, pStmt.TitleIsMarkdown);
+            var (subtitle, subtitleMd) = styleBuilder.ResolveMarkdown(pStmt.Subtitle, pStmt.SubtitleIsMarkdown);
+
             var pm = new PageManifest
             {
-                Name      = name,
-                Structure = pStmt.Structure,
-                SlotMap   = pStmt.SlotMap.ToDictionary(kv => kv.Key, kv => kv.Value)
+                Name               = name,
+                Structure          = pStmt.Structure,
+                SlotMap            = pStmt.SlotMap.ToDictionary(kv => kv.Key, kv => kv.Value),
+                Title              = title,
+                TitleIsMarkdown    = titleMd,
+                Subtitle           = subtitle,
+                SubtitleIsMarkdown = subtitleMd,
+                Tooltip            = styleBuilder.BuildTooltipManifest(pStmt.Tooltip)
             };
 
             // Map parameters and their types

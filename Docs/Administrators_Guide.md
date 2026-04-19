@@ -104,6 +104,7 @@ Applies to: **All Hosts**
 | `Engine:MaxRecursiveDepth` | `10000` | Maximum call stack depth for nested procedures and `RUN SCRIPT`. |
 | `Engine:JoinSpillThreshold` | `100000` | Row count at which a join operation spills to disk instead of holding all data in RAM. |
 | `Engine:WindowSpillThreshold` | `100000` | Row count at which window function processing spills to disk. |
+| `Engine:TempTableSpillThresholdRows` | `1000000` | Row count at which #temp tables spill to encrypted disk chunks. |
 | `Engine:ExternalHashPartitions` | `32` | Number of disk partitions used for spilled joins and aggregates. Increase if spill files become very large. |
 | `Engine:ExternalSort:ChunkSize` | `100000` | Rows per chunk in the external sort engine. |
 | `Engine:MaxMessages` | `1000` | Maximum number of print/log messages held in a session's message buffer. |
@@ -257,6 +258,7 @@ Applies to: **App / TUI**
      "MaxRecursiveDepth": 10000,
      "JoinSpillThreshold": 100000,
      "WindowSpillThreshold": 100000,
+     "TempTableSpillThresholdRows": 1000000,
      "ExternalHashPartitions": 32,
      "ExternalSort": {
        "ChunkSize": 100000

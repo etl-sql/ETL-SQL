@@ -33,6 +33,9 @@ namespace ETL_SQL.Engine.Services
         public static int WindowSpillThreshold(IConfiguration? config)
             => config?.GetValue<int?>("Engine:WindowSpillThreshold") ?? LanguageMetadata.DefaultWindowSpillThreshold;
 
+        public static long TempTableSpillThresholdRows(IConfiguration? config)
+            => config?.GetValue<long?>("Engine:TempTableSpillThresholdRows") ?? LanguageMetadata.DefaultTempTableSpillThresholdRows;
+
         public static bool SpillEncryptionEnabled(IConfiguration? config)
             => config?.GetValue<bool>("Security:SpillEncryptionEnabled") ?? true;
 

@@ -179,6 +179,7 @@ namespace ETL_SQL.Core
         int MaxRecursiveDepth { get; set; }
         int CurrentRecursiveDepth { get; set; }
         int BatchSize { get; set; }
+        long TempTableSpillThresholdRows { get; set; }
         int ForeachPageSize { get; set; }
         int? PreviewLimit { get; set; }
         bool FunctionExists(string name);
@@ -208,6 +209,8 @@ namespace ETL_SQL.Core
         string TemplatePath { get; set; }
         /// <summary>Report-level title set by SET REPORT TITLE = '...'</summary>
         string? ReportTitle { get; set; }
+        /// <summary>Whether the report title is markdown.</summary>
+        bool ReportTitleIsMarkdown { get; set; }
         /// <summary>Report-level description set by SET REPORT DESCRIPTION = '...'</summary>
         string? ReportDescription { get; set; }
     }

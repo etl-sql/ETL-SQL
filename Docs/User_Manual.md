@@ -129,6 +129,7 @@ Variables are the engine's memory. Prefix all variable names with `@`.
 DECLARE @BatchDate  DATE    = '2026-04-01';
 DECLARE @Threshold  DECIMAL = 5000.00;
 DECLARE @Label      STRING  = 'Q2-Load';
+DECLARE @Note       MARKDOWN = '# Update';  -- Explicitly enables Markdown in reports
 DECLARE @ids        LIST    = (1, 2, 3, 4);
 
 -- Set a new value
@@ -653,6 +654,9 @@ END;
 -- Monitor
 SHOW JOBS;
 SHOW JOB HISTORY NightlyLoad;
+
+-- Terminate a hanging job (HistoryId from SHOW JOBS)
+KILL JOB 12345;
 ```
 
 ### 10.3 Procedures for Reusable Logic

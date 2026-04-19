@@ -184,7 +184,9 @@ namespace ETL_SQL.Core
         public required string Name                    { get; init; }
         public required VisualType VisualType          { get; init; }
         public string? Title                          { get; init; }
+        public bool TitleIsMarkdown                  { get; init; }
         public string? Subtitle                       { get; init; }
+        public bool SubtitleIsMarkdown               { get; init; }
         public TooltipDefinition? Tooltip             { get; init; }
         public string? DefaultValue                   { get; init; }
         public required VisualSourceExpression Source  { get; init; }
@@ -217,7 +219,9 @@ namespace ETL_SQL.Core
         public Dictionary<string, string> Styles              { get; init; } = new();
         public string? StyleName                              { get; init; }
         public string? Title                                  { get; init; }
+        public bool TitleIsMarkdown                          { get; init; }
         public string? Subtitle                               { get; init; }
+        public bool SubtitleIsMarkdown                       { get; init; }
         public TooltipDefinition? Tooltip                     { get; init; }
         public ObjectCreationMode Mode                         { get; init; } = ObjectCreationMode.Create;
     }
@@ -246,7 +250,9 @@ namespace ETL_SQL.Core
         public Dictionary<string, string> Styles { get; init; } = new();
         public string? StyleName { get; init; }
         public string? Title { get; init; }
+        public bool TitleIsMarkdown { get; init; }
         public string? Subtitle { get; init; }
+        public bool SubtitleIsMarkdown { get; init; }
         public TooltipDefinition? Tooltip { get; init; }
         public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
     }
@@ -299,7 +305,9 @@ namespace ETL_SQL.Core
         public Dictionary<string, string>? Styles      { get; init; }
         public string? StyleName                       { get; init; }
         public string? Title                           { get; init; }
+        public bool TitleIsMarkdown                   { get; init; }
         public string? Subtitle                        { get; init; }
+        public bool SubtitleIsMarkdown                { get; init; }
         public TooltipDefinition? Tooltip              { get; init; }
     }
 

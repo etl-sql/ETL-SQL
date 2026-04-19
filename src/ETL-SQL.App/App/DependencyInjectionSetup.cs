@@ -156,6 +156,7 @@ namespace ETL_SQL.App
             services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
             services.AddSingleton<JobThrottle>();
             services.AddSingleton<SchedulerService>();
+            services.AddSingleton<IJobManager>(sp => sp.GetRequiredService<SchedulerService>());
 
             services.AddTransient<Evaluator>(sp => {
                 var evaluator = ActivatorUtilities.CreateInstance<Evaluator>(sp);

@@ -34,7 +34,25 @@ namespace ETL_SQL.ReportBuilder.Builders
                 return new TooltipManifest { Type = "container", ContainerRef = tooltip.ContainerRef };
             if (tooltip.InlineVisuals != null)
                 return new TooltipManifest { Type = "inline", Markdown = tooltip.InlineMarkdown, Visuals = tooltip.InlineVisuals };
-            return new TooltipManifest { Type = "text", Text = tooltip.PlainText };
+            
+            var (text, isMd) = ResolveMarkdown(tooltip.PlainText);
+            return new TooltipManifest { Type = "text", Text = text, IsMarkdown = isMd };
+        }
+
+        public (string? Value, bool IsMarkdown) ResolveMarkdown(string? input, bool parserFlag = false)
+        {
+            if (string.IsNullOrEmpty(input)) return (null, false);
+            if (input.StartsWith("@"))
+            {
+                var val = ctx.VarContext.GetVariable(input);
+                bool typeMd = false;
+                if (ctx.VarContext.VariableMetadata.TryGetValue(input, out var meta))
+                {
+                    typeMd = meta.DataType?.Equals("MARKDOWN", StringComparison.OrdinalIgnoreCase) == true;
+                }
+                return (val?.ToString(), parserFlag || typeMd);
+            }
+            return (input, parserFlag);
         }
     }
 }

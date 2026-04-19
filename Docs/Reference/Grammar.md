@@ -13,6 +13,7 @@ Defines one or more variables. The data type is optional; omitting it defaults t
 
 ```sql
 DECLARE @name STRING = 'Chuck';
+DECLARE @note MARKDOWN = '# Hello';
 DECLARE @id   INT    = 101;
 DECLARE @rate DECIMAL(10,4) = 1.2345;
 
@@ -239,6 +240,7 @@ These commands allow fine-tuning how the engine manages memory and disk during h
 | :--- | :--- | :--- |
 | `SET JOIN_SPILL_THRESHOLD = n` | 100,000 | Rows held in memory before an internal join spills to a disk-based hash join. |
 | `SET WINDOW_SPILL_THRESHOLD = n` | 100,000 | Rows held in memory before window functions spill to a disk-based partitioned stream. |
+| `SET TEMP_TABLE_SPILL_THRESHOLD = n` | 1,000,000 | Row count at which `#temp` tables spill to disk via `SpillStore`. |
 | `SET EXTERNAL_HASH_PARTITIONS = n` | 32 | Number of discrete partitions used when spilling joins/windows to disk. |
 | `SET EXTERNAL_SORT_CHUNK_SIZE = n` | 50,000 | Rows per sort-block during external disk-sorting operations. |
 | `SET BATCHSIZE = n` | 10,000 | Number of rows processed per batch in the engine pipeline. |
@@ -275,12 +277,13 @@ SELECT * INTO #big_join FROM src.A JOIN src.B ON A.id = B.id;
 | `SHOW COLUMNS FOR [table]` | Displays the schema (name, type, nullability) for the target table. |
 | `SHOW VARIABLES` | Lists all variables and their current values in the global scope. |
 | `SHOW LOCAL VARIABLES` | Lists variables in the current procedural/block scope. |
-| `SHOW JOBS` | Lists all background jobs currently managed by the scheduler. |
+| `SHOW JOBS` | Lists all active background jobs and their current execution `HistoryId` (used for `KILL JOB`). |
 | `SHOW JOB HISTORY [name]` | Displays execution logs and performance metrics for past jobs. |
 | `SHOW PROFILE` | Displays statement-level performance metrics (requires `SET PROFILING ON`). |
 | `SHOW LINEAGE [FOR table]` | Displays dependency metadata for the target table or the entire session. |
 | `SHOW SAFE ZONES` | Lists the absolute paths where security overrides are permitted. |
 | `SHOW TAGS FOR TABLE t [COLUMN c]` | Lists all lineage tags/metadata associated with a table or column. |
+| `KILL JOB <HistoryId>` | Terminates a running background job instance by its HistoryId. |
 
 ---
 

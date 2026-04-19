@@ -594,6 +594,8 @@ namespace ETL_SQL.Core
         }
     }
 
+    public record KillJobStatement(Expression JobIdExpr) : Statement;
+
     public record TruncateTableStatement : Statement
     {
         public TableReference TargetTable { get; }

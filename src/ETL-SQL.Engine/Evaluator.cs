@@ -124,6 +124,7 @@ namespace ETL_SQL.Engine
             get => _sortSpillCount;
             set => _sortSpillCount = value;
         }
+        public long TempTableSpillThresholdRows { get; set; }
         public int MaxRecursiveDepth { get; set; } = 10000;
         public int CurrentRecursiveDepth { get; set; } = 0;
         public string? LastIndexUsedName { get; set; }
@@ -242,6 +243,12 @@ namespace ETL_SQL.Engine
         {
             get => _registry.ReportContext.ReportDescription;
             set => _registry.ReportContext.ReportDescription = value;
+        }
+        /// <inheritdoc />
+        public bool ReportTitleIsMarkdown
+        {
+            get => _registry.ReportContext.ReportTitleIsMarkdown;
+            set => _registry.ReportContext.ReportTitleIsMarkdown = value;
         }
 
         /// <summary>Optional prompt callback for interactive USE SETS WITH_PROMPT. Null = non-interactive (auto-proceed).</summary>
@@ -471,6 +478,7 @@ namespace ETL_SQL.Engine
             MaxRecursiveDepth = DefaultThresholds.MaxRecursiveDepth(config);
             ExternalSortChunkSize = DefaultThresholds.ExternalSortChunkSize(config);
             WindowSpillThreshold = DefaultThresholds.WindowSpillThreshold(config);
+            TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
             SpillEncryptionEnabled = DefaultThresholds.SpillEncryptionEnabled(config);
             SpillCompressionEnabled = DefaultThresholds.SpillCompressionEnabled(config);
 

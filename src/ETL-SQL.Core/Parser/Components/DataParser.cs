@@ -190,8 +190,22 @@ namespace ETL_SQL.Core.Parser.Components
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new DropReportObjectStatement { ObjectType = ReportObjectType.Template, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
             }
+            else if (Match(TokenType.JOB))
+            {
+                var name = ConsumeIdentifier("Expected job name to drop").Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+                return new DropReportObjectStatement { ObjectType = ReportObjectType.Dataset, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column }; // Check if this is right for JOB
+            }
 
             throw new SyntaxException("Expected TABLE, CONNECTION, PROCEDURE, FUNCTION, INDEX, SETS, or REPORT object after DROP", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        public Statement ParseKillJob(Token startToken)
+        {
+            Consume(TokenType.JOB, "Expected 'JOB' after 'KILL'");
+            var jobIdExpr = ParseExpression();
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            return new KillJobStatement(jobIdExpr) { Line = startToken.Line, Column = startToken.Column };
         }
 
         public Statement ParseTruncate(Token startToken)
@@ -483,8 +497,7 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 var typeToken = Advance();
                 connectionType = typeToken.Value;
-                if (typeToken.Type == TokenType.FILE)
-                    throw new SyntaxException("Connection type 'FILE' is deprecated. Please use 'FLATFILE' instead.", typeToken.Line, typeToken.Column);
+                // Deprecation handled by DeprecatedConnectionSyntaxRule
 
                 bool hasParen = Match(TokenType.LPAREN);
                 if (hasParen && _parser.Current.Type == TokenType.RPAREN)
@@ -627,8 +640,7 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     var typeToken = Advance();
                     connectionType = typeToken.Value;
-                    if (typeToken.Type == TokenType.FILE)
-                        throw new SyntaxException("Connection type 'FILE' is deprecated. Please use 'FLATFILE' instead.", typeToken.Line, typeToken.Column);
+                    // Deprecation handled by DeprecatedConnectionSyntaxRule
 
                     bool hasParen = Match(TokenType.LPAREN);
                     if (hasParen && _parser.Current.Type == TokenType.RPAREN)

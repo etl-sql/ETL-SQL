@@ -62,7 +62,8 @@ namespace ETL_SQL.Engine.Handlers
                 IsInput = stmt.IsInput, 
                 IsOutput = stmt.IsOutput, 
                 IsSensitive = stmt.IsSensitive,
-                IsDeclared = true 
+                IsDeclared = true,
+                DataType = stmt.DataType
             };
             context.VarContext.DeclareVariable(stmt.VariableName, val, metadata);
         }

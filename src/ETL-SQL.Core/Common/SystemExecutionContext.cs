@@ -111,6 +111,7 @@ namespace ETL_SQL.Core.Common
         public int ExternalSortChunkSize { get; set; } = LanguageMetadata.DefaultExternalSortChunkSize;
         public int WindowSpillThreshold { get; set; } = LanguageMetadata.DefaultWindowSpillThreshold;
         public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
+        public long TempTableSpillThresholdRows { get; set; } = LanguageMetadata.DefaultTempTableSpillThresholdRows;
         public int MaxParallelDegree { get; set; } = LanguageMetadata.DefaultMaxParallelDegree;
         public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
         public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
@@ -137,6 +138,7 @@ namespace ETL_SQL.Core.Common
         public IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; } = new Dictionary<string, CreateTemplateStatement>(StringComparer.OrdinalIgnoreCase);
         public string TemplatePath { get; set; } = "./Templates";
         public string? ReportTitle { get; set; }
+        public bool ReportTitleIsMarkdown { get; set; }
         public string? ReportDescription { get; set; }
 
         public SystemExecutionContext()

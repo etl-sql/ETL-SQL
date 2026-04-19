@@ -67,7 +67,7 @@ namespace ETL_SQL.Common
             "SUBJECT", "BODY", "ATTACH", "CC", "BCC", "LINEAGE",
             "SINGLEQUOTE", "DOUBLEQUOTE", "SINGLEQUOTES", "DOUBLEQUOTES", "LF", "CR", "CRLF", "TILDE", "SEMICOLON", "COLON", "COMMA", "TAB", "PIPE",
             "ESCAPE_CHAR", "NULL_AS", "DATE_FORMAT", "STRICT_SCHEMA", "UTF16", "LATIN1", "UNICODE", "BACKSLASH_N", "EMPTY",
-            "PASSWORD", "SHOW_PASSWORD", "OUTPUT", "INPUT", "PARALLEL", "RUN", "SCRIPT", "USE", "START", "STOP", "PAUSE",
+            "PASSWORD", "SHOW_PASSWORD", "OUTPUT", "INPUT", "PARALLEL", "RUN", "SCRIPT", "USE", "START", "STOP", "PAUSE", "KILL",
             "START_DOCKER", "STOP_DOCKER", "PAUSE_DOCKER", "CLOSE_DOCKER",
             "BULK", "LOAD", "BATCHSIZE", "MAXERRORS", "FIELDTERMINATOR", "ROWTERMINATOR", "FIRSTROW", "DATA_SOURCE",
             "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND", "INCLUDE_NULL_VALUES", "WITHOUT_ARRAY_WRAPPER",
@@ -75,7 +75,7 @@ namespace ETL_SQL.Common
             "SETS", "SESSION", "SESSIONS", "CONNECTIONS", "VARIABLES", "LOCAL", "ANALYZE", "TABLES", "COLUMNS", "TAGS", "TAG", "VALUE", "BITS", "ALGORITHM", "PASSPHRASE", "COMMENT",
             "SUBSTRING", "POSITION", "OVERLAY", "EXTRACT", "TRIM", "PLACING", "LEADING", "TRAILING", "BOTH",
             "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE", "REQUIRE", "SAFE", "ZONES",
-            "JOIN_SPILL_THRESHOLD", "EXTERNAL_HASH_PARTITIONS", "EXTERNAL_SORT_CHUNK_SIZE", "WINDOW_SPILL_THRESHOLD",
+            "JOIN_SPILL_THRESHOLD", "TEMP_TABLE_SPILL_THRESHOLD", "EXTERNAL_HASH_PARTITIONS", "EXTERNAL_SORT_CHUNK_SIZE", "WINDOW_SPILL_THRESHOLD",
             "MAX_RECURSIVE_DEPTH", "MAX_IN_MEMORY_BATCHES", "FOREACH_PAGE_SIZE", "MAX_MESSAGES", "MAX_FILE_OPERATIONS",
             "MAX_PARALLEL_DEGREE", "MAX_STRING_RESULT_SIZE", "REGEX_MATCH_TIMEOUT",
             "SPILL_ENCRYPTION", "SPILL_COMPRESSION",
@@ -90,7 +90,7 @@ namespace ETL_SQL.Common
             "DATE", "DATETIME", "DATETIME2", "SMALLDATETIME", "DATETIMEOFFSET", "TIMESTAMP", "TIME",
             "CHAR", "VARCHAR", "NCHAR", "NVARCHAR", "TEXT", "NTEXT", "BINARY", "VARBINARY", "IMAGE",
             "XML", "JSON", "UNIQUEIDENTIFIER", "UUID", "GUID", "GEOMETRY", "GEOGRAPHY", "HIERARCHYID",
-            "VARIANT", "SQL_VARIANT", "TABLE", "CURSOR", "ANY"
+            "VARIANT", "SQL_VARIANT", "TABLE", "CURSOR", "ANY", "MARKDOWN"
         };
 
         public static readonly HashSet<string> Functions = new(StringComparer.OrdinalIgnoreCase)
@@ -121,6 +121,9 @@ namespace ETL_SQL.Common
         
         /// <summary>Default number of batches held in memory before spilling to disk for #temp tables.</summary>
         public const int DefaultMaxInMemoryBatches = 100;
+
+        /// <summary>Default number of rows held in memory before #temp tables spill to disk via SpillStore.</summary>
+        public const long DefaultTempTableSpillThresholdRows = 1000000;
         
         /// <summary>Default number of rows before in-memory joins spill to disk.</summary>
         public const int DefaultJoinSpillThreshold = 100000;

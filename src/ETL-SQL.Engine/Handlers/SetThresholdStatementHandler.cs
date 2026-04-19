@@ -86,6 +86,9 @@ namespace ETL_SQL.Engine.Handlers
                 case ThresholdType.Telemetry:
                     context.TelemetryEnabled = Convert.ToBoolean(val);
                     break;
+                case ThresholdType.TempTableSpill:
+                    context.TempTableSpillThresholdRows = Convert.ToInt64(val);
+                    break;
             }
 
             if (context.IsVerbose)
