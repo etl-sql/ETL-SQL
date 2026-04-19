@@ -10,6 +10,8 @@ using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
+using System.Collections.Concurrent;
+using System.Reflection;
 
 namespace ETL_SQL.Engine
 {
@@ -21,6 +23,7 @@ namespace ETL_SQL.Engine
         private static readonly TableSchema _scalarSchema = new TableSchema(new[] { "Value" });
         private readonly IExecutionContext _context;
         private readonly ILogger _logger;
+        private static readonly ConcurrentDictionary<(Type, string), MemberInfo?> _reflectionCache = new();
 
         public ExpressionEvaluator(IExecutionContext context)
         {
@@ -73,7 +76,18 @@ namespace ETL_SQL.Engine
             var strongMatches = new List<string>();
             var weakMatches = new List<string>();
 
-            foreach (var k in context.Columns.Keys)
+            // Optimization: Pre-calculate the set of all qualified names to avoid O(n^2) search
+            var allNames = context.Columns.Keys;
+            var qualifiedSuffixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (qualifier != null)
+            {
+                foreach (var k in allNames)
+                {
+                    if (k.Contains(".")) qualifiedSuffixes.Add(k);
+                }
+            }
+
+            foreach (var k in allNames)
             {
                 // Case 1: Partial match on baseName or suffix
                 if (k.Equals(baseName, StringComparison.OrdinalIgnoreCase) || k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
@@ -87,7 +101,8 @@ namespace ETL_SQL.Engine
                         {
                             // If the row contains a strongly qualified version of this unqualified column for a DIFFERENT qualifier,
                             // then this unqualified column actually belongs to that other block.
-                            bool belongsToAnother = context.Columns.Keys.Any(other => other.EndsWith("." + k, StringComparison.OrdinalIgnoreCase) && !other.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase));
+                            var targetSuffix = "." + k;
+                            bool belongsToAnother = qualifiedSuffixes.Any(other => other.EndsWith(targetSuffix, StringComparison.OrdinalIgnoreCase) && !other.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase));
                             if (!belongsToAnother)
                             {
                                 weakMatches.Add(k);
@@ -286,7 +301,11 @@ namespace ETL_SQL.Engine
         /// <summary>Evaluates a scalar or aggregate function call.</summary>
         public async Task<object?> EvaluateFunction(FunctionCallExpression f, Row context)
         {
-            if (f.Window != null) return context.Columns.ContainsKey($"WINDOW_{f.ToSql().ToUpperInvariant()}") ? context[$"WINDOW_{f.ToSql().ToUpperInvariant()}"] : null;
+            if (f.Window != null) 
+            {
+                var winKey = $"WINDOW_{f.ToSql().ToUpperInvariant()}";
+                return context.Columns.ContainsKey(winKey) ? context[winKey] : null;
+            }
             
             // Check for pre-calculated aggregate results (used in HAVING clause)
             var aggKey = $"AGG_{f.ToSql().ToUpperInvariant()}";
@@ -432,12 +451,17 @@ namespace ETL_SQL.Engine
             }
             if (val is IDictionary<string, object?> dict && dict.TryGetValue(ma.MemberName, out var dVal)) return dVal;
             
-            // Handle reflection for properties/fields
-            var prop = val.GetType().GetProperty(ma.MemberName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
-            if (prop != null) return prop.GetValue(val);
-            
-            var field = val.GetType().GetField(ma.MemberName, System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.IgnoreCase);
-            if (field != null) return field.GetValue(val);
+            // Handle reflection for properties/fields with caching
+            var type = val.GetType();
+            var member = _reflectionCache.GetOrAdd((type, ma.MemberName), key =>
+            {
+                var p = key.Item1.GetProperty(key.Item2, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                if (p != null) return p;
+                return (MemberInfo?)key.Item1.GetField(key.Item2, BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+            });
+
+            if (member is PropertyInfo prop) return prop.GetValue(val);
+            if (member is FieldInfo field) return field.GetValue(val);
 
             return null;
         }

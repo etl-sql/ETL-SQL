@@ -102,7 +102,8 @@ namespace ETL_SQL.Engine.Engines
                     foreach (var agg in havingAggs)
                     {
                         var val = await EvaluateAggregate(agg, groupRows);
-                        havingContext[$"AGG_{agg.ToSql().ToUpperInvariant()}"] = val;
+                        var aggName = $"AGG_{agg.ToSql().ToUpperInvariant()}";
+                        havingContext[aggName] = val;
                     }
 
                     if (!await _context.EvaluateCondition(havingClause, havingContext)) continue;
@@ -118,7 +119,8 @@ namespace ETL_SQL.Engine.Engines
                         var val = await EvaluateAggregate(finalColumns[i].Expression, groupRows);
                         resRow[colNames[i]] = val;
                         // Also store with AGG_ prefix for subsequent steps (Window, OrderBy)
-                        resRow[$"AGG_{finalColumns[i].Expression.ToSql().ToUpperInvariant()}"] = val;
+                        var aggName = $"AGG_{finalColumns[i].Expression.ToSql().ToUpperInvariant()}";
+                        resRow[aggName] = val;
                     }
                     else
                     {
@@ -231,7 +233,8 @@ namespace ETL_SQL.Engine.Engines
         {
             if (expr is FunctionCallExpression f && IsAggregate(f))
             {
-                if (!aggs.Any(a => a.ToSql().Equals(f.ToSql(), StringComparison.OrdinalIgnoreCase))) 
+                var fSql = f.ToSql();
+                if (!aggs.Any(a => a.ToSql().Equals(fSql, StringComparison.OrdinalIgnoreCase))) 
                     aggs.Add(f);
             }
             else if (expr is BinaryExpression b)

@@ -40,9 +40,12 @@ namespace ETL_SQL.TUI.UI
 
             if (res.Rows.Any())
             {
-                var visibleRows = res.Rows.Skip(_renderer.ResultScrollRow).Take(Math.Max(1, height - 4)).ToList();
-                foreach (var row in visibleRows)
+                int start = _renderer.ResultScrollRow;
+                int count = Math.Max(1, height - 4);
+                int end = Math.Min(start + count, res.Rows.Count);
+                for (int i = start; i < end; i++)
                 {
+                    var row = res.Rows[i];
                     table.AddRow(visibleColumns.Select(c => Markup.Escape(row[c]?.ToString() ?? "")).ToArray());
                 }
             }
