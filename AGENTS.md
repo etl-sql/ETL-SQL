@@ -49,13 +49,18 @@ Key syntax facts:
 - **Variables**: `@VariableName` — always prefix with `@`, case-insensitive
 - **Temp tables**: `#TableName` — prefix with `#` for in-memory engine-side tables
 - **Encrypted strings**: `'ENC:base64...'` — set session password first with `USE PASSWORD = '...'`
-- **Connectors**: Supported types are `MSSQL`, `POSTGRES`, `ORACLE`, `ODBC`, `MOCKDB`, `FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `API`/`REST`, `SFTP`, `FTP`, `AZURE_BLOB`, `SMTP`, `DIRECTORY`
+- **Connectors**: Supported types are `MSSQL`, `POSTGRES`, `ORACLE`, `ODBC`, `FLATFILE`/`CSV`, `EXCEL`, `JSON`, `XML`, `PARQUET`, `AVRO`, `API`/`REST`, `SFTP`, `FTP`, `AZURE_BLOB`, `SMTP`, `DIRECTORY` (and `MOCKDB` for test/mock workloads)
 - **Suspension**: `WAITFOR DELAY 'hh:mm:ss'` — fixed pause; `WAITFOR TIME 'hh:mm:ss'` — pause until clock time
 
-> [!IMPORTANT]
-> There is no `WAITFOR (SELECT ...)` polling syntax. Use a `WHILE` loop with `WAITFOR DELAY` inside it to implement polling.
+> [!NOTE]
+> `WAITFOR` has three supported forms:
+> - `WAITFOR DELAY 'hh:mm:ss'` — fixed pause
+> - `WAITFOR TIME 'hh:mm:ss'` — pause until wall-clock time
+> - `WAITFOR (condition)` — polls the expression at 200ms intervals until it returns a truthy value
+>
+> The `WHILE` loop with `WAITFOR DELAY` inside remains the preferred pattern when you need a custom poll interval or inter-check logic.
 
-### 2.5 Report-SQL (`.rptsql`) Key Facts
+### 2.1 Report-SQL (`.rptsql`) Key Facts
 
 `.rptsql` files are standard ETL-SQL scripts with additional statement types. Use `Report_SQL_Guide.md` as the full reference. Critical patterns to get right:
 
@@ -178,7 +183,7 @@ END CATCH
 ### 5.4 Does this involve scheduling?
 Use `CREATE JOB` for recurring tasks; use `RUN SCRIPT` to break large scripts into composable modules.
 
-For 12 production-grade complete recipes, see **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)**.
+For 18 production-grade complete recipes, see **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)**.
 
 ---
 
@@ -195,7 +200,7 @@ Use this map to find the right document for any task.
 | File ops, email, lineage, Docker, jobs | **[Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md)** |
 | Complete production recipes | **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)** |
 | Pipeline mental model for new users | **[User_Manual.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/User_Manual.md)** |
-| Sample script inventory (40+ scripts in `/scripts/`) | **[Sample_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Sample_Guide.md)** |
+| Sample script inventory (55+ scripts in `/scripts/`) | **[Sample_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Sample_Guide.md)** |
 | Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** |
 | Master language reference (comprehensive) | **[ETL_SQL_Language_Reference.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/ETL_SQL_Language_Reference.md)** |
 
@@ -250,6 +255,7 @@ For full engine coding standards, see **[Standards/Connectors_Standards.md](file
 | Declaring `class` for AST nodes in C# | Use `record` types for all AST nodes |
 | Writing `WAITFOR (SELECT ...)` | This form does not exist; use `WHILE` + `WAITFOR DELAY` for polling |
 | Using `MySQL` as a connector token | MySQL is not a supported connector; use `ODBC` with a MySQL driver instead |
+| Writing `FROM FLATFILE` or `FROM FILE` in a `CREATE CONNECTION` | `FLATFILE` is the **connector type**; `FILE` is the **table alias** used in queries — `CREATE CONNECTION src ON FLATFILE('my.csv'); SELECT * FROM src` |
 
 ---
 

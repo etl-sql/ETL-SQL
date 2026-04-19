@@ -44,7 +44,7 @@ UNION ALL SELECT 'Apr', 'South', 'Widget B', 145, 21750
 UNION ALL SELECT 'Apr', 'East',  'Widget A', 105, 12600;
 
 -- Shared pre-aggregated dataset (swap FLATFILE source here when using real data)
-CREATE DATASET #sales
+CREATE DATASET &sales
   REFRESH EVERY '1h'
   COMPRESS = ON
   AS (SELECT month, region, product,
@@ -55,7 +55,7 @@ CREATE DATASET #sales
 
 -- ── Filter control ────────────────────────────────────────────────────────
 CREATE VISUAL RegionFilter AS SLICER (
-  SOURCE   = (SELECT DISTINCT region FROM #sales ORDER BY region),
+  SOURCE   = (SELECT DISTINCT region FROM &sales ORDER BY region),
   MAPPINGS (VALUE = region),
   ACTIONS  (ON_CHANGE = SET_PARAMETER(@region, region)),
   DEFAULT  = 'All'
@@ -63,7 +63,7 @@ CREATE VISUAL RegionFilter AS SLICER (
 
 -- ── KPI cards ─────────────────────────────────────────────────────────────
 CREATE VISUAL TotalRevenue AS CARD (
-  SOURCE   = (SELECT SUM(revenue) AS val FROM #sales
+  SOURCE   = (SELECT SUM(revenue) AS val FROM &sales
               WHERE @region = 'All' OR region = @region),
   TITLE    = 'Total Revenue',
   MAPPINGS (VALUE = val),
@@ -71,7 +71,7 @@ CREATE VISUAL TotalRevenue AS CARD (
 );
 
 CREATE VISUAL TotalUnits AS CARD (
-  SOURCE   = (SELECT SUM(units) AS val FROM #sales
+  SOURCE   = (SELECT SUM(units) AS val FROM &sales
               WHERE @region = 'All' OR region = @region),
   TITLE    = 'Units Sold',
   MAPPINGS (VALUE = val),
@@ -79,7 +79,7 @@ CREATE VISUAL TotalUnits AS CARD (
 );
 
 CREATE VISUAL AvgRevenue AS CARD (
-  SOURCE   = (SELECT AVG(revenue) AS val FROM #sales
+  SOURCE   = (SELECT AVG(revenue) AS val FROM &sales
               WHERE @region = 'All' OR region = @region),
   TITLE    = 'Avg Monthly Revenue',
   MAPPINGS (VALUE = val),
@@ -88,7 +88,7 @@ CREATE VISUAL AvgRevenue AS CARD (
 
 -- ── Chart ─────────────────────────────────────────────────────────────────
 CREATE VISUAL RevenueByRegion AS BAR (
-  SOURCE   = (SELECT region, SUM(revenue) AS revenue FROM #sales
+  SOURCE   = (SELECT region, SUM(revenue) AS revenue FROM &sales
               WHERE @region = 'All' OR region = @region
               GROUP BY region
               ORDER BY revenue DESC),
@@ -102,7 +102,7 @@ CREATE VISUAL RevenueByRegion AS BAR (
 
 -- ── Detail table with conditional formatting ──────────────────────────────
 CREATE VISUAL SalesDetail AS TABLE (
-  SOURCE = (SELECT month, region, product, units, revenue FROM #sales
+  SOURCE = (SELECT month, region, product, units, revenue FROM &sales
             WHERE @region = 'All' OR region = @region
             ORDER BY month, region),
   FORMATTING (
@@ -790,7 +790,7 @@ WITH PARAMETERS (
 
 ## Tips
 
-**Use `CREATE DATASET` for shared expensive queries** — if multiple visuals query the same data, compute it once into a `#temp` and reference it everywhere. Add `COMPRESS = ON` for large result sets.
+**Use `CREATE DATASET` for shared expensive queries** — if multiple visuals query the same data, compute it once as `CREATE DATASET &name` and reference it everywhere. Add `COMPRESS = ON` for large result sets.
 
 **The "All or filtered" pattern** — use `WHERE @param = 'All' OR col = @param` so visuals show full data before the user makes a selection. Pair with a SLICER whose option list includes an `'All'` row.
 
@@ -916,9 +916,9 @@ CREATE PAGE Overview AS LAYOUT (
 
 CREATE NAVIGATION MainNav AS TAB (
   ORIENTATION = HORIZONTAL,
-  DEFAULT     = Overview,
-  PAGES       (Overview)
-);
+  DEFAULT     = Overview
+)
+WITH PAGES (Overview);
 ```
 
 ### Key Points

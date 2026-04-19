@@ -2,6 +2,26 @@
 
 Welcome to ETL-SQL. This guide is designed to help you transition from thinking in "Single Database SQL" to "Multi-Context Data Flow." Work through each section in order — each one builds on the last.
 
+> [!TIP]
+> **Stuck on something specific?** Use the table of contents below to jump directly to the section you need. For a searchable list of errors and gotchas, see the [FAQ](FAQ.md). For connector-specific syntax, see [Data_Connectors.md](Reference/Data_Connectors.md).
+
+## Contents
+
+1. [The Pipeline Mental Model](#1-the-pipeline-mental-model)
+2. [Your First Connection](#2-your-first-connection)
+3. [Variables & State Management](#3-variables--state-management)
+4. [The #Temp Table Workspace](#4-the-temp-table-workspace)
+5. [Core SELECT Patterns](#5-core-select-patterns)
+6. [Control Flow](#6-control-flow)
+7. [Error Handling & Transactions](#7-error-handling--transactions)
+8. [Data Movement Patterns](#8-data-movement-patterns)
+9. [File Operations](#9-file-operations)
+10. [Modular Scripts & Jobs](#10-modular-scripts--jobs)
+11. [Metadata, Lineage & Tags](#11-metadata-lineage--tags)
+12. [Debugging & Diagnostics](#12-debugging--diagnostics)
+13. [Zero-Trust Security](#13-zero-trust-security)
+- [Next Steps](#next-steps)
+
 ---
 
 ## 1. The Pipeline Mental Model
@@ -27,7 +47,8 @@ The most important concept to master is **Context Awareness**. In standard SQL, 
 | **Engine** | ETL-SQL syntax, `@variables`, `#temp` tables, functions, `FOREACH`, `IF`, `MERGE` | `SELECT ... INTO #stage FROM conn.Table` |
 | **Remote** | Native SQL of the target engine — passed verbatim | `EXECUTE mssql_conn BEGIN ... END` |
 
-**The Golden Rule**: Data always flows *through* the engine. If you want to move data from Postgres to a CSV file, you stage it in a `#temp` table first. This is where validation, masking, regex, and lineage tagging happen.
+> [!IMPORTANT]
+> **The Golden Rule**: Data always flows *through* the engine. If you want to move data from Postgres to a CSV file, you stage it in a `#temp` table first. This is where validation, masking, regex, and lineage tagging happen. The remote engines only ever receive simple, native SQL they can execute directly.
 
 ### 1.2 Why This Matters
 
@@ -73,7 +94,7 @@ CREATE CONNECTION secure_db ON MSSQL('ENC:U2FsdGVkX1+abc...');
 ```
 
 > [!TIP]
-> The IDE and CLI can automatically encrypt all plaintext connection strings in a script when you save with a master password set. Use `HELP CONNECTION <type>` to see all available options for any connector.
+> The IDE and CLI can automatically encrypt all plaintext connection strings in a script when you save with a master password set. Use `HELP CONNECTION <type>` in the TUI (e.g. `HELP CONNECTION MSSQL`) to see every available `WITH()` option and its default for any connector type.
 
 ### 2.3 Environment Switching
 
@@ -133,6 +154,41 @@ DECLARE @Loaded INT;
 RUN SCRIPT 'ingest.etlsql' WITH (@Env = 'PROD', @Loaded = @Loaded);
 PRINT 'Loaded rows: ' + @Loaded;
 ```
+
+### 3.2 Environment Sets — Switching DEV / QA / PROD
+
+Instead of changing connection strings throughout your script, define **named environment sets** once and activate them with a single command:
+
+```sql
+-- Define environments once (usually stored in a shared setup script)
+CREATE SETS !DEV
+BEGIN
+    @server   = 'dev-db.internal',
+    @database = 'DevWarehouse'
+END
+
+CREATE SETS !PROD
+BEGIN
+    @server   = 'prod-db.internal',
+    @database = 'ProdWarehouse';
+    SET WITH_PROMPT ON;    -- requires confirmation before activating
+END
+
+-- Activate the environment for this run
+USE SETS !DEV;
+
+-- Now use the variables
+CREATE CONNECTION dw ON MSSQL() WITH(SERVER=@server, DATABASE=@database, TRUSTED_CONNECTION=TRUE);
+
+-- Switch to PROD (prompts for confirmation in interactive mode)
+USE SETS !PROD;
+
+-- Remove a set that is no longer needed
+DROP SETS IF EXISTS !STAGING;
+```
+
+> [!TIP]
+> `CREATE SETS` blocks are typically placed in a shared `_environments.etlsql` and loaded at the top of each orchestrator script via `RUN SCRIPT '_environments.etlsql'`.
 
 ---
 
@@ -303,13 +359,20 @@ WAITFOR DELAY '00:00:00.500';    -- 500 milliseconds
 -- Wait until a specific time today (or tomorrow if already past)
 WAITFOR TIME '02:00:00';
 
--- WAITFOR (SELECT ...)
--- Polling pattern
+-- Polling form — waits until the expression becomes truthy (polls every 200ms)
+WAITFOR (SELECT COUNT(*) FROM control_db.JobStatus WHERE Status = 'Ready');
+PRINT 'Condition met — proceeding.';
+
+-- WAIT UNTIL is a more readable alias for the same polling form
+WAIT UNTIL (SELECT COUNT(*) FROM control_db.JobStatus WHERE Status = 'Ready') > 0;
+
+-- Equivalent WHILE form — use this when you need control over the poll interval
+-- or want to perform additional logic between checks:
 DECLARE @ready INT = 0;
 WHILE @ready = 0
 BEGIN
     SET @ready = (SELECT COUNT(*) FROM control_db.JobStatus WHERE Status = 'Ready');
-    IF @ready = 0 WAITFOR DELAY '00:01:00';   -- poll every minute
+    IF @ready = 0 WAITFOR DELAY '00:01:00';   -- check every minute
 END
 PRINT 'Job is ready — proceeding.';
 ```
@@ -357,6 +420,36 @@ SET WHAT_IF OFF;
 -- Review the console output, then run for real:
 DELETE FROM prod.logs WHERE log_date < '2024-01-01';
 ```
+
+### 7.3 ASSERT and EXPECT SCHEMA — Proactive Validation
+
+Use these before destructive operations to fail fast with a clear message rather than silently loading bad data.
+
+```sql
+-- ASSERT: halt if a logical condition is false
+ASSERT (SELECT COUNT(*) FROM #staging) > 0,
+    'Staging table is empty — source feed may have failed';
+
+ASSERT @total_amount >= 0,
+    'Negative balance detected — aborting before MERGE';
+
+-- EXPECT SCHEMA: halt (or warn) if the source schema has drifted
+EXPECT SCHEMA #staging (
+    CustomerId INT,
+    Name       VARCHAR,
+    Email      VARCHAR,
+    Amount     DECIMAL(18,2)
+);
+
+-- Warn instead of abort (script continues, but logs a yellow warning)
+EXPECT SCHEMA #staging (
+    CustomerId INT,
+    Name       VARCHAR
+) ON DRIFT WARN;
+```
+
+> [!TIP]
+> Place `ASSERT` and `EXPECT SCHEMA` checks immediately after a source extract and before any `MERGE` or `DELETE`. This pattern catches schema changes from upstream teams before they corrupt your target.
 
 ---
 
@@ -433,11 +526,21 @@ BEGIN
     END
 END;
 PRINT 'Dimensions loaded in parallel.';
+
+-- Add a concurrency limit to avoid overwhelming a source system
+-- At most 3 branches run simultaneously; the rest queue
+PARALLEL(3)
+BEGIN
+    RUN SCRIPT 'load_north.etlsql';
+    RUN SCRIPT 'load_south.etlsql';
+    RUN SCRIPT 'load_east.etlsql';
+    RUN SCRIPT 'load_west.etlsql';
+END;
 ```
 
 ### 8.5 Dynamic SQL with EXEC
 
-Build and execute SQL statements constructed at runtime. The engine supports four EXEC forms:
+Build and execute SQL statements constructed at runtime. The engine supports five EXEC forms:
 
 ```sql
 -- Form 1: Dynamic expression — EXEC(@string_expr)
@@ -474,6 +577,11 @@ EXEC dbo.sp_archive @Year = 2025, @DryRun = 1;
 
 > [!IMPORTANT]
 > `EXEC(@sql)` without `AT conn` runs in **engine context** — it can read `#temp` tables and `@variables` from the current session. `EXEC(@sql) AT conn` sends the SQL string to the remote engine and cannot reference engine-side objects. `WHAT_IF` mode is respected: remote EXEC statements log what would run without executing.
+
+> [!TIP]
+> **Choosing the right form**: Use Form 1 for dynamic ETL logic that needs engine functions. Use Form 3 (parameterized) any time user input or variable values appear in the query string — it eliminates SQL injection risk. Use Form 4 when you need stored procs, CTEs, or native syntax the ETL-SQL parser doesn't handle directly.
+
+---
 
 ## 9. File Operations
 
@@ -514,6 +622,9 @@ INTO #remote_manifest
 FROM REMOTE_FILE_LIST(sftp_conn, '/uploads/')
 WHERE LastModified >= DATEADD(HOUR, -24, GETDATE());
 ```
+
+> [!TIP]
+> For the full file operation reference — `COMPRESS FILE`, `ENCRYPT FILE`, `MOVE FILE`, directory operations, and SFTP/FTP patterns — see [Specialized_Operations.md](Reference/Specialized_Operations.md).
 
 ---
 
@@ -562,6 +673,9 @@ EXEC LoadRegion 'North', '2026-01-01';
 EXEC LoadRegion 'South', '2026-01-01';
 ```
 
+> [!TIP]
+> For the full scheduling reference — `SHOW JOBS`, `DROP JOB`, `KILL JOB`, CI/CD integration, and Windows Service deployment — see the [Orchestrator's Guide](Orchestrators_Guide.md).
+
 ---
 
 ## 11. Metadata, Lineage & Tags
@@ -587,6 +701,25 @@ SELECT Operation, SourceTables, TargetColumn
 FROM LINEAGE(#TaggedUsers)
 WHERE TargetColumn = 'Email';
 ```
+
+---
+
+### 11.1 Script Metadata Headers
+
+The engine automatically reads a structured comment at the top of any `.etlsql` file and records the metadata in lineage logs:
+
+```sql
+/*
+   @author:      Chuck
+   @version:     2.1.0
+   @description: Nightly customer sync from Postgres → SQL Server DW
+*/
+
+DECLARE @BatchDate DATE = GETDATE();
+...
+```
+
+Any `@key: value` pair is captured. `@author` defaults to the current system user if omitted. This metadata appears in `SHOW LINEAGE` output and the Orchestrator job history.
 
 ---
 
@@ -621,6 +754,9 @@ SHOW PROFILE INTO #perf;
 SELECT * FROM #perf ORDER BY DurationMs DESC LIMIT 10;
 ```
 
+> [!TIP]
+> `@@LAST_EXEC_MS`, `@@TOTAL_SPILLED_BYTES`, and `@@PEAK_MEMORY_MB` are system variables you can query at any time — no profiling mode required. See [Administrators_Guide.md §5.4](Administrators_Guide.md) for the full system variable reference.
+
 ### 12.4 MOCKDB — Safe Development
 
 Use the built-in mock database for development without touching production:
@@ -637,7 +773,9 @@ SELECT u.UserName, o.TotalAmount FROM m.Users AS u JOIN m.Orders AS o ON u.UserI
 
 ## 13. Zero-Trust Security
 
-ETL-SQL treats all scripts as untrusted. Key rules enforced by the engine:
+ETL-SQL treats every script as untrusted by default regardless of who wrote it or where it came from. The sandbox rules below are always enforced — they cannot be disabled, only selectively relaxed inside an administrator-approved `Safe Zone`. See [SECURITY.md](../SECURITY.md) for the complete policy.
+
+Key rules enforced by the engine:
 
 | Rule | Details |
 | :--- | :--- |
@@ -661,6 +799,6 @@ Use `SET WHAT_IF ON` before any destructive operation. See [SECURITY.md](file://
 | All built-in functions | **[Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md)** |
 | File ops, email, lineage, Docker, jobs | **[Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md)** |
 | 18 production-ready recipes | **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)** |
-| 40+ sample scripts inventory | **[Sample_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Sample_Guide.md)** |
+| 55+ sample scripts inventory | **[Sample_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Sample_Guide.md)** |
 | Reporting & dashboards | **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** |
 | Security policy | **[SECURITY.md](file:///c:/Users/chuck/scratch/ETL-SQL/SECURITY.md)** |

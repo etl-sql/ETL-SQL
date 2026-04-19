@@ -28,11 +28,11 @@ namespace ETL_SQL.Core.Linting.Rules
                 switch (stmt)
                 {
                     case CreateDatasetStatement ds:
-                        definedDatasets.Add(ds.TempTableName);
+                        definedDatasets.Add(StripSigil(ds.TempTableName));
                         break;
 
                     case SelectStatement sel when sel.IntoTable != null:
-                        definedDatasets.Add(sel.IntoTable.TableName);
+                        definedDatasets.Add(StripSigil(sel.IntoTable.TableName));
                         break;
 
                     case CreateVisualStatement visual:
@@ -40,8 +40,7 @@ namespace ETL_SQL.Core.Linting.Rules
                         if (!visual.Source.IsInlineSelect && visual.Source.TempTableName != null)
                         {
                             var refName = visual.Source.TempTableName;
-                            var normalized = refName.StartsWith('#') ? refName : '#' + refName;
-                            if (!definedDatasets.Contains(normalized))
+                            if (!definedDatasets.Contains(StripSigil(refName)))
                             {
                                 results.Add(new LintResult
                                 {
@@ -86,5 +85,8 @@ namespace ETL_SQL.Core.Linting.Rules
 
             return Task.FromResult<IEnumerable<LintResult>>(results);
         }
+
+        private static string StripSigil(string name) =>
+            name.Length > 0 && (name[0] == '#' || name[0] == '&') ? name[1..] : name;
     }
 }

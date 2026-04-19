@@ -279,6 +279,6 @@ To report a security vulnerability in ETL-SQL, open a confidential issue or cont
 
 ---
 
-**Policy Version**: 0.6
+**Policy Version**: 0.7
 **Compliance Standard**: Built with reference to NIST SP 800-204 (Microservices Security), NIST SP 800-132 (Password-Based Key Derivation), and OWASP CLI Security Principles.
-**Last Review Date**: 2026-04-14
+**Last Review Date**: 2026-04-19

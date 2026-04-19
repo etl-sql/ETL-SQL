@@ -751,7 +751,7 @@ Sets the named `@param` to the selected value. Any visual whose inline `SELECT` 
 Pre-computes a named temp table that can be independently refreshed and optionally encrypted or compressed. Use this when multiple visuals share the same expensive base query, or when you want separate refresh cadences.
 
 ```
-CREATE DATASET #<name>
+CREATE DATASET &<name>
   [REFRESH EVERY '<interval>']
   [TTL = '<duration>']
   [COMPRESS = ON|OFF]
@@ -773,7 +773,7 @@ AS ( SELECT ... );
 
 ```sql
 -- Machine-bound (simplest — no credentials to manage)
-CREATE DATASET #sales_snap
+CREATE DATASET &sales_snap
   REFRESH EVERY '1h'
   TTL = '24h'
   COMPRESS = ON
@@ -783,13 +783,13 @@ CREATE DATASET #sales_snap
       GROUP BY region, product);
 
 -- Password-protected (portable)
-CREATE DATASET #sales_secure
+CREATE DATASET &sales_secure
   ENCRYPT = PASSWORD
   PASSWORD = 'MyS3cretPhrase'
   AS (SELECT * FROM sensitive_table);
 
 -- Key-file protected
-CREATE DATASET #sales_keyfile
+CREATE DATASET &sales_keyfile
   ENCRYPT = KEYFILE
   KEYFILE = 'C:\keys\report.key'
   AS (SELECT * FROM sales);
@@ -799,7 +799,7 @@ CREATE DATASET #sales_keyfile
 
 | Clause | Required | Description |
 |--------|----------|-------------|
-| `#<name>` | Yes | Temp table name. The `#` prefix is automatically added if omitted. |
+| `&<name>` | Yes | Dataset name. The `&` prefix is automatically added if omitted. |
 | `REFRESH EVERY '<interval>'` | No | Re-compute interval. Format: `<n>s`, `<n>m`, `<n>h`, or `<n>d` (e.g. `'30m'`, `'1h'`, `'7d'`). |
 | `TTL = '<duration>'` | No | How long a snapshot stays valid before `IsStale` returns true. Same interval format. |
 | `COMPRESS = ON` | No | Compress the snapshot file on disk. Default `OFF`. |
@@ -1344,7 +1344,7 @@ The language server checks `.rptsql` files automatically:
 
 | Rule | Severity | Condition |
 |------|----------|-----------| 
-| `VisualSourceExists` | Warning | `SOURCE = #table` references a temp table not defined earlier in the script. |
+| `VisualSourceExists` | Warning | `SOURCE = &dataset` (or `#table`) references a source not defined earlier in the script. |
 | `VisualMappingColumnExists` | Warning | A `MAPPINGS` role references a column not returned by the `SOURCE` inline SELECT. |
 | `PageVisualReferenced` | Warning | A `MAP` entry references a visual or container name that is not defined in the script. |
 | `DatasetRefreshInterval` | Warning | `REFRESH EVERY` value does not match the `<n>s/m/h/d` format. |
@@ -1417,7 +1417,7 @@ The snapshot and API both return this structure:
 
   "datasets": [
     {
-      "tempTableName":   "#sales_snap",
+      "tempTableName":   "&sales_snap",
       "refreshInterval": "1h",
       "ttl":             "24h",
       "lastRefresh":     "2026-04-12T18:00:00Z",
@@ -1441,7 +1441,7 @@ DROP CONNECTION IF EXISTS c;
 CREATE CONNECTION c ON FLATFILE('TestData/test_sales.csv');
 
 -- Shared base dataset (refreshed every hour)
-CREATE DATASET #summary
+CREATE DATASET &summary
   REFRESH EVERY '1h'
   ENCRYPT = MACHINE
   AS (SELECT month, region, product,
@@ -1452,7 +1452,7 @@ CREATE DATASET #summary
 
 -- Region filter slicer
 CREATE VISUAL RegionFilter AS SLICER (
-  SOURCE   = (SELECT DISTINCT region FROM #summary ORDER BY region),
+  SOURCE   = (SELECT DISTINCT region FROM &summary ORDER BY region),
   MAPPINGS (VALUE = region),
   ACTIONS  (ON_CHANGE = SET_PARAMETER(@region, region)),
   DEFAULT  = 'All'
@@ -1461,7 +1461,7 @@ CREATE VISUAL RegionFilter AS SLICER (
 -- KPI card: total revenue
 CREATE VISUAL TotalRevenue AS CARD (
   SOURCE = (SELECT SUM(revenue) AS val, 'Total Revenue' AS lbl
-            FROM #summary
+            FROM &summary
             WHERE @region = 'All' OR region = @region),
   TITLE    = 'Total Revenue',
   MAPPINGS (VALUE = val, LABEL = lbl),
@@ -1471,7 +1471,7 @@ CREATE VISUAL TotalRevenue AS CARD (
 -- Bar chart: revenue by region
 CREATE VISUAL RevenueByRegion AS BAR (
   SOURCE = (SELECT region, SUM(revenue) AS revenue
-            FROM #summary
+            FROM &summary
             WHERE @region = 'All' OR region = @region
             GROUP BY region),
   TITLE    = 'Revenue by Region',
@@ -1485,7 +1485,7 @@ CREATE VISUAL RevenueByRegion AS BAR (
 -- Multi-series bar: revenue by region and month
 CREATE VISUAL RevenueByRegionMonth AS BAR (
   SOURCE = (SELECT month, region, SUM(revenue) AS revenue
-            FROM #summary
+            FROM &summary
             GROUP BY month, region),
   TITLE    = 'Revenue by Region (Monthly)',
   MAPPINGS (X = month, Y = revenue, SERIES = region),
@@ -1495,7 +1495,7 @@ CREATE VISUAL RevenueByRegionMonth AS BAR (
 -- Donut chart: revenue share by product
 CREATE VISUAL RevenueByProduct AS DONUT (
   SOURCE = (SELECT product, SUM(revenue) AS revenue
-            FROM #summary
+            FROM &summary
             GROUP BY product),
   TITLE    = 'Revenue by Product',
   MAPPINGS (LABEL = product, VALUE = revenue)
@@ -1504,7 +1504,7 @@ CREATE VISUAL RevenueByProduct AS DONUT (
 -- Line chart: units by month
 CREATE VISUAL UnitsByMonth AS LINE (
   SOURCE = (SELECT month, SUM(units) AS units
-            FROM #summary
+            FROM &summary
             GROUP BY month),
   TITLE    = 'Units Sold by Month',
   MAPPINGS (X = month, Y = units),
@@ -1513,20 +1513,13 @@ CREATE VISUAL UnitsByMonth AS LINE (
 
 -- Detail table: all rows
 CREATE VISUAL SalesTable AS TABLE (
-  SOURCE = #summary
+  SOURCE = &summary
 );
 
 -- KPI container
 CREATE CONTAINER KpiRow AS BOX (
   VISUALS (TotalRevenue)
 );
-
--- Navigation
-CREATE NAVIGATION MainNav AS TAB (
-  ORIENTATION = HORIZONTAL,
-  DEFAULT = Overview
-)
-WITH PAGES (Overview, Trends);
 
 -- Dashboard pages
 CREATE PAGE Overview AS LAYOUT (
@@ -1548,6 +1541,13 @@ CREATE PAGE Trends AS LAYOUT (
     'C' = RevenueByProduct
   )
 );
+
+-- Navigation (defined after pages so the LayerOrder linter is satisfied)
+CREATE NAVIGATION MainNav AS TAB (
+  ORIENTATION = HORIZONTAL,
+  DEFAULT = Overview
+)
+WITH PAGES (Overview, Trends);
 ```
 
 ---

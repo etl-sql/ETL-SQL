@@ -82,7 +82,7 @@ namespace ETL_SQL.Core
     // ── Sub-nodes (all must be records since AstNode is a record) ────────────
 
     /// <summary>
-    /// Source expression for a visual: either an inline SELECT or a #temp table reference.
+    /// Source expression for a visual: either an inline SELECT or a &dataset reference.
     /// Exactly one of InlineSelect / TempTableName is set; the other is null.
     /// </summary>
     public record VisualSourceExpression : AstNode
@@ -223,7 +223,7 @@ namespace ETL_SQL.Core
     }
 
     /// <summary>
-    /// CREATE DATASET #name
+    /// CREATE DATASET &name
     ///     REFRESH EVERY '&lt;interval&gt;'
     ///     TTL = '&lt;duration&gt;'
     ///     COMPRESS = ON|OFF

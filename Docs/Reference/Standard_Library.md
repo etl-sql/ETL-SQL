@@ -366,6 +366,9 @@ SELECT IIF(Score >= 90, 'Pass', 'Fail') AS Result FROM #tests;
 | `@@TRANCOUNT` | Current transaction nesting level |
 | `@@VERSION` | Full engine version and metadata string |
 | `@@RESULTSETS` | Number of result sets produced by the last statement |
+| `@@ERROR` | Error number of the last statement (0 = success); equivalent to `ERROR_NUMBER()` inside a `CATCH` |
+| `@@TOTAL_SPILLED_BYTES` | Bytes written to disk by the external window/join engine during the last spilling operation |
+| `@@PARTITIONS_COUNT` | Number of disk-partition files created during the last external spill |
 | `FILE_EXISTS(path)` | `TRUE` if the specified file exists on disk |
 | `DIRECTORY_EXISTS(path)` | `TRUE` if the directory exists on disk |
 

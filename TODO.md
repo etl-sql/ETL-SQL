@@ -4,68 +4,6 @@
 
 - [ ] **Code review round 2** — findings below, implement separately per priority.
 
-  #### 🔴 High Priority — Security
-
-  - [x] **SQL injection via unparameterized table names in connectors** — `SqlServerDataSource.cs:78`, `OracleDataSource.cs:71,234`, `PostgresDataSource.cs:77,231,277` all use `$"SELECT * FROM {_tableName}"` and similar patterns. Table names are user-supplied identifiers and must be quoted/validated, not interpolated directly. Use a safe quoting helper (bracket/double-quote escaping per dialect) since table names can't be parameterized via ADO.NET.
-
-  - [x] **Hardcoded fallback password `"DefaultETLPass123!"`** — `FileOperationStatementHandler.cs:143,151` and `DirectoryOperationStatementHandler.cs:136,145` fall back to this literal when no password is provided and `MasterPassword` is null. Any encrypted file is trivially decryptable by anyone with source access. Remove the hardcoded fallback; throw a clear error instead when encryption is requested with no credential.
-
-  - [x] **SMTP default port 25 (plaintext)** — `SmtpDataSource.cs:135` defaults to port 25 when no PORT option is set. Credentials and message body travel in plaintext. Default to 587 (STARTTLS) instead.
-
-  #### 🔴 High Priority — Bugs
-
-  - [x] **File handle leak in SMTP attachments** — `SmtpDataSource.cs:117` calls `File.OpenRead(path)` and passes the stream directly to `MimeContent`. The stream is never disposed if MimeKit doesn't take ownership, leaking file handles when sending multiple emails with attachments. Copy to a `MemoryStream` first or ensure MimeKit closes the underlying stream.
-
-  - [x] **Negative OFFSET silently swallowed** — `SelectExecutionEngine.cs:280-281` checks `if (offset > 0)` before applying `.Skip()`. A negative OFFSET is silently treated as zero, returning all rows instead of an error. Should validate `offset >= 0` and throw `ExecutionException` otherwise.
-
-  - [x] **Negative/zero threshold values not validated** — `SetThresholdStatementHandler.cs` validates `ExternalHashPartitions > 0` but not `BatchSize`, `ForeachPageSize`, `ExternalSortChunkSize`, or `MaxMessages`. Setting these to zero or negative causes hangs, silent data loss, or divide-by-zero downstream. Add a `> 0` guard matching the existing partition check pattern.
-
-  #### 🔴 High Priority — Performance
-
-  - [x] **O(n²) UNION DISTINCT deduplication in recursive CTEs** — `SelectStatementHandler.cs:440` uses `.Any(existing => context.IsSoftEqual(existing, r))` (full linear scan) per new row in the recursive accumulator. At 10k+ rows this becomes the dominant cost. Replace with a hash-based dedup set using `CompoundKey` as in the join engine.
-
-  - [x] **Nested-loop Semi/Anti joins with no hash optimization** — `JoinEngine.cs:243-270` uses `foreach (left) { foreach (right) }` for SEMI/ANTI join types. No hash table is built on the probe side. These become O(n·m) at 100k rows. Build a `HashSet<CompoundKey>` on the right side once, then probe it per left row.
-
-  - [x] **Unnecessary `.ToList()` on `Columns` dictionary per row in JoinEngine** — `JoinEngine.cs:35,209` calls `.ToList()` on `r.Columns` just to iterate, allocating a new `List` per row processed. Change to `foreach (var kv in r.Columns)` directly.
-
-  #### 🟡 Medium Priority — Performance
-
-  - [x] **Uncached reflection per row in member access evaluation** — `ExpressionEvaluator.cs:436-440` calls `GetType().GetProperty()` and `GetType().GetField()` on every row evaluation when a `MemberAccessExpression` is hit. Cache the `PropertyInfo`/`FieldInfo` keyed by `(type, memberName)` in a static `ConcurrentDictionary`.
-
-  - [x] **O(n²) identifier ambiguity check per column reference** — `ExpressionEvaluator.cs:90` runs `.Any(other => ...)` inside a `foreach` over `context.Columns.Keys` to detect ambiguous names. For wide rows this is O(columns²) per identifier resolution. Pre-build a `HashSet<string>` of suffixes (column name without qualifier) once per row and check it in O(1).
-
-  - [x] **`ToSql()` called multiple times per expression in hot loops** — `AggregateEngine.cs:47,234` and `ExpressionEvaluator.cs:289` call `expr.ToSql()` 2–3× for the same expression in tight loops. Cache the result in a local variable at the start of the expression visit.
-
-  - [x] **TUI results panel `Skip().ToList()` on every render** — `ResultsPanel.cs:38,43` does `res.Rows.Skip(_renderer.ResultScrollRow).Take(...)..ToList()` on each redraw. With 50k+ rows this materializes a large intermediate allocation per keypress. Use indexed access with a page window instead.
-
-  #### 🟡 Medium Priority — Maintainability / SRP
-
-  - [x] **`Evaluator` stores Report-SQL object registries** — `Evaluator.cs:206-220` has `VisualDefinitions`, `PageDefinitions`, `ContainerDefinitions`, etc. as direct properties. The execution engine layer owning UI/report definitions creates a layering violation and makes `Evaluator` a god class (1,000+ lines, 3+ interfaces). Extract to `IReportRegistry` and inject it as a dependency rather than baking it into the evaluator.
-
-  - [x] **`ManifestBuilder.BuildAsync` is a 230-line method** — Handles visuals, pages, containers, navigations, buttons, and datasets all inline. Split into `BuildVisuals()`, `BuildPages()`, etc. private methods so each report object type can be tested and modified independently.
-
-  - [x] **`DashboardService` duplicates parameter refresh logic** — `SetParametersAsync` (lines 65-109) and `SetParameterAsync` (lines 115-154) duplicate the visual dependency scan and re-query loop. Extract a `RefreshAffectedVisuals(IEnumerable<string> changedParams)` helper called by both.
-
-  - [x] **Magic numbers in `Evaluator.cs` without named constants** — `500` (cache size), `10000` (batch size, recursive depth), `100000` (join/sort thresholds), `1000` (max messages), `200 * 1024 * 1024` (session size) are all hardcoded inline. Define them as `const` in a `EngineDefaults` static class so they're tunable in one place and self-documenting.
-
-  - [x] **Inconsistent `DBNull` check pattern** — `ExpressionEvaluator.cs` uses 4 different patterns to check for null/DBNull (`val == null`, `val == DBNull.Value`, combined `&&`, and inverted `||`). Extract `static bool IsDbNull(object? val) => val is null or DBNull` and replace all 9+ call sites.
-
-  #### 🟡 Medium Priority — Documentation
-
-  - [x] **`Architecture/Reporting.md` is missing new statement types** — `CREATE STYLE`, `CREATE TEMPLATE`, `CREATE BUTTON`, `ALTER <type>`, `DROP <type>`, and `CREATE OR ALTER` are all implemented but absent from the architecture overview and parser dispatch table. Update the doc to match the current statement set.
-
-  - [x] **TEXT visual documentation says "VALUE option" but parser uses `DEFAULT` clause** — `Report_SQL_Guide.md:147` tells users to write `OPTIONS (VALUE = '...')` for TEXT visuals, but the parser stores text content in the `DefaultValue` field via the `DEFAULT` clause. Update the guide with the correct syntax and a working example.
-
-  #### 🟢 Low Priority / Simplification
-
-  - [x] **`BeginTransactionStatementHandler.cs` has duplicate `using System.Threading.Tasks;`** — Remove one.
-
-  - [x] **HTTP custom headers use `TryAddWithoutValidation`** — `RestDataSource.cs:154-161` bypasses .NET's header validation. Values containing CRLF could cause header injection. Either validate header values or use the validating `Add()` overload.
-
-  - [x] **`StatementParser` is a 7,000-line partial class across 7 files** — Consider whether the partial split across `StatementParser.Data.cs`, `StatementParser.Report.cs`, `StatementParser.Flow.cs`, etc. should become actual separate classes composited by a thin `StatementParser` dispatcher. The current approach technically works but makes cross-file navigation painful and disguises the true complexity.
-
-  - [x] **`quote` identifier logic in `Evaluator.GetSqlTableName` is an untestable inline lambda** — `Evaluator.cs:696-706` defines dialect-specific quoting as a local `Func<string,string>`. Extract to `private static string QuoteMssqlIdentifier(string s)` / `QuoteStandardIdentifier(string s)` so they can be unit-tested and reused from `QueryCompiler`.
-
   #### 🧪 Linting Gaps
 
   - [ ] **No linter rule: `MULTISELECT` / `SLICER` without `SOURCE`** — The parser allows it and silently produces a broken visual. Add `VisualSourceRequiredRule` that flags these as errors (not warnings).
@@ -73,3 +11,32 @@
   - [ ] **No linter rule: required `MAPPINGS` per visual type** — `BAR` without X+Y, `PIE` without LABEL+VALUE, `CARD` without VALUE are all accepted by the parser but produce empty/broken charts at runtime. Add `VisualMappingCompletenessRule` to catch these at lint time.
 
   - [ ] **No linter rule: deprecated connector syntax** — The parser throws immediately on `FILE(...)` (should be `FLATFILE`), but a linter rule would give a friendlier message during development with a suggestion to use the current syntax.
+
+- [ ] **KILL JOB missing** This was referenced several times in different documentations but apparently it was never implemented.  After running SHOW JOBS the user should see the JOB ID and be able to KILL that job if they need to.  The KILL command should do a graceful end to the job, logging that it was killed by user, clean up SESSION, clean up incomplete files, rollback DB transactions if possible.  The KILL is meant to be somewhat immediate so we want to respect that idea as far as how far we go to gracefully cleanup.
+---
+
+## Large Dataset Handling — Gaps vs. `Docs/Strategy/LargeDatasets.md`
+
+The spill infrastructure (`SpillStore`, `ExternalSortEngine`, `ExternalJoinEngine`, `ExternalAggregateEngine`, `ExternalWindowEngine`) is complete and wired for query operations. The items below are the remaining unimplemented strategies from the design doc. Without them the acceptance criterion — `SELECT * INTO #SalesData FROM FactSales` (50M rows) on an 8 GB VM without OOM — cannot be met.
+
+  #### 🔴 High Priority — Strategy 2.3: Spill-to-Disk for `#temp` Tables
+
+  - [ ] **`#temp` table accumulation has no spill mechanism** — `InsertStatementHandler` writes every inserted row directly into the in-memory `DataTable` stored in `_tempTables`. There is no threshold check, no `SpillStore` hook, and no overflow path. A script doing `INSERT INTO #big ... ` (millions of rows) or `SELECT * INTO #big FROM large_source` will OOM the host. **Design in `LargeDatasets.md §5`:**
+    - `TempTableInfo` gains a nullable `SpillStore` field (path to GZip-compressed NDJSON spill file — the existing `SpillStore` class already provides the writer/reader).
+    - `InsertStatementHandler` checks row count against `TempTable:SpillThresholdRows` (config, default 1,000,000) after each batch; when exceeded, flushes in-memory rows to the spill file and clears the buffer.
+    - All `#temp` table read paths (SELECT, JOIN probe side, FOREACH source, etc.) must transparently merge spill pages with the in-memory buffer when a spill file is present.
+    - `DROP TABLE` and session disposal must delete the spill file.
+    - `SHOW TABLES` should surface a `(spilled)` indicator when the table has overflow pages on disk.
+
+  #### 🟡 Medium Priority — Strategy 2.1: Streaming Batch Propagation
+
+  - [ ] **`SelectStatementHandler` merges all batches before returning** — The INTO path correctly calls `WriteBatches()` and streams, but the non-INTO path (plain `SELECT`) still collapses all batches into a single `DataTable` via `ReadBatches()` → merge loop before capping at `MaxLastResultRows`. For large sources this materializes the full dataset in RAM before the display cap is applied. **Fix:** apply the display cap during the merge loop (stop consuming batches once `MaxLastResultRows` is reached) and log a "results truncated to N rows" message. This avoids buffering rows beyond what will ever be shown.
+
+  #### 🟢 Low Priority — Strategy 2.2: Chunked FOR Loop Pushdown
+
+  - [ ] **`ForeachStatementHandler` paginates in-process, not at the source** — The handler re-issues the driving query with `OFFSET`/`LimitCount` per page, which causes the source connector to re-execute the full query N times (once per page). For SQL connectors that support native `OFFSET ... FETCH`, this should be pushed down as a single parameterized query variant per page rather than full re-execution. Low priority — only affects `FOREACH` over SQL sources larger than one page; flat-file and in-memory sources are unaffected.
+
+  #### 🟢 Low Priority — Strategy 2.4: Arrow Columnar Format
+
+  - [ ] **`DataTable` (row-oriented, boxed `object[]`) is the core temp-table representation** — Replacing it with Apache Arrow columnar format would yield 10–50× speedup on aggregation-heavy workloads and dramatically lower memory for numeric columns. Explicitly deferred — scope as a separate architectural migration project after strategies 2.1–2.3 are validated in production.
+

@@ -286,16 +286,18 @@ DROP JOB NightlyArchive;
 ```
 
 > [!CAUTION]
-> `DROP JOB` permanently deletes the job and all its history entries. There is no undo. If you just want to pause a job, use `DROP JOB` and re-create it later, or set `IsEnabled = 0` directly in `etlsql.db` using any SQLite tool.
+> `DROP JOB` permanently deletes the job and all its history entries. There is no undo. If you just want to pause a job temporarily, use the Orchestrator REST API: `PUT /jobs/{name}/disable` — or connect to `etlsql.db` with any SQLite tool and set `IsEnabled = 0`.
 
-### 3.5 `KILL JOB` — Stop a Running Job
+### 3.5 Cancelling a Running Job
 
-Requests cancellation of a currently executing job.
+To request cancellation of a currently-executing job, use the Orchestrator REST API:
 
-```sql
--- Get the job ID from SHOW JOB HISTORY (the Id column while Status = 'RUNNING')
-KILL JOB 'a1b2c3d4';
+```bash
+# Get job run ID from SHOW JOB HISTORY (Id column, Status = 'RUNNING')
+PUT http://localhost:5100/jobs/{name}/cancel
 ```
+
+From within a script or TUI session, the in-engine scheduler will also automatically stop a job's execution if its `CancellationToken` is triggered (e.g. via `Ctrl+C` or process shutdown).
 
 ---
 
@@ -610,6 +612,20 @@ crontab -r
 
 ---
 
+## 9. VS Code Extension
+
+ETL-SQL ships with a dedicated VS Code extension (`src/etl-sql-vscode/`) that enhances the development experience. The extension communicates with the engine via the JSON REPL protocol (`ETL-SQL ui repl`).
+
+**Key features:**
+- **Syntax highlighting** for `.etlsql` and `.rptsql` files
+- **Inline LINT** — static analysis errors appear as squiggles as you type
+- **Execution tree** — visual representation of the running pipeline
+- **Variable sidebar** — live display of declared and runtime variable values
+- **Report preview panel** — `CREATE PAGE` dashboards rendered inline for `.rptsql` files
+- **Slicer interaction** — filter parameters can be changed in the sidebar without re-running the full script
+
+**Starting the extension host:**
+The extension auto-launches `ETL-SQL ui repl` in the background when you open an `.etlsql` or `.rptsql` file. For configuration, see the VS Code settings under `etlsql.*`.
 
 ---
 

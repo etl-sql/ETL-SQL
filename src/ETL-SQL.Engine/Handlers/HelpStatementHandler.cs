@@ -325,7 +325,7 @@ namespace ETL_SQL.Engine.Handlers
                             _logger.WriteLine("Types: BAR, HBAR, LINE, SCATTER, PIE, DONUT, COMBO, GAUGE, FUNNEL, WATERFALL, TABLE, CARD, TEXT");
                             _logger.WriteLine("Filters: SLICER, DATEPICKER, SLIDER, MULTISELECT, SEARCH");
                             _logger.WriteLine("\nExample:");
-                            _logger.WriteLine("  CREATE VISUAL Sales AS BAR (SOURCE=#data, MAPPINGS(X=month, Y=total));");
+                            _logger.WriteLine("  CREATE VISUAL Sales AS BAR (SOURCE=&data, MAPPINGS(X=month, Y=total));");
                             break;
                         case "PAGE":
                             _logger.WriteLine("Syntax: CREATE PAGE <name> AS LAYOUT (STRUCTURE='...', MAP(...)) [WITH PARAMETERS (...)]");

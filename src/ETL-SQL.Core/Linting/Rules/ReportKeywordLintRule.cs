@@ -26,7 +26,7 @@ namespace ETL_SQL.Core.Linting.Rules
                 if (stmt is CreatePageStatement cp)      Check(cp.Name, cp, results);
                 if (stmt is CreateContainerStatement cc) Check(cc.Name, cc, results);
                 if (stmt is CreateNavigationStatement cn) Check(cn.Name, cn, results);
-                if (stmt is CreateDatasetStatement cd)   Check(cd.TempTableName.TrimStart('#'), cd, results);
+                if (stmt is CreateDatasetStatement cd)   Check(cd.TempTableName.TrimStart('&'), cd, results);
                 if (stmt is CreateStyleStatement cs)     Check(cs.Name, cs, results);
                 if (stmt is CreateTemplateStatement ct)  Check(ct.Name, ct, results);
             }

@@ -394,13 +394,13 @@ USE DOCKER('<image>') AS <alias>;
 DECLARE @conn VARCHAR(500) = <alias>.CONNECTION_STRING;
 
 -- Container lifecycle
-<alias> STOP;    -- Pauses container (state retained)
-<alias> START;   -- Resumes a stopped container
-<alias> PAUSE;   -- Suspends container CPU
-<alias> CLOSE;   -- Destroys container and wipes all state
+STOP DOCKER <alias>;    -- Stops the container (state retained on disk)
+START DOCKER <alias>;   -- Resumes a stopped container
+PAUSE DOCKER <alias>;   -- Suspends the container CPU
+CLOSE DOCKER <alias>;   -- Destroys container and wipes all state
 
 -- Close ALL active containers
-DOCKER CLOSE;
+CLOSE_DOCKER;
 ```
 
 ### 6.2 Function-Style Aliases
@@ -483,7 +483,8 @@ SHOW JOBS;                            -- List all registered jobs and their sche
 SHOW JOB HISTORY;                     -- Execution history for all jobs
 SHOW JOB HISTORY NightlyArchive;      -- History for a specific job
 DROP JOB IF EXISTS CleanupJob;        -- Remove a job
-KILL JOB 'job_id_abc123';             -- Terminate an actively running job
+-- To terminate an actively running job, use the Orchestrator REST API:
+--   PUT http://localhost:5100/jobs/{job_name}/cancel
 ```
 
 ---
@@ -551,6 +552,7 @@ Displays timing and resource usage for the most recently profiled execution.
 
 ```sql
 SHOW PROFILE;
+```
 
 ---
 

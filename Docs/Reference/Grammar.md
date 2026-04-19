@@ -80,7 +80,7 @@ DECLARE @Mode      STRING INPUT;
 DECLARE @SubResult STRING OUTPUT = 'OK';
 ```
 
-### 1.4 `USE PASSWORD`
+### 1.5 `USE PASSWORD`
 Sets the master decryption password for the session. Used to decrypt `ENC:` prefixed connection strings.
 
 ```sql
@@ -88,14 +88,14 @@ USE PASSWORD = 'myMasterSecret';
 CREATE CONNECTION db ON MSSQL('ENC:U2FsdGVkX1+...');
 ```
 
-### 1.5 `CLEAR SESSION`
+### 1.6 `CLEAR SESSION`
 Aggressively cleans the in-memory execution cache — deletes all temporary files, recovery manifests, and encrypted session state. Recommended for security-critical pipelines.
 
 ```sql
 CLEAR SESSION;
 ```
 
-### 1.6 Environment Sets (`CREATE SETS` / `USE SETS` / `DROP SETS`)
+### 1.7 Environment Sets (`CREATE SETS` / `USE SETS` / `DROP SETS`)
 Named groups of variable assignments for seamlessly switching between environments (DEV, QA, PROD).
 
 ```sql
@@ -113,9 +113,15 @@ BEGIN
     @schema   = 'dbo';
     SET WITH_PROMPT ON;   -- Prompts for confirmation in interactive mode
 END
+
+-- Apply the DEV set
+USE SETS !DEV;
+
+-- Remove a set
+DROP SETS IF EXISTS !STAGING;
 ```
 
-### 1.7 `REQUIRE VERSION`
+### 1.8 `REQUIRE VERSION`
 Ensures the script is running on a minimum version of the engine. If the condition is not met, the engine throws an error immediately before executing any further statements.
 
 ```sql
@@ -128,19 +134,12 @@ Supported operators: `=`, `>`, `>=`.
 
 ---
 
-## 2. Control Flow
 
--- Apply the DEV set
-USE SETS !DEV;
-
--- Remove a set
-DROP SETS IF EXISTS !STAGING;
-```
 
 > [!TIP]
 > `SET WITH_PROMPT ON` inside a `CREATE SETS` block causes `USE SETS` to ask for confirmation before applying in interactive mode. In batch or scripted mode the set is applied automatically.
 
-### 1.8 Member Access (Dot Notation)
+### 1.9 Member Access (Dot Notation)
 The engine supports accessing members of complex objects using the `.` operator. This is used extensively with loops and metadata functions. All member lookups are **case-insensitive**.
 
 **Resolution Order:**
@@ -247,6 +246,14 @@ These commands allow fine-tuning how the engine manages memory and disk during h
 | `SET MAX_IN_MEMORY_BATCHES = n` | 100 | Maximum number of batches held in memory for `#temp` tables before automatic spilling. |
 | `SET FOREACH_PAGE_SIZE = n` | 10,000 | Number of items fetched per page when iterating over large collections. |
 | `SET MAX_MESSAGES = n` | 1,000 | Limit on the number of captured log/print messages in the session buffer. |
+| `SET MAX_FILE_OPERATIONS = n` | 100 | Maximum filesystem operations (copy, move, delete, etc.) allowed in a single script before the security guardrail fires. |
+| `SET MAX_PARALLEL_DEGREE = n` | 8 | Maximum number of branches that can run concurrently inside a `PARALLEL` block. |
+| `SET MAX_STRING_RESULT_SIZE = n` | 5,242,880 | Maximum byte length of a string expression result (default 5 MB). Prevents runaway string concatenations. |
+| `SET REGEX_MATCH_TIMEOUT = n` | 1,000 | Milliseconds before a regex match operation is aborted (prevents catastrophic backtracking). |
+| `SET MAX_GROUPING_SETS = n` | 100 | Maximum grouping combinations from `CUBE` / `GROUPING SETS` before the engine aborts. |
+| `SET MAX_SESSION_SIZE = n` | 524,288,000 | Maximum session state in bytes (~500 MB) before the engine evicts the oldest cached data. |
+| `SET SPILL_ENCRYPTION = ON/OFF` | OFF | Encrypt spill-to-disk temporary files (AES-256). Adds CPU cost; disable for trusted-disk environments. |
+| `SET SPILL_COMPRESSION = ON/OFF` | OFF | Compress spill-to-disk temporary files (Brotli). Reduces I/O; disable when CPU is the bottleneck. |
 | `SET TELEMETRY = ON/OFF` | ON | Toggles collection of high-cost execution metrics (e.g., precise spill byte counting). |
 
 ```sql
@@ -347,7 +354,8 @@ END
 | :--- | :--- |
 | `BREAK;` | Exit the innermost `WHILE`/`FOR`/`FOREACH` loop immediately |
 | `CONTINUE;` | Skip the remainder of the current loop iteration |
-| `RETURN;` | Exit the current script or procedure immediately |
+| `RETURN;` | Exit the current script or sub-script immediately |
+| `RETURN <expr>;` | Exit and return a value to the caller (e.g. from `CREATE FUNCTION` or captured via `RUN SCRIPT` OUTPUT variable) |
 
 ### 3.6 `PRINT`
 Outputs a message to the console / messages panel.
@@ -391,7 +399,7 @@ Pauses execution for a fixed duration or until a specific clock time.
 | :--- | :--- |
 | `WAITFOR DELAY 'hh:mm:ss[.fff]';` | Pause for a fixed duration. Supports milliseconds via `.fff`. |
 | `WAITFOR TIME 'hh:mm:ss[.fff]';` | Pause until the specified time. If the time has already passed today, waits until **tomorrow**. |
-| `WAITFOR (condition);` | Polls the condition (expression or subquery) every 1 second until it evaluates to true or returns rows. |
+| `WAITFOR (condition);` | Polls the condition (expression or subquery) every **200ms** until it evaluates to truthy (non-zero, non-empty, or `true`). |
 | `WAIT UNTIL condition;` | Cleaner alternative to `WAITFOR (condition)`. |
 
 ```sql
@@ -837,6 +845,19 @@ BEGIN
 END
 -- All three above complete before this line runs
 PRINT 'Dimensions loaded.';
+
+-- With concurrency limit — at most 4 branches run simultaneously
+-- (remaining branches queue and start as running ones finish)
+PARALLEL(4)
+BEGIN
+    RUN SCRIPT 'load_region_north.etlsql';
+    RUN SCRIPT 'load_region_south.etlsql';
+    RUN SCRIPT 'load_region_east.etlsql';
+    RUN SCRIPT 'load_region_west.etlsql';
+    RUN SCRIPT 'load_region_central.etlsql';
+    RUN SCRIPT 'load_region_pacific.etlsql';
+END
+PRINT 'All regions loaded.';
 ```
 
 ### 10.3 `RUN SCRIPT`
@@ -926,7 +947,8 @@ SHOW JOBS;                          -- List all registered jobs
 SHOW JOB HISTORY;                   -- All execution history
 SHOW JOB HISTORY NightlyArchive;    -- History for a specific job
 DROP JOB IF EXISTS CleanupJob;
-KILL JOB 'job_id_123';              -- Halt a running job
+-- To halt a running job, use the Orchestrator REST API — there is no in-engine KILL JOB statement:
+--   PUT http://localhost:5100/jobs/{jobName}/cancel
 ```
 
 ---
@@ -947,7 +969,6 @@ LINT 'scripts/nightly_load.etlsql';                        -- Static analysis
 
 HELP CONNECTION MSSQL;    -- Connector-specific option help
 HELP VARIABLES;           -- List all @@ system variables
-```
 ```
 
 ### 14.1 Script Metadata Headers
@@ -1018,9 +1039,10 @@ Any image not matching these patterns throws an `ExecutionException` at runtime.
 
 | Syntax | Effect |
 | :--- | :--- |
-| `<alias> STOP;` | Stops the container (state is preserved on disk) |
-| `<alias> START;` | Resumes a stopped container |
-| `<alias> CLOSE;` | Destroys the container and removes all state |
+| `START DOCKER <alias>;` | Resumes a stopped container (state is preserved on disk) |
+| `STOP DOCKER <alias>;` | Stops the container (state is preserved on disk) |
+| `PAUSE DOCKER <alias>;` | Pauses a running container (suspends CPU; faster to resume than stop/start) |
+| `CLOSE DOCKER <alias>;` | Destroys the container and removes all state |
 | `CLOSE_DOCKER;` | Destroys **all** active containers in the session |
 | `CLOSE_DOCKER <alias>;` | Destroys a specific container by alias |
 | `CLOSE_DOCKER ('<image>');` | Destroys all containers matching the image name |
@@ -1153,7 +1175,7 @@ EXEC ( PRINT 'Hello'; SET @x = 1; );
 
 ---
 
-## 14. Display Commands (`SHOW`)
+## 17. Display Commands (`SHOW`)
 
 Display commands are used to inspect metadata, session state, and performance logs. Most `SHOW` commands can be directed into an `@variable` or into a `#temp` table using the `INTO` clause.
 
@@ -1211,7 +1233,7 @@ SET REPORT DESCRIPTION = '<string>';
 
 ```
 CREATE VISUAL <name> AS <type> (
-  [SOURCE    = #table | ( SELECT ... ),]
+  [SOURCE    = &dataset | #table | ( SELECT ... ),]
   [TITLE     = '<string>',]
   [SUBTITLE  = '<string>',]
   [MAPPINGS  ( role = column [, ...] ),]
@@ -1259,7 +1281,7 @@ CREATE PAGE <name> AS LAYOUT (
 ### A.4 CREATE DATASET
 
 ```
-CREATE DATASET #<name>
+CREATE DATASET &<name>
   [REFRESH EVERY '<interval>']
   [TTL = '<duration>']
   [COMPRESS = ON|OFF]
@@ -1288,4 +1310,102 @@ CREATE NAVIGATION <name> AS TAB|BUTTON|LINK (
   [DEFAULT = <PageName>]
 )
 WITH PAGES ( <PageName> [, ...] );
+```
+
+### A.7 CREATE STYLE
+
+Defines a reusable CSS-like style object that can be applied to visuals, pages, and containers via `STYLE = <name>`.
+
+```
+CREATE STYLE <name> (
+  <property> = '<value>'
+  [, ...]
+);
+```
+
+Supported properties include `BACKGROUND-COLOR`, `COLOR`, `FONT-SIZE`, `FONT-WEIGHT`, `BORDER`, `BORDER-RADIUS`, `PADDING`, `MARGIN`, `HEIGHT`, `WIDTH`, and `THEME` (`light` | `dark`).
+
+```sql
+CREATE STYLE DarkCard (
+  BACKGROUND-COLOR = '#1e1e2e',
+  COLOR            = '#cdd6f4',
+  BORDER-RADIUS    = '8px',
+  THEME            = dark
+);
+```
+
+### A.8 CREATE BUTTON
+
+Creates an interactive button visual that can trigger navigation or parameter changes.
+
+```
+CREATE BUTTON <name> (
+  TITLE   = '<string>',
+  [STYLE  = <StyleName> | ( key = value [, ...] ),]
+  ACTIONS ( trigger = action [, ...] )
+);
+```
+
+Valid action triggers: `ON_CLICK`. Valid actions: `NAVIGATE(<PageName>)`, `SET_PARAMETER(@paramName, value)`, `REFRESH`.
+
+```sql
+CREATE BUTTON GoBack (
+  TITLE   = '← Return',
+  ACTIONS (ON_CLICK = NAVIGATE(Overview))
+);
+
+CREATE BUTTON RefreshData (
+  TITLE   = '🔄 Refresh',
+  ACTIONS (ON_CLICK = REFRESH)
+);
+```
+
+### A.9 OVERLAYS and TOOLTIP on CREATE VISUAL
+
+These optional clauses appear inside `CREATE VISUAL` blocks:
+
+- **`OVERLAYS ( <VisualName> [, ...] )`** — composites one or more visuals on top of this visual's chart area (e.g., overlaying a LINE on a BAR chart).
+- **`TOOLTIP = '<string>'`** — sets a hover tooltip shown when the user mouses over the visual.
+
+```sql
+CREATE VISUAL RevenueWithTrend AS BAR (
+  SOURCE   = &summary,
+  TITLE    = 'Revenue with Trend',
+  MAPPINGS (X = month, Y = revenue),
+  TOOLTIP  = 'Click a bar to filter the table below.',
+  OVERLAYS (TrendLine)
+);
+```
+
+### A.10 ALTER / DROP / CREATE OR ALTER
+
+All report object types support `ALTER`, `DROP [IF EXISTS]`, and `CREATE OR ALTER` forms:
+
+```sql
+-- Modify one or more properties of an existing object
+ALTER VISUAL   <name> ( <clause> [, ...] );
+ALTER PAGE     <name> ( <clause> [, ...] );
+ALTER CONTAINER <name> ( <clause> [, ...] );
+ALTER BUTTON   <name> ( <clause> [, ...] );
+ALTER STYLE    <name> ( <clause> [, ...] );
+ALTER NAVIGATION <name> ( <clause> [, ...] );
+ALTER DATASET  <name> ( <clause> [, ...] );
+
+-- Remove an object (IF EXISTS suppresses the error when object is absent)
+DROP VISUAL        [IF EXISTS] <name>;
+DROP PAGE          [IF EXISTS] <name>;
+DROP CONTAINER     [IF EXISTS] <name>;
+DROP BUTTON        [IF EXISTS] <name>;
+DROP STYLE         [IF EXISTS] <name>;
+DROP NAVIGATION    [IF EXISTS] <name>;
+DROP DATASET       [IF EXISTS] <name>;
+
+-- Idempotent create-or-update (equivalent to ALTER if the object exists, CREATE if not)
+CREATE OR ALTER VISUAL    <name> AS <type> ( ... );
+CREATE OR ALTER PAGE      <name> AS LAYOUT ( ... );
+CREATE OR ALTER DATASET   &<name> ... AS ( SELECT ... );
+CREATE OR ALTER STYLE     <name> ( ... );
+CREATE OR ALTER BUTTON    <name> ( ... );
+CREATE OR ALTER CONTAINER <name> AS BOX|SCROLL ( ... );
+CREATE OR ALTER NAVIGATION <name> AS TAB|BUTTON|LINK ( ... ) WITH PAGES ( ... );
 ```

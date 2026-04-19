@@ -419,9 +419,12 @@ CREATE CONNECTION sftp_key ON SFTP('sftp.example.com')
 ---
 
 ### 4.2 FTP (`FTP`)
-Aliases: `FTP_CONN`, `FTPS`
+Aliases: `FTP_CONN`
 
 Legacy File Transfer Protocol. Supports active and passive mode depending on the server.
+
+> [!NOTE]
+> `FTPS` (FTP over SSL/TLS) is treated as an alias token at parse time but uses the same connector. Provide `USE_SSL=TRUE` in the connection string if your server requires implicit FTPS.
 
 | Option | Description | Mandatory |
 | :--- | :--- | :---: |

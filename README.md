@@ -41,7 +41,7 @@ A strict `VERB NOUN` / `VERB_NOUN` convention for all automation commands — pr
 | :--- | :--- |
 | **Data Flow** | `SEND EMAIL`, `SEND FILE`, `RECEIVE FILE` |
 | **Filesystem** | `CREATE DIRECTORY`, `DELETE FILE`, `COMPRESS FILE`, `ENCRYPT FILE` |
-| **Management** | `CREATE CONNECTION`, `DROP CONNECTION`, `USE DOCKER`, `CREATE JOB` |
+| **Management** | `CREATE CONNECTION`, `DROP CONNECTION`, `START DOCKER`, `CLOSE DOCKER`, `CREATE JOB` |
 | **Scripting** | `CREATE PROCEDURE`, `CREATE FUNCTION`, `CREATE SETS`, `USE SETS` |
 | **Analysis** | `LINT`, `EXPLAIN`, `LINEAGE()`, `SET PROFILING ON` |
 
@@ -155,8 +155,8 @@ END CATCH;
 | Document | Description |
 | :--- | :--- |
 | [User Manual](Docs/User_Manual.md) | Pipeline mental model, connections, variables, control flow, and debugging |
-| [Pattern Cookbook](Docs/Cookbook.md) | 12 self-contained, production-ready ETL recipes |
-| [Sample Guide](Docs/Sample_Guide.md) | Inventory of 34+ sample scripts in the `/scripts/` folder |
+| [Pattern Cookbook](Docs/Cookbook.md) | 18 self-contained, production-ready ETL recipes |
+| [Sample Guide](Docs/Sample_Guide.md) | Inventory of 55+ sample scripts in the `/scripts/` folder |
 
 ### 📜 Language Reference
 | Document | Description |

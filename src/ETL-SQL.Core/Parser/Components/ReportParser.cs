@@ -248,8 +248,8 @@ namespace ETL_SQL.Core.Parser.Components
 
         public Statement ParseCreateDataset(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
         {
-            var tableName = ConsumeIdentifier("Expected #tableName after CREATE DATASET").Value;
-            if (!tableName.StartsWith("#")) tableName = "#" + tableName;
+            var tableName = ConsumeIdentifier("Expected &datasetName after CREATE DATASET").Value;
+            if (!tableName.StartsWith("&")) tableName = "&" + tableName;
 
             string? refreshInterval    = null;
             string? ttl                = null;
@@ -795,7 +795,7 @@ namespace ETL_SQL.Core.Parser.Components
                 return new VisualSourceExpression { TempTableName = val };
             }
 
-            var tableRef = ConsumeIdentifier("Expected #tableName or SELECT or ( SELECT ... ) after SOURCE").Value;
+            var tableRef = ConsumeIdentifier("Expected &datasetName or SELECT or ( SELECT ... ) after SOURCE").Value;
             return new VisualSourceExpression { TempTableName = tableRef };
         }
 

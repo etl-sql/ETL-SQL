@@ -11,7 +11,7 @@ namespace ETL_SQL.Core.Linting.Rules
     public class VisualSourceExistsRule : ILintRule
     {
         public string Name        => "VisualSourceExists";
-        public string Description => "Warns when CREATE VISUAL SOURCE = #table references a temp table not defined in the script.";
+        public string Description => "Warns when CREATE VISUAL SOURCE = &dataset (or #table) references a source not defined in the script.";
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {
@@ -26,8 +26,8 @@ namespace ETL_SQL.Core.Linting.Rules
                 var refName = visual.Source.TempTableName;
                 if (refName == null) continue;
 
-                var normalized = refName.StartsWith('#') ? refName : '#' + refName;
-                if (!tempNames.Contains(normalized))
+                var bare = StripSigil(refName);
+                if (!tempNames.Contains(bare))
                 {
                     results.Add(new LintResult
                     {
@@ -43,15 +43,18 @@ namespace ETL_SQL.Core.Linting.Rules
             return Task.FromResult<IEnumerable<LintResult>>(results);
         }
 
+        private static string StripSigil(string name) =>
+            name.Length > 0 && (name[0] == '#' || name[0] == '&') ? name[1..] : name;
+
         private static HashSet<string> CollectTempTableNames(Script script)
         {
             var names = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
             foreach (var stmt in script.Statements)
             {
                 if (stmt is CreateDatasetStatement ds)
-                    names.Add(ds.TempTableName);
+                    names.Add(StripSigil(ds.TempTableName));
                 else if (stmt is SelectStatement sel && sel.IntoTable != null)
-                    names.Add(sel.IntoTable.TableName);
+                    names.Add(StripSigil(sel.IntoTable.TableName));
             }
             return names;
         }

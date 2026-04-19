@@ -10,11 +10,17 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > ETL-SQL is a scripting language and engine that lets you move, transform, and clean data across multiple heterogeneous sources — SQL databases, flat files, SFTP servers, REST APIs, cloud storage, and more — using familiar SQL-like syntax. Think of it as SQL with a pipeline superpower.
 
 **Q: What version am I running?**
-> Currently there is no `@@VERSION` variable in the engine (that's on the roadmap as ENG-2). For now, check the binary version by running:
+> Use the `@@VERSION` system variable to get the full engine version string at runtime:
+> ```sql
+> PRINT @@VERSION;
+> -- or capture it
+> DECLARE @v STRING = @@VERSION;
+> ```
+> You can also check the binary version from the shell:
 > ```bash
 > ETL-SQL.exe --version
 > ```
-> The current release is **v0.5.0**.
+> The current release is **v0.5.0**. Use `SHOW VERSION;` to display version info from within a script session.
 
 **Q: Where do I start?**
 > Read the [User Manual](User_Manual.md) first — it explains the pipeline mental model that everything else builds on. Then work through the [Cookbook](Cookbook.md) for production-ready examples.
@@ -47,9 +53,14 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 > SQL style is preferred in new scripts — it's more readable and closer to natural language.  Function style is available to those who feel more comfortable with this style.
 
 **Q: Can I use `WAITFOR (SELECT ...)` to poll until a condition is true?**
-> No — that form does **not** exist in ETL-SQL. The parser only accepts `WAITFOR DELAY 'hh:mm:ss'` (fixed pause) and `WAITFOR TIME 'hh:mm:ss'` (wait until wall-clock time).
+> Yes — the `WAITFOR (condition)` form is supported. The engine evaluates the expression repeatedly at a 200ms interval and continues execution as soon as the result is truthy (non-zero, non-empty, or `true`):
+> ```sql
+> -- Polls every 200ms until the condition returns a non-zero count
+> WAITFOR (SELECT COUNT(*) FROM control_db.JobStatus WHERE Status = 'Ready');
+> PRINT 'Condition met — proceeding.';
+> ```
 >
-> Use a `WHILE` loop with `WAITFOR DELAY` inside it to implement polling:
+> If you need a longer poll interval or additional logic between checks, use a `WHILE` loop with `WAITFOR DELAY` inside:
 > ```sql
 > DECLARE @ready INT = 0;
 > WHILE @ready = 0
@@ -216,21 +227,25 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 ## Error Handling
 
 **Q: My `CATCH` block runs `ERROR_MESSAGE()` but I also need the line number. How?**
-> `ERROR_NUMBER()`, `ERROR_LINE()`, and `ERROR_SEVERITY()` are on the roadmap (ENG-5) but not yet implemented. For now, include contextual information explicitly in your `PRINT` or `THROW` message:
+> Use `ERROR_LINE()`, `ERROR_NUMBER()`, and `ERROR_SEVERITY()` — all three are fully implemented and available inside `CATCH` blocks:
 > ```sql
 > BEGIN CATCH
->     PRINT 'Failure at Stage 3 (customer merge): ' + ERROR_MESSAGE();
+>     PRINT 'Error at line ' + CAST(ERROR_LINE() AS STRING) + ': ' + ERROR_MESSAGE();
+>     PRINT 'Error number: ' + CAST(ERROR_NUMBER() AS STRING) + ', Severity: ' + CAST(ERROR_SEVERITY() AS STRING);
 >     THROW;
 > END CATCH;
 > ```
 
 **Q: How do I raise a custom error that `CATCH` upstream can handle?**
-> Use `THROW 'your message'` — it raises an `ExecutionException` that propagates up through `TRY/CATCH` blocks:
+> Use `THROW` — it raises an `ExecutionException` that propagates up through `TRY/CATCH` blocks. Both forms are supported:
 > ```sql
+> -- Simple form — message only
 > IF (SELECT COUNT(*) FROM #staging) = 0
 >     THROW 'Staging table is empty — aborting load.';
+>
+> -- Full form — error number, message, state (T-SQL compatible)
+> THROW 50001, 'Staging table is empty — aborting load.', 1;
 > ```
-> `THROW` with an error number (`THROW 50001, 'msg', 1`) is on the roadmap (ENG-4) but not yet supported.
 
 ---
 

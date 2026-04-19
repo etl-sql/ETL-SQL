@@ -78,7 +78,7 @@ Applies to: **All Hosts**
 | `Security:SpillCompressionEnabled` | `true` | When `true`, spilled disk data is GZip compressed (Optimal level). |
 
 > [!NOTE]
-> `Security:AllowedEnvVars` (the allow-list for the `ENV()` function) is not currently wired to `appsettings.json`. It must be configured programmatically in the DI setup (`SecurityService.AllowedEnvVars`). By default the set is empty, which means all `ENV()` calls are blocked.
+> `Security:AllowedEnvVars` accepts an array of environment variable names that `ENV()` calls may access. By default the set contains only safe system variables (`TEMP`, `USERDOMAIN`, `PROCESSOR_ARCHITECTURE`). Use `"*"` to allow all — not recommended in multi-tenant environments.
 
 **Example — hardened production configuration:**
 ```json
@@ -243,8 +243,12 @@ Applies to: **App / TUI**
    "Security": {
      "AllowedHosts": ["*"],
      "ApprovedSafeZones": [],
+     "AllowedEnvVars": ["TEMP", "USERDOMAIN", "PROCESSOR_ARCHITECTURE"],
      "MaxFileOperationsPerScript": 100,
      "MaxRecursiveNestingDepth": 5,
+     "MaxParallelDegree": 32,
+     "MaxStringResultSize": 104857600,
+     "RegexMatchTimeoutMs": 1000,
      "SpillEncryptionEnabled": true,
      "SpillCompressionEnabled": true
    },
@@ -268,7 +272,8 @@ Applies to: **App / TUI**
    },
    "Scheduler": {
      "MetricsIntervalSeconds": 60,
-     "SleepIntervalSeconds": 30
+     "SleepIntervalSeconds": 30,
+     "SessionReapIntervalMinutes": 60
    },
    "Jobs": {
      "UseProcessSpawning": false,
@@ -280,7 +285,8 @@ Applies to: **App / TUI**
      "Port": 5200
    },
    "Session": {
-     "StaleSessionRetentionDays": 7
+     "StaleSessionRetentionDays": 7,
+     "Root": null
    },
    "Connectors": {
      "Retry": {
