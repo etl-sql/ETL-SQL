@@ -156,12 +156,18 @@ namespace ETL_SQL.ReportPlayer
         private bool DependsOnVariable(CreateVisualStatement visual, string variableName)
         {
             if (!variableName.StartsWith("@")) variableName = "@" + variableName;
-            
-            string? sql = visual.Source.IsInlineSelect 
-                ? visual.Source.InlineSelect?.ToSql() 
-                : visual.Source.TempTableName;
-                
-            return sql?.Contains(variableName, StringComparison.OrdinalIgnoreCase) ?? false;
+
+            // AST-based scanning: robustly identify @Variable usage in the SelectStatement AST.
+            // This avoids false positives from strings/comments that would occur with raw string.Contains().
+            if (visual.Source.IsInlineSelect && visual.Source.InlineSelect != null)
+            {
+                var usedParams = ParameterScanner.Scan(visual.Source.InlineSelect);
+                return usedParams.Contains(variableName);
+            }
+
+            // For #temp tables, we fallback to checking if the table name itself contains the variable name.
+            // Usually #temp tables don't contain @vars in their names, but this maintains parity with previous logic.
+            return visual.Source.TempTableName?.Contains(variableName, StringComparison.OrdinalIgnoreCase) ?? false;
         }
 
         /// <summary>Full rebuild: re-evaluate the script and re-snapshot all visuals.</summary>

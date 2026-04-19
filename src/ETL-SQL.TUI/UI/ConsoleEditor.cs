@@ -344,6 +344,7 @@ namespace ETL_SQL.TUI.UI
             catch (Exception ex) { _renderer.ShowStatus($"Error: {ex.Message}"); }
             finally
             {
+                _renderer.MessageScrollRow = int.MaxValue; // Auto-scroll to latest messages
                 _renderer.Render(_buffer, _evaluator, _filePath, _isDirty, Console.WindowWidth, Console.WindowHeight);
             }
         }

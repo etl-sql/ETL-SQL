@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using System.Threading;
+using System.IO.Compression;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
@@ -175,11 +176,18 @@ namespace ETL_SQL.Engine.Services
             
             // 6. Protect and save full state (Zero-password, Machine-Bound)
             string fullJson = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
+            
+            // Resource Guard: Check session size before persisting (Item 228)
+            if (fullJson.Length > evaluator.MaxSessionSize)
+            {
+                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"Session persistence failed: The session payload size ({fullJson.Length / 1024 / 1024} MB) exceeds the safety limit of {evaluator.MaxSessionSize / 1024 / 1024} MB. Reduce the number of global variables or increase the limit via 'SET MAX_SESSION_SIZE'.");
+            }
+
+            // Optimization: Compression for large session state (TODO-108)
+            var sessionPayload = Compress(fullJson);
             string sessionFile = GetSessionFilePath(sessionId);
             string entropyKey = GetMachineKey();
             
-            File.WriteAllText(sessionFile, CryptoUtils.Protect(fullJson, entropyKey));
-
             var manifest = new
             {
                 SessionId = sessionId,
@@ -197,7 +205,7 @@ namespace ETL_SQL.Engine.Services
                 await sessionLock.WaitAsync();
                 try
                 {
-                    await WriteAtomicAsync(sessionFile, CryptoUtils.Protect(fullJson, entropyKey));
+                    await WriteAtomicAsync(sessionFile, CryptoUtils.Protect(sessionPayload, entropyKey));
                     await WriteAtomicAsync(GetRecoveryFilePath(sessionId), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
                 }
                 finally
@@ -205,6 +213,29 @@ namespace ETL_SQL.Engine.Services
                     sessionLock.Release();
                 }
             });
+        }
+
+        private string Compress(string data)
+        {
+            var bytes = Encoding.UTF8.GetBytes(data);
+            using var ms = new MemoryStream();
+            using (var gzs = new GZipStream(ms, CompressionMode.Compress))
+            {
+                gzs.Write(bytes, 0, bytes.Length);
+            }
+            return "COMP:" + Convert.ToBase64String(ms.ToArray());
+        }
+
+        private string Decompress(string compressedData)
+        {
+            if (!compressedData.StartsWith("COMP:")) return compressedData;
+            
+            var bytes = Convert.FromBase64String(compressedData.Substring(5));
+            using var msIn = new MemoryStream(bytes);
+            using var gzs = new GZipStream(msIn, CompressionMode.Decompress);
+            using var msOut = new MemoryStream();
+            gzs.CopyTo(msOut);
+            return Encoding.UTF8.GetString(msOut.ToArray());
         }
 
         private async Task WriteAtomicAsync(string path, string content)
@@ -274,16 +305,17 @@ namespace ETL_SQL.Engine.Services
             {
                 _logger.Debug("[SESSION_READ_FILE] Reading {SessionFile}...", sessionFile);
                 
-                string protectedJson = "";
+                string protectedPayload = "";
                 _securityService.ExecuteInternal(() => {
-                    protectedJson = File.ReadAllText(sessionFile);
+                    protectedPayload = File.ReadAllText(sessionFile);
                 });
                 
                 _logger.Debug("[SESSION_UNPROTECT] Unprotecting state using OS context...");
                 string entropy = GetMachineKey();
                 
-                string plainJson = CryptoUtils.Unprotect(protectedJson, entropy);
-                
+                string plainPayload = CryptoUtils.Unprotect(protectedPayload, entropy);
+                string plainJson = Decompress(plainPayload);
+
                 _logger.Debug("[SESSION_DESERIALIZE] Deserializing JSON...");
                 return JsonSerializer.Deserialize<SessionState>(plainJson);
             }

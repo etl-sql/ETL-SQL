@@ -225,12 +225,15 @@
         const card = document.createElement('div');
         card.className = 'visual-card';
 
-        // Apply WIDTH / HEIGHT from styles
+        // Apply WIDTH / HEIGHT / TOOLTIP from styles
         const vstyles = visual.styles || {};
-        if (vstyles['WIDTH'] || vstyles['width'])
-            card.style.width = vstyles['WIDTH'] || vstyles['width'];
-        if (vstyles['HEIGHT'] || vstyles['height'])
-            card.style.height = vstyles['HEIGHT'] || vstyles['height'];
+        const width   = vstyles['WIDTH'] || vstyles['width'];
+        const height  = vstyles['HEIGHT'] || vstyles['height'];
+        const tooltip = vstyles['TOOLTIP'] || vstyles['tooltip'] || visual.tooltip;
+
+        if (width)   card.style.width  = width;
+        if (height)  card.style.height = height;
+        if (tooltip) card.title        = tooltip;
 
         const title = document.createElement('h3');
         title.textContent = visual.name;
@@ -244,8 +247,13 @@
 
         const type = (visual.visualType || '').toUpperCase();
 
+        // Empty state handling: If not a filter/text type and no data rows, show "No Data" icon + message.
         if (!FILTER_TYPES.has(type) && (!visual.rows || visual.rows.length === 0)) {
-            card.appendChild(noDataEl('No data available'));
+            const empty = document.createElement('div');
+            empty.className = 'empty-state';
+            empty.innerHTML = '<div class="empty-icon">\u2205</div>' + 
+                              '<p>No data matches the current filters.</p>';
+            card.appendChild(empty);
             container.appendChild(card);
             return;
         }
