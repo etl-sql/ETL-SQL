@@ -62,7 +62,7 @@
 
   - [x] **HTTP custom headers use `TryAddWithoutValidation`** — `RestDataSource.cs:154-161` bypasses .NET's header validation. Values containing CRLF could cause header injection. Either validate header values or use the validating `Add()` overload.
 
-  - [ ] **`StatementParser` is a 7,000-line partial class across 7 files** — Consider whether the partial split across `StatementParser.Data.cs`, `StatementParser.Report.cs`, `StatementParser.Flow.cs`, etc. should become actual separate classes composited by a thin `StatementParser` dispatcher. The current approach technically works but makes cross-file navigation painful and disguises the true complexity.
+  - [x] **`StatementParser` is a 7,000-line partial class across 7 files** — Consider whether the partial split across `StatementParser.Data.cs`, `StatementParser.Report.cs`, `StatementParser.Flow.cs`, etc. should become actual separate classes composited by a thin `StatementParser` dispatcher. The current approach technically works but makes cross-file navigation painful and disguises the true complexity.
 
   - [x] **`quote` identifier logic in `Evaluator.GetSqlTableName` is an untestable inline lambda** — `Evaluator.cs:696-706` defines dialect-specific quoting as a local `Func<string,string>`. Extract to `private static string QuoteMssqlIdentifier(string s)` / `QuoteStandardIdentifier(string s)` so they can be unit-tested and reused from `QueryCompiler`.
 

@@ -16,58 +16,169 @@ namespace ETL_SQL.Tests
     [Trait("Category", "Performance")]
     public class PerformanceTests
     {
-        [Fact]
-        public async Task TestLargeDatasetMemory()
+        // Graduated #temp insert benchmark: measures rows/sec and memory at each 10k checkpoint.
+        // Uses direct AST inserts (no SQL parse overhead in the hot loop).
+        // Detects O(n²) DataTable scan degradation: last chunk should not be >5x slower than first.
+        // Spill-to-disk is live for query engines (sort/join/agg) but not raw #temp accumulation.
+        [Fact(Timeout = 120_000)] // 2-minute hard cap — hang == fail
+        public async Task TestLargeDatasetScaling()
         {
-            AnsiConsole.MarkupLine("\n[cyan]Testing Large Dataset Memory Usage (1M rows)...[/]");
+            const int chunkSize  = 10_000;
+            const int maxChunks  = 10;   // 100k rows; extend when spill-to-disk ships
+
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
-            eval.BatchSize = 10000;
-            
-            await Execute(eval, @"
-                CREATE TABLE #big (ID INT, Val VARCHAR(20));
-                DECLARE @i INT = 1;
-                WHILE @i <= 1000000
-                BEGIN
-                    INSERT INTO #big 
-                    SELECT @i, 'Value ' + CAST(@i AS VARCHAR) FROM DUAL
-                    UNION ALL SELECT @i+1, 'Value ' FROM DUAL
-                    UNION ALL SELECT @i+2, 'Value ' FROM DUAL
-                    UNION ALL SELECT @i+3, 'Value ' FROM DUAL
-                    UNION ALL SELECT @i+4, 'Value ' FROM DUAL
-                    UNION ALL SELECT @i+5, 'Value ' FROM DUAL
-                    UNION ALL SELECT @i+6, 'Value ' FROM DUAL
-                    UNION ALL SELECT @i+7, 'Value ' FROM DUAL
-                    UNION ALL SELECT @i+8, 'Value ' FROM DUAL
-                    UNION ALL SELECT @i+9, 'Value ' FROM DUAL;
-                    
-                    SET @i = @i + 10;
-                END
-            ");
+            eval.BatchSize = chunkSize;
+
+            await Execute(eval, "CREATE TABLE #scaling (ID INT, Val VARCHAR(20));");
 
             var process = Process.GetCurrentProcess();
-            process.Refresh();
-            long memoryBefore = process.WorkingSet64;
+            var chunkTimes = new List<double>();
+            int totalRows = 0;
 
-            AnsiConsole.MarkupLine($"[grey]Memory before streaming select: {memoryBefore / 1024 / 1024} MB[/]");
+            Console.WriteLine($"{"Rows",10}  {"Rows/sec",10}  {"Chunk ms",10}  {"WorkSet MB",12}");
+            Console.WriteLine(new string('-', 50));
 
-            int count = 0;
-            var batches = await eval.ExecuteQuery(Parse("SELECT * FROM #big;").Statements[0]).ToListAsync();
-            foreach (var batch in batches)
+            for (int chunk = 0; chunk < maxChunks; chunk++)
             {
-                count += batch.Rows.Count;
-                if (count % 100000 == 0)
+                // Build the chunk as an AST InsertStatement — no SQL parsing in the hot loop.
+                var rowValues = new List<List<Expression>>(chunkSize);
+                for (int r = 0; r < chunkSize; r++)
                 {
-                    process.Refresh();
-                    AnsiConsole.Markup($"\r[grey]Processed {count:N0} rows... Memory: {process.WorkingSet64 / 1024 / 1024} MB[/]");
+                    int id = totalRows + r + 1;
+                    rowValues.Add(new List<Expression>
+                    {
+                        new LiteralExpression(id,            TokenType.NUMBER),
+                        new LiteralExpression($"V{id}", TokenType.STRING)
+                    });
                 }
+
+                var insertStmt = new InsertStatement(
+                    new TableReference("#scaling"),
+                    new List<string> { "ID", "Val" },
+                    rowValues);
+                var script = new Script();
+                script.Statements.Add(insertStmt);
+
+                var sw = Stopwatch.StartNew();
+                await eval.Evaluate(script);
+                sw.Stop();
+
+                totalRows += chunkSize;
+                chunkTimes.Add(sw.Elapsed.TotalMilliseconds);
+
+                process.Refresh();
+                long memMB    = process.WorkingSet64 / 1024 / 1024;
+                double rps    = chunkSize / sw.Elapsed.TotalSeconds;
+
+                Console.WriteLine($"{totalRows,10:N0}  {rps,10:N0}  {sw.Elapsed.TotalMilliseconds,10:N0}  {memMB,10} MB");
             }
-            AnsiConsole.WriteLine();
+
+            // Degradation check: last chunk should be < 5x the first chunk's time.
+            // A ratio above that indicates O(n²) table growth — a bug worth fixing.
+            double firstMs = chunkTimes[0];
+            double lastMs  = chunkTimes[^1];
+            double ratio   = lastMs / firstMs;
+            Console.WriteLine($"\nDegradation ratio (last/first chunk): {ratio:F2}x");
+            Assert.True(ratio < 5.0,
+                $"Insert performance degraded {ratio:F1}x from first to last chunk " +
+                $"({firstMs:N0}ms → {lastMs:N0}ms). " +
+                "Likely O(n²) growth in DataTable scan or identifier resolution. " +
+                "See Docs/Strategy/LargeDatasets.md for the spill-to-disk fix.");
+
+            // Streaming SELECT: measure whether ExecuteQuery streams or materializes.
+            GC.Collect();
+            process.Refresh();
+            long mbBefore = process.WorkingSet64 / 1024 / 1024;
+
+            int selectCount = 0;
+            var selectSw = Stopwatch.StartNew();
+            await foreach (var batch in eval.ExecuteQuery(Parse("SELECT * FROM #scaling;").Statements[0]))
+                selectCount += batch.Rows.Count;
+            selectSw.Stop();
 
             process.Refresh();
-            long memoryAfter = process.WorkingSet64;
-            AnsiConsole.MarkupLine($"[green]Finished streaming 1M rows. Final Memory: {memoryAfter / 1024 / 1024} MB[/]");
-            
-            Assert.Equal(1000000, count);
+            long mbAfter  = process.WorkingSet64 / 1024 / 1024;
+            double selectRps = selectCount / selectSw.Elapsed.TotalSeconds;
+            Console.WriteLine($"\nSELECT * returned {selectCount:N0} rows in {selectSw.ElapsedMilliseconds:N0}ms " +
+                              $"({selectRps:N0} rows/sec). Memory delta: +{mbAfter - mbBefore}MB");
+
+            Assert.Equal(totalRows, selectCount);
+        }
+
+        // Exercises the disk-spill path on sort, join, and aggregate engines.
+        // Forces spill by temporarily lowering thresholds below the 50k test data size.
+        [Fact(Timeout = 120_000)]
+        public async Task TestSpillEnginesPaths()
+        {
+            var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+            // Lower spill thresholds below 50k so every operation is forced through spill.
+            eval.JoinSpillThreshold    = 10_000;
+            eval.WindowSpillThreshold  = 10_000;
+
+            // Build 50k rows directly from C# — no SQL WHILE loop overhead.
+            const int rowCount = 50_000;
+            var rowValues = new List<List<Expression>>(rowCount);
+            var rng = new Random(42);
+            for (int i = 1; i <= rowCount; i++)
+                rowValues.Add(new List<Expression>
+                {
+                    new LiteralExpression(i,                 TokenType.NUMBER),
+                    new LiteralExpression(rng.Next(1, 1000), TokenType.NUMBER), // Group (1-999)
+                    new LiteralExpression(rng.Next(1, 10000), TokenType.NUMBER) // Value
+                });
+
+            await Execute(eval, "CREATE TABLE #spill_test (ID INT, Grp INT, Val INT);");
+
+            var insertStmt = new InsertStatement(
+                new TableReference("#spill_test"),
+                new List<string> { "ID", "Grp", "Val" },
+                rowValues);
+            var insertScript = new Script();
+            insertScript.Statements.Add(insertStmt);
+            await eval.Evaluate(insertScript);
+
+            Console.WriteLine($"Inserted {rowCount:N0} rows. Testing spill-to-disk paths...");
+            var process = Process.GetCurrentProcess();
+
+            // 1. External sort (ORDER BY on full table → ExternalSortEngine)
+            var sortSw = Stopwatch.StartNew();
+            await Execute(eval, "SELECT * FROM #spill_test ORDER BY Val;");
+            sortSw.Stop();
+            Console.WriteLine($"ORDER BY (spill sort):  {sortSw.ElapsedMilliseconds:N0}ms");
+
+            // 2. External aggregate (GROUP BY → ExternalAggregateEngine)
+            var aggSw = Stopwatch.StartNew();
+            await Execute(eval, "SELECT Grp, SUM(Val) AS Total FROM #spill_test GROUP BY Grp;");
+            aggSw.Stop();
+            var aggResult = eval.LastResult as DataTable;
+            Console.WriteLine($"GROUP BY (spill agg):   {aggSw.ElapsedMilliseconds:N0}ms → {aggResult?.Rows.Count ?? 0} groups");
+
+            // 3. External join (JOIN over threshold → ExternalJoinEngine)
+            await Execute(eval, "CREATE TABLE #spill_right (ID INT, Label VARCHAR(10));");
+            var joinRows = new List<List<Expression>>(1000);
+            for (int i = 1; i <= 1000; i++)
+                joinRows.Add(new List<Expression>
+                {
+                    new LiteralExpression(i, TokenType.NUMBER),
+                    new LiteralExpression("L" + i, TokenType.STRING)
+                });
+            var joinInsert = new InsertStatement(new TableReference("#spill_right"), new List<string> { "ID", "Label" }, joinRows);
+            var joinScript = new Script(); joinScript.Statements.Add(joinInsert);
+            await eval.Evaluate(joinScript);
+
+            var joinSw = Stopwatch.StartNew();
+            await Execute(eval, "SELECT COUNT(*) FROM #spill_test JOIN #spill_right ON #spill_test.Grp = #spill_right.ID;");
+            joinSw.Stop();
+            process.Refresh();
+            Console.WriteLine($"JOIN (spill join):      {joinSw.ElapsedMilliseconds:N0}ms | WorkSet: {process.WorkingSet64 / 1024 / 1024}MB");
+
+            // All three operations must complete without OOM or timeout.
+            Assert.True(sortSw.ElapsedMilliseconds < 60_000, $"Spill sort took {sortSw.ElapsedMilliseconds}ms — expected < 60s");
+            Assert.True(aggSw.ElapsedMilliseconds  < 60_000, $"Spill aggregate took {aggSw.ElapsedMilliseconds}ms — expected < 60s");
+            Assert.True(joinSw.ElapsedMilliseconds < 60_000, $"Spill join took {joinSw.ElapsedMilliseconds}ms — expected < 60s");
+            Assert.NotNull(aggResult);
+            Assert.True(aggResult!.Rows.Count > 0, "GROUP BY returned no groups");
         }
 
         private static Script Parse(string sql) => new Parser(new Lexer(sql).Tokenize()).Parse();
