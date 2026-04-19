@@ -32,7 +32,7 @@ namespace ETL_SQL.Engine.Engines
             {
                 foreach (var r in allBufferedRows)
                 {
-                    foreach (var kv in r.Columns.ToList())
+                    foreach (var kv in r.Columns)
                     {
                         if (!kv.Key.Contains(".")) r[$"{baseAlias}.{kv.Key}"] = kv.Value;
                     }
@@ -52,11 +52,23 @@ namespace ETL_SQL.Engine.Engines
 
                 if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase))
                 {
-                    allBufferedRows = await PerformSemiJoin(allBufferedRows, joinRows, join);
+                    var rightAlias = join.Table.Alias ?? join.Table.TableName;
+                    var hashKeysLeft = new List<string>();
+                    var hashKeysRight = new List<string>();
+                    if (TryExtractEqualityKeys(join.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight))
+                        allBufferedRows = PerformHashSemiAntiJoin(allBufferedRows, joinRows, hashKeysLeft, hashKeysRight, semi: true);
+                    else
+                        allBufferedRows = await PerformSemiJoin(allBufferedRows, joinRows, join);
                 }
                 else if (join.JoinType.Equals("ANTI", StringComparison.OrdinalIgnoreCase))
                 {
-                    allBufferedRows = await PerformAntiJoin(allBufferedRows, joinRows, join);
+                    var rightAlias = join.Table.Alias ?? join.Table.TableName;
+                    var hashKeysLeft = new List<string>();
+                    var hashKeysRight = new List<string>();
+                    if (TryExtractEqualityKeys(join.Condition, baseAlias, rightAlias, hashKeysLeft, hashKeysRight))
+                        allBufferedRows = PerformHashSemiAntiJoin(allBufferedRows, joinRows, hashKeysLeft, hashKeysRight, semi: false);
+                    else
+                        allBufferedRows = await PerformAntiJoin(allBufferedRows, joinRows, join);
                 }
                 else // INNER, LEFT, RIGHT, FULL
                 {
@@ -206,7 +218,7 @@ namespace ETL_SQL.Engine.Engines
                 foreach (var jr in jb.Rows)
                 {
                     var r = jr.Clone();
-                    foreach (var kv in jr.Columns.ToList()) r[$"{joinName}.{kv.Key}"] = kv.Value;
+                    foreach (var kv in jr.Columns) r[$"{joinName}.{kv.Key}"] = kv.Value;
                     yield return r;
                 }
             }
@@ -268,6 +280,20 @@ namespace ETL_SQL.Engine.Engines
                 if (!foundMatch) nextRows.Add(left);
             }
             return nextRows;
+        }
+
+        private List<Row> PerformHashSemiAntiJoin(List<Row> leftRows, List<Row> rightRows,
+            List<string> leftKeys, List<string> rightKeys, bool semi)
+        {
+            var rightKeySet = new HashSet<CompoundKey>(rightRows.Select(r => GetHashKey(r, rightKeys)));
+            var results = new List<Row>(leftRows.Count);
+            foreach (var left in leftRows)
+            {
+                bool found = rightKeySet.Contains(GetHashKey(left, leftKeys));
+                if (semi ? found : !found)
+                    results.Add(left);
+            }
+            return results;
         }
 
         private async Task<List<Row>> PerformNestedLoopJoin(List<Row> leftRows, List<Row> rightRows, JoinClause join)
