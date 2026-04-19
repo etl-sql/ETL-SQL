@@ -13,6 +13,7 @@ using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests
 {
+    [Trait("Category", "Performance")]
     public class PerformanceTests
     {
         [Fact]

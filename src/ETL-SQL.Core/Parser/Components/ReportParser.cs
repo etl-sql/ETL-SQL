@@ -1,0 +1,1207 @@
+using System;
+using System.Collections.Generic;
+using ETL_SQL.Core.Common.Exceptions;
+
+namespace ETL_SQL.Core.Parser.Components
+{
+    public class ReportParser : ParserComponent
+    {
+        public ReportParser(IParser parser, StatementParser parent) : base(parser, parent) { }
+
+        private bool ReportCheck(TokenType t) => _parser.Current.Type == t;
+        private bool ReportAtEnd()            => _parser.Current.Type == TokenType.EOF;
+
+        // ── CREATE VISUAL ─────────────────────────────────────────────────────
+
+        public Statement ParseCreateVisual(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
+        {
+            var name       = ConsumeIdentifier("Expected visual name after CREATE VISUAL").Value;
+            Consume(TokenType.AS, "Expected AS after visual name");
+            var visualType = ParseVisualType();
+            Consume(TokenType.LPAREN, "Expected '(' after visual type");
+
+            VisualSourceExpression? source = null;
+            string? title = null;
+            string? subtitle = null;
+            string? defaultValue = null;
+            string? styleName = null;
+            TooltipDefinition? tooltip = null;
+            var mappings        = new List<VisualMapping>();
+            var options         = new List<VisualOption>();
+            var axisOptions     = new List<AxisOptions>();
+            var actions         = new List<VisualAction>();
+            var styles          = new Dictionary<string, string>();
+            var typedSeries     = new List<TypedSeries>();
+            var formattingRules = new List<FormattingRule>();
+            var overlays        = new List<VisualOverlay>();
+
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                if (Match(TokenType.SOURCE))
+                {
+                    Match(TokenType.EQUALS);
+                    source = ParseVisualSource();
+                }
+                else if (Match(TokenType.TITLE))
+                {
+                    title = ParseVisualProperty("TITLE");
+                }
+                else if (Match(TokenType.SUBTITLE))
+                {
+                    subtitle = ParseVisualProperty("SUBTITLE");
+                }
+                else if (Match(TokenType.TOOLTIP))
+                {
+                    tooltip = ParseTooltipDefinition();
+                }
+                else if (Match(TokenType.MAPPINGS))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after MAPPINGS");
+                    mappings.AddRange(ParseMappings());
+                    Consume(TokenType.RPAREN, "Expected ')' to close MAPPINGS");
+                }
+                else if (Match(TokenType.OPTIONS))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after OPTIONS");
+                    ParseOptions(options, axisOptions);
+                    Consume(TokenType.RPAREN, "Expected ')' to close OPTIONS");
+                }
+                else if (Match(TokenType.ACTIONS))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after ACTIONS");
+                    actions.AddRange(ParseActions());
+                    Consume(TokenType.RPAREN, "Expected ')' to close ACTIONS");
+                }
+                else if (Match(TokenType.STYLE))
+                {
+                    ParseStyleClause(styles, ref styleName);
+                }
+                else if (Match(TokenType.SERIES))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after SERIES");
+                    typedSeries.AddRange(ParseTypedSeries());
+                    Consume(TokenType.RPAREN, "Expected ')' to close SERIES");
+                }
+                else if (Match(TokenType.FORMATTING))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after FORMATTING");
+                    formattingRules.AddRange(ParseFormattingRules());
+                    Consume(TokenType.RPAREN, "Expected ')' to close FORMATTING");
+                }
+                else if (Match(TokenType.OVERLAYS))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after OVERLAYS");
+                    overlays.AddRange(ParseOverlays());
+                    Consume(TokenType.RPAREN, "Expected ')' to close OVERLAYS");
+                }
+                else if (Match(TokenType.DEFAULT))
+                {
+                    defaultValue = ParseVisualProperty("DEFAULT");
+                }
+                else
+                {
+                    throw new SyntaxException(
+                        $"Unexpected token '{_parser.Current.Value}' inside CREATE VISUAL body",
+                        _parser.Current.Line, _parser.Current.Column);
+                }
+                Match(TokenType.COMMA);
+            }
+
+            Consume(TokenType.RPAREN, "Expected ')' to close CREATE VISUAL");
+            Match(TokenType.SEMICOLON);
+
+            if (source == null)
+            {
+                if (visualType == VisualType.Text
+                    || visualType == VisualType.DatePicker
+                    || visualType == VisualType.Slider
+                    || visualType == VisualType.Search)
+                    source = new VisualSourceExpression();
+                else
+                    throw new SyntaxException($"CREATE VISUAL '{name}' is missing a SOURCE clause.", startToken.Line, startToken.Column);
+            }
+
+            return new CreateVisualStatement
+            {
+                Name            = name,
+                VisualType      = visualType,
+                Title           = title,
+                Subtitle        = subtitle,
+                DefaultValue    = defaultValue,
+                Source          = source,
+                Mappings        = mappings,
+                Options         = options,
+                AxisOptions     = axisOptions,
+                Actions         = actions,
+                TypedSeries     = typedSeries,
+                FormattingRules = formattingRules,
+                Overlays        = overlays,
+                Styles          = styles,
+                StyleName       = styleName,
+                Tooltip         = tooltip,
+                Mode            = mode,
+                Line            = startToken.Line,
+                Column          = startToken.Column
+            };
+        }
+
+        // ── CREATE PAGE ───────────────────────────────────────────────────────
+
+        public Statement ParseCreatePage(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
+        {
+            var name = ConsumeIdentifier("Expected page name after CREATE PAGE").Value;
+            Consume(TokenType.AS,     "Expected AS after page name");
+            Consume(TokenType.LAYOUT, "Expected LAYOUT after AS");
+            Consume(TokenType.LPAREN, "Expected '(' after LAYOUT");
+
+            string? structure = null;
+            string? pageStyleName = null;
+            var slotMap    = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var pageStyles = new Dictionary<string, string>();
+
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                if (Match(TokenType.STRUCTURE))
+                {
+                    Consume(TokenType.EQUALS, "Expected '=' after STRUCTURE");
+                    structure = Consume(TokenType.STRING, "Expected string literal for STRUCTURE").Value;
+                }
+                else if (Match(TokenType.MAP))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after MAP");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        var slot   = Consume(TokenType.STRING, "Expected slot letter (e.g. 'A')").Value;
+                        Consume(TokenType.EQUALS, "Expected '=' in MAP entry");
+                        var visual = ConsumeIdentifier("Expected visual name after '='").Value;
+                        slotMap[slot] = visual;
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close MAP");
+                }
+                else if (Match(TokenType.STYLE))
+                {
+                    ParseStyleClause(pageStyles, ref pageStyleName);
+                }
+                else
+                {
+                    throw new SyntaxException(
+                        $"Unexpected token '{_parser.Current.Value}' in CREATE PAGE body",
+                        _parser.Current.Line, _parser.Current.Column);
+                }
+                Match(TokenType.COMMA);
+            }
+            Consume(TokenType.RPAREN, "Expected ')' to close CREATE PAGE LAYOUT");
+
+            var parameters = new List<PageParameter>();
+            if (Match(TokenType.WITH))
+            {
+                ConsumeIdentifier("Expected PARAMETERS after WITH");
+                Consume(TokenType.LPAREN, "Expected '(' after PARAMETERS");
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    var paramName = ConsumeIdentifier("Expected parameter name").Value;
+                    if (!paramName.StartsWith("@")) paramName = "@" + paramName;
+                    string? dataType   = null;
+                    string? defaultVal = null;
+                    if (Match(TokenType.AS))
+                    {
+                        dataType = _parser.Current.Value.ToUpperInvariant();
+                        Advance();
+                        if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                            _parser.Current.Value.Equals("DEFAULT", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Advance();
+                            defaultVal = ConsumeReportOptionValue();
+                        }
+                    }
+                    else if (Match(TokenType.EQUALS))
+                    {
+                        defaultVal = ConsumeReportOptionValue();
+                    }
+                    parameters.Add(new PageParameter { Name = paramName, DataType = dataType, DefaultValue = defaultVal });
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close PARAMETERS");
+            }
+
+            Match(TokenType.SEMICOLON);
+
+            if (structure == null)
+                throw new SyntaxException($"CREATE PAGE '{name}' is missing a STRUCTURE clause.", startToken.Line, startToken.Column);
+
+            return new CreatePageStatement
+            {
+                Name       = name,
+                Structure  = structure,
+                SlotMap    = slotMap,
+                Parameters = parameters,
+                Styles     = pageStyles,
+                StyleName  = pageStyleName,
+                Mode       = mode,
+                Line       = startToken.Line,
+                Column     = startToken.Column
+            };
+        }
+
+        // ── CREATE DATASET ────────────────────────────────────────────────────
+
+        public Statement ParseCreateDataset(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
+        {
+            var tableName = ConsumeIdentifier("Expected #tableName after CREATE DATASET").Value;
+            if (!tableName.StartsWith("#")) tableName = "#" + tableName;
+
+            string? refreshInterval    = null;
+            string? ttl                = null;
+            bool    compress           = false;
+            var     encryptionMode     = DatasetEncryptionMode.None;
+            string? encryptionPassword = null;
+            string? keyFile            = null;
+
+            while (!ReportCheck(TokenType.AS) && !ReportAtEnd())
+            {
+                if (Match(TokenType.REFRESH))
+                {
+                    Consume(TokenType.EVERY, "Expected EVERY after REFRESH");
+                    refreshInterval = Consume(TokenType.STRING, "Expected interval string after REFRESH EVERY").Value;
+                }
+                else if (Match(TokenType.TTL))
+                {
+                    Match(TokenType.EQUALS);
+                    ttl = Consume(TokenType.STRING, "Expected TTL duration string").Value;
+                }
+                else if (Match(TokenType.COMPRESS))
+                {
+                    Match(TokenType.EQUALS);
+                    compress = ParseOnOffValue();
+                }
+                else if (Match(TokenType.ENCRYPT))
+                {
+                    Match(TokenType.EQUALS);
+                    var modeVal = _parser.Current.Value.ToUpperInvariant();
+                    Advance();
+                    encryptionMode = modeVal switch
+                    {
+                        "MACHINE"  => DatasetEncryptionMode.MachineBound,
+                        "PASSWORD" => DatasetEncryptionMode.Password,
+                        "KEYFILE"  => DatasetEncryptionMode.KeyFile,
+                        "ON" or "TRUE" or "1" => DatasetEncryptionMode.MachineBound,
+                        _ => DatasetEncryptionMode.None
+                    };
+                }
+                else if (Match(TokenType.PASSWORD))
+                {
+                    Match(TokenType.EQUALS);
+                    encryptionPassword = Consume(TokenType.STRING, "Expected password string after PASSWORD =").Value;
+                }
+                else if (Match(TokenType.KEYFILE))
+                {
+                    Match(TokenType.EQUALS);
+                    keyFile = Consume(TokenType.STRING, "Expected key file path after KEYFILE").Value;
+                }
+                else
+                {
+                    throw new SyntaxException(
+                        $"Unexpected token '{_parser.Current.Value}' in CREATE DATASET options",
+                        _parser.Current.Line, _parser.Current.Column);
+                }
+            }
+
+            Consume(TokenType.AS,     "Expected AS before source query");
+            Consume(TokenType.LPAREN, "Expected '(' before source SELECT");
+            var sourceSelect = (SelectStatement)_parser.ParseStatement();
+            Consume(TokenType.RPAREN, "Expected ')' after source SELECT");
+            Match(TokenType.SEMICOLON);
+
+            return new CreateDatasetStatement
+            {
+                TempTableName      = tableName,
+                RefreshInterval    = refreshInterval,
+                Ttl                = ttl,
+                Compress           = compress,
+                EncryptionMode     = encryptionMode,
+                EncryptionPassword = encryptionPassword,
+                KeyFile            = keyFile,
+                SourceQuery        = sourceSelect,
+                Mode               = mode,
+                Line               = startToken.Line,
+                Column             = startToken.Column
+            };
+        }
+
+        // ── CREATE STYLE ──────────────────────────────────────────────────────
+
+        public Statement ParseCreateStyle(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
+        {
+            var name = ConsumeIdentifier("Expected style name after CREATE STYLE").Value;
+            Consume(TokenType.LPAREN, "Expected '(' after style name");
+            var styles = new Dictionary<string, string>();
+            ParseStyleBody(styles);
+            Consume(TokenType.RPAREN, "Expected ')' to close CREATE STYLE");
+            Match(TokenType.SEMICOLON);
+            return new CreateStyleStatement
+            {
+                Name   = name,
+                Styles = styles,
+                Mode   = mode,
+                Line   = startToken.Line,
+                Column = startToken.Column
+            };
+        }
+
+        // ── CREATE TEMPLATE ───────────────────────────────────────────────────
+
+        public Statement ParseCreateTemplate(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
+        {
+            var name = ConsumeIdentifier("Expected template name after CREATE TEMPLATE").Value;
+            Consume(TokenType.AS, "Expected AS after template name");
+            Consume(TokenType.LPAREN, "Expected '(' after AS");
+
+            var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                var key = ConsumeIdentifier("Expected option key").Value;
+                Match(TokenType.EQUALS);
+                var val = ConsumeReportOptionValue();
+                options[key] = val;
+                Match(TokenType.COMMA);
+            }
+
+            Consume(TokenType.RPAREN, "Expected ')' to close CREATE TEMPLATE");
+            Match(TokenType.SEMICOLON);
+
+            return new CreateTemplateStatement
+            {
+                Name    = name,
+                Options = options,
+                Mode    = mode,
+                Line    = startToken.Line,
+                Column  = startToken.Column
+            };
+        }
+
+        // ── CREATE CONTAINER ──────────────────────────────────────────────────
+
+        public Statement ParseCreateContainer(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
+        {
+            var name = ConsumeIdentifier("Expected container name after CREATE CONTAINER").Value;
+            Consume(TokenType.AS, "Expected AS after container name");
+
+            string containerType;
+            if (Match(TokenType.BOX))         containerType = "BOX";
+            else if (Match(TokenType.SCROLL))  containerType = "SCROLL";
+            else
+            {
+                var raw = ConsumeIdentifier("Expected BOX or SCROLL after AS").Value.ToUpperInvariant();
+                containerType = raw is "BOX" or "SCROLL" ? raw : "BOX";
+            }
+
+            Consume(TokenType.LPAREN, "Expected '(' after container type");
+
+            string? containerStyleName = null;
+            var styles  = new Dictionary<string, string>();
+            var visuals = new List<string>();
+
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                if (Match(TokenType.STYLE))
+                {
+                    ParseStyleClause(styles, ref containerStyleName);
+                }
+                else if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                         _parser.Current.Value.Equals("VISUALS", StringComparison.OrdinalIgnoreCase))
+                {
+                    Advance();
+                    Consume(TokenType.LPAREN, "Expected '(' after VISUALS");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        visuals.Add(ConsumeIdentifier("Expected visual name in VISUALS list").Value);
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close VISUALS");
+                }
+                else
+                {
+                    throw new SyntaxException(
+                        $"Unexpected token '{_parser.Current.Value}' in CREATE CONTAINER body",
+                        _parser.Current.Line, _parser.Current.Column);
+                }
+                Match(TokenType.COMMA);
+            }
+
+            Consume(TokenType.RPAREN, "Expected ')' to close CREATE CONTAINER");
+            Match(TokenType.SEMICOLON);
+
+            return new CreateContainerStatement
+            {
+                Name          = name,
+                ContainerType = containerType,
+                Visuals       = visuals,
+                Styles        = styles,
+                StyleName     = containerStyleName,
+                Mode          = mode,
+                Line          = startToken.Line,
+                Column        = startToken.Column
+            };
+        }
+
+        // ── CREATE NAVIGATION ─────────────────────────────────────────────────
+
+        public Statement ParseCreateNavigation(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
+        {
+            var name = ConsumeIdentifier("Expected navigation name after CREATE NAVIGATION").Value;
+            Consume(TokenType.AS, "Expected AS after navigation name");
+
+            NavigationType navType;
+            if (Match(TokenType.NAV_TAB))       navType = NavigationType.Tab;
+            else if (Match(TokenType.BUTTON))   navType = NavigationType.Button;
+            else if (Match(TokenType.LINK_NAV)) navType = NavigationType.Link;
+            else
+            {
+                var raw = ConsumeIdentifier("Expected TAB, BUTTON, or LINK after AS").Value.ToUpperInvariant();
+                navType = raw switch
+                {
+                    "TAB"    => NavigationType.Tab,
+                    "BUTTON" => NavigationType.Button,
+                    "LINK"   => NavigationType.Link,
+                    _        => NavigationType.Tab
+                };
+            }
+
+            Consume(TokenType.LPAREN, "Expected '(' after navigation type");
+
+            var orientation = NavigationOrientation.Horizontal;
+            string? defaultPage = null;
+
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                    _parser.Current.Value.Equals("ORIENTATION", StringComparison.OrdinalIgnoreCase))
+                {
+                    Advance();
+                    Consume(TokenType.EQUALS, "Expected '=' after ORIENTATION");
+                    var oriVal = ConsumeIdentifier("Expected HORIZONTAL or VERTICAL").Value.ToUpperInvariant();
+                    orientation = oriVal == "VERTICAL" ? NavigationOrientation.Vertical : NavigationOrientation.Horizontal;
+                }
+                else if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                         _parser.Current.Value.Equals("DEFAULT", StringComparison.OrdinalIgnoreCase))
+                {
+                    Advance();
+                    Consume(TokenType.EQUALS, "Expected '=' after DEFAULT");
+                    defaultPage = ConsumeIdentifier("Expected page name after DEFAULT =").Value;
+                }
+                else if (_parser.Current.Type == TokenType.DEFAULT)
+                {
+                    Advance();
+                    Consume(TokenType.EQUALS, "Expected '=' after DEFAULT");
+                    defaultPage = ConsumeIdentifier("Expected page name after DEFAULT =").Value;
+                }
+                else
+                {
+                    throw new SyntaxException(
+                        $"Unexpected token '{_parser.Current.Value}' in CREATE NAVIGATION body",
+                        _parser.Current.Line, _parser.Current.Column);
+                }
+                Match(TokenType.COMMA);
+            }
+
+            Consume(TokenType.RPAREN, "Expected ')' to close CREATE NAVIGATION options");
+
+            var pages = new List<string>();
+            if (Match(TokenType.WITH))
+            {
+                ConsumeIdentifier("Expected PAGES after WITH");
+                Consume(TokenType.LPAREN, "Expected '(' after PAGES");
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    pages.Add(ConsumeIdentifier("Expected page name").Value);
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close PAGES");
+            }
+
+            Match(TokenType.SEMICOLON);
+
+            return new CreateNavigationStatement
+            {
+                Name        = name,
+                NavType     = navType,
+                Orientation = orientation,
+                DefaultPage = defaultPage,
+                Pages       = pages,
+                Mode        = mode,
+                Line        = startToken.Line,
+                Column      = startToken.Column
+            };
+        }
+
+        // ── CREATE BUTTON ─────────────────────────────────────────────────────
+
+        public Statement ParseCreateButton(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
+        {
+            var name = ConsumeIdentifier("Expected button name after CREATE BUTTON").Value;
+            Consume(TokenType.AS, "Expected AS after button name");
+
+            string buttonType;
+            if (Match(TokenType.BACK))           buttonType = "BACK";
+            else if (Match(TokenType.REFRESH))   buttonType = "REFRESH";
+            else if (Match(TokenType.IDENTIFIER)) buttonType = _parser.Previous.Value.ToUpperInvariant();
+            else throw new SyntaxException("Expected button type (BACK, REFRESH, etc.) after AS", _parser.Current.Line, _parser.Current.Column);
+
+            Consume(TokenType.LPAREN, "Expected '(' after button type");
+
+            string? title = null;
+            TooltipDefinition? tooltip = null;
+            string? styleName = null;
+            var options = new List<VisualOption>();
+            var actions = new List<VisualAction>();
+            var styles  = new Dictionary<string, string>();
+
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                if (Match(TokenType.TITLE))
+                {
+                    Match(TokenType.EQUALS);
+                    title = Consume(TokenType.STRING, "Expected button title string").Value;
+                }
+                else if (Match(TokenType.TOOLTIP))
+                {
+                    tooltip = ParseTooltipDefinition();
+                }
+                else if (Match(TokenType.OPTIONS))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after OPTIONS");
+                    ParseOptions(options, new List<AxisOptions>());
+                    Consume(TokenType.RPAREN, "Expected ')' to close OPTIONS");
+                }
+                else if (Match(TokenType.ACTIONS))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after ACTIONS");
+                    actions.AddRange(ParseActions());
+                    Consume(TokenType.RPAREN, "Expected ')' to close ACTIONS");
+                }
+                else if (Match(TokenType.STYLE))
+                {
+                    ParseStyleClause(styles, ref styleName);
+                }
+                else
+                {
+                    throw new SyntaxException($"Unexpected token '{_parser.Current.Value}' in CREATE BUTTON body", _parser.Current.Line, _parser.Current.Column);
+                }
+                Match(TokenType.COMMA);
+            }
+
+            Consume(TokenType.RPAREN, "Expected ')' to close CREATE BUTTON");
+            Match(TokenType.SEMICOLON);
+
+            return new CreateButtonStatement
+            {
+                Name       = name,
+                ButtonType = buttonType,
+                Title      = title,
+                Tooltip    = tooltip,
+                Options    = options,
+                Actions    = actions,
+                Styles     = styles,
+                StyleName  = styleName,
+                Mode       = mode,
+                Line       = startToken.Line,
+                Column     = startToken.Column
+            };
+        }
+
+        // ── ALTER (Report Objects) ────────────────────────────────────────────
+
+        public Statement ParseAlterReportObject(ReportObjectType type)
+        {
+            var startToken = _parser.Previous;
+            var name = ConsumeIdentifier($"Expected {type} name after ALTER {type}").Value;
+            Consume(TokenType.LPAREN, $"Expected '(' after {type} name");
+
+            VisualSourceExpression? source = null;
+            var mappings    = new List<VisualMapping>();
+            var options     = new List<VisualOption>();
+            var axisOptions = new List<AxisOptions>();
+            var actions     = new List<VisualAction>();
+            var styles      = new Dictionary<string, string>();
+            string? styleName = null;
+            string? title = null;
+            string? subtitle = null;
+            TooltipDefinition? tooltip = null;
+
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                if (Match(TokenType.SOURCE))
+                {
+                    Match(TokenType.EQUALS);
+                    source = ParseVisualSource();
+                }
+                else if (Match(TokenType.TITLE))
+                {
+                    Match(TokenType.EQUALS);
+                    title = Consume(TokenType.STRING, "Expected title string").Value;
+                }
+                else if (Match(TokenType.SUBTITLE))
+                {
+                    Match(TokenType.EQUALS);
+                    subtitle = Consume(TokenType.STRING, "Expected subtitle string").Value;
+                }
+                else if (Match(TokenType.TOOLTIP))
+                {
+                    tooltip = ParseTooltipDefinition();
+                }
+                else if (Match(TokenType.MAPPINGS))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after MAPPINGS");
+                    mappings.AddRange(ParseMappings());
+                    Consume(TokenType.RPAREN, "Expected ')' to close MAPPINGS");
+                }
+                else if (Match(TokenType.OPTIONS))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after OPTIONS");
+                    ParseOptions(options, axisOptions);
+                    Consume(TokenType.RPAREN, "Expected ')' to close OPTIONS");
+                }
+                else if (Match(TokenType.ACTIONS))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after ACTIONS");
+                    actions.AddRange(ParseActions());
+                    Consume(TokenType.RPAREN, "Expected ')' to close ACTIONS");
+                }
+                else if (Match(TokenType.STYLE))
+                {
+                    ParseStyleClause(styles, ref styleName);
+                }
+                else
+                {
+                    throw new SyntaxException($"Unexpected token '{_parser.Current.Value}' in ALTER {type} body", _parser.Current.Line, _parser.Current.Column);
+                }
+                Match(TokenType.COMMA);
+            }
+
+            Consume(TokenType.RPAREN, $"Expected ')' to close ALTER {type}");
+            Match(TokenType.SEMICOLON);
+
+            return new AlterReportObjectStatement
+            {
+                ObjectType  = type,
+                Name        = name,
+                Source      = source,
+                Mappings    = mappings.Count > 0 ? mappings : null,
+                Options     = options.Count > 0 ? options : null,
+                AxisOptions = axisOptions.Count > 0 ? axisOptions : null,
+                Actions     = actions.Count > 0 ? actions : null,
+                Styles      = styles.Count > 0 ? styles : null,
+                StyleName   = styleName,
+                Title       = title,
+                Subtitle    = subtitle,
+                Tooltip     = tooltip,
+                Line        = startToken.Line,
+                Column      = startToken.Column
+            };
+        }
+
+        // ── Private helpers ───────────────────────────────────────────────────
+
+        private VisualType ParseVisualType()
+        {
+            if (Match(TokenType.BAR))          return VisualType.Bar;
+            if (Match(TokenType.LINE))         return VisualType.Line;
+            if (Match(TokenType.SCATTER))      return VisualType.Scatter;
+            if (Match(TokenType.PIE))          return VisualType.Pie;
+            if (Match(TokenType.TABLE_VISUAL)) return VisualType.Table;
+            if (Match(TokenType.TABLE))        return VisualType.Table;
+            if (Match(TokenType.CARD))         return VisualType.Card;
+            if (Match(TokenType.SLICER))       return VisualType.Slicer;
+            if (Match(TokenType.HEATMAP))      return VisualType.HeatMap;
+            if (Match(TokenType.DONUT))        return VisualType.Donut;
+            if (Match(TokenType.HBAR))         return VisualType.HorizontalBar;
+            if (Match(TokenType.BOXPLOT))      return VisualType.BoxPlot;
+            if (Match(TokenType.TREEMAP))      return VisualType.Treemap;
+            if (Match(TokenType.TEXT))         return VisualType.Text;
+            if (Match(TokenType.COMBO))        return VisualType.Combo;
+            if (Match(TokenType.DATEPICKER))   return VisualType.DatePicker;
+            if (Match(TokenType.SLIDER))       return VisualType.Slider;
+            if (Match(TokenType.MULTISELECT))  return VisualType.MultiSelect;
+            if (Match(TokenType.SEARCH))       return VisualType.Search;
+            if (Match(TokenType.GAUGE))        return VisualType.Gauge;
+            if (Match(TokenType.FUNNEL))       return VisualType.Funnel;
+            if (Match(TokenType.WATERFALL))    return VisualType.Waterfall;
+
+            if (_parser.Current.Type == TokenType.IDENTIFIER)
+            {
+                var val = _parser.Current.Value.ToUpperInvariant();
+                Advance();
+                return val switch
+                {
+                    "BAR"         => VisualType.Bar,
+                    "LINE"        => VisualType.Line,
+                    "SCATTER"     => VisualType.Scatter,
+                    "PIE"         => VisualType.Pie,
+                    "TABLE"       => VisualType.Table,
+                    "CARD"        => VisualType.Card,
+                    "SLICER"      => VisualType.Slicer,
+                    "HEATMAP"     => VisualType.HeatMap,
+                    "DONUT"       => VisualType.Donut,
+                    "HBAR"        => VisualType.HorizontalBar,
+                    "BOXPLOT"     => VisualType.BoxPlot,
+                    "TREEMAP"     => VisualType.Treemap,
+                    "TEXT"        => VisualType.Text,
+                    "COMBO"       => VisualType.Combo,
+                    "DATEPICKER"  => VisualType.DatePicker,
+                    "SLIDER"      => VisualType.Slider,
+                    "MULTISELECT" => VisualType.MultiSelect,
+                    "SEARCH"      => VisualType.Search,
+                    "GAUGE"       => VisualType.Gauge,
+                    "FUNNEL"      => VisualType.Funnel,
+                    "WATERFALL"   => VisualType.Waterfall,
+                    _ => throw new SyntaxException(
+                             $"Unknown visual type '{val}'.",
+                             _parser.Previous.Line, _parser.Previous.Column)
+                };
+            }
+
+            throw new SyntaxException(
+                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL) but got '{_parser.Current.Value}'",
+                _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private VisualSourceExpression ParseVisualSource()
+        {
+            if (Match(TokenType.LPAREN))
+            {
+                var select = (SelectStatement)_parser.ParseStatement();
+                Consume(TokenType.RPAREN, "Expected ')' to close SOURCE subquery");
+                return new VisualSourceExpression { InlineSelect = select };
+            }
+
+            if (_parser.Current.Type == TokenType.SELECT)
+            {
+                var select = (SelectStatement)_parser.ParseStatement();
+                return new VisualSourceExpression { InlineSelect = select };
+            }
+
+            if (Match(TokenType.STRING))
+            {
+                var val = _parser.Previous.Value;
+                if (val.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+                {
+                    var subLexer  = new Lexer(val);
+                    var subParser = new Parser(subLexer.Tokenize(), val);
+                    var subScript = subParser.Parse();
+                    if (subScript.Statements.Count > 0 && subScript.Statements[0] is SelectStatement sel)
+                        return new VisualSourceExpression { InlineSelect = sel };
+                }
+                return new VisualSourceExpression { TempTableName = val };
+            }
+
+            var tableRef = ConsumeIdentifier("Expected #tableName or SELECT or ( SELECT ... ) after SOURCE").Value;
+            return new VisualSourceExpression { TempTableName = tableRef };
+        }
+
+        private string? ParseVisualProperty(string propertyName)
+        {
+            Match(TokenType.EQUALS);
+            string? value;
+            if (Match(TokenType.LPAREN))
+            {
+                value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : Consume(TokenType.STRING, $"Expected string literal for {propertyName}").Value;
+                Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
+            }
+            else
+            {
+                value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : Consume(TokenType.STRING, $"Expected string literal for {propertyName}").Value;
+            }
+            return value;
+        }
+
+        private TooltipDefinition ParseTooltipDefinition()
+        {
+            Match(TokenType.EQUALS);
+
+            if (ReportCheck(TokenType.LPAREN))
+            {
+                Advance();
+                string? markdown = null;
+                var visuals = new List<string>();
+
+                if (ReportCheck(TokenType.STRING))
+                {
+                    markdown = Advance().Value;
+                    Match(TokenType.COMMA);
+                }
+
+                if (_parser.Current.Value.Equals("VISUALS", StringComparison.OrdinalIgnoreCase))
+                {
+                    Advance();
+                    Consume(TokenType.LPAREN, "Expected '(' after VISUALS in TOOLTIP");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        visuals.Add(ConsumeIdentifier("Expected visual name in TOOLTIP VISUALS").Value);
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP VISUALS");
+                }
+
+                Consume(TokenType.RPAREN, "Expected ')' to close TOOLTIP inline block");
+                return TooltipDefinition.Inline(markdown, visuals);
+            }
+
+            if (ReportCheck(TokenType.STRING))
+                return TooltipDefinition.Text(Advance().Value);
+
+            return TooltipDefinition.Container(
+                ConsumeIdentifier("Expected string, container name, or '(' for TOOLTIP").Value);
+        }
+
+        private IEnumerable<VisualMapping> ParseMappings()
+        {
+            var result = new List<VisualMapping>();
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                var role   = ConsumeIdentifier("Expected mapping role name").Value.ToUpperInvariant();
+                Consume(TokenType.EQUALS, $"Expected '=' after mapping role '{role}'");
+                var column = ConsumeIdentifier("Expected column name after '='").Value;
+                result.Add(new VisualMapping { Role = role, Column = column });
+                Match(TokenType.COMMA);
+            }
+            return result;
+        }
+
+        private void ParseOptions(List<VisualOption> options, List<AxisOptions> axisOptions)
+        {
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                bool isX = _parser.Current.Type == TokenType.X_AXIS || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("X_AXIS", StringComparison.OrdinalIgnoreCase));
+                bool isY = _parser.Current.Type == TokenType.Y_AXIS || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("Y_AXIS", StringComparison.OrdinalIgnoreCase));
+
+                if (isX)
+                {
+                    Advance();
+                    var axisOpts = new AxisOptions { Axis = "X" };
+                    Consume(TokenType.LPAREN, "Expected '(' after X_AXIS");
+                    ParseAxisOptionBody(axisOpts.Options);
+                    Consume(TokenType.RPAREN, "Expected ')' to close X_AXIS");
+                    axisOptions.Add(axisOpts);
+                }
+                else if (isY)
+                {
+                    Advance();
+                    var axisOpts = new AxisOptions { Axis = "Y" };
+                    Consume(TokenType.LPAREN, "Expected '(' after Y_AXIS");
+                    ParseAxisOptionBody(axisOpts.Options);
+                    Consume(TokenType.RPAREN, "Expected ')' to close Y_AXIS");
+                    axisOptions.Add(axisOpts);
+                }
+                else if (Match(TokenType.COLORS))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after COLORS");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        var colorKey = _parser.Current.Type == TokenType.STRING
+                            ? Advance().Value
+                            : ConsumeIdentifier("Expected color key in COLORS").Value;
+                        Consume(TokenType.EQUALS, "Expected '=' after color key");
+                        var colorVal = ConsumeReportOptionValue();
+                        var finalKey = colorKey.StartsWith("color:", StringComparison.OrdinalIgnoreCase)
+                            ? colorKey
+                            : "color:" + colorKey;
+                        options.Add(new VisualOption { Key = finalKey, Value = colorVal });
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close COLORS");
+                }
+                else
+                {
+                    var key = ConsumeIdentifier("Expected option key").Value.ToUpperInvariant();
+                    Match(TokenType.EQUALS);
+                    var val = ParseExpression();
+                    options.Add(new VisualOption { Key = key, Value = val.ToString() });
+                }
+                Match(TokenType.COMMA);
+            }
+        }
+
+        private void ParseAxisOptionBody(List<VisualOption> opts)
+        {
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                var key = ConsumeIdentifier("Expected axis option key").Value.ToUpperInvariant();
+                Match(TokenType.EQUALS);
+                var val = ParseExpression();
+                opts.Add(new VisualOption { Key = key, Value = val.ToString() });
+                Match(TokenType.COMMA);
+            }
+        }
+
+        private static readonly HashSet<TokenType> _overlayKeywordTokens = new()
+        {
+            TokenType.LINEAR, TokenType.EXPONENTIAL, TokenType.LOGARITHMIC,
+            TokenType.POLYNOMIAL, TokenType.POWER, TokenType.GOAL, TokenType.AVERAGE,
+            TokenType.MOVING_AVG, TokenType.SOLID, TokenType.DASHED, TokenType.DOTTED,
+            TokenType.OVERLAYS, TokenType.COLOR,
+        };
+
+        private string ConsumeReportOptionValue()
+        {
+            var t = _parser.Current.Type;
+            if (t == TokenType.STRING   || t == TokenType.NUMBER  ||
+                t == TokenType.IDENTIFIER || t == TokenType.TRUE  || t == TokenType.FALSE ||
+                t == TokenType.ON       || t == TokenType.OFF     ||
+                t == TokenType.TOP      || t == TokenType.BOTTOM  ||
+                t == TokenType.LEFT     || t == TokenType.RIGHT   ||
+                _overlayKeywordTokens.Contains(t))
+            {
+                var value = _parser.Current.Value;
+                Advance();
+                return value;
+            }
+            throw new SyntaxException(
+                $"Expected option value but got '{_parser.Current.Value}'",
+                _parser.Current.Line, _parser.Current.Column);
+        }
+
+        private static string NormalizeBoolOptionValue(string val) =>
+            val.ToUpperInvariant() switch
+            {
+                "TRUE" or "ON" or "1"   => "ON",
+                "FALSE" or "OFF" or "0" => "OFF",
+                _                       => val
+            };
+
+        private bool ParseOnOffValue()
+        {
+            var value = _parser.Current.Value;
+            Advance();
+            return value.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
+                   value.Equals("TRUE", StringComparison.OrdinalIgnoreCase) ||
+                   value == "1";
+        }
+
+        private IEnumerable<VisualAction> ParseActions()
+        {
+            var result = new List<VisualAction>();
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                string trigger;
+                if (Match(TokenType.ON_CLICK))       trigger = "ON_CLICK";
+                else if (Match(TokenType.ON_CHANGE)) trigger = "ON_CHANGE";
+                else throw new SyntaxException(
+                    $"Expected ON_CLICK or ON_CHANGE in ACTIONS but got '{_parser.Current.Value}'",
+                    _parser.Current.Line, _parser.Current.Column);
+
+                Consume(TokenType.EQUALS, $"Expected '=' after {trigger}");
+
+                VisualAction action;
+                if (Match(TokenType.DRILL_DOWN))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after DRILL_DOWN");
+                    Advance();
+                    Consume(TokenType.EQUALS, "Expected '=' after Target");
+                    var target = ConsumeIdentifier("Expected target visual name").Value;
+                    Match(TokenType.COMMA);
+                    Advance();
+                    Consume(TokenType.EQUALS, "Expected '=' after Key");
+                    var key = ConsumeIdentifier("Expected key column name").Value;
+                    Consume(TokenType.RPAREN, "Expected ')' to close DRILL_DOWN");
+                    action = new DrillDownAction { Trigger = trigger, TargetVisual = target, KeyColumn = key };
+                }
+                else if (Match(TokenType.SET_PARAMETER))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after SET_PARAMETER");
+                    var paramName = ConsumeIdentifier("Expected parameter name").Value;
+                    if (!paramName.StartsWith("@")) paramName = "@" + paramName;
+                    Match(TokenType.COMMA);
+                    var valueExpr = ConsumeIdentifier("Expected value expression").Value;
+                    Consume(TokenType.RPAREN, "Expected ')' to close SET_PARAMETER");
+                    action = new SetParameterAction { Trigger = trigger, ParameterName = paramName, ValueExpression = valueExpr };
+                }
+                else
+                {
+                    throw new SyntaxException(
+                        $"Expected DRILL_DOWN or SET_PARAMETER after {trigger} =",
+                        _parser.Current.Line, _parser.Current.Column);
+                }
+
+                result.Add(action);
+                Match(TokenType.COMMA);
+            }
+            return result;
+        }
+
+        private IEnumerable<TypedSeries> ParseTypedSeries()
+        {
+            var result = new List<TypedSeries>();
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                string seriesType;
+                if (Match(TokenType.BAR))       seriesType = "bar";
+                else if (Match(TokenType.LINE)) seriesType = "line";
+                else
+                {
+                    var raw = ConsumeIdentifier("Expected BAR or LINE in SERIES").Value;
+                    seriesType = raw.ToLowerInvariant();
+                }
+
+                var column = ConsumeIdentifier("Expected column name after series type").Value;
+                result.Add(new TypedSeries { SeriesType = seriesType, Column = column });
+                Match(TokenType.COMMA);
+            }
+            return result;
+        }
+
+        private IEnumerable<FormattingRule> ParseFormattingRules()
+        {
+            var result = new List<FormattingRule>();
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                var column  = ConsumeIdentifier("Expected column name in FORMATTING rule").Value;
+                var opToken = _parser.Current.Type;
+                string op   = opToken switch
+                {
+                    TokenType.LESS_THAN      => "<",
+                    TokenType.GREATER_THAN   => ">",
+                    TokenType.LESS_EQUALS    => "<=",
+                    TokenType.GREATER_EQUALS => ">=",
+                    TokenType.EQUALS         => "=",
+                    TokenType.NOT_EQUALS     => "<>",
+                    _ => throw new SyntaxException(
+                        $"Expected comparison operator (<, >, <=, >=, =, <>) in FORMATTING rule but got '{_parser.Current.Value}'",
+                        _parser.Current.Line, _parser.Current.Column)
+                };
+                Advance();
+                var threshold = _parser.Current.Type is TokenType.NUMBER or TokenType.STRING
+                    ? Advance().Value
+                    : throw new SyntaxException("Expected threshold value in FORMATTING rule", _parser.Current.Line, _parser.Current.Column);
+                Consume(TokenType.THEN, "Expected THEN after threshold in FORMATTING rule");
+                var color = Consume(TokenType.STRING, "Expected color string after THEN").Value;
+                result.Add(new FormattingRule { Column = column, Operator = op, Threshold = threshold, Color = color });
+                Match(TokenType.COMMA);
+            }
+            return result;
+        }
+
+        private IEnumerable<VisualOverlay> ParseOverlays()
+        {
+            var result = new List<VisualOverlay>();
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                OverlayType overlayType;
+                double?     parameter = null;
+
+                if (Match(TokenType.GOAL))
+                {
+                    overlayType = OverlayType.Goal;
+                    Consume(TokenType.LPAREN, "Expected '(' after GOAL");
+                    parameter = double.Parse(Consume(TokenType.NUMBER, "Expected numeric value for GOAL").Value,
+                        System.Globalization.CultureInfo.InvariantCulture);
+                    Consume(TokenType.RPAREN, "Expected ')' after GOAL value");
+                }
+                else if (Match(TokenType.AVERAGE))     { overlayType = OverlayType.Average; }
+                else if (Match(TokenType.MOVING_AVG))
+                {
+                    overlayType = OverlayType.MovingAvg;
+                    Consume(TokenType.LPAREN, "Expected '(' after MOVING_AVG");
+                    parameter = double.Parse(Consume(TokenType.NUMBER, "Expected window size for MOVING_AVG").Value,
+                        System.Globalization.CultureInfo.InvariantCulture);
+                    Consume(TokenType.RPAREN, "Expected ')' after MOVING_AVG window");
+                }
+                else if (Match(TokenType.LINEAR))      { overlayType = OverlayType.Linear; }
+                else if (Match(TokenType.EXPONENTIAL)) { overlayType = OverlayType.Exponential; }
+                else if (Match(TokenType.LOGARITHMIC)) { overlayType = OverlayType.Logarithmic; }
+                else if (Match(TokenType.POWER))       { overlayType = OverlayType.Power; }
+                else if (Match(TokenType.POLYNOMIAL))
+                {
+                    overlayType = OverlayType.Polynomial;
+                    Consume(TokenType.LPAREN, "Expected '(' after POLYNOMIAL");
+                    parameter = double.Parse(Consume(TokenType.NUMBER, "Expected degree for POLYNOMIAL").Value,
+                        System.Globalization.CultureInfo.InvariantCulture);
+                    Consume(TokenType.RPAREN, "Expected ')' after POLYNOMIAL degree");
+                }
+                else throw new SyntaxException(
+                    $"Expected overlay type (GOAL, AVERAGE, MOVING_AVG, LINEAR, ...) but got '{_parser.Current.Value}'",
+                    _parser.Current.Line, _parser.Current.Column);
+
+                Consume(TokenType.AS, "Expected AS after overlay type");
+                OverlayLineStyle lineStyle;
+                if      (Match(TokenType.SOLID))  lineStyle = OverlayLineStyle.Solid;
+                else if (Match(TokenType.DASHED)) lineStyle = OverlayLineStyle.Dashed;
+                else if (Match(TokenType.DOTTED)) lineStyle = OverlayLineStyle.Dotted;
+                else throw new SyntaxException(
+                    $"Expected SOLID, DASHED, or DOTTED after AS in OVERLAYS but got '{_parser.Current.Value}'",
+                    _parser.Current.Line, _parser.Current.Column);
+
+                string? color = null;
+                string? label = null;
+                if (Match(TokenType.WITH))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after WITH in overlay");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        if (Match(TokenType.COLOR))
+                        {
+                            Consume(TokenType.EQUALS, "Expected = after COLOR");
+                            color = Consume(TokenType.STRING, "Expected color string").Value;
+                        }
+                        else if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("LABEL", StringComparison.OrdinalIgnoreCase))
+                        {
+                            Advance();
+                            Consume(TokenType.EQUALS, "Expected = after LABEL");
+                            label = Consume(TokenType.STRING, "Expected label string").Value;
+                        }
+                        else break;
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close WITH");
+                }
+
+                result.Add(new VisualOverlay
+                {
+                    OverlayType = overlayType,
+                    Parameter   = parameter,
+                    LineStyle   = lineStyle,
+                    Color       = color,
+                    Label       = label
+                });
+                Match(TokenType.COMMA);
+            }
+            return result;
+        }
+
+        private void ParseStyleClause(Dictionary<string, string> styles, ref string? styleName)
+        {
+            if (Match(TokenType.EQUALS))
+                styleName = ConsumeIdentifier("Expected style name after STYLE =").Value;
+            else
+            {
+                Consume(TokenType.LPAREN, "Expected '(' or '=' after STYLE");
+                ParseStyleBody(styles);
+                Consume(TokenType.RPAREN, "Expected ')' to close STYLE");
+            }
+        }
+
+        private void ParseStyleBody(Dictionary<string, string> styles)
+        {
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                var key = ConsumeIdentifier("Expected style key").Value;
+                Consume(TokenType.EQUALS, $"Expected '=' after style key '{key}'");
+                string val;
+                var t = _parser.Current.Type;
+                if (t == TokenType.STRING || t == TokenType.NUMBER || t == TokenType.IDENTIFIER ||
+                    t == TokenType.TRUE || t == TokenType.FALSE)
+                {
+                    val = _parser.Current.Value;
+                    Advance();
+                }
+                else
+                {
+                    val = _parser.Current.Value;
+                    Advance();
+                }
+                styles[key] = val;
+                Match(TokenType.COMMA);
+            }
+        }
+    }
+}
