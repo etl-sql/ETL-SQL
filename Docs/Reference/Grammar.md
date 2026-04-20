@@ -16,6 +16,8 @@ DECLARE @name STRING = 'Chuck';
 DECLARE @note MARKDOWN = '# Hello';
 DECLARE @id   INT    = 101;
 DECLARE @rate DECIMAL(10,4) = 1.2345;
+DECLARE @icon IMAGE = 'C:\Data\icon.png';
+DECLARE @range MINMAX(INT) = (1, 100);
 
 -- Multiple variables in one statement
 DECLARE @list LIST = (1, 2, 3), @count INT = 0;
@@ -31,6 +33,10 @@ Assigns a new value to an existing variable.
 SET @name  = 'Charles';
 SET @count = @count + 1;
 SET @label = UPPER(@name) + '_PROCESSED';
+
+-- Member Access Assignment (Property Setting)
+SET @range.MIN = 5;
+SET @range.MAX = 50;
 ```
 
 ### 1.3 System Variables
@@ -165,6 +171,8 @@ While many objects are dynamic, the following standard functions return objects 
 | | `.SIZE` | Size in bytes |
 | | `.LASTMODIFIED` | Last modified time from remote server |
 | | `.ISDIRECTORY` | Boolean indicator |
+| **Range Selection** (`MINMAX`) | `.MIN` | The minimum value of the range |
+| | `.MAX` | The maximum value of the range |
 | **Docker Helper** | `.CONNECTION_STRING` | Host-mapped connection string for a container |
 
 *Example using FOREACH with files:*
@@ -478,6 +486,7 @@ EXPECT SCHEMA myConnection (
 | Date | `DATE`, `DATETIME`, `DATETIME2`, `SMALLDATETIME`, `TIMESTAMP`, `DATETIMEOFFSET` |
 | Boolean | `BIT`, `BOOLEAN`, `BOOL` |
 | Binary | `VARBINARY`, `BINARY`, `BLOB`, `IMAGE` |
+| Range | `MINMAX` |
 
 ---
 

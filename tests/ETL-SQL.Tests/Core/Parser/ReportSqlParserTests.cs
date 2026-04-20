@@ -146,7 +146,7 @@ CREATE VISUAL Slicer1 AS SLICER (
 CREATE PAGE Dashboard AS LAYOUT (
     STRUCTURE = 'AB/CC',
     MAP ('A' = SalesChart, 'B' = PieChart, 'C' = SummaryTable)
-) WITH PARAMETERS (@region = 'All', @year = '2025');";
+);";
             var script = Parse(sql);
             var stmt = script.Statements.OfType<CreatePageStatement>().FirstOrDefault();
 
@@ -155,12 +155,10 @@ CREATE PAGE Dashboard AS LAYOUT (
             Assert.Equal("AB/CC", stmt.Structure);
             Assert.Equal(3, stmt.SlotMap.Count);
             Assert.Equal("SalesChart", stmt.SlotMap["A"]);
-            Assert.Equal(2, stmt.Parameters.Count);
-            Assert.Equal("All", stmt.Parameters[0].DefaultValue);
         }
 
         [Fact]
-        public void ParseCreatePage_NoParameters_ParsesWithEmptyParameterList()
+        public void ParseCreatePage_Minimal_ParsesCorrectly()
         {
             var sql = @"
 CREATE PAGE SimplePage AS LAYOUT (
@@ -171,7 +169,7 @@ CREATE PAGE SimplePage AS LAYOUT (
             var stmt = script.Statements.OfType<CreatePageStatement>().FirstOrDefault();
 
             Assert.NotNull(stmt);
-            Assert.Empty(stmt!.Parameters);
+            Assert.Equal("A", stmt!.Structure);
         }
 
         // ── CREATE DATASET ────────────────────────────────────────────────────

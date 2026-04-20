@@ -141,18 +141,48 @@ export interface VisualManifest {
     chartConfig?: string;
     columns: string[];
     rows: any[][];
+    rowStyles?: (string | null)[];
     options: Record<string, string>;
     error?: string;
     actions: any[];
     styles?: Record<string, string>;
     defaultValue?: string;
+    summaryData?: TableSummaryData;
+    gridStyle?: string;
+    dataLabels?: DataLabelsManifest;
+}
+
+export interface DataLabelsManifest {
+    show: boolean;
+    position?: string;
+    color?: string;
+    fontSize?: number;
+    fontWeight?: string;
+    fontFamily?: string;
+    format?: string;
+}
+
+export interface SummaryItemData {
+    column: string;
+    aggregate: string;
+    value: string;
+    alias?: string;
+}
+
+export interface TableSummaryData {
+    aggregates: SummaryItemData[];
+    grandTotals?: Record<string, string>;
 }
 
 export interface ContainerManifest {
     name: string;
     containerType: string;
-    visuals: string[];
+    visuals?: string[];
+    structure?: string;
+    slotMap?: Record<string, string>;
     styles?: Record<string, string>;
+    title?: string;
+    subtitle?: string;
 }
 
 export interface NavigationManifest {
@@ -167,7 +197,6 @@ export interface PageManifest {
     name: string;
     structure: string;
     slotMap: Record<string, string>;
-    parameters: Record<string, string | null>;
     styles?: Record<string, string>;
 }
 

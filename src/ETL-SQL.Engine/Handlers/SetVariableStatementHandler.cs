@@ -24,13 +24,49 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (SetVariableStatement)statement;
             
-            _logger.Debug("Setting variable {VariableName}", stmt.VariableName);
+            if (stmt.Target is VariableExpression vExpr)
+            {
+                var varName = vExpr.Name;
+                _logger.Debug("Setting variable {VariableName}", varName);
 
-            if (!context.VarContext.ContainsVariable(stmt.VariableName))
-                throw new ExecutionException($"Variable {stmt.VariableName} must be declared before it can be assigned.");
+                if (!context.VarContext.ContainsVariable(varName))
+                    throw new ExecutionException($"Variable {varName} must be declared before it can be assigned.");
 
-            var val = await context.EvaluationContext.EvaluateValue(stmt.Value, new Row());
-            context.VarContext.SetVariable(stmt.VariableName, val);
+                var val = await context.EvaluationContext.EvaluateValue(stmt.Value, new Row());
+                context.VarContext.SetVariable(varName, val);
+            }
+            else if (stmt.Target is MemberAccessExpression ma)
+            {
+                if (ma.Expression is not VariableExpression baseVarExpr)
+                    throw new ExecutionException("Only variable properties can be assigned in SET statements.");
+
+                var baseVarName = baseVarExpr.Name;
+                _logger.Debug("Setting property {MemberName} on variable {VariableName}", ma.MemberName, baseVarName);
+
+                if (!context.VarContext.ContainsVariable(baseVarName))
+                    throw new ExecutionException($"Variable {baseVarName} must be declared before it can be assigned.");
+
+                var baseVal = context.VarContext.GetVariable(baseVarName);
+                var newVal = await context.EvaluationContext.EvaluateValue(stmt.Value, new Row());
+
+                if (baseVal is MinMaxValue mm)
+                {
+                    if (ma.MemberName.Equals("MIN", StringComparison.OrdinalIgnoreCase))
+                        context.VarContext.SetVariable(baseVarName, mm with { Min = newVal });
+                    else if (ma.MemberName.Equals("MAX", StringComparison.OrdinalIgnoreCase))
+                        context.VarContext.SetVariable(baseVarName, mm with { Max = newVal });
+                    else
+                        throw new ExecutionException($"Property '{ma.MemberName}' is not valid for MINMAX type.");
+                }
+                else
+                {
+                    throw new ExecutionException($"Variable '{baseVarName}' of type {baseVal?.GetType()?.Name ?? "NULL"} does not support property assignment.");
+                }
+            }
+            else
+            {
+                throw new ExecutionException("Invalid assignment target in SET statement.");
+            }
         }
     }
 }

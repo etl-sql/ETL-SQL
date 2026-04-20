@@ -19,14 +19,14 @@ using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Tests
 {
-    public class Batch3HardeningTests
+    public class EngineResourceLimitTests
     {
         private Mock<ILogger> _loggerMock = new();
         private Mock<IConnectorRegistry> _connectors = new();
         private Mock<IServiceProvider> _services = new();
         private SecurityService _security;
 
-        public Batch3HardeningTests()
+        public EngineResourceLimitTests()
         {
             _security = new SecurityService(_loggerMock.Object);
             _security.IsTestMode = true;

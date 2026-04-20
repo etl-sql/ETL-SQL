@@ -17,14 +17,14 @@ using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests.Security
 {
-    public class Batch2HardeningTests
+    public class EvaluatorLifecycleTests
     {
         private Mock<ILogger> _logger = new();
         private Mock<IConnectorRegistry> _connectors = new();
         private Mock<IServiceProvider> _services = new();
         private SecurityService _security;
 
-        public Batch2HardeningTests()
+        public EvaluatorLifecycleTests()
         {
             _security = new SecurityService(_logger.Object);
             _security.IsTestMode = true;

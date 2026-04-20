@@ -69,12 +69,19 @@ FROM c
 GROUP BY region;
 
 -- 2. Define a visual
-CREATE VISUAL SalesChart AS BAR (
+CREATE VISUAL SalesByRegion AS BAR (
   SOURCE = #summary,
-  MAPPINGS (X = region, Y = revenue),
+  MAPPINGS (X = region, Y = sales),
   OPTIONS (
-    X_AXIS (LABEL = 'Region'),
-    Y_AXIS (LABEL = 'Revenue ($)')
+    DATA_LABELS = ON WITH (
+      POSITION    = 'INSIDE_TOP',  -- TOP | BOTTOM | LEFT | RIGHT | CENTER | INSIDE | INSIDE_TOP | ...
+      COLOR       = '#FFFFFF',     -- CSS color
+      FONT_SIZE   = 12,            -- Numeric size
+      FONT_WEIGHT = 'BOLD',        -- NORMAL | BOLD
+      FONT_FAMILY = 'Arial',
+      FORMAT      = 'N1'           -- .NET format string
+    ),
+    GRID = ON
   )
 );
 
@@ -111,6 +118,45 @@ Both statements are optional. If omitted the script filename is used as the titl
 
 ---
 
+## Global Report Settings (SET REPORT)
+
+Sets global metadata and overrides for the entire report. These settings affect the dashboard shell, navigation profiles, and master branding.
+
+### Hierarchy & Cascade
+- **Global vs. Local**: `SET REPORT` settings provide the **master default** for the dashboard. For example, setting `SET REPORT THEME = 'dark'` will theme all pages and the dashboard shell unless a specific `CREATE PAGE` has its own `STYLE (THEME = ...)` override.
+- **Shell vs. Content**: Unlike `CREATE VISUAL` or `CREATE PAGE` which define the content, `SET REPORT` affects the **Host Shell** (the browser tab, the header bar, the sidebar container, and injected assets like JS/CSS).
+
+| Key | Description | Example |
+|-----|-------------|---------|
+| `TITLE` | Custom report title shown in browser tab and header. | `SET REPORT TITLE = 'Ops Dashboard';` |
+| `DESCRIPTION` | Summary shown on the report catalog page. | `SET REPORT DESCRIPTION = 'Daily monitoring';` |
+| `CSS` | Raw CSS injected into the dashboard `<head>`. Useful for global font or brand overrides. | `SET REPORT CSS = '.v-card { border-radius: 20px; }';` |
+| `JS` | Raw JavaScript executed on dashboard load. Use for tracking or custom interactions. | `SET REPORT JS = 'console.log("Report loaded");';` |
+| `HEAD` | Custom HTML injected into the `<head>` section (e.g. meta tags). | `SET REPORT HEAD = '<meta name="custom" content="...">';` |
+| `BODY` | Custom HTML injected at the start of the `<body>`. Useful for global banners. | `SET REPORT BODY = '<div>Maintenance Mode</div>';` |
+| `FOOTER` | Custom HTML injected at the bottom of the page. | `SET REPORT FOOTER = '<span>© 2026 Admin</span>';` |
+| `FAVICON` | URL to a custom favicon image (.png, .ico, .svg). | `SET REPORT FAVICON = '/assets/fav.png';` |
+| `LOGO` | URL to a custom logo shown in the dashboard header. | `SET REPORT LOGO = '/assets/logo.svg';` |
+| `BACKGROUND` | CSS Background for the shell (color, gradient, or URL). | `SET REPORT BACKGROUND = '#f0f0f0';` |
+| `THEME` | Named theme applied as the **Global Default**. Themes the shell and all unthemed pages. | `SET REPORT THEME = 'dark';` |
+| `NAVIGATION` | **Nav Mode Override**. Controls the shell's navigation behavior (e.g. `Compact`, `Hidden`, `Breadcrumbs`). | `SET REPORT NAVIGATION = 'Compact';` |
+
+> [!TIP]
+> **Difference from `CREATE NAVIGATION`**: `CREATE NAVIGATION` defines the **links and layout** of the menu (Tabs vs. Sidebar). `SET REPORT NAVIGATION` defines the **Shell Mode**, which can override the visibility or behavior of the navigation component (e.g., hiding it entirely for embedded reports).
+
+```sql
+-- Branding and Shell Customization
+SET REPORT TITLE = 'Global Sales Dashboard';
+SET REPORT THEME = 'glass'; -- Sets the default for all pages
+SET REPORT LOGO = 'https://example.com/assets/logo-white.svg';
+SET REPORT CSS = '
+  :root { --accent-color: #ff9900; }
+  .dashboard-header { border-bottom: 2px solid var(--accent-color); }
+';
+```
+
+---
+
 ## CREATE VISUAL
 
 ```
@@ -119,6 +165,10 @@ CREATE [OR ALTER] VISUAL <name> AS <TYPE> (
   [TITLE = '<string>',]
   [SUBTITLE = '<string>',]
   [TOOLTIP = '<string>',]
+  [SUMMARY (
+    [GRAND_TOTAL = ON|OFF,]
+    [aggregate(column) [AS alias], ...]
+  ),]
   [MAPPINGS (role = column, ...),]
   [OPTIONS (key = value, ..., X_AXIS (...), Y_AXIS (...), COLORS (...), LEGEND (...)),]
   [STYLE = <styleName> | STYLE (key = value, ...),]
@@ -146,8 +196,9 @@ All clauses inside the outer `( )` are separated by commas. The closing `)` ends
 | `GAUGE` | Radial KPI gauge. Single VALUE from first data row against a min/max arc. | ECharts |
 | `FUNNEL` | Conversion funnel. Each row is one stage (LABEL + VALUE). | ECharts |
 | `WATERFALL` | Cumulative change chart. Positive values rise, negative values fall. | ECharts |
-| `TABLE` | Paginated, scrollable data grid. Supports `FORMATTING` for conditional cell colors. | HTML `<table>` |
+| `TABLE` | Paginated, scrollable data grid. Supports `SUMMARY` for server-side aggregates and `FORMATTING` for conditional cell colors. | HTML `<table>` |
 | `CARD` | Single large KPI number with an optional label. | Styled `<div>` |
+| `IMAGE` | Static or dynamic image rendering from a URL. Supports `FIT` (contain/cover/fill). | `<img>` |
 | `TEXT` | Free-form text or HTML block. Uses the `DEFAULT` clause, not a SOURCE query. | `<div>` |
 | `SLICER` | Dropdown parameter selector. SOURCE provides the option list. | `<select>` |
 | `DATEPICKER` | Date input control. No SOURCE required. | `<input type="date">` |
@@ -299,6 +350,21 @@ MAPPINGS (LABEL = category, VALUE = total)
 MAPPINGS (VALUE = val, LABEL = lbl)
 ```
 
+#### IMAGE
+
+The `IMAGE` visual renders an image from a URL or a local file path. Variables of type `IMAGE` can also be passed directly to report visuals.
+
+```sql
+DECLARE @logo IMAGE = 'C:\Data\Branding\logo.png';
+
+CREATE VISUAL CompanyLogo AS IMAGE (
+  OPTIONS (
+    SRC = @logo,
+    FIT = 'contain' -- contain | cover | fill | none
+  )
+);
+```
+
 #### TEXT
 
 `TEXT` visuals render free-form string content. No `SOURCE` is required; the content is provided via the `DEFAULT` clause.
@@ -393,6 +459,21 @@ CREATE VISUAL ProductSearch AS SEARCH (
 | `PLACEHOLDER` | Ghost text shown when the box is empty. |
 | `DEFAULT` | Initial text value when the page loads. |
 
+### Filter Visuals & Variable Type Mapping
+
+When using visual filters to control parameters, ensure the target variable type matches the filter's behavior:
+
+| Visual Type | Recommended Variable Type | Mapping Role | Event |
+|-------------|----------------------------|--------------|-------|
+| **`SLICER`** | `INT`, `DECIMAL`, `VARCHAR` | `VALUE` | `SET_PARAMETER` (single selection) |
+| **`MULTISELECT`** | `LIST(TYPE)` | `VALUE` | `SET_PARAMETER` (adds to/removes from list) |
+| **`SLIDER`** | `MINMAX(TYPE)` | `VALUE` | `SET_PARAMETER` (updates range bounds) |
+| **`DATEPICKER`** | `DATE` or `DATETIME` | N/A | `SET_PARAMETER` (selected date) |
+| **`SEARCH`** | `VARCHAR` or `TEXT` | `VALUE` | `SET_PARAMETER` (search string) |
+
+> [!TIP]
+> Use `@VariableName.MIN` and `@VariableName.MAX` in your SQL queries when binding a `SLIDER` to a `MINMAX` variable.
+
 #### HEATMAP
 
 | Role | Description |
@@ -430,9 +511,24 @@ CREATE VISUAL RevenueKpi AS GAUGE (
   MAPPINGS (VALUE = pct, MAX = target, LABEL = lbl),
   OPTIONS (MIN = 0, MAX = 100, TITLE = 'Revenue vs Target')
 );
+
+-- Using a MINMAX variable for bounds
+DECLARE @bounds MINMAX(INT) = (0, 200);
+CREATE VISUAL BalancedGauge AS GAUGE (
+  SOURCE = #data,
+  MAPPINGS (VALUE = val),
+  OPTIONS (MIN = @bounds.MIN, MAX = @bounds.MAX)
+);
 ```
+,StartLine:454,TargetContent:```
 
 `MIN` and `MAX` options override column-derived bounds. Both default to `0` / `100` when omitted.
+
+| Option | Values | Description |
+|--------|--------|-------------|
+| `GAUGE_STYLE` | `'PROGRESS'` | Renders a modern circular progress bar instead of a needle gauge. |
+| `MIN` | Numeric | Set the start of the gauge arc. |
+| `MAX` | Numeric | Set the end of the gauge arc. |
 
 #### FUNNEL
 
@@ -487,9 +583,30 @@ CREATE VISUAL PriceDistribution AS BOXPLOT (
 
 TABLE visuals use all columns returned by `SOURCE` in definition order. No `MAPPINGS` clause is needed.
 
-See [Conditional Formatting](#conditional-formatting) for applying cell colors to TABLE visuals.
+See [Table Summaries](#table-summaries) for calculating aggregates and [Conditional Formatting](#conditional-formatting) for applying cell colors.
 
-#### COMBO
+### SUMMARY (Table Summaries) {#table-summaries}
+
+The `SUMMARY` clause enables server-side calculation of aggregates and grand totals for TABLE visuals. The computed results appear in a sticky footer.
+
+```sql
+CREATE VISUAL SalesTable AS TABLE (
+  SOURCE = #sales,
+  OPTIONS (
+    GRID = (HEADER, FOOTER),  -- ALL | NONE | HEADER | FOOTER | LEFT | RIGHT | TOP | BOTTOM
+    SHOW_NO_DATA_PLACEHOLDER = ON
+  ),
+  SUMMARY (
+    GRAND_TOTAL = ON,
+    SUM(revenue) AS 'Total Revenue'
+  )
+);
+```
+
+- `GRID`: Controls border visibility. `ALL` (default) shows full grid. `NONE` removes all lines. Supports multi-select via lists: `GRID = (HEADER, FOOTER, LEFT)`.
+- `SHOW_NO_DATA_PLACEHOLDER`: Displays a "No Data" icon or empty state when the source result is empty.
+
+### 6.2 `COMBO`
 
 COMBO visuals use the `SERIES` block to assign which columns render as bars vs lines. The `X` mapping provides the category axis.
 
@@ -540,8 +657,17 @@ OPTIONS (
 | `TITLE` | All chart types | Any string | Chart title. Defaults to the visual name. Prefer the top-level `TITLE` clause. |
 | `STACKED` | BAR, HBAR, LINE | `ON` / `OFF` | Stack series on top of each other. Default `OFF`. |
 | `SMOOTH` | LINE | `ON` / `OFF` | Smooth curves via bezier interpolation. Default `OFF`. |
-| `FORMAT` | CARD | .NET format string | Applies a numeric format to the VALUE column (e.g. `N0`, `C2`, `P1`). |
+| `FORMAT` | CARD, TABLE | .NET format string | Applies a numeric format (e.g. `N0`, `C2`, `P1`). |
 | `LEGEND_POSITION` | All chart types | `TOP` / `BOTTOM` / `LEFT` / `RIGHT` | Legend placement. Default `BOTTOM`. |
+| `SHOW_NO_DATA_PLACEHOLDER` | BAR, LINE, AREA | `ON` / `OFF` | Fill gaps with `0` for categorical/time-series data instead of leaving breaks. Default `OFF`. |
+| `GRID` | TABLE | `ALL`, `NONE`, or list of `HEADER`, `FOOTER`, `LEFT`, `RIGHT`, `TOP`, `BOTTOM` | Control data grid line visibility. Single value or list `(HEADER, FOOTER)`. Default `ALL`. |
+| `DATA_LABELS` | BAR, LINE, PIE | `ON` / `OFF` | Show values directly on data points. Supports `WITH` configuration. |
+| `DATA_LABELS:POSITION` | BAR, LINE | `TOP`, `BOTTOM`, `LEFT`, `RIGHT`, `CENTER`, `INSIDE`, `INSIDE_TOP`, `INSIDE_BOTTOM`, `INSIDE_LEFT`, `INSIDE_RIGHT`, `INSIDE_TOP_LEFT`, `INSIDE_TOP_RIGHT`, `INSIDE_BOTTOM_LEFT`, `INSIDE_BOTTOM_RIGHT` | Data label placement. |
+| `DATA_LABELS:COLOR` | BAR, LINE | CSS Color | Data label text color. |
+| `DATA_LABELS:FONT_SIZE` | BAR, LINE | Numeric | Data label font size. |
+| `DATA_LABELS:FONT_WEIGHT`| BAR, LINE | `NORMAL`, `BOLD` | Data label font weight. |
+| `DATA_LABELS:FONT_FAMILY`| BAR, LINE | String | Data label font family. |
+| `DATA_LABELS:FORMAT` | BAR, LINE | .NET format | Numeric format string for labels. |
 
 #### X_AXIS / Y_AXIS sub-block options
 
@@ -573,31 +699,23 @@ OPTIONS (LEGEND_POSITION = TOP)     -- TOP | BOTTOM | LEFT | RIGHT
 
 ### FORMATTING (Conditional Cell Colors) {#conditional-formatting}
 
-Applies CSS colors to TABLE visual cells based on column value comparisons. Each rule specifies a column, a comparison operator, a threshold, and a color:
+Applies CSS colors to TABLE visual cells based on full logical expressions. Each rule acts as a branch in an implied `CASE` statement.
 
 ```sql
 CREATE VISUAL FinancialSummary AS TABLE (
   SOURCE = (SELECT Category, Revenue, Margin FROM #summary),
   FORMATTING (
-    Revenue < 0       THEN 'red',
-    Revenue >= 100000 THEN '#28a745',
-    Margin < 0.05     THEN 'orange'
+    Revenue < 0 OR Margin < 0      THEN 'red',
+    Revenue >= 100000 AND Revenue < 500000 THEN 'yellow',
+    Revenue >= 500000 AND Margin > 0.1 THEN '#28a745',
+    Category IS NULL THEN 'gray'
   )
 );
 ```
 
-**Rule syntax:** `column operator threshold THEN 'color'`
+**Rule syntax:** `<Expression> THEN 'color'`
 
-| Operator | Meaning |
-|----------|---------|
-| `<` | Less than |
-| `>` | Greater than |
-| `<=` | Less than or equal |
-| `>=` | Greater than or equal |
-| `=` | Equal |
-| `<>` | Not equal |
-
-Multiple rules for the same column are evaluated top-to-bottom; the first matching rule wins. Numeric thresholds use numeric comparison; string thresholds use string equality (`=` / `<>`). `color` may be any CSS color value (`'red'`, `'#ff0000'`, `'rgba(255,0,0,0.5)'`).
+Formatting rules support the full ETL-SQL expression engine, including `AND`, `OR`, `NOT`, `IS NULL`, `IS NOT NULL`, and standard library functions. Multiple rules are evaluated top-to-bottom; the first matching rule wins.
 
 ### OVERLAYS
 
@@ -712,15 +830,16 @@ STYLE (
 | `BORDER-RADIUS` | `'8px'` | Any | Corner rounding. |
 | `FONT-SIZE` | `'14px'` | Any | Base font size for textual content. |
 | `PADDING` | `'12px'` | Any | Inner spacing. |
-| `HEIGHT` | `200` | Container | Fixed height for SCROLL containers. |
-| `WIDTH` | `'100%'` | Any | Visual width (e.g., `'100%'`, `'400px'`). |
+| `HEIGHT` | `400` | Any* | Manual height override in pixels. |
+| `WIDTH` | `'100%'` | Any* | Visual width (e.g., `'100%'`, `'400px'`). |
 | `TOOLTIP` | `'Hover text'` | Visual | Floating help text. Prefer the top-level `TOOLTIP` clause; this key is accepted here for backwards compatibility. |
 | `Z-INDEX` | `100` | Any | Layer stacking order. |
 | `SHADOW` | `ON` / `OFF` | Visual | Enable/disable visual card shadow. |
 | `TITLE_MD` | `ON` / `OFF` | Any | Force Markdown resolution for the title. |
 | `SUBTITLE_MD` | `ON` / `OFF` | Any | Force Markdown resolution for the subtitle. |
 | `TOOLTIP_MD` | `ON` / `OFF` | Any | Force Markdown resolution for the tooltip text. |
-```
+
+>\* **Note on HEIGHT/WIDTH**: These properties apply to all report objects, including `VISUAL`, `CONTAINER`, and `BUTTON`. When applied to a container, they constrain the outer boundary of the layout.
 
 ### ACTIONS
 
@@ -834,9 +953,7 @@ CREATE [OR ALTER] PAGE <name> AS LAYOUT (
     ...
   )
   [, STYLE = <styleName> | STYLE (key = value, ...)]
-)
-[WITH PARAMETERS (@param = default, ...)]
-;
+);
 ```
 
 ### STRUCTURE string
@@ -883,32 +1000,11 @@ STYLE (
 )
 ```
 
-### WITH PARAMETERS
+### Variables and Parameters
 
-Declares page-level parameters with optional default values. These drive dynamic queries when a SLICER or other filter control fires `SET_PARAMETER`.
+Report-SQL uses standard ETL-SQL `@variables` for all parameters. There is no need to declare parameters inside a `CREATE PAGE` statement. Simply use `@VariableName` in your visual queries, and the dashboard will automatically wire them to any `SLICER`, `SEARCH`, or `DATEPICKER` that fires a `SET_PARAMETER` action for that variable.
 
-**Untyped (legacy):**
-
-```sql
-WITH PARAMETERS (@region = 'All', @year = '2024')
-```
-
-**Typed declarations** — add `AS type` and the `DEFAULT` keyword:
-
-```sql
-WITH PARAMETERS (
-    @startDate AS DATE    DEFAULT '2024-01-01',
-    @endDate   AS DATE    DEFAULT '2024-12-31',
-    @minSales  AS NUMBER  DEFAULT '0',
-    @region    AS VARCHAR DEFAULT 'All'
-)
-```
-
-Supported types: `DATE`, `DATETIME`, `NUMBER`, `INT`, `DECIMAL`, `VARCHAR`. The declared type is stored in the manifest under `parameterTypes` and can be used by the runtime for type-safe casting before passing to queries. Untyped parameters are treated as `VARCHAR`.
-
-**Defaults are applied immediately at page load** — any visual whose inline SELECT references a page parameter can use it safely from the first render. The engine declares all `WITH PARAMETERS` variables with their default values when the `CREATE PAGE` statement executes, so no slicer interaction is needed for initial data to appear.
-
-When a parameter changes the DashboardService re-evaluates all visuals whose inline SELECTs reference that parameter. Unaffected visuals are not re-queried.
+When a parameter changes, the DashboardService re-evaluates all visuals whose inline SELECTs reference that parameter. Unaffected visuals are not re-queried.
 
 ### Full page example
 
@@ -922,8 +1018,7 @@ CREATE PAGE Overview AS LAYOUT (
     'D' = SalesTable
   ),
   STYLE (THEME = dark)
-)
-WITH PARAMETERS (@region = 'All');
+);
 ```
 
 ---
@@ -996,36 +1091,57 @@ CREATE PAGE Main AS LAYOUT (
 
 ---
 
-## CREATE CONTAINER
-
-Groups multiple visuals into a single layout region, optionally with scrolling. Useful when many visuals share one page slot.
-
-```
 CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL (
   [TITLE = '<string>',]
   [SUBTITLE = '<string>',]
   [TOOLTIP = '<string>',]
   [STYLE = <styleName> | STYLE (key = value, ...),]
-  VISUALS (VisualA, VisualB, ...)
+  [VISUALS (VisualA, VisualB, ...),]
+  [STRUCTURE = '<grid-template-areas>',]
+  [MAP ('<slot>' = VisualOrContainerName, ...)]
 );
 ```
 
 | Type | Description |
 |------|-------------|
-| `BOX` | Fixed-height container. Visuals are stacked vertically inside. |
-| `SCROLL` | Scrollable container. Overflow visuals scroll within the container. |
+| `BOX` | Layout region. If `VISUALS` is used, they are stacked. If `STRUCTURE` is used, it follows the grid layout. |
+| `SCROLL` | Scrollable region. Overflow content scrolls within fixed container height. |
+
+### Layout vs Simple List
+
+Containers support two layout modes:
+
+**1. Simple List (Legacy)**
+Visuals are stacked vertically or horizontally depending on the container type and styles.
 
 ```sql
 CREATE CONTAINER KpiRow AS BOX (
-  STYLE (HEIGHT = 200),
   VISUALS (TotalRevenue, TotalUnits, AvgOrderValue)
 );
+```
 
--- Reference the container in MAP just like a visual
+**2. Grid Layout (Modern)**
+Uses the same `STRUCTURE` and `MAP` logic as pages, enabling nested layouts.
+
+```sql
+CREATE CONTAINER InfoPanel AS BOX (
+  TITLE = 'Product Insights',
+  STRUCTURE = 'A B / C C',
+  MAP (
+    'A' = ProductImage,
+    'B' = PriceCard,
+    'C' = DescriptionText
+  )
+);
+```
+
+Reference the container in a page's `MAP` just like a visual:
+
+```sql
 CREATE PAGE Main AS LAYOUT (
   STRUCTURE = 'A A / B C',
   MAP (
-    'A' = KpiRow,
+    'A' = InfoPanel,
     'B' = RevenueChart,
     'C' = SalesTable
   )
@@ -1061,6 +1177,13 @@ WITH PAGES (Overview, Details, Trends);
 ```
 
 If `DEFAULT` is omitted, the first page in the list is shown on load.
+
+### ORIENTATION
+
+The `ORIENTATION` option determines the placement and behavior of the navigation bar:
+
+- **`HORIZONTAL` (Default)**: Renders a horizontal bar at the top of the report, above the page content. Best for reports with 3-5 pages.
+- **`VERTICAL`**: Renders the navigation as a sidebar on the left. The `STRUCTURE` of the active page is resolved within the remaining horizontal space. Best for complex reports with many pages or sub-sections.
 
 ---
 
@@ -1401,7 +1524,6 @@ The snapshot and API both return this structure:
       "name":      "Overview",
       "structure": "A B / C C",
       "slotMap":   { "A": "TotalRevenue", "B": "RegionFilter", "C": "RevenueByRegion" },
-      "parameters": { "@region": "All" },
       "styles":    { "THEME": "dark" }
     }
   ],
@@ -1410,7 +1532,8 @@ The snapshot and API both return this structure:
     {
       "name":          "KpiRow",
       "containerType": "BOX",
-      "visuals":       ["TotalRevenue", "TotalUnits"],
+      "structure":     "A B",
+      "slotMap":       { "A": "TotalRevenue", "B": "TotalUnits" },
       "styles":        { "HEIGHT": "200" }
     }
   ],
@@ -1521,14 +1644,30 @@ CREATE VISUAL UnitsByMonth AS LINE (
   OPTIONS  (SMOOTH = ON, X_AXIS (LABEL = 'Month'), Y_AXIS (LABEL = 'Units Sold', MIN = 0))
 );
 
--- Detail table: all rows
+-- Detail table: all rows with summary
 CREATE VISUAL SalesTable AS TABLE (
-  SOURCE = &summary
+  SOURCE = &summary,
+  SUMMARY (
+    GRAND_TOTAL = ON,
+    SUM(revenue) AS 'Total Revenue'
+  )
 );
 
--- KPI container
+-- Brand logo
+CREATE VISUAL BrandLogo AS IMAGE (
+  OPTIONS (
+    SRC = 'https://etl-sql.io/logo.png',
+    FIT = 'contain'
+  )
+);
+
+-- KPI container using modern grid layout
 CREATE CONTAINER KpiRow AS BOX (
-  VISUALS (TotalRevenue)
+  STRUCTURE = 'A B',
+  MAP (
+    'A' = BrandLogo,
+    'B' = TotalRevenue
+  )
 );
 
 -- Dashboard pages
@@ -1540,8 +1679,7 @@ CREATE PAGE Overview AS LAYOUT (
     'C' = RevenueByRegion,
     'D' = SalesTable
   )
-)
-WITH PARAMETERS (@region = 'All');
+);
 
 CREATE PAGE Trends AS LAYOUT (
   STRUCTURE = 'A A / B C',

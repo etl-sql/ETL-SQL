@@ -9,7 +9,7 @@ using Moq;
 
 namespace ETL_SQL.Tests.Hardening
 {
-    public class Batch12SshTests
+    public class SshKeyManagementTests
     {
         private readonly Mock<ILogger> _logger = new Mock<ILogger>();
 

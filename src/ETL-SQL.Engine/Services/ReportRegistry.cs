@@ -24,6 +24,16 @@ namespace ETL_SQL.Engine.Services
         public string? ReportTitle { get; set; }
         public bool ReportTitleIsMarkdown { get; set; }
         public string? ReportDescription { get; set; }
+        public string? ReportCss { get; set; }
+        public string? ReportJs { get; set; }
+        public string? ReportHtmlHead { get; set; }
+        public string? ReportHtmlBody { get; set; }
+        public string? ReportHtmlFooter { get; set; }
+        public string? ReportFavicon { get; set; }
+        public string? ReportLogo { get; set; }
+        public string? ReportBackground { get; set; }
+        public string? ReportTheme { get; set; }
+        public string? ReportNavigation { get; set; }
 
         public ReportRegistry()
         {
@@ -52,7 +62,17 @@ namespace ETL_SQL.Engine.Services
                 TemplateDefinitions = new Dictionary<string, CreateTemplateStatement>(TemplateDefinitions, StringComparer.OrdinalIgnoreCase),
                 TemplatePath = this.TemplatePath,
                 ReportTitle = this.ReportTitle,
-                ReportDescription = this.ReportDescription
+                ReportDescription = this.ReportDescription,
+                ReportCss = this.ReportCss,
+                ReportJs = this.ReportJs,
+                ReportHtmlHead = this.ReportHtmlHead,
+                ReportHtmlBody = this.ReportHtmlBody,
+                ReportHtmlFooter = this.ReportHtmlFooter,
+                ReportFavicon = this.ReportFavicon,
+                ReportLogo = this.ReportLogo,
+                ReportBackground = this.ReportBackground,
+                ReportTheme = this.ReportTheme,
+                ReportNavigation = this.ReportNavigation
             };
         }
     }

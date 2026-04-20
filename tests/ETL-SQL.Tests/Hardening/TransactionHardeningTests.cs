@@ -8,7 +8,7 @@ using Moq;
 
 namespace ETL_SQL.Tests.Hardening
 {
-    public class Batch12TransactionTests
+    public class TransactionHardeningTests
     {
         [Fact]
         public async Task TransactionManager_ShouldHandleNestedTransactions()

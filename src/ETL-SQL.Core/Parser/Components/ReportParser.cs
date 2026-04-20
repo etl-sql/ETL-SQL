@@ -34,6 +34,8 @@ namespace ETL_SQL.Core.Parser.Components
             var typedSeries     = new List<TypedSeries>();
             var formattingRules = new List<FormattingRule>();
             var overlays        = new List<VisualOverlay>();
+            var summaries       = new List<TableSummaryItem>();
+            TableSummaryOptions? summaryOptions = null;
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
@@ -98,6 +100,12 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     defaultValue = ParseVisualProperty("DEFAULT");
                 }
+                else if (Match(TokenType.SUMMARY))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after SUMMARY");
+                    (summaries, summaryOptions) = ParseSummaryClause();
+                    Consume(TokenType.RPAREN, "Expected ')' to close SUMMARY");
+                }
                 else
                 {
                     throw new SyntaxException(
@@ -140,6 +148,8 @@ namespace ETL_SQL.Core.Parser.Components
                 TypedSeries     = typedSeries,
                 FormattingRules = formattingRules,
                 Overlays        = overlays,
+                Summaries       = summaries,
+                SummaryOptions  = summaryOptions,
                 Styles          = styles,
                 StyleName       = styleName,
                 Tooltip         = tooltip,
@@ -212,38 +222,6 @@ namespace ETL_SQL.Core.Parser.Components
             }
             Consume(TokenType.RPAREN, "Expected ')' to close CREATE PAGE LAYOUT");
 
-            var parameters = new List<PageParameter>();
-            if (Match(TokenType.WITH))
-            {
-                ConsumeIdentifier("Expected PARAMETERS after WITH");
-                Consume(TokenType.LPAREN, "Expected '(' after PARAMETERS");
-                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
-                {
-                    var paramName = ConsumeIdentifier("Expected parameter name").Value;
-                    if (!paramName.StartsWith("@")) paramName = "@" + paramName;
-                    string? dataType   = null;
-                    string? defaultVal = null;
-                    if (Match(TokenType.AS))
-                    {
-                        dataType = _parser.Current.Value.ToUpperInvariant();
-                        Advance();
-                        if (_parser.Current.Type == TokenType.IDENTIFIER &&
-                            _parser.Current.Value.Equals("DEFAULT", StringComparison.OrdinalIgnoreCase))
-                        {
-                            Advance();
-                            defaultVal = ConsumeReportOptionValue();
-                        }
-                    }
-                    else if (Match(TokenType.EQUALS))
-                    {
-                        defaultVal = ConsumeReportOptionValue();
-                    }
-                    parameters.Add(new PageParameter { Name = paramName, DataType = dataType, DefaultValue = defaultVal });
-                    Match(TokenType.COMMA);
-                }
-                Consume(TokenType.RPAREN, "Expected ')' to close PARAMETERS");
-            }
-
             Match(TokenType.SEMICOLON);
 
             if (structure == null)
@@ -254,7 +232,6 @@ namespace ETL_SQL.Core.Parser.Components
                 Name            = name,
                 Structure       = structure,
                 SlotMap         = slotMap,
-                Parameters      = parameters,
                 Styles          = pageStyles,
                 StyleName       = pageStyleName,
                 Title           = title,
@@ -426,8 +403,9 @@ namespace ETL_SQL.Core.Parser.Components
             string? title = null, subtitle = null;
             bool titleMd = false, subtitleMd = false;
             TooltipDefinition? tooltip = null;
+            string? structure = null;
+            var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var styles  = new Dictionary<string, string>();
-            var visuals = new List<string>();
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
@@ -447,17 +425,23 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     tooltip = ParseTooltipDefinition();
                 }
-                else if (_parser.Current.Type == TokenType.IDENTIFIER &&
-                         _parser.Current.Value.Equals("VISUALS", StringComparison.OrdinalIgnoreCase))
+                else if (Match(TokenType.STRUCTURE))
                 {
-                    Advance();
-                    Consume(TokenType.LPAREN, "Expected '(' after VISUALS");
+                    Consume(TokenType.EQUALS, "Expected '=' after STRUCTURE");
+                    structure = Consume(TokenType.STRING, "Expected string literal for STRUCTURE").Value;
+                }
+                else if (Match(TokenType.MAP))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after MAP");
                     while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
                     {
-                        visuals.Add(ConsumeIdentifier("Expected visual name in VISUALS list").Value);
+                        var slot   = Consume(TokenType.STRING, "Expected slot letter (e.g. 'A')").Value;
+                        Consume(TokenType.EQUALS, "Expected '=' in MAP entry");
+                        var visual = ConsumeIdentifier("Expected visual or container name after '='").Value;
+                        slotMap[slot] = visual;
                         Match(TokenType.COMMA);
                     }
-                    Consume(TokenType.RPAREN, "Expected ')' to close VISUALS");
+                    Consume(TokenType.RPAREN, "Expected ')' to close MAP");
                 }
                 else
                 {
@@ -475,7 +459,8 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 Name               = name,
                 ContainerType      = containerType,
-                Visuals            = visuals,
+                Structure          = structure,
+                SlotMap            = slotMap,
                 Styles             = styles,
                 StyleName          = containerStyleName,
                 Title              = title,
@@ -773,6 +758,7 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.GAUGE))        return VisualType.Gauge;
             if (Match(TokenType.FUNNEL))       return VisualType.Funnel;
             if (Match(TokenType.WATERFALL))    return VisualType.Waterfall;
+            if (Match(TokenType.IMAGE))        return VisualType.Image;
 
             if (_parser.Current.Type == TokenType.IDENTIFIER)
             {
@@ -976,6 +962,47 @@ namespace ETL_SQL.Core.Parser.Components
                     }
                     Consume(TokenType.RPAREN, "Expected ')' to close COLORS");
                 }
+                else if (Match(TokenType.DATA_LABELS))
+                {
+                    Match(TokenType.EQUALS);
+                    var val = ConsumeReportOptionValue();
+                    options.Add(new VisualOption { Key = "DATA_LABELS", Value = NormalizeBoolOptionValue(val) });
+                    if (Match(TokenType.WITH))
+                    {
+                        Consume(TokenType.LPAREN, "Expected '(' after WITH in DATA_LABELS");
+                        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                        {
+                            var subKey = ConsumeIdentifier("Expected data labels option key").Value.ToUpperInvariant();
+                            Match(TokenType.EQUALS);
+                            // Standard numeric/string values for sub-options
+                            var subVal = ConsumeReportOptionValue();
+                            options.Add(new VisualOption { Key = "DATA_LABELS:" + subKey, Value = subVal });
+                            Match(TokenType.COMMA);
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' to close DATA_LABELS WITH block");
+                    }
+                }
+                else if (Match(TokenType.GRID))
+                {
+                    Match(TokenType.EQUALS);
+                    string val;
+                    if (Match(TokenType.LPAREN))
+                    {
+                        var vals = new List<string>();
+                        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                        {
+                            vals.Add(ConsumeReportOptionValue().ToUpperInvariant());
+                            Match(TokenType.COMMA);
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' to close GRID list");
+                        val = string.Join(",", vals);
+                    }
+                    else
+                    {
+                        val = ConsumeReportOptionValue().ToUpperInvariant();
+                    }
+                    options.Add(new VisualOption { Key = "GRID", Value = val });
+                }
                 else
                 {
                     var key = ConsumeIdentifier("Expected option key").Value.ToUpperInvariant();
@@ -1015,6 +1042,17 @@ namespace ETL_SQL.Core.Parser.Components
                 t == TokenType.ON       || t == TokenType.OFF     ||
                 t == TokenType.TOP      || t == TokenType.BOTTOM  ||
                 t == TokenType.LEFT     || t == TokenType.RIGHT   ||
+                t == TokenType.GRID     || t == TokenType.DATA_LABELS ||
+                t == TokenType.NONE     || t == TokenType.HEADER || t == TokenType.FOOTER ||
+                t == TokenType.ALL      ||
+                t == TokenType.CENTER   || t == TokenType.FONT_SIZE ||
+                t == TokenType.INSIDE   || t == TokenType.INSIDE_TOP || t == TokenType.INSIDE_BOTTOM ||
+                t == TokenType.INSIDE_LEFT || t == TokenType.INSIDE_RIGHT ||
+                t == TokenType.INSIDE_TOP_LEFT || t == TokenType.INSIDE_TOP_RIGHT ||
+                t == TokenType.INSIDE_BOTTOM_LEFT || t == TokenType.INSIDE_BOTTOM_RIGHT ||
+                t == TokenType.DATA_LABELS_POSITION || t == TokenType.FONT_FAMILY ||
+                t == TokenType.FONT_WEIGHT || t == TokenType.GAUGE_STYLE ||
+                t == TokenType.SHOW_NO_DATA_PLACEHOLDER ||
                 _overlayKeywordTokens.Contains(t))
             {
                 var value = _parser.Current.Value;
@@ -1120,27 +1158,10 @@ namespace ETL_SQL.Core.Parser.Components
             var result = new List<FormattingRule>();
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
-                var column  = ConsumeIdentifier("Expected column name in FORMATTING rule").Value;
-                var opToken = _parser.Current.Type;
-                string op   = opToken switch
-                {
-                    TokenType.LESS_THAN      => "<",
-                    TokenType.GREATER_THAN   => ">",
-                    TokenType.LESS_EQUALS    => "<=",
-                    TokenType.GREATER_EQUALS => ">=",
-                    TokenType.EQUALS         => "=",
-                    TokenType.NOT_EQUALS     => "<>",
-                    _ => throw new SyntaxException(
-                        $"Expected comparison operator (<, >, <=, >=, =, <>) in FORMATTING rule but got '{_parser.Current.Value}'",
-                        _parser.Current.Line, _parser.Current.Column)
-                };
-                Advance();
-                var threshold = _parser.Current.Type is TokenType.NUMBER or TokenType.STRING
-                    ? Advance().Value
-                    : throw new SyntaxException("Expected threshold value in FORMATTING rule", _parser.Current.Line, _parser.Current.Column);
-                Consume(TokenType.THEN, "Expected THEN after threshold in FORMATTING rule");
+                var condition = _parser.ParseExpression();
+                Consume(TokenType.THEN, "Expected THEN after formatting condition");
                 var color = Consume(TokenType.STRING, "Expected color string after THEN").Value;
-                result.Add(new FormattingRule { Column = column, Operator = op, Threshold = threshold, Color = color });
+                result.Add(new FormattingRule { Condition = condition, Color = color });
                 Match(TokenType.COMMA);
             }
             return result;
@@ -1231,6 +1252,82 @@ namespace ETL_SQL.Core.Parser.Components
                 Match(TokenType.COMMA);
             }
             return result;
+        }
+
+        private (List<TableSummaryItem>, TableSummaryOptions) ParseSummaryClause()
+        {
+            var summaries = new List<TableSummaryItem>();
+            bool grandTotalRow = false, grandTotalCol = false, sumRow = false, sumCol = false;
+            List<string>? specificCols = null;
+
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                if (Match(TokenType.GRAND_TOTAL))
+                {
+                    Match(TokenType.EQUALS);
+                    var val = ParseOnOffValue();
+                    grandTotalRow = val;
+                    grandTotalCol = val;
+                }
+                else if (Match(TokenType.GRAND_TOTAL_ROW))
+                {
+                    Match(TokenType.EQUALS);
+                    grandTotalRow = ParseOnOffValue();
+                }
+                else if (Match(TokenType.GRAND_TOTAL_COLUMN))
+                {
+                    Match(TokenType.EQUALS);
+                    grandTotalCol = ParseOnOffValue();
+                }
+                else if (Match(TokenType.SUMMARIZE_ROW))
+                {
+                    Match(TokenType.EQUALS);
+                    sumRow = ParseOnOffValue();
+                }
+                else if (Match(TokenType.SUMMARIZE_COLUMN))
+                {
+                    Match(TokenType.EQUALS);
+                    sumCol = ParseOnOffValue();
+                    if (ReportCheck(TokenType.LPAREN))
+                    {
+                        Advance();
+                        specificCols = new List<string>();
+                        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                        {
+                            specificCols.Add(ConsumeIdentifier("Expected column name").Value);
+                            Match(TokenType.COMMA);
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' to close column list");
+                    }
+                }
+                else if (_parser.Current.Type == TokenType.IDENTIFIER || _parser.Current.Type == TokenType.SUM || _parser.Current.Type == TokenType.AVG || _parser.Current.Type == TokenType.COUNT || _parser.Current.Type == TokenType.MIN || _parser.Current.Type == TokenType.MAX)
+                {
+                    var agg = Advance().Value.ToUpperInvariant();
+                    Consume(TokenType.LPAREN, $"Expected '(' after {agg}");
+                    var col = ConsumeIdentifier("Expected column name in aggregate").Value;
+                    Consume(TokenType.RPAREN, $"Expected ')' after {col}");
+                    string? alias = null;
+                    if (Match(TokenType.AS))
+                    {
+                        alias = ConsumeIdentifier("Expected alias after AS").Value;
+                    }
+                    summaries.Add(new TableSummaryItem(agg, col, alias));
+                }
+                else
+                {
+                    throw new SyntaxException($"Unexpected token '{_parser.Current.Value}' in SUMMARY clause", _parser.Current.Line, _parser.Current.Column);
+                }
+                Match(TokenType.COMMA);
+            }
+
+            return (summaries, new TableSummaryOptions
+            {
+                GrandTotalRow = grandTotalRow,
+                GrandTotalColumn = grandTotalCol,
+                SummarizeRow = sumRow,
+                SummarizeColumn = sumCol,
+                SpecificColumns = specificCols
+            });
         }
 
         private void ParseStyleClause(Dictionary<string, string> styles, ref string? styleName)

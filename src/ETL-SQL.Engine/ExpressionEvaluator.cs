@@ -451,6 +451,12 @@ namespace ETL_SQL.Engine
                 return null;
             }
             if (val is IDictionary<string, object?> dict && dict.TryGetValue(ma.MemberName, out var dVal)) return dVal;
+
+            if (val is MinMaxValue mm)
+            {
+                if (ma.MemberName.Equals("MIN", StringComparison.OrdinalIgnoreCase)) return mm.Min;
+                if (ma.MemberName.Equals("MAX", StringComparison.OrdinalIgnoreCase)) return mm.Max;
+            }
             
             // Handle reflection for properties/fields with caching
             var type = val.GetType();

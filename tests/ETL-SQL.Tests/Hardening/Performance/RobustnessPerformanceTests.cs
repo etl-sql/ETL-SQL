@@ -17,7 +17,7 @@ using Moq;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
-    public class Batch10RobustnessTests
+    public class RobustnessPerformanceTests
     {
         // ─── JSON Streaming ─────────────────────────────────────────────────────
 

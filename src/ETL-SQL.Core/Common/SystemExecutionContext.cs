@@ -146,6 +146,16 @@ namespace ETL_SQL.Core.Common
         public string? ReportTitle { get; set; }
         public bool ReportTitleIsMarkdown { get; set; }
         public string? ReportDescription { get; set; }
+        public string? ReportCss { get; set; }
+        public string? ReportJs { get; set; }
+        public string? ReportHtmlHead { get; set; }
+        public string? ReportHtmlBody { get; set; }
+        public string? ReportHtmlFooter { get; set; }
+        public string? ReportFavicon { get; set; }
+        public string? ReportLogo { get; set; }
+        public string? ReportBackground { get; set; }
+        public string? ReportTheme { get; set; }
+        public string? ReportNavigation { get; set; }
 
         public SystemExecutionContext()
         {

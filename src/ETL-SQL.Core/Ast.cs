@@ -943,16 +943,15 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record SetVariableStatement : Statement
+    public record SetVariableStatement(Expression Target, Expression Value) : Statement
     {
-        public string VariableName { get; }
-        public Expression Value { get; }
-
-        public SetVariableStatement(string variableName, Expression value)
+        public string VariableName => Target switch
         {
-            VariableName = variableName;
-            Value = value;
-        }
+            VariableExpression v => v.Name,
+            IdentifierExpression i => i.Name,
+            MemberAccessExpression m => m.ToSql(), // Handle nested assignments like @json.key
+            _ => Target.ToSql()
+        };
     }
 
     public record BlockStatement : Statement

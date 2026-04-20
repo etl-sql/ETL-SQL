@@ -28,18 +28,11 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh }) => 
         setIsRefreshing(false);
     }, [manifest]);
 
-    // Initialize parameters when active page changes
+    // Initialize parameters when manifest changes (if new variables are detected)
     useEffect(() => {
-        if (activePage) {
-            setParameters(prev => {
-                const next = { ...prev };
-                Object.entries(activePage.parameters).forEach(([name, val]) => {
-                    if (next[name] === undefined) next[name] = val;
-                });
-                return next;
-            });
-        }
-    }, [activePage]);
+        // Variables are now managed primarily by the host environment, 
+        // but we can initialize local state if needed.
+    }, [manifest]);
 
     // Handle parameter changes from slicers/inputs
     const handleParameterUpdate = (name: string, value: string) => {
@@ -96,10 +89,33 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh }) => 
                 </div>
             </header>
 
-            {/* Navigation Tabs (if multiple pages) */}
-            {manifest.pages.length > 1 && (
-                <div className="px-6 border-b border-[var(--border)] bg-[var(--bg-darker)]/20 shrink-0 flex gap-2 overflow-x-auto no-scrollbar py-2">
-                    {manifest.pages.map(page => (
+            {/* Navigation Tabs (if defined or multiple pages) */}
+            {(manifest.navigations?.length || manifest.pages.length > 1) && (
+                <div className={clsx(
+                    "px-6 shrink-0 flex gap-2 overflow-x-auto no-scrollbar py-2",
+                    "border-b border-[var(--border)] bg-[var(--bg-darker)]/20 shadow-inner"
+                )}>
+                    {/* Render Explicit Navigations if any */}
+                    {manifest.navigations?.map(nav => (
+                        <div key={nav.name} className={clsx("flex gap-2", nav.orientation === 'VERTICAL' ? "flex-col" : "flex-row")}>
+                            {nav.pages.map(pageName => (
+                                <button
+                                    key={pageName}
+                                    onClick={() => setActivePageName(pageName)}
+                                    className={clsx(
+                                        "px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 whitespace-nowrap border",
+                                        activePageName === pageName 
+                                            ? "bg-indigo-500 text-white border-indigo-400/50 shadow-[0_0_15px_rgba(99,102,241,0.4)]" 
+                                            : "bg-white/5 text-[var(--muted)] border-transparent hover:bg-white/10"
+                                    )}
+                                >
+                                    {pageName}
+                                </button>
+                            ))}
+                        </div>
+                    ))}
+                    {/* Fallback to simple page list if no explicit navigation defined */}
+                    {(!manifest.navigations || manifest.navigations.length === 0) && manifest.pages.map(page => (
                         <button
                             key={page.name}
                             onClick={() => setActivePageName(page.name)}
@@ -139,20 +155,37 @@ const RenderLayout: React.FC<{
     parameters: Record<string, string | null>,
     onParameterChange: (name: string, value: string) => void
 }> = ({ page, manifest, parameters, onParameterChange }) => {
-    // Basic CSS Grid areas from structure (e.g., 'A B / C C / D D')
-    const rows = page.structure.split('/').map(r => r.trim());
+    return (
+        <GenericLayout 
+            structure={page.structure} 
+            slotMap={page.slotMap} 
+            manifest={manifest} 
+            parameters={parameters} 
+            onParameterChange={onParameterChange} 
+        />
+    );
+};
+
+const GenericLayout: React.FC<{
+    structure: string,
+    slotMap: Record<string, string>,
+    manifest: ReportManifest,
+    parameters: Record<string, string | null>,
+    onParameterChange: (name: string, value: string) => void
+}> = ({ structure, slotMap, manifest, parameters, onParameterChange }) => {
+    const rows = structure.split('/').map(r => r.trim());
     const rowCount = rows.length;
     const colCount = rows[0].split(/\s+/).length;
     const gridStyle = {
         gridTemplateAreas: rows.map(r => `'${r}'`).join(' '),
         gridTemplateColumns: `repeat(${colCount}, 1fr)`,
-        gridTemplateRows: `repeat(${rowCount}, minmax(100px, auto))`, // reduced from 300px for filters
+        gridTemplateRows: `repeat(${rowCount}, minmax(40px, auto))`, 
     };
 
     return (
         <div className="grid gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700" style={gridStyle}>
-            {Object.keys(page.slotMap).map(slot => {
-                const objectName = page.slotMap[slot];
+            {Object.keys(slotMap).map(slot => {
+                const objectName = slotMap[slot];
                 return (
                     <div key={slot} style={{ gridArea: slot }} className="flex">
                         <RenderObject 
@@ -212,14 +245,35 @@ const ContainerView: React.FC<{
     parameters: Record<string, string | null>,
     onParameterChange: (name: string, value: string) => void
 }> = ({ container, manifest, parameters, onParameterChange }) => {
+    if (container.structure && container.slotMap) {
+        return (
+            <div className="w-full flex flex-col gap-4">
+                {(container.title || container.subtitle) && (
+                    <div className="flex flex-col gap-1 px-1">
+                        {container.title && <h2 className="text-sm font-bold text-white/80">{container.title}</h2>}
+                        {container.subtitle && <p className="text-xs text-[var(--muted)]">{container.subtitle}</p>}
+                    </div>
+                )}
+                <GenericLayout 
+                    structure={container.structure} 
+                    slotMap={container.slotMap} 
+                    manifest={manifest} 
+                    parameters={parameters} 
+                    onParameterChange={onParameterChange} 
+                />
+            </div>
+        );
+    }
+
     const isRow = container.containerType.toUpperCase() === 'ROW' || container.containerType.toUpperCase() === 'BOX';
+    const visuals = container.visuals || [];
     
     return (
         <div className={clsx(
             "w-full flex gap-6",
             isRow ? "flex-row flex-wrap" : "flex-col"
         )}>
-            {container.visuals.map(vName => (
+            {visuals.map(vName => (
                 <div key={vName} className={isRow ? "flex-1 min-w-[200px]" : "w-full"}>
                     <RenderObject 
                         name={vName} 
@@ -241,11 +295,20 @@ const VisualCard: React.FC<{
     const type = visual.visualType.toUpperCase();
     const isFilter = ['SLICER', 'DATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH'].includes(type);
     
+    const cardStyle: React.CSSProperties = {};
+    if (visual.styles?.HEIGHT) cardStyle.height = visual.styles.HEIGHT;
+    if (visual.styles?.WIDTH) cardStyle.width = visual.styles.WIDTH;
+    if (visual.styles?.MAX_HEIGHT) cardStyle.maxHeight = visual.styles.MAX_HEIGHT;
+    if (visual.styles?.MIN_HEIGHT) cardStyle.minHeight = visual.styles.MIN_HEIGHT;
+
     return (
-        <div className={clsx(
-            "w-full group/card flex flex-col rounded-3xl border transition-all duration-500 shadow-xl overflow-hidden backdrop-blur-sm",
-            isFilter ? "border-indigo-500/20 hover:border-indigo-500/40 bg-[var(--bg-darker,#050507)]" : "border-[var(--border)] hover:border-indigo-500/30 bg-[var(--bg-darker,#050507)]"
-        )}>
+        <div 
+            style={cardStyle}
+            className={clsx(
+                "w-full group/card flex flex-col rounded-3xl border transition-all duration-500 shadow-xl overflow-hidden backdrop-blur-sm",
+                isFilter ? "border-indigo-500/20 hover:border-indigo-500/40 bg-[var(--bg-darker,#050507)]" : "border-[var(--border)] hover:border-indigo-500/30 bg-[var(--bg-darker,#050507)]"
+            )}
+        >
             {/* Component Header */}
             <div className="px-6 py-4 flex items-center justify-between border-b border-[var(--border)]/30">
                 <h3 className="text-sm font-bold tracking-wide text-white/80 flex items-center gap-2">
@@ -274,6 +337,7 @@ const VisualCard: React.FC<{
                                  onParameterChange={onParameterChange} 
                              />
                          )}
+                         {type === 'IMAGE' && <ReportImage visual={visual} />}
                          {['BAR', 'LINE', 'PIE', 'DONUT', 'SCATTER', 'HBAR', 'BOXPLOT', 'TREEMAP', 'HEATMAP', 'COMBO', 'GAUGE', 'FUNNEL', 'WATERFALL'].includes(type) && (
                              <ReportChart visual={visual} />
                          )}
@@ -328,6 +392,7 @@ const ReportChart: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
 
 const ReportTable: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
     const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
+    const grid = (visual.options?.GRID || 'HEADER').toUpperCase();
 
     const exportCsv = () => {
         const escape = (v: string | null) => '"' + (v ?? '').replace(/"/g, '""') + '"';
@@ -351,26 +416,52 @@ const ReportTable: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
                 className="w-full h-full overflow-auto rounded-xl border border-[var(--border)]/30 bg-black/10 custom-scrollbar"
                 onContextMenu={e => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY }); }}
             >
-                <table className="w-full text-left text-xs border-collapse">
-                    <thead className="sticky top-0 bg-[var(--bg-darker)] shadow-md z-10">
+                <table className={clsx(
+                    "w-full text-left text-xs border-collapse",
+                    (grid === 'ALL' || grid === 'BOTH' || grid === 'OUTSIDE') && "border border-[var(--border)]/40"
+                )}>
+                    <thead className={clsx(
+                        "sticky top-0 bg-[var(--bg-darker)] shadow-md z-10",
+                        (grid === 'HEADER' || grid === 'ALL' || grid === 'ROWS' || grid === 'BOTH') && "border-b border-[var(--border)]"
+                    )}>
                         <tr>
-                            {visual.columns.map(col => (
-                                <th key={col} className="px-4 py-3 font-bold border-b border-[var(--border)] text-indigo-300 uppercase tracking-widest text-[10px]">
+                            {visual.columns.map((col, ci) => (
+                                <th key={col} className={clsx(
+                                    "px-4 py-3 font-bold text-indigo-300 uppercase tracking-widest text-[10px]",
+                                    (grid === 'ALL' || grid === 'COLS' || grid === 'BOTH') && ci < visual.columns.length - 1 && "border-r border-[var(--border)]/30",
+                                    (grid === 'HEADER' || grid === 'ALL' || grid === 'ROWS' || grid === 'BOTH') && "border-b border-[var(--border)]",
+                                    (grid === 'LEFT' && ci === 0) && "border-l border-[var(--border)]",
+                                    (grid === 'RIGHT' && ci === visual.columns.length - 1) && "border-r border-[var(--border)]"
+                                )}>
                                     {col}
                                 </th>
                             ))}
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-[var(--border)]/40">
-                        {visual.rows.slice(0, 100).map((row, i) => (
-                            <tr key={i} className="hover:bg-white/5 transition-colors">
-                                {row.map((cell, ci) => (
-                                    <td key={ci} className="px-4 py-2.5 font-mono text-[var(--muted)]">
-                                        {cell !== null ? String(cell) : ''}
-                                    </td>
-                                ))}
-                            </tr>
-                        ))}
+                    <tbody className={clsx(
+                        (grid === 'ROWS' || grid === 'ALL' || grid === 'BOTH') ? "divide-y divide-[var(--border)]/40" : ""
+                    )}>
+                        {visual.rows.slice(0, 100).map((row, i) => {
+                            const rowStyle = visual.rowStyles?.[i];
+                            return (
+                                <tr 
+                                    key={i} 
+                                    className="hover:bg-white/5 transition-colors"
+                                    style={rowStyle ? { backgroundColor: rowStyle + '33' } : {}}
+                                >
+                                    {row.map((cell, ci) => (
+                                        <td key={ci} className={clsx(
+                                            "px-4 py-2.5 font-mono text-[var(--muted)]",
+                                            (grid === 'ALL' || grid === 'COLS' || grid === 'BOTH') && ci < visual.columns.length - 1 && "border-r border-[var(--border)]/20",
+                                            (grid === 'LEFT' && ci === 0) && "border-l border-[var(--border)]",
+                                            (grid === 'RIGHT' && ci === visual.columns.length - 1) && "border-r border-[var(--border)]"
+                                        )}>
+                                            {cell !== null ? String(cell) : ''}
+                                        </td>
+                                    ))}
+                                </tr>
+                            );
+                        })}
                         {visual.rows.length > 100 && (
                             <tr>
                                 <td colSpan={visual.columns.length} className="px-4 py-3 text-center text-[var(--muted)] italic opacity-50">
@@ -379,6 +470,33 @@ const ReportTable: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
                             </tr>
                         )}
                     </tbody>
+                    {visual.summaryData && (
+                        <tfoot className="sticky bottom-0 bg-[var(--bg-darker)] shadow-[0_-4px_6px_rgba(0,0,0,0.3)] z-10 border-t border-indigo-500/30">
+                            {visual.summaryData.grandTotals && (
+                                <tr className="bg-indigo-500/5">
+                                    {visual.columns.map((col, ci) => (
+                                        <td key={ci} className="px-4 py-3 font-black text-indigo-400 text-xs border-t border-indigo-500/20">
+                                            {visual.summaryData!.grandTotals![col] ?? ''}
+                                        </td>
+                                    ))}
+                                </tr>
+                            )}
+                            {visual.summaryData.aggregates.length > 0 && (
+                                <tr className="bg-black/20">
+                                    <td colSpan={visual.columns.length} className="px-4 py-2">
+                                        <div className="flex flex-wrap gap-x-6 gap-y-2">
+                                            {visual.summaryData.aggregates.map((agg, ai) => (
+                                                <div key={ai} className="flex items-center gap-2">
+                                                    <span className="text-[9px] font-bold text-[var(--muted)] uppercase tracking-widest">{agg.alias || `${agg.aggregate}(${agg.column})`}</span>
+                                                    <span className="text-xs font-mono text-indigo-300">{agg.value}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </td>
+                                </tr>
+                            )}
+                        </tfoot>
+                    )}
                 </table>
             </div>
 
@@ -480,6 +598,23 @@ const ReportSlicer: React.FC<{
                     <span className="text-[9px] font-mono text-indigo-400/50">{boundParam}</span>
                 </div>
             )}
+        </div>
+    );
+};
+const ReportImage: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
+    const src = visual.options['SRC'] || visual.options['source'] || '';
+    const fit = visual.options['FIT'] || visual.options['object-fit'] || 'contain';
+    
+    if (!src) return <div className="h-full flex items-center justify-center text-[var(--muted)] text-xs italic">No image source provided.</div>;
+
+    return (
+        <div className="h-full w-full flex items-center justify-center overflow-hidden rounded-xl">
+            <img 
+                src={src} 
+                alt={visual.name}
+                className="max-w-full max-h-full transition-transform duration-500 group-hover:scale-105"
+                style={{ objectFit: fit as any }}
+            />
         </div>
     );
 };

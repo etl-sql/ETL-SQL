@@ -31,7 +31,7 @@ namespace ETL_SQL.Core.Linting.Rules
             }
             else if (statement is SetVariableStatement setVar)
             {
-                CheckVariable(setVar.VariableName, setVar, declaredVariables, results);
+                AnalyzeExpression(setVar.Target, declaredVariables, results);
                 AnalyzeExpression(setVar.Value, declaredVariables, results);
             }
             else if (statement is SelectStatement select)

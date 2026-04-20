@@ -9,12 +9,12 @@ using ETL_SQL.Core;
 
 namespace ETL_SQL.Tests.Hardening
 {
-    public class Batch12SecurityDeepTests
+    public class SecurityHardeningTests
     {
         private readonly Mock<ILogger> _logger = new Mock<ILogger>();
         private readonly SecurityService _security;
 
-        public Batch12SecurityDeepTests()
+        public SecurityHardeningTests()
         {
             _security = new SecurityService(_logger.Object);
             _security.IsTestMode = false; // Force host/path validation logic to run

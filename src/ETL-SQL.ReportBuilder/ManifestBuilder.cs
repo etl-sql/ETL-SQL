@@ -27,7 +27,7 @@ namespace ETL_SQL.ReportBuilder
             var renderer = new EChartsRenderer();
             _styleBuilder = new StyleBuilder(ctx);
             _visualBuilder = new VisualBuilder(ctx, renderer, _styleBuilder);
-            _pageBuilder = new PageBuilder(ctx, _styleBuilder);
+            _pageBuilder = new PageBuilder(_styleBuilder);
             _datasetBuilder = new DatasetBuilder();
         }
 
@@ -43,7 +43,17 @@ namespace ETL_SQL.ReportBuilder
                 BuiltAt     = DateTime.UtcNow,
                 Title           = _ctx.ReportTitle,
                 TitleIsMarkdown  = _ctx.ReportTitleIsMarkdown,
-                Description     = _ctx.ReportDescription
+                Description     = _ctx.ReportDescription,
+                Css             = _ctx.ReportCss,
+                Js              = _ctx.ReportJs,
+                HtmlHead        = _ctx.ReportHtmlHead,
+                HtmlBody        = _ctx.ReportHtmlBody,
+                HtmlFooter      = _ctx.ReportHtmlFooter,
+                Favicon         = _ctx.ReportFavicon,
+                Logo            = _ctx.ReportLogo,
+                Background      = _ctx.ReportBackground,
+                Theme           = _ctx.ReportTheme,
+                Navigation      = _ctx.ReportNavigation
             };
 
             // ── Visuals ──────────────────────────────────────────────────────
@@ -65,12 +75,21 @@ namespace ETL_SQL.ReportBuilder
                 foreach (var (name, cStmt) in _ctx.ContainerDefinitions)
                 {
                     var resolvedStyles = _styleBuilder.ResolveStyles(cStmt.StyleName, cStmt.Styles);
+                    var (title, titleMd) = _styleBuilder.ResolveMarkdown(cStmt.Title, cStmt.TitleIsMarkdown);
+                    var (subtitle, subtitleMd) = _styleBuilder.ResolveMarkdown(cStmt.Subtitle, cStmt.SubtitleIsMarkdown);
+
                     manifest.Containers.Add(new ContainerManifest
                     {
-                        Name          = name,
-                        ContainerType = cStmt.ContainerType,
-                        Visuals       = new List<string>(cStmt.Visuals),
-                        Styles        = resolvedStyles.Count > 0 ? resolvedStyles : null
+                        Name               = name,
+                        ContainerType      = cStmt.ContainerType,
+                        Structure          = cStmt.Structure,
+                        SlotMap            = cStmt.SlotMap.ToDictionary(kv => kv.Key, kv => kv.Value),
+                        Title              = title,
+                        TitleIsMarkdown    = titleMd,
+                        Subtitle           = subtitle,
+                        SubtitleIsMarkdown = subtitleMd,
+                        Tooltip            = _styleBuilder.BuildTooltipManifest(cStmt.Tooltip),
+                        Styles             = resolvedStyles.Count > 0 ? resolvedStyles : null
                     });
                 }
             }

@@ -49,8 +49,6 @@ namespace ETL_SQL.ReportBuilder
             var (xLabels, series) = ExtractCartesianSeries(v, seriesType);
             bool stacked = IsOn(v.Options.GetValueOrDefault("STACKED"));
             bool smooth  = IsOn(v.Options.GetValueOrDefault("SMOOTH")) && seriesType == "line";
-            if (stacked || smooth)
-                series = ApplySeriesFlags(series, stacked, smooth);
             AppendOverlaySeries(v, series, xLabels, horizontal: false);
             return Serialize(new
             {
@@ -59,7 +57,7 @@ namespace ETL_SQL.ReportBuilder
                 legend  = LegendOpt(v),
                 xAxis   = BuildAxisOpts(v, "x", "category", xLabels),
                 yAxis   = BuildAxisOpts(v, "y", "value"),
-                series
+                series  = ApplyCommonSeriesOptions(v, series, stacked, smooth)
             });
         }
 
@@ -68,8 +66,6 @@ namespace ETL_SQL.ReportBuilder
         private string RenderHorizontalBar(VisualManifest v)
         {
             var (labels, series) = ExtractCartesianSeries(v, "bar");
-            if (IsOn(v.Options.GetValueOrDefault("STACKED")))
-                series = ApplySeriesFlags(series, stacked: true, smooth: false);
             AppendOverlaySeries(v, series, labels, horizontal: true);
             return Serialize(new
             {
@@ -78,7 +74,7 @@ namespace ETL_SQL.ReportBuilder
                 legend  = LegendOpt(v),
                 xAxis   = BuildAxisOpts(v, "x", "value"),
                 yAxis   = BuildAxisOpts(v, "y", "category", labels),
-                series
+                series  = ApplyCommonSeriesOptions(v, series, stacked: IsOn(v.Options.GetValueOrDefault("STACKED")), smooth: false)
             });
         }
 
@@ -103,12 +99,13 @@ namespace ETL_SQL.ReportBuilder
 
             object radius = donut ? (object)new[] { "40%", "70%" } : "60%";
 
+            var series = new List<object> { new { type = "pie", name = v.Name, radius, data } };
             return Serialize(new
             {
                 title   = TitleOpt(v),
                 tooltip = new { trigger = "item" },
                 legend  = LegendOpt(v),
-                series  = new[] { new { type = "pie", name = v.Name, radius, data } }
+                series  = ApplyCommonSeriesOptions(v, series, stacked: false, smooth: false)
             });
         }
 
@@ -128,13 +125,14 @@ namespace ETL_SQL.ReportBuilder
                 ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null) ?? 0.0
             }).ToList();
 
+            var series = new List<object> { new { type = "scatter", name = v.Name, data } };
             return Serialize(new
             {
                 title   = TitleOpt(v),
                 tooltip = new { trigger = "item" },
                 xAxis   = new { },
                 yAxis   = new { },
-                series  = new[] { new { type = "scatter", name = v.Name, data } }
+                series  = ApplyCommonSeriesOptions(v, series, stacked: false, smooth: false)
             });
         }
 
@@ -308,7 +306,7 @@ namespace ETL_SQL.ReportBuilder
                 legend  = LegendOpt(v),
                 xAxis   = BuildAxisOpts(v, "x", "category", xLabels),
                 yAxis   = BuildAxisOpts(v, "y", "value"),
-                series  = seriesList
+                series  = ApplyCommonSeriesOptions(v, seriesList, stacked: false, smooth: false)
             });
         }
 
@@ -338,6 +336,9 @@ namespace ETL_SQL.ReportBuilder
                 gaugeMax = ToDouble(firstRow[mi]) ?? 100.0;
             }
 
+            v.Options.TryGetValue("GAUGE_STYLE", out var style);
+            bool isProgress = style?.ToUpperInvariant() == "PROGRESS";
+
             return Serialize(new
             {
                 title   = TitleOpt(v),
@@ -345,6 +346,8 @@ namespace ETL_SQL.ReportBuilder
                 series  = new[]
                 {
                     new { type = "gauge", min = gaugeMin, max = gaugeMax,
+                          progress = new { show = isProgress },
+                          detail = new { valueAnimation = true, formatter = "{value}" },
                           data = new[] { new { value, name } } }
                 }
             });
@@ -459,16 +462,18 @@ namespace ETL_SQL.ReportBuilder
                 var seriesKeys = v.Rows.Select(r => si < r.Count ? r[si] ?? "" : "").Distinct().ToList();
                 var xIndex     = xLabels.Select((l, i) => (l, i)).ToDictionary(t => t.l, t => t.i);
 
+                bool fillGaps = IsOn(v.Options.GetValueOrDefault("SHOW_NO_DATA_PLACEHOLDER"));
+
                 var seriesList = new List<object>();
                 foreach (var sk in seriesKeys)
                 {
-                    var vals = Enumerable.Repeat<object?>(null, xLabels.Count).ToList();
+                    var vals = Enumerable.Repeat<object?>(fillGaps ? 0.0 : null, xLabels.Count).ToList();
                     foreach (var row in v.Rows)
                     {
                         if ((si < row.Count ? row[si] ?? "" : "") != sk) continue;
                         var xl = xi < row.Count ? row[xi] ?? "" : "";
                         if (!xIndex.TryGetValue(xl, out var idx)) continue;
-                        vals[idx] = ToDouble(yi < row.Count ? row[yi] : null);
+                        vals[idx] = ToDouble(yi < row.Count ? row[yi] : null) ?? (fillGaps ? 0.0 : null);
                     }
                     seriesList.Add(new { type = seriesType, name = sk, data = vals });
                 }
@@ -513,14 +518,43 @@ namespace ETL_SQL.ReportBuilder
         private static bool IsOn(string? val) =>
             val?.ToUpperInvariant() is "ON" or "TRUE" or "1";
 
-        private static List<object> ApplySeriesFlags(List<object> series, bool stacked, bool smooth)
+        private static List<object> ApplyCommonSeriesOptions(VisualManifest v, List<object> series, bool stacked, bool smooth)
         {
+            bool showLabels = IsOn(v.Options.GetValueOrDefault("DATA_LABELS"));
+            object? labelObj = null;
+
+            if (showLabels)
+            {
+                var labelDict = new Dictionary<string, object> { ["show"] = true };
+                
+                if (v.Options.TryGetValue("DATA_LABELS:POSITION", out var pos))
+                    labelDict["position"] = pos.ToLowerInvariant();
+                
+                if (v.Options.TryGetValue("DATA_LABELS:COLOR", out var color))
+                    labelDict["color"] = color;
+                
+                if (v.Options.TryGetValue("DATA_LABELS:FONT_SIZE", out var size))
+                    labelDict["fontSize"] = double.TryParse(size, out var d) ? d : size;
+                
+                if (v.Options.TryGetValue("DATA_LABELS:FONT_FAMILY", out var family))
+                    labelDict["fontFamily"] = family;
+                
+                if (v.Options.TryGetValue("DATA_LABELS:FONT_WEIGHT", out var weight))
+                    labelDict["fontWeight"] = weight;
+
+                if (v.Options.TryGetValue("DATA_LABELS:FORMAT", out var fmt))
+                    labelDict["formatter"] = "{c}"; // Basic for now, could be more complex
+
+                labelObj = labelDict;
+            }
+
             return series.Select(s =>
             {
                 var json = JsonSerializer.Serialize(s, _json);
                 var dict = JsonSerializer.Deserialize<Dictionary<string, object>>(json)!;
                 if (stacked) dict["stack"] = "total";
                 if (smooth)  dict["smooth"] = (object)true;
+                if (labelObj != null) dict["label"] = labelObj;
                 return (object)dict;
             }).ToList();
         }

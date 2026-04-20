@@ -57,12 +57,32 @@ namespace ETL_SQL.Core.Parser.Components
 
         public Statement ParseSetVariable()
         {
-            var startToken = _parser.Previous;
-            var varToken = Consume(TokenType.VARIABLE, "Expected variable name starting with '@'");
+            var startToken = _parser.Previous; // The 'SET' token
+            
+            Expression target;
+            if (_parser.Current.Type == TokenType.VARIABLE)
+            {
+                var varToken = Advance();
+                target = new VariableExpression(varToken.Value) { Line = varToken.Line, Column = varToken.Column };
+                while (Match(TokenType.DOT))
+                {
+                    var member = Consume(TokenType.IDENTIFIER, "Expected member name after '.'");
+                    target = new MemberAccessExpression(target, member.Value) { Line = varToken.Line, Column = varToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                }
+            }
+            else
+            {
+                target = ParseExpression();
+            }
+            
+            if (target is not VariableExpression && target is not MemberAccessExpression)
+                throw new SyntaxException("The left-hand side of a SET statement must be a variable or a variable property.", startToken.Line, startToken.Column);
+
             Consume(TokenType.EQUALS, "Expected '=' in SET statement");
             var expr = ParseExpression();
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new SetVariableStatement(varToken.Value, expr) { Line = startToken.Line, Column = startToken.Column };
+            
+            return new SetVariableStatement(target, expr) { Line = startToken.Line, Column = startToken.Column };
         }
 
         public Statement ParseSetProfiling()
@@ -143,19 +163,25 @@ namespace ETL_SQL.Core.Parser.Components
         {
             var startToken = _parser.Previous;
             string key;
-            if (Match(TokenType.TITLE))
-                key = "TITLE";
-            else if (Match(TokenType.DESCRIPTION))
-                key = "DESCRIPTION";
-            else if (_parser.Current.Type == TokenType.IDENTIFIER &&
-                     (_parser.Current.Value.Equals("TITLE", StringComparison.OrdinalIgnoreCase) ||
-                      _parser.Current.Value.Equals("DESCRIPTION", StringComparison.OrdinalIgnoreCase)))
+            if (Match(TokenType.TITLE)) key = "TITLE";
+            else if (Match(TokenType.DESCRIPTION)) key = "DESCRIPTION";
+            else if (Match(TokenType.CSS)) key = "CSS";
+            else if (Match(TokenType.JS)) key = "JS";
+            else if (Match(TokenType.HEAD)) key = "HEAD";
+            else if (Match(TokenType.BODY)) key = "BODY";
+            else if (Match(TokenType.FOOTER)) key = "FOOTER";
+            else if (Match(TokenType.FAVICON)) key = "FAVICON";
+            else if (Match(TokenType.LOGO)) key = "LOGO";
+            else if (Match(TokenType.BACKGROUND)) key = "BACKGROUND";
+            else if (Match(TokenType.THEME)) key = "THEME";
+            else if (Match(TokenType.NAVIGATION) || Match(TokenType.NAV_OVERRIDE)) key = "NAVIGATION";
+            else if (_parser.Current.Type == TokenType.IDENTIFIER)
             {
                 key = _parser.Current.Value.ToUpperInvariant();
                 Advance();
             }
             else
-                throw new SyntaxException("Expected TITLE or DESCRIPTION after SET REPORT", _parser.Current.Line, _parser.Current.Column);
+                throw new SyntaxException("Expected report metadata key after SET REPORT", _parser.Current.Line, _parser.Current.Column);
 
             Consume(TokenType.EQUALS, $"Expected '=' after SET REPORT {key}");
             var valueToken = Consume(TokenType.STRING, $"Expected string value after SET REPORT {key} =");

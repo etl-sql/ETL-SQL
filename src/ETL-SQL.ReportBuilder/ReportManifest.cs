@@ -35,6 +35,46 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("description")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Description { get; set; }
+        
+        [JsonPropertyName("css")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Css { get; set; }
+
+        [JsonPropertyName("js")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Js { get; set; }
+
+        [JsonPropertyName("htmlHead")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? HtmlHead { get; set; }
+
+        [JsonPropertyName("htmlBody")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? HtmlBody { get; set; }
+
+        [JsonPropertyName("htmlFooter")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? HtmlFooter { get; set; }
+
+        [JsonPropertyName("favicon")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Favicon { get; set; }
+
+        [JsonPropertyName("logo")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Logo { get; set; }
+
+        [JsonPropertyName("background")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Background { get; set; }
+
+        [JsonPropertyName("theme")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Theme { get; set; }
+
+        [JsonPropertyName("navigation")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Navigation { get; set; }
 
         /// <summary>Named visuals in script-definition order.</summary>
         [JsonPropertyName("visuals")]
@@ -102,6 +142,11 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("rows")]
         public List<List<string?>> Rows { get; set; } = new();
 
+        /// <summary>Row-level background colors applied via FORMATTING rules.</summary>
+        [JsonPropertyName("rowStyles")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string?>? RowStyles { get; set; }
+
         /// <summary>Flat options (title, legend, etc.).</summary>
         [JsonPropertyName("options")]
         public Dictionary<string, string> Options { get; set; } = new();
@@ -129,6 +174,31 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("overlays")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<OverlayManifest>? Overlays { get; set; }
+
+        [JsonPropertyName("summaryData")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public TableSummaryData? SummaryData { get; set; }
+
+        /// <summary>Grid visibility for TABLE visuals (ALL, NONE, HEADER, etc.).</summary>
+        [JsonPropertyName("gridStyle")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? GridStyle { get; set; }
+
+        /// <summary>Chart data labels configuration.</summary>
+        [JsonPropertyName("dataLabels")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public DataLabelsManifest? DataLabels { get; set; }
+    }
+
+    public class DataLabelsManifest
+    {
+        [JsonPropertyName("show")] public bool Show { get; set; }
+        [JsonPropertyName("position")] public string? Position { get; set; }
+        [JsonPropertyName("color")] public string? Color { get; set; }
+        [JsonPropertyName("fontSize")] public int? FontSize { get; set; }
+        [JsonPropertyName("fontWeight")] public string? FontWeight { get; set; }
+        [JsonPropertyName("fontFamily")] public string? FontFamily { get; set; }
+        [JsonPropertyName("format")] public string? Format { get; set; }
     }
 
     /// <summary>A serialisable representation of one ACTIONS entry (DRILL_DOWN or SET_PARAMETER).</summary>
@@ -190,15 +260,6 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("slotMap")]
         public Dictionary<string, string> SlotMap { get; set; } = new();
 
-        /// <summary>Parameter names and their default values.</summary>
-        [JsonPropertyName("parameters")]
-        public Dictionary<string, string?> Parameters { get; set; } = new();
-
-        /// <summary>Parameter names and their declared types (e.g. "DATE", "NUMBER").</summary>
-        [JsonPropertyName("parameterTypes")]
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public Dictionary<string, string>? ParameterTypes { get; set; }
-
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
@@ -225,9 +286,7 @@ namespace ETL_SQL.ReportBuilder
 
     public class FormattingRuleManifest
     {
-        [JsonPropertyName("column")]    public string Column    { get; set; } = string.Empty;
-        [JsonPropertyName("operator")]  public string Operator  { get; set; } = string.Empty;
-        [JsonPropertyName("threshold")] public string Threshold { get; set; } = string.Empty;
+        [JsonPropertyName("condition")] public string Condition { get; set; } = string.Empty;
         [JsonPropertyName("color")]     public string Color     { get; set; } = string.Empty;
     }
 
@@ -250,6 +309,24 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("column")]     public string Column { get; set; } = string.Empty;
     }
 
+    public class TableSummaryData
+    {
+        [JsonPropertyName("aggregates")]
+        public List<SummaryItemData> Aggregates { get; set; } = new();
+
+        [JsonPropertyName("grandTotals")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? GrandTotals { get; set; }
+    }
+
+    public class SummaryItemData
+    {
+        [JsonPropertyName("column")]    public string Column { get; set; } = string.Empty;
+        [JsonPropertyName("aggregate")] public string Aggregate { get; set; } = string.Empty;
+        [JsonPropertyName("value")]     public string Value { get; set; } = string.Empty;
+        [JsonPropertyName("alias")]     public string? Alias { get; set; }
+    }
+
     public class ContainerManifest
     {
         [JsonPropertyName("name")]          public string Name { get; set; } = string.Empty;
@@ -270,17 +347,29 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("subtitleIsMarkdown")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool SubtitleIsMarkdown { get; set; }
-        [JsonPropertyName("visuals")]       public List<string> Visuals { get; set; } = new();
+
+        [JsonPropertyName("structure")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Structure { get; set; }
+
+        [JsonPropertyName("slotMap")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? SlotMap { get; set; }
+
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
+
+        [JsonPropertyName("tooltip")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public TooltipManifest? Tooltip { get; set; }
     }
 
     public class NavigationManifest
     {
         [JsonPropertyName("name")]        public string Name { get; set; } = string.Empty;
         [JsonPropertyName("navType")]     public string NavType { get; set; } = string.Empty;
-        [JsonPropertyName("orientation")] public string Orientation { get; set; } = string.Empty;
+        [JsonPropertyName("orientation")] public string Orientation { get; set; } = "horizontal";
         [JsonPropertyName("defaultPage")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? DefaultPage { get; set; }

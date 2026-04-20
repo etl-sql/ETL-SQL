@@ -54,7 +54,7 @@ namespace ETL_SQL.Core.Formatting
 
             // ── Variables & flow ──
             DeclareStatement               s => FormatDeclare(s),
-            SetVariableStatement           s => $"SET {s.VariableName} = {s.Value.ToSql()};",
+            SetVariableStatement           s => $"SET {s.Target.ToSql()} = {s.Value.ToSql()};",
             WhileStatement                 s => $"WHILE {s.Condition.ToSql()} BEGIN ... END",
             ForStatement                   s => $"FOR {s.VariableName} = {s.StartValue.ToSql()} TO {s.EndValue.ToSql()} BEGIN ... END",
             ForeachStatement               s => $"FOREACH {s.VariableName} IN {s.ListExpression.ToSql()} BEGIN ... END",

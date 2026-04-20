@@ -68,16 +68,6 @@ namespace ETL_SQL.Engine.Handlers
 
             context.PageDefinitions[stmt.Name] = stmt;
 
-            // Declare page parameters with their defaults if not already in scope.
-            // This ensures visuals whose SOURCE queries reference @param can execute
-            // during ManifestBuilder.FetchVisualDataAsync even before the user has
-            // interacted with any slicer.
-            foreach (var param in stmt.Parameters)
-            {
-                var varName = param.Name.StartsWith('@') ? param.Name : '@' + param.Name;
-                if (!context.Variables.ContainsKey(varName))
-                    context.DeclareVariable(varName, param.DefaultValue);
-            }
 
             _logger.Debug("Page '{PageName}' registered with {SlotCount} visual slot(s).", stmt.Name, stmt.SlotMap.Count);
             context.Log($"Page '{stmt.Name}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}.");

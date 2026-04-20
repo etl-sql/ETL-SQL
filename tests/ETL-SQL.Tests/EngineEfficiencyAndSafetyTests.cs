@@ -20,7 +20,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Tests
 {
-    public class Batch4EfficiencyTests
+    public class EngineEfficiencyAndSafetyTests
     {
         private Mock<ILogger> _loggerMock = new();
         private Mock<IConnectorRegistry> _connectors = new();
@@ -28,7 +28,7 @@ namespace ETL_SQL.Tests
         private SecurityService _security;
         private IConfiguration _config = new ConfigurationBuilder().Build();
 
-        public Batch4EfficiencyTests()
+        public EngineEfficiencyAndSafetyTests()
         {
             _security = new SecurityService(_loggerMock.Object);
             _security.IsTestMode = true;

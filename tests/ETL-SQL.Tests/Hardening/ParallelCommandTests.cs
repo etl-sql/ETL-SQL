@@ -10,7 +10,7 @@ using ETL_SQL.Common;
 
 namespace ETL_SQL.Tests.Hardening
 {
-    public class Batch13ParallelTests
+    public class ParallelCommandTests
     {
         [Fact]
         public async Task Parallel_ShouldForkVariablesSafely()

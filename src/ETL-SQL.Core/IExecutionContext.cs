@@ -219,6 +219,16 @@ namespace ETL_SQL.Core
         /// <summary>Whether the report title is markdown.</summary>
         bool ReportTitleIsMarkdown { get; set; }
         string? ReportDescription { get; set; }
+        string? ReportCss { get; set; }
+        string? ReportJs { get; set; }
+        string? ReportHtmlHead { get; set; }
+        string? ReportHtmlBody { get; set; }
+        string? ReportHtmlFooter { get; set; }
+        string? ReportFavicon { get; set; }
+        string? ReportLogo { get; set; }
+        string? ReportBackground { get; set; }
+        string? ReportTheme { get; set; }
+        string? ReportNavigation { get; set; }
     }
 
     /// <summary>

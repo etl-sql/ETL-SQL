@@ -14,7 +14,7 @@ using ETL_SQL.Core.Linting;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {
-    public class Batch9ReliabilityTests
+    public class ReliabilityPerformanceTests
     {
         private static Evaluator NewEvaluator() =>
             DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

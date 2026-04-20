@@ -80,7 +80,10 @@ namespace ETL_SQL.Common
             "MAX_PARALLEL_DEGREE", "MAX_STRING_RESULT_SIZE", "REGEX_MATCH_TIMEOUT", "MAX_LAST_RESULT_ROWS",
             "SPILL_ENCRYPTION", "SPILL_COMPRESSION",
             "MAX_GROUPING_SETS", "SET_CUBE_LIMIT", "MAX_SESSION_SIZE", "TELEMETRY",
-            "TOOLTIP", "BUTTON", "BACK", "REFRESH", "TEMPLATE_PATH"
+            "TOOLTIP", "BUTTON", "BACK", "REFRESH", "TEMPLATE_PATH", "MINMAX",
+            "FONT_SIZE", "CENTER", "INSIDE", "INSIDE_TOP", "INSIDE_BOTTOM", "INSIDE_LEFT", "INSIDE_RIGHT",
+            "INSIDE_TOP_LEFT", "INSIDE_TOP_RIGHT", "INSIDE_BOTTOM_LEFT", "INSIDE_BOTTOM_RIGHT",
+            "NONE", "HEADER", "FOOTER", "CSS", "JS", "FAVICON", "LOGO", "BACKGROUND"
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -90,7 +93,7 @@ namespace ETL_SQL.Common
             "DATE", "DATETIME", "DATETIME2", "SMALLDATETIME", "DATETIMEOFFSET", "TIMESTAMP", "TIME",
             "CHAR", "VARCHAR", "NCHAR", "NVARCHAR", "TEXT", "NTEXT", "BINARY", "VARBINARY", "IMAGE",
             "XML", "JSON", "UNIQUEIDENTIFIER", "UUID", "GUID", "GEOMETRY", "GEOGRAPHY", "HIERARCHYID",
-            "VARIANT", "SQL_VARIANT", "TABLE", "CURSOR", "ANY", "MARKDOWN"
+            "VARIANT", "SQL_VARIANT", "TABLE", "CURSOR", "ANY", "MARKDOWN", "MINMAX"
         };
 
         public static readonly HashSet<string> Functions = new(StringComparer.OrdinalIgnoreCase)

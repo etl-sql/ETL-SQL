@@ -28,9 +28,31 @@ namespace ETL_SQL.ReportBuilder.Builders
             if (title != null) vm.Options["title"] = title;
             if (subtitle != null) vm.Options["subtitle"] = subtitle;
 
-            // Copy flat options
+            // Copy flat options and map special ones
             foreach (var opt in vStmt.Options)
+            {
                 vm.Options[opt.Key] = opt.Value;
+                if (opt.Key == "GRID") vm.GridStyle = opt.Value;
+                if (opt.Key == "DATA_LABELS")
+                {
+                    vm.DataLabels ??= new DataLabelsManifest();
+                    vm.DataLabels.Show = opt.Value == "ON";
+                }
+                if (opt.Key.StartsWith("DATA_LABELS:"))
+                {
+                    vm.DataLabels ??= new DataLabelsManifest();
+                    var sub = opt.Key.Substring("DATA_LABELS:".Length);
+                    switch (sub)
+                    {
+                        case "POSITION": vm.DataLabels.Position = opt.Value; break;
+                        case "COLOR": vm.DataLabels.Color = opt.Value; break;
+                        case "FONT_SIZE": if (int.TryParse(opt.Value, out var fs)) vm.DataLabels.FontSize = fs; break;
+                        case "FONT_WEIGHT": vm.DataLabels.FontWeight = opt.Value; break;
+                        case "FONT_FAMILY": vm.DataLabels.FontFamily = opt.Value; break;
+                        case "FORMAT": vm.DataLabels.Format = opt.Value; break;
+                    }
+                }
+            }
 
             // Styles
             var resolvedStyles = styleBuilder.ResolveStyles(vStmt.StyleName, vStmt.Styles);
@@ -56,9 +78,7 @@ namespace ETL_SQL.ReportBuilder.Builders
             if (vStmt.FormattingRules.Count > 0)
                 vm.FormattingRules = vStmt.FormattingRules.Select(r => new FormattingRuleManifest
                 {
-                    Column    = r.Column,
-                    Operator  = r.Operator,
-                    Threshold = r.Threshold,
+                    Condition = r.Condition.ToSql(),
                     Color     = r.Color
                 }).ToList();
 
@@ -100,6 +120,7 @@ namespace ETL_SQL.ReportBuilder.Builders
             try
             {
                 await FetchDataAsync(vStmt, vm);
+                CalculateSummaries(vStmt, vm);
                 vm.ChartConfig = renderer.Render(vm);
             }
             catch (Exception ex)
@@ -137,8 +158,107 @@ namespace ETL_SQL.ReportBuilder.Builders
                 foreach (var row in batch.Rows)
                 {
                     vm.Rows.Add(vm.Columns.Select(c => row[c]?.ToString()).ToList());
+                    
+                    // Apply formatting rules row-by-row
+                    if (vStmt.FormattingRules.Count > 0)
+                    {
+                        if (vm.RowStyles == null) vm.RowStyles = new List<string?>();
+                        string? matchedColor = null;
+                        foreach (var rule in vStmt.FormattingRules)
+                        {
+                            if (await ctx.EvaluateCondition(rule.Condition, row))
+                            {
+                                matchedColor = rule.Color;
+                                break;
+                            }
+                        }
+                        vm.RowStyles.Add(matchedColor);
+                    }
                 }
             }
+        }
+
+        private void CalculateSummaries(CreateVisualStatement vStmt, VisualManifest vm)
+        {
+            if (vm.Rows.Count == 0 || vm.Columns.Count == 0) return;
+            if (vStmt.Summaries.Count == 0 && (vStmt.SummaryOptions == null || 
+                (!vStmt.SummaryOptions.GrandTotalRow && !vStmt.SummaryOptions.GrandTotalColumn && 
+                 !vStmt.SummaryOptions.SummarizeRow && !vStmt.SummaryOptions.SummarizeColumn)))
+                return;
+
+            var summaryData = new TableSummaryData();
+            vm.SummaryData = summaryData;
+
+            // 1. Specific Aggregates
+            foreach (var item in vStmt.Summaries)
+            {
+                var colIndex = vm.Columns.FindIndex(c => c.Equals(item.Column, StringComparison.OrdinalIgnoreCase));
+                if (colIndex < 0) continue;
+
+                var value = ComputeAggregate(vm.Rows, colIndex, item.Aggregate);
+                summaryData.Aggregates.Add(new SummaryItemData
+                {
+                    Column = item.Column,
+                    Aggregate = item.Aggregate,
+                    Value = value,
+                    Alias = item.Alias
+                });
+            }
+
+            // 2. Grand Totals (if enabled, compute SUM for all numeric columns or specific ones)
+            if (vStmt.SummaryOptions != null && (vStmt.SummaryOptions.GrandTotalRow || vStmt.SummaryOptions.SummarizeColumn))
+            {
+                summaryData.GrandTotals = new Dictionary<string, string>();
+                var colsToSummarize = vStmt.SummaryOptions.SpecificColumns ?? vm.Columns;
+
+                foreach (var colName in colsToSummarize)
+                {
+                    var colIndex = vm.Columns.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
+                    if (colIndex < 0) continue;
+
+                    // Only SUM numeric looking columns for Grand Totals automatically
+                    var sum = ComputeAggregate(vm.Rows, colIndex, "SUM");
+                    if (sum != "0" || IsNumericColumn(vm.Rows, colIndex))
+                    {
+                        summaryData.GrandTotals[colName] = sum;
+                    }
+                }
+            }
+        }
+
+        private string ComputeAggregate(List<List<string?>> rows, int colIndex, string aggregate)
+        {
+            var values = rows.Select(r => r[colIndex]).Where(v => v != null).ToList();
+            if (values.Count == 0) return "0";
+
+            switch (aggregate.ToUpperInvariant())
+            {
+                case "COUNT":
+                    return values.Count.ToString();
+                case "SUM":
+                case "AVG":
+                case "MIN":
+                case "MAX":
+                    var decimals = values.Select(v => decimal.TryParse(v, out var d) ? d : (decimal?)null).Where(d => d != null).Select(d => d!.Value).ToList();
+                    if (decimals.Count == 0) return values.Count > 0 && (aggregate == "MIN" || aggregate == "MAX") ? values.OrderBy(v => v).First()! : "0";
+
+                    return aggregate.ToUpperInvariant() switch
+                    {
+                        "SUM" => decimals.Sum().ToString("G29"),
+                        "AVG" => decimals.Average().ToString("G29"),
+                        "MIN" => decimals.Min().ToString("G29"),
+                        "MAX" => decimals.Max().ToString("G29"),
+                        _ => "0"
+                    };
+                default:
+                    return "0";
+            }
+        }
+
+        private bool IsNumericColumn(List<List<string?>> rows, int colIndex)
+        {
+            var sample = rows.Take(10).Select(r => r[colIndex]).FirstOrDefault(v => !string.IsNullOrEmpty(v));
+            return decimal.TryParse(sample, out _);
         }
 
         private (string? Value, bool IsMarkdown) ResolveMarkdown(string? input, bool parserFlag) => styleBuilder.ResolveMarkdown(input, parserFlag);

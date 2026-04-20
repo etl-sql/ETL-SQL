@@ -252,6 +252,66 @@ namespace ETL_SQL.Engine
             get => _registry.ReportContext.ReportTitleIsMarkdown;
             set => _registry.ReportContext.ReportTitleIsMarkdown = value;
         }
+        /// <inheritdoc />
+        public string? ReportCss
+        {
+            get => _registry.ReportContext.ReportCss;
+            set => _registry.ReportContext.ReportCss = value;
+        }
+        /// <inheritdoc />
+        public string? ReportJs
+        {
+            get => _registry.ReportContext.ReportJs;
+            set => _registry.ReportContext.ReportJs = value;
+        }
+        /// <inheritdoc />
+        public string? ReportHtmlHead
+        {
+            get => _registry.ReportContext.ReportHtmlHead;
+            set => _registry.ReportContext.ReportHtmlHead = value;
+        }
+        /// <inheritdoc />
+        public string? ReportHtmlBody
+        {
+            get => _registry.ReportContext.ReportHtmlBody;
+            set => _registry.ReportContext.ReportHtmlBody = value;
+        }
+        /// <inheritdoc />
+        public string? ReportHtmlFooter
+        {
+            get => _registry.ReportContext.ReportHtmlFooter;
+            set => _registry.ReportContext.ReportHtmlFooter = value;
+        }
+        /// <inheritdoc />
+        public string? ReportFavicon
+        {
+            get => _registry.ReportContext.ReportFavicon;
+            set => _registry.ReportContext.ReportFavicon = value;
+        }
+        /// <inheritdoc />
+        public string? ReportLogo
+        {
+            get => _registry.ReportContext.ReportLogo;
+            set => _registry.ReportContext.ReportLogo = value;
+        }
+        /// <inheritdoc />
+        public string? ReportBackground
+        {
+            get => _registry.ReportContext.ReportBackground;
+            set => _registry.ReportContext.ReportBackground = value;
+        }
+        /// <inheritdoc />
+        public string? ReportTheme
+        {
+            get => _registry.ReportContext.ReportTheme;
+            set => _registry.ReportContext.ReportTheme = value;
+        }
+        /// <inheritdoc />
+        public string? ReportNavigation
+        {
+            get => _registry.ReportContext.ReportNavigation;
+            set => _registry.ReportContext.ReportNavigation = value;
+        }
 
         /// <summary>Optional prompt callback for interactive USE SETS WITH_PROMPT. Null = non-interactive (auto-proceed).</summary>
         public Func<string, Task<bool>>? OnPrompt { get; set; }

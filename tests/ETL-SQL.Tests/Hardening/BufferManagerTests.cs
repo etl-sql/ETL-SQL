@@ -13,7 +13,7 @@ using System.Security.Cryptography;
 
 namespace ETL_SQL.Tests.Hardening
 {
-    public class Batch11RefinementTests
+    public class BufferManagerTests
     {
         [Fact]
         public void CryptoVersioning_ShouldPrependVersionByte()

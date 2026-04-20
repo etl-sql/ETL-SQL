@@ -27,7 +27,7 @@ namespace ETL_SQL.Core.Parser
             TokenType.EXCEL, TokenType.AZURE_BLOB, TokenType.SYSDATE, TokenType.CURRENT_TIMESTAMP, 
             TokenType.CURRENT_DATE, TokenType.CURRENT_TIME, TokenType.YEAR, TokenType.MONTH, 
             TokenType.DAY, TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
-            TokenType.TELEMETRY
+            TokenType.TELEMETRY, TokenType.POSITION, TokenType.FORMAT
         };
 
         private static readonly HashSet<TokenType> DataTypeTokens = new()
@@ -616,10 +616,10 @@ namespace ETL_SQL.Core.Parser
                     Consume(TokenType.RPAREN, "Expected ')'");
                     typeName += ")";
                 }
-                else if (Current.Type == TokenType.IDENTIFIER)
+                else if (IsIdentifier(Current) || Current.Type == TokenType.MAX)
                 {
-                    typeName += "(" + ParseType() + ")";
-                    Consume(TokenType.RPAREN, "Expected ')' after inner type");
+                    typeName += "(" + Advance().Value + ")";
+                    Consume(TokenType.RPAREN, "Expected ')' after type parameter");
                 }
                 else
                 {

@@ -68,7 +68,7 @@ namespace ETL_SQL.Core
         Bar, Line, Scatter, Pie, Table, Card, Slicer,
         Donut, HorizontalBar, BoxPlot, Treemap, HeatMap, Text, Combo,
         DatePicker, Slider, MultiSelect, Search,
-        Gauge, Funnel, Waterfall
+        Gauge, Funnel, Waterfall, Image
     }
 
     public enum DatasetEncryptionMode
@@ -134,20 +134,21 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
-    public record PageParameter : AstNode
+    public record TableSummaryItem(string Aggregate, string Column, string? Alias);
+
+    public record TableSummaryOptions : AstNode
     {
-        public required string Name     { get; init; }
-        public string? DataType         { get; init; }
-        public string? DefaultValue     { get; init; }
-        public string ToSql() => AstSerializer.Format(this);
+        public bool GrandTotalRow    { get; init; }
+        public bool GrandTotalColumn { get; init; }
+        public bool SummarizeRow     { get; init; }
+        public bool SummarizeColumn  { get; init; }
+        public List<string>? SpecificColumns { get; init; }
     }
 
     public record FormattingRule : AstNode
     {
-        public required new string Column { get; init; }  // hides AstNode.Column intentionally
-        public required string Operator   { get; init; }  // "<", ">", "<=", ">=", "=", "<>"
-        public required string Threshold  { get; init; }
-        public required string Color      { get; init; }
+        public required Expression Condition { get; init; }
+        public required string Color         { get; init; }
     }
 
     public record TypedSeries : AstNode
@@ -197,6 +198,8 @@ namespace ETL_SQL.Core
         public List<TypedSeries> TypedSeries           { get; init; } = new();
         public List<FormattingRule> FormattingRules    { get; init; } = new();
         public List<VisualOverlay> Overlays            { get; init; } = new();
+        public List<TableSummaryItem> Summaries        { get; init; } = new();
+        public TableSummaryOptions? SummaryOptions     { get; init; }
         public Dictionary<string, string> Styles       { get; init; } = new();
         /// <summary>Name of a CREATE STYLE to inherit. Merged before inline Styles (inline wins).</summary>
         public string? StyleName                       { get; init; }
@@ -215,7 +218,6 @@ namespace ETL_SQL.Core
         public required string Name                           { get; init; }
         public required string Structure                      { get; init; }
         public Dictionary<string, string> SlotMap             { get; init; } = new();
-        public List<PageParameter> Parameters                 { get; init; } = new();
         public Dictionary<string, string> Styles              { get; init; } = new();
         public string? StyleName                              { get; init; }
         public string? Title                                  { get; init; }
@@ -246,7 +248,8 @@ namespace ETL_SQL.Core
     {
         public required string Name { get; init; }
         public required string ContainerType { get; init; }  // "BOX" or "SCROLL"
-        public List<string> Visuals { get; init; } = new();
+        public string? Structure { get; init; }
+        public Dictionary<string, string> SlotMap { get; init; } = new();
         public Dictionary<string, string> Styles { get; init; } = new();
         public string? StyleName { get; init; }
         public string? Title { get; init; }

@@ -1,5 +1,6 @@
 using System;
-using System.Collections.Generic;
+using System.Collections;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Core.Data
 {
@@ -42,7 +43,20 @@ namespace ETL_SQL.Core.Data
             ["ENCRYPTED"] = v => v.ToString(),
             ["VARBINARY"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
             ["BINARY"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
-            ["IMAGE"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
+            ["IMAGE"] = v => {
+                if (v is byte[] b) return b;
+                string s = v.ToString() ?? "";
+                if (s.Contains("/") || s.Contains("\\") || s.Contains("."))
+                {
+                    var lower = s.ToLowerInvariant();
+                    if (lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.EndsWith(".png") || lower.EndsWith(".gif") || lower.EndsWith(".svg"))
+                        return s;
+                    
+                    throw new ArgumentException("Invalid image extension. Supported types are: .jpg, .jpeg, .png, .gif, .svg");
+                }
+                try { return Convert.FromBase64String(s); } catch { return s; }
+            },
+            ["MINMAX"] = v => ConvertToMinMax(v),
             ["BLOB"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
             ["LOB"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
             ["UNIQUEIDENTIFIER"] = v => v is Guid g ? g : Guid.Parse(v.ToString() ?? Guid.Empty.ToString()),
@@ -72,5 +86,14 @@ namespace ETL_SQL.Core.Data
 
         /// <summary>Registers a custom type converter.</summary>
         public static void Register(string typeName, Func<object, object?> converter) => _converters[typeName] = converter;
+
+        private static MinMaxValue ConvertToMinMax(object value)
+        {
+            if (value is MinMaxValue mm) return mm;
+            if (value is IList list && list.Count >= 2)
+                return new MinMaxValue(list[0], list[1]);
+            
+            return new MinMaxValue(value, value);
+        }
     }
 }

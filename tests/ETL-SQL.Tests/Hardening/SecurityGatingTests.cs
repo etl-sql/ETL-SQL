@@ -11,7 +11,7 @@ using Moq;
 
 namespace ETL_SQL.Tests.Hardening
 {
-    public class Batch13SecurityHardeningTests
+    public class SecurityGatingTests
     {
         [Fact]
         public async Task SpillSecurityRule_EnforcesRecursionLimit()

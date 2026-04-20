@@ -80,10 +80,16 @@ namespace ETL_SQL.Core.Linting.Rules
             else if (statement is SetVariableStatement setStmt)
             {
                 // SEC-4: Taint tracking - if RHS has sensitive variables, LHS becomes sensitive
-                bool rhsSensitive = FindSensitiveVariables(setStmt.Value, scopes).Any();
-                bool nameSensitive = _sensitiveKeywords.Any(k => setStmt.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
-                
-                scopes.Peek()[setStmt.VariableName] = rhsSensitive || nameSensitive;
+                string? targetVarName = null;
+                if (setStmt.Target is VariableExpression v) targetVarName = v.Name;
+                else if (setStmt.Target is MemberAccessExpression ma && ma.Expression is VariableExpression bv) targetVarName = bv.Name;
+
+                if (targetVarName != null)
+                {
+                    bool rhsSensitive = FindSensitiveVariables(setStmt.Value, scopes).Any();
+                    bool nameSensitive = _sensitiveKeywords.Any(k => targetVarName.Contains(k, StringComparison.OrdinalIgnoreCase));
+                    scopes.Peek()[targetVarName] = rhsSensitive || nameSensitive;
+                }
             }
             else if (statement is BlockStatement block)
             {
