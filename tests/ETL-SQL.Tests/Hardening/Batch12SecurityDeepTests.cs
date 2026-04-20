@@ -17,6 +17,7 @@ namespace ETL_SQL.Tests.Hardening
         public Batch12SecurityDeepTests()
         {
             _security = new SecurityService(_logger.Object);
+            _security.IsTestMode = false; // Force host/path validation logic to run
         }
 
         [Theory]

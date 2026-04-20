@@ -34,6 +34,7 @@ namespace ETL_SQL.Engine.Services
             if (isTemp || !connections.ContainsKey(connName))
             {
                 var mem = new InMemoryDataSource();
+                mem.ExecutionContext = _evaluator;
                 mem.Validator = _evaluator;
                 mem.SetSchema(stmt.Columns, stmt.TableConstraints);
                 connections[connName] = mem;

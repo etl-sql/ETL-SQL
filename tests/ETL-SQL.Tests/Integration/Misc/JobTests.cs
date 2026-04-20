@@ -33,6 +33,7 @@ namespace ETL_SQL.Tests.Integration
             var dbName = $"test_jobs_{Guid.NewGuid()}.db";
             services.AddSingleton<IJobHistoryStore>(new SQLiteJobHistoryStore(dbName));
             services.AddSingleton<SchedulerService>();
+            
             var registry = new FunctionRegistry();
             FileFunctions.Register(registry);
             StandardFunctions.Register(registry);
@@ -41,13 +42,19 @@ namespace ETL_SQL.Tests.Integration
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
-            services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>();
+            services.AddSingleton<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
+            services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager, ETL_SQL.Engine.Services.SessionStateManager>();
+            services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>(sp => (ETL_SQL.Engine.Services.SessionStateManager)sp.GetRequiredService<ETL_SQL.Core.Execution.ISessionStateManager>());
             
             services.AddSingleton(new CliContext());
             services.AddSingleton<SecurityService>();
             services.AddSingleton<IScriptExecutor, ScriptExecutorAdapter>();
             services.AddSingleton(new ETL_SQL.Orchestrator.Execution.JobThrottleOptions());
             services.AddSingleton<ETL_SQL.Orchestrator.Execution.JobThrottle>();
+            
+            services.AddSingleton<ETL_SQL.Core.Execution.ISystemResources, ETL_SQL.Core.Execution.DefaultSystemResources>();
+            services.AddSingleton<ETL_SQL.Core.Execution.IBufferManager, ETL_SQL.Orchestrator.Execution.BufferManager>();
+            services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new ETL_SQL.Core.Execution.BufferManagerOptions()));
 
             services.AddTransient<Evaluator>();
             

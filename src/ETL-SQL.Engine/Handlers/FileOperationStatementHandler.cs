@@ -28,8 +28,17 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (FileOperationStatement)statement;
             
             string sourceVal = (await context.EvaluateValue(stmt.Source, new Row()))?.ToString() ?? "";
-            string source = context.ResolvePath(sourceVal);
+            string source = context.ResolvePath(sourceVal); // Resolving path first ensures it's checked against safe zones
             string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
+
+            // Security Hardening: Count this as a file operation for runaway protection
+            context.IncrementOperationCount(source, 1);
+
+            if (context.IsWhatIf)
+            {
+                context.Log($"WHAT IF: Would perform {stmt.Type}_FILE", ConsoleColor.Yellow);
+                return;
+            }
             
             bool overwrite = true; // Default to true for backward compatibility with underscore functions
             if (stmt.Overwrite != null)
@@ -47,14 +56,6 @@ namespace ETL_SQL.Engine.Handlers
 
             _logger.Debug("File Operation: {OperationType} on {Source}{Dest}", stmt.Type, source, dest != null ? $" -> {dest}" : "");
 
-            if (context.IsWhatIf)
-            {
-                _logger.WriteLine($"WHAT IF: Would perform {stmt.Type}_FILE on {source}{(dest != null ? $" to {dest}" : "")}", ConsoleColor.Yellow);
-                return;
-            }
-
-            // Security Hardening: Count this as a file operation for runaway protection
-            context.IncrementOperationCount(source);
 
             switch (stmt.Type)
             {
@@ -62,7 +63,7 @@ namespace ETL_SQL.Engine.Handlers
                     if (File.Exists(source)) 
                     {
                         File.Delete(source);
-                        _logger.WriteLine($"File deleted: {source}", ConsoleColor.Green);
+                        context.Log($"File deleted: {source}", ConsoleColor.Green);
                     }
                     break;
                 case FileOpType.Copy:

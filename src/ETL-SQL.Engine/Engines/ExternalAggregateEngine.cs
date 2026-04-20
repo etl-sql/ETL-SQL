@@ -6,8 +6,10 @@ using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Common;
-using ETL_SQL.Core;
+using ETL_SQL.Core.Spill;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Engine.Spill;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -19,6 +21,7 @@ namespace ETL_SQL.Engine.Engines
         private readonly IExecutionContext _context;
         private readonly ILogger _logger;
         private readonly AggregateEngine _inMemoryEngine;
+        private readonly IBufferManager? _bufferManager;
         public int PartitionCount => Math.Max(1, _context.ExternalHashPartitions);
 
 
@@ -27,11 +30,13 @@ namespace ETL_SQL.Engine.Engines
             _context = context;
             _logger = logger;
             _inMemoryEngine = new AggregateEngine(context, logger);
+            _bufferManager = _context.ServiceProvider?.GetService<IBufferManager>();
         }
 
         /// <summary>Applies aggregation by partitioning the stream into disk files and processing each partition sequentially.</summary>
         public async IAsyncEnumerable<Row> ApplyAggregationExternal(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null)
         {
+            using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId, owner: this) : null;
             bool yieldedAny = false;
             try
             {

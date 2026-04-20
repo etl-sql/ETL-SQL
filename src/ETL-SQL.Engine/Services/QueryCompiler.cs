@@ -134,21 +134,27 @@ namespace ETL_SQL.Engine.Services
                     sql += " ORDER BY " + string.Join(", ", sel.OrderBy.Select(o => CompileExpressionInternal(o.Expression, d) + (o.Descending ? " DESC" : " ASC")));
                 }
 
-                if (sel.LimitCount != null)
-                {
-                    if (d != "MSSQL") sql += $" LIMIT {CompileExpressionInternal(sel.LimitCount, d)}";
-                }
-
                 if (sel.Offset != null)
                 {
-                    if (d == "MSSQL") 
+                    if (d.Equals("MSSQL", StringComparison.OrdinalIgnoreCase))
                     {
                         sql += $" OFFSET {CompileExpressionInternal(sel.Offset, d)} ROWS";
                         if (sel.LimitCount != null) sql += $" FETCH NEXT {CompileExpressionInternal(sel.LimitCount, d)} ROWS ONLY";
                     }
-                    else 
+                    else
                     {
                         sql += $" OFFSET {CompileExpressionInternal(sel.Offset, d)}";
+                        if (sel.LimitCount != null && !d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))
+                        {
+                            sql += $" LIMIT {CompileExpressionInternal(sel.LimitCount, d)}";
+                        }
+                    }
+                }
+                else if (sel.LimitCount != null)
+                {
+                    if (!d.Equals("MSSQL", StringComparison.OrdinalIgnoreCase) && !d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))
+                    {
+                        sql += $" LIMIT {CompileExpressionInternal(sel.LimitCount, d)}";
                     }
                 }
 
@@ -187,16 +193,30 @@ namespace ETL_SQL.Engine.Services
                 sql = _evaluator.GetSqlTableName(t, d);
             }
 
-            if (t.Alias != null) sql += " AS " + t.Alias;
+            if (t.Alias != null) 
+            {
+                if (d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase))
+                    sql += " " + t.Alias;
+                else
+                    sql += " AS " + t.Alias;
+            }
             return sql;
         }
 
         private string CompileMergeInternal(MergeStatement m, string d)
         {
-            var sql = $"MERGE INTO {_evaluator.GetSqlTableName(m.TargetTable, d)} AS T";
+            var targetTable = _evaluator.GetSqlTableName(m.TargetTable, d);
+            var sql = d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase) 
+                ? $"MERGE INTO {targetTable} T" 
+                : $"MERGE INTO {targetTable} AS T";
             
-            sql += $" USING {m.SourceTable.ToSql()}";
-            if (m.SourceTable.Alias == null) sql += " AS S";
+            sql += $" USING {CompileTableReferenceInternal(m.SourceTable, d)}";
+            
+            // If the source table reference didn't have an alias, we explicitly add one for the ON clause (S and T are standard)
+            if (m.SourceTable.Alias == null)
+            {
+                sql += d.Equals("ORACLE", StringComparison.OrdinalIgnoreCase) ? " S" : " AS S";
+            }
 
             sql += $" ON {CompileExpressionInternal(m.OnCondition, d)}";
 

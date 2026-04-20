@@ -9,6 +9,7 @@ using Serilog;
 using Serilog.Events;
 using Serilog.Extensions.Logging;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Common;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Connectors.MockDb;
@@ -22,6 +23,8 @@ using ETL_SQL.Connectors.Odbc;
 using ETL_SQL.Connectors.Rest;
 using ETL_SQL.Connectors.Excel;
 using ETL_SQL.Connectors.Directory;
+using ETL_SQL.Engine.Services;
+using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Connectors.Parquet;
 using ETL_SQL.Connectors.Avro;
 using ETL_SQL.Connectors.Email;
@@ -141,6 +144,13 @@ namespace ETL_SQL.App
             services.AddSingleton<IConnector>(new AzureBlobConnector(azureConn, azureContainer));
 
             services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
+            services.AddSingleton<ISystemResources, DefaultSystemResources>();
+            services.AddSingleton<IBufferManager, BufferManager>();
+            services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));
+            
+            services.AddSingleton<ISessionStateManager, SessionStateManager>();
+            services.AddSingleton<SessionStateManager>(sp => (SessionStateManager)sp.GetRequiredService<ISessionStateManager>());
+            
             services.AddTransient<ETL_SQL.Engine.Services.ReportRegistry>();
             services.AddTransient<IReportContext, ETL_SQL.Engine.Services.ReportRegistry>();
             services.AddTransient<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
@@ -155,6 +165,11 @@ namespace ETL_SQL.App
             services.AddSingleton<IJobHistoryStore, SQLiteJobHistoryStore>();
             services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
             services.AddSingleton<JobThrottle>();
+            
+            services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
+            services.AddSingleton<BufferManager>();
+            services.AddSingleton<IBufferManager>(sp => sp.GetRequiredService<BufferManager>());
+
             services.AddSingleton<SchedulerService>();
             services.AddSingleton<IJobManager>(sp => sp.GetRequiredService<SchedulerService>());
 

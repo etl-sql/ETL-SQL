@@ -29,7 +29,10 @@ namespace ETL_SQL.Engine.Handlers
                 stmt.Schedule.Unit,
                 stmt.Schedule.AtTime,
                 null,
-                null
+                null,
+                true,
+                stmt.MaxRetries,
+                stmt.RetryDelaySeconds
             );
 
             await _store.SaveJobAsync(job);
@@ -37,6 +40,3 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
-
-
-

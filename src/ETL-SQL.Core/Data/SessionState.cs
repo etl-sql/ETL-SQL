@@ -47,7 +47,7 @@ namespace ETL_SQL.Core.Data
     {
         public string Name { get; set; } = string.Empty;
         public string DataFilePath { get; set; } = string.Empty;
-        public string? SpillChunkName { get; set; }
+        public List<string> SpillChunkNames { get; set; } = new();
         public List<ColumnDefinition> Columns { get; set; } = new();
         public List<TableConstraintInfo> Constraints { get; set; } = new();
     }

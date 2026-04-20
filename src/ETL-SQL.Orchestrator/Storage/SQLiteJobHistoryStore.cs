@@ -33,7 +33,9 @@ namespace ETL_SQL.Orchestrator.Storage
                     AtTime TEXT,
                     LastRun TEXT,
                     NextRun TEXT,
-                    IsEnabled INTEGER NOT NULL DEFAULT 1
+                    IsEnabled INTEGER NOT NULL DEFAULT 1,
+                    MaxRetries INTEGER NOT NULL DEFAULT 0,
+                    RetryDelaySeconds INTEGER NOT NULL DEFAULT 30
                 );";
 
             var createHistoryTable = @"
@@ -53,6 +55,32 @@ namespace ETL_SQL.Orchestrator.Storage
 
             // 8B-2: Schema migration — add resource tracking columns if missing
             await EnsureHistoryColumnsExist(connection);
+            await EnsureJobColumnsExist(connection);
+        }
+
+        private async Task EnsureJobColumnsExist(SqliteConnection connection)
+        {
+            var columns = new List<string>();
+            using (var cmd = connection.CreateCommand())
+            {
+                cmd.CommandText = "PRAGMA table_info(Jobs);";
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync()) columns.Add(reader.GetString(1));
+            }
+
+            if (!columns.Contains("MaxRetries"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN MaxRetries INTEGER NOT NULL DEFAULT 0;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            if (!columns.Contains("RetryDelaySeconds"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN RetryDelaySeconds INTEGER NOT NULL DEFAULT 30;";
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
 
         private async Task EnsureHistoryColumnsExist(SqliteConnection connection)
@@ -86,8 +114,8 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             var sql = @"
-                INSERT OR REPLACE INTO Jobs (Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled)
-                VALUES ($name, $script, $interval, $unit, $atTime, $lastRun, $nextRun, $isEnabled);";
+                INSERT OR REPLACE INTO Jobs (Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds)
+                VALUES ($name, $script, $interval, $unit, $atTime, $lastRun, $nextRun, $isEnabled, $maxRetries, $retryDelay);";
 
             using var command = connection.CreateCommand();
             command.CommandText = sql;
@@ -99,6 +127,8 @@ namespace ETL_SQL.Orchestrator.Storage
             command.Parameters.AddWithValue("$lastRun", (object?)job.LastRun?.ToString("O") ?? DBNull.Value);
             command.Parameters.AddWithValue("$nextRun", (object?)job.NextRun?.ToString("O") ?? DBNull.Value);
             command.Parameters.AddWithValue("$isEnabled", job.IsEnabled ? 1 : 0);
+            command.Parameters.AddWithValue("$maxRetries", job.MaxRetries);
+            command.Parameters.AddWithValue("$retryDelay", job.RetryDelaySeconds);
 
             await command.ExecuteNonQueryAsync();
         }
@@ -124,7 +154,9 @@ namespace ETL_SQL.Orchestrator.Storage
                     reader.IsDBNull(4) ? null : reader.GetString(4),
                     reader.IsDBNull(5) ? null : DateTime.Parse(reader.GetString(5)),
                     reader.IsDBNull(6) ? null : DateTime.Parse(reader.GetString(6)),
-                    reader.GetInt32(7) == 1
+                    reader.GetInt32(7) == 1,
+                    reader.IsDBNull(8) ? 0 : reader.GetInt32(8),
+                    reader.IsDBNull(9) ? 30 : reader.GetInt32(9)
                 ));
             }
             return jobs;

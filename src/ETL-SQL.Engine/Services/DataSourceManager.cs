@@ -23,6 +23,25 @@ namespace ETL_SQL.Engine.Services
         private readonly ExpressionEvaluator _expressionEvaluator = expressionEvaluator;
 
         /// <summary>
+        /// Scans all active connections for #temp tables and prepares them for session persistence.
+        /// Flushes all in-memory batches to the spill store before returning metadata.
+        /// </summary>
+        public async Task<IEnumerable<ETL_SQL.Core.Execution.SavedTempTable>> GetTempTablesToSave()
+        {
+            var result = new List<ETL_SQL.Core.Execution.SavedTempTable>();
+            foreach (var kvp in _evaluator.Connections)
+            {
+                if (kvp.Value is InMemoryDataSource mem && kvp.Key.StartsWith("#"))
+                {
+                    await mem.FlushToSpillAsync();
+                    var chunks = mem.GetSpillChunks().ToList();
+                    result.Add(new ETL_SQL.Core.Execution.SavedTempTable(kvp.Key, mem.Schema.Values.ToList(), chunks));
+                }
+            }
+            return result;
+        }
+
+        /// <summary>
         /// Resolves a table reference to a functional IDataSource.
         /// Handles subqueries, function calls, dual table, and temporary tables.
         /// </summary>
@@ -68,6 +87,10 @@ namespace ETL_SQL.Engine.Services
                 if (result is DataTable dt)
                 {
                     var mem = new InMemoryDataSource();
+                    mem.Validator = _evaluator;
+                    mem.ExecutionContext = _evaluator;
+                    mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
+                    
                     await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
                     return mem;
                 }
@@ -78,6 +101,10 @@ namespace ETL_SQL.Engine.Services
                 if (!connections.ContainsKey("DUAL"))
                 {
                     var dual = new InMemoryDataSource();
+                    dual.Validator = _evaluator;
+                    dual.ExecutionContext = _evaluator;
+                    dual.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
+
                     var dualTable = new DataTable();
                     dualTable.SetColumns(new[] { "DUMMY" });
                     await dualTable.AddRowAsync(new Row { ["DUMMY"] = "X" });
@@ -89,6 +116,10 @@ namespace ETL_SQL.Engine.Services
             else if (name.StartsWith("@") && _evaluator.GetVariable(name) is System.Collections.IEnumerable list)
             {
                 var mem = new InMemoryDataSource();
+                mem.Validator = _evaluator;
+                mem.ExecutionContext = _evaluator;
+                mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
+
                 var dt = new DataTable();
                 dt.SetColumns(new[] { "Val" });
                 foreach (var item in list) await dt.AddRowAsync(new Row { ["Val"] = item });
@@ -107,22 +138,28 @@ namespace ETL_SQL.Engine.Services
             return source;
         }
 
-        /// <summary>Restores a temporary table from a session data file.</summary>
+        /// <summary>Restores a temporary table from a session data store (SQLite/Chunks or Legacy JSON).</summary>
         public async Task<IDataSource> RestoreTempTable(TempTableInfo info, string password)
         {
             var ds = new InMemoryDataSource();
             ds.Validator = _evaluator;
+            ds.ExecutionContext = _evaluator;
             
             // Restore schema (full ColumnDefinitions and TableConstraints)
             if (info.Columns != null && info.Columns.Count > 0)
             {
                 ds.SetSchema(info.Columns, MapToAst(info.Constraints));
             }
-            else if (info.Columns != null && info.Columns.Count == 0) // Fallback for names if definitions are missing
+
+            // High-Performance Path: Restore from Persistent Spill Chunks
+            if (info.SpillChunkNames != null && info.SpillChunkNames.Count > 0)
             {
-                // This shouldn't happen with the new logic, but handled for safety
+                ds.Rehydrate(info.Columns ?? new(), info.SpillChunkNames);
+                _logger.Debug("[SESSION] Rehydrated temp table {TableName} from {ChunkCount} spill chunks.", info.Name, info.SpillChunkNames.Count);
+                return ds;
             }
             
+            // Legacy/Snapshot Path: Restore from JSON file
             if (File.Exists(info.DataFilePath))
             {
                 try
@@ -146,21 +183,13 @@ namespace ETL_SQL.Engine.Services
                             await dt.AddRowAsync(row);
                         }
                         await ds.WriteBatches(new[] { dt }.ToAsyncEnumerable());
-                        _logger.Debug("[SESSION] Restored {RowCount} rows into temp table {TableName}", rows.Count, info.Name);
-                    }
-                    else
-                    {
-                        _logger.Debug("[SESSION] Data file for {TableName} found but contained 0 rows.", info.Name);
+                        _logger.Debug("[SESSION] Restored {RowCount} rows into temp table {TableName} via JSON snapshot", rows.Count, info.Name);
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.WriteLine($"Warning: Failed to restore temp table {info.Name}: {ex.Message}", ConsoleColor.Yellow);
                 }
-            }
-            else
-            {
-                _logger.Debug("[SESSION] No data file found for temp table {TableName} at {DataFilePath}", info.Name, info.DataFilePath);
             }
             
             return ds;

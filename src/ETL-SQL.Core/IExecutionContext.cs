@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Spill;
+using ETL_SQL.Core.Execution;
 
 namespace ETL_SQL.Core
 {
@@ -94,6 +95,8 @@ namespace ETL_SQL.Core
 
     public interface IDataContext
     {
+        string SessionId { get; }
+        string SessionRoot { get; }
         IDictionary<string, IDataSource> Connections { get; }
         /// <summary>Statement-local data source overrides (used for CTEs).</summary>
         IDictionary<string, IDataSource> LocalSources { get; }
@@ -154,6 +157,8 @@ namespace ETL_SQL.Core
         int MaxGroupingSets { get; set; }
         /// <summary>Maximum size in bytes for a persisted session payload (CFG-G4).</summary>
         long MaxSessionSize { get; set; }
+        /// <summary>Whether this session is marked for persistence across process runs.</summary>
+        bool IsPersistentSession { get; set; }
     }
 
 
@@ -174,6 +179,7 @@ namespace ETL_SQL.Core
         Functions.IFunctionRegistry FunctionRegistry { get; }
         Task EvaluateStatement(Statement statement);
         Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default);
+        IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt);
         Task EvaluateProcedure(string name, List<object?> args);
         string ResolvePath(string path);
         int MaxRecursiveDepth { get; set; }
@@ -212,7 +218,6 @@ namespace ETL_SQL.Core
         string? ReportTitle { get; set; }
         /// <summary>Whether the report title is markdown.</summary>
         bool ReportTitleIsMarkdown { get; set; }
-        /// <summary>Report-level description set by SET REPORT DESCRIPTION = '...'</summary>
         string? ReportDescription { get; set; }
     }
 
@@ -254,7 +259,11 @@ namespace ETL_SQL.Core
 
         /// <summary>Standardizer for file/path security and runaway protection.</summary>
         ETL_SQL.Services.SecurityService SecurityService { get; }
-        void IncrementOperationCount(string? path = null);
+        
+        /// <summary>Manager for session persistence and key derivation.</summary>
+        ETL_SQL.Core.Execution.ISessionStateManager SessionStateManager { get; }
+        
+        void IncrementOperationCount(string? path = null, int count = 1);
 
         List<string> GetIndexedColumns(Expression? cond, string alias);
 

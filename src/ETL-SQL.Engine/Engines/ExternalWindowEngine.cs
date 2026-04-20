@@ -8,7 +8,9 @@ using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Engine.Spill;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -22,6 +24,7 @@ namespace ETL_SQL.Engine.Engines
         private readonly WindowEngine _inMemoryEngine;
         private readonly ExternalSortEngine _sortEngine;
         private readonly ILogger _logger;
+        private readonly IBufferManager? _bufferManager;
         public int PartitionCount => Math.Max(1, _context.ExternalHashPartitions);
 
         public ExternalWindowEngine(IExecutionContext context, WindowEngine inMemoryEngine, ILogger logger)
@@ -30,6 +33,7 @@ namespace ETL_SQL.Engine.Engines
             _inMemoryEngine = inMemoryEngine;
             _sortEngine = new ExternalSortEngine(context, logger);
             _logger = logger;
+            _bufferManager = _context.ServiceProvider?.GetService<IBufferManager>();
         }
 
         private record WindowSignature
@@ -67,6 +71,7 @@ namespace ETL_SQL.Engine.Engines
 
         public async IAsyncEnumerable<Row> ApplyWindowFunctionsExternal(IAsyncEnumerable<Row> inputStream, SelectStatement stmt)
         {
+            using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId, owner: this) : null;
             var windowCols = stmt.Columns.Where(c => c.Expression is FunctionCallExpression f && f.Window != null).ToList();
             if (windowCols.Count == 0)
             {

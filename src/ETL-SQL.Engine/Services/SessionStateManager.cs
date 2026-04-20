@@ -6,30 +6,54 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
 using System.Threading;
-using System.IO.Compression;
+using System.Reflection;
+using System.Security.Cryptography;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ConnectionInfo = ETL_SQL.Core.Data.ConnectionInfo;
 using ETL_SQL.Data;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace ETL_SQL.Engine.Services
 {
     /// <summary>
     /// Manages saving and loading of session state to allow ad-hoc development (Run Selection)
-    /// to maintain state across multiple process runs.
+    /// to maintain state across multiple process runs. Optimized with SQLite and Persistent Chunks.
     /// </summary>
-    public class SessionStateManager(ILogger logger, ETL_SQL.Services.SecurityService securityService, string? customSessionDir = null)
+    public class SessionStateManager : ISessionStateManager
     {
-        public string SessionRoot { get; } = InitializeSessionRoot(customSessionDir);
-        private readonly ILogger _logger = logger;
-        private readonly ETL_SQL.Services.SecurityService _securityService = securityService;
-        private const string SessionFileExtension = ".etlsession";
-        private const string RecoveryManifestExtension = ".recovery.json";
+        public string SessionRoot { get; }
+        private readonly ILogger _logger;
+        private readonly ETL_SQL.Services.SecurityService _securityService;
+        private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration;
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
         private readonly ConcurrentDictionary<string, byte> _activeSessions = new();
+        private readonly int _ttlHours;
+
+        public SessionStateManager(ILogger logger, ETL_SQL.Services.SecurityService securityService, Microsoft.Extensions.Configuration.IConfiguration configuration, string? customSessionDir = null)
+        {
+            _logger = logger;
+            _securityService = securityService;
+            _configuration = configuration;
+            SessionRoot = InitializeSessionRoot(customSessionDir);
+            
+            _ttlHours = int.TryParse(_configuration["Session:PersistentSessionTTLHours"], out var val) ? val : 24;
+            
+            // Clean up stale sessions on startup
+            ReapStaleSessions();
+        }
+
+        /// <summary>
+        /// Generates a deterministic encryption key for a session based on the machine key and session ID.
+        /// Centralizing this ensures consistency between SpillStore and rehydration logic.
+        /// </summary>
+        public byte[] GetSpillKey(string sessionId)
+        {
+            var entropy = ETL_SQL.Services.SecurityService.GetMachineKey();
+            using var sha256 = SHA256.Create();
+            return sha256.ComputeHash(System.Text.Encoding.UTF8.GetBytes(entropy + sessionId));
+        }
 
         public void RegisterActiveSession(string sessionId) => _activeSessions.TryAdd(sessionId, 0);
         public void UnregisterActiveSession(string sessionId) => _activeSessions.TryRemove(sessionId, out _);
@@ -40,315 +64,148 @@ namespace ETL_SQL.Engine.Services
         private static string InitializeSessionRoot(string? customDir)
         {
             var root = customDir ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions");
-            
-            // Security Hardening: Validate the session root if it's custom
-            if (customDir != null)
-            {
-                var fullPath = Path.GetFullPath(root);
-                var pathRoot = Path.GetPathRoot(fullPath);
-                if (string.Equals(fullPath, pathRoot, StringComparison.OrdinalIgnoreCase))
-                    throw new UnauthorizedAccessException("Session storage cannot be placed at the root directory.");
-
-                string[] blocked = { ".git", ".vscode", "Windows", "System32" };
-                if (blocked.Any(b => fullPath.Contains(Path.DirectorySeparatorChar + b + Path.DirectorySeparatorChar) || fullPath.EndsWith(Path.DirectorySeparatorChar + b)))
-                    throw new UnauthorizedAccessException($"Session storage cannot be placed in protected directory: {fullPath}");
-            }
-
             if (!Directory.Exists(root)) Directory.CreateDirectory(root);
             return root;
         }
 
-        private string GetSessionFilePath(string sessionId) => Path.Combine(SessionRoot, sessionId + SessionFileExtension);
-        private string GetRecoveryFilePath(string sessionId) => Path.Combine(SessionRoot, sessionId + RecoveryManifestExtension);
-        private string GetTempTableDir(string sessionId) => Path.Combine(SessionRoot, sessionId + "_temp");
+        private string GetSessionDbPath(string sessionId) => Path.Combine(SessionRoot, sessionId, "metadata.db");
 
-        public string GetMachineKey()
+        /// <summary>Saves the current evaluator state to a persistent SQLite-backed session.</summary>
+        public async Task SaveSession(string sessionId, object evaluatorObj, string? scriptSource = null)
         {
-            var rawKey = $"{Environment.MachineName}:{Environment.UserName}";
-            using var sha256 = SHA256.Create();
-            var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(rawKey));
-            return Convert.ToBase64String(bytes);
-        }
+            if (evaluatorObj is not Evaluator evaluator)
+                throw new ArgumentException("SessionStateManager.SaveSession expects an Evaluator instance.", nameof(evaluatorObj));
 
-        /// <summary>Saves the current evaluator state to a session file.</summary>
-        public async Task SaveSession(string sessionId, Evaluator evaluator, string? scriptSource = null)
-        {
-            var state = new SessionState
+            // Enforce MaxSessionSize (Zero-Trust Guardrail)
+            var currentSize = MeasureSessionSize(evaluator);
+            if (currentSize > evaluator.MaxSessionSize)
             {
-                SessionId = sessionId,
-                CreatedAt = DateTime.Now, // Should preserve if exists
-                LastModifiedAt = DateTime.Now,
-                LastScriptSource = scriptSource,
-                LastDockerConnectionString = evaluator.DockerManager.LastConnectionString,
-                OwnerUser = Environment.UserName,
-                OwnerMachine = Environment.MachineName
-            };
-
-            // 1. Capture Variables (only primitives for now)
-            var (vars, meta) = evaluator.GetGlobalState();
-            foreach (var kvp in vars)
-            {
-                if (kvp.Value == null || IsSerializable(kvp.Value))
-                {
-                    state.GlobalVariables[kvp.Key] = kvp.Value;
-                }
-            }
-            state.GlobalMetadata = meta;
-
-            // 2. Capture Connections
-            foreach (var conn in evaluator.Connections)
-            {
-                if (conn.Value is IDataSource ds) // Capture all IDataSource implementations
-                {
-                    state.Connections.Add(new ConnectionInfo
-                    {
-                        Name = conn.Key,
-                        Type = (ds as IDatabaseSource)?.Dialect ?? ds.GetType().Name.Replace("DataSource", "").ToUpperInvariant(),
-                        ConnectionString = (ds as IDatabaseSource)?.ConnectionString ?? ds.Path,
-                        Options = ds.Options != null ? new Dictionary<string, string>(ds.Options) : new Dictionary<string, string>()
-                    });
-                }
+                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"Session size {currentSize} bytes exceeds the safety limit of {evaluator.MaxSessionSize} bytes. Consider reducing global variable payload or lineage depth.");
             }
 
-            // 3. Capture Docker connection strings (from static manager)
-            // We'll need to expose a way to get all connection strings from DockerManager.
-            // For now, at least save the last one.
-            
-            // 4. Capture Temp Tables (#tables)
-            var tempDir = GetTempTableDir(sessionId);
-            if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
+            var entropyKey = ETL_SQL.Services.SecurityService.GetMachineKey();
+            using var store = new SqliteSessionMetadataStore(sessionId, SessionRoot, entropyKey);
+            await store.InitializeAsync();
 
-            foreach (var conn in evaluator.Connections)
-            {
-                if (conn.Key.StartsWith("#") && conn.Value is InMemoryDataSource mem)
-                {
-                    var dataFile = Path.Combine(tempDir, conn.Key.Replace("#", "temp_") + ".json");
-                    var info = new TempTableInfo
-                    {
-                        Name = conn.Key,
-                        DataFilePath = dataFile,
-                        Columns = mem.Schema.Values.ToList(),
-                        Constraints = MapConstraints(mem.TableConstraints)
-                    };
-                    
-                    // Simple JSON serialization of the data table
-                    var batches = await mem.ReadBatches().ToListAsync();
-                    int totalSavedRows = 0;
-                    if (batches.Count > 0)
-                    {
-                        // Columns property is already set correctly on 'info' at line 100
-                        
-                        var schemaCols = mem.Schema.Keys.ToList();
-                        var allRows = new List<Dictionary<string, object?>>();
-                        foreach (var batch in batches)
-                        {
-                            foreach (var row in batch.Rows)
-                            {
-                                var rowDict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-                                foreach (var col in schemaCols) rowDict[col] = row[col];
-                                allRows.Add(rowDict);
-                            }
-                        }
-                        totalSavedRows = allRows.Count;
-
-                        if (totalSavedRows > 0)
-                        {
-                            string json = JsonSerializer.Serialize(allRows);
-                            
-                            // Hardware-bound encryption for temp data
-                            var entropy = GetMachineKey();
-                            File.WriteAllText(dataFile, CryptoUtils.Protect(json, entropy));
-                            _logger.Debug("[SESSION] Persisted {RowCount} rows for temp table {TableName} to {FileName} (Machine-Locked)", totalSavedRows, conn.Key, Path.GetFileName(dataFile));
-                        }
-                    }
-                    
-                    if (totalSavedRows == 0)
-                    {
-                        _logger.Debug("[SESSION] Temp table {TableName} is empty; no data file created.", conn.Key);
-                    }
-                    
-                    state.TempTables.Add(info);
-                }
-            }
-
-            // 5. Capture Lineage
-            state.LineageEntries = evaluator.LineageTracker.GetFullLineage().ToList();
-            
-            // 6. Protect and save full state (Zero-password, Machine-Bound)
-            string fullJson = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
-            
-            // Resource Guard: Check session size before persisting (Item 228)
-            if (fullJson.Length > evaluator.MaxSessionSize)
-            {
-                throw new ETL_SQL.Core.Common.Exceptions.ExecutionException($"Session persistence failed: The session payload size ({fullJson.Length / 1024 / 1024} MB) exceeds the safety limit of {evaluator.MaxSessionSize / 1024 / 1024} MB. Reduce the number of global variables or increase the limit via 'SET MAX_SESSION_SIZE'.");
-            }
-
-            // Optimization: Compression for large session state (TODO-108)
-            var sessionPayload = Compress(fullJson);
-            string sessionFile = GetSessionFilePath(sessionId);
-            string entropyKey = GetMachineKey();
-            
-            var manifest = new
-            {
-                SessionId = sessionId,
-                LastModified = state.LastModifiedAt,
-                ScriptSource = scriptSource,
-                TempTables = state.TempTables.Select(t => t.Name).ToList(),
-                Variables = state.GlobalVariables.Keys.ToList(),
-                OwnerUser = state.OwnerUser,
-                OwnerMachine = state.OwnerMachine
-            };
-
-            await _securityService.ExecuteInternalAsync(async () =>
-            {
-                var sessionLock = GetSessionLock(sessionId);
-                await sessionLock.WaitAsync();
-                try
-                {
-                    await WriteAtomicAsync(sessionFile, CryptoUtils.Protect(sessionPayload, entropyKey));
-                    await WriteAtomicAsync(GetRecoveryFilePath(sessionId), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
-                }
-                finally
-                {
-                    sessionLock.Release();
-                }
-            });
-        }
-
-        private string Compress(string data)
-        {
-            var bytes = Encoding.UTF8.GetBytes(data);
-            using var ms = new MemoryStream();
-            using (var gzs = new GZipStream(ms, CompressionMode.Compress))
-            {
-                gzs.Write(bytes, 0, bytes.Length);
-            }
-            return "COMP:" + Convert.ToBase64String(ms.ToArray());
-        }
-
-        private string Decompress(string compressedData)
-        {
-            if (!compressedData.StartsWith("COMP:")) return compressedData;
-            
-            var bytes = Convert.FromBase64String(compressedData.Substring(5));
-            using var msIn = new MemoryStream(bytes);
-            using var gzs = new GZipStream(msIn, CompressionMode.Decompress);
-            using var msOut = new MemoryStream();
-            gzs.CopyTo(msOut);
-            return Encoding.UTF8.GetString(msOut.ToArray());
-        }
-
-        private async Task WriteAtomicAsync(string path, string content)
-        {
-            var tmpPath = path + ".tmp";
+            var sessionLock = GetSessionLock(sessionId);
+            await sessionLock.WaitAsync();
             try
             {
-                await File.WriteAllTextAsync(tmpPath, content);
-                if (File.Exists(path)) File.Delete(path);
-                File.Move(tmpPath, path);
+                // 1. Save Variables
+                var (vars, meta) = evaluator.GetGlobalState();
+                await store.SaveVariablesAsync(vars, meta);
+
+                // 2. Save Lineage
+                var lineage = evaluator.LineageTracker.GetFullLineage();
+                await store.SaveLineageAsync(lineage);
+
+                // 3. Save Connections
+                var connections = evaluator.Connections
+                    .Where(c => c.Value.ConnectorType != "INMEMORY")
+                    .Select(c => new ConnectionInfo { 
+                        Name = c.Key, 
+                        Type = c.Value.ConnectorType, 
+                        ConnectionString = GetSafeConnectionString(c.Value), 
+                        Options = c.Value.Options ?? new() 
+                    }).ToList();
+                await store.SaveConnectionsAsync(connections);
+
+                // 4. Save Docker State
+                var dockerStrings = evaluator.DockerManager.GetState();
+                var dockerLast = evaluator.DockerManager.LastConnectionString;
+                await store.SaveDockerStateAsync(dockerLast, dockerStrings);
+
+                // 6. Save Temp Tables
+                var savedTables = await evaluator.DataSourceManager.GetTempTablesToSave();
+                await store.SaveTempTablesAsync(savedTables);
+
+                _logger.Info("[SESSION] Session {SessionId} persisted successfully (SQLite + Meta-Chunks)", sessionId);
             }
             finally
             {
-                if (File.Exists(tmpPath))
-                {
-                    try { File.Delete(tmpPath); } catch { }
-                }
+                sessionLock.Release();
             }
         }
 
-        private List<TableConstraintInfo> MapConstraints(IEnumerable<TableConstraint> constraints)
+        private string GetSafeConnectionString(IDataSource ds)
         {
-            var result = new List<TableConstraintInfo>();
-            foreach (var tc in constraints)
+            // Database connectors often hide the connection string from IDataSource.Path for security/legacy reasons.
+            // We look for a 'ConnectionString' property via reflection to ensure we persist the real credentials.
+            var prop = ds.GetType().GetProperty("ConnectionString", BindingFlags.Public | BindingFlags.Instance);
+            if (prop != null)
             {
-                var info = new TableConstraintInfo { Name = tc.ConstraintName };
-                if (tc is TablePrimaryKeyConstraint pk)
-                {
-                    info.Type = ConstraintType.PrimaryKey;
-                    info.Columns = pk.Columns;
-                }
-                else if (tc is TableUniqueConstraint uk)
-                {
-                    info.Type = ConstraintType.Unique;
-                    info.Columns = uk.Columns;
-                }
-                else if (tc is TableCheckConstraint c)
-                {
-                    info.Type = ConstraintType.Check;
-                    info.Expression = c.Expression;
-                }
-                else if (tc is TableForeignKeyConstraint fk)
-                {
-                    info.Type = ConstraintType.ForeignKey;
-                    info.Columns = fk.Columns;
-                    info.ForeignKey = fk.Reference;
-                }
-                result.Add(info);
+                var val = prop.GetValue(ds)?.ToString();
+                if (!string.IsNullOrEmpty(val)) return val;
             }
-            return result;
+            return ds.Path;
         }
 
-        private bool IsSerializable(object value)
+        /// <summary>Loads existing session state from the SQLite store.</summary>
+        public async Task<SessionState?> LoadSession(string sessionId)
         {
-            return value is string or int or long or decimal or double or bool or DateTime;
-        }
+            if (!File.Exists(GetSessionDbPath(sessionId))) return null;
 
-        /// <summary>Loads existing session state from disk using machine-bound decryption.</summary>
-        public async Task<SessionState?> LoadSession(string sessionId, string? legacyPassword = null)
-        {
-            _logger.Debug("[SESSION_MANAGER_ENTER] LoadSession method entered.");
-            
-            string sessionFile = GetSessionFilePath(sessionId);
-            if (!File.Exists(sessionFile)) return null;
+            var entropyKey = ETL_SQL.Services.SecurityService.GetMachineKey();
+            using var store = new SqliteSessionMetadataStore(sessionId, SessionRoot, entropyKey);
+            await store.InitializeAsync();
 
             try
             {
-                _logger.Debug("[SESSION_READ_FILE] Reading {SessionFile}...", sessionFile);
+                var state = new SessionState { SessionId = sessionId };
                 
-                string protectedPayload = "";
-                _securityService.ExecuteInternal(() => {
-                    protectedPayload = File.ReadAllText(sessionFile);
-                });
-                
-                _logger.Debug("[SESSION_UNPROTECT] Unprotecting state using OS context...");
-                string entropy = GetMachineKey();
-                
-                string plainPayload = CryptoUtils.Unprotect(protectedPayload, entropy);
-                string plainJson = Decompress(plainPayload);
+                // 1. Load Variables
+                var (vars, meta) = await store.LoadVariablesAsync();
+                state.GlobalVariables = vars;
+                state.GlobalMetadata = meta;
 
-                _logger.Debug("[SESSION_DESERIALIZE] Deserializing JSON...");
-                return JsonSerializer.Deserialize<SessionState>(plainJson);
-            }
-            catch (CryptographicException)
-            {
-                _logger.Warning("[SESSION_SECURITY] Failed to resume session {SessionId}. The session file is locked to a different machine or user account.", sessionId);
-                return null;
+                // 2. Load Lineage
+                state.LineageEntries = (await store.LoadLineageAsync()).ToList();
+
+                // 3. Load Connections
+                state.Connections = (await store.LoadConnectionsAsync()).ToList();
+
+                // 4. Load Docker State
+                var (lastDocker, dockerStrings) = await store.LoadDockerStateAsync();
+                state.LastDockerConnectionString = lastDocker;
+                state.DockerConnectionStrings = dockerStrings;
+
+                // 5. Load Temp Tables
+                var savedTables = await store.LoadAllTempTablesAsync();
+                foreach (var saved in savedTables)
+                {
+                    state.TempTables.Add(new TempTableInfo
+                    {
+                        Name = saved.TableName,
+                        Columns = saved.Schema,
+                        SpillChunkNames = saved.ChunkNames
+                    });
+                }
+
+                return state;
             }
             catch (Exception ex)
             {
-                _logger.Error("[SESSION_ERROR] Unexpected error loading session: {Message}", ex, ex.Message);
+                _logger.Error("[SESSION_ERROR] Failed to load session {SessionId}: {Message}", ex, sessionId, ex.Message);
                 return null;
             }
         }
 
-        /// <summary>Clears session files from disk.</summary>
+        /// <summary>Clears session files and database from disk.</summary>
         public void ClearSession(string sessionId)
         {
             if (IsSessionInUse(sessionId))
             {
-                _logger.Warning("[SESSION] Cannot clear session {SessionId} because it is currently in use by an active evaluator.", sessionId);
+                _logger.Warning("[SESSION] Cannot clear session {SessionId} because it is active.", sessionId);
                 return;
             }
 
             _securityService.ExecuteInternal(() => {
-                string sessionFile = GetSessionFilePath(sessionId);
-                if (File.Exists(sessionFile)) File.Delete(sessionFile);
-
-                string recoveryFile = GetRecoveryFilePath(sessionId);
-                if (File.Exists(recoveryFile)) File.Delete(recoveryFile);
-
-                string tempDir = GetTempTableDir(sessionId);
-                if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
+                var sessionDir = Path.Combine(SessionRoot, sessionId);
+                if (Directory.Exists(sessionDir))
+                {
+                    Directory.Delete(sessionDir, true);
+                    _logger.Info("[SESSION] Cleared all persistent data for session {SessionId}", sessionId);
+                }
             });
         }
 
@@ -357,85 +214,165 @@ namespace ETL_SQL.Engine.Services
         {
             if (!Directory.Exists(SessionRoot)) yield break;
 
-            var sessionFiles = Directory.GetFiles(SessionRoot, "*" + SessionFileExtension);
-            foreach (var file in sessionFiles)
+            foreach (var dir in Directory.GetDirectories(SessionRoot))
             {
-                var sessionId = Path.GetFileNameWithoutExtension(file);
-                var lastModified = File.GetLastWriteTime(file);
-                var createdAt = File.GetCreationTime(file);
+                var sessionId = Path.GetFileName(dir);
+                var dbPath = Path.Combine(dir, "metadata.db");
+                if (!File.Exists(dbPath)) continue;
+
+                var lastModified = File.GetLastWriteTime(dbPath);
+                var createdAt = File.GetCreationTime(dbPath);
                 
-                long totalSize = 0;
-                try
-                {
-                    totalSize += new FileInfo(file).Length;
-                    var recoveryFile = GetRecoveryFilePath(sessionId);
-                    if (File.Exists(recoveryFile)) totalSize += new FileInfo(recoveryFile).Length;
-                    
-                    var tempDir = GetTempTableDir(sessionId);
-                    if (Directory.Exists(tempDir))
-                    {
-                        totalSize += Directory.GetFiles(tempDir, "*", SearchOption.AllDirectories).Sum(t => new FileInfo(t).Length);
-                    }
-                }
-                catch { }
-
-                // Try to get counts from recovery manifest to avoid heavy decryption
-                int tempTables = 0;
-                int variables = 0;
-                string? lastScript = null;
-                string? ownerUser = null;
-                string? ownerMachine = null;
-
-                try
-                {
-                    var recoveryFile = GetRecoveryFilePath(sessionId);
-                    if (File.Exists(recoveryFile))
-                    {
-                        using var doc = JsonDocument.Parse(File.ReadAllText(recoveryFile));
-                        if (doc.RootElement.TryGetProperty("TempTables", out var tt)) tempTables = tt.GetArrayLength();
-                        if (doc.RootElement.TryGetProperty("Variables", out var v)) variables = v.GetArrayLength();
-                        if (doc.RootElement.TryGetProperty("ScriptSource", out var s)) lastScript = s.GetString();
-                        if (doc.RootElement.TryGetProperty("LastModified", out var lm)) lastModified = lm.GetDateTime();
-                        if (doc.RootElement.TryGetProperty("OwnerUser", out var ou)) ownerUser = ou.GetString();
-                        if (doc.RootElement.TryGetProperty("OwnerMachine", out var om)) ownerMachine = om.GetString();
-                    }
-                }
-                catch { }
+                long totalSize = Directory.GetFiles(dir, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
 
                 yield return new SessionSummary
                 {
                     SessionId = sessionId,
                     CreatedAt = createdAt,
                     LastModifiedAt = lastModified,
-                    TotalSizeBytes = totalSize,
-                    TempTableCount = tempTables,
-                    VariableCount = variables,
-                    LastScriptSource = lastScript,
-                    OwnerUser = ownerUser,
-                    OwnerMachine = ownerMachine
+                    TotalSizeBytes = totalSize
                 };
             }
         }
 
-        /// <summary>Deletes stale session files older than the specified duration.</summary>
         public void ReapStaleSessions(TimeSpan maxAge)
         {
             var now = DateTime.Now;
-            foreach (var file in Directory.GetFiles(SessionRoot, "*" + SessionFileExtension))
+            foreach (var summary in GetSessions())
             {
-                if (now - File.GetLastWriteTime(file) > maxAge)
+                if (now - summary.LastModifiedAt > maxAge && !IsSessionInUse(summary.SessionId))
                 {
-                    try
-                    {
-                        string sessionId = Path.GetFileNameWithoutExtension(file);
-                        if (!IsSessionInUse(sessionId))
-                        {
-                            ClearSession(sessionId);
-                        }
-                    }
-                    catch { }
+                    ClearSession(summary.SessionId);
                 }
             }
+        }
+        /// <summary>
+        /// Scans the session root and deletes any session directories where the metadata 
+        /// has not been touched within the configured TTL hours.
+        /// </summary>
+        public void ReapStaleSessions()
+        {
+            try
+            {
+                if (!Directory.Exists(SessionRoot)) return;
+                
+                var cutoff = DateTime.Now.AddHours(-_ttlHours);
+                var sessionDirs = Directory.GetDirectories(SessionRoot);
+                int reapCount = 0;
+
+                foreach (var dir in sessionDirs)
+                {
+                    var sessionId = Path.GetFileName(dir);
+                    if (IsSessionInUse(sessionId)) continue;
+
+                    var dbPath = GetSessionDbPath(sessionId);
+                    if (File.Exists(dbPath))
+                    {
+                        var lastWrite = File.GetLastWriteTime(dbPath);
+                        if (lastWrite < cutoff)
+                        {
+                            try
+                            {
+                                Directory.Delete(dir, true);
+                                reapCount++;
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.Warning("Failed to reap stale session {SessionId}: {Message}", sessionId, ex.Message);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Directory exists but no metadata.db? Might be an abandoned or corrupted session.
+                        // If it's old enough, clean it up.
+                        var dirTime = Directory.GetLastWriteTime(dir);
+                        if (dirTime < cutoff)
+                        {
+                            try { Directory.Delete(dir, true); reapCount++; } catch { }
+                        }
+                    }
+                }
+
+                if (reapCount > 0)
+                {
+                    _logger.Info("[SESSION] Reaped {Count} stale persistent sessions (TTL: {TTL}h).", reapCount, _ttlHours);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.Error("Error during session reaping: {Message}", ex);
+            }
+        }
+
+        private string Compress(string data)
+        {
+            if (string.IsNullOrEmpty(data)) return data;
+            var bytes = System.Text.Encoding.UTF8.GetBytes(data);
+            using var ms = new MemoryStream();
+            using (var gzip = new System.IO.Compression.GZipStream(ms, System.IO.Compression.CompressionLevel.Optimal))
+            {
+                gzip.Write(bytes, 0, bytes.Length);
+            }
+            return "COMP:" + Convert.ToBase64String(ms.ToArray());
+        }
+
+        private string Decompress(string data)
+        {
+            if (string.IsNullOrEmpty(data) || !data.StartsWith("COMP:")) return data;
+            var base64 = data.Substring(5);
+            var bytes = Convert.FromBase64String(base64);
+            using var ms = new MemoryStream(bytes);
+            using var decompressed = new MemoryStream();
+            using (var gzip = new System.IO.Compression.GZipStream(ms, System.IO.Compression.CompressionMode.Decompress))
+            {
+                gzip.CopyTo(decompressed);
+            }
+            return System.Text.Encoding.UTF8.GetString(decompressed.ToArray());
+        }
+
+        private long MeasureSessionSize(Evaluator evaluator)
+        {
+            long size = 0;
+
+            // 1. Variables and Metadata
+            var (vars, meta) = evaluator.GetGlobalState();
+            foreach (var kv in vars)
+            {
+                size += kv.Key.Length * 2;
+                if (kv.Value is string s) size += s.Length * 2;
+                else if (kv.Value is byte[] b) size += b.Length;
+                else size += 16; // Guess for other primitives/objects
+            }
+            foreach (var kv in meta)
+            {
+                size += kv.Key.Length * 2;
+                if (kv.Value.DataType != null) size += kv.Value.DataType.Length * 2;
+            }
+
+            // 2. Lineage
+            var lineage = evaluator.LineageTracker.GetFullLineage();
+            foreach (var entry in lineage)
+            {
+                size += (entry.TargetTable.Length + (entry.TargetColumn?.Length ?? 0) + entry.Operation.Length) * 2;
+                if (entry.SourceTables != null) size += entry.SourceTables.Sum(st => st.Length) * 2;
+                if (entry.SourceColumns != null) size += entry.SourceColumns.Sum(sc => sc.Length) * 2;
+                if (entry.Metadata != null) size += entry.Metadata.Sum(kv => kv.Key.Length + kv.Value.Length) * 2;
+                if (entry.DerivedFromDescriptions != null) size += entry.DerivedFromDescriptions.Length * 2;
+                size += 50; // Timestamp and other fields
+            }
+
+            // 3. Connections
+            foreach (var conn in evaluator.Connections)
+            {
+                size += conn.Key.Length * 2;
+                if (conn.Value is IDatabaseSource db)
+                {
+                    if (db.ConnectionString != null) size += db.ConnectionString.Length * 2;
+                }
+            }
+
+            return size;
         }
     }
 }

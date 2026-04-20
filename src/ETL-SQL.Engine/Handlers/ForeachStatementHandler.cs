@@ -1,20 +1,25 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
+using ETL_SQL.Core.Analysis;
+using ETL_SQL.Core.Execution;
 
 namespace ETL_SQL.Engine.Handlers
 {
     /// <summary>
     /// Handles the FOREACH loop statement, iterating over collections, table rows, or JSON arrays.
+    /// Supports optimized streaming for read-only sources.
     /// </summary>
-    public class ForeachStatementHandler : IStatementHandler
+    public class ForeachStatementHandler(IBufferManager bufferManager) : IStatementHandler
     {
+        private readonly IBufferManager _bufferManager = bufferManager;
         public Type SupportedStatementType => typeof(ForeachStatement);
 
-        /// <summary>Executes the FOREACH statement, resolving the collection and iterating through its elements via streaming.</summary>
+        /// <summary>Executes the FOREACH statement, resolving the collection and iterating through its elements.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (ForeachStatement)statement;
@@ -24,38 +29,101 @@ namespace ETL_SQL.Engine.Handlers
                 context.DeclareVariable(iterVarName, null);
             }
 
-            // 1. Try Paged Pushdown (Optimized Paging for Remote SQL)
-            if (await TryPagedPushdown(stmt, context, iterVarName)) return;
+            // 1. Safety Check: If the loop body modifies the source table, we MUST use Paged Re-execution.
+            // Also use paging if explicitly requested via ForeachPageSize (and ORBER BY is present).
+            if (await ShouldUseSafePagedPath(stmt, context) || context.ForeachPageSize > 0)
+            {
+                if (await TryPagedPushdown(stmt, context, iterVarName)) return;
+            }
+            else
+            {
+                // 2. Fast Path: Streaming Iteration (Single cursor)
+                if (await TryStreamingIteration(stmt, context, iterVarName)) return;
+            }
 
-            // 2. Fallback: Full Streaming Iteration
+            // 3. Fallback: Full In-Memory Streaming Iteration (for non-pushdown sources or collections)
             await foreach (var row in context.EvaluateStream(stmt.ListExpression, new Row()))
             {
-                // Optimization: If the row has exactly one column and its name is "Value", 
-                // it's likely a scalar wrapper from a LIST or scalar expression. 
-                // Unwrap it to provide the scalar value directly to the user.
-                // Otherwise, keep it as a Row to allow member access (e.g., @row.ColumnName).
-                // Only unwrap if it's a single column named "Value" (standard for simple collections/scalars)
-                // Otherwise keep the row to allow member access (e.g. @row.Val)
-                bool shouldUnwrap = row.Schema != null && 
-                                   row.Schema.ColumnCount == 1 && 
-                                   row.Schema.ColumnNames[0].Equals("Value", StringComparison.OrdinalIgnoreCase);
-
-                object? val = shouldUnwrap ? row[0] : row;
-                context.SetVariable(iterVarName, val);
+                ProcessRow(row, iterVarName, stmt, context);
                 
                 try
                 {
                     await context.EvaluateStatement(stmt.Body);
                 }
-                catch (BreakException)
+                catch (BreakException) { break; }
+                catch (ContinueException) { continue; }
+            }
+        }
+
+        private async Task<bool> ShouldUseSafePagedPath(ForeachStatement stmt, IExecutionContext context)
+        {
+            var subq = stmt.ListExpression as SubqueryExpression;
+            if (subq == null) return false;
+
+            var sel = subq.Query as SelectStatement;
+            if (sel == null) return false;
+
+            var targetTable = sel.FromTable?.TableName;
+            var targetConn = sel.FromTable?.ConnectionName;
+
+            var detector = new DmlDetector(targetTable, targetConn);
+            detector.Analyze(stmt.Body);
+
+            if (detector.IsDmlDetected || detector.HasOpaqueCalls)
+            {
+                context.Log($"Side effects or DML detected in FOREACH body. Using SAFE Paged Re-execution path.");
+                return true;
+            }
+
+            return false;
+        }
+
+        private async Task<bool> TryStreamingIteration(ForeachStatement stmt, IExecutionContext context, string iterVarName)
+        {
+            var subq = stmt.ListExpression as SubqueryExpression;
+            if (subq == null) return false;
+
+            var sel = subq.Query as SelectStatement;
+            if (sel == null || sel.IntoTable != null) return false;
+
+            // Resolve data source
+            var ds = await context.ResolveDataSourceAsync(sel.FromTable);
+            if (ds is not IDatabaseSource db || !db.SupportsSqlPushdown) return false;
+
+            // Request a streaming cursor slot from the BufferManager
+            using (await _bufferManager.AcquireCursorAsync(context.SessionId, owner: this))
+            {
+                context.Log($"Starting FAST-PATH Streaming FOREACH for {sel.FromTable.TableName} on {sel.FromTable.ConnectionName}");
+                
+                var compiled = context.CompileQuery(sel, db.Dialect);
+                await foreach (var batch in db.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values))
                 {
-                    break;
-                }
-                catch (ContinueException)
-                {
-                    continue;
+                    foreach (var row in batch.Rows)
+                    {
+                        ProcessRow(row, iterVarName, stmt, context);
+                        
+                        try
+                        {
+                            await context.EvaluateStatement(stmt.Body);
+                        }
+                        catch (BreakException) { return true; }
+                        catch (ContinueException) { continue; }
+                    }
                 }
             }
+
+            return true;
+        }
+
+        private void ProcessRow(Row row, string iterVarName, ForeachStatement stmt, IExecutionContext context)
+        {
+            // Optimization: If the row has exactly one column and its name is "Value", unwrap it
+            bool shouldUnwrap = row.Schema != null && 
+                               row.Schema.ColumnCount == 1 && 
+                               row.Schema.ColumnNames[0].Equals("Value", StringComparison.OrdinalIgnoreCase);
+
+            object? val = shouldUnwrap ? row[0] : row;
+            context.SetVariable(iterVarName, val);
         }
 
         private async Task<bool> TryPagedPushdown(ForeachStatement stmt, IExecutionContext context, string iterVarName)
@@ -73,23 +141,34 @@ namespace ETL_SQL.Engine.Handlers
             var ds = await context.ResolveDataSourceAsync(sel.FromTable);
             if (ds is not IDatabaseSource db || !db.SupportsSqlPushdown) return false;
 
-            int pageSize = context.ForeachPageSize;
+            int pageSize = context.ForeachPageSize > 0 ? context.ForeachPageSize : 10000;
             int offset = 0;
             bool hasMore = true;
 
+            context.Log($"Starting SAFE-PATH Paged FOREACH for {sel.FromTable.TableName} on {sel.FromTable.ConnectionName}");
+
             while (hasMore)
             {
-                // Create a paged version of the query
-                // Using record 'with' expression for immutability-aware cloning
-                var pagedQuery = sel with { Offset = new LiteralExpression(offset, TokenType.NUMBER), LimitCount = new LiteralExpression(pageSize, TokenType.NUMBER) };
+                // We manually deep-clone the parts we need to avoid 'with' expression polymorphism issues
+                var pagedQuery = new SelectStatement(sel.Columns, sel.IntoTable, sel.FromTable, sel.Joins, sel.WhereClause, sel.GroupBy, sel.HavingClause, sel.OrderBy);
+                pagedQuery.Offset = new LiteralExpression((decimal)offset, TokenType.NUMBER);
+                pagedQuery.LimitCount = new LiteralExpression((decimal)pageSize, TokenType.NUMBER);
+                pagedQuery.IsDistinct = sel.IsDistinct;
+                pagedQuery.TopCount = sel.TopCount;
+                pagedQuery.IsTopPercent = sel.IsTopPercent;
+                pagedQuery.WithTies = sel.WithTies;
+                pagedQuery.ForClause = sel.ForClause;
+                pagedQuery.Ctes = sel.Ctes;
+                pagedQuery.IsRecursive = sel.IsRecursive;
                 
                 int rowsInPage = 0;
-                await foreach (var batch in context.ExecuteQuery(pagedQuery))
+                var compiled = context.CompileQuery(pagedQuery, db.Dialect);
+                await foreach (var batch in db.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values))
                 {
                     foreach (var row in batch.Rows)
                     {
                         rowsInPage++;
-                        context.SetVariable(iterVarName, (row.Schema?.ColumnCount ?? 0) == 1 ? row[0] : row);
+                        ProcessRow(row, iterVarName, stmt, context);
                         
                         try
                         {

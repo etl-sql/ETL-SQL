@@ -15,9 +15,9 @@ namespace ETL_SQL.Engine.Handlers
     public class ShowSessionsStatementHandler : IStatementHandler
     {
         public Type SupportedStatementType => typeof(ShowSessionsStatement);
-        private readonly SessionStateManager _sessionManager;
+        private readonly ETL_SQL.Core.Execution.ISessionStateManager _sessionManager;
 
-        public ShowSessionsStatementHandler(SessionStateManager sessionManager)
+        public ShowSessionsStatementHandler(ETL_SQL.Core.Execution.ISessionStateManager sessionManager)
         {
             _sessionManager = sessionManager;
         }

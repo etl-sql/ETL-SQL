@@ -53,8 +53,12 @@ namespace ETL_SQL.Tests.Integration
             var tokens = lexer.Tokenize();
             var parser = new Parser(tokens);
             var script = parser.Parse();
+            
+            // Run linter manually as Parser no longer adds this diagnostic directly
+            var lintResults = ETL_SQL.Core.Linting.LinterFactory.CreateWithAllRules()
+                .AnalyzeAsync(script, new ETL_SQL.Core.Linting.DefaultLintContext()).Result;
 
-            Assert.Contains(script.Diagnostics, d => d.Message.Contains("Connection type 'FILE' is deprecated"));
+            Assert.Contains(lintResults, r => r.Message.Contains("Connection type 'FILE' is deprecated"));
         }
 
         [Fact]

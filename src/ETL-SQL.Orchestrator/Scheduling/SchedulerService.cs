@@ -25,13 +25,13 @@ namespace ETL_SQL.Orchestrator.Scheduling
         private readonly ILogger<SchedulerService> _logger;
         private readonly IConfiguration _configuration;
         private readonly JobThrottle _throttle;
-        private readonly ETL_SQL.Engine.Services.SessionStateManager _sessionManager;
+        private readonly ETL_SQL.Core.Execution.ISessionStateManager _sessionManager;
         private CancellationTokenSource? _cts;
         private readonly System.Collections.Concurrent.ConcurrentDictionary<long, CancellationTokenSource> _runningJobs = new();
 
         public SchedulerService(IServiceProvider serviceProvider, IJobHistoryStore store,
             ILogger<SchedulerService> logger, JobThrottle throttle, IConfiguration configuration,
-            ETL_SQL.Engine.Services.SessionStateManager sessionManager)
+            ETL_SQL.Core.Execution.ISessionStateManager sessionManager)
         {
             _serviceProvider = serviceProvider;
             _store           = store;
@@ -148,74 +148,104 @@ namespace ETL_SQL.Orchestrator.Scheduling
 
         private async Task ExecuteJobAsync(JobDefinition job)
         {
-            _logger.LogInformation("Executing job: {JobName}", job.Name);
+            _logger.LogInformation("Job runner: {JobName} starting execution cycle (MaxRetries={Max}).", job.Name, job.MaxRetries);
 
-            long historyId = 0;
-            try
+            string? sessionId = null;
+            int maxAttempts = Math.Max(1, job.MaxRetries + 1);
+            ScriptExecutionResult? lastResult = null;
+
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                historyId = await _store.LogJobStartAsync(job.Name);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to log job start for {JobName}.", job.Name);
-            }
-
-            try
-            {
-                // Acquire a concurrency slot — waits if the cap is reached.
-                using var slot = await _throttle.AcquireAsync(job.Name);
-
-                using var scope = _serviceProvider.CreateScope();
-                // Inject IScriptExecutor — decoupled from the concrete Evaluator class.
-                var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
-
-                using var jobCts = CancellationTokenSource.CreateLinkedTokenSource(_cts?.Token ?? default);
-                if (historyId > 0) _runningJobs[historyId] = jobCts;
-
+                long historyId = 0;
                 try
                 {
-                    var result = await executor.ExecuteTextAsync(job.Script, jobCts.Token);
-
-                    if (result.Success)
-                    {
-                        _logger.LogInformation("Job {JobName} finished successfully. (RAM: {Mem} bytes, CPU: {Cpu}s)", 
-                            job.Name, result.PeakMemoryBytes, result.CpuTimeSeconds);
-                        if (historyId > 0)
-                            await _store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: result.RowsProcessed, 
-                                peakMemoryBytes: result.PeakMemoryBytes, cpuTimeSeconds: result.CpuTimeSeconds);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Job {JobName} finished with failure: {Error}", job.Name, result.ErrorMessage);
-                        if (historyId > 0)
-                            await _store.LogJobEndAsync(historyId, "FAILURE", result.ErrorMessage, 
-                                peakMemoryBytes: result.PeakMemoryBytes, cpuTimeSeconds: result.CpuTimeSeconds);
-                    }
-                }
-                finally
-                {
-                    if (historyId > 0) _runningJobs.TryRemove(historyId, out _);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error executing job {JobName}.", job.Name);
-                if (historyId > 0)
-                {
-                    await _store.LogJobEndAsync(historyId, "FAILURE", ex.Message);
-                }
-            }
-            finally
-            {
-                var nextRun = CalculateNextRun(job);
-                try
-                {
-                    await _store.UpdateJobLastRunAsync(job.Name, DateTime.Now, nextRun);
+                    historyId = await _store.LogJobStartAsync(job.Name);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to update last run for {JobName}.", ex.Message);
+                    _logger.LogError(ex, "Failed to log job start for {JobName}.", job.Name);
                 }
+
+                try
+                {
+                    // Acquire a concurrency slot — waits if the cap is reached.
+                    using var slot = await _throttle.AcquireAsync(job.Name);
+
+                    using var scope = _serviceProvider.CreateScope();
+                    // Inject IScriptExecutor — decoupled from the concrete Evaluator class.
+                    var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
+
+                    using var jobCts = CancellationTokenSource.CreateLinkedTokenSource(_cts?.Token ?? default);
+                    if (historyId > 0) _runningJobs[historyId] = jobCts;
+
+                    try
+                    {
+                        lastResult = await executor.ExecuteTextAsync(job.Script, sessionId, jobCts.Token);
+                        
+                        // Capture sessionId for potential persistence in retry (CQ-S2)
+                        sessionId = lastResult.SessionId;
+
+                        if (lastResult.Success)
+                        {
+                            _logger.LogInformation("Job {JobName} finished successfully on attempt {Attempt}. (RAM: {Mem} bytes, CPU: {Cpu}s)", 
+                                job.Name, attempt, lastResult.PeakMemoryBytes, lastResult.CpuTimeSeconds);
+                            
+                            if (historyId > 0)
+                                await _store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: lastResult.RowsProcessed, 
+                                    peakMemoryBytes: lastResult.PeakMemoryBytes, cpuTimeSeconds: lastResult.CpuTimeSeconds);
+                                    
+                            break; // Done
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Job {JobName} finished with failure on attempt {Attempt}/{Max}: {Error}", 
+                                job.Name, attempt, maxAttempts, lastResult.ErrorMessage);
+                            
+                            if (historyId > 0)
+                                await _store.LogJobEndAsync(historyId, "FAILURE", lastResult.ErrorMessage, 
+                                    peakMemoryBytes: lastResult.PeakMemoryBytes, cpuTimeSeconds: lastResult.CpuTimeSeconds);
+                        }
+                    }
+                    finally
+                    {
+                        if (historyId > 0) _runningJobs.TryRemove(historyId, out _);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error executing job {JobName} on attempt {Attempt}.", job.Name, attempt);
+                    if (historyId > 0)
+                    {
+                        await _store.LogJobEndAsync(historyId, "FAILURE", ex.Message);
+                    }
+                    lastResult = new ScriptExecutionResult(false, 0, ex.Message);
+                }
+
+                if (attempt < maxAttempts)
+                {
+                    // Exponential backoff: delay * 2^(attempt-1)
+                    int backoffSeconds = (int)Math.Pow(2, attempt - 1) * job.RetryDelaySeconds;
+                    backoffSeconds = Math.Min(backoffSeconds, 3600); // Cap at 1 hour
+
+                    _logger.LogInformation("Job {JobName} failed. Retrying in {Delay}s (Backoff). Session: {SessionId}", 
+                        job.Name, backoffSeconds, sessionId);
+                    
+                    try
+                    {
+                        await Task.Delay(TimeSpan.FromSeconds(backoffSeconds), _cts?.Token ?? default);
+                    }
+                    catch (TaskCanceledException) { break; }
+                }
+            }
+
+            var nextRun = CalculateNextRun(job);
+            try
+            {
+                await _store.UpdateJobLastRunAsync(job.Name, DateTime.Now, nextRun);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to update last run info for {JobName}.", job.Name);
             }
         }
 

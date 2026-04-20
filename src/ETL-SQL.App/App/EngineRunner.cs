@@ -202,7 +202,10 @@ namespace ETL_SQL.App
                     var sessionManager = Program.ServiceProvider.GetRequiredService<ETL_SQL.Engine.Services.SessionStateManager>();
                     if (!string.IsNullOrEmpty(ctx.SessionId))
                     {
-                        var state = await sessionManager.LoadSession(ctx.SessionId, ctx.Password);
+                        evaluator.IsPersistentSession = true;
+                        evaluator.SessionId = ctx.SessionId;
+                        evaluator.SessionRoot = sessionManager.SessionRoot;
+                        var state = await sessionManager.LoadSession(ctx.SessionId);
                         if (state != null)
                         {
                             logger.WriteLine($"Restoring session {ctx.SessionId}...", ConsoleColor.Cyan);

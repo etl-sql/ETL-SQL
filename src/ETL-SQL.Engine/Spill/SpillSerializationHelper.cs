@@ -34,22 +34,7 @@ namespace ETL_SQL.Engine.Spill
         internal static object? UnwrapValue(object? val)
         {
             if (val == null || val == DBNull.Value) return null;
-
-            if (val is JsonElement je)
-            {
-                val = UnwrapJsonElement(je);
-                if (val == null) return null;
-            }
-
-            if (val is string s)
-            {
-                if (decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out var dec))
-                    return dec;
-                if (EvaluationUtils.SafeTryParseDate(s, out var dt))
-                    return dt;
-                return s.Trim();
-            }
-
+            if (val is JsonElement je) val = UnwrapJsonElement(je);
             return CompoundKey.NormalizeValue(val);
         }
 

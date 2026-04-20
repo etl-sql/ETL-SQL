@@ -1,5 +1,5 @@
-using System;
 using System.Linq;
+using ETL_SQL.Core.Execution;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -73,10 +73,15 @@ namespace ETL_SQL.TUI
 
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
-            services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>();
+            services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager, ETL_SQL.Engine.Services.SessionStateManager>();
+            services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>(sp => (ETL_SQL.Engine.Services.SessionStateManager)sp.GetRequiredService<ETL_SQL.Core.Execution.ISessionStateManager>());
             var securityService = new ETL_SQL.Services.SecurityService(loggerService);
             securityService.UpdateFromConfiguration(configuration);
             services.AddSingleton<ETL_SQL.Services.SecurityService>(securityService);
+            services.AddSingleton<ISystemResources, DefaultSystemResources>();
+            services.AddSingleton<ETL_SQL.Core.Execution.IBufferManager, BufferManager>();
+            services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));
+            services.AddSingleton<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
 
             // ── Connectors ─────────────────────────────────────────────────────
             services.AddSingleton<IConnector, MockDbConnector>();
@@ -127,6 +132,11 @@ namespace ETL_SQL.TUI
             // ── Storage & Scheduling ───────────────────────────────────────────
             services.Configure<JobThrottleOptions>(configuration.GetSection("Scheduling:Throttle"));
             services.AddSingleton<JobThrottle>();
+            
+            services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
+            services.AddSingleton<BufferManager>();
+            services.AddSingleton<IBufferManager>(sp => sp.GetRequiredService<BufferManager>());
+
             services.AddSingleton<IJobHistoryStore>(_ => new SQLiteJobHistoryStore());
             services.AddSingleton<SchedulerService>();
             services.AddTransient<IScriptExecutor, ScriptExecutorAdapter>();

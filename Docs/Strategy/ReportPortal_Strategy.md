@@ -525,3 +525,7 @@ parallel. Phase 4 is short because `PdfExporter` and CSV generation already exis
 | `IExecutionContext.ResolvePath` | `Engine` | Script path boundary enforcement |
 | Orchestrator `ExecutionHistory` | `Orchestrator` | Polled for dataset refresh completions |
 | `ReportManifest` JSON schema | `ReportBuilder` | Snapshot column is the serialized manifest |
+
+
+## Questions to answer
+- How to manage the buffer, currently Orchestrator owns the Buffer Manager and will resource manage for all jobs including DATASETS, this web service will manage number of users running reports how to share resource responsibilities between the two?  I feel Orchestrator should still own Buffer Management and the web service should report in on its current resource needs.  A user logs in allocate x automatically so Orchestrator can dial down the number of jobs is run concurrently.  Need some brainstorming on this.

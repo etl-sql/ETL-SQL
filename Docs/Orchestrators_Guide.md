@@ -195,8 +195,10 @@ BEGIN
     PRINT 'Sync complete.';
 END;
 
--- Run once daily at 2:00 AM
-CREATE JOB NightlyArchive ON SCHEDULE EVERY 1 DAY AT '02:00' AS
+-- Run once daily at 2:00 AM with retries
+CREATE JOB NightlyArchive ON SCHEDULE EVERY 1 DAY AT '02:00'
+WITH (MAX_RETRIES = 3, RETRY_DELAY = 30)
+AS
 BEGIN
     INSERT INTO archive.dbo.Logs
     SELECT * FROM prod.dbo.Logs
@@ -211,11 +213,15 @@ END;
 
 **Syntax:**
 ```
-CREATE JOB <name> ON SCHEDULE EVERY <n> SECONDS|MINUTES|HOURS|DAYS [AT 'HH:MM'] AS
+CREATE JOB <name> ON SCHEDULE EVERY <n> SECONDS|MINUTES|HOURS|DAYS [AT 'HH:MM']
+[WITH (MAX_RETRIES = <n>, RETRY_DELAY = <seconds>)]
+AS
     <single_statement>;
 
 -- or with a block:
-CREATE JOB <name> ON SCHEDULE EVERY <n> SECONDS|MINUTES|HOURS|DAYS [AT 'HH:MM'] AS
+CREATE JOB <name> ON SCHEDULE EVERY <n> SECONDS|MINUTES|HOURS|DAYS [AT 'HH:MM']
+[WITH (MAX_RETRIES = <n>, RETRY_DELAY = <seconds>)]
+AS
 BEGIN
     <statements>
 END;
@@ -233,7 +239,22 @@ END;
 > [!TIP]
 > When using `EVERY 1 DAY AT '02:00'`, the job fires at 2:00 AM regardless of when the previous run ended. If the engine is restarted late, the next run is scheduled to the next 2:00 AM occurrence.
 
-### 3.2 `SHOW JOBS` — List Registered Jobs
+### 3.2 Retry Policies & Resilience
+
+Jobs can be configured with a retry policy to handle transient failures (e.g., network glitches, database timeouts).
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `MAX_RETRIES` | `0` | Number of times to retry a failed job attempt. |
+| `RETRY_DELAY` | `30` | Initial delay in seconds between retries. |
+
+**Exponential Backoff:**
+The scheduler employs an exponential backoff strategy. The delay doubles with each subsequent attempt: $delay \times 2^{(attempt-1)}$, capped at 1 hour.
+
+**Session Persistence:**
+Retries automatically preserve the `SessionId` from the first attempt. This ensures that any persisted state (connections, variables, `#temp` tables) remains available to the retried script if the environment is configured for session persistence.
+
+### 3.3 `SHOW JOBS` — List Registered Jobs
 
 Displays all registered jobs with their schedule, last run time, and next scheduled run.
 
@@ -247,7 +268,7 @@ SELECT * FROM #job_list WHERE IsEnabled = 1;
 
 **Result columns:** `Name`, `Interval`, `Unit`, `AtTime`, `LastRun`, `NextRun`, `IsEnabled`
 
-### 3.3 `SHOW JOB HISTORY` — View Execution History
+### 3.4 `SHOW JOB HISTORY` — View Execution History
 
 Returns the execution log for all jobs or a specific job.
 
@@ -642,7 +663,35 @@ Refer to that guide for:
 
 ---
 
-## 11. Troubleshooting
+## 11. Resource Governance
+
+To prevent Out-Of-Memory (OOM) errors and database connection exhaustion in multi-user environments, the Orchestrator employs a **Buffer Manager**.
+
+### 11.1 Resource Queuing (FIFO)
+When global limits for RAM (`MaxGlobalMemoryMB`) or Database Cursors (`MaxStreamingCursors`) are reached, new requests are placed in a **First-In, First-Out (FIFO)** queue. 
+
+- **Graceful Wait**: The engine will block and wait for resources to become available.
+- **Visual Feedback**: Every minute, the engine prints a status update to the console or session log: `Waiting for resources... (T-4 minutes remaining)`. This allows operators to differentiate between a hung process and a resource-constrained wait.
+- **Timeout**: If the resource is not granted within the configured `ResourceWaitTimeoutSeconds` (default 10 minutes), the script fails with a `TimeoutException`.
+
+### 11.2 Hysteresis (Memory Cooldown)
+To prevent "resource thrashing" (where the engine constantly starts and immediately stalls tasks as tiny amounts of memory fluctuate), the Buffer Manager employs a **Hysteresis Threshold**.
+
+Once the global memory limit is hit and the engine enters the "Exhausted" state:
+1. All new memory requests are queued.
+2. Queue processing is **suspended** until memory usage drops below a safe threshold.
+3. Safe threshold = `MaxGlobalMemoryMB - HysteresisMemoryMB`.
+4. This ensures that when the engine resumes, it has enough room to process at least a few full batches without immediately re-entering the exhausted state.
+
+### 11.3 Policy Overrides
+Users can bypass global resource governors using `SET` commands (e.g., `SET MAX_MEMORY = 4096`). 
+
+> [!WARNING]
+> **Accountability**: Any resource request that exceeds the global policy via a `SET` command is logged with a `[POLICY_OVERRIDE]` tag in the central AppLog. This allows administrators to trace system instability back to specific user-initiated overrides.
+
+---
+
+## 12. Troubleshooting
 
 ### The scheduler isn't firing my job
 

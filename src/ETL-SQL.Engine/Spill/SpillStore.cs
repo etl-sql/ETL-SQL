@@ -13,49 +13,98 @@ using ETL_SQL.Core.Spill;
 
 namespace ETL_SQL.Engine.Spill
 {
-
+    /// <summary>
+    /// Implements encrypted, compressed storage for spilling large data sets to disk.
+    /// This implementation is session-aware and dynamically reacts to changes in 
+    /// SessionId or SessionRoot after initialization.
+    /// </summary>
     public class SpillStore : ISpillStore
     {
-        private readonly string _rootPath;
-        private readonly byte[] _sessionKey;
+        private string? _cachedRootPath;
+        private byte[]? _cachedSessionKey;
+        private string? _cachedSessionId;
         private readonly IExecutionContext _context;
         private bool _disposed;
+
+        public bool IsPersistent { get; set; }
+
+        public string RootPath 
+        {
+            get 
+            {
+                EnsureInitialized();
+                return _cachedRootPath!;
+            }
+        }
 
         public SpillStore(IExecutionContext context)
         {
             _context = context;
-            _rootPath = Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(_rootPath);
+        }
 
-            // Generate a random 256-bit session key
-            _sessionKey = RandomNumberGenerator.GetBytes(32);
+        /// <summary>
+        /// Ensures that the spill directory and encryption keys are correctly initialized
+        /// based on the current context state.
+        /// </summary>
+        private void EnsureInitialized()
+        {
+            // If already initialized and context hasn't changed its persistent/session state, skip.
+            if (_cachedRootPath != null && 
+                IsPersistent == _context.IsPersistentSession && 
+                (!IsPersistent || _cachedSessionId == _context.SessionId))
+            {
+                return;
+            }
+
+            IsPersistent = _context.IsPersistentSession;
+            _cachedSessionId = _context.SessionId;
+
+            if (IsPersistent)
+            {
+                // Stable path in the session directory
+                _cachedRootPath = Path.Combine(_context.SessionRoot, "spill");
+                
+                // Deterministic Key based on MachineKey + SessionId (Centralized)
+                _cachedSessionKey = _context.SessionStateManager.GetSpillKey(_context.SessionId);
+            }
+            else if (_cachedRootPath == null || IsPersistent != _context.IsPersistentSession)
+            {
+                // Disposable temp path
+                _cachedRootPath = Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill", Guid.NewGuid().ToString("N"));
+                _cachedSessionKey = RandomNumberGenerator.GetBytes(32);
+            }
+
+            if (!Directory.Exists(_cachedRootPath))
+            {
+                Directory.CreateDirectory(_cachedRootPath);
+            }
         }
 
         public async Task<ISpillWriter> CreateWriterAsync(string chunkName)
         {
-            var path = Path.Combine(_rootPath, chunkName);
+            EnsureInitialized();
+            var path = Path.Combine(_cachedRootPath!, chunkName);
             var encrypt = _context.SpillEncryptionEnabled;
             var compress = _context.SpillCompressionEnabled;
-            return await Task.FromResult(new SecureSpillWriter(path, chunkName, _sessionKey, _context, encrypt, compress));
+            return await Task.FromResult(new SecureSpillWriter(path, chunkName, _cachedSessionKey!, _context, encrypt, compress));
         }
 
         public async Task<ISpillReader> CreateReaderAsync(string chunkName)
         {
-            var path = Path.Combine(_rootPath, chunkName);
+            EnsureInitialized();
+            var path = Path.Combine(_cachedRootPath!, chunkName);
             var encrypt = _context.SpillEncryptionEnabled;
             var compress = _context.SpillCompressionEnabled;
-            return await Task.FromResult(new SecureSpillReader(path, chunkName, _sessionKey, encrypt, compress));
+            return await Task.FromResult(new SecureSpillReader(path, chunkName, _cachedSessionKey!, encrypt, compress));
         }
 
         public void DeleteChunk(string chunkName)
         {
-            var path = Path.Combine(_rootPath, chunkName);
+            EnsureInitialized();
+            var path = Path.Combine(_cachedRootPath!, chunkName);
             if (File.Exists(path))
             {
-                try
-                {
-                    File.Delete(path);
-                }
+                try { File.Delete(path); }
                 catch (Exception ex)
                 {
                     _context.Logger.Warning("Failed to delete spill chunk {ChunkName}: {Message}", chunkName, ex.Message);
@@ -65,27 +114,34 @@ namespace ETL_SQL.Engine.Spill
 
         public void Cleanup()
         {
-            if (Directory.Exists(_rootPath))
+            EnsureInitialized();
+            if (Directory.Exists(_cachedRootPath))
             {
                 try 
                 { 
-                    Directory.Delete(_rootPath, true); 
+                    Directory.Delete(_cachedRootPath, true); 
                 } 
                 catch (Exception ex)
                 { 
-                    _context.Logger.Warning("Failed to cleanup spill directory {Path}: {Message}", _rootPath, ex.Message);
+                    _context.Logger.Warning("Failed to cleanup spill directory {Path}: {Message}", _cachedRootPath, ex.Message);
                 }
             }
         }
 
         public void Dispose()
         {
-            if (!_disposed)
+            if (_disposed) return;
+            
+            // Clean up non-persistent spill directories
+            if (!IsPersistent && _cachedRootPath != null && Directory.Exists(_cachedRootPath))
             {
-                Cleanup();
-                Array.Clear(_sessionKey); // Wipe the key from memory
-                _disposed = true;
+                try { Directory.Delete(_cachedRootPath, true); } catch { }
             }
+
+            if (_cachedSessionKey != null) Array.Clear(_cachedSessionKey);
+            
+            _disposed = true;
+            GC.SuppressFinalize(this);
         }
 
         private class SecureSpillWriter : ISpillWriter

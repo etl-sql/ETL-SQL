@@ -10,12 +10,14 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Orchestrator.Execution;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Common;
 using ETL_SQL.Services;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Core.Common;
 using Moq;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Tests.Hardening
 {
@@ -110,9 +112,15 @@ namespace ETL_SQL.Tests.Hardening
             serviceCollection.AddSingleton(new Mock<ILineageTracker>().Object);
             serviceCollection.AddSingleton(new Mock<IDockerManager>().Object);
             serviceCollection.AddSingleton(new Mock<IConnectorRegistry>().Object);
+            serviceCollection.AddSingleton<ETL_SQL.Core.Execution.ISystemResources, ETL_SQL.Core.Execution.DefaultSystemResources>();
+            serviceCollection.AddSingleton<ETL_SQL.Core.Execution.IBufferManager, ETL_SQL.Orchestrator.Execution.BufferManager>();
+            serviceCollection.AddSingleton(Microsoft.Extensions.Options.Options.Create(new ETL_SQL.Core.Execution.BufferManagerOptions()));
+            serviceCollection.AddSingleton<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
+            serviceCollection.AddSingleton<IConfiguration>(new ConfigurationBuilder().Build());
             
-            var mockSessionManager = new Mock<SessionStateManager>(_mockLogger.Object, _securityService, null);
-            serviceCollection.AddSingleton(mockSessionManager.Object);
+            var realSessionManager = new SessionStateManager(_mockLogger.Object, _securityService, new ConfigurationBuilder().Build());
+            serviceCollection.AddSingleton<ISessionStateManager>(realSessionManager);
+            serviceCollection.AddSingleton<SessionStateManager>(realSessionManager);
             
             serviceCollection.AddSingleton(_securityService);
 

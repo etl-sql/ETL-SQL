@@ -34,7 +34,7 @@ namespace ETL_SQL.ReportBuilder
         public string Render(ReportManifest manifest)
         {
             var sb = new StringBuilder();
-            string heading = manifest.Title ?? (manifest.Source != null ? System.IO.Path.GetFileNameWithoutExtension(manifest.Source) : "Report");
+            string heading = manifest.Title ?? "Report";
             if (manifest.TitleIsMarkdown)
                 sb.AppendLine($"# {heading}");
             else
@@ -45,7 +45,9 @@ namespace ETL_SQL.ReportBuilder
                 sb.AppendLine(manifest.Description);
                 sb.AppendLine();
             }
-            sb.AppendLine($"*Generated: {manifest.BuiltAt:yyyy-MM-dd HH:mm:ss} UTC*");
+            if (manifest.Source != null) sb.Append($"*Source: {manifest.Source} | ");
+            else sb.Append("*");
+            sb.AppendLine($"Generated: {manifest.BuiltAt:yyyy-MM-dd HH:mm:ss} UTC*");
             sb.AppendLine();
 
             if (manifest.Pages.Count > 0)

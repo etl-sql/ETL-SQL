@@ -38,5 +38,9 @@ namespace ETL_SQL.Core.Spill
         /// <summary>Deletes a specific chunk from the store.</summary>
         void DeleteChunk(string chunkName);
         void Cleanup();
+        /// <summary>Whether this store should persist after disposal.</summary>
+        bool IsPersistent { get; set; }
+        /// <summary>The root directory of the spill store.</summary>
+        string RootPath { get; }
     }
 }

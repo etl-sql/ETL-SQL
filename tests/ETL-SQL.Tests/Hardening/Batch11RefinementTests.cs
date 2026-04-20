@@ -71,7 +71,8 @@ namespace ETL_SQL.Tests.Hardening
             
             try 
             {
-                var mgr = new SessionStateManager(logger.Object, security, testDir);
+                var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
+                var mgr = new SessionStateManager(logger.Object, security, config, testDir);
                 // We'll test the Compress/Decompress methods via reflection since they are private
                 var compressMethod = typeof(SessionStateManager).GetMethod("Compress", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 var decompressMethod = typeof(SessionStateManager).GetMethod("Decompress", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);

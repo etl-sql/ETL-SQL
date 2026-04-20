@@ -32,11 +32,11 @@ namespace ETL_SQL.Engine.Handlers
             // Handle pushdown if applicable (only if no INTO clause and ALL tables are on the same pushable connection)
             if (statement is SelectStatement selPush && selPush.IntoTable == null)
             {
-                var fromConn = selPush.FromTable.ConnectionName ?? selPush.FromTable.TableName;
-                bool allSameConn = (selPush.Joins == null || selPush.Joins.Count == 0) || 
-                                   selPush.Joins.All(j => (j.Table.ConnectionName ?? j.Table.TableName).Equals(fromConn, StringComparison.OrdinalIgnoreCase));
+                var fromConn = (selPush.FromTable != null) ? (selPush.FromTable.ConnectionName ?? selPush.FromTable.TableName) : null;
+                bool allSameConn = (selPush.FromTable != null) && ((selPush.Joins == null || selPush.Joins.Count == 0) || 
+                                   selPush.Joins.All(j => (j.Table.ConnectionName ?? j.Table.TableName).Equals(fromConn, StringComparison.OrdinalIgnoreCase)));
 
-                if (allSameConn && context.IsSqlPushdown(fromConn))
+                if (fromConn != null && allSameConn && context.IsSqlPushdown(fromConn))
                 {
                     _logger.Debug("Pushing down SELECT to remote connection: {ConnName}", fromConn);
                     var conn = (IDatabaseSource)context.Connections[fromConn];
@@ -233,12 +233,7 @@ namespace ETL_SQL.Engine.Handlers
                     bool shouldStop = false;
                     foreach (var r in batch.Rows)
                     {
-                        if (result.Rows.Count < context.MaxLastResultRows)
-                        {
-                            totalRows++;
-                            await result.AddRowAsync(r);
-                        }
-                        else if (!context.RedirectOutput)
+                        if (result.Rows.Count >= context.MaxLastResultRows)
                         {
                             if (!capped)
                             {
@@ -246,17 +241,18 @@ namespace ETL_SQL.Engine.Handlers
                                 result.IsCapped = true;
                                 _logger.Debug("[SELECT] Result buffer reached {MaxLastResultRows} rows. Stopping consumption to prevent memory exhaustion.", context.MaxLastResultRows);
                             }
-                            shouldStop = true;
-                            break;
-                        }
-                        else 
-                        {
-                            totalRows++;
-                            if (!capped)
+
+                            if (!context.RedirectOutput)
                             {
-                                capped = true;
-                                result.IsCapped = true;
+                                shouldStop = true;
+                                break;
                             }
+                        }
+                        
+                        totalRows++;
+                        if (result.Rows.Count < context.MaxLastResultRows)
+                        {
+                            await result.AddRowAsync(r);
                         }
                     }
 
@@ -306,6 +302,9 @@ namespace ETL_SQL.Engine.Handlers
         /// </summary>
         public async IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt, IExecutionContext context)
         {
+            var aggregateEngine = new AggregateEngine(context, _logger);
+            var windowEngine = new WindowEngine(context, aggregateEngine, _logger);
+
             // 1. Handle Remote Pushdown (No aggregation/sorting allowed in streaming pushdown here)
             if (stmt.IntoTable == null)
             {
@@ -315,17 +314,27 @@ namespace ETL_SQL.Engine.Handlers
 
                 if (allSameConn && context.IsSqlPushdown(fromConn))
                 {
-                    _logger.Debug("[SELECT] Pushing down subquery to remote: {ConnName}", fromConn);
-                    var conn = (IDatabaseSource)context.Connections[fromConn];
-                    var compiled = context.CompileQuery(stmt, conn.Dialect);
-                    await foreach (var batch in conn.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values)) yield return batch;
-                    yield break;
+                    // Check for local engines (aggregation, window functions, distinct, join)
+                    // If none of those are present, we can push down the entire query including OFFSET/LIMIT.
+                    // If those are present, we must fall through to the Heavy Pipeline.
+                    bool localEngineRequired = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || 
+                                               stmt.GroupBy != null || 
+                                               stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression)) ||
+                                               stmt.IsDistinct ||
+                                               (stmt.Joins != null && stmt.Joins.Count > 0);
+
+                    if (!localEngineRequired)
+                    {
+                        _logger.Debug("[SELECT] Pushing down query (possibly paged) to remote: {ConnName}", fromConn);
+                        var conn = (IDatabaseSource)context.Connections[fromConn];
+                        var compiled = context.CompileQuery(stmt, conn.Dialect);
+                        await foreach (var batch in conn.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values)) yield return batch;
+                        yield break;
+                    }
                 }
             }
 
-            // 2. Prepare Engines
-            var aggregateEngine = new AggregateEngine(context, _logger);
-            var windowEngine = new WindowEngine(context, aggregateEngine, _logger);
+            // 2. Prepare Engines (Engines already prepared above)
             
             _logger.Debug("[SELECT] Evaluating local engine for {TableName}", stmt.FromTable.TableName);
             var batches = context.ResolveAndApplyOperators(stmt.FromTable);
@@ -342,7 +351,7 @@ namespace ETL_SQL.Engine.Handlers
             // 4. Strategy Selection
             bool hasAgg = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || stmt.GroupBy != null;
             bool hasWindow = stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression));
-            bool isComplex = hasAgg || hasWindow || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null || stmt.Offset != null || stmt.IsDistinct;
+            bool isComplex = hasAgg || hasWindow || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null || stmt.Offset != null || stmt.LimitCount != null || stmt.IsDistinct;
 
             if (!isComplex)
             {
@@ -383,17 +392,42 @@ namespace ETL_SQL.Engine.Handlers
             resultBatch.SetColumns(colNames);
 
             bool yielded = false;
+            int rowsYielded = 0;
+            int rowsSkipped = 0;
+            int offset = 0;
+            if (stmt.Offset != null)
+            {
+                var offVal = await context.EvaluateValue(stmt.Offset, new Row());
+                offset = Convert.ToInt32(offVal);
+            }
+            int? limit = null;
+            if (stmt.LimitCount != null)
+            {
+                var limVal = await context.EvaluateValue(stmt.LimitCount, new Row());
+                limit = Convert.ToInt32(limVal);
+            }
+
             await foreach (var batch in batches)
             {
                 foreach (var row in batch.Rows)
                 {
                     if (stmt.WhereClause != null && !await context.EvaluateCondition(stmt.WhereClause, row)) continue;
                     
+                    if (rowsSkipped < offset)
+                    {
+                        rowsSkipped++;
+                        continue;
+                    }
+
+                    if (limit.HasValue && rowsYielded >= limit.Value) break;
+
                     var resRow = resultBatch.NewRow();
                     for (int i = 0; i < finalColumns.Count; i++)
                         resRow[i] = await context.EvaluateValue(finalColumns[i].Expression, row);
                     
                     await resultBatch.AddRowAsync(resRow);
+                    rowsYielded++;
+
                     if (resultBatch.Rows.Count >= context.BatchSize)
                     {
                         yield return resultBatch;
@@ -402,6 +436,7 @@ namespace ETL_SQL.Engine.Handlers
                         resultBatch.SetColumns(colNames);
                     }
                 }
+                if (limit.HasValue && rowsYielded >= limit.Value) break;
             }
             if (resultBatch.Rows.Count > 0 || !yielded) yield return resultBatch;
         }
@@ -451,6 +486,9 @@ namespace ETL_SQL.Engine.Handlers
                         
                         // Register currentStep as the CTE source for this iteration
                         var mem = new InMemoryDataSource();
+                        mem.Validator = context as IDataValidator;
+                        mem.ExecutionContext = context;
+                        mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
                         
                         // Type inference (only on first iteration to establish schema)
                         if (depth == 1 && currentStep.Rows.Count > 0)
@@ -511,6 +549,9 @@ namespace ETL_SQL.Engine.Handlers
                         throw new ExecutionException($"The maximum recursion {context.MaxRecursiveDepth} has been exhausted before statement completion for CTE '{cte.Name}'.", null, cte.Line, cte.Column);
                     
                     var finalMem = new InMemoryDataSource();
+                    finalMem.Validator = context as IDataValidator;
+                    finalMem.ExecutionContext = context;
+                    finalMem.MaxInMemoryBatches = context.MaxInMemoryBatches;
                     finalMem.SetSchema(colDefs);
                     await finalMem.WriteBatches(new[] { finalResult }.ToAsyncEnumerable());
                     context.LocalSources[cte.Name] = finalMem;
@@ -525,6 +566,9 @@ namespace ETL_SQL.Engine.Handlers
                         foreach (var r in batch.Rows) await cteResult.AddRowAsync(r);
                     }
                     var mem = new InMemoryDataSource();
+                    mem.Validator = context as IDataValidator;
+                    mem.ExecutionContext = context;
+                    mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
                     mem.SetSchema(cteResult.ColumnNames.Select(c => new ColumnDefinition(c, "STRING", false)));
                     await mem.WriteBatches(new[] { cteResult }.ToAsyncEnumerable());
                     context.LocalSources[cte.Name] = mem;

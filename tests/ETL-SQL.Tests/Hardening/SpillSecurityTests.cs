@@ -21,6 +21,8 @@ namespace ETL_SQL.Tests.Hardening
             var mockContext = new Mock<IExecutionContext>();
             mockContext.SetupProperty(c => c.SpillEncryptionEnabled, true);
             mockContext.SetupProperty(c => c.SpillCompressionEnabled, true);
+            mockContext.Setup(c => c.SessionStateManager).Returns(new global::ETL_SQL.Core.Execution.NullSessionStateManager());
+            mockContext.Setup(c => c.SessionRoot).Returns(Path.GetTempPath());
 
             using var store = new SpillStore(mockContext.Object);
             string chunkName = "test_data.tmp";
@@ -33,7 +35,7 @@ namespace ETL_SQL.Tests.Hardening
             }
 
             // Assert: Verify file exists and is garbage (encrypted/compressed)
-            var rootPath = typeof(SpillStore).GetField("_rootPath", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(store) as string;
+            var rootPath = typeof(SpillStore).GetField("_cachedRootPath", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(store) as string;
             var filePath = Path.Combine(rootPath!, chunkName);
             
             Assert.True(File.Exists(filePath));
@@ -88,10 +90,13 @@ namespace ETL_SQL.Tests.Hardening
             // Arrange
             var mockContext = new Mock<IExecutionContext>();
             string rootPath;
+            mockContext.Setup(c => c.SessionRoot).Returns(Path.GetTempPath());
+            mockContext.Setup(c => c.SessionStateManager).Returns(new global::ETL_SQL.Core.Execution.NullSessionStateManager());
             
             using (var store = new SpillStore(mockContext.Object))
             {
-                rootPath = typeof(SpillStore).GetField("_rootPath", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)?.GetValue(store) as string ?? "";
+                // Trigger initialization
+                rootPath = store.RootPath;
                 Assert.True(Directory.Exists(rootPath));
 
                 await using (var writer = await store.CreateWriterAsync("data.tmp"))

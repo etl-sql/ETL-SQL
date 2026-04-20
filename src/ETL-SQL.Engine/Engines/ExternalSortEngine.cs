@@ -7,7 +7,9 @@ using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Spill;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Engine.Spill;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -19,12 +21,14 @@ namespace ETL_SQL.Engine.Engines
     {
         private readonly IExecutionContext _context;
         private readonly ILogger _logger;
+        private readonly IBufferManager? _bufferManager;
         public int ChunkSize => _context.ExternalSortChunkSize;
 
         public ExternalSortEngine(IExecutionContext context, ILogger logger)
         {
             _context = context;
             _logger = logger;
+            _bufferManager = _context.ServiceProvider?.GetService<IBufferManager>();
         }
 
         public async Task<List<Row>> SortExternal(
@@ -50,6 +54,7 @@ namespace ETL_SQL.Engine.Engines
             IAsyncEnumerable<Row> inputStream,
             List<OrderByClause> orderBy)
         {
+            using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId, owner: this) : null;
             var chunkPaths = new List<string>();
 
             // 1. Comparison function

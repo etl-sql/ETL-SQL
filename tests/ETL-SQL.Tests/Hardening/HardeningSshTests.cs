@@ -32,7 +32,8 @@ namespace ETL_SQL.Tests.Hardening
         [Fact]
         public async Task TestGenerateRsaKey()
         {
-            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var sp = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = sp.GetRequiredService<Evaluator>();
             string scriptDir = Path.Combine(_testDir, "rsa");
             string script = $"CREATE SSH_KEY_PAIR('{scriptDir.Replace("\\", "\\\\")}', 2048, 'RSA');";
             
@@ -48,7 +49,8 @@ namespace ETL_SQL.Tests.Hardening
         [Fact]
         public async Task TestGenerateEcdsaKey()
         {
-            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var sp = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = sp.GetRequiredService<Evaluator>();
             string scriptDir = Path.Combine(_testDir, "ecdsa");
             string script = $"CREATE SSH_KEY_PAIR('{scriptDir.Replace("\\", "\\\\")}', 256, 'ECDSA');";
             
@@ -65,7 +67,8 @@ namespace ETL_SQL.Tests.Hardening
         [Fact]
         public async Task TestGenerateEncryptedRsaKey()
         {
-            var evaluator = ETL_SQL.Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var sp = DependencyInjectionSetup.BuildServiceProvider();
+            var evaluator = sp.GetRequiredService<Evaluator>();
             string scriptDir = Path.Combine(_testDir, "encrypted");
             string passphrase = "secret_passphrase";
             string script = $"CREATE SSH_KEY_PAIR('{scriptDir.Replace("\\", "\\\\")}', 2048, 'RSA', '{passphrase}');";

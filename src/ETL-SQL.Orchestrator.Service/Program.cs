@@ -100,7 +100,7 @@ try
         var slog = sp.GetRequiredService<ETL_SQL.Common.ILogger>();
         var ssec = sp.GetRequiredService<ETL_SQL.Services.SecurityService>();
         var customDir = scfg["Session:Root"];
-        return new SessionStateManager(slog, ssec, customDir);
+        return new SessionStateManager(slog, ssec, scfg, customDir);
     });
     
     var securityService = new ETL_SQL.Services.SecurityService(loggerService);

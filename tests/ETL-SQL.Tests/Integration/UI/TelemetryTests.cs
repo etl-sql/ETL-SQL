@@ -21,6 +21,10 @@ namespace ETL_SQL.Tests.Integration.UI
             _originalOut = Console.Out;
             _originalIn = Console.In;
             Console.SetOut(_outWriter);
+            if (ETL_SQL.TUI.Program.ServiceProvider == null)
+            {
+                ETL_SQL.TUI.Program.ServiceProvider = ETL_SQL.TUI.TuiDependencyInjectionSetup.BuildServiceProvider();
+            }
         }
 
         public void Dispose()

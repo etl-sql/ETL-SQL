@@ -16,7 +16,9 @@ namespace ETL_SQL.Tests.Hardening.Hardening
     {
         private Evaluator CreateEvaluator()
         {
-            return Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();
+            eval.SecurityService.IsTestMode = false; // Force enforcement
+            return eval;
         }
 
         [Fact]
@@ -46,25 +48,50 @@ namespace ETL_SQL.Tests.Hardening.Hardening
         public async Task TestBlockedFileType_Throws()
         {
             var eval = CreateEvaluator();
-            var tempFile = Path.Combine(Path.GetTempPath(), "test_hardening_blocked.dll");
-            var sql = $"DELETE FILE '{tempFile.Replace("\\", "/")}';";
-            
-            var script = TestHelpers.Parse(sql);
-            var ex = await Assert.ThrowsAsync<SecurityException>(() => eval.Evaluate(script));
-            Assert.Contains("dangerous file type", ex.Message);
+            var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var securityService = eval.SecurityService;
+            securityService.ApprovedSafeZones.Add(baseDir);
+            try
+            {
+                var tempFile = Path.Combine(baseDir, "test_hardening_blocked.dll");
+                var sql = $"DELETE FILE '{tempFile.Replace("\\", "/")}';";
+                var script = TestHelpers.Parse(sql);
+                
+                var ex = await Assert.ThrowsAsync<SecurityException>(() => eval.Evaluate(script));
+                Assert.Contains("dangerous file type", ex.Message);
+            }
+            finally
+            {
+                securityService.ApprovedSafeZones.Remove(baseDir);
+            }
         }
 
         [Fact]
         public async Task TestRunawayProtection_CountLimit()
         {
-            var eval = CreateEvaluator();
-            var tempFile = Path.Combine(Path.GetTempPath(), "test_hardening_limit.csv");
-            var scriptSql = $"DELETE FILE '{tempFile.Replace("\\", "/")}';\n";
-            var fullSql = string.Concat(Enumerable.Repeat(scriptSql, 101));
+            var securityService = Program.ServiceProvider.GetRequiredService<SecurityService>();
+            var originalTestMode = securityService.IsTestMode;
+            securityService.IsTestMode = false;
             
-            var script = TestHelpers.Parse(fullSql);
-            var ex = await Assert.ThrowsAsync<SecurityException>(() => eval.Evaluate(script));
-            Assert.Contains("safety limit of 100", ex.Message);
+            var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            securityService.ApprovedSafeZones.Add(baseDir);
+
+            try
+            {
+                var eval = CreateEvaluator();
+                var tempFile = Path.Combine(baseDir, "test_hardening_limit.csv");
+                var scriptSql = $"DELETE FILE '{tempFile.Replace("\\", "/")}';\n";
+                var fullSql = string.Concat(Enumerable.Repeat(scriptSql, 101));
+                
+                var script = TestHelpers.Parse(fullSql);
+                var ex = await Assert.ThrowsAsync<SecurityException>(() => eval.Evaluate(script));
+                Assert.Contains("limit of 100", ex.Message);
+            }
+            finally
+            {
+                securityService.IsTestMode = originalTestMode;
+                securityService.ApprovedSafeZones.Remove(baseDir);
+            }
         }
 
         [Fact]
@@ -72,29 +99,66 @@ namespace ETL_SQL.Tests.Hardening.Hardening
         {
             // We need to use ExecutionSession to test overrides
             var session = ETL_SQL.Program.ServiceProvider.GetRequiredService<ETL_SQL.Orchestrator.Execution.ExecutionSession>();
+            var securityService = ETL_SQL.Program.ServiceProvider.GetRequiredService<ETL_SQL.Services.SecurityService>();
             
-            var scriptSql = "DELETE FILE 'test.csv';\n";
-            var fullSql = "SET WHAT_IF ON;\nSET ALLOW_GREATER_THAN_100_FILE ON;\n" + string.Concat(Enumerable.Repeat(scriptSql, 101));
+            var originalTestMode = securityService.IsTestMode;
+            securityService.IsTestMode = false; // Force enforcement logic to run
             
-            var result = await session.ExecuteAsync(fullSql);
-            
-            // It should NOT fail with SecurityException 100 limit
-            bool hasSecurityError = result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error && d.Message.Contains("Safety limit of 100", StringComparison.OrdinalIgnoreCase));
-            Assert.False(hasSecurityError, "Should NOT have triggered 100-file safety limit due to override.");
-            
-            // PROACTIVE CHECK: verify exactly 101 operations were 'performed' in WHAT_IF mode
-            int attemptCount = result.Messages.Count(m => m.Contains("Would perform Delete_FILE", StringComparison.OrdinalIgnoreCase));
-            Assert.Equal(101, attemptCount);
+            // AUTHORIZE current test directory to bypass bin/obj block while IsTestMode is false
+            var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            securityService.ApprovedSafeZones.Add(baseDir);
+
+            try
+            {
+                var tempFile = Path.Combine(baseDir, "hardening_override_test.csv");
+                var scriptSql = $"DELETE FILE '{tempFile.Replace("\\", "/")}';\n";
+                var fullSql = "SET WHAT_IF ON;\nSET ALLOW_GREATER_THAN_100_FILE ON;\n" + string.Concat(Enumerable.Repeat(scriptSql, 101));
+                
+                var scriptPath = Path.Combine(baseDir, "test_override.sql");
+                File.WriteAllText(scriptPath, fullSql);
+                
+                // Run as a script so CurrentScriptPath is populated
+                var result = await session.ExecuteAsync($"RUN SCRIPT '{scriptPath.Replace("\\", "/")}';");
+                
+                // It should NOT fail with SecurityException 100 limit
+                bool hasSecurityError = result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error && (d.Message.Contains("Safety limit of 100", StringComparison.OrdinalIgnoreCase) || d.Message.Contains("Runaway", StringComparison.OrdinalIgnoreCase)));
+                if (hasSecurityError || result.Messages.Count == 0)
+                {
+                    var msgs = string.Join("\n", result.Messages);
+                    var diags = string.Join("\n", result.Diagnostics.Select(d => d.Message));
+                    Assert.Fail($"Security override failed or no messages captured.\nDIAGNOSTICS:\n{diags}\nMESSAGES:\n{msgs}");
+                }
+                
+                // PROACTIVE CHECK: verify exactly 101 operations were 'performed' in WHAT_IF mode
+                int attemptCount = result.Messages.Count(m => m.Contains("Would perform Delete_FILE", StringComparison.OrdinalIgnoreCase));
+                Assert.Equal(101, attemptCount);
+            }
+            finally
+            {
+                securityService.IsTestMode = originalTestMode;
+                securityService.ApprovedSafeZones.Remove(baseDir);
+            }
         }
 
         [Fact]
         public async Task TestRecursiveDepth_Throws()
         {
-            var eval = CreateEvaluator();
-            eval.CurrentRecursiveDepth = 6;
-            
-            var ex = Assert.Throws<SecurityException>(() => eval.IncrementOperationCount());
-            Assert.Contains("Recursive operation depth (6) exceeds the safety limit of 5", ex.Message);
+            var securityService = Program.ServiceProvider.GetRequiredService<SecurityService>();
+            var originalTestMode = securityService.IsTestMode;
+            securityService.IsTestMode = false;
+
+            try
+            {
+                var eval = CreateEvaluator();
+                eval.CurrentRecursiveDepth = 6;
+                
+                var ex = Assert.Throws<SecurityException>(() => eval.IncrementOperationCount());
+                Assert.Contains("Recursive operation depth (6) exceeds the safety limit of 5", ex.Message);
+            }
+            finally
+            {
+                securityService.IsTestMode = originalTestMode;
+            }
         }
     }
 }

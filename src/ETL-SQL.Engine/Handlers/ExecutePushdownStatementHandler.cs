@@ -123,6 +123,10 @@ namespace ETL_SQL.Engine.Handlers
                 if (firstBatch != null)
                 {
                     var mem = new InMemoryDataSource();
+                    mem.Validator = context;
+                    mem.ExecutionContext = context;
+                    mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
+
                     var columns = firstBatch.ColumnNames.Select(c => new ColumnDefinition(c, "ANY", false));
                     mem.SetSchema(columns);
                     context.Connections[tableName] = mem;

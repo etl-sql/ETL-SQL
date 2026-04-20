@@ -8,10 +8,10 @@ namespace ETL_SQL.Core.Common
     /// </summary>
     public static class ParameterUtility
     {
-        private static readonly Regex ParameterRegex = new Regex(@"\?(?<index>[0-9]+)?", RegexOptions.Compiled);
+        private static readonly Regex ParameterRegex = new Regex(@"\?(?<index>[0-9]+)?|@p(?<pindex>[0-9]+)", RegexOptions.Compiled);
 
         /// <summary>
-        /// Processes the SQL text, replacing '?' and '?n' (1-indexed) with numbered parameter tokens (e.g., '@p0').
+        /// Processes the SQL text, replacing '?', '?n' (1-indexed), and '@pn' (0-indexed) with numbered parameter tokens (e.g., '@p0').
         /// </summary>
         /// <param name="sqlText">The raw SQL text to process.</param>
         /// <param name="parameterPrefix">The prefix to use for generated parameters (default is '@').</param>
@@ -23,7 +23,13 @@ namespace ETL_SQL.Core.Common
             int sequentialIndex = 0;
             return ParameterRegex.Replace(sqlText, match =>
             {
-                if (match.Groups["index"].Success)
+                if (match.Value.StartsWith("@p"))
+                {
+                    // Indexed parameter @pn (0-indexed, from QueryCompiler)
+                    int index = int.Parse(match.Groups["pindex"].Value);
+                    return $"{parameterPrefix}p{index}";
+                }
+                else if (match.Groups["index"].Success)
                 {
                     // Indexed parameter ?n (1-indexed)
                     int index = int.Parse(match.Groups["index"].Value) - 1;

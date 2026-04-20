@@ -19,6 +19,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Services;
 using Microsoft.Extensions.Configuration;
 using ETL_SQL.Core.Spill;
+using ETL_SQL.Core.Execution;
 
 namespace ETL_SQL.Engine
 {
@@ -37,7 +38,7 @@ namespace ETL_SQL.Engine
     /// The primary execution engine for ETL-SQL scripts.
     /// Coordinates connections, variables, statement handlers, and expression evaluation.
     /// </summary>
-    public class Evaluator : IExecutionContext, IAsyncDisposable, IDataValidator
+    public class Evaluator : IExecutionContext, IAsyncDisposable, IDataValidator, ISpillable
     {
         private readonly IEnumerable<IStatementHandler> _handlers;
         private readonly IServiceProvider _serviceProvider;
@@ -45,7 +46,7 @@ namespace ETL_SQL.Engine
         private readonly ILineageTracker _lineageTracker;
         private readonly IDockerManager _dockerManager;
         private readonly IConnectorRegistry _connectorRegistry;
-        private readonly SessionStateManager _sessionStateManager;
+        private readonly ISessionStateManager _sessionStateManager;
         public SecurityService SecurityService => _securityService;
         private readonly SecurityService _securityService;
         private readonly ETL_SQL.Common.ILogger _logger;
@@ -161,7 +162,7 @@ namespace ETL_SQL.Engine
         public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
 
         /// <summary>Maximum rows to fetch per page for remote FOREACH pushdown.</summary>
-        public int ForeachPageSize { get; set; } = 10000;
+        public int ForeachPageSize { get; set; } = 0;
         
         private bool _isVerbose;
         
@@ -304,7 +305,7 @@ namespace ETL_SQL.Engine
         public ILineageTracker LineageTracker => _lineageTracker;
 
         /// <summary>Manager for session persistence and cleanup.</summary>
-        public SessionStateManager SessionStateManager => _sessionStateManager;
+        public ISessionStateManager SessionStateManager => _sessionStateManager;
 
         public ILogger Logger => _logger;
 
@@ -313,18 +314,30 @@ namespace ETL_SQL.Engine
         /// Setting this also stamps all subsequent log output from this Evaluator
         /// with the session ID for correlation across concurrent sessions.
         /// </summary>
-        public string? SessionId
+        public string SessionId
         {
             get => _sessionId;
             set
             {
+                var val = string.IsNullOrEmpty(value) ? Guid.NewGuid().ToString("N") : value;
                 if (_sessionId != null) _sessionStateManager.UnregisterActiveSession(_sessionId);
-                _sessionId = value;
+                _sessionId = val;
                 if (_sessionId != null) _sessionStateManager.RegisterActiveSession(_sessionId);
-                _logger.SessionId = value;
+                _logger.SessionId = val;
             }
         }
-        private string? _sessionId;
+        private string _sessionId = Guid.NewGuid().ToString("N");
+
+        /// <summary>
+        /// The root directory for the current session (metadata, logs, and spills).
+        /// Defaults to the standard AppData path if not explicitly provided.
+        /// </summary>
+        public string SessionRoot 
+        { 
+            get => _sessionRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions", SessionId);
+            set => _sessionRoot = value;
+        }
+        private string? _sessionRoot;
 
         
         /// <summary>Cache for scalar subquery results to avoid redundant execution.</summary>
@@ -372,20 +385,32 @@ namespace ETL_SQL.Engine
         public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null) => _variableScopeManager.PushScope(vars, metadata);
         public void PopScope() => _variableScopeManager.PopScope();
 
-        public Evaluator(
-            IEnumerable<IStatementHandler> handlers,
-            IServiceProvider serviceProvider,
-            Core.Functions.IFunctionRegistry functionRegistry,
-            ILineageTracker lineageTracker,
-            IDockerManager dockerManager,
-            IConnectorRegistry connectorRegistry,
-            SessionStateManager sessionStateManager,
-            SecurityService securityService,
-            ILogger logger)
-            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, connectorRegistry, sessionStateManager, securityService, logger, new EvaluatorComponentRegistry())
+        public bool IsPersistentSession { get; set; }
+
+        public string SpillToken => $"Session_{SessionId}";
+        public long MemoryUsageBytes 
         {
+            get
+            {
+                // Estimate variable metadata and subquery cache overhead
+                long varBytes = Variables.Count * 256;
+                long subqueryBytes = _subqueryCache.Count * 1024;
+                return varBytes + subqueryBytes;
+            }
+        }
+        public Task<bool> SpillAsync()
+        {
+            if (_subqueryCache.Count > 0)
+            {
+                _subqueryCache.Clear();
+                _logger.Warning("Evaluator spilled: Subquery cache cleared to reclaim memory.");
+                return Task.FromResult(true);
+            }
+            return Task.FromResult(false);
         }
 
+        // Consolidated Unified Constructor for DI and Sessions
+        [Microsoft.Extensions.DependencyInjection.ActivatorUtilitiesConstructor]
         public Evaluator(
             IEnumerable<IStatementHandler> handlers,
             IServiceProvider serviceProvider,
@@ -393,29 +418,13 @@ namespace ETL_SQL.Engine
             ILineageTracker lineageTracker,
             IDockerManager dockerManager,
             IConnectorRegistry connectorRegistry,
-            SessionStateManager sessionStateManager,
+            ISessionStateManager sessionStateManager,
             SecurityService securityService,
             ILogger logger,
-            EvaluatorComponentRegistry registry)
-            : this(handlers, serviceProvider, functionRegistry, lineageTracker, dockerManager, connectorRegistry, sessionStateManager, securityService, logger, registry, null, null, null)
-        {
-        }
-
-        // Removed attribute to allow DI to pick the simpler constructor above
-        public Evaluator(
-            IEnumerable<IStatementHandler> handlers,
-            IServiceProvider serviceProvider,
-            Core.Functions.IFunctionRegistry functionRegistry,
-            ILineageTracker lineageTracker,
-            IDockerManager dockerManager,
-            IConnectorRegistry connectorRegistry,
-            SessionStateManager sessionStateManager,
-            SecurityService securityService,
-            ILogger logger,
-            EvaluatorComponentRegistry registry,
-            ConcurrentDictionary<string, IDataSource>? connections,
-            VariableScopeManager? variableScopeManager,
-            ExecutionTree? executionTree,
+            EvaluatorComponentRegistry? registry = null,
+            ConcurrentDictionary<string, IDataSource>? connections = null,
+            VariableScopeManager? variableScopeManager = null,
+            ExecutionTree? executionTree = null,
             IReportContext? reportContext = null)
         {
             _handlers = handlers;
@@ -425,13 +434,14 @@ namespace ETL_SQL.Engine
             _dockerManager = dockerManager;
             _connectorRegistry = connectorRegistry;
             _sessionStateManager = sessionStateManager;
-            _logger = logger;
             _securityService = securityService;
+            _logger = logger;
+            _registry = registry ?? new EvaluatorComponentRegistry();
+
             ExecutionTree = executionTree ?? new ExecutionTree();
             _connections = connections ?? new ConcurrentDictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
             _variableScopeManager = variableScopeManager ?? new VariableScopeManager();
 
-            _registry = registry;
             _registry.Initialize(this, _logger, _variableScopeManager, reportContext);
             
             _queryCompiler = _registry.QueryCompiler;
@@ -448,29 +458,25 @@ namespace ETL_SQL.Engine
             Functions.JsonFunctions.Register(functionRegistry);
             Functions.XmlFunctions.Register(functionRegistry);
 
-            foreach (var handler in handlers)
+            foreach (var h in handlers)
             {
-                _statementHandlers[handler.SupportedStatementType] = handler;
+                _statementHandlers[h.SupportedStatementType] = h;
             }
 
-            // Special mapping: SelectStatementHandler also handles SetOperationStatement
             if (_statementHandlers.TryGetValue(typeof(SelectStatement), out var selectHandler))
             {
                 _statementHandlers[typeof(SetOperationStatement)] = selectHandler;
             }
 
-            // Assign a short session ID for log correlation across concurrent sessions.
-            // Callers can override this after construction if they have a meaningful ID.
             SessionId = Guid.NewGuid().ToString("N")[..8];
 
-            // Initialize TemplatePath from configuration
+            // Initialize TemplatePath and thresholds from configuration
             var config = _serviceProvider?.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
             if (config != null)
             {
                 TemplatePath = config.GetValue<string>("Reporting:TemplatePath") ?? "./Templates";
             }
 
-            // Initialize thresholds from config or defaults
             MaxInMemoryBatches = DefaultThresholds.MaxInMemoryBatches(config);
             ForeachPageSize = DefaultThresholds.ForeachPageSize(config);
             JoinSpillThreshold = DefaultThresholds.JoinSpillThreshold(config);
@@ -487,19 +493,22 @@ namespace ETL_SQL.Engine
             _logger.Info("Evaluator initialized.");
 
             // Standard OnMessage hook for capturing output into the Messages list
-                _logger.OnMessage += (msg, col) =>
+            _logger.OnMessage += (msg, col) =>
+            {
+                if (RedirectOutput)
                 {
-                    if (RedirectOutput)
+                    var scrubbed = Scrub(msg);
+                    lock (_messagesLock)
                     {
-                        var scrubbed = Scrub(msg);
-                        lock (_messagesLock)
-                        {
-                            Messages.Add(scrubbed);
-                            if (Messages.Count > MaxMessages)
-                                Messages.RemoveAt(0);
-                        }
+                        Messages.Add(scrubbed);
+                        if (Messages.Count > MaxMessages)
+                            Messages.RemoveAt(0);
                     }
-                };
+                }
+            };
+
+            // Register for spill orchestration
+            _serviceProvider.GetService<IBufferManager>()?.RegisterSpillable(this);
         }
 
         public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)
@@ -590,7 +599,7 @@ namespace ETL_SQL.Engine
             
             foreach (var temp in state.TempTables)
             {
-                _connections[temp.Name] = await _dataSourceManager.RestoreTempTable(temp, ScriptPassword ?? _sessionStateManager.GetMachineKey());
+                _connections[temp.Name] = await _dataSourceManager.RestoreTempTable(temp, ScriptPassword ?? ETL_SQL.Services.SecurityService.GetMachineKey());
             }
         }
 
@@ -691,12 +700,6 @@ namespace ETL_SQL.Engine
                 if (IsVerbose) _metricsReporter.ProvideTips(statement);
                 LastIndexUsedName = null;
             }
-            else
-            {
-                // Even without verbose/profiling, we might want to track timing for @@LAST_EXEC_MS
-                // but for now we follow the existing pattern where sw is only created if IsVerbose/IsProfiling.
-                // Actually, let's always track it if possible.
-            }
         }
 
         public Task<IDataSource> ResolveDataSourceAsync(TableReference table) => _dataSourceManager.ResolveDataSourceAsync(table, _connections, _transactionManager);
@@ -753,9 +756,12 @@ namespace ETL_SQL.Engine
                 parts.Add(t.TableName);
             }
 
-            Func<string, string> quote = dialect.Equals("MSSQL", StringComparison.OrdinalIgnoreCase)
-                ? QuoteIdentifierMssql
-                : QuoteIdentifierStandard;
+            Func<string, string> quote = dialect.ToUpperInvariant() switch
+            {
+                "MSSQL" => QuoteIdentifierMssql,
+                "ORACLE" => s => QuoteIdentifierStandard(s.ToUpperInvariant()),
+                _ => QuoteIdentifierStandard
+            };
 
             return string.Join(".", parts.Select(quote));
         }
@@ -1001,7 +1007,15 @@ namespace ETL_SQL.Engine
         public async ValueTask DisposeAsync()
         {
             if (_sessionId != null) _sessionStateManager.UnregisterActiveSession(_sessionId);
-            _spillStore.Dispose();
+            
+            // Reclaim any 'Zombie' resource reservations (Reference Counting protection)
+            var bufferManager = _serviceProvider.GetService<IBufferManager>();
+            if (!string.IsNullOrEmpty(SessionId))
+            {
+                bufferManager?.ReleaseAllForSession(SessionId);
+            }
+
+            _spillStore?.Dispose();
             foreach (var conn in _connections.Values) await conn.DisposeAsync();
             await DockerManager.DisposeAsync();
             _connections.Clear();
@@ -1068,10 +1082,10 @@ namespace ETL_SQL.Engine
         public long LastStatementRowsProcessed { get; set; }
 
         private int _operationCount = 0;
-        public void IncrementOperationCount(string? path = null)
+        public void IncrementOperationCount(string? path = null, int count = 1)
         {
-            var count = System.Threading.Interlocked.Increment(ref _operationCount);
-            _securityService.CheckRunawayProtection(count, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, path);
+            var total = System.Threading.Interlocked.Add(ref _operationCount, count);
+            _securityService.CheckRunawayProtection(total, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, path);
         }
 
         ETL_SQL.Services.SecurityService IExecutionContext.SecurityService => _securityService;

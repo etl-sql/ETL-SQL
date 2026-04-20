@@ -9,6 +9,8 @@ using System.Xml.Linq;
 
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.DependencyInjection;
+using ETL_SQL.Core.Execution;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
@@ -113,7 +115,7 @@ namespace ETL_SQL.Data
     /// Represents an in-memory data store with indexing and constraint validation support.
     /// Used for temporary tables, MOCKDB, and intermediate query results.
     /// </summary>
-    public class InMemoryDataSource : IDataSource
+    public class InMemoryDataSource : IDataSource, ISpillable
     {
         private readonly List<DataTable> _batches = new();
         private readonly SemaphoreSlim _lock = new(1, 1);
@@ -132,7 +134,69 @@ namespace ETL_SQL.Data
         
         private readonly List<string> _spillChunkNames = new();
         private long _totalRowCount = 0;
-        public IExecutionContext? ExecutionContext { get; set; }
+        private IExecutionContext? _executionContext;
+        public IExecutionContext? ExecutionContext 
+        { 
+            get => _executionContext;
+            set
+            {
+                if (_executionContext != null)
+                {
+                    _executionContext.ServiceProvider.GetService<IBufferManager>()?.UnregisterSpillable(this);
+                }
+                _executionContext = value;
+                if (_executionContext != null)
+                {
+                    _executionContext.ServiceProvider.GetService<IBufferManager>()?.RegisterSpillable(this);
+                }
+            }
+        }
+
+        public long MemoryUsageBytes
+        {
+            get
+            {
+                // Simple estimation: 256 bytes per row (overhead + pointers)
+                // Plus index overhead
+                long batchBytes = _batches.Sum(b => (long)b.Rows.Count * 256);
+                long indexBytes = _indexes.Sum(idx => (long)idx.Value.Count * 128);
+                // Spilled chunks are ON DISK, so they don't count towards CURRENT RAM USAGE.
+                // This is critical for BufferManager to know how much RAM is actually reclaimable.
+                return batchBytes + indexBytes;
+            }
+        }
+
+        public string SpillToken => "InMemoryDataSource_" + (string.IsNullOrEmpty(Path) ? GetHashCode().ToString("X") : Path);
+
+        public async Task<bool> SpillAsync()
+        {
+            await _lock.WaitAsync();
+            try
+            {
+                if (_batches.Count == 0 && _indexes.Count == 0) return false;
+                if (ExecutionContext == null) return false;
+
+                // Move all batches to spill store
+                foreach (var batch in _batches)
+                {
+                    var chunkName = $"{Guid.NewGuid():N}.spill";
+                    await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
+                    {
+                        await writer.WriteRowsAsync(batch.Rows);
+                    }
+                    _spillChunkNames.Add(chunkName);
+                }
+
+                _batches.Clear();
+                foreach (var index in _indexes.Values) index.Clear();
+                
+                return true;
+            }
+            finally
+            {
+                _lock.Release();
+            }
+        }
 
         public async Task ValidateRow(Row row)
         {
@@ -679,7 +743,7 @@ namespace ETL_SQL.Data
             _indexes.Clear();
             _indexColumnMap.Clear();
 
-            if (ExecutionContext != null)
+            if (ExecutionContext != null && !ExecutionContext.IsPersistentSession)
             {
                 foreach (var chunk in _spillChunkNames)
                 {
@@ -687,6 +751,38 @@ namespace ETL_SQL.Data
                 }
             }
             _spillChunkNames.Clear();
+        }
+
+        public void Rehydrate(IEnumerable<ColumnDefinition> schema, IEnumerable<string> chunks)
+        {
+            SetSchema(schema);
+            _spillChunkNames.Clear();
+            _spillChunkNames.AddRange(chunks);
+            _totalRowCount = 0; // Will be recalculatable from chunks if needed, but for now we assume recovered
+        }
+
+        public IEnumerable<string> GetSpillChunks() => _spillChunkNames;
+
+        public async Task FlushToSpillAsync()
+        {
+            await _lock.WaitAsync();
+            try
+            {
+                if (_batches.Count == 0 || ExecutionContext?.SpillStore == null) return;
+
+                foreach (var batch in _batches)
+                {
+                    var chunkName = $"{Guid.NewGuid():N}.tmp";
+                    await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
+                    {
+                        await writer.WriteRowsAsync(batch.Rows);
+                    }
+                    _spillChunkNames.Add(chunkName);
+                }
+                _batches.Clear();
+                _indexes.Clear();
+            }
+            finally { _lock.Release(); }
         }
     }
 

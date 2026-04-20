@@ -30,7 +30,7 @@ namespace ETL_SQL.Core
         public bool IsJsonMode { get; set; }
         public bool EnablePaging { get; set; }
         public bool DisplayProgress { get; set; }
-        public string? SessionId { get; set; }
+        public string SessionId { get; set; } = System.Guid.NewGuid().ToString("N");
         public Dictionary<string, object?> Variables { get; } = new(System.StringComparer.OrdinalIgnoreCase);
     }
 }

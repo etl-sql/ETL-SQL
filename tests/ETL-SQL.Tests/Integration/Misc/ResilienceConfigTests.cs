@@ -40,7 +40,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             services.AddSingleton<IDockerManager>(new DockerContainerManager(testLogger));
 
 
-            services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>();
+            services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager, ETL_SQL.Engine.Services.SessionStateManager>();
             services.AddSingleton<SecurityService>();
 
             // Mimic DependencyInjectionSetup logic

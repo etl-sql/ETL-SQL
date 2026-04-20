@@ -9,6 +9,7 @@ using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Services;
 using ETL_SQL.Core.Spill;
+using ETL_SQL.Core.Execution;
 
 namespace ETL_SQL.Core.Common
 {
@@ -55,7 +56,9 @@ namespace ETL_SQL.Core.Common
         public IDictionary<string, VariableMetadata> VariableMetadata => new Dictionary<string, VariableMetadata>();
         public IDictionary<string, VariableMetadata> CurrentMetadata => new Dictionary<string, VariableMetadata>();
         
-        public IDictionary<string, IDataSource> Connections => new Dictionary<string, IDataSource>();
+        public string SessionId { get; set; } = Guid.NewGuid().ToString("N");
+        public string SessionRoot => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions", SessionId);
+        public IDictionary<string, IDataSource> Connections { get; } = new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
         public IDictionary<string, IDataSource> LocalSources => new Dictionary<string, IDataSource>();
         public IDictionary<string, NamedSet> NamedSets => new Dictionary<string, NamedSet>();
         
@@ -84,6 +87,7 @@ namespace ETL_SQL.Core.Common
         public List<string> Messages { get; } = new();
         public int MaxMessages { get; set; } = 1000;
         public Func<string, Task<bool>>? OnPrompt { get; set; }
+        public bool IsPersistentSession { get; set; }
 
         public Stack<Row> OuterRowStack { get; } = new();
         public LruCache<Statement, object?> SubqueryCache { get; } = new(500);
@@ -123,6 +127,7 @@ namespace ETL_SQL.Core.Common
         public bool SpillEncryptionEnabled { get; set; } = true;
         public bool SpillCompressionEnabled { get; set; } = true;
         public ISpillStore SpillStore => null!;
+        public ISessionStateManager SessionStateManager { get; set; } = new NullSessionStateManager();
 
         public bool AllowUnknownFileTypes { get; set; }
         public bool AllowLargeFileOperationCount { get; set; }
@@ -188,12 +193,13 @@ namespace ETL_SQL.Core.Common
 
         public Task EvaluateStatement(Statement statement) => Task.CompletedTask;
         public Task Evaluate(Script script, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt) => throw new NotSupportedException();
         public Task EvaluateProcedure(string name, List<object?> args) => Task.CompletedTask;
         public string ResolvePath(string path) => path;
         public bool FunctionExists(string name) => false;
         public bool ProcedureExists(string name) => false;
 
-        public void IncrementOperationCount(string? path = null) { }
+        public void IncrementOperationCount(string? path = null, int count = 1) { }
         public List<string> GetIndexedColumns(Expression? cond, string alias) => new();
 
         public Task EvaluateCreateTable(CreateTableStatement stmt) => Task.CompletedTask;

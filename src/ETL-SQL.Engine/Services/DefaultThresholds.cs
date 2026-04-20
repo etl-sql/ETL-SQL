@@ -13,7 +13,7 @@ namespace ETL_SQL.Engine.Services
             => config?.GetValue<int?>("Engine:MaxInMemoryBatches") ?? LanguageMetadata.DefaultMaxInMemoryBatches;
 
         public static int ForeachPageSize(IConfiguration? config)
-            => config?.GetValue<int?>("Engine:ForeachPageSize") ?? 10000;
+            => config?.GetValue<int?>("Engine:ForeachPageSize") ?? 0;
 
         public static int JoinSpillThreshold(IConfiguration? config)
             => config?.GetValue<int?>("Engine:JoinSpillThreshold") ?? LanguageMetadata.DefaultJoinSpillThreshold;

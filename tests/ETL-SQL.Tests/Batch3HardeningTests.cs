@@ -12,6 +12,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Data;
 
 using ETL_SQL.Core.Common.Exceptions;
+using Microsoft.Extensions.Configuration;
 using ETL_SQL.Services;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Engine.Services;
@@ -90,6 +91,7 @@ END";
         {
             // Arrange
             var evaluator = CreateEvaluator();
+            evaluator.MaxLastResultRows = 50000;
             
             // Generate 50005 rows - this triggers the 50k cap.
             // Using a more efficient way if possible, but the engine is fast for #temp table inserts.
@@ -127,7 +129,7 @@ SELECT * FROM #large;";
             tracker.Setup(t => t.GlobalMetadata).Returns(new Dictionary<string, string>());
             
             var docker = new Mock<IDockerManager>();
-            var sessions = new Mock<SessionStateManager>(l, _security, null);
+            var sessions = new Mock<SessionStateManager>(l, _security, new Mock<IConfiguration>().Object, null);
             var pushdown = new Mock<ExecutePushdownStatementHandler>(l);
             
             var handlers = new List<IStatementHandler>
@@ -147,7 +149,7 @@ SELECT * FROM #large;";
 
             _services.Setup(s => s.GetService(typeof(IEnumerable<IStatementHandler>))).Returns(handlers);
 
-            return new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, l);
+            return new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, l, new EvaluatorComponentRegistry());
         }
 
         private class TestLogger : ILogger

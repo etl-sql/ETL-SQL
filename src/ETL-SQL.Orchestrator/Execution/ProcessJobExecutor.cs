@@ -40,14 +40,14 @@ namespace ETL_SQL.Orchestrator.Execution
             _logger  = logger;
         }
 
-        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, CancellationToken cancellationToken = default)
+        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default)
         {
             // Write script to a temp file — ETL-SQL.exe run expects a file path
             var tempFile = Path.Combine(Path.GetTempPath(), $"etlsql-job-{Guid.NewGuid():N}.etlsql");
             try
             {
                 await File.WriteAllTextAsync(tempFile, scriptText, Encoding.UTF8, cancellationToken);
-                return await RunProcessAsync(tempFile, cancellationToken);
+                return await RunProcessAsync(tempFile, sessionId, cancellationToken);
             }
             finally
             {
@@ -55,10 +55,12 @@ namespace ETL_SQL.Orchestrator.Execution
             }
         }
 
-        private async Task<ScriptExecutionResult> RunProcessAsync(string scriptFile, CancellationToken ct)
+        private async Task<ScriptExecutionResult> RunProcessAsync(string scriptFile, string? sessionId, CancellationToken ct)
         {
             var exePath = ResolveExecutablePath();
             var args    = $"run \"{scriptFile}\" --json";
+            if (!string.IsNullOrEmpty(sessionId))
+                args += $" --session \"{sessionId}\"";
 
             _logger.LogInformation("Spawning job process: {Exe} {Args}", exePath, args);
 
@@ -142,8 +144,9 @@ namespace ETL_SQL.Orchestrator.Execution
                     bool   success  = root.TryGetProperty("success",       out var s) && s.GetBoolean();
                     long   rows     = root.TryGetProperty("rowsProcessed", out var r) ? r.GetInt64() : 0;
                     string? error   = root.TryGetProperty("error",         out var e) ? e.GetString() : null;
+                    string? session = root.TryGetProperty("sessionId",     out var sid) ? sid.GetString() : null;
 
-                    return new ScriptExecutionResult(success, rows, error, peakMemory, cpuSeconds);
+                    return new ScriptExecutionResult(success, rows, error, peakMemory, cpuSeconds, session);
                 }
                 catch (JsonException)
                 {

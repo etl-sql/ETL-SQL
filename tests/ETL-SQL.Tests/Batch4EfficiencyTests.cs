@@ -16,6 +16,7 @@ using ETL_SQL.Core.Functions;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Core.Data;
 using System.IO;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Tests
 {
@@ -25,6 +26,7 @@ namespace ETL_SQL.Tests
         private Mock<IConnectorRegistry> _connectors = new();
         private Mock<IServiceProvider> _services = new();
         private SecurityService _security;
+        private IConfiguration _config = new ConfigurationBuilder().Build();
 
         public Batch4EfficiencyTests()
         {
@@ -62,7 +64,7 @@ namespace ETL_SQL.Tests
             Directory.CreateDirectory(tempDir);
             try
             {
-                var sessions = new SessionStateManager(logger, _security, tempDir);
+                var sessions = new SessionStateManager(logger, _security, _config, tempDir);
                 
                 // Act & Assert
                 var ex = await Assert.ThrowsAsync<ExecutionException>(() => 
@@ -73,6 +75,9 @@ namespace ETL_SQL.Tests
             }
             finally
             {
+                // SQLite on Windows can hold file locks even after disposal due to connection pooling.
+                // Clear the pool to ensure metadata.db is released so the directory can be deleted.
+                Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
                 if (Directory.Exists(tempDir)) Directory.Delete(tempDir, true);
             }
         }
@@ -136,7 +141,7 @@ SELECT * FROM #collision ORDER BY id;"));
             tracker.Setup(t => t.GlobalMetadata).Returns(new Dictionary<string, string>());
             
             var docker = new Mock<IDockerManager>();
-            var sessions = new Mock<SessionStateManager>(l, _security, null);
+            var sessions = new Mock<SessionStateManager>(l, _security, _config, null);
             var pushdown = new Mock<ExecutePushdownStatementHandler>(l);
             
             var handlers = new List<IStatementHandler>
@@ -155,7 +160,7 @@ SELECT * FROM #collision ORDER BY id;"));
 
             _services.Setup(s => s.GetService(typeof(IEnumerable<IStatementHandler>))).Returns(handlers);
 
-            return new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, l);
+            return new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, l, new EvaluatorComponentRegistry());
         }
 
         private class TestLogger : ILogger

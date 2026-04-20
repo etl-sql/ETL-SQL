@@ -14,6 +14,7 @@ using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Services;
+using ETL_SQL.Core.Execution;
 
 namespace ETL_SQL.Tests.Integration.Misc
 {
@@ -35,7 +36,7 @@ namespace ETL_SQL.Tests.Integration.Misc
                 It.IsAny<DateTime?>())).Returns(Task.CompletedTask);
 
             var mockExecutor = new Mock<IScriptExecutor>();
-            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                         .ReturnsAsync(result);
 
             return (BuildService(mockStore, mockExecutor), mockStore, mockExecutor);
@@ -67,8 +68,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             mockConfig.Setup(c => c.GetSection(It.IsAny<string>())).Returns(new Mock<IConfigurationSection>().Object);
 
             var mockSessLogger = new Mock<ETL_SQL.Common.ILogger>();
-            var securityService = new SecurityService(mockSessLogger.Object);
-            var sessionManager = new SessionStateManager(mockSessLogger.Object, securityService);
+            var sessionManager = new Mock<ISessionStateManager>();
 
             return new SchedulerService(
                 mockServiceProvider.Object,
@@ -76,7 +76,7 @@ namespace ETL_SQL.Tests.Integration.Misc
                 new Mock<ILogger<SchedulerService>>().Object,
                 throttle,
                 mockConfig.Object,
-                sessionManager);
+                sessionManager.Object);
         }
 
         [Fact]
@@ -89,7 +89,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             await Task.Delay(500);
             service.Stop();
 
-            executor.Verify(e => e.ExecuteTextAsync("SELECT 1;", It.IsAny<CancellationToken>()), Times.AtLeastOnce());
+            executor.Verify(e => e.ExecuteTextAsync("SELECT 1;", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce());
         }
 
         [Fact]
@@ -103,7 +103,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             await Task.Delay(500);
             service.Stop();
 
-            executor.Verify(e => e.ExecuteTextAsync("PRINT 'hi';", It.IsAny<CancellationToken>()), Times.AtLeastOnce());
+            executor.Verify(e => e.ExecuteTextAsync("PRINT 'hi';", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.AtLeastOnce());
         }
 
         [Fact]
@@ -117,7 +117,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             await Task.Delay(300);
             service.Stop();
 
-            executor.Verify(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
+            executor.Verify(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never());
         }
 
         [Fact]
@@ -161,7 +161,7 @@ namespace ETL_SQL.Tests.Integration.Misc
                 It.IsAny<DateTime?>())).Returns(Task.CompletedTask);
 
             var mockExecutor = new Mock<IScriptExecutor>();
-            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            mockExecutor.Setup(e => e.ExecuteTextAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
                         .ThrowsAsync(new InvalidOperationException("DB connection lost"));
 
             var service = BuildService(mockStore, mockExecutor);

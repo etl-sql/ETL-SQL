@@ -75,12 +75,12 @@ namespace ETL_SQL.Engine.Engines
                     {
                         allRows.Add(inputEnumerator.Current);
                         count++;
-                        if (count > 100000) break;
+                        if (count > _context.JoinSpillThreshold) break;
                     }
 
-                    if (count > 100000)
+                    if (count > _context.JoinSpillThreshold)
                     {
-                        _logger.WriteLine("[yellow]HYPER-SCALE: Switching to streaming external join.[/]");
+                        _logger.WriteLine($"[yellow]HYPER-SCALE: Memory threshold exceeded ({count} rows). Switching to streaming external join.[/]");
                         var externalJoin = new ExternalJoinEngine(_context, _logger);
                         var hashKeysLeft = new List<string>();
                         var hashKeysRight = new List<string>();
@@ -127,7 +127,7 @@ namespace ETL_SQL.Engine.Engines
             // 2. GROUP BY
             if (!streamAggregate && (stmt.GroupBy != null || stmt.GroupingSet != null || hasAggInColumns))
             {
-                if (allRows.Count > 100000)
+                if (allRows.Count > _context.JoinSpillThreshold)
                 {
                     var externalAgg = new ExternalAggregateEngine(_context, _logger);
                     allRows = await externalAgg.ApplyAggregationExternal(allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet).ToListAsync();
@@ -160,7 +160,7 @@ namespace ETL_SQL.Engine.Engines
             // 4. ORDER BY
             if (stmt.OrderBy != null && stmt.OrderBy.Count > 0)
             {
-                if (allRows.Count > 100000)
+                if (allRows.Count > _context.JoinSpillThreshold)
                 {
                     var externalSort = new ExternalSortEngine(_context, _logger);
                     allRows = await externalSort.SortExternal(allRows, stmt.OrderBy);

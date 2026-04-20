@@ -35,41 +35,49 @@ namespace ETL_SQL.Tests.Integration.Integration
             }
         }
 
-        private async Task<(Evaluator, int exitCode)> RunSessionStep(string sql, string? password = null)
+        async Task<(Evaluator, int)> RunSessionStep(string sql)
         {
-            // Simulate a fresh process run
-            var services = DependencyInjectionSetup.BuildServiceProvider();
-            var evaluator = services.GetRequiredService<Evaluator>();
-            var security = services.GetRequiredService<SecurityService>();
-            var sessionManager = new SessionStateManager(NullLogger.Instance, security, _sessionDir);
+            var security = new SecurityService(NullLogger.Instance);
+            security.IsTestMode = true;
+            
+            
+            var config = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
+            var sessionManager = new SessionStateManager(NullLogger.Instance, security, config, _sessionDir);
 
             // 1. Load Session
-            var state = await sessionManager.LoadSession(_sessionId, password);
+            var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            evaluator.IsPersistentSession = true;
+            evaluator.SessionId = _sessionId;
+            evaluator.SessionRoot = _sessionDir;
+            
+            var state = await sessionManager.LoadSession(_sessionId);
             if (state != null)
             {
                 await evaluator.LoadSessionState(state);
             }
-
-            // 2. Execute SQL
+            
+            // 2. Run Script
             var lexer = new Lexer(sql);
             var parser = new Parser(lexer.Tokenize(), sql);
             var script = parser.Parse();
             
-            int exitCode = 0;
             try 
             {
                 await evaluator.Evaluate(script);
+                
+                // 3. Save Session
+                await sessionManager.SaveSession(_sessionId, evaluator, sql);
+                return (evaluator, 0);
             }
             catch (Exception ex)
             {
-                AnsiConsole.WriteException(ex);
-                exitCode = 1;
+                AnsiConsole.MarkupLine($"[red]ERROR in RunSessionStep:[/] {ex.Message}");
+                if (evaluator.LastError != null)
+                {
+                    AnsiConsole.MarkupLine($"[yellow]Evaluator Error {evaluator.LastError.Number}:[/] {evaluator.LastError.Message}");
+                }
+                return (evaluator, 1);
             }
-
-            // 3. Save Session
-            await sessionManager.SaveSession(_sessionId, evaluator, sql);
-
-            return (evaluator, exitCode);
         }
 
         [Fact]
@@ -165,14 +173,17 @@ namespace ETL_SQL.Tests.Integration.Integration
 
             // 12th run: Fails gracefully
             AnsiConsole.MarkupLine("  - Step 12: Verify connection failure to closed Docker");
-            var (eval12, code12) = await RunSessionStep("CREATE CONNECTION m ON MSSQL(@conn);");
+            var (eval12, code12) = await RunSessionStep(@"
+                CREATE CONNECTION m ON MSSQL(@conn);
+                SELECT TOP 1 * FROM m.dbo.SessionStateTestEmployee;
+            ");
             Assert.Equal(1, code12); // Should fail to connect
 
             // 13th run: Re-open Docker
             AnsiConsole.MarkupLine("  - Step 13: Re-initialize Docker container");
             var (eval13, code13) = await RunSessionStep(@"
                 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest');
-                DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
+                SET @conn = DOCKER.CONNECTION_STRING;
                 CREATE CONNECTION m ON MSSQL(@conn);
             ");
             Assert.Equal(0, code13);

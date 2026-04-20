@@ -116,6 +116,7 @@ namespace ETL_SQL.Tests.Integration
         public void TestSafeZoneRunawayProtection()
         {
             var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
+            security.IsTestMode = false; // Force restriction enforcement for verification
             var safePath = "C:\\MyProject";
             var neutralPath = "C:\\Data";
             

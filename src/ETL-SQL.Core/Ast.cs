@@ -228,8 +228,8 @@ namespace ETL_SQL.Core
         public List<Expression>? GroupBy { get; }
         /// <summary>Non-null when GROUP BY uses GROUPING SETS / ROLLUP / CUBE. Null for plain GROUP BY.</summary>
         public GroupingSetClause? GroupingSet { get; set; }
-        public Expression? HavingClause { get; }
-        public List<OrderByClause>? OrderBy { get; }
+        public Expression? HavingClause { get; set; }
+        public List<OrderByClause>? OrderBy { get; set; }
         public bool IsDistinct { get; set; }
         public Expression? TopCount { get; set; }
         public bool IsTopPercent { get; set; }
@@ -1782,12 +1782,16 @@ namespace ETL_SQL.Core
         public string JobName { get; }
         public ScheduleInfo Schedule { get; }
         public Statement Script { get; }
+        public int MaxRetries { get; }
+        public int RetryDelaySeconds { get; }
 
-        public CreateJobStatement(string jobName, ScheduleInfo schedule, Statement script)
+        public CreateJobStatement(string jobName, ScheduleInfo schedule, Statement script, int maxRetries = 0, int retryDelaySeconds = 30)
         {
             JobName = jobName;
             Schedule = schedule;
             Script = script;
+            MaxRetries = maxRetries;
+            RetryDelaySeconds = retryDelaySeconds;
         }
     }
 

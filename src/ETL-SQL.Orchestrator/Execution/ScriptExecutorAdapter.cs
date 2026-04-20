@@ -26,13 +26,17 @@ namespace ETL_SQL.Orchestrator.Execution
             _logger = logger;
         }
 
-        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, CancellationToken cancellationToken = default)
+        public async Task<ScriptExecutionResult> ExecuteTextAsync(string scriptText, string? sessionId = null, CancellationToken cancellationToken = default)
         {
             var process = System.Diagnostics.Process.GetCurrentProcess();
             var startCpu = process.TotalProcessorTime.TotalSeconds;
             
             try
             {
+                // Override the context's session ID if provided by the orchestrator (CQ-S2)
+                if (!string.IsNullOrEmpty(sessionId))
+                    _ctx.SessionId = sessionId;
+
                 var session = new ExecutionSession(_serviceProvider, _ctx, _logger);
                 var result = await session.ExecuteAsync(scriptText, cancellationToken);
                 
@@ -41,13 +45,13 @@ namespace ETL_SQL.Orchestrator.Execution
                 
                 return new ScriptExecutionResult(result.Success, result.RowsProcessed,
                     result.Success ? null : string.Join("; ", result.Diagnostics.Select(d => d.Message)),
-                    process.PeakWorkingSet64, endCpu - startCpu);
+                    process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId);
             }
             catch (Exception ex)
             {
                 process.Refresh();
                 var endCpu = process.TotalProcessorTime.TotalSeconds;
-                return new ScriptExecutionResult(false, 0, ex.Message, process.PeakWorkingSet64, endCpu - startCpu);
+                return new ScriptExecutionResult(false, 0, ex.Message, process.PeakWorkingSet64, endCpu - startCpu, _ctx.SessionId);
             }
         }
     }

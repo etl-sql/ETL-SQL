@@ -140,12 +140,15 @@ namespace ETL_SQL.Common
         public const long DefaultMaxStringResultSize = 100 * 1024 * 1024; // 100 MiB
         
         /// <summary>Default maximum number of rows held in a SELECT result buffer for display.</summary>
-        public const int DefaultMaxLastResultRows = 50000;
+        public const int DefaultMaxLastResultRows = 200000;
         
         /// <summary>Maximum number of grouping sets allowed in an aggregate CUBE/ROLLUP.</summary>
         public const int DefaultMaxGroupingSets = 1024;
         /// <summary>Default maximum size in bytes for a persisted session payload.</summary>
         public const long DefaultMaxSessionSize = 200 * 1024 * 1024; // 200 MiB
+
+        /// <summary>Default minimum OS physical memory that must remain free (4GB).</summary>
+        public const int DefaultSystemMemoryFloorMB = 4096;
 
         public static bool IsKeyword(string word) => DmlKeywords.Contains(word) || DdlKeywords.Contains(word) || ControlFlowKeywords.Contains(word) || JoinKeywords.Contains(word) || OperatorKeywords.Contains(word) || Keywords.Contains(word) || ConnectorTypes.Contains(word) || Functions.Contains(word);
         public static bool IsFunction(string word) => Functions.Contains(word);

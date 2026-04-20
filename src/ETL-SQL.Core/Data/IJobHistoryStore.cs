@@ -12,7 +12,9 @@ namespace ETL_SQL.Core.Data
         string? AtTime,
         DateTime? LastRun,
         DateTime? NextRun,
-        bool IsEnabled = true
+        bool IsEnabled = true,
+        int MaxRetries = 0,
+        int RetryDelaySeconds = 30
     );
 
     public record JobHistoryEntry(

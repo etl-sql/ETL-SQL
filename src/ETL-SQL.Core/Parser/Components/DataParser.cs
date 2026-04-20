@@ -895,9 +895,39 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.ON, "Expected ON after job name");
             Consume(TokenType.SCHEDULE, "Expected SCHEDULE after ON");
             var schedule = ParseSchedule();
+
+            int maxRetries = 0;
+            int retryDelay = 30;
+
+            if (Match(TokenType.WITH))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                while (!Match(TokenType.RPAREN) && _parser.Current.Type != TokenType.EOF)
+                {
+                    var keyTok = Advance();
+                    string key = keyTok.Value.ToUpperInvariant();
+                    Consume(TokenType.EQUALS, "Expected '=' after option key");
+                    
+                    var valExpr = ParseExpression();
+                    if (valExpr is LiteralExpression lit && lit.Type == TokenType.NUMBER)
+                    {
+                        int val = (int)Convert.ChangeType(lit.Value, typeof(int));
+                        if (key == "MAX_RETRIES") maxRetries = val;
+                        else if (key == "RETRY_DELAY" || key == "RETRY_DELAY_SECONDS") retryDelay = val;
+                        else throw new SyntaxException($"Unknown JOB option: {key}", keyTok.Line, keyTok.Column);
+                    }
+                    else
+                    {
+                        throw new SyntaxException($"Expected numeric literal for JOB option {key}", keyTok.Line, keyTok.Column);
+                    }
+
+                    if (!Match(TokenType.COMMA)) { Consume(TokenType.RPAREN, "Expected ')' or ','"); break; }
+                }
+            }
+
             Consume(TokenType.AS, "Expected AS before job script");
             var script = _parser.ParseStatement();
-            return new CreateJobStatement(jobName, schedule, script) { Line = startToken.Line, Column = startToken.Column };
+            return new CreateJobStatement(jobName, schedule, script, maxRetries, retryDelay) { Line = startToken.Line, Column = startToken.Column };
         }
 
         private ScheduleInfo ParseSchedule()

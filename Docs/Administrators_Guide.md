@@ -110,6 +110,11 @@ Applies to: **All Hosts**
 | `Engine:ExternalSort:ChunkSize` | `100000` | Rows per chunk in the external sort engine. |
 | `Engine:MaxMessages` | `1000` | Maximum number of print/log messages held in a session's message buffer. |
 
+| `Orchestration:ResourceManagement:MaxGlobalMemoryMB` | `2048` | Aggregate RAM (MB) allowed for all active sessions before queuing occurs. |
+| `Orchestration:ResourceManagement:MaxStreamingCursors` | `50` | Maximum number of concurrent high-speed database cursors allowed globally. |
+| `Orchestration:ResourceManagement:ResourceWaitTimeoutSeconds` | `600` | How long a script waits for resources (with 1-min feedback) before timing out. |
+| `Orchestration:ResourceManagement:HysteresisMemoryMB` | `256` | Safe buffer size required before resuming queue processing after exhaustion. |
+
 ---
 
 ### 3.3 Orchestration & Concurrency
@@ -271,7 +276,12 @@ Applies to: **App / TUI**
      "MaxInMemoryBatches": 100,
      "ForeachPageSize": 10000,
      "JobThrottle": {
-       "MaxConcurrentJobs": 0
+       "MaxConcurrentJobs": 4
+     },
+     "ResourceManagement": {
+       "MaxGlobalMemoryMB": 2048,
+       "MaxStreamingCursors": 50,
+       "ResourceWaitTimeoutSeconds": 600
      }
    },
    "Scheduler": {
@@ -308,9 +318,13 @@ Applies to: **App / TUI**
 
 ## 5. Resource Governance
 
-### 5.1 Memory Management
+### 5.1 Memory Management & Hysteresis
 ETL-SQL uses an **aggregate streaming model**. While it can process terabytes of data, it only holds a "window" of records in memory (`MaxInMemoryBatches`).
+
 - **High Memory Usage**: Reduce `Engine:BatchSize` or `Orchestration:MaxInMemoryBatches`. Lower values increase disk I/O but reduce peak RAM.
+- **Resource Exhaustion**: If the aggregate RAM usage across all sessions exceeds `MaxGlobalMemoryMB`, new requests are placed in a **FIFO Queue**.
+- **Wait Feedback**: While queued, the engine provides a 1-minute status update to the session log (e.g., "Session X still waiting for Memory... (4 min remaining)"). 
+- **Hysteresis (Cooldown)**: To prevent I/O "death spirals," once memory is exhausted, the engine will not release queued tasks until memory usage drops below a safe threshold defined by `HysteresisMemoryMB` (e.g., `MaxMB - HysteresisMB`).
 - **Disk Pressure**: Large `#temp` tables spill to the local temp directory. Ensure your `TEMP` directory has sufficient IOPS and free space.
 
 ### 5.2 Concurrency Tuning

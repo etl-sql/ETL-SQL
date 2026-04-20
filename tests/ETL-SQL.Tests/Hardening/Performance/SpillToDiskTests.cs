@@ -261,6 +261,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             const int LEFT_SIDE  = 100_000;
             const int RIGHT_SIDE = 110_000;
             var e = NewEvaluator();
+            e.MaxLastResultRows = 200000;
 
             var leftSchema  = new TableSchema(new[] { "Id", "LeftV" });
             var rightSchema = new TableSchema(new[] { "Id", "RightV" });
