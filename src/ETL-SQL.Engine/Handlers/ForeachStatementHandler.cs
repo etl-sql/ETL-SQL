@@ -91,7 +91,7 @@ namespace ETL_SQL.Engine.Handlers
             if (ds is not IDatabaseSource db || !db.SupportsSqlPushdown) return false;
 
             // Request a streaming cursor slot from the BufferManager
-            using (await _bufferManager.AcquireCursorAsync(context.SessionId, owner: this))
+            using (await _bufferManager.AcquireCursorAsync(context.SessionId ?? "DEFAULT", owner: this))
             {
                 context.Log($"Starting FAST-PATH Streaming FOREACH for {sel.FromTable.TableName} on {sel.FromTable.ConnectionName}");
                 

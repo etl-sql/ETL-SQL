@@ -57,6 +57,15 @@ export function activate(context: vscode.ExtensionContext) {
     let serverPath = (config.get<string>('server.path') || '').trim();
 
     if (!serverPath) {
+        // Try bundled path first
+        const bundledServer = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL.LanguageServer.exe' : 'ETL-SQL.LanguageServer');
+        if (fs.existsSync(bundledServer)) {
+            serverPath = bundledServer;
+            outputChannel.appendLine(`Using bundled Language Server: ${serverPath}`);
+        }
+    }
+
+    if (!serverPath) {
         outputChannel.appendLine("Server path not configured. Searching in build folder...");
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (workspaceFolder) {
@@ -220,7 +229,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!scriptPath.endsWith('.rptsql') && !scriptPath.endsWith('.etlsql')) {
             vscode.window.showWarningMessage('ETL-SQL: Preview Report is intended for .rptsql files.');
         }
-        ReportPreviewPanel.open(context.extensionUri, scriptPath);
+        ReportPreviewPanel.open(context, scriptPath);
     }));
 }
 
@@ -252,7 +261,7 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     }
 
     const config = vscode.workspace.getConfiguration('etlsql');
-    let exePath = getExecutablePath(config);
+    let exePath = getExecutablePath(context, config);
     
     // Defaulting previously user-facing settings to standard defaults for cleaner UI
     const runMethod = 'Webview (Grid)'; 
@@ -299,19 +308,25 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     }
 }
 
-function getExecutablePath(config: vscode.WorkspaceConfiguration): string {
-    let exePath = (config.get<string>('executable.path') || 'ETL-SQL.exe').trim();
-    if (!path.isAbsolute(exePath)) {
-        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-        if (workspaceFolder) {
-            const searchPaths = [
-                path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Debug', 'net10.0', 'ETL-SQL.exe'),
-                path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Release', 'net10.0', 'ETL-SQL.exe')
-            ];
-            for (const p of searchPaths) if (fs.existsSync(p)) return p;
-        }
+function getExecutablePath(context: vscode.ExtensionContext, config: vscode.WorkspaceConfiguration): string {
+    let exePath = (config.get<string>('executable.path') || '').trim();
+    if (exePath) return exePath;
+
+    // 1. Try bundled path first
+    const bundledPath = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL.exe' : 'ETL-SQL');
+    if (fs.existsSync(bundledPath)) return bundledPath;
+
+    // 2. Search in common build folders
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (workspaceFolder) {
+        const searchPaths = [
+            path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Debug', 'net10.0', 'ETL-SQL.exe'),
+            path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Release', 'net10.0', 'ETL-SQL.exe')
+        ];
+        for (const p of searchPaths) if (fs.existsSync(p)) return p;
     }
-    return exePath;
+
+    return 'ETL-SQL.exe'; // Fallback to PATH
 }
 
 function getSessionId(document: vscode.TextDocument): string {

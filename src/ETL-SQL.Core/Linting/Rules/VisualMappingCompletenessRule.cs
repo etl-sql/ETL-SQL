@@ -45,7 +45,7 @@ namespace ETL_SQL.Core.Linting.Rules
             return Task.FromResult<IEnumerable<LintResult>>(results);
         }
 
-        private static List<string> GetRequiredRoles(VisualType type)
+        private static List<string>? GetRequiredRoles(VisualType type)
         {
             return type switch
             {

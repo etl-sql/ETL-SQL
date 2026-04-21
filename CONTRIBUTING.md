@@ -57,10 +57,10 @@ dotnet test --collect:"XPlat Code Coverage"
 
 ```bash
 # Interactive console IDE
-dotnet run --project src/ETL-SQL.App -- --ui edit scripts/sample.etlsql
+dotnet run --project src/ETL-SQL.App -- --ui edit samples/sample.etlsql
 
 # Headless script execution
-dotnet run --project src/ETL-SQL.App -- --run scripts/sample.etlsql
+dotnet run --project src/ETL-SQL.App -- --run samples/sample.etlsql
 
 # Interactive REPL (no file)
 dotnet run --project src/ETL-SQL.App
@@ -90,7 +90,7 @@ ETL-SQL/
 │   └── etl-sql-vscode/        # VS Code language extension (TypeScript/Node)
 ├── tests/
 │   └── ETL-SQL.Tests/         # xUnit test suite (unit + integration)
-├── scripts/                   # Sample .etlsql scripts (see Docs/Sample_Guide.md)
+├── samples/                   # Sample .etlsql scripts (see Docs/Sample_Guide.md)
 ├── Docs/                      # Full documentation library
 ├── AGENTS.md                  # AI assistant instruction manual
 ├── CHANGELOG.md               # Version history

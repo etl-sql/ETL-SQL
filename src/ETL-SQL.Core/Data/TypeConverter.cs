@@ -26,9 +26,10 @@ namespace ETL_SQL.Core.Data
             ["SMALLINT"] = v => Convert.ToInt16(v),
             ["BIGINT"] = v => Convert.ToInt64(v),
             ["REAL"] = v => Convert.ToSingle(v),
-            ["DATETIME"] = v => DateTime.Parse(v.ToString() ?? ""),
-            ["DATE"] = v => DateTime.Parse(v.ToString() ?? ""),
-            ["TIMESTAMP"] = v => DateTime.Parse(v.ToString() ?? ""),
+            ["DATETIME"] = v => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt) ? dt : DateTime.Parse(v.ToString() ?? ""),
+            ["DATE"] = v => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt) ? dt : DateTime.Parse(v.ToString() ?? ""),
+            ["TIMESTAMP"] = v => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt) ? dt : DateTime.Parse(v.ToString() ?? ""),
+
             ["TIME"] = v => TimeSpan.Parse(v.ToString() ?? "00:00:00"),
             ["STRING"] = v => v.ToString(),
             ["VARCHAR"] = v => v.ToString(),

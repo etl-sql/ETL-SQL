@@ -26,10 +26,10 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("ADD_TO_LIST", AddToList, "ADD_TO_LIST(@list, value): Alias for APPEND_TO_LIST.");
             registry.RegisterWithHelp("REMOVE_FROM_LIST", RemoveFromList, "REMOVE_FROM_LIST(@list, value): Removes all occurrences of a value from a list variable.");
             registry.RegisterWithHelp("SORT_LIST", SortList, "SORT_LIST(list[, 'ASC'|'DESC']): Returns a sorted version of the list.");
-            registry.RegisterWithHelp("TRIM", (args, ctx) => args[0] == null ? null : args[0].ToString()?.Trim(), "TRIM(str): Removes leading and trailing whitespaces.");
-            registry.RegisterWithHelp("LTRIM", (args, ctx) => args[0] == null ? null : args[0].ToString()?.TrimStart(), "LTRIM(str): Removes leading whitespaces.");
-            registry.RegisterWithHelp("RTRIM", (args, ctx) => args[0] == null ? null : args[0].ToString()?.TrimEnd(), "RTRIM(str): Removes trailing whitespaces.");
-            registry.RegisterWithHelp("REVERSE", (args, ctx) => args[0] == null ? null : new string((args[0].ToString() ?? "").Reverse().ToArray()), "REVERSE(str): Reverses the characters in the string.");
+            registry.RegisterWithHelp("TRIM", (args, ctx) => args[0] == null ? null : args[0]!.ToString()?.Trim(), "TRIM(str): Removes leading and trailing whitespaces.");
+            registry.RegisterWithHelp("LTRIM", (args, ctx) => args[0] == null ? null : args[0]!.ToString()?.TrimStart(), "LTRIM(str): Removes leading whitespaces.");
+            registry.RegisterWithHelp("RTRIM", (args, ctx) => args[0] == null ? null : args[0]!.ToString()?.TrimEnd(), "RTRIM(str): Removes trailing whitespaces.");
+            registry.RegisterWithHelp("REVERSE", (args, ctx) => args[0] == null ? null : new string((args[0]!.ToString() ?? "").Reverse().ToArray()), "REVERSE(str): Reverses the characters in the string.");
             registry.RegisterWithHelp("ABS", (args, ctx) => {
                 if (args[0].IsNull()) return null;
                 if (!decimal.TryParse(args[0]?.ToString(), out var n)) return null;
@@ -162,7 +162,7 @@ namespace ETL_SQL.Engine.Functions
         private static object? Len(List<object?> args, IExecutionContext ctx)
         {
             if (args[0].IsNull()) return null;
-            return args[0] is System.Collections.ICollection coll ? (decimal)coll.Count : (decimal)(args[0].ToString()?.Length ?? 0);
+            return args[0] is System.Collections.ICollection coll ? (decimal)coll.Count : (decimal)(args[0]!.ToString()?.Length ?? 0);
         }
 
         /// <summary>Adds an item to a list.</summary>

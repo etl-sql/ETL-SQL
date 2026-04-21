@@ -71,7 +71,7 @@ namespace ETL_SQL.Engine.Engines
 
         public async IAsyncEnumerable<Row> ApplyWindowFunctionsExternal(IAsyncEnumerable<Row> inputStream, SelectStatement stmt)
         {
-            using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId, owner: this) : null;
+            using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
             var windowCols = stmt.Columns.Where(c => c.Expression is FunctionCallExpression f && f.Window != null).ToList();
             if (windowCols.Count == 0)
             {

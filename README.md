@@ -156,7 +156,7 @@ END CATCH;
 | :--- | :--- |
 | [User Manual](Docs/User_Manual.md) | Pipeline mental model, connections, variables, control flow, and debugging |
 | [Pattern Cookbook](Docs/Cookbook.md) | 18 self-contained, production-ready ETL recipes |
-| [Sample Guide](Docs/Sample_Guide.md) | Inventory of 55+ sample scripts in the `/scripts/` folder |
+| [Sample Guide](Docs/Sample_Guide.md) | Inventory of 55+ sample scripts in the `/samples/` folder |
 
 ### 📜 Language Reference
 | Document | Description |

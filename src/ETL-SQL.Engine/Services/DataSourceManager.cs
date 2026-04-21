@@ -96,7 +96,12 @@ namespace ETL_SQL.Engine.Services
                 }
                 throw new ExecutionException($"Function {table.FunctionCall.FunctionName} did not return a table.");
             }
+            else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
+            {
+                return new LineageDataSource(_evaluator.LineageTracker);
+            }
             else if (name.Equals("DUAL", StringComparison.OrdinalIgnoreCase))
+
             {
                 if (!connections.ContainsKey("DUAL"))
                 {
@@ -113,19 +118,28 @@ namespace ETL_SQL.Engine.Services
                 }
                 source = connections["DUAL"];
             }
-            else if (name.StartsWith("@") && _evaluator.GetVariable(name) is System.Collections.IEnumerable list)
+            else if (name.StartsWith("@"))
             {
-                var mem = new InMemoryDataSource();
-                mem.Validator = _evaluator;
-                mem.ExecutionContext = _evaluator;
-                mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
+                var val = _evaluator.GetVariable(name);
+                if (val is System.Collections.IEnumerable list && !(val is string))
+                {
+                    var mem = new InMemoryDataSource();
+                    mem.Validator = _evaluator;
+                    mem.ExecutionContext = _evaluator;
+                    mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
 
-                var dt = new DataTable();
-                dt.SetColumns(new[] { "Val" });
-                foreach (var item in list) await dt.AddRowAsync(new Row { ["Val"] = item });
-                await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
-                return mem;
+                    var dt = new DataTable();
+                    dt.SetColumns(new[] { "Val" });
+                    foreach (var item in list) await dt.AddRowAsync(new Row { ["Val"] = item });
+                    await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+                    return mem;
+                }
+
+                // If it's used as a target in SELECT INTO, or if it's not a collection,
+                // return a VariableDataSource so it can be written to and updated in the session.
+                return new VariableDataSource(name, _evaluator);
             }
+
 
             if (source == null)
             {

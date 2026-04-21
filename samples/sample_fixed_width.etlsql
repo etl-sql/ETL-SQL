@@ -1,0 +1,33 @@
+-- Sample: Fixed-Width File Ingestion
+-- Demonstrates using a table schema as a layout template for fixed-width flat files.
+
+-- 1. Define the layout via a temporary table
+-- Use /* @width: N */ comments or standard types to define field lengths.
+CREATE TABLE #Layout (
+    EmpId CHAR(5),           -- Implicit width 5
+    EmpName VARCHAR(20),     -- Implicit width 20
+    Department VARCHAR(10),  -- Implicit width 10
+    Salary CHAR(8)           -- Implicit width 8
+);
+
+-- 2. Define the fixed-width connection
+-- FORMAT='FIXED' instructs the engine to use the TEMPLATE for offsets.
+CREATE CONNECTION fw_source ON FLATFILE WITH (
+    FORMAT = 'FIXED',
+    TEMPLATE = #Layout,
+    TRIM = 'ON' -- Automatically removes padding whitespace
+);
+
+-- Note: In a real scenario, you would point to a physical file:
+-- CREATE CONNECTION fw_source ON FLATFILE 'data/fixed_employees.txt' ...
+
+-- 3. Ingestion Logic
+-- The engine will slice each line at offsets (0, 5, 25, 35) based on #Layout.
+PRINT 'Loading fixed-width data using template-based offsets...';
+SELECT * FROM fw_source;
+
+/*
+Expected Input Format example:
+00101Alice Smith         Eng       00095000
+00102Bob Jones           Sales     00080000
+*/

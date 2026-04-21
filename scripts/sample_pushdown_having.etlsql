@@ -1,6 +1,0 @@
-CREATE CONNECTION myDb ON MSSQL('Server=Demo;');
-
-SELECT SUM(Val) AS TotalVal
-INTO myDb
-FROM myDb
-HAVING TotalVal > 100;

@@ -2,8 +2,13 @@
   "name": "etl-sql-vscode",
   "displayName": "ETL-SQL Tools",
   "description": "Language support for ETL-SQL scripts with lineage tracking and diagnostics.",
-  "version": "0.1.0",
+  "version": "0.6.0",
   "publisher": "chuck",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AmericanSuperstar/ETL-SQL"
+  },
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -236,11 +241,12 @@
     "eslint": "^8.34.0",
     "glob": "^8.1.0",
     "jsdom": "^29.0.2",
-    "mocha": "^7.2.0",
+    "mocha": "^11.3.0",
     "typescript": "^4.9.5",
     "vitest": "^4.1.2",
     "vscode-languageclient": "^8.1.0"
   },
-  "dependencies": {
+  "overrides": {
+    "serialize-javascript": ">=7.0.5"
   }
 }

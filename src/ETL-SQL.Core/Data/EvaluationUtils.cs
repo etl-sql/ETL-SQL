@@ -38,16 +38,16 @@ namespace ETL_SQL.Core.Data
                 
                 if (a is DateTime dta && b is DateTime dtb) return dta.Year == dtb.Year && dta.Month == dtb.Month && dta.Day == dtb.Day && dta.Hour == dtb.Hour && dta.Minute == dtb.Minute && dta.Second == dtb.Second;
                 
-                if (decimal.TryParse(a.ToString(), out var m1) && decimal.TryParse(b.ToString(), out var m2)) return m1 == m2;
+                if (decimal.TryParse(a?.ToString(), out var m1) && decimal.TryParse(b?.ToString(), out var m2)) return m1 == m2;
                 
-                if (DateTime.TryParse(a.ToString(), out var dt1) && DateTime.TryParse(b.ToString(), out var dt2)) return dt1.Year == dt2.Year && dt1.Month == dt2.Month && dt1.Day == dt2.Day && dt1.Hour == dt2.Hour && dt1.Minute == dt2.Minute && dt1.Second == dt2.Second;
+                if (DateTime.TryParse(a?.ToString(), out var dt1) && DateTime.TryParse(b?.ToString(), out var dt2)) return dt1.Year == dt2.Year && dt1.Month == dt2.Month && dt1.Day == dt2.Day && dt1.Hour == dt2.Hour && dt1.Minute == dt2.Minute && dt1.Second == dt2.Second;
             }
             catch (Exception ex) 
             { 
                 if (logger != null) logger.Debug($"[EvaluationUtils.IsSoftEqual] Type coercion failed, falling back to string compare: {ex.Message}");
             }
 
-            return a.ToString()?.Equals(b.ToString(), StringComparison.OrdinalIgnoreCase) ?? false;
+            return a?.ToString()?.Equals(b?.ToString(), StringComparison.OrdinalIgnoreCase) ?? false;
         }
 
         public static int CompareConstants(object? a, object? b)
@@ -97,7 +97,7 @@ namespace ETL_SQL.Core.Data
             }
 
             // 4. Fallback to others
-            string[] otherFormats = { "MM/dd/yyyy", "M/d/yyyy", "yyyy/MM/dd", "yyyy-MM-dd HH:mm:ss" };
+            string[] otherFormats = { "yyyyMMdd", "MM/dd/yyyy", "M/d/yyyy", "yyyy/MM/dd", "yyyy-MM-dd HH:mm:ss" };
             if (DateTime.TryParseExact(s, otherFormats, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AllowWhiteSpaces, out dt)) return true;
 
             if (DateTime.TryParse(s, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AllowWhiteSpaces, out dt)) return true;

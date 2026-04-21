@@ -1,0 +1,41 @@
+-- Sample: Enhanced IO & Automation Syntax
+-- Demonstrates SQL-style verbose syntax for file operations, SFTP, and Email.
+
+-- 1. File Operations (Verbose Syntax)
+-- Syntax: COPY FILE '<src>' TO '<dest>' [WITH(OVERWRITE=ON|OFF)]
+PRINT 'Demonstrating Verbose File Syntax';
+COPY FILE 'scripts/sample_Hello.etlsql' TO 'scripts/sample_Hello_Copy.etlsql' WITH(OVERWRITE=ON);
+MOVE FILE 'scripts/sample_Hello_Copy.etlsql' TO 'scripts/sample_Hello_Moved.etlsql';
+DELETE FILE 'scripts/sample_Hello_Moved.etlsql';
+
+-- 2. SFTP Operations (Verbose Syntax)
+-- Syntax: SEND FILE '<local>' TO '<remote>' AT <connection>
+/*
+SEND FILE 'exports/report.csv' 
+TO '/uploads/daily_report.csv' 
+AT my_sftp_conn 
+WITH(OVERWRITE=ON);
+
+RECEIVE FILE 
+FROM '/data/input.csv' 
+TO 'imports/daily_input.csv' 
+AT my_sftp_conn;
+*/
+
+-- 3. Email Operations (Verbose Syntax)
+-- Demonstrates the block-style SEND EMAIL syntax.
+PRINT 'Demonstrating Verbose Email Syntax (Structural illustration)';
+/*
+SEND EMAIL TO 'manager@company.com'
+FROM 'etl-bot@company.com'
+SUBJECT 'Daily ETL Completion Report'
+BODY 'The data pipeline finished successfully at ' + CAST(GETDATE() AS STRING)
+CC 'admin@company.com'
+ATTACH 'logs/daily_run.log'
+AT my_smtp_server;
+*/
+
+-- 4. Comparison with Shorthand
+-- Both are equivalent.
+-- Shorthand: COPY_FILE('src', 'dest', OVERWRITE=ON);
+-- Verbose:   COPY FILE 'src' TO 'dest' WITH(OVERWRITE=ON);

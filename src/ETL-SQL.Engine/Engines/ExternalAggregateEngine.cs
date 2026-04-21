@@ -36,13 +36,13 @@ namespace ETL_SQL.Engine.Engines
         /// <summary>Applies aggregation by partitioning the stream into disk files and processing each partition sequentially.</summary>
         public async IAsyncEnumerable<Row> ApplyAggregationExternal(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null)
         {
-            using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId, owner: this) : null;
+            using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
             bool yieldedAny = false;
             try
             {
                 // 1. Partition Phase (supports one-pass expansion for grouping sets)
                 string[] partitionPaths;
-                List<List<Expression>> expandedSets = null;
+                List<List<Expression>>? expandedSets = null;
                 
                 if (groupingSet != null && groupingSet.Type != GroupingSetType.None)
                 {
@@ -107,7 +107,7 @@ namespace ETL_SQL.Engine.Engines
                         // Handle GROUPING() / NULL substitution for sub-sets
                         if (expandedSets != null && groupBy != null)
                         {
-                            var activeKeys = new HashSet<string>(activeGroupBy.Select(e => e.ToSql()), StringComparer.OrdinalIgnoreCase);
+                            var activeKeys = new HashSet<string>(activeGroupBy!.Select(e => e.ToSql()), StringComparer.OrdinalIgnoreCase);
                             foreach (var resRow in partResults)
                             {
                                 foreach (var expr in groupBy)

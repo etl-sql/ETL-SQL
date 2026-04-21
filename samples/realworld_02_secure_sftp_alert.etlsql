@@ -1,0 +1,35 @@
+/* 
+    REAL-WORLD SCENARIO 2: Secure File Transfer & Alerting
+    ------------------------------------------------------
+    Self-contained dummy using Local directories simulating SFTP drops.
+*/
+
+BEGIN TRY
+    PRINT 'Extracting financial records...';
+    
+    CREATE TABLE #oracle_Ledger (AccountId INT, TransactionId INT, Amount DECIMAL, PostedDate DATETIME);
+    INSERT INTO #oracle_Ledger VALUES (5021, 999123, 1000.50, TRUNC(GETDATE()));
+
+    CREATE CONNECTION LocalExport ON FLATFILE('TestData/out/daily_finances.csv') WITH (HEADER = 'ON');
+    
+    SELECT AccountId, TransactionId, Amount, PostedDate
+    INTO LocalExport.Main
+    FROM #oracle_Ledger
+    WHERE PostedDate = TRUNC(GETDATE());
+
+    PRINT 'Encrypting payload...';
+    ENCRYPT_FILE('TestData/out/daily_finances.csv', 'TestData/out/daily_finances.csv.enc') PASS 'SecureVendorKey2026!';
+    
+    PRINT 'Transmitting to Vendor...';
+    -- Simulate SFTP by dropping into a local mock folder
+    CREATE_DIRECTORY('TestData/out/vendor_sftp/');
+    MOVE_FILE('TestData/out/daily_finances.csv.enc', 'TestData/out/vendor_sftp/daily_finances.csv.enc');
+
+    PRINT 'Transmission successful.';
+END TRY
+BEGIN CATCH
+    DECLARE @errMsg VARCHAR = ERROR_MESSAGE();
+    PRINT 'Transmission Failed: ' + @errMsg;
+    PRINT 'ALERT: Firing email to oncall@corp.com ...';
+    THROW;
+END CATCH;

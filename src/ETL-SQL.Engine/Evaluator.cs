@@ -41,7 +41,7 @@ namespace ETL_SQL.Engine
     public class Evaluator : IExecutionContext, IAsyncDisposable, IDataValidator, ISpillable
     {
         private readonly IEnumerable<IStatementHandler> _handlers;
-        private readonly IServiceProvider _serviceProvider;
+        private readonly IServiceProvider _serviceProvider = null!;
         private readonly Core.Functions.IFunctionRegistry _functionRegistry;
         private readonly ILineageTracker _lineageTracker;
         private readonly IDockerManager _dockerManager;
@@ -374,19 +374,19 @@ namespace ETL_SQL.Engine
         /// Setting this also stamps all subsequent log output from this Evaluator
         /// with the session ID for correlation across concurrent sessions.
         /// </summary>
-        public string SessionId
+        public string? SessionId
         {
             get => _sessionId;
             set
             {
-                var val = string.IsNullOrEmpty(value) ? Guid.NewGuid().ToString("N") : value;
+                var val = value;
                 if (_sessionId != null) _sessionStateManager.UnregisterActiveSession(_sessionId);
                 _sessionId = val;
                 if (_sessionId != null) _sessionStateManager.RegisterActiveSession(_sessionId);
                 _logger.SessionId = val;
             }
         }
-        private string _sessionId = Guid.NewGuid().ToString("N");
+        private string? _sessionId = Guid.NewGuid().ToString("N");
 
         /// <summary>
         /// The root directory for the current session (metadata, logs, and spills).
@@ -394,7 +394,7 @@ namespace ETL_SQL.Engine
         /// </summary>
         public string SessionRoot 
         { 
-            get => _sessionRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions", SessionId);
+            get => _sessionRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ETL-SQL", "Sessions", SessionId ?? "DEFAULT");
             set => _sessionRoot = value;
         }
         private string? _sessionRoot;
@@ -568,7 +568,7 @@ namespace ETL_SQL.Engine
             };
 
             // Register for spill orchestration
-            _serviceProvider.GetService<IBufferManager>()?.RegisterSpillable(this);
+            _serviceProvider?.GetService<IBufferManager>()?.RegisterSpillable(this);
         }
 
         public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)

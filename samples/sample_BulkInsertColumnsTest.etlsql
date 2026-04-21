@@ -1,0 +1,17 @@
+-- Test Script for Bulk Insert with Column Mapping
+CREATE TABLE #Target (
+    Name VARCHAR(100),
+    Age INT,
+    Location VARCHAR(100)
+);
+
+-- CSV: Bob,New York,30
+-- We want to map it to Name, Location, Age (reordered)
+BULK INSERT #Target (Name, Location, Age) 
+FROM 'TestData\test_bulk_mapped.csv'
+WITH (FORMAT = 'CSV');
+
+SELECT * FROM #Target;
+
+-- Check lineage
+SHOW LINEAGE FOR #Target;

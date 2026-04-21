@@ -62,7 +62,7 @@ export class ReportPreviewPanel {
     }
 
     /** Opens (or reveals) the preview for the given .rptsql file. */
-    public static open(extensionUri: vscode.Uri, scriptPath: string): ReportPreviewPanel {
+    public static open(context: vscode.ExtensionContext, scriptPath: string): ReportPreviewPanel {
         const title   = `Preview: ${path.basename(scriptPath)}`;
         const column  = vscode.window.activeTextEditor
             ? vscode.ViewColumn.Beside
@@ -76,12 +76,12 @@ export class ReportPreviewPanel {
                 enableScripts:      true,
                 retainContextWhenHidden: true,
                 localResourceRoots: [
-                    vscode.Uri.joinPath(extensionUri, 'media')
+                    vscode.Uri.joinPath(context.extensionUri, 'media')
                 ]
             }
         );
 
-        return new ReportPreviewPanel(panel, extensionUri, scriptPath);
+        return new ReportPreviewPanel(panel, context.extensionUri, scriptPath);
     }
 
     /** Runs the build CLI, parses the manifest JSON, and refreshes the webview.
@@ -149,13 +149,22 @@ export class ReportPreviewPanel {
     /** Resolves the command and base arguments for the etl-sql-report CLI. */
     private _resolveCliCall(): { exe: string, baseArgs: string[] } {
         const config     = vscode.workspace.getConfiguration('etlsql');
-        const configured = config.get<string>('report.executable.path');
+        const configured = (config.get<string>('report.executable.path') || '').trim();
         
-        if (configured && configured.trim() !== '') {
+        if (configured) {
             return { exe: configured, baseArgs: [] };
         }
 
-        // Development fallback: dotnet run from the CLI project if we can find it
+        // 1. Try bundled path first (search for both etl-sql-report.exe and etl-sql-report)
+        const possibleExtensions = os.platform() === 'win32' ? ['.exe', ''] : ['', '.exe'];
+        for (const ext of possibleExtensions) {
+            const bundledPath = path.join(this._extensionUri.fsPath, 'bin', `etl-sql-report${ext}`);
+            if (fs.existsSync(bundledPath)) {
+                return { exe: bundledPath, baseArgs: [] };
+            }
+        }
+
+        // 2. Development fallback: dotnet run from the CLI project if we can find it
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (workspaceFolders) {
             const cliProjectPath = path.join(workspaceFolders[0].uri.fsPath, 'src', 'ETL-SQL.ReportBuilder.CLI', 'ETL-SQL.ReportBuilder.CLI.csproj');

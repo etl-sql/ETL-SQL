@@ -96,7 +96,7 @@ namespace ETL_SQL.Core
             FunctionCall = functionCall;
         }
 
-        public string ToSql() => AstSerializer.Format(this);
+        public override string ToSql() => AstSerializer.Format(this);
 
         public virtual IEnumerable<string> GetSourceTables()
         {
@@ -719,7 +719,7 @@ namespace ETL_SQL.Core
     public abstract record TableConstraint : AstNode
     {
         public string? ConstraintName { get; set; }
-        public abstract string ToSql();
+        public override abstract string ToSql();
     }
 
     public record TablePrimaryKeyConstraint : TableConstraint

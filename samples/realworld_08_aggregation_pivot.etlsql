@@ -1,0 +1,44 @@
+/* 
+    REAL-WORLD SCENARIO 8: Complex Aggregation & Pivot
+    --------------------------------------------------
+    Self-contained mock.
+*/
+
+CREATE TABLE #Transactions (TransactionID INT, SalesRegion VARCHAR(20), ProductCategory VARCHAR(20), SaleDate DATETIME, TotalRevenue DECIMAL);
+
+-- Q1 Sales
+INSERT INTO #Transactions VALUES (1, 'NORTH', 'Electronics', '2026-02-15', 12000.00);
+-- Q2 Sales
+INSERT INTO #Transactions VALUES (2, 'NORTH', 'Electronics', '2026-05-15', 15000.00);
+-- Q3 Sales
+INSERT INTO #Transactions VALUES (3, 'SOUTH', 'Furniture', '2026-08-10', 25000.00);
+-- Q4 Sales
+INSERT INTO #Transactions VALUES (4, 'NORTH', 'Electronics', '2026-11-20', 30000.00);
+INSERT INTO #Transactions VALUES (5, 'SOUTH', 'Furniture', '2026-12-05', 40000.00);
+
+CREATE CONNECTION BoardReport ON FLATFILE('TestData/out/Quarterly_Board_Report_2026.csv') WITH (HEADER='ON');
+
+-- Use native PIVOT to rotate quarterly revenue into columns
+-- 1. Prepare data with a subquery
+-- 2. Apply PIVOT operator
+SELECT 
+    SalesRegion,
+    ProductCategory,
+    [1] AS Q1_Revenue,
+    [2] AS Q2_Revenue,
+    [3] AS Q3_Revenue,
+    [4] AS Q4_Revenue
+INTO BoardReport.Main
+FROM (
+    SELECT SalesRegion, ProductCategory, DATEPART(QQ, SaleDate) AS Q, TotalRevenue
+    FROM #Transactions
+    WHERE YEAR(SaleDate) = 2026
+) AS src
+PIVOT (
+    SUM(TotalRevenue)
+    FOR Q IN (1, 2, 3, 4)
+) AS pvt
+-- Filters can be applied to the pivoted result
+WHERE (Q1_Revenue + Q2_Revenue + Q3_Revenue + Q4_Revenue) > 10000;
+
+PRINT 'Quarterly Pivot Report generation completed.';

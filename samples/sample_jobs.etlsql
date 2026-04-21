@@ -1,0 +1,15 @@
+-- This script demonstrates Job Scheduling and History
+
+-- 1. Create a job to run every minute
+-- Syntax: CREATE JOB name ON cron AS 'path'
+CREATE JOB 'CleanupTask' ON '0 * * * * *' AS 'scripts/cleanup.etlsql';
+
+-- 2. View current jobs and their status
+-- Note: This requires the scheduler service to be running
+SHOW JOBS;
+
+-- 3. View job execution history
+SHOW JOB HISTORY;
+
+-- 4. View history for a specific job
+SHOW JOB HISTORY 'CleanupTask';

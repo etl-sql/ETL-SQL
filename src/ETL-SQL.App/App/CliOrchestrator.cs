@@ -105,12 +105,17 @@ namespace ETL_SQL.App
             uiCommand.AddCommand(editSubcommand);
             uiCommand.AddCommand(oldSubcommand);
             
+            // 7. DOCTOR Command (Health Check)
+            var doctorCommand = new Command("doctor", "Perform a system health check to verify the environment");
+            doctorCommand.SetHandler(async (context) => await Dispatch(context, "doctor", handler));
+
             rootCommand.AddCommand(runCommand);
             rootCommand.AddCommand(testCommand);
             rootCommand.AddCommand(encryptCommand);
             rootCommand.AddCommand(generateCommand);
             rootCommand.AddCommand(sessionCommand);
             rootCommand.AddCommand(uiCommand);
+            rootCommand.AddCommand(doctorCommand);
 
             return rootCommand;
         }

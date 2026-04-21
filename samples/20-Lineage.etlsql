@@ -1,0 +1,41 @@
+-- ==========================================
+-- Sample 20: Data Lineage Tracking
+-- Demonstrates how ETL-SQL tracks the flow of data
+-- across multiple transformations.
+-- ==========================================
+
+-- 1. Setup Sample Data
+DECLARE @RawData = [
+    {"ID": 1, "Name": "Alice", "Sales": 100},
+    {"ID": 2, "Name": "Bob", "Sales": 200},
+    {"ID": 3, "Name": "Charlie", "Sales": 150}
+];
+
+-- 2. First Transformation: Filter and Calculate Tax
+SELECT 
+    ID, 
+    Name, 
+    Sales, 
+    Sales * 0.1 AS Tax
+INTO @TaxedSales
+FROM @RawData
+WHERE Sales > 120;
+
+-- 3. Second Transformation: Aggregation
+SELECT 
+    SUM(Sales) AS TotalSales,
+    SUM(Tax) AS TotalTax
+INTO @Summary
+FROM @TaxedSales;
+
+-- 4. Final Output with Lineage (Engine captures this internally)
+SELECT * FROM @Summary;
+
+-- 5. Query Lineage Metadata (Virtual Table)
+-- The 'Lineage' virtual table is provided by the engine.
+SELECT 
+    SourceTable,
+    TargetTable,
+    Operation,
+    Columns
+FROM Lineage;

@@ -96,7 +96,7 @@ namespace ETL_SQL.Engine.Handlers
             // 3. Send via WriteBatches
             _logger.Debug("Sending email to {To} via {ConnName}", row["To"], connName ?? "default SMTP");
             
-            ValidateEmails(row["To"].ToString());
+            ValidateEmails(row["To"]?.ToString());
             if (row.Columns.TryGetValue("Cc", out var cc)) ValidateEmails(cc?.ToString());
             if (row.Columns.TryGetValue("Bcc", out var bcc)) ValidateEmails(bcc?.ToString());
 

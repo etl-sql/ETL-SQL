@@ -1,0 +1,78 @@
+-- Messy Data Transformation Regression Test
+-- Pattern: Extract -> Stage -> Cleanse -> Load
+-- Purpose: Test high-precision time, diverse date formats, and region standardization.
+
+USE PASSWORD = 'test-password';
+
+-- 1. Create connections
+CREATE CONNECTION csv ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\test_data\sales_messy.csv');
+CREATE CONNECTION mock ON MOCKDB() WITH(DIALECT='MSSQL');
+
+BEGIN TRY
+    PRINT 'Phase 1: Extract messy data into engine memory...';
+    
+    -- Load raw data into engine-side temp table
+    -- For FLATFILE, the table name is always 'FILE'
+    SELECT * INTO #raw FROM csv.FILE;
+
+    PRINT 'Phase 2: Standardizing data in staging table...';
+
+    -- Add clean columns
+    ALTER TABLE #raw ADD CleanDate DATETIME;
+    ALTER TABLE #raw ADD CleanRegion STRING;
+
+    -- Update dates based on messy variations
+    -- Variations: mmm DD YYYY, YYYY-MM-DD, M/D/YY, YYYYmmDD, mmDDYYYY, Jan 2024, 2024
+    UPDATE #raw 
+    SET CleanDate = CASE
+        -- Standard formats handled by engine naturally
+        WHEN ISDATE(SaleDate) = 1 THEN CAST(SaleDate AS DATETIME)
+        
+        -- YYYYmmDD (Length 8, starts with 20)
+        WHEN LEN(SaleDate) = 8 AND LEFT(SaleDate, 2) = '20' 
+             THEN CAST(CONCAT(SUBSTRING(SaleDate, 1, 4), '-', SUBSTRING(SaleDate, 5, 2), '-', SUBSTRING(SaleDate, 7, 2)) AS DATETIME)
+        
+        -- mmDDYYYY (Length 8, ends with 20)
+        WHEN LEN(SaleDate) = 8 AND RIGHT(SaleDate, 2) = '24' -- Simplified for the test data year
+             THEN CAST(CONCAT(RIGHT(SaleDate, 4), '-', LEFT(SaleDate, 2), '-', SUBSTRING(SaleDate, 3, 2)) AS DATETIME)
+        
+        -- Month YYYY (Jan 2024)
+        WHEN LEN(SaleDate) > 4 AND REGEXP_LIKE(SaleDate, '^[A-Za-z]+ \d{4}$') = 1
+             THEN CAST(CONCAT('01 ', SaleDate) AS DATETIME)
+        
+        -- YYYY (2024)
+        WHEN LEN(SaleDate) = 4 AND REGEXP_LIKE(SaleDate, '^\d{4}$') = 1
+             THEN CAST(CONCAT(SaleDate, '-01-01') AS DATETIME)
+        
+        ELSE NULL
+    END
+    WHERE 1=1;
+
+    -- Standardize Region casing
+    UPDATE #raw SET CleanRegion = UPPER(TRIM(Region)) WHERE 1=1;
+
+    PRINT 'Phase 3: Merging cleaned data into MockDB...';
+
+    -- Use MOCKDB.Sales as target.
+    -- Assuming mock.Sales columns: SaleID, OrderDate, Total, Region
+    MERGE INTO mock.Sales AS T
+    USING #raw AS S ON T.SaleID = CAST(S.SaleID AS BIGINT)
+    WHEN MATCHED THEN
+        UPDATE SET 
+            OrderDate = S.CleanDate,
+            Total = CAST(S.TotalAmount AS DECIMAL(18,2)),
+            Region = S.CleanRegion
+    WHEN NOT MATCHED THEN
+        INSERT (SaleID, OrderDate, Total, Region)
+        VALUES (CAST(S.SaleID AS BIGINT), S.CleanDate, CAST(S.TotalAmount AS DECIMAL(18,2)), S.CleanRegion);
+
+    PRINT 'Transformation and Load Complete.';
+
+    -- Verify results
+    SELECT TOP 10 * FROM mock.Sales ORDER BY SaleID DESC;
+
+END TRY
+BEGIN CATCH
+    PRINT 'Error occurred during transformation: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

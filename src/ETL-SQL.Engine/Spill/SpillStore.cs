@@ -65,7 +65,7 @@ namespace ETL_SQL.Engine.Spill
                 _cachedRootPath = Path.Combine(_context.SessionRoot, "spill");
                 
                 // Deterministic Key based on MachineKey + SessionId (Centralized)
-                _cachedSessionKey = _context.SessionStateManager.GetSpillKey(_context.SessionId);
+                _cachedSessionKey = _context.SessionStateManager.GetSpillKey(_context.SessionId ?? "DEFAULT");
             }
             else if (_cachedRootPath == null || IsPersistent != _context.IsPersistentSession)
             {

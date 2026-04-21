@@ -1,0 +1,41 @@
+-- Slicer Default Value Test
+DECLARE @region VARCHAR(50) = 'East';
+
+CREATE CONNECTION mock ON MOCKDB() WITH (ROWS=100);
+
+-- Source data for the slicer
+SELECT DISTINCT region INTO #regions FROM (
+    SELECT 'East' AS region UNION SELECT 'West' UNION SELECT 'North' UNION SELECT 'South'
+) AS t;
+
+-- Summary data filtered by the parameter
+SELECT 
+    region, 
+    CASE 
+        WHEN region = 'East' THEN 100 
+        WHEN region = 'West' THEN 200 
+        WHEN region = 'North' THEN 300 
+        ELSE 400 
+    END as TotalSales 
+INTO #summary 
+FROM (SELECT 'East' as region UNION SELECT 'West' UNION SELECT 'North' UNION SELECT 'South') as r 
+WHERE region = @region;
+
+SET REPORT TITLE = 'Slicer Default Test';
+
+CREATE VISUAL RegionFilter AS SLICER (
+    SOURCE = (SELECT region FROM #regions),
+    MAPPINGS (VALUE = region),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region)),
+    DEFAULT = 'West'
+);
+
+CREATE VISUAL SalesCard AS CARD (
+    SOURCE = (SELECT TotalSales FROM #summary),
+    MAPPINGS (VALUE = TotalSales)
+);
+
+CREATE PAGE Overview AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP ('A' = RegionFilter, 'B' = SalesCard)
+);

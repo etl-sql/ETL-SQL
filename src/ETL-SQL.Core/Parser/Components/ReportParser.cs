@@ -654,7 +654,7 @@ namespace ETL_SQL.Core.Parser.Components
             var actions     = new List<VisualAction>();
             var styles      = new Dictionary<string, string>();
             string? styleName = null;
-            string? title = null, subtitle = null, defaultValue = null;
+            string? title = null, subtitle = null;
             bool titleMd = false, subtitleMd = false;
             TooltipDefinition? tooltip = null;
 

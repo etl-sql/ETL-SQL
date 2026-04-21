@@ -1,0 +1,39 @@
+/* 
+    REAL-WORLD SCENARIO 7: Window Functions for Deduplication
+    ---------------------------------------------------------
+    Self contained mock.
+*/
+
+CREATE TABLE #StageEvents (EventID INT, UserID INT, EventType VARCHAR(20), Payload VARCHAR(100), EventTimestamp DATETIME);
+
+-- Same UserID, but different timestamps
+INSERT INTO #StageEvents VALUES (101, 5, 'Login', 'Success', DATEADD(MINUTE, -10, GETDATE()));
+INSERT INTO #StageEvents VALUES (102, 5, 'Login', 'Success', DATEADD(MINUTE, -2, GETDATE()));
+INSERT INTO #StageEvents VALUES (103, 5, 'Login', 'Success', GETDATE()); -- Latest
+
+INSERT INTO #StageEvents VALUES (104, 8, 'Logout', 'Success', DATEADD(MINUTE, -5, GETDATE()));
+
+-- Use an analytical Window Function to rank events chronologically per User
+SELECT 
+    EventID,
+    UserID,
+    EventType,
+    Payload,
+    EventTimestamp,
+    ROW_NUMBER() OVER(PARTITION BY UserID ORDER BY EventTimestamp DESC) AS RankVersion
+INTO #RankedEvents
+FROM #StageEvents;
+
+-- Deduplicate by filtering for the latest event sequence (RankVersion = 1)
+SELECT 
+    EventID,
+    UserID,
+    EventType,
+    Payload,
+    EventTimestamp
+INTO #CleanEvents
+FROM #RankedEvents
+WHERE RankVersion = 1;
+
+PRINT 'Clickstream Deduplication Result:';
+SELECT * FROM #CleanEvents;

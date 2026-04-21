@@ -33,7 +33,10 @@ namespace ETL_SQL.Core.Common
             public string? SessionId { get; set; }
             public event Action<string, ConsoleColor>? OnMessage;
 
-            public void Log(LogLevel level, string message, Exception? ex = null) { }
+            public void Log(LogLevel level, string message, Exception? ex = null) 
+            {
+                OnMessage?.Invoke(message, ConsoleColor.Gray);
+            }
             public void Debug(string message) { }
             public void Info(string message) { }
             public void Warning(string message) { }

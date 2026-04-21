@@ -95,7 +95,7 @@ namespace ETL_SQL.Core
 
     public interface IDataContext
     {
-        string SessionId { get; }
+        string? SessionId { get; }
         string SessionRoot { get; }
         IDictionary<string, IDataSource> Connections { get; }
         /// <summary>Statement-local data source overrides (used for CTEs).</summary>

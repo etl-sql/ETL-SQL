@@ -8,36 +8,50 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 *Changes staged on `dev` that have not yet been cut into a release.*
 
-- **Security & Integrity (SEC-1, CR-S4, CR-C4, Rpt-2, Rpt-3)**:
-    - **Hardened Connection Encryption**: Increased PBKDF2 iterations to 600,000 for industry-standard brute-force resistance.
-    - **Expanded Credential Protection**: `CredentialLeakRule` now scans native pushdown SQL text for sensitive variable references.
-    - **Engine Isolation**: Fixed context flag mutation in `EXPLAIN ANALYZE` and ensured proper result-set registration for analytical output.
-    - **Snapshot Safety**: Hardened `SnapshotStore` with atomic file replacements and per-path async reader-writer locks.
-    - **Dashboard Stability**: New `DashboardKeywordConflictRule` prevents user-defined visuals/datasets from shadowing internal dashboard state.
-- **VS Code Extension (Modernization & Stabilization)**:
-    - **Real-Time Variable Discovery**: Added recursive AST scanning to the Language Server. User-declared variables (`DECLARE`, `SET`, `FOR`, `FOREACH`) are now discovered in real-time as you type and broadcast to the Sidebar and Results Panel.
-    - **Theme-Aware Rendering**: Optimized all React UI components to use native VS Code semantic CSS variables. Fixed "invisible text" and high-contrast issues across Light, Dark, and High Contrast themes.
-    - **Protocol Resilience**: Implemented defensive message handling to bridge inconsistencies between the engine and LSP formats (`variables` vs `data` keys).
-    - **Sidebar Enhancements**: Unified variable explorer that merges static (declared) variables with active (runtime) values during execution.
-    - **Results Panel Reliability**: Resolved "white screen" regression caused by ES2022 feature incompatibility and missing view-state injection.
-    - **Loop Node Stabilization**: Implemented "restating" node model in the execution pipeline. Loops now reuse existing visual nodes and display an iteration count badge (e.g. `x10`), preventing visual clutter while accumulating total rows and duration.
-- **Testing**: Added verification suites for system variables, scaling configuration, snapshot safety, security hardening, and UI protocol resilience (49 total tests).
+---
 
-    - `Security:MaxRecursiveNestingDepth` – Configurable recursion safety limit (formerly hardcoded at 5).
-- **Documentation**:
-    - **[Administrators Guide](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Administrators_Guide.md)** – New central resource for deployment, host-level configuration, and resource governance.
-    *   Updated `SECURITY.md` with hardening details for report snapshots and configurable limits.
-    *   Updated `Grammar.md` and `Report_SQL_Guide.md` with comprehensive system variable documentation.
+## [0.6.0] — 2026-04-20
+
+### Added
+
+**Security & Integrity**
+- **PBKDF2 Hardening**: Increased iteration count to 600,000 for industry-standard credential protection.
+- **Credential Leak Detection**: New `CredentialLeakRule` scans native pushdown SQL blocks for sensitive variable leaks.
+- **Snapshot Safety**: Hardened `SnapshotStore` with atomic file replacements and reader-writer locks.
+- **Engine Isolation**: Refined context flag management for `EXPLAIN ANALYZE` and isolated internal sub-evaluations.
+
+**VS Code Extension (Modernization)**
+- **Real-Time Variable Discovery**: LSP now parses `DECLARE`, `SET`, and loop variables in real-time, appearing instantly in the Sidebar.
+- **Theme-Aware UI**: Optimized React components to follow native VS Code semantic CSS variables (Light, Dark, High Contrast).
+- **Loop Node Stabilization**: Implemented "restating" UI model with iteration count badges to prevent result-set clutter.
+- **Protocol Reliability**: Fixed "white screen" regressions and improved message synchronization between the engine and LSP.
+
+**Reporting Layer (Global Control & Enhancements)**
+- **Global Dashboard Shell**: New `SET REPORT` syntax to override shell properties (`CSS`, `JS`, `HEAD`, `BODY`, `LOGO`, `FAVICON`, `BACKGROUND`, `NAV_OVERRIDE`).
+- **Enhanced Data Visualizations**: 
+    - **Advanced Data Labels**: Support for precise labels (`INSIDE`, `INSIDE_TOP`, etc.) and font styling for chart values.
+    - **Table Visualization**: New `GRID` style options and `GRAND_TOTAL` calculation rows.
+- **Image Support**: Added `IMAGE` as a native data type for direct rendering of binary/URL images in reports.
+
+**Architecture & Core**
+- **Image Processing**: Unified `IMAGE` data type across all connectors and reporting components.
+- **MinMax Logic**: Refactored `MinMax` variable support for improved aggregation and comparison safety.
+- **Syntax Robustness**: Improved `NVARCHAR(MAX)` and empty type parameter parsing.
+- **Orchestration**: `RUN SCRIPT` now supports variable paths and improved parameter binding.
+
+**Testing & Documentation**
+- **Validation**: Added 49+ new tests for system variables, scaling, snapshot safety, and security hardening.
+- **[Administrators Guide](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Administrators_Guide.md)**: New central resource for deployment and resource governance.
+- **Updated Guides**: Comprehensive updates to `Grammar.md`, `SECURITY.md`, and `Report_SQL_Guide.md`.
 
 ### Fixed
-- **Security (CR-S1)**: Resolved high-severity script injection vulnerability in `DashboardService` by refactoring slicer parameter injection to use engine-level `DeclareVariable` instead of raw string concatenation.
-- **Evaluation Stability**: Improved `@@ERROR` accuracy by buffering `PreviousErrorNumber` within `Evaluator.EvaluateStatement`, ensuring correct cross-statement error reporting.
+- **Security (CR-S1)**: Refactored slicer parameter injection to prevent script injection vulnerabilities.
+- **Evaluation Stability**: Improved `@@ERROR` accuracy and cross-statement reporting.
 
 ### Changed
-- `Orchestrators_Guide.md` – Cleaned up redundant deployment/configuration sections; redirected to the new Administrators Guide.
-- `DependencyInjectionSetup.cs` – Refactored to propagate all `appsettings.json` safety and logging limits at startup.
+- `Directory.Build.props`: Centralized version management for all projects.
+- `Orchestrators_Guide.md`: Reorganized to prioritize the new Administrators Guide.
 
----
 
 
 ## [0.5.0] — 2026-04-12

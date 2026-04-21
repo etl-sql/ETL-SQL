@@ -1,0 +1,50 @@
+/* 
+    REAL-WORLD SCENARIO 1: Multi-System Data Warehouse Load
+    -------------------------------------------------------
+    Self-contained mock: Uses memory tables to simulate Postgres, flatfiles, and SQL Server DW.
+*/
+
+CREATE TABLE #pg_transactions (CustomerID INT, TransactionDate DATETIME, Amount DECIMAL, BranchID INT);
+INSERT INTO #pg_transactions VALUES (101, GETDATE(), 550.00, 10);
+INSERT INTO #pg_transactions VALUES (102, GETDATE(), 200.00, 20);
+
+CREATE TABLE #csv_maps (BranchID INT, RegionCode VARCHAR);
+INSERT INTO #csv_maps VALUES (10, 'NORTH');
+INSERT INTO #csv_maps VALUES (20, 'SOUTH');
+
+CREATE TABLE #sql_dw_DailyRegionalSales (RegionCode VARCHAR, TotalTransactions INT, Revenue DECIMAL, LoadDate DATETIME);
+
+BEGIN TRY
+    PRINT 'Starting Data Warehouse Load...';
+    
+    -- Step 1: Extract and Transform in Memory
+    SELECT 
+        txn.CustomerID,
+        txn.TransactionDate,
+        txn.Amount,
+        map.RegionCode
+    INTO #EnrichedTransactions
+    FROM #pg_transactions txn
+    INNER HASH JOIN #csv_maps map ON txn.BranchID = map.BranchID;
+
+    -- Step 2: Aggregate by Region
+    SELECT 
+        RegionCode,
+        COUNT(CustomerID) AS TotalTransactions,
+        SUM(Amount) AS Revenue
+    INTO #DailyRegionalAggregates
+    FROM #EnrichedTransactions
+    GROUP BY RegionCode;
+
+    -- Step 3: Load into Data Warehouse
+    INSERT INTO #sql_dw_DailyRegionalSales (RegionCode, TotalTransactions, Revenue, LoadDate)
+    SELECT RegionCode, TotalTransactions, Revenue, GETDATE() 
+    FROM #DailyRegionalAggregates;
+
+    PRINT 'Load Completed Successfully.';
+    SELECT * FROM #sql_dw_DailyRegionalSales;
+END TRY
+BEGIN CATCH
+    PRINT 'CRITICAL FAILURE: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH;

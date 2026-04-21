@@ -19,8 +19,8 @@ if ($rootDir -match "scripts$") {
     Set-Location ..
 }
 
-$scriptsDir = "scripts"
-$etlScripts = Get-ChildItem -Path $scriptsDir -Filter "*.etlsql"
+$scriptsDir = "samples"
+$etlScripts = Get-ChildItem -Path $scriptsDir -Filter "*.etlsql" -Recurse
 $total = $etlScripts.Count
 
 Write-Host "=======================================================" -ForegroundColor Cyan
@@ -52,8 +52,15 @@ foreach ($script in $etlScripts) {
         $proc.StartInfo = $procInfo
         $proc.Start() | Out-Null
         
-        $proc.WaitForExit()
-        $exitCode = $proc.ExitCode
+        if ($proc.WaitForExit(60000)) {
+            $exitCode = $proc.ExitCode
+        }
+        else {
+            $proc.Kill()
+            $exitCode = -1
+            $cliOutput += "`n[TIMEOUT] Script execution exceeded 60 seconds and was terminated."
+        }
+
         
         $cliOutput += $proc.StandardOutput.ReadToEnd()
         $cliOutput += $proc.StandardError.ReadToEnd()
@@ -77,8 +84,10 @@ foreach ($script in $etlScripts) {
         $failedScripts += [PSCustomObject]@{
             Name     = $script.Name
             ExitCode = $exitCode
+            Output   = $cliOutput
         }
     }
+
 }
 
 Write-Host "`n=======================================================" -ForegroundColor Cyan
@@ -92,9 +101,16 @@ if ($failed -gt 0) {
     Write-Host "`nFailed Scripts Detail:" -ForegroundColor Yellow
     foreach ($f in $failedScripts) {
         Write-Host " - $($f.Name) (Exit Code: $($f.ExitCode))" -ForegroundColor Red
+        $preview = ($f.Output -split '\r?\n')[0..5] -join "`n   "
+        Write-Host "   Preview: $preview" -ForegroundColor Gray
     }
+
+
+
+
     Write-Host "`nRecommendation: Run failing scripts individually using the verbose flag (-v) to debug." -ForegroundColor Yellow
 }
+
 else {
     Write-Host "`nSUCCESS: All ETL-SQL Samples validated flawlessly!" -ForegroundColor Green
 }

@@ -90,34 +90,34 @@ namespace ETL_SQL.Core
         public SelectStatement? InlineSelect { get; init; }
         public string? TempTableName        { get; init; }
         public bool IsInlineSelect          => InlineSelect != null;
-        public string ToSql() => AstSerializer.Format(this);
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record VisualMapping : AstNode
     {
         public required string Role   { get; init; }
         public required new string Column { get; init; }
-        public string ToSql() => AstSerializer.Format(this);
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record VisualOption : AstNode
     {
         public required string Key   { get; init; }
         public required string Value { get; init; }
-        public string ToSql() => AstSerializer.Format(this);
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public record AxisOptions : AstNode
     {
         public required string Axis             { get; init; }  // "X" or "Y"
         public List<VisualOption> Options       { get; init; } = new();
-        public string ToSql() => AstSerializer.Format(this);
+        public override string ToSql() => AstSerializer.Format(this);
     }
 
     public abstract record VisualAction : AstNode
     {
         public required string Trigger { get; init; }
-        public virtual string ToSql() => "UNKNOWN ACTION";
+        public override string ToSql() => "UNKNOWN ACTION";
     }
 
     public record SetParameterAction : VisualAction

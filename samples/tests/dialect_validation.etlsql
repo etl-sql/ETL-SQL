@@ -1,0 +1,28 @@
+-- Test script for dialect-aware linter validation
+CREATE CONNECTION pg_conn ON POSTGRES() WITH(HOST='localhost', DATABASE='test');
+CREATE CONNECTION ms_conn ON MSSQL() WITH(SERVER='localhost', DATABASE='test');
+
+-- 1. Test TOP on Postgres (Should warn)
+EXECUTE pg_conn BEGIN
+    SELECT TOP 10 * FROM users;
+END;
+
+-- 2. Test TOP PERCENT on Postgres (Should warn twice: TOP and PERCENT)
+EXECUTE pg_conn BEGIN
+    SELECT TOP 10 PERCENT * FROM orders;
+END;
+
+-- 3. Test ROWNUM on Postgres (Should warn)
+EXECUTE pg_conn BEGIN
+    SELECT * FROM logs WHERE ROWNUM <= 100;
+END;
+
+-- 4. Test LIMIT on MSSQL (Should warn)
+EXECUTE ms_conn BEGIN
+    SELECT * FROM employees LIMIT 10;
+END;
+
+-- 5. Test ROWNUM on MSSQL (Should warn)
+EXECUTE ms_conn BEGIN
+    SELECT * FROM inventory WHERE ROWNUM < 50;
+END;

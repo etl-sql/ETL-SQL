@@ -54,7 +54,7 @@ namespace ETL_SQL.Engine.Engines
             IAsyncEnumerable<Row> inputStream,
             List<OrderByClause> orderBy)
         {
-            using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId, owner: this) : null;
+            using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
             var chunkPaths = new List<string>();
 
             // 1. Comparison function

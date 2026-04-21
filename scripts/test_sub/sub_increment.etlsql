@@ -1,4 +1,0 @@
--- scripts/test_sub/sub_increment.etlsql
-DECLARE @p1 INT INPUT OUTPUT;
-SET @p1 = @p1 + 1;
-PRINT 'Sub-script incremented p1 to ' + CAST(@p1 AS VARCHAR);

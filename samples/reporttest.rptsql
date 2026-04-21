@@ -1,0 +1,58 @@
+DROP CONNECTION IF EXISTS c;
+CREATE CONNECTION c ON FLATFILE('\TestData\test_sales.csv');
+
+-- Base dataset
+SELECT month, region, product, SUM(units) AS units, SUM(revenue) AS revenue
+INTO #summary
+FROM c
+GROUP BY month, region, product;
+
+-- KPI card: total revenue
+CREATE VISUAL TotalRevenue AS CARD (
+  SOURCE = (SELECT SUM(revenue) AS val, 'Total Revenue' AS lbl FROM #summary),
+  MAPPINGS (VALUE = val, LABEL = lbl)
+);
+
+-- Bar chart: revenue by region
+CREATE VISUAL RevenueByRegion AS BAR (
+  SOURCE = (SELECT region, SUM(revenue) AS revenue FROM #summary GROUP BY region),
+  MAPPINGS (X = region, Y = revenue),
+  OPTIONS (
+    X_AXIS (label = 'Region'),
+    Y_AXIS (label = 'Revenue ($)')
+  )
+);
+
+-- Pie chart: revenue by product
+CREATE VISUAL RevenueByProduct AS PIE (
+  SOURCE = (SELECT product, SUM(revenue) AS revenue FROM #summary GROUP BY product),
+  MAPPINGS (LABEL = product, VALUE = revenue)
+);
+
+-- Line chart: units by month
+CREATE VISUAL UnitsByMonth AS LINE (
+  SOURCE = (SELECT month, SUM(units) AS units FROM #summary GROUP BY month),
+  MAPPINGS (X = month, Y = units),
+  OPTIONS (
+    X_AXIS (label = 'Month'),
+    Y_AXIS (label = 'Units Sold'),
+    SMOOTH = true
+  )
+);
+
+-- Detail table: all rows
+CREATE VISUAL SalesTable AS TABLE (
+  SOURCE = #summary
+);
+
+-- Dashboard page
+CREATE PAGE Main AS LAYOUT (
+  STRUCTURE = 'grid:2x3',
+  MAP (
+    'A' = TotalRevenue,
+    'B' = RevenueByRegion,
+    'C' = RevenueByProduct,
+    'D' = UnitsByMonth,
+    'E' = SalesTable
+  )
+);
