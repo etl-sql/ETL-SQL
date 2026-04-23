@@ -162,6 +162,7 @@ namespace ETL_SQL.Core
     {
         public required string Name                  { get; init; }
         public Dictionary<string, string> Styles     { get; init; } = new();
+        public string? StyleName                     { get; init; }
         public ObjectCreationMode Mode               { get; init; } = ObjectCreationMode.Create;
         public override string ToSql() => AstSerializer.Format(this);
     }

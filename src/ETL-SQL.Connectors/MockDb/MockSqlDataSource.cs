@@ -72,7 +72,7 @@ namespace ETL_SQL.Connectors.MockDb
             }
         }
 
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches) 
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) 
         {
             return Task.CompletedTask;
         }

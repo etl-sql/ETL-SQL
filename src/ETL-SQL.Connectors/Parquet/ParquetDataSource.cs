@@ -17,7 +17,7 @@ namespace ETL_SQL.Connectors.Parquet
     /// Data source implementation for Apache Parquet files.
     /// Supports high-performance columnar reading and writing.
     /// </summary>
-    public class ParquetDataSource : IDataSource
+    public class ParquetDataSource : IDatabaseSource
     {
         private readonly string _filePath;
         private readonly string _compression;
@@ -115,10 +115,15 @@ namespace ETL_SQL.Connectors.Parquet
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             var enumerator = batches.GetAsyncEnumerator();
-            if (!await enumerator.MoveNextAsync()) return;
+            if (!await enumerator.MoveNextAsync())
+            {
+                _logger.Debug("[ParquetDataSource.WriteBatches] Received empty batch stream for '{FilePath}'. No file will be created.", _filePath);
+                return;
+            }
+            _logger.Debug("[ParquetDataSource.WriteBatches] Starting write to '{FilePath}'...", _filePath);
 
             var firstBatch = enumerator.Current;
             var colNames = firstBatch.ColumnNames;
@@ -222,9 +227,24 @@ namespace ETL_SQL.Connectors.Parquet
             catch { return null; }
         }
 
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName)
+        {
+            if (!string.Equals(tableName, "FILE", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.Debug("[PARQUET] GetColumnsAsync requested for unknown table '{TableName}'. Only 'FILE' is supported.", tableName);
+                return Task.FromResult(Enumerable.Empty<string>());
+            }
+            return GetColumnsAsync();
+        }
+
         public async Task<IEnumerable<string>> GetColumnsAsync()
         {
-            if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
+            _logger.Debug("[PARQUET] GetColumnsAsync requested for {FilePath}", _filePath);
+            if (!System.IO.File.Exists(_filePath)) 
+            {
+                _logger.Debug("[PARQUET] GetColumnsAsync failed: File does not exist at {FilePath}", _filePath);
+                return Enumerable.Empty<string>();
+            }
             
             string effectivePath = _filePath;
             string? tempFile = null;
@@ -232,17 +252,32 @@ namespace ETL_SQL.Connectors.Parquet
             if (_encryption.Enabled)
             {
                 tempFile = System.IO.Path.GetTempFileName();
-                try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
-                catch (Exception ex) { _logger.Debug("[ParquetDataSource.GetColumnsAsync] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message); return Enumerable.Empty<string>(); }
+                try 
+                { 
+                    _encryption.DecryptFile(_filePath, tempFile); 
+                    effectivePath = tempFile; 
+                    _logger.Debug("[PARQUET] Decrypted to {TempFile} for schema discovery.", tempFile);
+                }
+                catch (Exception ex) 
+                { 
+                    _logger.Debug("[PARQUET] Failed to decrypt '{FilePath}': {Message}", _filePath, ex.Message); 
+                    return Enumerable.Empty<string>(); 
+                }
             }
 
             try
             {
                 using var stream = System.IO.File.OpenRead(effectivePath);
                 using var reader = await ParquetReader.CreateAsync(stream);
-                return reader.Schema.Fields.Select(f => f.Name).ToList();
+                var cols = reader.Schema.Fields.Select(f => f.Name).ToList();
+                _logger.Debug("[PARQUET] Found {Count} columns: {Cols}", cols.Count, string.Join(", ", cols));
+                return cols;
             }
-            catch { return Enumerable.Empty<string>(); }
+            catch (Exception ex) 
+            { 
+                _logger.Debug("[PARQUET] Failed to read schema from '{FilePath}': {Message}", _filePath, ex.Message);
+                return Enumerable.Empty<string>(); 
+            }
             finally { TempFileHelper.SafeDelete(tempFile, _logger); }
         }
 
@@ -253,5 +288,27 @@ namespace ETL_SQL.Connectors.Parquet
         {
             await Task.CompletedTask;
         }
+
+        public async Task<string> GetVersionAsync() => await Task.FromResult("Parquet.Net 4.0");
+        public HashSet<string> GetSupportedFunctions() => new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        {
+            if (sql.Trim().ToUpperInvariant().StartsWith("SELECT * FROM FILE"))
+            {
+                await foreach (var batch in ReadBatches()) yield return batch;
+            }
+            else
+            {
+                _logger.Debug("[PARQUET] ExecuteRawSql received unknown SQL: {Sql}. Returning empty result as native pushdown is not supported.", sql);
+                yield return new DataTable { ColumnNames = { "Status" }, Rows = { new Row { ["Status"] = "NOT_SUPPORTED" } } };
+            }
+        }
+
+        public string ConnectionString => _filePath;
+        public string Dialect => "PARQUET";
+        public bool SupportsSqlPushdown => false;
+        public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
+        public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
     }
 }

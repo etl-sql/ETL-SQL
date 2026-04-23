@@ -21,6 +21,7 @@ namespace ETL_SQL.Core
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, IContainer> _activeContainers = new(StringComparer.OrdinalIgnoreCase);
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _connectionStrings = new(StringComparer.OrdinalIgnoreCase);
         public string? LastConnectionString { get; private set; }
+        public string? LastAlias { get; private set; }
         public bool HasActiveContainers => !_activeContainers.IsEmpty;
         
         private readonly ILoggerFactory _loggerFactory;
@@ -124,6 +125,7 @@ namespace ETL_SQL.Core
             string connectionString = GetConnectionString(container, imageName);
             _connectionStrings[key] = connectionString;
             LastConnectionString = connectionString;
+            LastAlias = key;
             return connectionString;
         }
 
@@ -196,32 +198,30 @@ namespace ETL_SQL.Core
         /// Stops a running container by its alias or image name.
         /// </summary>
         /// <param name="alias">The alias of the container to stop.</param>
-        public async Task StopContainer(string alias)
+        public async Task StopContainer(string? alias)
         {
-            if (_activeContainers.TryGetValue(alias, out var container))
+            alias ??= LastAlias;
+            if (alias != null && _activeContainers.TryGetValue(alias, out var container))
             {
                 _logger.WriteLine($"Stopping Docker container {alias}...", ConsoleColor.Yellow);
                 await container.StopAsync();
             }
         }
 
-        public async Task PauseContainer(string alias)
+        public async Task PauseContainer(string? alias)
         {
-            if (_activeContainers.TryGetValue(alias, out var container))
+            alias ??= LastAlias;
+            if (alias != null && _activeContainers.TryGetValue(alias, out var container))
             {
                 _logger.WriteLine($"Pausing Docker container {alias}...", ConsoleColor.Yellow);
-                // Testcontainers doesn't have a direct PauseAsync in basic IContainer, 
-                // but some implementations might. We'll stick to Stop if Pause is not available,
-                // or just log it for now if we want to add full docker exec support later.
-                // Actually, let's just Stop/Start for now as a simple implementation of Pause/Resume
-                // unless IContainer has it.
                 await container.StopAsync();
             }
         }
 
-        public async Task ResumeContainer(string alias)
+        public async Task ResumeContainer(string? alias)
         {
-            if (_activeContainers.TryGetValue(alias, out var container))
+            alias ??= LastAlias;
+            if (alias != null && _activeContainers.TryGetValue(alias, out var container))
             {
                 _logger.WriteLine($"Resuming Docker container {alias}...", ConsoleColor.Green);
                 await container.StartAsync();

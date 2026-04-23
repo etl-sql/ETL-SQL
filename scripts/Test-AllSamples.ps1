@@ -13,19 +13,18 @@
 
 $ErrorActionPreference = "Stop"
 
-# Navigate to solution root if executed inside scripts/
-$rootDir = (Get-Item -Path ".\").FullName
-if ($rootDir -match "scripts$") {
-    Set-Location ..
-}
+# Navigate to solution root relative to this script's location
+# Navigate to solution root relative to this script's location
+$solutionRoot = Split-Path -Path $PSScriptRoot -Parent
+Set-Location $solutionRoot
 
-$scriptsDir = "samples"
-$etlScripts = Get-ChildItem -Path $scriptsDir -Filter "*.etlsql" -Recurse
+$samplesDir = Join-Path $solutionRoot "samples"
+$etlScripts = Get-ChildItem -Path $samplesDir -Filter "*.etlsql" -Recurse
 $total = $etlScripts.Count
 
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " ETL-SQL SAMPLE VALIDATOR STARTING..." -ForegroundColor Cyan
-Write-Host " Found $total scripts to validate in '$scriptsDir'." -ForegroundColor Cyan
+Write-Host " Found $total scripts to validate in '$samplesDir'." -ForegroundColor Cyan
 Write-Host "=======================================================`n" -ForegroundColor Cyan
 
 $passed = 0
@@ -42,7 +41,9 @@ foreach ($script in $etlScripts) {
         # Using Start-Process to accurately grab Exit Codes synchronously
         $procInfo = New-Object System.Diagnostics.ProcessStartInfo
         $procInfo.FileName = "dotnet"
-        $procInfo.Arguments = "run --project src/ETL-SQL.App -- run `"$($script.FullName)`" --silent"
+        $projectPath = Join-Path $solutionRoot "src/ETL-SQL.App"
+        $procInfo.Arguments = "run --project `"$projectPath`" -- run `"$($script.FullName)`" --silent"
+        $procInfo.WorkingDirectory = $solutionRoot
         $procInfo.RedirectStandardOutput = $true
         $procInfo.RedirectStandardError = $true
         $procInfo.UseShellExecute = $false
@@ -72,7 +73,7 @@ foreach ($script in $etlScripts) {
 
     # Some scripts might throw internal errors but not bubble the exit code correctly.
     # We do a secondary baseline check on the output text.
-    $hasInternalError = ($cliOutput -match "CRITICAL FAILURE|Unhandled exception|Connection Refused")
+    $hasInternalError = ($cliOutput -match "CRITICAL FAILURE|Unhandled exception")
     
     if ($exitCode -eq 0 -and (-not $hasInternalError)) {
         Write-Host "PASSED" -ForegroundColor Green

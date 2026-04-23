@@ -74,8 +74,13 @@ namespace ETL_SQL.LSP
 
         public override async Task<MediatR.Unit> Handle(DidOpenTextDocumentParams request, CancellationToken cancellationToken)
         {
-            if (_metadata.DebugMode) _logger.LogInformation("[DIAGNOSTIC] LSP: didOpen {Uri}", request.TextDocument.Uri);
-            await AnalyzeAsync(request.TextDocument.Uri, request.TextDocument.Text);
+            var uri = request.TextDocument.Uri;
+            if (_metadata.DebugMode) _logger.LogInformation("[DIAGNOSTIC] LSP: didOpen {Uri}", uri);
+            
+            // Notify the client that a script has been opened/focused to help sync UI state
+            _server?.SendNotification("etlsql/scriptOpened", new { uri = uri.ToString() });
+
+            await AnalyzeAsync(uri, request.TextDocument.Text);
             return MediatR.Unit.Value;
         }
 
@@ -83,7 +88,22 @@ namespace ETL_SQL.LSP
             => Task.FromResult(MediatR.Unit.Value);
 
         public override Task<MediatR.Unit> Handle(DidCloseTextDocumentParams request, CancellationToken cancellationToken)
-            => Task.FromResult(MediatR.Unit.Value);
+        {
+            var uri = request.TextDocument.Uri;
+            _logger.LogInformation("LSP: didClose {Uri}. Cleaning up metadata and signaling session recycle.", uri);
+
+            // 1. Clear session metadata and temp tables for this document
+            _metadata.ClearDocumentConnections(uri.ToString());
+            _metadata.ClearTempTables(uri.ToString());
+
+            // 2. Clear LSP state store
+            _store.RemoveState(uri);
+
+            // 3. Notify the client that the script is closed and its session can be recycled/deleted
+            _server?.SendNotification("etlsql/scriptClosed", new { uri = uri.ToString() });
+
+            return Task.FromResult(MediatR.Unit.Value);
+        }
 
         /// <summary>
         /// Full analysis pipeline:

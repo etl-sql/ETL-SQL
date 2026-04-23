@@ -24,6 +24,9 @@ DECLARE @list LIST = (1, 2, 3), @count INT = 0;
 
 -- No type — inferred at runtime
 DECLARE @value = 'hello';
+
+-- Table variable — acts as an in-memory temp table
+DECLARE @inventory TABLE;
 ```
 
 ### 1.2 `SET`
@@ -771,7 +774,37 @@ WITH (
 );
 ```
 
-### 8.6 `TRUNCATE TABLE`
+### 8.6 `GENERATE`
+Produces mock data based on rules and writes it to a target `#temp` table or `@variable` table. Ideal for testing and development in air-gapped or restricted environments.
+
+```sql
+GENERATE <rowCount> ROWS INTO <target>
+[WITH (SEED = <int>)]
+AS (
+    <column> = '<rule_function>',
+    ...
+);
+```
+
+**Supported Rule Functions:**
+- `SEQUENCE(start, step [, unit])`: Generates a sequence. Unit can be `DAY`, `MONTH`, `YEAR` for dates.
+- `RANDOM(val1, val2, ...)`: Randomly selects from the provided list.
+- `RANDOM_INT(min, max)`: Random integer within range.
+- `RANDOM_DECIMAL(min, max)`: Random decimal within range.
+
+*Example:*
+```sql
+GENERATE 100 ROWS INTO #test_data
+WITH (SEED = 42)
+AS (
+    id       = 'SEQUENCE(1, 1)',
+    category = 'RANDOM(Electronics, Apparel, Home)',
+    price    = 'RANDOM_DECIMAL(10, 500)',
+    created  = 'SEQUENCE(2026-01-01, 1, DAY)'
+);
+```
+
+### 8.7 `TRUNCATE TABLE`
 Efficiently removes all rows without logging individual deletions.
 
 ```sql

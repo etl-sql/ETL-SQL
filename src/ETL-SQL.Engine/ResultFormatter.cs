@@ -80,7 +80,7 @@ namespace ETL_SQL.Engine
                 rows = batch.Rows.Select(r => 
                 {
                     var dict = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-                    foreach(var col in batch.ColumnNames) dict[col] = r[col];
+                    foreach(var col in batch.ColumnNames) dict[col] = r[col] ?? "NULL";
                     return dict;
                 }).ToList()
             };

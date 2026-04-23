@@ -68,10 +68,12 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // Security Hardening: Count this as a directory operation
-            context.IncrementOperationCount(path);
+            context.IncrementOperationCount(OperationType.FileSystem, path);
 
-            switch (stmt.Type)
+            try
             {
+                switch (stmt.Type)
+                {
                 case DirectoryOpType.Create:
                     Directory.CreateDirectory(path);
                     _logger.WriteLine($"Directory created: {path}", ConsoleColor.Green);
@@ -152,16 +154,22 @@ namespace ETL_SQL.Engine.Handlers
                     }
                     break;
             }
+        }
+        catch (ExecutionException) { throw; }
+        catch (Exception ex)
+        {
+            throw new ExecutionException($"Directory operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
+        }
             await Task.CompletedTask;
         }
 
         private void EncryptDirectory(string sourceDir, string destDir, string password, bool overwrite, IExecutionContext context)
         {
-            context.IncrementOperationCount(sourceDir);
+            context.IncrementOperationCount(OperationType.FileSystem, sourceDir);
             if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
             foreach (string file in Directory.GetFiles(sourceDir))
             {
-                context.IncrementOperationCount(file);
+                context.IncrementOperationCount(OperationType.FileSystem, file);
                 string destFile = Path.Combine(destDir, Path.GetFileName(file) + ".enc");
                 CryptoUtils.EncryptFile(file, destFile, password, overwrite);
             }
@@ -175,12 +183,12 @@ namespace ETL_SQL.Engine.Handlers
 
         private void DecryptDirectory(string sourceDir, string destDir, string password, bool overwrite, IExecutionContext context)
         {
-            context.IncrementOperationCount(sourceDir);
+            context.IncrementOperationCount(OperationType.FileSystem, sourceDir);
             if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
             foreach (string file in Directory.GetFiles(sourceDir))
             {
                 if (!file.EndsWith(".enc")) continue;
-                context.IncrementOperationCount(file);
+                context.IncrementOperationCount(OperationType.FileSystem, file);
                 string destFile = Path.Combine(destDir, Path.GetFileNameWithoutExtension(file));
                 CryptoUtils.DecryptFile(file, destFile, password, overwrite);
             }
@@ -194,7 +202,7 @@ namespace ETL_SQL.Engine.Handlers
 
         private void CopyDirectory(string sourceDir, string destinationDir, bool overwrite, IExecutionContext context)
         {
-            context.IncrementOperationCount(sourceDir);
+            context.IncrementOperationCount(OperationType.FileSystem, sourceDir);
             var dir = new DirectoryInfo(sourceDir);
             if (!dir.Exists) throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
 
@@ -203,7 +211,7 @@ namespace ETL_SQL.Engine.Handlers
 
             foreach (FileInfo file in dir.GetFiles())
             {
-                context.IncrementOperationCount(file.FullName);
+                context.IncrementOperationCount(OperationType.FileSystem, file.FullName);
                 string targetFilePath = Path.Combine(destinationDir, file.Name);
                 file.CopyTo(targetFilePath, overwrite);
             }
@@ -219,13 +227,13 @@ namespace ETL_SQL.Engine.Handlers
 
         private void DeleteDirectoryContents(string path, bool recursive, IExecutionContext context)
         {
-            context.IncrementOperationCount(path);
+            context.IncrementOperationCount(OperationType.FileSystem, path);
             var dir = new DirectoryInfo(path);
             if (!dir.Exists) return;
 
             foreach (FileInfo file in dir.GetFiles()) 
             {
-                context.IncrementOperationCount(file.FullName);
+                context.IncrementOperationCount(OperationType.FileSystem, file.FullName);
                 file.Delete();
             }
             
@@ -237,7 +245,7 @@ namespace ETL_SQL.Engine.Handlers
                     DeleteDirectoryContents(subDir.FullName, true, context);
                     context.CurrentRecursiveDepth--;
                 }
-                context.IncrementOperationCount(subDir.FullName);
+                context.IncrementOperationCount(OperationType.FileSystem, subDir.FullName);
                 subDir.Delete(recursive);
             }
         }

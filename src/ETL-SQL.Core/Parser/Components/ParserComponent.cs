@@ -19,7 +19,7 @@ namespace ETL_SQL.Core.Parser.Components
         protected Token Consume(TokenType type, string message) => _parser.Consume(type, message);
         protected Token ConsumeIdentifier(string message) => _parser.ConsumeIdentifier(message);
         protected Expression ParseExpression() => _parser.ParseExpression();
-        protected TableReference ParseTableReference(bool allowFunction = true) => _parser.ParseTableReference(allowFunction);
+        protected TableReference ParseTableReference(bool allowFunction = true, bool allowWithClause = true, bool allowAlias = true) => _parser.ParseTableReference(allowFunction, allowWithClause, allowAlias);
 
         protected bool MatchIdentifier(string value)
         {

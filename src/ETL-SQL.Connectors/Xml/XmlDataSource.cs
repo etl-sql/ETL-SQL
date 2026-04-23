@@ -185,7 +185,7 @@ namespace ETL_SQL.Connectors.Xml
             return current?.Elements() ?? Enumerable.Empty<XElement>();
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             bool alreadyXml = false;
             string? singleXml = null;

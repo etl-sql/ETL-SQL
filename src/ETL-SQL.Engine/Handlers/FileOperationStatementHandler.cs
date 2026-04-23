@@ -32,7 +32,7 @@ namespace ETL_SQL.Engine.Handlers
             string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
 
             // Security Hardening: Count this as a file operation for runaway protection
-            context.IncrementOperationCount(source, 1);
+            context.IncrementOperationCount(OperationType.FileSystem, source, 1);
 
             if (context.IsWhatIf)
             {
@@ -57,106 +57,114 @@ namespace ETL_SQL.Engine.Handlers
             _logger.Debug("File Operation: {OperationType} on {Source}{Dest}", stmt.Type, source, dest != null ? $" -> {dest}" : "");
 
 
-            switch (stmt.Type)
+            try
             {
-                case FileOpType.Delete:
-                    if (File.Exists(source)) 
-                    {
-                        File.Delete(source);
-                        context.Log($"File deleted: {source}", ConsoleColor.Green);
-                    }
-                    break;
-                case FileOpType.Copy:
-                    if (dest != null)
-                    {
-                        // Security Hardening: Block writing to script files
-                        context.SecurityService.ValidateWriteAccess(dest);
+                switch (stmt.Type)
+                {
+                    case FileOpType.Delete:
+                        if (File.Exists(source)) 
+                        {
+                            File.Delete(source);
+                            context.Log($"File deleted: {source}", ConsoleColor.Green);
+                        }
+                        break;
+                    case FileOpType.Copy:
+                        if (dest != null)
+                        {
+                            // Security Hardening: Block writing to script files
+                            context.SecurityService.ValidateWriteAccess(dest);
 
-                        if (File.Exists(dest) && !overwrite)
-                             throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
-                        File.Copy(source, dest, overwrite);
-                    }
-                    break;
-                case FileOpType.Move:
-                    if (dest != null)
-                    {
-                         // Security Hardening: Block writing to script files
-                         context.SecurityService.ValidateWriteAccess(dest);
+                            if (File.Exists(dest) && !overwrite)
+                                 throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                            File.Copy(source, dest, overwrite);
+                        }
+                        break;
+                    case FileOpType.Move:
+                        if (dest != null)
+                        {
+                             // Security Hardening: Block writing to script files
+                             context.SecurityService.ValidateWriteAccess(dest);
 
-                         if (File.Exists(dest))
-                         {
-                             if (overwrite) File.Delete(dest);
-                             else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
-                         }
-                         File.Move(source, dest);
-                    }
-                    break;
-                case FileOpType.Rename:
-                    if (dest != null)
-                    {
-                        var fileName = Path.GetFileName(source);
-                        var dir = Path.GetDirectoryName(source) ?? "";
-                        var newPath = Path.Combine(dir, dest);
-                        
-                        // Security Hardening: Validate the constructed rename path
-                        context.SecurityService.ValidatePath(newPath);
-                        context.SecurityService.ValidateWriteAccess(newPath);
-                        
-                        if (File.Exists(newPath))
-                        {
-                            if (overwrite) File.Delete(newPath);
-                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {newPath}");
+                             if (File.Exists(dest))
+                             {
+                                 if (overwrite) File.Delete(dest);
+                                 else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                             }
+                             File.Move(source, dest);
                         }
-                        File.Move(source, newPath);
-                    }
-                    else
-                    {
-                        throw new ExecutionException("RENAME FILE requires a destination name.");
-                    }
-                    break;
-                case FileOpType.Compress:
-                    if (dest != null)
-                    {
-                        if (File.Exists(dest))
+                        break;
+                    case FileOpType.Rename:
+                        if (dest != null)
                         {
-                            if (overwrite) File.Delete(dest);
-                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
-                        }
-                        if (Directory.Exists(source))
-                        {
-                            System.IO.Compression.ZipFile.CreateFromDirectory(source, dest);
-                        }
-                        else if (File.Exists(source))
-                        {
-                            using var archive = ZipFile.Open(dest, ZipArchiveMode.Create);
-                            archive.CreateEntryFromFile(source, Path.GetFileName(source));
+                            var fileName = Path.GetFileName(source);
+                            var dir = Path.GetDirectoryName(source) ?? "";
+                            var newPath = Path.Combine(dir, dest);
+                            
+                            // Security Hardening: Validate the constructed rename path
+                            context.SecurityService.ValidatePath(newPath);
+                            context.SecurityService.ValidateWriteAccess(newPath);
+                            
+                            if (File.Exists(newPath))
+                            {
+                                if (overwrite) File.Delete(newPath);
+                                else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {newPath}");
+                            }
+                            File.Move(source, newPath);
                         }
                         else
                         {
-                            throw new ExecutionException($"Source for COMPRESS_FILE does not exist: {source}");
+                            throw new ExecutionException("RENAME FILE requires a destination name.");
                         }
-                    }
-                    break;
-                case FileOpType.Encrypt:
-                    if (dest != null)
-                    {
-                        var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
-                        pwd ??= context.SecurityService.MasterPassword;
-                        if (pwd == null)
-                            throw new ExecutionException("ENCRYPT_FILE requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
-                        CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
-                    }
-                    break;
-                case FileOpType.Decrypt:
-                    if (dest != null)
-                    {
-                        var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
-                        pwd ??= context.SecurityService.MasterPassword;
-                        if (pwd == null)
-                            throw new ExecutionException("DECRYPT_FILE requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
-                        CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
-                    }
-                    break;
+                        break;
+                    case FileOpType.Compress:
+                        if (dest != null)
+                        {
+                            if (File.Exists(dest))
+                            {
+                                if (overwrite) File.Delete(dest);
+                                else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                            }
+                            if (Directory.Exists(source))
+                            {
+                                System.IO.Compression.ZipFile.CreateFromDirectory(source, dest);
+                            }
+                            else if (File.Exists(source))
+                            {
+                                using var archive = ZipFile.Open(dest, ZipArchiveMode.Create);
+                                archive.CreateEntryFromFile(source, Path.GetFileName(source));
+                            }
+                            else
+                            {
+                                throw new ExecutionException($"Source for COMPRESS_FILE does not exist: {source}");
+                            }
+                        }
+                        break;
+                    case FileOpType.Encrypt:
+                        if (dest != null)
+                        {
+                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
+                            pwd ??= context.SecurityService.MasterPassword;
+                            if (pwd == null)
+                                throw new ExecutionException("ENCRYPT_FILE requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
+                            CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
+                        }
+                        break;
+                    case FileOpType.Decrypt:
+                        if (dest != null)
+                        {
+                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
+                            pwd ??= context.SecurityService.MasterPassword;
+                            if (pwd == null)
+                                throw new ExecutionException("DECRYPT_FILE requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
+                            CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
+                        }
+                        break;
+                }
+            }
+            catch (ExecutionException) { throw; }
+            catch (Exception ex)
+            {
+                throw new ExecutionException($"File operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
             }
             await Task.CompletedTask;
         }

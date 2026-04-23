@@ -92,8 +92,7 @@ namespace ETL_SQL.Core.Analysis
                      statement is FileTransferStatement ||
                      statement is FileOperationStatement ||
                      statement is DirectoryOperationStatement ||
-                     statement is DockerActionStatement ||
-                     statement is DockerCloseStatement)
+                     statement is DockerActionStatement)
             {
                 // Side effects detected - trigger safe path
                 HasOpaqueCalls = true;

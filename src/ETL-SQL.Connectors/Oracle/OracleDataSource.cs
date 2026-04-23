@@ -103,10 +103,12 @@ namespace ETL_SQL.Connectors.Oracle
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Oracle data source write.");
+
+            if (!append) await TruncateAsync();
 
             using var conn = await OpenConnectionAsync();
 
@@ -189,6 +191,7 @@ namespace ETL_SQL.Connectors.Oracle
                 }
                 await resultBatch.AddRowAsync(row);
             }
+            resultBatch.RowsAffected = (int)reader.RecordsAffected;
             yield return resultBatch;
         }
 

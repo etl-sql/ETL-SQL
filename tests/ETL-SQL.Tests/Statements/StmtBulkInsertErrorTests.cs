@@ -41,7 +41,7 @@ namespace ETL_SQL.Tests.Statements
                 await Task.CompletedTask;
             }
 
-            public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+            public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
             {
                 await foreach (var batch in batches)
                 {

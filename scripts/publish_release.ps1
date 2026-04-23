@@ -1,7 +1,7 @@
-# ETL-SQL Release Automation Script (v0.6.0)
+# ETL-SQL Release Automation Script
 # Usage: ./publish_release.ps1
 
-$Version = "0.6.0"
+$Version = if ($env:ETL_SQL_VERSION) { $env:ETL_SQL_VERSION } else { "0.6.0" }
 $ReleaseRoot = Join-Path $PSScriptRoot "..\release"
 $SampleSource = Join-Path $PSScriptRoot "..\samples"
 $DocsSource = Join-Path $PSScriptRoot "..\Docs"

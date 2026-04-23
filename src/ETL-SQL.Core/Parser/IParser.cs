@@ -20,7 +20,7 @@ namespace ETL_SQL.Core.Parser
         Statement ParseQuery();
         Expression ParseExpression();
         string ParseType();
-        TableReference ParseTableReference(bool allowFunction = true);
+        TableReference ParseTableReference(bool allowFunction = true, bool allowWithClause = true, bool allowAlias = true);
         SelectColumn ParseSelectColumn();
         OutputClause ParseOutputClause();
         bool IsIdentifier(Token token);

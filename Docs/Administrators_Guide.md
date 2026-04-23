@@ -68,7 +68,8 @@ Applies to: **All Hosts**
 | Key | Default | Description |
 | :--- | :--- | :--- |
 | `Security:AllowedHosts` | `["*"]` | Whitelist of network hosts scripts may connect to. `["*"]` = unrestricted. Remove `*` and list explicit hosts to enable strict egress control (see [SECURITY.md](../SECURITY.md)). |
-| `Security:ApprovedSafeZones` | `[]` | Absolute paths of directories where `SET ALLOW_...` script overrides are honored. Scripts outside these paths cannot bypass runaway guards. |
+| `Security:PathProtectionMode` | `Restricted` | The strictness level for filesystem access. Options: `Restricted` (blocks system folders), `Defined` (only allows Approved Safe Zones), `Unrestricted` (no blocks). |
+| `Security:ApprovedSafeZones` | `[]` | Absolute paths where `SET ALLOW_...` script overrides are honored. In `Defined` mode, access is ONLY permitted within these paths. |
 | `Security:MaxFileOperationsPerScript` | `100` | Maximum number of filesystem operations a single script may perform before the engine halts with a `SecurityException`. |
 | `Security:MaxRecursiveNestingDepth` | `5` | Maximum `RUN SCRIPT` / procedural nesting depth before halting. |
 | `Security:MaxParallelDegree` | `32` | Maximum concurrent tasks allowed in a `PARALLEL` block. |
@@ -247,18 +248,19 @@ Applies to: **App / TUI**
        "FileSizeLimitMb": 50
      }
    },
-   "Security": {
-     "AllowedHosts": ["*"],
-     "ApprovedSafeZones": [],
-     "AllowedEnvVars": ["TEMP", "USERDOMAIN", "PROCESSOR_ARCHITECTURE"],
-     "MaxFileOperationsPerScript": 100,
-     "MaxRecursiveNestingDepth": 5,
-     "MaxParallelDegree": 32,
-     "MaxStringResultSize": 104857600,
-     "RegexMatchTimeoutMs": 1000,
-     "SpillEncryptionEnabled": true,
-     "SpillCompressionEnabled": true
-   },
+    "Security": {
+      "PathProtectionMode": "Restricted",
+      "AllowedHosts": ["*"],
+      "ApprovedSafeZones": [],
+      "AllowedEnvVars": ["TEMP", "USERDOMAIN", "PROCESSOR_ARCHITECTURE"],
+      "MaxFileOperationsPerScript": 100,
+      "MaxRecursiveNestingDepth": 5,
+      "MaxParallelDegree": 32,
+      "MaxStringResultSize": 104857600,
+      "RegexMatchTimeoutMs": 1000,
+      "SpillEncryptionEnabled": true,
+      "SpillCompressionEnabled": true
+    },
    "Engine": {
      "BatchSize": 10000,
      "MaxRecursiveDepth": 10000,
@@ -350,6 +352,31 @@ Available security overrides:
 - `SET SPILL_ENCRYPTION ON/OFF`: Toggles disk spill encryption.
 - `SET SPILL_COMPRESSION ON/OFF`: Toggles disk spill compression.
 
+> [!TIP]
+> **Synthetic Data for Isolated Testing**: Administrators can encourage the use of the `GENERATE` statement to populate in-memory `#temp` tables with synthetic data. This allows developers to test complex logic and Report-SQL dashboards within **Approved Safe Zones** without requiring database egress or local file system access.
+
+### 5.6 Mock Data Generation & Testing
+The engine supports a dedicated `GENERATE` statement for producing deterministic mock data. This is particularly useful for:
+- **Air-gapped development**: Generating data locally without connecting to production databases.
+- **Performance benchmarking**: Creating millions of rows to test join/spill logic.
+- **Unit testing**: Ensuring scripts handle specific data distributions.
+
+Governance rules:
+- Mock data generation happens entirely in-memory (staged in `#temp` tables or `@variable` tables).
+- It does **not** count against `MaxFileOperationsPerScript` unless the result is subsequently saved to disk.
+- Use `WITH (SEED = <n>)` to ensure results are identical across executions.
+
+Example:
+```sql
+GENERATE 1000 ROWS INTO #sales
+WITH (SEED = 12345)
+AS (
+    OrderDate = 'SEQUENCE(2026-01-01, 1, DAY)',
+    Category  = 'RANDOM(Electronics, Apparel, Home)',
+    Amount    = 'RANDOM_DECIMAL(10.0, 1000.0)'
+);
+```
+
 ### 5.4 Performance Monitoring
 
 Session metrics can be queried at any time using system variables. These are particularly useful for profiling complex ETL pipelines.
@@ -422,7 +449,8 @@ PRINT 'Total Unique Groups: ' + @@AGGREGATE_GROUPS_COUNT;
 
 | Error | Likely Cause | Fix |
 | :--- | :--- | :--- |
-| `SecurityException: Unauthorized access to protected system directory` | Script is reading a blocked path | Review script paths; add an Approved Safe Zone if the path is legitimate |
+| `SecurityException: Unauthorized access to protected system directory` | Script is reading a blocked path in `Restricted` mode | Review script paths; add an Approved Safe Zone if the path is legitimate |
+| `SecurityException: [DEFINED MODE] Unauthorized path access` | Script is accessing a path outside of `ApprovedSafeZones` in `Defined` mode | Register the path as an Approved Safe Zone or change the protection mode |
 | `SecurityException: File operation count exceeds safety limit of N` | Script is processing too many files | Add `SET ALLOW_GREATER_THAN_N_FILE ON;` to the script **and** register an Approved Safe Zone |
 | `SecurityException: Connection to host 'X' is denied` | `AllowedHosts` is in strict mode and host is not listed | Add the host to `Security:AllowedHosts` |
 | `SecurityException: Access to environment variable 'X' is denied` | `AllowedEnvVars` does not include that variable | Add the variable name to `SecurityService.AllowedEnvVars` in DI setup |

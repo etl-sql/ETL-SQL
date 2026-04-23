@@ -20,6 +20,7 @@ Welcome to ETL-SQL. This guide is designed to help you transition from thinking 
 11. [Metadata, Lineage & Tags](#11-metadata-lineage--tags)
 12. [Debugging & Diagnostics](#12-debugging--diagnostics)
 13. [Zero-Trust Security](#13-zero-trust-security)
+14. [Mocking & Testing](#14-mocking--testing)
 - [Next Steps](#next-steps)
 
 ---
@@ -791,6 +792,59 @@ Key rules enforced by the engine:
 | **Credential masking** | Never `PRINT` passwords, tokens, or `ENC:` values |
 
 Use `SET WHAT_IF ON` before any destructive operation. See [SECURITY.md](file:///c:/Users/chuck/scratch/ETL-SQL/SECURITY.md) for the complete security policy.
+
+---
+
+## 14. Mocking & Testing
+
+Great pipelines require great tests. ETL-SQL provides tools to simulate complex data scenarios without touching production systems.
+
+### 14.1 The `GENERATE` Statement
+The `GENERATE` statement is the primary tool for creating synthetic data. It allows you to populate `#temp` tables or `@variable` tables using rule-based functions.
+
+```sql
+GENERATE 10 ROWS INTO #orders AS (
+    OrderID    = 'SEQUENCE(1001, 1)',
+    Status     = 'RANDOM(Open, Shipped, Cancelled)',
+    Amount     = 'RANDOM_DECIMAL(10.0, 500.0)',
+    OrderDate  = 'SEQUENCE(2026-01-01, 1, DAY)'
+);
+```
+
+### 14.2 Deterministic Testing with `SEED`
+To ensure your tests are reproducible, use the `SEED` option. This forces the random number generator to produce the same sequence of values every time the script runs.
+
+```sql
+-- This will always produce the same 10 "random" categories
+GENERATE 10 ROWS INTO #test WITH (SEED = 42)
+AS (
+    Category = 'RANDOM(Electronics, Apparel, Home)'
+);
+```
+
+### 14.3 Table Variables
+For lightweight, isolated data storage, use `DECLARE @var TABLE`. These variables behave exactly like `#temp` tables but are scoped to the variable manager.
+
+```sql
+DECLARE @audit TABLE;
+
+-- Populate it
+GENERATE 5 ROWS INTO @audit AS (
+    Event = 'RANDOM(Login, Logout, Export)',
+    Time  = 'SEQUENCE(08:00:00, 00:01:00)'
+);
+
+-- Query it
+SELECT * FROM @audit;
+```
+
+### 14.4 The `MOCKDB` Connector
+While `GENERATE` creates custom data, the `MOCKDB` connector provides pre-populated tables (Users, Orders, etc.) for testing standard join and aggregation logic quickly.
+
+```sql
+CREATE CONNECTION test_src ON MOCKDB();
+SELECT * FROM test_src.Users;
+```
 
 ---
 

@@ -71,8 +71,8 @@ namespace ETL_SQL.Data
     {
         /// <summary>Streams the data source content in batches.</summary>
         IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000);
-        /// <summary>Writes batches of data into the data source.</summary>
-        Task WriteBatches(IAsyncEnumerable<DataTable> batches);
+        /// <summary>Writes batches of data into the data source. If append is true, existing data is preserved.</summary>
+        Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false);
         /// <summary>Removes all data from the data source.</summary>
         Task TruncateAsync() => throw new NotSupportedException($"TRUNCATE is not supported for {GetType().Name}");
         /// <summary>Returns the list of column names in the data source.</summary>
@@ -567,8 +567,9 @@ namespace ETL_SQL.Data
             foreach (var b in memoryCopy) yield return b;
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            if (!append) await TruncateAsync();
             await foreach (var b in batches)
             {
                 if (_columnOrder.Count == 0) _columnOrder.AddRange(b.ColumnNames);
@@ -828,7 +829,7 @@ namespace ETL_SQL.Data
         }
 
         public IDataSource WithTable(string tableName) => this;
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => throw new NotSupportedException();
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException();
         public string ConnectorType => "STREAMING";
  
         public async Task<IEnumerable<string>> GetColumnsAsync()

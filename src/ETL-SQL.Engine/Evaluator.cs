@@ -146,6 +146,8 @@ namespace ETL_SQL.Engine
         public int MaxGroupingSets { get; set; } = LanguageMetadata.DefaultMaxGroupingSets;
         public long MaxSessionSize { get; set; } = 200 * 1024 * 1024; // 200MB Default
         public int MaxLastResultRows { get; set; } = LanguageMetadata.DefaultMaxLastResultRows;
+        public bool IsPersistentSession { get; set; }
+        public List<object?>? Parameters { get; set; }
         
         /// <summary>Last script lexing duration in milliseconds.</summary>
         public long LastLexTimeMs { get; set; }
@@ -445,8 +447,6 @@ namespace ETL_SQL.Engine
         public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null) => _variableScopeManager.PushScope(vars, metadata);
         public void PopScope() => _variableScopeManager.PopScope();
 
-        public bool IsPersistentSession { get; set; }
-
         public string SpillToken => $"Session_{SessionId}";
         public long MemoryUsageBytes 
         {
@@ -512,6 +512,7 @@ namespace ETL_SQL.Engine
             _schemaManager = _registry.SchemaManager;
             _procedureExecutor = _registry.ProcedureExecutor;
 
+            Functions.StandardFunctions.Register(functionRegistry);
             Functions.FileFunctions.Register(functionRegistry);
             Functions.LineageFunctions.Register(functionRegistry);
             Functions.RegexFunctions.Register(functionRegistry);
@@ -573,9 +574,16 @@ namespace ETL_SQL.Engine
 
         public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)
         {
-            LastResultSets.Clear();
-            _operationCount = 0;
-            CurrentRecursiveDepth = 0;
+            if (CurrentRecursiveDepth == 0)
+            {
+                LastResultSets.Clear();
+                LastResult = null;
+                _nodeReuseMap.Clear();
+                _operationCount = 0;
+                ExecutionTree.Clear();
+                ProfileMetrics.Clear();
+                lock(_messagesLock) { Messages.Clear(); }
+            }
             try
             {
                 var analyzer = new LineageAnalyzer(LineageTracker);
@@ -947,7 +955,9 @@ namespace ETL_SQL.Engine
         {
             if (expr == null) return true;
             var res = await EvaluateValue(expr, context);
-            return res is bool b && b;
+            if (res == null || res == DBNull.Value) return false;
+            if (res is bool b) return b;
+            try { return Convert.ToBoolean(res); } catch { return false; }
         }
 
         public List<string> GetIndexedColumns(Expression? cond, string alias)
@@ -997,9 +1007,19 @@ namespace ETL_SQL.Engine
         public async Task RollbackTransaction(string? name = null) => await _transactionManager.RollbackTransaction(_variableScopeManager.GlobalVariables, _connections);
         public async Task RollbackAll() => await _transactionManager.RollbackAll(_variableScopeManager.GlobalVariables, _connections);
 
-        public void Log(string message, ConsoleColor color = ConsoleColor.White)
+        public void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true)
         {
             var scrubbed = Scrub(message);
+            
+            if (forwardToLogger)
+            {
+                _logger.WriteLine(scrubbed, color);
+                
+                // If output is redirected, the OnMessage event (subscribed in constructor) 
+                // will handle adding to the Messages list to avoid double-capture.
+                if (RedirectOutput) return;
+            }
+
             lock (_messagesLock)
             {
                 Messages.Add(scrubbed);
@@ -1142,10 +1162,10 @@ namespace ETL_SQL.Engine
         public long LastStatementRowsProcessed { get; set; }
 
         private int _operationCount = 0;
-        public void IncrementOperationCount(string? path = null, int count = 1)
+        public void IncrementOperationCount(OperationType type = OperationType.FileSystem, string? path = null, int count = 1)
         {
             var total = System.Threading.Interlocked.Add(ref _operationCount, count);
-            _securityService.CheckRunawayProtection(total, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, path);
+            _securityService.CheckRunawayProtection(type, total, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, path);
         }
 
         ETL_SQL.Services.SecurityService IExecutionContext.SecurityService => _securityService;

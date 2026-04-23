@@ -47,8 +47,6 @@ namespace ETL_SQL.Core.Parser
             dict["CUBE"] = TokenType.CUBE;
             dict["GROUPING"] = TokenType.GROUPING;
             dict["FILE"] = TokenType.FILE;  // Reserved table name — not a keyword, but must lex as FILE for deprecation detection
-            dict["ENCRYPT_FILE"] = TokenType.ENCRYPT_FILE;
-            dict["DECRYPT_FILE"] = TokenType.DECRYPT_FILE;
             dict["SEND_FILE"] = TokenType.SEND_FILE;
             dict["RECEIVE_FILE"] = TokenType.RECEIVE_FILE;
             dict["FILE_SEND"] = TokenType.SEND_FILE;
@@ -102,6 +100,7 @@ namespace ETL_SQL.Core.Parser
             dict["TEMPLATE_PATH"] = TokenType.TEMPLATE_PATH;
             dict["Y_AXIS"]        = TokenType.Y_AXIS;
             dict["REPORT"]        = TokenType.REPORT;
+            dict["PAGES"]         = TokenType.PAGES;
             dict["DESCRIPTION"]   = TokenType.DESCRIPTION;
 
             // ── Report-SQL keywords (Phase 9.3) ────────────────────────────
@@ -422,8 +421,21 @@ namespace ETL_SQL.Core.Parser
                         Advance();
                         break;
                     case '?':
-                        tokens.Add(new Token(TokenType.QUESTION, "?", startLine, startColumn, startLine, startColumn + 1, startOffset, startOffset + 1));
                         Advance();
+                        if (char.IsDigit(CurrentChar))
+                        {
+                            var sb = new StringBuilder("?");
+                            while (char.IsDigit(CurrentChar))
+                            {
+                                sb.Append(CurrentChar);
+                                Advance();
+                            }
+                            tokens.Add(new Token(TokenType.PARAMETER, sb.ToString(), startLine, startColumn, _line, _column, startOffset, _position));
+                        }
+                        else
+                        {
+                            tokens.Add(new Token(TokenType.PARAMETER, "?", startLine, startColumn, startLine, startColumn + 1, startOffset, startOffset + 1));
+                        }
                         break;
                     default:
                         // Instead of throwing, just skip the character. This makes the LSP more resilient to unknown snippets/logs.

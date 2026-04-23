@@ -393,25 +393,37 @@ USE DOCKER('<image>') AS <alias>;
 -- Access the generated connection string
 DECLARE @conn VARCHAR(500) = <alias>.CONNECTION_STRING;
 
--- Container lifecycle
-STOP DOCKER <alias>;    -- Stops the container (state retained on disk)
+-- Access the last started container connection string
+DECLARE @last_conn VARCHAR(500) = DOCKER.CONNECTION_STRING;
+
+-- Container lifecycle (Targeted)
 START DOCKER <alias>;   -- Resumes a stopped container
+STOP DOCKER <alias>;    -- Stops the container (state retained on disk)
 PAUSE DOCKER <alias>;   -- Suspends the container CPU
 CLOSE DOCKER <alias>;   -- Destroys container and wipes all state
 
--- Close ALL active containers
-CLOSE_DOCKER;
+-- Container lifecycle (Last Started)
+START DOCKER;
+STOP DOCKER;
+PAUSE DOCKER;
+CLOSE DOCKER;
+
+-- Container lifecycle (All Active)
+START ALL DOCKER;
+STOP ALL DOCKER;
+PAUSE ALL DOCKER;
+CLOSE ALL DOCKER;
 ```
 
 ### 6.2 Function-Style Aliases
 
 | Function | Equivalent |
 | :--- | :--- |
-| `START_DOCKER('image' [, 'alias'])` | `USE DOCKER(...) AS alias` |
-| `STOP_DOCKER('alias')` | `alias STOP` |
-| `PAUSE_DOCKER('alias')` | `alias PAUSE` |
-| `RESUME_DOCKER('alias')` | `alias START` |
-| `CLOSE_DOCKER('alias')` | `alias CLOSE` |
+| `DOCKER('<image>' [, 'alias'])` | `USE DOCKER(...) AS alias` |
+| `START_DOCKER(['alias'])` | `START DOCKER [alias]` |
+| `STOP_DOCKER(['alias'])` | `STOP DOCKER [alias]` |
+| `PAUSE_DOCKER(['alias'])` | `PAUSE DOCKER [alias]` |
+| `CLOSE_DOCKER(['alias'])` | `CLOSE DOCKER [alias]` |
 
 ### 6.3 Example
 

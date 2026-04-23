@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -85,7 +86,7 @@ namespace ETL_SQL.Engine.Handlers
                  throw new ExecutionException($"Unknown connection: {connName} at Line {stmt.Line}");
             _logger.Debug("Destination resolved as {DestinationType}", destination.GetType().Name);
 
-            if (destination is IDatabaseSource sqlDest)
+            if (destination is IDatabaseSource sqlDest && sqlDest.SupportsSqlPushdown)
             {
                 if (stmt.SelectQuery != null && stmt.SelectQuery is SelectStatement sel && sel.FromTable != null && (sel.FromTable.ConnectionName ?? sel.FromTable.TableName).Equals(connName, StringComparison.OrdinalIgnoreCase))
                 {
@@ -98,7 +99,10 @@ namespace ETL_SQL.Engine.Handlers
                     }
                     else
                     {
-                        await foreach (var _ in sqlDest.ExecuteRawSql(sql, compiledSelect.Parameters.Values)) { }
+                        await foreach (var batch in sqlDest.ExecuteRawSql(sql, compiledSelect.Parameters.Values)) 
+                        {
+                            if (batch.RowsAffected >= 0) context.RowsProcessed += batch.RowsAffected;
+                        }
                     }
                 }
                 else if (stmt.SelectQuery != null && stmt.SelectQuery is ExecutePushdownStatement pushdown)
@@ -120,7 +124,10 @@ namespace ETL_SQL.Engine.Handlers
                     }
                     else
                     {
-                        await foreach (var _ in sqlDest.ExecuteRawSql(sql)) { }
+                        await foreach (var batch in sqlDest.ExecuteRawSql(sql)) 
+                        {
+                            if (batch.RowsAffected >= 0) context.RowsProcessed += batch.RowsAffected;
+                        }
                     }
                 }
                 else
@@ -157,7 +164,7 @@ namespace ETL_SQL.Engine.Handlers
                 var forClause = context.GetForClause(stmt.SelectQuery);
                 if (forClause != null) batches = context.EvaluateForClause(batches, forClause);
 
-                var targetCols = stmt.Columns ?? (forClause == null ? (await destination.GetColumnsAsync()).ToList() : new List<string>());
+                var targetCols = stmt.Columns ?? (forClause == null ? (await destination.GetColumnsAsync()).ToList() : stmt.Columns ?? new List<string>());
                 if (targetCols.Count > 0)
                 {
                     batches = context.AlignColumns(batches, targetCols);
@@ -180,7 +187,7 @@ namespace ETL_SQL.Engine.Handlers
                             context.SecurityService.ValidateWriteAccess(destination.Path);
                         }
                         
-                        await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable());
+                        await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true);
                     }
                     count += batch.Rows.Count;
                     if (stmt.Output != null) allInsertedRows.AddRange(batch.Rows);
@@ -204,7 +211,11 @@ namespace ETL_SQL.Engine.Handlers
                 var destinationCols = (await destination.GetColumnsAsync()).ToList();
                 if (destinationCols.Count == 0 && stmt.Values.Count > 0)
                 {
-                    for (int i = 0; i < stmt.Values[0].Count; i++) destinationCols.Add($"Col{i + 1}");
+                    if (stmt.Columns != null) destinationCols.AddRange(stmt.Columns);
+                    else
+                    {
+                        for (int i = 0; i < stmt.Values[0].Count; i++) destinationCols.Add($"Col{i + 1}");
+                    }
                 }
 
                 var batch = new DataTable();
@@ -256,8 +267,9 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 else
                 {
-                    await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable());
+                    await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true);
                 }
+                context.IncrementOperationCount(OperationType.EngineInternal, count: stmt.Values.Count);
                 context.RowsProcessed += stmt.Values.Count;
 
                 if (stmt.Output != null && batch.Rows.Count > 0)
@@ -272,41 +284,9 @@ namespace ETL_SQL.Engine.Handlers
         /// <summary>Processes the OUTPUT clause of an INSERT statement, evaluating expressions against inserted rows.</summary>
         private async Task ProcessOutputClause(OutputClause output, List<Row> insertedRows, IExecutionContext context)
         {
-            var outputTable = new DataTable();
-            var outputRows = new List<Row>();
-
-            foreach (var insertedRow in insertedRows)
+            if (output != null)
             {
-                var contextRow = new Row();
-                contextRow["INSERTED"] = insertedRow;
-                foreach (var col in insertedRow.Columns)
-                {
-                    if (!contextRow.HasColumn(col.Key)) contextRow[col.Key] = col.Value;
-                }
-
-                var outputRow = new Row();
-                foreach (var outCol in output.Columns)
-                {
-                    var val = await context.EvaluateValue(outCol.Expression, contextRow);
-                    outputRow[outCol.Alias ?? outCol.ToSql()] = val;
-                }
-                outputRows.Add(outputRow);
-            }
-
-            if (outputRows.Count > 0)
-            {
-                outputTable.SetColumns(outputRows[0].Columns.Keys);
-                foreach (var r in outputRows) await outputTable.AddRowAsync(r);
-
-                if (output.IntoTable != null)
-                {
-                    var intoDest = await context.ResolveDataSourceAsync(output.IntoTable);
-                    await intoDest.WriteBatches(new[] { outputTable }.ToAsyncEnumerable());
-                }
-                else
-                {
-                    context.LastResult = outputTable;
-                }
+                await OutputClauseHelper.ProcessAsync(output, context, insertedRows.Select(r => ((Row?)null, (Row?)r, (string?)null)));
             }
         }
     }

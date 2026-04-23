@@ -1,0 +1,52 @@
+-- Test Script for Standard Function Registration
+-- Validates that core SQL functions are correctly registered in the engine.
+
+USE PASSWORD = 'TestPassword123!';
+
+DECLARE @now DATETIME = GETDATE();
+DECLARE @len INT = LEN('Hello World');
+DECLARE @upper VARCHAR(50) = UPPER('hello');
+DECLARE @lower VARCHAR(50) = LOWER('WORLD');
+DECLARE @ltrim VARCHAR(50) = LTRIM('  trim');
+DECLARE @rtrim VARCHAR(50) = RTRIM('trim  ');
+DECLARE @substring VARCHAR(50) = SUBSTRING('Hello World', 1, 5);
+DECLARE @left VARCHAR(50) = LEFT('Hello World', 5);
+DECLARE @right VARCHAR(50) = RIGHT('Hello World', 5);
+DECLARE @abs INT = ABS(-100);
+DECLARE @round DECIMAL = ROUND(1.2345, 2);
+DECLARE @dateadd DATETIME = DATEADD(DAY, 1, @now);
+DECLARE @datediff INT = DATEDIFF(SECOND, @now, @dateadd);
+DECLARE @coalesce VARCHAR(50) = COALESCE(NULL, 'Value');
+DECLARE @isnull VARCHAR(50) = ISNULL(NULL, 'Value');
+
+-- Assertions
+PRINT 'Checking GETDATE()...';
+IF @now IS NULL THROW 50001, 'GETDATE() returned NULL', 1;
+
+PRINT 'Checking LEN()...';
+IF @len <> 11 THROW 50002, 'LEN() failed', 1;
+
+PRINT 'Checking UPPER()/LOWER()...';
+IF @upper <> 'HELLO' THROW 50003, 'UPPER() failed', 1;
+IF @lower <> 'world' THROW 50004, 'LOWER() failed', 1;
+
+PRINT 'Checking SUBSTRING/LEFT/RIGHT...';
+IF @substring <> 'Hello' THROW 50005, 'SUBSTRING() failed', 1;
+IF @left <> 'Hello' THROW 50006, 'LEFT() failed', 1;
+IF @right <> 'World' THROW 50007, 'RIGHT() failed', 1;
+
+PRINT 'Checking math functions...';
+IF @abs <> 100 THROW 50008, 'ABS() failed', 1;
+IF @round <> 1.23 THROW 50009, 'ROUND() failed', 1;
+
+PRINT 'Checking date arithmetic...';
+PRINT '  Now:      ' + @now;
+PRINT '  Add 1d:   ' + @dateadd;
+PRINT '  Diff (s): ' + @datediff;
+IF @datediff < 86400 THROW 50010, 'DATEADD/DATEDIFF failed: ' + @datediff, 1;
+
+PRINT 'Checking COALESCE/ISNULL...';
+IF @coalesce <> 'Value' THROW 50011, 'COALESCE() failed', 1;
+IF @isnull <> 'Value' THROW 50012, 'ISNULL() failed', 1;
+
+PRINT 'All standard functions verified successfully.';

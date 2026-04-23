@@ -31,7 +31,9 @@ namespace ETL_SQL.LSP
         {
             "SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "HAVING", "LIMIT", "OFFSET",
             "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE", "TRUNCATE", "MERGE", "MATCHED",
-            "CREATE", "TABLE", "CONNECTION", "ON", "TYPE", "TARGET", "FLATFILE", "CSV", "EXCEL", "JSON", "XML", "MSSQL", "POSTGRES", "ORACLE", "ODBC", "MOCKDB",
+            "CREATE", "TABLE", "CONNECTION", "ON", "TYPE", "TARGET", 
+            "FLATFILE", "CSV", "EXCEL", "JSON", "XML", "PARQUET", "AVRO", "API", "REST", "SMTP", "DIRECTORY", "SFTP", "FTP", "AZURE_BLOB",
+            "MSSQL", "POSTGRES", "ORACLE", "ODBC", "MOCKDB",
             "DROP", "DECLARE", "PRINT", "IF", "ELSE", "WHILE", "FOR", "FOREACH", "BEGIN", "END", "TRY", "CATCH", "THROW", "RAISEERROR",
             "EXEC", "EXECUTE", "RETURN", "BREAK", "CONTINUE", "JOB", "STEP", "LOAD", "BULK", "SHOW",
             "LINEAGE", "DOCKER", "START", "STOP", "PAUSE", "CLOSE", "PARALLEL", "RUN", "SCRIPT", "USE", "LINT",
@@ -89,7 +91,7 @@ namespace ETL_SQL.LSP
                         var tables = (await _metadata.GetTablesAsync(connName, docUri)).ToList();
                         _logger.LogInformation("Found {Count} tables for {ConnName}", tables.Count, connName);
 
-                        bool isFileBased = new[] { "FLATFILE", "CSV", "JSON", "XML" }.Contains(conn.Type.ToUpperInvariant());
+                        bool isFileBased = new[] { "FLATFILE", "CSV", "JSON", "XML", "PARQUET", "AVRO" }.Contains(conn.Type.ToUpperInvariant());
                         if (isFileBased || (tables.Count == 1 && string.Equals(tables[0], connName, StringComparison.OrdinalIgnoreCase)))
                         {
                             var tableName = tables.Count > 0 ? tables[0] : connName;
@@ -129,7 +131,7 @@ namespace ETL_SQL.LSP
                         {
                             var cinfo = contextConnections.First(c => string.Equals(c.Name, first, StringComparison.OrdinalIgnoreCase));
                             var tables = (await _metadata.GetTablesAsync(first, docUri)).ToList();
-                            bool isFileBased = new[] { "FLATFILE", "CSV", "JSON", "XML" }.Contains(cinfo.Type.ToUpperInvariant());
+                            bool isFileBased = new[] { "FLATFILE", "CSV", "JSON", "XML", "PARQUET", "AVRO" }.Contains(cinfo.Type.ToUpperInvariant());
 
                             if (isFileBased || (tables.Count == 1 && string.Equals(tables[0], first, StringComparison.OrdinalIgnoreCase)))
                             {

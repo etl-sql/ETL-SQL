@@ -1,0 +1,43 @@
+-- Test DateDiff Boundary Crossing
+
+DECLARE @dt1 DATETIME = '2023-01-01 10:59:59';
+DECLARE @dt2 DATETIME = '2023-01-01 11:00:01';
+
+-- Hour boundary (10:59 -> 11:00 should be 1)
+DECLARE @diff_hour INT = DATEDIFF(HOUR, @dt1, @dt2);
+PRINT 'Hour diff: ' + CAST(@diff_hour AS STRING);
+ASSERT @diff_hour = 1;
+
+-- Minute boundary (10:59:59 -> 11:00:01 should be 1)
+DECLARE @diff_min INT = DATEDIFF(MINUTE, @dt1, @dt2);
+PRINT 'Minute diff: ' + CAST(@diff_min AS STRING);
+ASSERT @diff_min = 1;
+
+-- Second boundary (10:59:59.999 -> 11:00:00.001 should be 1)
+DECLARE @dt3 DATETIME = '2023-01-01 10:59:59.999';
+DECLARE @dt4 DATETIME = '2023-01-01 11:00:00.001';
+DECLARE @diff_sec INT = DATEDIFF(SECOND, @dt3, @dt4);
+PRINT 'Second diff: ' + CAST(@diff_sec AS STRING);
+ASSERT @diff_sec = 1;
+
+-- Week boundary (Saturday -> Sunday should be 1)
+DECLARE @sat DATETIME = '2023-01-07'; -- Saturday
+DECLARE @sun DATETIME = '2023-01-08'; -- Sunday
+DECLARE @diff_week INT = DATEDIFF(WEEK, @sat, @sun);
+PRINT 'Week diff: ' + CAST(@diff_week AS STRING);
+ASSERT @diff_week = 1;
+
+-- Day boundary (11:59 PM -> 12:01 AM should be 1)
+DECLARE @night DATETIME = '2023-01-01 23:59:59';
+DECLARE @morning DATETIME = '2023-01-02 00:00:01';
+DECLARE @diff_day INT = DATEDIFF(DAY, @night, @morning);
+PRINT 'Day diff: ' + CAST(@diff_day AS STRING);
+ASSERT @diff_day = 1;
+
+PRINT 'All DateDiff precision tests passed.';
+
+-- Verify DML RowsProcessed reporting
+CREATE TABLE #test (id INT, val STRING);
+INSERT INTO #test (id, val) VALUES (1, 'A'), (2, 'B'), (3, 'C');
+UPDATE #test SET val = 'X' WHERE id > 1;
+-- CLI should report "Rows affected: 2"

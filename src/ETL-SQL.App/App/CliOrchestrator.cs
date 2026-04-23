@@ -156,7 +156,8 @@ namespace ETL_SQL.App
             else if (commandName == "session-clear")
             {
                 var idArg = res.CommandResult.Children.OfType<ArgumentResult>().FirstOrDefault();
-                cliContext.SessionId = idArg?.GetValueOrDefault<string>();
+                var sid = idArg?.GetValueOrDefault<string>();
+                if (sid != null) cliContext.SessionId = sid;
             }
             else if (commandName.StartsWith("ui-"))
             {
@@ -170,7 +171,8 @@ namespace ETL_SQL.App
                 }
             }
 
-            cliContext.SessionId ??= res.FindResultFor(SessionOption) != null ? res.GetValueForOption(SessionOption) : null;
+            var sessionOptVal = res.FindResultFor(SessionOption) != null ? res.GetValueForOption(SessionOption) : null;
+            if (sessionOptVal != null) cliContext.SessionId = sessionOptVal;
 
             if (res.FindResultFor(VarOption) != null)
             {

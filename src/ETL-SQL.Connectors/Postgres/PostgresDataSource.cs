@@ -113,10 +113,12 @@ namespace ETL_SQL.Connectors.Postgres
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for Postgres data source write.");
+
+            if (!append) await TruncateAsync();
 
             var (conn, isShared) = await GetConnectionAsync();
             System.IO.TextWriter? writer = null;
@@ -212,6 +214,12 @@ namespace ETL_SQL.Connectors.Postgres
 
                 if (currentBatch.Rows.Count > 0 || resultSetIndex == 0 || reader.FieldCount > 0)
                 {
+                    currentBatch.RowsAffected = (int)reader.RecordsAffected;
+                    yield return currentBatch;
+                }
+                else if (resultSetIndex == 0 && reader.RecordsAffected >= 0)
+                {
+                    currentBatch.RowsAffected = (int)reader.RecordsAffected;
                     yield return currentBatch;
                 }
                 resultSetIndex++;

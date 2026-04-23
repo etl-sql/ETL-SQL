@@ -664,3 +664,25 @@ END
 
 PRINT GET_TAG_VALUE('#TaggedUsers', 'UserId', 'd');  -- 'Internal user ID'
 ```
+
+---
+
+## 16. Data Generation Functions
+
+These functions are used exclusively within the `GENERATE` statement to define mock data production rules.
+
+| Function | Signature | Description |
+| :--- | :--- | :--- |
+| `SEQUENCE` | `SEQUENCE(start, step [, unit])` | Produces an arithmetic or temporal sequence. `unit` can be `DAY`, `MONTH`, `YEAR`. |
+| `RANDOM` | `RANDOM(val1, val2, ...)` | Selects a value randomly from the provided literal list. |
+| `RANDOM_INT` | `RANDOM_INT(min, max)` | Returns a random integer between `min` and `max` (inclusive). |
+| `RANDOM_DECIMAL` | `RANDOM_DECIMAL(min, max)` | Returns a random decimal between `min` and `max`. |
+
+*Example:*
+```sql
+GENERATE 10 ROWS INTO #test AS (
+    id   = 'SEQUENCE(1, 1)',
+    cat  = 'RANDOM(A, B, C)',
+    amt  = 'RANDOM_DECIMAL(10.5, 99.9)'
+);
+```

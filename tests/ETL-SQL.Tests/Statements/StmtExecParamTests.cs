@@ -17,8 +17,14 @@ namespace ETL_SQL.Tests.Statements
         private static Script Parse(string source)
         {
             var tokens = new Lexer(source).Tokenize();
+            foreach (var t in tokens)
+            {
+                Console.WriteLine($"{t.Line}:{t.Column} {t.Type} ({t.Value})");
+            }
+
             return new Parser(tokens, source).Parse();
         }
+
 
         [Fact]
         public async Task TestIndexedParameters_Pushdown()

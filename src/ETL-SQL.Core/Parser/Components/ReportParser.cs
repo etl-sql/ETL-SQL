@@ -350,6 +350,24 @@ namespace ETL_SQL.Core.Parser.Components
             };
         }
 
+        public Statement ParseStyleStatement(Token startToken)
+        {
+            var styles = new Dictionary<string, string>();
+            string? styleName = null;
+            ParseStyleClause(styles, ref styleName);
+            Match(TokenType.SEMICOLON);
+            
+            return new CreateStyleStatement
+            {
+                Name   = "GLOBAL",
+                Styles = styles,
+                StyleName = styleName,
+                Mode   = ObjectCreationMode.Create,
+                Line   = startToken.Line,
+                Column = startToken.Column
+            };
+        }
+
         // ── CREATE TEMPLATE ───────────────────────────────────────────────────
 
         public Statement ParseCreateTemplate(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
@@ -501,6 +519,7 @@ namespace ETL_SQL.Core.Parser.Components
 
             var orientation = NavigationOrientation.Horizontal;
             string? defaultPage = null;
+            var pages = new List<string>();
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
@@ -525,6 +544,17 @@ namespace ETL_SQL.Core.Parser.Components
                     Consume(TokenType.EQUALS, "Expected '=' after DEFAULT");
                     defaultPage = ConsumeIdentifier("Expected page name after DEFAULT =").Value;
                 }
+                else if (Match(TokenType.PAGES) || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("PAGES", StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (_parser.Current.Type != TokenType.LPAREN) Match(TokenType.PAGES); // handle identifier vs token
+                    Consume(TokenType.LPAREN, "Expected '(' after PAGES");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        pages.Add(ConsumeIdentifier("Expected page name").Value);
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close PAGES");
+                }
                 else
                 {
                     throw new SyntaxException(
@@ -536,17 +566,20 @@ namespace ETL_SQL.Core.Parser.Components
 
             Consume(TokenType.RPAREN, "Expected ')' to close CREATE NAVIGATION options");
 
-            var pages = new List<string>();
-            if (Match(TokenType.WITH))
+            if (pages.Count == 0)
             {
-                ConsumeIdentifier("Expected PAGES after WITH");
-                Consume(TokenType.LPAREN, "Expected '(' after PAGES");
-                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                bool hasPagesClause = Match(TokenType.WITH) || ReportCheck(TokenType.PAGES);
+                if (hasPagesClause)
                 {
-                    pages.Add(ConsumeIdentifier("Expected page name").Value);
-                    Match(TokenType.COMMA);
+                    Match(TokenType.PAGES);
+                    Consume(TokenType.LPAREN, "Expected '(' after PAGES");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        pages.Add(ConsumeIdentifier("Expected page name").Value);
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close PAGES");
                 }
-                Consume(TokenType.RPAREN, "Expected ')' to close PAGES");
             }
 
             Match(TokenType.SEMICOLON);

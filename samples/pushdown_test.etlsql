@@ -1,5 +1,6 @@
 -- Setup a mock connection
-CREATE CONNECTION MyDb ON MOCKDB('mock://localhost') WITH (dialect='MSSQL');
+DROP CONNECTION IF EXISTS MyDb;
+CREATE CONNECTION MyDb ON MOCKDB();
 
 PRINT 'Testing standalone EXECUTE INTO #RemoteUsers...';
 

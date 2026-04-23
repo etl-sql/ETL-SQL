@@ -18,8 +18,8 @@ BEGIN TRY
     WHERE PostedDate = TRUNC(GETDATE());
 
     PRINT 'Encrypting payload...';
-    ENCRYPT_FILE('TestData/out/daily_finances.csv', 'TestData/out/daily_finances.csv.enc') PASS 'SecureVendorKey2026!';
-    
+    ENCRYPT FILE  'TestData/out/daily_finances.csv' TO 'TestData/out/daily_finances.csv.enc' PASSWORD('SecureVendorKey2026!');
+
     PRINT 'Transmitting to Vendor...';
     -- Simulate SFTP by dropping into a local mock folder
     CREATE_DIRECTORY('TestData/out/vendor_sftp/');

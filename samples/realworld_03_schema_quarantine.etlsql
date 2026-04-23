@@ -7,28 +7,28 @@
 CREATE TABLE #FileSpec (TransactionID VARCHAR(50), Amount DECIMAL(18,2), Status VARCHAR(10), CreatedAt DATETIME);
 
 CREATE CONNECTION MockGenerator ON FLATFILE('TestData/inbound/partner_feed.csv') WITH (HEADER='ON');
-INSERT INTO MockGenerator.Main (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN100', 50.00, 'PAID', GETDATE());
-INSERT INTO MockGenerator.Main (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN101', -15.00, 'FAILED', GETDATE());
-INSERT INTO MockGenerator.Main (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN102', 0.00, 'INVALID', GETDATE());
-INSERT INTO MockGenerator.Main (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN103', 100.00, 'PENDING', GETDATE());
+INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN100', 50.00, 'PAID', GETDATE());
+INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN101', -15.00, 'FAILED', GETDATE());
+INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN102', 0.00, 'INVALID', GETDATE());
+INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN103', 100.00, 'PENDING', GETDATE());
 
 -- Force the file to adhere to strict schema
 CREATE CONNECTION InboundFeed ON FLATFILE('TestData/inbound/partner_feed.csv') 
     WITH (HEADER = 'ON', STRICT_SCHEMA = 'ON', ERROR_POLICY = 'IGNORE');
 
-SELECT * INTO #RawStage FROM InboundFeed.Main;
+SELECT * INTO #RawStage FROM InboundFeed.FILE;
 
 SELECT TransactionID, Amount, Status, CreatedAt INTO #CleanData FROM #RawStage
 WHERE Amount > 0 AND STATUS IN ('PAID', 'PENDING', 'FAILED');
 
 CREATE CONNECTION QuarantineFile ON FLATFILE('TestData/out/quarantine_log.csv') WITH(HEADER='ON');
 
-SELECT TransactionID, Amount, Status, CreatedAt, 'Validation Failure' AS Reason INTO QuarantineFile.Main
+SELECT TransactionID, Amount, Status, CreatedAt, 'Validation Failure' AS Reason INTO QuarantineFile.FILE
 FROM #RawStage
 WHERE Amount <= 0 OR Amount IS NULL OR STATUS NOT IN ('PAID', 'PENDING', 'FAILED');
 
 DECLARE @cleanCount INT = (SELECT COUNT(*) FROM #CleanData);
-DECLARE @quarantineCount INT = (SELECT COUNT(*) FROM QuarantineFile.Main);
+DECLARE @quarantineCount INT = (SELECT COUNT(*) FROM QuarantineFile.FILE);
 
 PRINT 'Ingestion Complete.';
 PRINT CONCAT('Clean Records: ', @cleanCount);

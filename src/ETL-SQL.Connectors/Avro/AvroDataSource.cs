@@ -15,7 +15,7 @@ namespace ETL_SQL.Connectors.Avro
     /// <summary>
     /// Data source implementation for reading and writing Apache Avro files.
     /// </summary>
-    public class AvroDataSource : IDataSource
+    public class AvroDataSource : IDatabaseSource
     {
         private readonly string _filePath;
         private readonly string? _schemaFile;
@@ -102,7 +102,7 @@ namespace ETL_SQL.Connectors.Avro
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             var enumerator = batches.GetAsyncEnumerator();
             if (!await enumerator.MoveNextAsync()) return;
@@ -232,5 +232,28 @@ namespace ETL_SQL.Connectors.Avro
         {
             await Task.CompletedTask;
         }
+
+        public async Task<string> GetVersionAsync() => await Task.FromResult("1.0.0");
+        public HashSet<string> GetSupportedFunctions() => new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
+        {
+            if (sql.Trim().ToUpperInvariant().StartsWith("SELECT * FROM FILE"))
+            {
+                await foreach (var batch in ReadBatches()) yield return batch;
+            }
+            else
+            {
+                _logger.Debug("[AVRO] ExecuteRawSql received unknown SQL: {Sql}. Returning empty result as native pushdown is not supported.", sql);
+                yield return new DataTable { ColumnNames = { "Status" }, Rows = { new Row { ["Status"] = "NOT_SUPPORTED" } } };
+            }
+        }
+
+        public string ConnectionString => _filePath;
+        public string Dialect => "AVRO";
+        public bool SupportsSqlPushdown => false;
+        public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
+        public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
     }
 }

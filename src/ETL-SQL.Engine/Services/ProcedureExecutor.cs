@@ -23,7 +23,7 @@ namespace ETL_SQL.Engine.Services
             FunctionCallExpression f, System.Collections.Generic.List<object?> args, Row row)
         {
              _context.CurrentRecursiveDepth++;
-            _context.IncrementOperationCount(); // Trigger check against limits
+            _context.IncrementOperationCount(OperationType.EngineInternal); // Trigger check against limits
 
             if (!_scopeManager.TryGetFunction(f.FunctionName, out var funcStmt) || funcStmt == null)
             {
@@ -56,7 +56,7 @@ namespace ETL_SQL.Engine.Services
         public async Task EvaluateProcedure(string name, List<object?> args)
         {
             _context.CurrentRecursiveDepth++;
-            _context.IncrementOperationCount(); // Trigger check against limits
+            _context.IncrementOperationCount(OperationType.EngineInternal); // Trigger check against limits
 
             if (!_scopeManager.TryGetProcedure(name, out var procStmt) || procStmt == null)
             {

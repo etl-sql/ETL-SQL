@@ -3,7 +3,7 @@ CREATE CONNECTION smallDict ON FLATFILE('TestData/categories.csv');
 
 SELECT s.category_name, COUNT(*) AS TotalCount, SUM(l.value) AS TotalValue
 INTO #havingResults
-FROM largeData l
+FROM source_data l
 INNER JOIN smallDict s ON l.category = s.id
 GROUP BY s.category_name
 HAVING TotalCount > 9000 AND TotalCount < 11000;

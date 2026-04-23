@@ -253,9 +253,17 @@ namespace ETL_SQL.App
                         evaluator.IsProfiling = true; 
                         evaluator.DisplayExecuteTree = true;
 
+                        // Initial clear signal for the VS Code extension
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new {
+                            type = "clear",
+                            uri = ctx.ScriptFile.FullName,
+                            target = "all"
+                        }));
+
                         // Initial flush to ensure the root node is visible immediately
                         var initialSnapshot = new {
                             type = "progress",
+                            uri = ctx.ScriptFile.FullName,
                             data = tree.ToSnapshot()
                         };
                         Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(initialSnapshot));
@@ -265,6 +273,7 @@ namespace ETL_SQL.App
                             {
                                 var snapshot = new {
                                     type = "progress",
+                                    uri = ctx.ScriptFile.FullName,
                                     data = tree.ToSnapshot()
                                 };
                                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(snapshot));
@@ -272,6 +281,7 @@ namespace ETL_SQL.App
                                 // Emit variables state
                                 var vars = new {
                                     type = "variables",
+                                    uri = ctx.ScriptFile.FullName,
                                     data = evaluator.CurrentVariables.Select(kv => new {
                                         name = kv.Key,
                                         value = kv.Value?.ToString() ?? "null",
@@ -300,6 +310,7 @@ namespace ETL_SQL.App
                         {
                             var finalSnapshot = new {
                                 type = "progress",
+                                uri = ctx.ScriptFile.FullName,
                                 data = evaluator.ExecutionTree.ToSnapshot()
                             };
                             Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(finalSnapshot));
@@ -307,6 +318,7 @@ namespace ETL_SQL.App
                             // Final variables flush
                             var finalVars = new {
                                 type = "variables",
+                                uri = ctx.ScriptFile.FullName,
                                 data = evaluator.CurrentVariables.Select(kv => new {
                                     name = kv.Key,
                                     value = kv.Value?.ToString() ?? "null",
@@ -320,6 +332,7 @@ namespace ETL_SQL.App
                             {
                                 var perf = new {
                                     type = "performance",
+                                    uri = ctx.ScriptFile.FullName,
                                     data = new {
                                         totalDurationMs = execTime.ElapsedMilliseconds,
                                         statements = evaluator.ProfileMetrics.Select(m => new {
@@ -352,6 +365,7 @@ namespace ETL_SQL.App
                         {
                             var perfPacket = new {
                                 type = "performance",
+                                uri = ctx.ScriptFile.FullName,
                                 metrics = new {
                                     lexerMs = lexTime.ElapsedMilliseconds,
                                     parserMs = parseTime.ElapsedMilliseconds,
@@ -417,6 +431,7 @@ namespace ETL_SQL.App
                         {
                             Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { 
                                 type = "message", 
+                                uri = ctx.ScriptFile.FullName,
                                 level = "warning",
                                 text = "Docker containers are still running. Remember to use 'DOCKER CLOSE;' when finished." 
                             }));

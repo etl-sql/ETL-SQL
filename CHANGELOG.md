@@ -45,8 +45,21 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 - **Updated Guides**: Comprehensive updates to `Grammar.md`, `SECURITY.md`, and `Report_SQL_Guide.md`.
 
 ### Fixed
+- **Parser Hardening**:
+  - Fixed conflict between `TRIM` function and connection option keys using context-aware lookahead.
+  - Added support for optional target expressions in `CREATE/ALTER CONNECTION`.
+  - Added support for `WITH` options in `SELECT ... FROM` table references (enabling `MOCKDB` hints).
+  - Improved `Report-SQL` stability:
+    - Made `WITH` keyword optional for `PAGES` in `CREATE NAVIGATION`.
+    - Added support for top-level `STYLE` statements for global dashboard themes.
+    - Improved statement boundary detection for reporting keywords.
+- **Integration Stability**:
+ Fixed regression where `CREATE CONNECTION` or `ALTER CONNECTION` would fail if the primary target string was omitted before a `WITH` clause.
 - **Security (CR-S1)**: Refactored slicer parameter injection to prevent script injection vulnerabilities.
 - **Evaluation Stability**: Improved `@@ERROR` accuracy and cross-statement reporting.
+- **Integration Tests**: Resolved race conditions in `SessionPersistenceTests.cs` by ensuring a 1000ms delay after `DOCKER CLOSE` to allow port release.
+- **Source Code Integrity**: Fixed all lingering `CS8601`, `CS8602`, `CS8605`, and `xUnit1031` build warnings across the Core, App, and Test projects.
+- **Sample Accuracy**: Fixed undeclared variable typo in `sample_aggregation.etlsql`.
 
 ### Changed
 - `Directory.Build.props`: Centralized version management for all projects.

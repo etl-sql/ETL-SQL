@@ -25,7 +25,7 @@ namespace ETL_SQL.Engine.Handlers
             _logger.Debug("Updating {ConnName}", connName);
             if (!context.Connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown connection: {connName}");
             _logger.Debug("Connection resolved as {ConnectionType}", connection.GetType().Name);
-            if (connection is IDatabaseSource sqlConn)
+            if (connection is IDatabaseSource sqlConn && context.IsSqlPushdown(connName))
             {
                 _logger.Debug("Strategy: Remote SQL UPDATE");
                 var allParams = new Dictionary<string, object?>();
@@ -56,67 +56,59 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 else
                 {
-                    await foreach (var _ in sqlConn.ExecuteRawSql(sql, allParams.Values)) { }
-                }
-                // Note: Reporting count for remote SQL is 0 for now as ExecuteRawSql doesn't return it
-                context.RowsProcessed = 0; 
-            }
-            else if (connection is InMemoryDataSource memConn)
-            {
-                if (context.IsWhatIf)
-                {
-                    _logger.WriteLine($"WHAT IF: Would update rows in in-memory table {connName}.", ConsoleColor.Yellow);
-                    // For in-memory what-if, we don't even call UpdateRows to avoid any side effects in the handler
-                    // but we could call it if we wanted to show the count.
-                    // For now, let's keep it simple.
-                    context.RowsProcessed = 0;
-                }
-                else
-                {
-                    var updatedRows = await memConn.UpdateRows(
-                        async row => stmt.WhereClause == null || await context.EvaluateCondition(stmt.WhereClause, row),
-                        async row => { 
-                            foreach (var a in stmt.Assignments) 
-                                row[a.ColumnName] = await context.EvaluateValue(a.Value, row); 
-                        });
-                    context.RowsProcessed = updatedRows.Count;
-
-                    if (stmt.Output != null)
+                    await foreach (var batch in sqlConn.ExecuteRawSql(sql, allParams.Values)) 
                     {
-                        var outputRows = new List<Row>();
-                        foreach (var (before, after) in updatedRows)
-                        {
-                            var contextRow = new Row();
-                            foreach (var col in before.Columns) contextRow[$"DELETED.{col.Key}"] = col.Value;
-                            foreach (var col in after.Columns) { contextRow[$"INSERTED.{col.Key}"] = col.Value; contextRow[col.Key] = col.Value; }
-
-                            var outputRow = new Row();
-                            foreach (var outCol in stmt.Output.Columns)
-                            {
-                                var val = await context.EvaluateValue(outCol.Expression, contextRow);
-                                outputRow[outCol.Alias ?? outCol.ToSql()] = val;
-                            }
-                            outputRows.Add(outputRow);
-                        }
-
-                        if (outputRows.Count > 0)
-                        {
-                            var outputTable = new DataTable();
-                            outputTable.SetColumns(outputRows[0].Columns.Keys);
-                            foreach (var r in outputRows) await outputTable.AddRowAsync(r);
-
-                            if (stmt.Output.IntoTable != null)
-                            {
-                                var intoDest = await context.ResolveDataSourceAsync(stmt.Output.IntoTable);
-                                await intoDest.WriteBatches(new[] { outputTable }.ToAsyncEnumerable());
-                            }
-                            else
-                            {
-                                context.LastResult = outputTable;
-                            }
-                        }
+                        if (batch.RowsAffected >= 0) context.RowsProcessed += batch.RowsAffected;
                     }
                 }
+            }
+            else
+            {
+                _logger.Debug("Strategy: Engine-side Batch UPDATE (Streaming)");
+                
+                if (context.IsWhatIf)
+                {
+                    _logger.WriteLine($"WHAT IF: Would update rows in {connName} via engine-side streaming.", ConsoleColor.Yellow);
+                    return;
+                }
+
+                // 1. Prepare temp storage to avoid reading/writing to the same file simultaneously
+                var tempStore = new InMemoryDataSource();
+
+                // 2. Read batches from source, transform, and stream to temp
+                int updatedCount = 0;
+                var batches = connection.ReadBatches();
+                
+                async IAsyncEnumerable<DataTable> ProcessBatches()
+                {
+                    await foreach (var batch in batches)
+                    {
+                        foreach (var row in batch.Rows)
+                        {
+                            if (stmt.WhereClause == null || await context.EvaluateCondition(stmt.WhereClause, row))
+                            {
+                                foreach (var a in stmt.Assignments)
+                                {
+                                    row[a.ColumnName] = await context.EvaluateValue(a.Value, row);
+                                }
+                                updatedCount++;
+                            }
+                        }
+                        yield return batch;
+                    }
+                }
+
+                // For large files, writing to memory first then back to source is safer to avoid access violations.
+                // If it's too large for memory, we should have used a temp file, but IDataSource.WriteBatches on file sources
+                // usually overwrites anyway.
+                
+                var processed = ProcessBatches();
+                await connection.WriteBatches(processed);
+
+                context.IncrementOperationCount(OperationType.EngineInternal, count: updatedCount);
+                context.RowsProcessed += updatedCount;
+                
+                if (context.IsVerbose) _logger.WriteLine($"Finished updating {updatedCount} rows in {connName}");
             }
         }
     }

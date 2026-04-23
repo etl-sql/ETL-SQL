@@ -21,7 +21,16 @@ namespace ETL_SQL.Common
         void Info(string message) => Log(LogLevel.Info, message);
         void Warning(string message) => Log(LogLevel.Warning, message);
         void Error(string message, Exception? ex = null) => Log(LogLevel.Error, message, ex);
-        void WriteLine(string message, ConsoleColor color = ConsoleColor.White) => Log(LogLevel.Info, message);
+        void WriteLine(string message, ConsoleColor color = ConsoleColor.White)
+        {
+            var level = color switch
+            {
+                ConsoleColor.Red => LogLevel.Error,
+                ConsoleColor.Yellow => LogLevel.Warning,
+                _ => LogLevel.Info
+            };
+            Log(level, message);
+        }
 
         // ── Structured-template overloads ─────────────────────────────────────
         // Call sites: _logger.Debug("Executing {Sql}", sql)

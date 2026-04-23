@@ -132,6 +132,18 @@ namespace ETL_SQL.Core.Linting.Rules
                 return;
             }
 
+            // Skip validation for reserved 'FILE' table in file connectors
+            if (string.Equals(tableRef.TableName, "FILE", StringComparison.OrdinalIgnoreCase))
+            {
+                var ftype = context.Metadata!.GetConnectionType(connName)?.ToUpperInvariant();
+                if (ftype == "FLATFILE" || ftype == "CSV" || ftype == "EXCEL" || ftype == "JSON" || 
+                    ftype == "XML" || ftype == "AVRO" || ftype == "PARQUET")
+                {
+                    tablesInScope.Add((connName, tableRef.TableName, tableRef.Alias));
+                    return;
+                }
+            }
+
             // Skip validation for DOCKER (b1)
             if (connType == "DOCKER")
             {
@@ -142,7 +154,8 @@ namespace ETL_SQL.Core.Linting.Rules
             var tables = await context.Metadata!.GetTablesAsync(connName);
             if (tables == null) return; 
             
-            if (!tables.Any(t => string.Equals(t, tableRef.TableName, StringComparison.OrdinalIgnoreCase)))
+            string searchName = NormalizeName(tableRef.TableName);
+            if (!tables.Any(t => string.Equals(NormalizeName(t), searchName, StringComparison.OrdinalIgnoreCase)))
             {
                 results.Add(new LintResult {
                     RuleName = Name,
@@ -156,6 +169,14 @@ namespace ETL_SQL.Core.Linting.Rules
             {
                 tablesInScope.Add((connName, tableRef.TableName, tableRef.Alias));
             }
+        }
+
+        private string NormalizeName(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return name;
+            string clean = name.Trim('[', ']', '"');
+            if (clean.Contains('.')) clean = clean.Split('.').Last();
+            return clean;
         }
 
         private async Task ValidateExpressionAsync(Expression expr, ILintContext context, List<LintResult> results, List<(string Conn, string Table, string? Alias)> tablesInScope)

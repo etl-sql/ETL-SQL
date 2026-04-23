@@ -28,6 +28,12 @@ namespace ETL_SQL.Core.Parser
                 return;
             }
 
+            if (obj is ParameterExpression pex)
+            {
+                vars.Add(pex.Value);
+                return;
+            }
+
             // Optimization for common collections in AST
             if (obj is System.Collections.IEnumerable enumerable && !(obj is string))
             {

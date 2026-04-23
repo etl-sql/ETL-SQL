@@ -149,7 +149,7 @@ namespace ETL_SQL.Connectors.Excel
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches)
+        public async Task WriteBatches(IAsyncEnumerable<ETL_SQL.Data.DataTable> batches, bool append = false)
         {
             throw new NotSupportedException("Writing to Excel is not currently supported. Use CSV or FLATFILE for output.");
         }
@@ -208,6 +208,34 @@ namespace ETL_SQL.Connectors.Excel
             finally { TempFileHelper.SafeDelete(tempFile, _logger); }
             return Enumerable.Empty<string>();
         }
+
+        public async Task<IEnumerable<string>> GetTablesAsync()
+        {
+            if (!System.IO.File.Exists(_filePath)) return Enumerable.Empty<string>();
+            
+            string effectivePath = _filePath;
+            string? tempFile = null;
+
+            if (_encryption.Enabled)
+            {
+                tempFile = System.IO.Path.GetTempFileName();
+                try { _encryption.DecryptFile(_filePath, tempFile); effectivePath = tempFile; }
+                catch { return Enumerable.Empty<string>(); }
+            }
+
+            try
+            {
+                using var stream = System.IO.File.OpenRead(effectivePath);
+                using var reader = ExcelReaderFactory.CreateReader(stream);
+                var result = reader.AsDataSet();
+                return result.Tables.Cast<System.Data.DataTable>().Select(t => t.TableName).ToList();
+            }
+            catch { return Enumerable.Empty<string>(); }
+            finally { TempFileHelper.SafeDelete(tempFile, _logger); }
+        }
+
+        public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult<IEnumerable<string>>(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => GetColumnsAsync();
 
         public async ValueTask DisposeAsync() => await Task.CompletedTask;
 

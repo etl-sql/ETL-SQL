@@ -105,10 +105,12 @@ namespace ETL_SQL.Connectors.Odbc
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             if (string.IsNullOrEmpty(_tableName))
                 throw new ExecutionException("No table specified for ODBC data source write.");
+
+            if (!append) await TruncateAsync();
 
             var (conn, isShared) = await GetConnectionAsync();
             OdbcTransaction? localTx = null;
@@ -207,6 +209,13 @@ namespace ETL_SQL.Connectors.Odbc
 
                     if (currentBatch.Rows.Count > 0 || (reader.FieldCount > 0 && resultSetIndex == 0))
                     {
+                        currentBatch.RowsAffected = reader.RecordsAffected;
+                        yield return currentBatch;
+                        resultSetIndex++;
+                    }
+                    else if (resultSetIndex == 0 && reader.RecordsAffected >= 0)
+                    {
+                        currentBatch.RowsAffected = reader.RecordsAffected;
                         yield return currentBatch;
                         resultSetIndex++;
                     }

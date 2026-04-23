@@ -242,8 +242,9 @@ namespace ETL_SQL.Core.Parser
                 _parser.Consume(TokenType.RPAREN, "Expected ')' after subquery");
                 return new ExistsExpression(subquery, false) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
-            if (_parser.Match(TokenType.TRIM))
+            if (_parser.Current.Type == TokenType.TRIM && _parser.Peek.Type == TokenType.LPAREN)
             {
+                _parser.Advance();
                 return ParseTrim();
             }
             if (_parser.Match(TokenType.SUBSTRING))
@@ -349,6 +350,16 @@ namespace ETL_SQL.Core.Parser
 
                 _parser.Consume(TokenType.END, "Expected END at the conclusion of CASE statement");
                 return new CaseExpression(clauses, elseResult) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+            }
+            if (_parser.Match(TokenType.PARAMETER))
+            {
+                var t = _parser.Previous;
+                int? index = null;
+                if (t.Value.Length > 1 && int.TryParse(t.Value.Substring(1), out int idx))
+                {
+                    index = idx;
+                }
+                return new ParameterExpression(t.Value, index) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
             }
             if (_parser.Match(TokenType.VARIABLE))
             {

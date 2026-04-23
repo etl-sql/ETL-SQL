@@ -34,16 +34,33 @@ namespace ETL_SQL.Engine.Storage
             };
         }
 
-        public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
+        private bool _loaded = false;
+        private async Task EnsureLoaded()
         {
-            // If the variable already has data (e.g. from a previous write), we should lead with that?
-            // But usually the IDataSource is the primary source of truth during the 'SELECT' operation.
-            return _inner.ReadBatches(batchSize);
+            if (_loaded) return;
+            if (_context.ContainsVariable(_variableName))
+            {
+                var val = _context.GetVariable(_variableName);
+                if (val is DataTable dt)
+                {
+                    await _inner.WriteBatches(new[] { dt }.ToAsyncEnumerable());
+                }
+            }
+            _loaded = true;
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
-            await _inner.WriteBatches(batches);
+            await EnsureLoaded();
+            await foreach (var batch in _inner.ReadBatches(batchSize))
+            {
+                yield return batch;
+            }
+        }
+
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
+        {
+            await _inner.WriteBatches(batches, append);
             
             // Consolidate into a single DataTable for the variable.
             // This ensures that @Variables behave like standard DataTables for all other engine operations.
@@ -75,7 +92,11 @@ namespace ETL_SQL.Engine.Storage
         }
 
         public Task TruncateAsync() => _inner.TruncateAsync();
-        public Task<IEnumerable<string>> GetColumnsAsync() => _inner.GetColumnsAsync();
+        public async Task<IEnumerable<string>> GetColumnsAsync()
+        {
+            await EnsureLoaded();
+            return await _inner.GetColumnsAsync();
+        }
         public object? Snapshot() => _inner.Snapshot();
         public void Restore(object? snapshot) => _inner.Restore(snapshot);
         public IDataSource WithTable(string tableName) => this;

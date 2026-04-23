@@ -75,7 +75,7 @@ namespace ETL_SQL.Tests.Core
         public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => Task.FromResult(Enumerable.Empty<string>());
         
         public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => Enumerable.Empty<DataTable>().ToAsyncEnumerable();
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches) 
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) 
         {
             ExecutedSql.Add("INSERT INTO TargetTable (BATCH TRANSFER)");
             await foreach (var batch in batches) { }

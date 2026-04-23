@@ -25,7 +25,7 @@ namespace ETL_SQL.Tests.Statements
             public string ConnectorType => "SMTP";
 
             public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => throw new NotSupportedException();
-            public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+            public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
             {
                 await foreach (var batch in batches)
                 {

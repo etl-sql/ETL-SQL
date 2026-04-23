@@ -11,6 +11,16 @@ namespace ETL_SQL.Core.Common
     {
         private readonly ConcurrentDictionary<Guid, ExecutionNode> _nodes = new();
         
+        /// <summary>Clears all nodes and roots from the tree.</summary>
+        public void Clear()
+        {
+            _nodes.Clear();
+            lock (RootNodeIds)
+            {
+                RootNodeIds.Clear();
+            }
+        }
+
         /// <summary>The root nodes of the execution tree (usually one for the main script).</summary>
         public List<Guid> RootNodeIds { get; } = new();
 

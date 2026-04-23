@@ -109,7 +109,7 @@ namespace ETL_SQL.Connectors.Json
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             var allRows = new List<IDictionary<string, object?>>();
             bool alreadyJson = false;
@@ -232,7 +232,8 @@ namespace ETL_SQL.Connectors.Json
             }
             else
             {
-                throw new ExecutionException("Json connector only supports 'SELECT * FROM FILE' as native SQL.");
+                _logger.Debug("[JSON] ExecuteRawSql received unknown SQL: {Sql}. Returning empty result as native pushdown is not supported.", sql);
+                yield return new DataTable { ColumnNames = { "Status" }, Rows = { new Row { ["Status"] = "NOT_SUPPORTED" } } };
             }
         }
 

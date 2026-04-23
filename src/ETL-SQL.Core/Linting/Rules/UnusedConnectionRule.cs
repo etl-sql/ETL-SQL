@@ -62,13 +62,38 @@ namespace ETL_SQL.Core.Linting.Rules
 
             if (stmt is SelectStatement sel)
             {
-                if (sel.FromTable?.ConnectionName != null) names.Add(sel.FromTable.ConnectionName);
+                AddTableRef(sel.FromTable, names);
+                if (sel.IntoTable != null) AddTableRef(sel.IntoTable, names);
                 foreach (var join in sel.Joins)
-                    if (join.Table.ConnectionName != null) names.Add(join.Table.ConnectionName);
+                    AddTableRef(join.Table, names);
             }
-            else if (stmt is InsertStatement ins && ins.TargetTable?.ConnectionName != null)
+            else if (stmt is InsertStatement ins)
             {
-                names.Add(ins.TargetTable.ConnectionName);
+                AddTableRef(ins.TargetTable, names);
+                if (ins.SelectQuery != null) names.AddRange(CollectConnectionRefs(ins.SelectQuery));
+            }
+            else if (stmt is UpdateStatement upd)
+            {
+                AddTableRef(upd.TargetTable, names);
+                if (upd.FromTable != null) AddTableRef(upd.FromTable, names);
+                if (upd.Joins != null) foreach (var j in upd.Joins) AddTableRef(j.Table, names);
+            }
+            else if (stmt is DeleteStatement del)
+            {
+                AddTableRef(del.TargetTable, names);
+            }
+            else if (stmt is MergeStatement mrg)
+            {
+                AddTableRef(mrg.TargetTable, names);
+                AddTableRef(mrg.SourceTable, names);
+            }
+            else if (stmt is ExecStatement exec && exec.ConnectionName is IdentifierExpression id)
+            {
+                names.Add(id.Name);
+            }
+            else if (stmt is ExecutePushdownStatement push && push.ConnectionName is IdentifierExpression pid)
+            {
+                names.Add(pid.Name);
             }
             else if (stmt is DropConnectionStatement drop)
             {
@@ -80,6 +105,14 @@ namespace ETL_SQL.Core.Linting.Rules
             }
 
             return names;
+        }
+
+        private static void AddTableRef(TableReference? table, List<string> names)
+        {
+            if (table == null) return;
+            if (table.ConnectionName != null) names.Add(table.ConnectionName);
+            else if (!string.IsNullOrEmpty(table.TableName) && !table.TableName.StartsWith("#")) 
+                names.Add(table.TableName);
         }
     }
 }

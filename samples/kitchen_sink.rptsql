@@ -1,0 +1,171 @@
+-- ============================================================================
+-- ETL-SQL KITCHEN SINK REPORT
+-- A comprehensive demonstration of all Visual types, interaction, and styling.
+-- ============================================================================
+
+-- Phase 1: Data Generation (using internal MOCKDB for self-contained execution)
+GENERATE 100 ROWS INTO #sales_raw AS (
+    date       = 'SEQUENCE(2026-01-01, 1, DAY)',
+    category   = 'RANDOM(Electronics, Apparel, Home, Grocery)',
+    region     = 'RANDOM(North, South, East, West)',
+    quantity   = 'RANDOM_INT(1, 100)',
+    unit_price = 'RANDOM_DECIMAL(10, 500)'
+);
+
+-- Demonstration of table variables
+DECLARE @audit TABLE;
+GENERATE 5 ROWS INTO @audit AS (
+    check_time = 'SEQUENCE(2026-04-21 10:00:00, 1, SECOND)',
+    status     = 'RANDOM(Success, Warning, Failure)',
+    message    = 'System Health Check'
+);
+
+SELECT 
+    CAST(date AS DATE) AS OrderDate,
+    category AS Category,
+    region AS Region,
+    CAST(quantity * unit_price AS DECIMAL) AS Revenue,
+    CAST(quantity * 2.5 AS DECIMAL) AS Units,
+    CAST(ROUND(RAND() * 100, 2) AS DECIMAL) AS Score,
+    CAST(ROUND(RAND() * 5, 0) AS INT) AS Rank
+INTO #sales
+FROM #sales_raw;
+
+
+-- Summary for Charts
+SELECT Region, Category, SUM(Revenue) AS TotalRevenue, SUM(Units) AS TotalUnits
+INTO #summary
+FROM #sales
+GROUP BY Region, Category;
+
+-- KPI Dataset
+SELECT SUM(Revenue) AS GrandTotal, AVG(Revenue) AS AvgOrder
+INTO #kpis
+FROM #sales;
+
+-- ============================================================================
+-- Phase 2: Visual Definitions
+-- ============================================================================
+
+SET REPORT TITLE = 'ETL-SQL Kitchen Sink';
+SET REPORT DESCRIPTION = 'Comprehensive demonstration of all visual types and interactive features.';
+
+-- 1. KPI CARDS
+CREATE VISUAL TotalRevCard AS CARD (
+    SOURCE = #kpis,
+    TITLE = 'Total Revenue',
+    MAPPINGS (VALUE = GrandTotal),
+    OPTIONS (FORMAT = 'C0')
+);
+
+CREATE VISUAL AvgOrderCard AS CARD (
+    SOURCE = #kpis,
+    TITLE = 'Avg Order',
+    MAPPINGS (VALUE = AvgOrder)
+);
+
+-- 2. CHARTS (The "Big Three")
+CREATE VISUAL RevenueByRegionBar AS BAR (
+    SOURCE = #summary,
+    TITLE = 'Revenue by Region',
+    MAPPINGS (X = Region, Y = TotalRevenue, SERIES = Category),
+    OPTIONS (STACKED = ON, LEGEND_POSITION = BOTTOM)
+);
+
+CREATE VISUAL UnitsTrendLine AS LINE (
+    SOURCE = #summary,
+    TITLE = 'Units Trend',
+    MAPPINGS (X = Region, Y = TotalUnits),
+    OPTIONS (SMOOTH = ON),
+    OVERLAYS (
+        AVERAGE AS DASHED WITH (COLOR = '#ff9900', LABEL = 'Mean Units')
+    )
+);
+
+CREATE VISUAL CategoryPie AS PIE (
+    SOURCE = #summary,
+    TITLE = 'Market Share',
+    MAPPINGS (LABEL = Category, VALUE = TotalRevenue)
+);
+
+-- 3. INTERACTIVE FILTERS
+CREATE VISUAL RegionSlicer AS SLICER (
+    SOURCE = (SELECT DISTINCT Region FROM #sales),
+    MAPPINGS (VALUE = Region),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@region, Region)),
+    DEFAULT = 'All'
+);
+
+CREATE VISUAL OrderSearch AS SEARCH (
+    TITLE = 'Search Orders',
+    OPTIONS (PLACEHOLDER = 'Type category...'),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@search, value))
+);
+
+-- 4. ADVANCED CHARTS
+CREATE VISUAL RegionalFunnel AS FUNNEL (
+    SOURCE = (SELECT Region, SUM(Revenue) AS Revenue FROM #sales GROUP BY Region ORDER BY Revenue DESC),
+    MAPPINGS (LABEL = Region, VALUE = Revenue),
+    TITLE = 'Conversion Funnel'
+);
+
+CREATE VISUAL GaugePerformance AS GAUGE (
+    SOURCE = (SELECT 75 AS Val),
+    MAPPINGS (VALUE = Val),
+    TITLE = 'Target Achievement',
+    OPTIONS (MIN = 0, MAX = 100)
+);
+
+CREATE VISUAL GeoHeatmap AS HEATMAP (
+    SOURCE = #summary,
+    MAPPINGS (X = Region, Y = Category, VALUE = TotalRevenue),
+    TITLE = 'Revenue Intensity'
+);
+
+-- 5. DATA TABLE
+CREATE VISUAL SalesDataTable AS TABLE (
+    SOURCE = #sales,
+    TITLE = 'Recent Sales',
+    FORMATTING (
+        Revenue > 1000 THEN 'green',
+        Revenue < 100 THEN 'red'
+    ),
+    SUMMARY (
+        GRAND_TOTAL = ON,
+        SUM(Revenue) AS Total
+    )
+);
+
+-- 6. DISPLAY & UTILITY
+CREATE VISUAL AboutText AS TEXT (
+    TITLE = 'About This Report',
+    DEFAULT = '### Welcome\nThis dashboard utilizes **MOCKDB** for real-time data generation. All charts are interactive.'
+);
+
+-- ============================================================================
+-- Phase 3: Layout and Presentation
+-- ============================================================================
+
+CREATE PAGE Dashboard AS LAYOUT (
+    STRUCTURE = '
+        A A B B
+        C C C D
+        E E F F
+        G G G G
+    ',
+    MAP (
+        'A' = AboutText,
+        'B' = TotalRevCard,
+        'C' = RevenueByRegionBar,
+        'D' = RegionSlicer,
+        'E' = CategoryPie,
+        'F' = GaugePerformance,
+        'G' = SalesDataTable
+    )
+);
+
+CREATE NAVIGATION MainMenu AS SIDEBAR (
+    PAGES (Dashboard)
+);
+
+STYLE (THEME = glass);

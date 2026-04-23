@@ -9,6 +9,16 @@ using ETL_SQL.Core.Execution;
 
 namespace ETL_SQL.Core
 {
+    public enum OperationType
+    {
+        /// <summary>Standard file system operations (Delete, Copy, Move, Rename, Zip, Encrypt).</summary>
+        FileSystem,
+        /// <summary>Internal engine operations (Procedure/Function calls, Template generation).</summary>
+        EngineInternal,
+        /// <summary>Mock data generation operations.</summary>
+        MockData
+    }
+
     public interface IVariableContext
     {
         IDictionary<string, object?> Variables { get; }
@@ -73,7 +83,7 @@ namespace ETL_SQL.Core
         bool RedirectOutput { get; set; }
         List<string> Messages { get; }
         int MaxMessages { get; set; }
-        void Log(string message, ConsoleColor color = ConsoleColor.White);
+        void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true);
         /// <summary>
         /// Optional interactive prompt callback. Returns true to proceed, false to abort.
         /// Null means non-interactive (auto-proceed).
@@ -159,6 +169,9 @@ namespace ETL_SQL.Core
         long MaxSessionSize { get; set; }
         /// <summary>Whether this session is marked for persistence across process runs.</summary>
         bool IsPersistentSession { get; set; }
+        
+        /// <summary>Positional parameters provided for the current execution (for ? and ?n placeholders).</summary>
+        List<object?>? Parameters { get; set; }
     }
 
 
@@ -273,7 +286,7 @@ namespace ETL_SQL.Core
         /// <summary>Manager for session persistence and key derivation.</summary>
         ETL_SQL.Core.Execution.ISessionStateManager SessionStateManager { get; }
         
-        void IncrementOperationCount(string? path = null, int count = 1);
+        void IncrementOperationCount(OperationType type = OperationType.FileSystem, string? path = null, int count = 1);
 
         List<string> GetIndexedColumns(Expression? cond, string alias);
 
@@ -313,10 +326,11 @@ namespace ETL_SQL.Core
     {
         bool HasActiveContainers { get; }
         string? LastConnectionString { get; }
+        string? LastAlias { get; }
         Task<string> StartContainer(string imageName, string? alias = null);
-        Task StopContainer(string alias);
-        Task PauseContainer(string alias);
-        Task ResumeContainer(string alias);
+        Task StopContainer(string? alias);
+        Task PauseContainer(string? alias);
+        Task ResumeContainer(string? alias);
         Task CloseContainers(string? nameOrAlias = null);
         string? GetConnectionString(string alias);
         Dictionary<string, string> GetState();

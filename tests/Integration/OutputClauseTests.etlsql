@@ -1,0 +1,55 @@
+-- Test Script for OUTPUT Clause centralization
+-- Validates consistency of row contexts ($action, INSERTED, DELETED) across DML.
+
+CREATE TABLE #Target (Id INT, Val VARCHAR(50));
+CREATE TABLE #Audit (Action VARCHAR(10), OldVal VARCHAR(50), NewVal VARCHAR(50));
+
+-- 1. Test INSERT OUTPUT
+PRINT 'Testing INSERT OUTPUT...';
+INSERT INTO #Target (Id, Val)
+OUTPUT 'INSERT', NULL, INSERTED.Val INTO #Audit
+VALUES (1, 'Initial');
+
+IF (SELECT COUNT(*) FROM #Audit WHERE Action = 'INSERT' AND NewVal = 'Initial') = 0 
+    THROW 60001, 'INSERT OUTPUT failed', 1;
+
+-- 2. Test UPDATE OUTPUT
+PRINT 'Testing UPDATE OUTPUT...';
+UPDATE #Target
+SET Val = 'Updated'
+OUTPUT 'UPDATE', DELETED.Val, INSERTED.Val INTO #Audit
+WHERE Id = 1;
+
+IF (SELECT COUNT(*) FROM #Audit WHERE Action = 'UPDATE' AND OldVal = 'Initial' AND NewVal = 'Updated') = 0 
+    THROW 60002, 'UPDATE OUTPUT failed', 1;
+
+-- 3. Test DELETE OUTPUT
+PRINT 'Testing DELETE OUTPUT...';
+DELETE FROM #Target
+OUTPUT 'DELETE', DELETED.Val, NULL INTO #Audit
+WHERE Id = 1;
+
+IF (SELECT COUNT(*) FROM #Audit WHERE Action = 'DELETE' AND OldVal = 'Updated') = 0 
+    THROW 60003, 'DELETE OUTPUT failed', 1;
+
+-- 4. Test MERGE OUTPUT
+PRINT 'Testing MERGE OUTPUT...';
+INSERT INTO #Target (Id, Val) VALUES (1, 'MergeInitial');
+CREATE TABLE #Source (Id INT, Val VARCHAR(50));
+INSERT INTO #Source (Id, Val) VALUES (1, 'MergeUpdated'), (2, 'MergeNew');
+
+MERGE INTO #Target AS T
+USING #Source AS S ON T.Id = S.Id
+WHEN MATCHED THEN
+    UPDATE SET Val = S.Val
+WHEN NOT MATCHED THEN
+    INSERT (Id, Val) VALUES (S.Id, S.Val)
+OUTPUT $action, DELETED.Val, INSERTED.Val INTO #Audit;
+
+IF (SELECT COUNT(*) FROM #Audit WHERE Action = 'UPDATE' AND OldVal = 'MergeInitial' AND NewVal = 'MergeUpdated') = 0 
+    THROW 60004, 'MERGE OUTPUT (Update) failed', 1;
+
+IF (SELECT COUNT(*) FROM #Audit WHERE Action = 'INSERT' AND NewVal = 'MergeNew') = 0 
+    THROW 60005, 'MERGE OUTPUT (Insert) failed', 1;
+
+PRINT 'All OUTPUT clause tests verified successfully.';

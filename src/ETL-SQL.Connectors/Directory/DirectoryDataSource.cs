@@ -71,7 +71,7 @@ namespace ETL_SQL.Connectors.Directory
             }
         }
 
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => throw new NotSupportedException("Writing to a DIRECTORY connection is not supported. Use file operations instead.");
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Writing to a DIRECTORY connection is not supported. Use file operations instead.");
         public object? Snapshot() => Path;
         public void Restore(object? snapshot) { }
         public async ValueTask DisposeAsync()

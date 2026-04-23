@@ -82,8 +82,7 @@ namespace ETL_SQL.Core.Formatting
 
             // ── Docker ──
             DockerStatement                s => s.Alias != null ? $"USE DOCKER({s.ImageName.ToSql()}) AS {s.Alias};" : $"USE DOCKER({s.ImageName.ToSql()});",
-            DockerActionStatement          s => $"{s.Action.ToString().ToUpper()}_DOCKER {s.Alias};",
-            DockerCloseStatement           s => FormatDockerClose(s),
+            DockerActionStatement          s => FormatDockerAction(s),
 
             // ── Jobs & scheduling ──
             CreateJobStatement             s => $"CREATE JOB {s.JobName} ON SCHEDULE {s.Schedule.ToSql()} AS {s.Script.ToSql()}",
@@ -483,11 +482,12 @@ namespace ETL_SQL.Core.Formatting
             }
         }
 
-        private static string FormatDockerClose(DockerCloseStatement s)
+        private static string FormatDockerAction(DockerActionStatement s)
         {
-            if (s.Alias     != null) return $"CLOSE_DOCKER {s.Alias};";
-            if (s.ImageName != null) return $"CLOSE_DOCKER {s.ImageName.ToSql()};";
-            return "CLOSE_DOCKER;";
+            string verb = s.Action.ToString().ToUpper();
+            if (s.TargetMode == DockerTargetMode.All) return $"{verb} ALL DOCKER;";
+            if (s.TargetMode == DockerTargetMode.LastStarted) return $"{verb} DOCKER;";
+            return $"{verb} DOCKER {s.Alias};";
         }
 
         private static string FormatRunScript(RunScriptStatement s)

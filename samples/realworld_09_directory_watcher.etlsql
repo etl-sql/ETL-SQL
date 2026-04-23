@@ -10,8 +10,8 @@ CREATE_DIRECTORY('TestData/out/archive/');
 
 -- Drop the mock trigger file
 CREATE CONNECTION TriggerDrop ON FLATFILE('TestData/out/pickup/trigger_data.csv');
-INSERT INTO TriggerDrop.Main (ID) VALUES (1);
-INSERT INTO TriggerDrop.Main (ID) VALUES (2);
+INSERT INTO TriggerDrop.FILE (ID) VALUES (1);
+INSERT INTO TriggerDrop.FILE (ID) VALUES (2);
 
 CREATE CONNECTION IncomingFtpFolder ON DIRECTORY('TestData/out/pickup/');
 DECLARE @fileFound INT = 0;
@@ -23,20 +23,20 @@ PRINT 'Initiating Event-Driven Directory Watcher...';
 WHILE @fileFound = 0 AND @iterations < 10
 BEGIN
     -- Check if target exists
-    IF EXISTS (SELECT 1 FROM IncomingFtpFolder.Main WHERE FileName LIKE 'trigger_%.csv')
+    IF EXISTS (SELECT 1 FROM IncomingFtpFolder.FILE WHERE FileName LIKE 'trigger_%.csv')
     BEGIN
         PRINT 'Signal File Discovered! Engaging Pipeline...';
         
         -- Retrieve exact file path
         DECLARE @targetFile VARCHAR(500);
-        SELECT TOP 1 @targetFile = FullPath FROM IncomingFtpFolder.Main WHERE FileName LIKE 'trigger_%.csv';
+        SELECT TOP 1 @targetFile = FullPath FROM IncomingFtpFolder.FILE WHERE FileName LIKE 'trigger_%.csv';
         
         -- Ad-Hoc dynamic target creation using the variable
         DECLARE @dynSql VARCHAR(1000) = 'CREATE CONNECTION Payload ON FLATFILE(''' + @targetFile + ''') WITH(HEADER=''ON'');';
         EXECUTE(@dynSql);
         
         CREATE TABLE #DWStage (ID INT);
-        INSERT INTO #DWStage SELECT * FROM Payload.Main;
+        INSERT INTO #DWStage SELECT * FROM Payload.FILE;
         
         PRINT 'Payload Ingested successfully. Triggering archival...';
         

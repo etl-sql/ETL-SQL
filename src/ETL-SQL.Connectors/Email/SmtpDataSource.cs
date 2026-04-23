@@ -51,8 +51,9 @@ namespace ETL_SQL.Connectors.Email
         }
 
         /// <summary>Writes batches of data by sending each row as an email.</summary>
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            if (!append) await TruncateAsync();
             await foreach (var batch in batches)
             {
                 foreach (var row in batch.Rows)

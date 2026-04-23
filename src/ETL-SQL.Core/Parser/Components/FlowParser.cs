@@ -14,18 +14,24 @@ namespace ETL_SQL.Core.Parser.Components
             while (_parser.Current.Type != TokenType.END && _parser.Current.Type != TokenType.EOF)
                 stmts.Add(_parser.ParseStatement());
             Consume(TokenType.END, "Expected END to close BEGIN block");
-            if (_parser.Current.Type == TokenType.TRY || _parser.Current.Type == TokenType.CATCH)
-                Advance();
-            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            // Suffixes (TRY, CATCH, SEMICOLON) are handled by specific callers or the dispatcher
             return new BlockStatement(stmts);
         }
 
         public Statement ParseTryCatch()
         {
             var tryBody = ParseBlock();
+            if (_parser.Current.Value.Equals("TRY", StringComparison.OrdinalIgnoreCase))
+                Advance();
+            if (Match(TokenType.SEMICOLON)) { /* optional after END TRY */ }
+
             Consume(TokenType.BEGIN, "Expected BEGIN after END TRY");
             Consume(TokenType.CATCH, "Expected CATCH after BEGIN");
             var catchBody = ParseBlock();
+            if (_parser.Current.Value.Equals("CATCH", StringComparison.OrdinalIgnoreCase))
+                Advance();
+            if (Match(TokenType.SEMICOLON)) { /* optional after END CATCH */ }
+
             return new TryCatchStatement(tryBody, catchBody);
         }
 

@@ -106,7 +106,7 @@ namespace ETL_SQL.Tests.Integration
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) { yield break; }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             await foreach (var b in batches)
             {

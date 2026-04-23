@@ -77,7 +77,7 @@ namespace ETL_SQL.Engine.Handlers
                  throw new ExecutionException($"Security Violation: Template files must have .json extension. Target: {resolvedPath}", null, stmt.Line, stmt.Column);
             }
 
-            context.IncrementOperationCount(resolvedPath);
+            context.IncrementOperationCount(OperationType.FileSystem, resolvedPath);
 
             var options = new JsonSerializerOptions { WriteIndented = true };
             string json = JsonSerializer.Serialize(stmt.Options, options);

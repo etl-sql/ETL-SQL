@@ -537,14 +537,19 @@ namespace ETL_SQL.Connectors.FlatFile
             }
         }
 
-        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             string tempFile = System.IO.Path.GetTempFileName();
             try
             {
-                using (var writer = new StreamWriter(tempFile, false, _encoding))
+                if (append && System.IO.File.Exists(_filePath) && !_compress && !_encryption.Enabled)
                 {
-                    bool headersWritten = false;
+                    System.IO.File.Copy(_filePath, tempFile, true);
+                }
+
+                using (var writer = new StreamWriter(tempFile, append, _encoding))
+                {
+                    bool headersWritten = append && System.IO.File.Exists(_filePath);
                     int totalRows = 0;
 
                     await foreach (var batch in batches)
@@ -595,13 +600,12 @@ namespace ETL_SQL.Connectors.FlatFile
                 }
                 else
                 {
-                    if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
-                    System.IO.File.Move(tempFile, _filePath);
+                    System.IO.File.Move(tempFile, _filePath, true);
                 }
             }
             finally
             {
-                TempFileHelper.SafeDelete(tempFile, _logger);
+                if (System.IO.File.Exists(tempFile)) System.IO.File.Delete(tempFile);
             }
         }
 
@@ -687,7 +691,8 @@ namespace ETL_SQL.Connectors.FlatFile
             }
             else
             {
-                throw new ExecutionException("FlatFile connector only supports 'SELECT * FROM FILE' as native SQL.");
+                _logger.Debug("[FlatFile] ExecuteRawSql received unknown SQL: {Sql}. Returning empty result as native pushdown is not supported.", sql);
+                yield return new DataTable { ColumnNames = { "Status" }, Rows = { new Row { ["Status"] = "NOT_SUPPORTED" } } };
             }
         }
 

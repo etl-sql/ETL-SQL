@@ -116,6 +116,13 @@ dotnet run --project src/ETL-SQL.App -- --ui edit MyScript.etlsql
 dotnet run --project src/ETL-SQL.App -- --run MyScript.etlsql
 ```
 
+### Full Release (Maintainers)
+To build a complete cross-platform release with tests and VS Code extension:
+```powershell
+.\scripts\Master-Release.ps1 -Version "0.6.0"
+```
+This script validates the engine, builds the React UI, publishes binaries for Windows/Linux/macOS, and packages everything into ZIP archives.
+
 ### Quick-Start Example
 
 ```sql

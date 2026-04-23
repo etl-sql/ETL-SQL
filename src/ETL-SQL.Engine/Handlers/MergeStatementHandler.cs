@@ -104,7 +104,10 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 else
                 {
-                    await foreach (var _ in targetSql.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values)) { }
+                    await foreach (var batch in targetSql.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values)) 
+                    {
+                        if (batch.RowsAffected >= 0) context.RowsProcessed += batch.RowsAffected;
+                    }
                 }
                 return;
             }
@@ -134,6 +137,7 @@ namespace ETL_SQL.Engine.Handlers
             var matchedTargetRows = new HashSet<Row>();
             var rowsToDelete = new HashSet<Row>();
             var rowsToAdd = new List<Row>();
+            var outputRows = new List<MergeOutputRow>();
 
             if (isEquality)
             {
@@ -157,13 +161,13 @@ namespace ETL_SQL.Engine.Handlers
                             if (await context.EvaluateCondition(stmt.OnCondition, combinedRow))
                             {
                                 matchedTargetRows.Add(tRow);
-                                await HandleMatched(stmt, combinedRow, tRow, rowsToDelete, context, () => processedCount++);
+                                await HandleMatched(stmt, combinedRow, tRow, rowsToDelete, outputRows, context, () => processedCount++);
                             }
                         }
                     }
                     else
                     {
-                        await HandleNotMatched(stmt, sRow, sAlias, target, rowsToAdd, context, () => processedCount++);
+                        await HandleNotMatched(stmt, sRow, sAlias, target, rowsToAdd, outputRows, context, () => processedCount++);
                     }
                 }
             }
@@ -180,12 +184,12 @@ namespace ETL_SQL.Engine.Handlers
                         {
                             rowMatched = true;
                             matchedTargetRows.Add(tRow);
-                            await HandleMatched(stmt, combinedRow, tRow, rowsToDelete, context, () => processedCount++);
+                            await HandleMatched(stmt, combinedRow, tRow, rowsToDelete, outputRows, context, () => processedCount++);
                         }
                     }
                     if (!rowMatched)
                     {
-                        await HandleNotMatched(stmt, sRow, sAlias, target, rowsToAdd, context, () => processedCount++);
+                        await HandleNotMatched(stmt, sRow, sAlias, target, rowsToAdd, outputRows, context, () => processedCount++);
                     }
                 }
             }
@@ -202,12 +206,16 @@ namespace ETL_SQL.Engine.Handlers
                         {
                             if (clause.ActionType == MergeActionType.DELETE)
                             {
+                                var oldRow = tRow.Clone();
                                 rowsToDelete.Add(tRow);
+                                outputRows.Add(new MergeOutputRow(null, oldRow, "DELETE"));
                             }
                             else if (clause.ActionType == MergeActionType.UPDATE)
                             {
+                                var oldRow = tRow.Clone();
                                 foreach (var a in clause.UpdateAssignments!) 
                                     tRow[a.ColumnName] = await context.EvaluateValue(a.Value, tEvalRow);
+                                outputRows.Add(new MergeOutputRow(tRow.Clone(), oldRow, "UPDATE"));
                             }
                             processedCount++;
                             break;
@@ -239,9 +247,14 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             context.RowsProcessed = processedCount;
+
+            if (stmt.Output != null && outputRows.Count > 0)
+            {
+                await OutputClauseHelper.ProcessAsync(stmt.Output, context, outputRows.Select(r => (r.Deleted, r.Inserted, (string?)r.Action)));
+            }
         }
 
-        private async Task HandleMatched(MergeStatement stmt, Row combinedRow, Row tRow, HashSet<Row> rowsToDelete, IExecutionContext context, Action onAction)
+        private async Task HandleMatched(MergeStatement stmt, Row combinedRow, Row tRow, HashSet<Row> rowsToDelete, List<MergeOutputRow> outputRows, IExecutionContext context, Action onAction)
         {
             foreach (var clause in stmt.MatchedClauses)
             {
@@ -249,12 +262,17 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     if (clause.ActionType == MergeActionType.UPDATE)
                     {
+                        var oldRow = tRow.Clone();
                         foreach (var a in clause.UpdateAssignments!)
                             tRow[a.ColumnName] = await context.EvaluateValue(a.Value, combinedRow);
+                        
+                        outputRows.Add(new MergeOutputRow(tRow.Clone(), oldRow, "UPDATE"));
                     }
                     else if (clause.ActionType == MergeActionType.DELETE)
                     {
+                        var oldRow = tRow.Clone();
                         rowsToDelete.Add(tRow);
+                        outputRows.Add(new MergeOutputRow(null, oldRow, "DELETE"));
                     }
                     onAction();
                     break;
@@ -262,7 +280,7 @@ namespace ETL_SQL.Engine.Handlers
             }
         }
 
-        private async Task HandleNotMatched(MergeStatement stmt, Row sRow, string sAlias, IDataSource target, List<Row> rowsToAdd, IExecutionContext context, Action onAction)
+        private async Task HandleNotMatched(MergeStatement stmt, Row sRow, string sAlias, IDataSource target, List<Row> rowsToAdd, List<MergeOutputRow> outputRows, IExecutionContext context, Action onAction)
         {
             var sEvalRow = CreateEvalRow(sRow, sAlias);
             foreach (var clause in stmt.NotMatchedClauses.Where(c => c.Option == MergeSourceOrTarget.Target))
@@ -274,12 +292,17 @@ namespace ETL_SQL.Engine.Handlers
                     var colNames = (clause.InsertColumns != null && clause.InsertColumns.Count > 0) ? clause.InsertColumns : targetCols;
                     for (int i = 0; i < colNames.Count && i < clause.InsertValues!.Count; i++)
                         newRow[colNames[i]] = await context.EvaluateValue(clause.InsertValues[i], sEvalRow);
+                    
                     rowsToAdd.Add(newRow);
+                    outputRows.Add(new MergeOutputRow(newRow.Clone(), null, "INSERT"));
                     onAction();
                     break;
                 }
             }
         }
+
+
+        private record MergeOutputRow(Row? Inserted, Row? Deleted, string Action);
 
         private (bool isEquality, List<string>? targetCols, List<string>? sourceCols) TryExtractEqualityJoin(Expression onCondition, string tAlias, string sAlias)
         {

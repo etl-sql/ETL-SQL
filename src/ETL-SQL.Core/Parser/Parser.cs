@@ -27,7 +27,10 @@ namespace ETL_SQL.Core.Parser
             TokenType.EXCEL, TokenType.AZURE_BLOB, TokenType.SYSDATE, TokenType.CURRENT_TIMESTAMP, 
             TokenType.CURRENT_DATE, TokenType.CURRENT_TIME, TokenType.YEAR, TokenType.MONTH, 
             TokenType.DAY, TokenType.HOUR, TokenType.MINUTE, TokenType.SECOND,
-            TokenType.TELEMETRY, TokenType.POSITION, TokenType.FORMAT
+            TokenType.TELEMETRY, TokenType.POSITION, TokenType.FORMAT, TokenType.TARGET,
+            TokenType.TYPE, TokenType.VERSION, TokenType.SOURCE, TokenType.MATCHED,
+            TokenType.TABLE, TokenType.TAG, TokenType.VALUE, TokenType.BITS, 
+            TokenType.ALGORITHM, TokenType.PASSPHRASE, TokenType.COMMENT, TokenType.DATE
         };
 
         private static readonly HashSet<TokenType> DataTypeTokens = new()
@@ -41,7 +44,7 @@ namespace ETL_SQL.Core.Parser
             TokenType.TEXT, TokenType.NTEXT, TokenType.BINARY, TokenType.VARBINARY, TokenType.IMAGE, 
             TokenType.UNIQUEIDENTIFIER, TokenType.UUID, TokenType.GUID, TokenType.GEOMETRY, 
             TokenType.GEOGRAPHY, TokenType.HIERARCHYID, TokenType.VARIANT, TokenType.SQL_VARIANT, 
-            TokenType.ANY
+            TokenType.ANY, TokenType.TABLE
         };
 
         /// <summary>
@@ -333,7 +336,7 @@ namespace ETL_SQL.Core.Parser
 
                 if (Match(TokenType.INTO))
                 {
-                    intoTable = ParseTableReference();
+                    intoTable = ParseTableReference(allowAlias: false);
                 }
             }
             catch (SyntaxException)
@@ -630,7 +633,7 @@ namespace ETL_SQL.Core.Parser
             return typeName;
         }
 
-        public TableReference ParseTableReference(bool allowFunction = true)
+        public TableReference ParseTableReference(bool allowFunction = true, bool allowWithClause = true, bool allowAlias = true)
         {
             var t = Current;
             
@@ -708,7 +711,12 @@ namespace ETL_SQL.Core.Parser
                         Consume(TokenType.RPAREN, "Expected ')' after function arguments");
                     }
                     var funcName = parts[^1];
-                    tableRef = new TableReference(funcName, functionCall: new FunctionCallExpression(funcName, args));
+                    var funcCall = new FunctionCallExpression(funcName, args) { Line = t.Line, Column = t.Column };
+                    
+                    if (parts.Count == 4) tableRef = new TableReference(parts[3], parts[2], parts[1], parts[0], functionCall: funcCall);
+                    else if (parts.Count == 3) tableRef = new TableReference(parts[2], parts[1], null, parts[0], functionCall: funcCall);
+                    else if (parts.Count == 2) tableRef = new TableReference(parts[1], null, null, parts[0], functionCall: funcCall);
+                    else tableRef = new TableReference(funcName, functionCall: funcCall);
                 }
                 else if (parts.Count == 4)
                 {
@@ -728,19 +736,22 @@ namespace ETL_SQL.Core.Parser
                 }
 
                 // Optional Alias
-                if (Match(TokenType.AS))
+                if (allowAlias)
                 {
-                    tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, ConsumeIdentifier("Expected alias after AS").Value);
-                    // Tags after alias: mytable AS c /* @tag: val */
-                    var aliasMetadata = _expressionParser.ParseMetadataTags();
-                    foreach (var tag in aliasMetadata) tableRef.Metadata[tag.Key] = tag.Value;
-                }
-                else if (IsIdentifier(Current))
-                {
-                    // Implicit alias
-                    tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, Advance().Value);
-                    var aliasMetadata = _expressionParser.ParseMetadataTags();
-                    foreach (var tag in aliasMetadata) tableRef.Metadata[tag.Key] = tag.Value;
+                    if (Match(TokenType.AS))
+                    {
+                        tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, ConsumeIdentifier("Expected alias after AS").Value);
+                        // Tags after alias: mytable AS c /* @tag: val */
+                        var aliasMetadata = _expressionParser.ParseMetadataTags();
+                        foreach (var tag in aliasMetadata) tableRef.Metadata[tag.Key] = tag.Value;
+                    }
+                    else if (IsIdentifier(Current))
+                    {
+                        // Implicit alias
+                        tableRef = new TableReference(tableRef.TableName, tableRef.SchemaName, tableRef.DatabaseName, tableRef.ConnectionName, Advance().Value);
+                        var aliasMetadata = _expressionParser.ParseMetadataTags();
+                        foreach (var tag in aliasMetadata) tableRef.Metadata[tag.Key] = tag.Value;
+                    }
                 }
 
                 // Merge table-level metadata
@@ -763,6 +774,31 @@ namespace ETL_SQL.Core.Parser
             {
                 if (Match(TokenType.PIVOT)) tableRef.TableOperators.Add(ParsePivotClause());
                 else if (Match(TokenType.UNPIVOT)) tableRef.TableOperators.Add(ParseUnpivotClause());
+                tableRef = tableRef with 
+                { 
+                    EndLine = LastTokenEndLine, 
+                    EndColumn = LastTokenEndColumn 
+                };
+            }
+
+            // Handle WITH (...) options
+            if (allowWithClause && Match(TokenType.WITH))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                while (Current.Type != TokenType.RPAREN && Current.Type != TokenType.EOF)
+                {
+                    // Permissive key: allow identifiers or any keyword (needed for MOCKDB(COLUMNS=...))
+                    string key;
+                    if (IsIdentifier(Current) || LanguageMetadata.IsKeyword(Current.Value))
+                        key = Advance().Value;
+                    else
+                        throw new SyntaxException("Expected option key", Current.Line, Current.Column);
+                    Match(TokenType.EQUALS);
+                    var val = _expressionParser.ParseExpression();
+                    tableRef.Options[key] = val;
+                    if (!Match(TokenType.COMMA)) break;
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close WITH options");
                 tableRef = tableRef with 
                 { 
                     EndLine = LastTokenEndLine, 

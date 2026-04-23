@@ -84,6 +84,7 @@ namespace ETL_SQL.Core
         public FunctionCallExpression? FunctionCall { get; }
         public List<AstNode> TableOperators { get; } = new();
         public Dictionary<string, string> Metadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, Expression> Options { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
         public TableReference(string tableName, string? schemaName = null, string? databaseName = null, string? connectionName = null, string? alias = null, Statement? subquery = null, FunctionCallExpression? functionCall = null)
         {
@@ -680,6 +681,7 @@ namespace ETL_SQL.Core
         public Expression OnCondition { get; init; }
         public List<MergeMatchedClause> MatchedClauses { get; init; }
         public List<MergeNotMatchedClause> NotMatchedClauses { get; init; }
+        public OutputClause? Output { get; set; }
 
         public MergeStatement(
             TableReference targetTable, 
@@ -688,7 +690,8 @@ namespace ETL_SQL.Core
             string? sourceAlias, 
             Expression onCondition, 
             List<MergeMatchedClause> matchedClauses, 
-            List<MergeNotMatchedClause> notMatchedClauses)
+            List<MergeNotMatchedClause> notMatchedClauses,
+            OutputClause? output = null)
         {
             TargetTable = targetTable;
             TargetAlias = targetAlias;
@@ -697,6 +700,7 @@ namespace ETL_SQL.Core
             OnCondition = onCondition;
             MatchedClauses = matchedClauses;
             NotMatchedClauses = notMatchedClauses;
+            Output = output;
         }
 
         public override IEnumerable<string> GetSourceTables()
@@ -1356,14 +1360,15 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record VariableExpression : Expression
+    public record VariableExpression(string Name) : Expression
     {
-        public string Name { get; }
+        public string Name { get; } = Name;
+    }
 
-        public VariableExpression(string name)
-        {
-            Name = name;
-        }
+    public record ParameterExpression(string Value, int? Index = null) : Expression
+    {
+        public string Value { get; } = Value;
+        public int? Index { get; } = Index;
     }
 
     public record FunctionCallExpression : Expression
@@ -1595,6 +1600,13 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns();
     }
 
+    public record GenerateRule(string ColumnName, string Rule) : AstNode;
+
+    public record GenerateStatement(Expression RowCount, TableReference Target, List<GenerateRule> Rules, Dictionary<string, Expression>? Options = null) : Statement
+    {
+        public override IEnumerable<string> GetSourceTables() => Enumerable.Empty<string>();
+    }
+
     public record PositionExpression(Expression substring, Expression str) : Expression
     {
         public Expression Substring { get; } = substring;
@@ -1758,22 +1770,13 @@ namespace ETL_SQL.Core
 
     public enum DockerAction { Start, Stop, Pause, Resume, Close }
 
-    public record DockerActionStatement : Statement
-    {
-        public string Alias { get; }
-        public DockerAction Action { get; }
-        public DockerActionStatement(string alias, DockerAction action) { Alias = alias; Action = action; }
-    }
+    public enum DockerTargetMode { Single, LastStarted, All }
 
-    public record DockerCloseStatement : Statement
+    public record DockerActionStatement(DockerAction action, string? alias = null, DockerTargetMode targetMode = DockerTargetMode.Single) : Statement
     {
-        public Expression? ImageName { get; }
-        public string? Alias { get; }
-        public DockerCloseStatement(Expression? imageName = null, string? alias = null) 
-        { 
-            ImageName = imageName; 
-            Alias = alias;
-        }
+        public DockerAction Action { get; } = action;
+        public string? Alias { get; } = alias;
+        public DockerTargetMode TargetMode { get; } = targetMode;
     }
 
     public record CreateJobStatement : Statement

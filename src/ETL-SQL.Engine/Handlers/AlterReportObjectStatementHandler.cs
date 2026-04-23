@@ -138,7 +138,7 @@ namespace ETL_SQL.Engine.Handlers
                 if (!resolvedPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                      throw new ExecutionException($"Security Violation: Template files must have .json extension. Target: {resolvedPath}", null, stmt.Line, stmt.Column);
 
-                context.IncrementOperationCount(resolvedPath);
+                context.IncrementOperationCount(OperationType.FileSystem, resolvedPath);
                 var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
                 string json = JsonSerializer.Serialize(template.Options, jsonOptions);
                 File.WriteAllText(resolvedPath, json);

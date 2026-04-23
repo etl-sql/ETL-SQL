@@ -149,7 +149,7 @@ namespace ETL_SQL.Connectors
             yield return table;
         }
 
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => throw new NotSupportedException("Writing batches to FTP directly is not supported. Use FILE_SEND.");
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Writing batches to FTP directly is not supported. Use FILE_SEND.");
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
         public object? Snapshot() => null;
         public void Restore(object? snapshot) { }

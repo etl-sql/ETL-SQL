@@ -243,8 +243,8 @@ SELECT 1";
 
                 SELECT 1;
 
-                CLOSE_DOCKER dms;
-                CLOSE_DOCKER dpost;
+                CLOSE DOCKER dms;
+                CLOSE DOCKER dpost;
             ";
 
             var evaluator = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

@@ -86,7 +86,7 @@ namespace ETL_SQL.Engine.Storage
             await Task.CompletedTask;
         }
 
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => throw new NotSupportedException("Lineage data is read-only.");
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotSupportedException("Lineage data is read-only.");
 
         public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)_columns);
 

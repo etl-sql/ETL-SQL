@@ -68,7 +68,7 @@ namespace ETL_SQL.Tests.Analysis.Analysis
             public Task<IEnumerable<string>> GetViewsAsync() => Task.FromResult(Enumerable.Empty<string>());
             public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => Task.FromResult(Enumerable.Empty<string>());
             public IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) => Enumerable.Empty<DataTable>().ToAsyncEnumerable();
-            public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => Task.CompletedTask;
+            public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => Task.CompletedTask;
             public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(Enumerable.Empty<string>());
             public object? Snapshot() => null;
             public void Restore(object? snapshot) { }

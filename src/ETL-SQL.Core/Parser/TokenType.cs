@@ -4,13 +4,13 @@ namespace ETL_SQL.Core.Parser
     {
         // Keywords
         CREATE, CONNECTION, ON, FILE, DATABASE, EXCEL, JSON, XML,
-        MSSQL, ORACLE, POSTGRES, MOCKDB, ODBC, FLATFILE,
+        MSSQL, ORACLE, POSTGRES, MOCKDB, ODBC, FLATFILE, GENERATE,
         SELECT, FROM, WHERE, GROUP, BY, HAVING,
         INSERT, INTO, VALUES,
         UPDATE, SET,
         DELETE, TRUNCATE, PIVOT, UNPIVOT, MERGE, USING, MATCHED, SOURCE,
         COPY, MOVE, COMPRESS, SEND, RECEIVE, EMAIL, ADD, COLUMN,
-        DOCKER, CLOSE, START_DOCKER, STOP_DOCKER, PAUSE_DOCKER, CLOSE_DOCKER,
+        DOCKER, CLOSE,
         DECLARE,
         AND, OR, NOT, AS, IS,
         IN, LIKE, ESCAPE,
@@ -64,10 +64,11 @@ namespace ETL_SQL.Core.Parser
         UNION, ALL, EXCEPT, INTERSECT,
  
         // Functions
-        UPPER, LOWER, CONCAT, CAST,
+        UPPER, LOWER, CONCAT, CAST, TRUNC, GETDATE,
         CURRENT_TIMESTAMP, CURRENT_DATE, CURRENT_TIME, FORMAT,
         OVER, PARTITION, ORDER, ASC, DESC,
         SUM, AVG, COUNT, MIN, MAX,
+        SEQUENCE, RANDOM, RANDOM_INT, RANDOM_DECIMAL,
  
         // Data types
         INT, INTEGER, BIGINT, SMALLINT, TINYINT, BIT, BOOLEAN, BOOL,
@@ -105,6 +106,7 @@ namespace ETL_SQL.Core.Parser
         SLASH,      // /
         MODULO,     // %
         QUESTION,   // ?
+        PARAMETER,  // ? or ?n
         COLUMN_TAG, // /*@d: ... */
 
         // ── Report-SQL tokens (Phase 9A) ───────────────────────────────────
@@ -118,7 +120,7 @@ namespace ETL_SQL.Core.Parser
         MAPPINGS, OPTIONS, ACTIONS, STRUCTURE, MAP, SERIES,
         SLICER, CARD, ON_CLICK, DRILL_DOWN, SET_PARAMETER, ON_CHANGE,
         TTL, KEYFILE, X_AXIS, Y_AXIS,
-        PAGE, DATASET,
+        PAGE, PAGES, DATASET,
         REPORT,
         STYLE, CONTAINER, BOX, SCROLL, NAVIGATION, COMBO, NAV_TAB, BUTTON, LINK_NAV,
         DATEPICKER, SLIDER, MULTISELECT, SEARCH,

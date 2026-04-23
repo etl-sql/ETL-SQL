@@ -70,9 +70,9 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("REPLACE", (args, ctx) => args.Count >= 3 ? args[0]?.ToString()?.Replace(args[1]?.ToString() ?? "", args[2]?.ToString() ?? "") : args[0], "REPLACE(str, old, new): Replaces occurrences of a substring.");
             registry.RegisterWithHelp("INITCAP", (args, ctx) => args[0]?.ToString() == null ? null : System.Globalization.CultureInfo.CurrentCulture.TextInfo.ToTitleCase(args[0]!.ToString()!.ToLower()), "INITCAP(str): Capitalizes the first letter of each word.");
             registry.RegisterWithHelp("MOD", (args, ctx) => args.Count >= 2 && args[0] != null && args[1] != null ? (decimal.TryParse(args[0]?.ToString(), out var n1) && decimal.TryParse(args[1]?.ToString(), out var n2) && n2 != 0 ? n1 % n2 : null) : null, "MOD(n, d): Returns the remainder of a division.");
-            registry.RegisterWithHelp("YEAR", (args, ctx) => args[0] == null ? null : (EvaluationUtils.SafeTryParseDate(args[0]!.ToString()!, out var dt) ? (decimal)dt.Year : null), "YEAR(date): Returns the year part of a date.");
-            registry.RegisterWithHelp("MONTH", (args, ctx) => args[0] == null ? null : (EvaluationUtils.SafeTryParseDate(args[0]!.ToString()!, out var dt) ? (decimal)dt.Month : null), "MONTH(date): Returns the month part of a date.");
-            registry.RegisterWithHelp("DAY", (args, ctx) => args[0] == null ? null : (EvaluationUtils.SafeTryParseDate(args[0]!.ToString()!, out var dt) ? (decimal)dt.Day : null), "DAY(date): Returns the day part of a date.");
+            registry.RegisterWithHelp("YEAR", (args, ctx) => args[0] == null ? null : (EvaluationUtils.TryToDateTime(args[0], out var dt) ? (decimal)dt.Year : null), "YEAR(date): Returns the year part of a date.");
+            registry.RegisterWithHelp("MONTH", (args, ctx) => args[0] == null ? null : (EvaluationUtils.TryToDateTime(args[0], out var dt) ? (decimal)dt.Month : null), "MONTH(date): Returns the month part of a date.");
+            registry.RegisterWithHelp("DAY", (args, ctx) => args[0] == null ? null : (EvaluationUtils.TryToDateTime(args[0], out var dt) ? (decimal)dt.Day : null), "DAY(date): Returns the day part of a date.");
             registry.RegisterWithHelp("COALESCE", (args, ctx) => args.FirstOrDefault(a => !a.IsNull()), "COALESCE(v1, v2, ...): Returns the first non-null value.");
             registry.RegisterWithHelp("ISNULL", IsNull, "ISNULL(v1, v2): Returns v2 if v1 is null.");
             registry.RegisterWithHelp("NVL", IsNull, "NVL(v1, v2): Alias for ISNULL.");
@@ -284,29 +284,36 @@ namespace ETL_SQL.Engine.Functions
         {
             if (args.Count < 3 || args[1] == null || args[2] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
-            if (!EvaluationUtils.SafeTryParseDate(args[1]?.ToString() ?? "", out var dt1)) return null;
-            if (!EvaluationUtils.SafeTryParseDate(args[2]?.ToString() ?? "", out var dt2)) return null;
+            if (!EvaluationUtils.TryToDateTime(args[1], out var dt1)) return null;
+            if (!EvaluationUtils.TryToDateTime(args[2], out var dt2)) return null;
+            
             
             var diff = dt2 - dt1;
             return part switch {
                 "YEAR" or "YY" or "YYYY" => (decimal)(dt2.Year - dt1.Year),
                 "QUARTER" or "QQ" or "Q" => (decimal)((dt2.Year - dt1.Year) * 4 + ((dt2.Month - 1) / 3) - ((dt1.Month - 1) / 3)),
                 "MONTH" or "MM" or "M" => (decimal)((dt2.Year - dt1.Year) * 12 + dt2.Month - dt1.Month),
-                "WEEK" or "WK" or "WW" => (decimal)Math.Truncate((dt2.Date - dt1.Date).TotalDays / 7),
+                "WEEK" or "WK" or "WW" => (decimal)Math.Truncate((GetStartOfWeek(dt2) - GetStartOfWeek(dt1)).TotalDays / 7),
                 "DAY" or "DD" or "D" => (decimal)(dt2.Date - dt1.Date).TotalDays,
-                "HOUR" or "HH" => (decimal)Math.Truncate(diff.TotalHours),
-                "MINUTE" or "MI" or "N" => (decimal)Math.Truncate(diff.TotalMinutes),
-                "SECOND" or "SS" or "S" => (decimal)Math.Truncate(diff.TotalSeconds),
-                "MILLISECOND" or "MS" => (decimal)Math.Truncate(diff.TotalMilliseconds),
+                "HOUR" or "HH" => (decimal)(dt2.Date.AddHours(dt2.Hour) - dt1.Date.AddHours(dt1.Hour)).TotalHours,
+                "MINUTE" or "MI" or "N" => (decimal)(dt2.Date.AddHours(dt2.Hour).AddMinutes(dt2.Minute) - dt1.Date.AddHours(dt1.Hour).AddMinutes(dt1.Minute)).TotalMinutes,
+                "SECOND" or "SS" or "S" => (decimal)(new DateTime(dt2.Year, dt2.Month, dt2.Day, dt2.Hour, dt2.Minute, dt2.Second) - new DateTime(dt1.Year, dt1.Month, dt1.Day, dt1.Hour, dt1.Minute, dt1.Second)).TotalSeconds,
+                "MILLISECOND" or "MS" => (decimal)(new DateTime(dt2.Year, dt2.Month, dt2.Day, dt2.Hour, dt2.Minute, dt2.Second, dt2.Millisecond) - new DateTime(dt1.Year, dt1.Month, dt1.Day, dt1.Hour, dt1.Minute, dt1.Second, dt1.Millisecond)).TotalMilliseconds,
                 _ => (decimal)0
             };
+        }
+
+        private static DateTime GetStartOfWeek(DateTime dt)
+        {
+            int diff = (7 + (dt.DayOfWeek - DayOfWeek.Sunday)) % 7;
+            return dt.Date.AddDays(-1 * diff);
         }
 
         /// <summary>Returns the last day of the month that contains the specified date.</summary>
         private static object? EoMonth(List<object?> args, IExecutionContext ctx)
         {
             if (args[0] == null) return null;
-            if (!EvaluationUtils.SafeTryParseDate(args[0]?.ToString() ?? "", out var dt)) return null;
+            if (!EvaluationUtils.TryToDateTime(args[0], out var dt)) return null;
             var monthsToAdd = args.Count >= 2 && int.TryParse(args[1]?.ToString(), out var m) ? m : 0;
             var target = dt.AddMonths(monthsToAdd);
             var firstOfNextMonth = new DateTime(target.Year, target.Month, 1).AddMonths(1);
@@ -524,7 +531,9 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 3 || args[2] == null) return null;
             string part = args[0]?.ToString()?.ToUpperInvariant() ?? "";
             if (!double.TryParse(args[1]?.ToString(), out var val)) return null;
-            if (!EvaluationUtils.SafeTryParseDate(args[2]?.ToString() ?? "", out var dt)) return null;
+            if (!EvaluationUtils.TryToDateTime(args[2], out var dt)) return null;
+            
+            ctx.Log($"DATEADD Debug: input='{dt:yyyy-MM-dd HH:mm:ss.fffffff}', val={val}, part='{part}'");
             
             return part switch {
                 "YEAR" or "YY" or "YYYY" => dt.AddYears((int)val),

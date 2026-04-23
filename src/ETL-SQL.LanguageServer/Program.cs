@@ -47,6 +47,18 @@ namespace ETL_SQL.LSP
                         registry.Register(new SqlServerConnector());
                         registry.Register(new PostgresConnector());
                         registry.Register(new OracleConnector());
+                        registry.Register(new ETL_SQL.Connectors.Parquet.ParquetConnector());
+                        registry.Register(new ETL_SQL.Connectors.Avro.AvroConnector());
+                        registry.Register(new ETL_SQL.Connectors.Json.JsonConnector());
+                        registry.Register(new ETL_SQL.Connectors.Xml.XmlConnector());
+                        registry.Register(new ETL_SQL.Connectors.Excel.ExcelConnector());
+                        registry.Register(new ETL_SQL.Connectors.Odbc.OdbcConnector());
+                        registry.Register(new ETL_SQL.Connectors.Rest.RestConnector());
+                        registry.Register(new ETL_SQL.Connectors.Email.SmtpConnector());
+                        registry.Register(new ETL_SQL.Connectors.SftpConnector());
+                        registry.Register(new ETL_SQL.Connectors.AzureBlobConnector());
+                        registry.Register(new ETL_SQL.Connectors.FtpConnector());
+                        registry.Register(new ETL_SQL.Connectors.Directory.DirectoryConnector());
 
                         services.AddSingleton<IConnectorRegistry>(registry);
                         services.AddSingleton<IMetadataManager, MetadataManager>();

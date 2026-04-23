@@ -207,6 +207,8 @@ General-purpose connector for delimited and fixed-width text files.
 | `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
 
+Querying a `FLATFILE` connection via `SELECT` the table name is `FILE` and the columns are named based on the header row in the file or if there is no header row then the columns are named `Column1`, `Column2`, ...
+
 *Examples:*
 ```sql
 -- Pipe-delimited with explicit encoding
@@ -274,6 +276,8 @@ Reads and writes Microsoft Excel workbooks (`.xlsx`, `.xls`, `.xlsb`).
 | `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
 
+Querying a `EXCEL` connection via `SELECT` the table name is `FILE` and the columns are named based on the header row in the file or if there is no header row then the columns are named `Column1`, `Column2`, ...
+
 *Examples:*
 ```sql
 -- Specific sheet and range
@@ -302,6 +306,8 @@ Document extraction with JSONPath addressing for nested data.
 | `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
 
+Querying a `JSON` connection via `SELECT` the table name is `FILE`.
+
 *Examples:*
 ```sql
 -- Drill into a nested array
@@ -327,6 +333,8 @@ Document extraction with XPath addressing for nested elements.
 | `ALGORITHM` | `MD5`, `SHA1`, `SHA2_256`, `SHA2_512` (Default: `SHA2_256`) | No |
 | `KEYFILE` | Path to private SSH key for key-pair encryption | Conditional |
 | `PASSPHRASE` | Passphrase for the key file | Conditional |
+
+Querying a `XML` connection via `SELECT` the table name is `FILE`.
 
 *Examples:*
 ```sql
@@ -575,14 +583,14 @@ SELECT * FROM data_dir;
 ```
 
 #### Result Set Schema
-When querying a `DIRECTORY` connection via `SELECT`, the following columns are returned:
-- `NAME` (STRING): Filename with extension.
-- `PATH` (STRING): Absolute path to the file.
-- `EXTENSION` (STRING): File extension (including dot).
-- `SIZE` (DECIMAL): File size in bytes.
-- `LASTMODIFIED` (DATETIME): Last write time.
-- `ISREADONLY` (BIT): `TRUE` if the file is read-only.
-- `CREATIONTIME` (DATETIME): Time the file was created.
+When querying a `DIRECTORY` connection via `SELECT` the table name is `FILE` and the following columns are returned:
+- `FileName` (STRING): Filename with extension.
+- `Path` (STRING): Absolute path to the file.
+- `Extension` (STRING): File extension (including dot).
+- `Size` (DECIMAL): File size in bytes.
+- `LastModified` (DATETIME): Last write time.
+- `IsReadOnly` (BIT): `TRUE` if the file is read-only.
+- `CreationTime` (DATETIME): Time the file was created.
 
 ---
 

@@ -41,6 +41,7 @@ namespace ETL_SQL.Core.Parser
             _dispatchMap[TokenType.DROP]          = () => { var t = _parser.Previous; return DataParser.ParseDrop(t); };
             _dispatchMap[TokenType.CLEAR]         = () => { var t = _parser.Previous; return SystemParser.ParseClear(t); };
             _dispatchMap[TokenType.TRUNCATE]      = () => { var t = _parser.Previous; return DataParser.ParseTruncate(t); };
+            _dispatchMap[TokenType.GENERATE]      = () => { var t = _parser.Previous; return DataParser.ParseGenerate(t); };
             _dispatchMap[TokenType.DELETE]        = () => { var t = _parser.Previous; return DataParser.ParseDelete(t); };
             _dispatchMap[TokenType.DECLARE]       = () => SystemParser.ParseDeclare();
             _dispatchMap[TokenType.RUN]           = () => { var t = _parser.Previous; return SystemParser.ParseRun(t); };
@@ -70,8 +71,12 @@ namespace ETL_SQL.Core.Parser
             _dispatchMap[TokenType.LINEAGE]       = () => { var t = _parser.Previous; return ExtensionParser.ParseLineage(t); };
             _dispatchMap[TokenType.LINT]          = () => { var t = _parser.Previous; return ExtensionParser.ParseLint(t); };
             _dispatchMap[TokenType.REQUIRE]       = () => { var t = _parser.Previous; return SystemParser.ParseRequireVersion(t); };
-            _dispatchMap[TokenType.DOCKER]        = () => ExtensionParser.ParseDocker();
-            _dispatchMap[TokenType.CLOSE_DOCKER]  = () => { var t = _parser.Previous; return ExtensionParser.ParseDockerClose(t); };
+            _dispatchMap[TokenType.START]         = () => ExtensionParser.ParseDockerVerb(DockerAction.Start);
+            _dispatchMap[TokenType.STOP]          = () => ExtensionParser.ParseDockerVerb(DockerAction.Stop);
+            _dispatchMap[TokenType.PAUSE]         = () => ExtensionParser.ParseDockerVerb(DockerAction.Pause);
+            _dispatchMap[TokenType.CLOSE]         = () => ExtensionParser.ParseDockerVerb(DockerAction.Close);
+            _dispatchMap[TokenType.DOCKER]        = () => ExtensionParser.ParseDockerVerb(DockerAction.Start); // Fallback
+            _dispatchMap[TokenType.STYLE]         = () => { var t = _parser.Previous; return ReportParser.ParseStyleStatement(t); };
         }
 
         public Statement ParseStatement()
@@ -165,9 +170,6 @@ namespace ETL_SQL.Core.Parser
                 return ExtensionParser.ParseDirectoryOperation(_parser.Advance());
             }
 
-            if (_parser.Match(TokenType.START_DOCKER)) return ExtensionParser.ParseDockerAction(DockerAction.Start);
-            if (_parser.Match(TokenType.STOP_DOCKER))  return ExtensionParser.ParseDockerAction(DockerAction.Stop);
-            if (_parser.Match(TokenType.PAUSE_DOCKER)) return ExtensionParser.ParseDockerAction(DockerAction.Pause);
 
             throw new SyntaxException($"Unexpected token type {_parser.Current.Type} ('{_parser.Current.Value}') at start of statement", _parser.Current.Line, _parser.Current.Column);
         }
@@ -219,8 +221,10 @@ namespace ETL_SQL.Core.Parser
                    type == TokenType.IF || type == TokenType.WHILE || type == TokenType.BEGIN ||
                    type == TokenType.PRINT || type == TokenType.EXEC || type == TokenType.EXECUTE ||
                    type == TokenType.RUN || type == TokenType.USE || type == TokenType.DOCKER || type == TokenType.HELP ||
+                   type == TokenType.START || type == TokenType.STOP || type == TokenType.PAUSE || type == TokenType.CLOSE ||
                    type == TokenType.SEND_EMAIL || type == TokenType.SEND_FILE || type == TokenType.FILE_SEND ||
-                   type == TokenType.RECEIVE_FILE || type == TokenType.FILE_RECEIVE || type == TokenType.WITH;
+                   type == TokenType.RECEIVE_FILE || type == TokenType.FILE_RECEIVE || type == TokenType.WITH ||
+                   type == TokenType.STYLE;
         }
 
         public ForeignKeyReference ParseForeignKeyReference() => DataParser.ParseForeignKeyReference();

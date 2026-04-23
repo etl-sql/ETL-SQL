@@ -52,8 +52,8 @@ BEGIN TRY
     PRINT 'Synchronization Verified. Shutting down container resources...';
 
     -- 4. Clean up infrastructure
-    dockerSqlServer CLOSE;
-    dockerPostgres CLOSE;
+    CLOSE DOCKER dockerSqlServer;
+    CLOSE DOCKER dockerPostgres;
 
     PRINT 'Sandbox orchestration executed perfectly.';
 END TRY

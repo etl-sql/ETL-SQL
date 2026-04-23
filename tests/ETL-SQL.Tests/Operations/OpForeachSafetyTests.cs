@@ -128,7 +128,7 @@ END";
             {
                 await foreach (var batch in ExecuteRawSql("SELECT * FROM [Users]")) yield return batch;
             }
-            public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => Task.CompletedTask;
+            public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => Task.CompletedTask;
             public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(Enumerable.Empty<string>());
             public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => Task.FromResult(Enumerable.Empty<string>());
             public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult(Enumerable.Empty<string>());

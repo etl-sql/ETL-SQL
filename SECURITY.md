@@ -16,32 +16,45 @@ The engine treats all user-provided scripts as **Untrusted Actors**. Our securit
 ---
 
 ## 3. Host System Isolation (The Sandbox)
-The sandbox is enforced at the core evaluation layer (`SecurityService`) via `ValidatePath()`, `ValidateFileType()`, and `ValidateWriteAccess()`, intercepting all filesystem and system-level calls before execution.
+The sandbox is enforced at the core evaluation layer (`SecurityService`) via `ValidatePath()`, `ValidateFileType()`, and `ValidateWriteAccess()`.
 
-### 3.1 Non-Bypassable Path Validation (Zero-Trust)
-All path resolutions undergo mandatory normalization and recursive segment matching.
+### 3.1 Path Protection Modes
+The engine supports three levels of path protection, configurable by an administrator via `Security:PathProtectionMode`.
 
-**Critical blocks (never bypassable, even in test mode):**
+- **`Restricted` (DEFAULT)**: The engine blocks known OS system folders and sensitive environment directories. Common temporary directories (`/tmp`, `C:\tmp`, `C:\temp`) are permitted.
+- **`Defined`**: The most secure mode. The engine blocks *all* filesystem access unless the path is within an explicitly [Approved Safe Zone](#33-authorized-safe-zones-bypass).
+- **`Unrestricted`**: Disables all path and extension validation. **WARNING**: This mode is highly discouraged for production and should only be used in isolated development environments.
+
+### 3.2 Non-Bypassable Path Validation (Zero-Trust)
+In `Restricted` mode, all path resolutions undergo mandatory normalization and recursive segment matching.
+
+**Critical System & Sensitive Blocks:**
+These directories are considered highly sensitive and are blocked by default in `Restricted` mode.
 
 | Category | Blocked Segments |
 | :--- | :--- |
-| Version control | `.git` |
-| Credential stores | `.ssh`, `.aws`, `.azure`, `.kube`, `.gnupg`, `.config` |
-| Windows OS | `Windows`, `System32` |
-| Linux OS | `etc`, `/root` |
+| **OS Core** | `Windows`, `System32`, `SysWOW64`, `etc`, `/bin`, `/sbin`, `/root`, `/usr`, `/var` |
+| **Credentials** | `.git`, `.ssh`, `.aws`, `.azure`, `.kube`, `.gnupg`, `.config` |
+| **System Identity** | `Users/Public` |
 
-**Standard blocks (bypassed only in test mode for authorized test paths):**
+**Standard Restricted Blocks:**
+These directories are blocked to prevent scripts from tampering with application state or build artifacts.
 
 | Category | Blocked Segments |
 | :--- | :--- |
-| IDE / Build artifacts | `.vscode`, `.idea`, `node_modules`, `bin`, `obj` |
-| Windows system directories | `SysWOW64`, `Program Files`, `Program Files (x86)`, `ProgramData`, `AppData`, `Documents and Settings`, `Config.msi`, `System Volume Information` |
-| Linux system directories | `/bin`, `/boot`, `/dev`, `/lib`, `/lib32`, `/lib64`, `/libx32`, `/lost+found`, `/media`, `/mnt`, `/opt`, `/proc`, `/run`, `/sbin`, `/srv`, `/sys`, `/tmp`, `/usr`, `/var` |
-| Sensitive config | `.gnupg`, `.config`, `Users/Public` |
+| **IDE / Build** | `.vscode`, `.idea`, `node_modules`, `bin`, `obj` |
+| **Windows AppData** | `Program Files`, `Program Files (x86)`, `ProgramData`, `AppData`, `Documents and Settings`, `Config.msi`, `System Volume Information` |
+| **Linux System** | `/boot`, `/dev`, `/lib`, `/lib32`, `/lib64`, `/libx32`, `/lost+found`, `/media`, `/mnt`, `/run`, `/srv`, `/sys` |
 
-**Root directory lockdown:** Any path resolving exactly to a drive root (e.g., `C:\` or `/`) always throws a `SecurityException` regardless of test mode or override flags.
+**Root directory lockdown:** Any path resolving exactly to a drive root (e.g., `C:\` or `/`) always throws a `SecurityException` in `Restricted` mode.
 
 **Session metadata protection:** Scripts cannot directly access `.etlsession` files or `.recovery.json` manifests. Direct access to `_temp` session storage folders is also blocked.
+
+### 3.3 Authorized Safe Zones (Bypass)
+Administrators can register specific filesystem paths as **Approved Safe Zones** in `appsettings.json`.
+- In **`Defined`** mode, access is ONLY permitted within these zones.
+- In **`Restricted`** mode, paths within safe zones bypass standard blocks.
+- **Trust with Audit**: If a critical OS or sensitive folder is explicitly whitelisted as a safe zone, the engine will allow access but log a `Warning` reflecting the authorized access to a sensitive path.
 
 ### 3.2 Immutable File Type Hardening
 To prevent arbitrary code execution or system-level tampering, the following extensions are globally blacklisted and can **never** be accessed regardless of override flags:
@@ -143,9 +156,9 @@ The Report-SQL dashboard (`ReportPlayer`) exposes a live web interface that must
 
 
 > [!IMPORTANT]
-> Override commands are **only honored** when the target path resides within a verified **Approved Safe Zone** (configured in `appsettings.json`). Providing an override command while operating outside a safe zone still throws a `SecurityException`.
+> Override commands are **only honored** when the target path resides within a verified **Approved Safe Zone** (configured in `appsettings.json`) OR the engine is in `Unrestricted` mode. Providing an override command while operating outside a safe zone still throws a `SecurityException`.
 >
-> All authorized bypasses are logged as `Warning` audits. Administrators can inspect the active safe zones via `SHOW SAFE ZONES;`.
+> All authorized bypasses and explicit access to sensitive system folders are logged as `Warning` audits. Administrators can inspect the active safe zones via `SHOW SAFE ZONES;`.
 
 ---
 
@@ -235,7 +248,7 @@ Every security violation or unauthorized access attempt triggers an immediate `S
 
 ### 5.1 `SecurityException` Thrown By
 All of the following trigger an immediate halt with a `SecurityException`:
-- `ValidatePath()` — blocked path segment, root access, session metadata access
+- `ValidatePath()` — blocked path segment, root access, session metadata access, or outside safe zone in `Defined` mode.
 - `ValidateFileType()` — blocked extension (`.dll`, `.exe`, etc.)
 - `ValidateWriteAccess()` — write attempt to a logic file (`.etlsql`, etc.)
 - `CheckRunawayProtection()` — operation count or recursion depth exceeded
@@ -246,6 +259,7 @@ All of the following trigger an immediate halt with a `SecurityException`:
 | Event | Logged |
 | :--- | :--- |
 | `SecurityException` thrown | Yes — message, path, operation type |
+| Authorized access to sensitive path | Yes — **Warning** log with path and matched safe zone |
 | Override command used (`SET ALLOW_...`) | Yes — command name, script line, current safe zone |
 | `ENC:` decryption failure | Yes — failure recorded; ciphertext is **not** included |
 | Script contains unencrypted credentials (`NeedsEncryption()`) | Warning issued in IDE/CLI |

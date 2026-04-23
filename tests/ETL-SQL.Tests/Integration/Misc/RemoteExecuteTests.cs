@@ -174,26 +174,26 @@ SELECT COUNT(*) AS cnt FROM #emp;";
         [Fact]
         public async Task TestDockerCloseSyntax()
         {
-            // Legacy syntax
+            // Legacy syntax (still supported via DOCKER fallback)
             var script = "DOCKER CLOSE 'mssql';";
             var parser = new Parser(new Lexer(script).Tokenize());
             var ast = parser.Parse();
             
-            Assert.True(ast.Statements[0] is DockerCloseStatement, "Should parse as DockerCloseStatement (legacy)");
-            var dcs = (DockerCloseStatement)ast.Statements[0];
-            Assert.True(dcs.ImageName != null, "Image name should be captured");
+            Assert.True(ast.Statements[0] is DockerActionStatement, "Should parse as DockerActionStatement (legacy)");
+            var dcs = (DockerActionStatement)ast.Statements[0];
+            Assert.Equal(DockerAction.Close, dcs.Action);
 
             // New standard syntax
-            script = "CLOSE_DOCKER 'mssql';";
+            script = "CLOSE DOCKER 'mssql';";
             parser = new Parser(new Lexer(script).Tokenize());
             ast = parser.Parse();
-            Assert.True(ast.Statements[0] is DockerCloseStatement, "Should parse as DockerCloseStatement (new)");
+            Assert.True(ast.Statements[0] is DockerActionStatement, "Should parse as DockerActionStatement (new)");
             
-            script = "CLOSE_DOCKER;";
+            script = "CLOSE DOCKER;";
             parser = new Parser(new Lexer(script).Tokenize());
             ast = parser.Parse();
-            Assert.True(ast.Statements[0] is DockerCloseStatement, "Should parse as DockerCloseStatement (empty)");
-            Assert.True(((DockerCloseStatement)ast.Statements[0]).ImageName == null, "Image name should be null");
+            Assert.True(ast.Statements[0] is DockerActionStatement, "Should parse as DockerActionStatement (empty)");
+            Assert.Equal(DockerTargetMode.LastStarted, ((DockerActionStatement)ast.Statements[0]).TargetMode);
             
             await Task.CompletedTask;
         }

@@ -72,7 +72,7 @@ namespace ETL_SQL.Connectors.Rest
             }
         }
 
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches)
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
             throw new NotSupportedException("Writing to REST APIs is not yet supported in this version.");
         }

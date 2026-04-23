@@ -43,7 +43,7 @@ namespace ETL_SQL.Connectors.Json
             return new JsonDataSource(context, connectionString, options);
         }
 
-        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
+        public Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) => Task.FromResult<IEnumerable<string>>(new[] { "FILE" });
         
         public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
         

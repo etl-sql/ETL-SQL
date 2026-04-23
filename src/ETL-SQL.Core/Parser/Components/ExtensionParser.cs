@@ -298,49 +298,37 @@ namespace ETL_SQL.Core.Parser.Components
             return new DirectoryOperationStatement(type, path, extra, overwrite, null, password) { Line = startToken.Line, Column = startToken.Column };
         }
 
-        public Statement ParseDockerClose(Token startToken)
+        public Statement ParseDockerVerb(DockerAction action)
         {
-            Expression? imageName = null;
+            var startToken = _parser.Previous;
+            DockerTargetMode mode = DockerTargetMode.LastStarted;
             string? alias = null;
-            bool hasParen = Match(TokenType.LPAREN);
-            if (_parser.Current.Type != TokenType.SEMICOLON && _parser.Current.Type != TokenType.RPAREN)
+
+            if (Match(TokenType.ALL))
             {
-                if (_parser.Current.Type == TokenType.STRING) imageName = ParseExpression();
-                else if (_parser.Current.Type == TokenType.IDENTIFIER) alias = ConsumeIdentifier("Expected alias").Value;
+                Consume(TokenType.DOCKER, "Expected DOCKER after ALL");
+                mode = DockerTargetMode.All;
             }
-            if (hasParen) Consume(TokenType.RPAREN, "Expected ')'");
-            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new DockerCloseStatement(imageName, alias) { Line = startToken.Line, Column = startToken.Column };
-        }
-
-        public Statement ParseDocker()
-        {
-            if (Match(TokenType.CLOSE)) return ParseDockerClose(_parser.Previous);
-            var startToken = _parser.Previous;
-            var alias = ConsumeIdentifier("Expected container alias").Value;
-            var actionStr = ConsumeIdentifier("Expected action (START, STOP, PAUSE, RESUME, CLOSE)").Value.ToUpperInvariant();
-            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            var action = actionStr switch
+            else if (Match(TokenType.DOCKER))
             {
-                "START"  => DockerAction.Start,
-                "STOP"   => DockerAction.Stop,
-                "PAUSE"  => DockerAction.Pause,
-                "RESUME" => DockerAction.Resume,
-                "CLOSE"  => DockerAction.Close,
-                _ => throw new SyntaxException($"Unknown Docker action: {actionStr}", startToken.Line, startToken.Column)
-            };
-            if (action == DockerAction.Close) return new DockerCloseStatement(null, alias) { Line = startToken.Line, Column = startToken.Column };
-            return new DockerActionStatement(alias, action) { Line = startToken.Line, Column = startToken.Column };
-        }
+                // START DOCKER [<alias>]
+                if (_parser.Current.Type == TokenType.IDENTIFIER && !LanguageMetadata.IsKeyword(_parser.Current.Value))
+                {
+                    alias = Advance().Value;
+                    mode = DockerTargetMode.Single;
+                }
+                else
+                {
+                    mode = DockerTargetMode.LastStarted;
+                }
+            }
+            else
+            {
+                throw new SyntaxException($"Expected DOCKER or ALL DOCKER after {startToken.Value}", _parser.Current.Line, _parser.Current.Column);
+            }
 
-        public Statement ParseDockerAction(DockerAction action)
-        {
-            var startToken = _parser.Previous;
-            bool hasParen = Match(TokenType.LPAREN);
-            var alias = ConsumeIdentifier("Expected container alias").Value;
-            if (hasParen) Consume(TokenType.RPAREN, "Expected ')'");
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new DockerActionStatement(alias, action) { Line = startToken.Line, Column = startToken.Column };
+            return new DockerActionStatement(action, alias, mode) { Line = startToken.Line, Column = startToken.Column };
         }
 
         public Statement ParseLineage(Token startToken)
@@ -430,7 +418,7 @@ namespace ETL_SQL.Core.Parser.Components
                     if (Match(TokenType.AT)) execConnName = ParseExpression();
 
                     TableReference? execIntoTable = null;
-                    if (Match(TokenType.INTO)) execIntoTable = ParseTableReference(false);
+                    if (Match(TokenType.INTO)) execIntoTable = ParseTableReference(allowFunction: false, allowWithClause: false);
 
                     List<Expression>? execParameters = null;
                     if (Match(TokenType.WITH))
@@ -453,7 +441,7 @@ namespace ETL_SQL.Core.Parser.Components
             var identifierExpr = ParseExpression();
 
             TableReference? remoteIntoTable = null;
-            if (Match(TokenType.INTO)) remoteIntoTable = ParseTableReference(false);
+            if (Match(TokenType.INTO)) remoteIntoTable = ParseTableReference(allowFunction: false, allowWithClause: false);
 
             List<Expression>? remoteParameters = null;
             if (Match(TokenType.WITH))

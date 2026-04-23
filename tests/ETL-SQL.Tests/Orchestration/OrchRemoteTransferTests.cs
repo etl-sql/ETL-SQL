@@ -71,7 +71,7 @@ namespace ETL_SQL.Tests.Orchestration
                 await Task.CompletedTask;
             }
 
-            public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => Task.CompletedTask;
+            public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => Task.CompletedTask;
             public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult((IEnumerable<string>)new[] { "Name" });
             public object? Snapshot() => null;
             public void Restore(object? snapshot) { }

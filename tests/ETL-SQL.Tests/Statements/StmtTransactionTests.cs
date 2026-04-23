@@ -173,7 +173,7 @@ namespace ETL_SQL.Tests.Statements
             public string ConnectorType => "MOCK_TRANSACTIONAL";
             public IDataSource WithTable(string tableName) => this;
             public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) { yield break; }
-            public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => Task.CompletedTask;
+            public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => Task.CompletedTask;
             public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null) { yield break; }
             public Task<string> GetVersionAsync() => Task.FromResult("Mock 1.0");
             public HashSet<string> GetSupportedFunctions() => new();

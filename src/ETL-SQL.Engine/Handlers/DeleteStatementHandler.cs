@@ -26,7 +26,7 @@ namespace ETL_SQL.Engine.Handlers
             _logger.Debug("Deleting from {ConnName}", connName);
             if (!context.Connections.TryGetValue(connName, out var connection)) throw new ExecutionException($"Unknown: {connName}");
             _logger.Debug("Connection resolved as {ConnectionType}", connection.GetType().Name);
-            if (connection is IDatabaseSource sqlConn)
+            if (connection is IDatabaseSource sqlConn && context.IsSqlPushdown(connName))
             {
                 _logger.Debug("Strategy: Remote SQL DELETE");
                 var sql = $"DELETE FROM {context.GetSqlTableName(stmt.TargetTable, sqlConn.Dialect)}";
@@ -47,61 +47,57 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 else
                 {
-                    await foreach (var _ in sqlConn.ExecuteRawSql(sql, compiledWhere?.Parameters.Values)) { }
+                    await foreach (var batch in sqlConn.ExecuteRawSql(sql, compiledWhere?.Parameters.Values)) 
+                    {
+                        if (batch.RowsAffected >= 0) context.RowsProcessed += batch.RowsAffected;
+                    }
                 }
-                context.RowsProcessed = 0; // Unknown for remote SQL
             }
-            else if (connection is InMemoryDataSource memConn)
+            else
             {
+                _logger.Debug("Strategy: Engine-side Batch DELETE (Streaming)");
+
                 if (context.IsWhatIf)
                 {
-                    _logger.WriteLine($"WHAT IF: Would delete rows from in-memory table {connName}.", ConsoleColor.Yellow);
-                    context.RowsProcessed = 0;
+                    _logger.WriteLine($"WHAT IF: Would delete rows in {connName} via engine-side streaming.", ConsoleColor.Yellow);
+                    return;
                 }
-                else
+
+                // 1. Read existing and filter
+                int deletedCount = 0;
+                var batches = connection.ReadBatches();
+
+                async IAsyncEnumerable<DataTable> FilterBatches()
                 {
-                    var deletedRows = await memConn.DeleteRows(async row => stmt.WhereClause == null || await context.EvaluateCondition(stmt.WhereClause, row));
-                    context.RowsProcessed = deletedRows.Count;
-
-                    if (stmt.Output != null)
+                    await foreach (var batch in batches)
                     {
-                        var outputRows = new List<Row>();
-                        foreach (var deletedRow in deletedRows)
+                        var survivingRows = new List<Row>();
+                        foreach (var row in batch.Rows)
                         {
-                            var contextRow = new Row();
-                            foreach (var col in deletedRow.Columns)
+                            if (stmt.WhereClause == null || await context.EvaluateCondition(stmt.WhereClause, row))
                             {
-                                contextRow[$"DELETED.{col.Key}"] = col.Value;
-                                if (!contextRow.HasColumn(col.Key)) contextRow[col.Key] = col.Value;
-                            }
-
-                            var outputRow = new Row();
-                            foreach (var outCol in stmt.Output.Columns)
-                            {
-                                var val = await context.EvaluateValue(outCol.Expression, contextRow);
-                                outputRow[outCol.Alias ?? outCol.ToSql()] = val;
-                            }
-                            outputRows.Add(outputRow);
-                        }
-
-                        if (outputRows.Count > 0)
-                        {
-                            var outputTable = new DataTable();
-                            outputTable.SetColumns(outputRows[0].Columns.Keys);
-                            foreach (var r in outputRows) await outputTable.AddRowAsync(r);
-
-                            if (stmt.Output.IntoTable != null)
-                            {
-                                var intoDest = await context.ResolveDataSourceAsync(stmt.Output.IntoTable);
-                                await intoDest.WriteBatches(new[] { outputTable }.ToAsyncEnumerable());
+                                deletedCount++;
                             }
                             else
                             {
-                                context.LastResult = outputTable;
+                                survivingRows.Add(row);
                             }
                         }
+                        
+                        var filteredBatch = new DataTable();
+                        filteredBatch.SetColumns(batch.ColumnNames);
+                        foreach (var row in survivingRows) await filteredBatch.AddRowAsync(row);
+                        yield return filteredBatch;
                     }
                 }
+
+                var filtered = FilterBatches();
+                await connection.WriteBatches(filtered);
+
+                context.IncrementOperationCount(OperationType.EngineInternal, count: deletedCount);
+                context.RowsProcessed += deletedCount;
+
+                if (context.IsVerbose) _logger.WriteLine($"Finished deleting {deletedCount} rows in {connName}");
             }
         }
     }

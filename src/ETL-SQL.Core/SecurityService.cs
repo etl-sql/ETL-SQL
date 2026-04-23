@@ -10,6 +10,13 @@ using ETL_SQL.Core;
 
 namespace ETL_SQL.Services
 {
+    public enum PathProtectionMode
+    {
+        Unrestricted, // Block nothing
+        Restricted,   // Block system folders (DEFAULT)
+        Defined       // Only allow ApprovedSafeZones
+    }
+
     public class SecurityService
     {
         public static string GetMachineKey()
@@ -68,6 +75,13 @@ namespace ETL_SQL.Services
             var section = configuration.GetSection("Security");
             if (!section.Exists()) return;
 
+            // 0. Path Protection Mode
+            if (Enum.TryParse<PathProtectionMode>(section["PathProtectionMode"], true, out var mode))
+            {
+                ProtectionMode = mode;
+                _logger.Info("Security: Path Protection Mode set to {Mode}.", mode);
+            }
+
             // 1. Allowed Hosts (Egress Control)
             var hosts = section.GetSection("AllowedHosts").Get<string[]>();
             if (hosts != null && hosts.Length > 0)
@@ -110,17 +124,23 @@ namespace ETL_SQL.Services
         private static readonly string[] BlockedWriteExtensions = { ".etlsql", ".rptsql", ".sql", ".etls", ".py", ".js", ".sh", ".bat", ".cmd" };
 
         // Comprehensive System Lockdown (Windows & Linux)
-        private static readonly string[] BlockedDirectories = { 
+        private static readonly string[] RestrictedDirectories = { 
             // VCS & IDE
-            ".git", ".vscode", ".idea", "node_modules", "bin", "obj", 
+            ".vscode", ".idea", "node_modules", "bin", "obj", 
             // Windows System
-            "System32", "Windows", "SysWOW64", "Program Files", "Program Files (x86)", 
+            "Program Files", "Program Files (x86)", 
             "ProgramData", "AppData", "Documents and Settings", "Config.msi", "System Volume Information",
             // Linux System
-            "/bin", "/boot", "/dev", "/etc", "/lib", "/lib32", "/lib64", "/libx32", "/lost+found", 
-            "/media", "/mnt", "/opt", "/proc", "/root", "/run", "/sbin", "/srv", "/sys", "/tmp", "/usr", "/var",
-            // Sensitive Config/Env
-            ".ssh", ".aws", ".azure", ".kube", ".gnupg", ".config", "Users/Public"
+            "/boot", "/dev", "/lib", "/lib32", "/lib64", "/libx32", "/lost+found", 
+            "/media", "/mnt", "/run", "/srv", "/sys"
+        };
+
+        private static readonly string[] CriticalSystemDirectories = {
+             "Windows", "System32", "SysWOW64", "etc", "/bin", "/sbin", "/root", "/usr", "/var"
+        };
+
+        private static readonly string[] SensitiveDirectories = {
+            ".git", ".ssh", ".aws", ".azure", ".kube", ".gnupg", ".config", "Users/Public"
         };
 
         public const int DefaultMaxFileOperations = 100;
@@ -130,10 +150,13 @@ namespace ETL_SQL.Services
         public static readonly TimeSpan DefaultRegexMatchTimeout = TimeSpan.FromSeconds(1);
 
         public int MaxFileOperations { get; set; } = DefaultMaxFileOperations;
+        public int MaxInternalOperations { get; set; } = 100000;
         public int MaxRecursiveDepth { get; set; } = DefaultMaxRecursiveDepth;
         public int MaxParallelDegree { get; set; } = DefaultMaxParallelDegree;
         public long MaxStringResultSize { get; set; } = DefaultMaxStringResultSize;
         public TimeSpan RegexMatchTimeout { get; set; } = DefaultRegexMatchTimeout;
+
+        public PathProtectionMode ProtectionMode { get; set; } = PathProtectionMode.Restricted;
 
         public string? MasterPassword { get; set; }
 
@@ -222,13 +245,12 @@ namespace ETL_SQL.Services
             var fullPath = Path.GetFullPath(path);
 
             // Security Hardening: Canonicalize symlinks to prevent sandbox escapes.
-            // We resolve the link target to get the REAL path before segment/prefix checks.
             if (File.Exists(fullPath) || Directory.Exists(fullPath))
             {
                 try
                 {
                     FileSystemInfo fsInfo = File.Exists(fullPath) ? new FileInfo(fullPath) : new DirectoryInfo(fullPath);
-                    var target = fsInfo.ResolveLinkTarget(true); // Recursive resolution
+                    var target = fsInfo.ResolveLinkTarget(true); 
                     if (target != null)
                     {
                         fullPath = Path.GetFullPath(target.FullName);
@@ -240,13 +262,15 @@ namespace ETL_SQL.Services
                 }
             }
 
-            // 0. Internal Bypass: If the engine is managing its own files (SessionManager), bypass safety checks.
+            // 0. Internal Bypass
             if (IsInternalOperation) return;
+            
+            // 0.1 Unrestricted Mode Bypass
+            if (ProtectionMode == PathProtectionMode.Unrestricted) return;
 
-            // 0.1 Test Mode Authorizations:
-            // In test mode, we automatically authorize access to the test execution directory and system temp.
-            // This is necessary because many tests create ephemeral files in these locations.
-            bool isAuthorizedTestPath = false;
+            // 1. Authorization Bypass Checklist (Safe Zones, Test Mode)
+            bool isSafeZone = false;
+            string? matchedZone = null;
             if (IsTestMode)
             {
                 var baseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
@@ -257,38 +281,46 @@ namespace ETL_SQL.Services
                     fullPath.StartsWith(tempPath, PathComparison) ||
                     fullPath.StartsWith(currentDir, PathComparison))
                 {
-                    isAuthorizedTestPath = true;
+                    isSafeZone = true;
                 }
             }
 
+            if (!isSafeZone)
+            {
+                matchedZone = ApprovedSafeZones.FirstOrDefault(z => fullPath.StartsWith(z, PathComparison));
+                if (matchedZone != null) isSafeZone = true;
+            }
+
+            // 2. Trust the User (Audit Logging)
+            // If the path is authorized via explicit Safe Zone, check if it's sensitive and log a warning.
+            if (isSafeZone)
+            {
+                if (IsSensitivePath(fullPath))
+                {
+                    _logger.Warning("[SECURITY] Authorized access to sensitive path '{Path}' via safe zone '{Zone}'.", fullPath, matchedZone ?? "TestMode");
+                }
+                return;
+            }
+
+            // 3. Mode Selection (Defined vs Restricted)
+            if (ProtectionMode == PathProtectionMode.Defined)
+            {
+                throw new SecurityException($"[DEFINED MODE] Unauthorized path access: '{fullPath}'. Access is only permitted within an Approved Safe Zone.");
+            }
+
+            // 4. Restricted Mode (Default) Guardrails
             var root = Path.GetPathRoot(fullPath);
             var normalizedPath = fullPath.Replace('\\', '/');
             var segments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
 
-            // 1. Block root directory access (e.g., C:\ or /) - NEVER bypassable
+            // A. Block root directory access (e.g., C:\ or /)
             if (string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase))
             {
                 throw new SecurityException($"Unauthorized access to root directory: {fullPath}");
             }
 
-            // 2. Block CRITICAL system/protected directories (Multi-Platform) - NEVER bypassable
-            // These are so sensitive that even tests shouldn't touch them unless mocking the service.
-            string[] criticalBlocks = { ".git", ".ssh", ".aws", ".azure", ".kube", ".gnupg", ".config", "Windows", "System32", "etc", "/root" };
-            foreach (var blocked in criticalBlocks)
-            {
-                if (segments.Any(s => string.Equals(s, blocked, StringComparison.OrdinalIgnoreCase)))
-                {
-                    throw new SecurityException($"Unauthorized access to protected system directory: {blocked} in path {fullPath}");
-                }
-            }
-
-            // 3. Authorization Bypass: If the path is within an explicitly authorized safe zone 
-            // (e.g. BaseDir in tests, or a configured safe zone), we allow it to proceed, 
-            // bypassing 'standard' blocks like AppData or bin/obj.
-            if (isAuthorizedTestPath || ApprovedSafeZones.Any(z => fullPath.StartsWith(z, PathComparison))) return;
-
-            // 4. Block access to standard system/protected directories
-            foreach (var blocked in BlockedDirectories)
+            // B. Block Critical and Sensitive directories
+            foreach (var blocked in CriticalSystemDirectories.Concat(SensitiveDirectories))
             {
                 var blockedClean = blocked.Trim('/'); 
                 if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase)))
@@ -297,21 +329,40 @@ namespace ETL_SQL.Services
                 }
             }
 
-            // 5. Session Isolation (Item 227): Block commands from targeting session metadata
-            if (!IsInternalOperation)
+            // C. Block Standard restricted directories (VCS, AppData, etc.)
+            foreach (var blocked in RestrictedDirectories)
             {
-                var fileName = Path.GetFileName(fullPath).ToLowerInvariant();
-                if (fileName.EndsWith(".etlsession") || fileName.EndsWith(".recovery.json"))
+                var blockedClean = blocked.Trim('/'); 
+                if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase)))
                 {
-                    throw new SecurityException($"Unauthorized access to internal session metadata: {fileName}");
-                }
-                
-                if (fullPath.Contains("_temp") && segments.Any(s => s.EndsWith("_temp")))
-                {
-                    // Specifically protect the session temp data folder
-                    throw new SecurityException("Direct access to session temporary storage is prohibited.");
+                    throw new SecurityException($"Unauthorized access to restricted application/build directory: {blocked} in path {fullPath}");
                 }
             }
+
+            // D. Session Isolation (protect internal metadata)
+            var fileName = Path.GetFileName(fullPath).ToLowerInvariant();
+            if (fileName.EndsWith(".etlsession") || fileName.EndsWith(".recovery.json"))
+            {
+                throw new SecurityException($"Unauthorized access to internal session metadata: {fileName}");
+            }
+            
+            if (fullPath.Contains("_temp") && segments.Any(s => s.EndsWith("_temp")))
+            {
+                throw new SecurityException("Direct access to session temporary storage is prohibited.");
+            }
+        }
+
+        private bool IsSensitivePath(string fullPath)
+        {
+            var normalizedPath = fullPath.Replace('\\', '/');
+            var segments = normalizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            
+            foreach (var blocked in CriticalSystemDirectories.Concat(SensitiveDirectories))
+            {
+                var blockedClean = blocked.Trim('/'); 
+                if (segments.Any(s => string.Equals(s, blockedClean, StringComparison.OrdinalIgnoreCase))) return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -357,29 +408,30 @@ namespace ETL_SQL.Services
         /// Checks if an operation count or recursion depth exceeds the allowed limits.
         /// Bypasses are only honored in 'Approved Safe Zones'.
         /// </summary>
-        public void CheckRunawayProtection(int count, int depth, bool allowLargeCount = false, bool allowDeepRecursion = false, string? path = null)
+        public void CheckRunawayProtection(OperationType type, int count, int depth, bool allowLargeCount = false, bool allowDeepRecursion = false, string? path = null)
         {
             if (IsInternalOperation) return;
 
-            int maxOps = MaxFileOperations;
+            int maxOps = (type == OperationType.FileSystem) ? MaxFileOperations : MaxInternalOperations;
             int maxDepth = MaxRecursiveDepth;
 
             bool isSafeZone = IsWithinSafeZone(path) || IsTestMode;
 
             if (count > maxOps && !allowLargeCount)
             {
-                throw new SecurityException($"Runaway protection: File operation count ({count}) exceeds the safety limit of {maxOps}. Use 'SET ALLOW_GREATER_THAN_{maxOps}_FILE ON;' override.");
+                string typeName = type == OperationType.FileSystem ? "File" : "Internal/Mock";
+                throw new SecurityException($"Runaway protection: {typeName} operation count ({count}) exceeds the safety limit of {maxOps}. Use 'SET ALLOW_GREATER_THAN_{maxOps}_FILE ON;' override.");
             }
 
-            if (count > maxOps && allowLargeCount && !isSafeZone)
+            if (count > maxOps && allowLargeCount && !isSafeZone && type == OperationType.FileSystem)
             {
                 var zones = string.Join(", ", ApprovedSafeZones);
-                throw new SecurityException($"Runaway protection: File operation count ({count}) override is only permitted within an approved safe zone. Path: '{path}'. Safe Zones: [{zones}]");
+                throw new SecurityException($"Runaway protection: Operation count ({count}) override is only permitted within an approved safe zone. Path: '{path}'. Safe Zones: [{zones}]");
             }
 
             if (count > maxOps && allowLargeCount && isSafeZone)
             {
-                _logger.Warning("Security Override: Large file operation count ({Count}) authorized via safe zone '{Path}'.", count, path);
+                _logger.Warning("Security Override: Large operation count ({Count}) authorized via safe zone '{Path}'.", count, path);
             }
 
             if (depth > maxDepth && !allowDeepRecursion)

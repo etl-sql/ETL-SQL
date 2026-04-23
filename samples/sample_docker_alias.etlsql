@@ -17,13 +17,13 @@ CREATE CONNECTION ms ON MSSQL(@ms_conn);
 CREATE CONNECTION pg ON POSTGRES(@pg_conn);
 
 -- 4. Management commands
-dms STOP;    -- Persist state but stop container
+STOP DOCKER dmsP;    -- Persist state but stop container
 PRINT('DMS stopped');
 
-dms START;   -- Resume
+START DOCKER dms;   -- Resume
 PRINT('DMS resumed');
 
 -- 5. Cleanup
-dms CLOSE;   -- Stop and dispose
-dpost CLOSE;
+CLOSE DOCKER dms;   -- Stop and dispose
+CLOSE DOCKER dpost;
 PRINT('Containers closed');

@@ -107,7 +107,7 @@ END";
             {
                 yield return new DataTable(); // Return empty to avoid crash if called
             }
-            public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => throw new NotImplementedException();
+            public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => throw new NotImplementedException();
             public Task<IEnumerable<string>> GetColumnsAsync() => Task.FromResult(Enumerable.Empty<string>());
             public Task<IEnumerable<string>> GetColumnsAsync(string tableName) => Task.FromResult(Enumerable.Empty<string>());
             public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult(Enumerable.Empty<string>());

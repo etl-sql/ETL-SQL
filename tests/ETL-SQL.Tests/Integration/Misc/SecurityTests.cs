@@ -8,6 +8,7 @@ using ETL_SQL.App;
 using ETL_SQL.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Spectre.Console;
+using System.Linq;
 
 namespace ETL_SQL.Tests.Integration
 {
@@ -112,6 +113,7 @@ namespace ETL_SQL.Tests.Integration
             }
             return content;
         }
+
         [Fact]
         public void TestSafeZoneRunawayProtection()
         {
@@ -122,13 +124,26 @@ namespace ETL_SQL.Tests.Integration
             
             security.ApprovedSafeZones.Add(safePath);
             
+            // 1. FileSystem Limit (100)
             // Should allow override in safe zone
-            security.CheckRunawayProtection(101, 1, allowLargeCount: true, allowDeepRecursion: false, path: safePath + "\\file.csv");
+            security.CheckRunawayProtection(OperationType.FileSystem, 101, 1, allowLargeCount: true, allowDeepRecursion: false, path: safePath + "\\file.csv");
             
             // Should FAIL override in neutral zone
             Assert.Throws<ETL_SQL.Services.SecurityException>(() => 
-                security.CheckRunawayProtection(101, 1, allowLargeCount: true, allowDeepRecursion: false, path: neutralPath + "\\file.csv")
+                security.CheckRunawayProtection(OperationType.FileSystem, 101, 1, allowLargeCount: true, allowDeepRecursion: false, path: neutralPath + "\\file.csv")
             );
+
+            // 2. EngineInternal/Mock Limit (100,000)
+            // Should allow up to 100k without override
+            security.CheckRunawayProtection(OperationType.EngineInternal, 99999, 1, allowLargeCount: false, allowDeepRecursion: false);
+            
+            // Should fail at 100,001 without override
+            Assert.Throws<ETL_SQL.Services.SecurityException>(() => 
+                security.CheckRunawayProtection(OperationType.EngineInternal, 100001, 1, allowLargeCount: false, allowDeepRecursion: false)
+            );
+
+            // Should allow override for Internal if requested (though usually not needed)
+            security.CheckRunawayProtection(OperationType.EngineInternal, 100001, 1, allowLargeCount: true, allowDeepRecursion: false);
         }
 
         [Fact]
@@ -218,6 +233,67 @@ namespace ETL_SQL.Tests.Integration
             // Internal bypass should allow even scripts (for session logic)
             security.IsInternalOperation = true;
             security.ValidateWriteAccess("internal.etlsql");
+        }
+
+        [Fact]
+        public void TestRestrictedMode_AllowsTemp()
+        {
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
+            security.IsTestMode = false;
+            security.ProtectionMode = PathProtectionMode.Restricted;
+
+            // Should allow common temp paths now
+            security.ValidatePath("C:\\tmp\\data.csv");
+            security.ValidatePath("C:\\temp\\log.txt");
+            security.ValidatePath("/tmp/session.json");
+            
+            // Should still block OS directories
+            Assert.Throws<SecurityException>(() => security.ValidatePath("C:\\Windows\\system.ini"));
+            Assert.Throws<SecurityException>(() => security.ValidatePath("/etc/passwd"));
+        }
+
+        [Fact]
+        public void TestDefinedMode_EnforcesSafeZones()
+        {
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
+            security.IsTestMode = false;
+            security.ProtectionMode = PathProtectionMode.Defined;
+            var safePath = "C:\\ApprovedZone";
+            security.ApprovedSafeZones.Add(safePath);
+
+            // Should allow safe zone
+            security.ValidatePath(safePath + "\\data.csv");
+
+            // Should block everything else (even temp)
+            Assert.Throws<SecurityException>(() => security.ValidatePath("C:\\tmp\\data.csv"));
+            Assert.Throws<SecurityException>(() => security.ValidatePath("C:\\Data\\file.txt"));
+        }
+
+        [Fact]
+        public void TestUnrestrictedMode_BypassAll()
+        {
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
+            security.IsTestMode = false;
+            security.ProtectionMode = PathProtectionMode.Unrestricted;
+
+            // Should allow EVERYTHING
+            security.ValidatePath("C:\\Windows\\system.ini");
+            security.ValidatePath("/etc/passwd");
+            security.ValidatePath("C:\\Users\\chuck\\.ssh\\id_rsa");
+        }
+
+        [Fact]
+        public void TestSafeZone_LogAuditForSensitivePaths()
+        {
+            var security = new ETL_SQL.Services.SecurityService(NullLogger.Instance);
+            security.IsTestMode = false;
+            security.ProtectionMode = PathProtectionMode.Restricted;
+            
+            var windowsZone = "C:\\Windows";
+            security.ApprovedSafeZones.Add(windowsZone);
+
+            // Should allow because it's in an Approved Safe Zone, despite being sensitive
+            security.ValidatePath(windowsZone + "\\system.ini");
         }
     }
 }

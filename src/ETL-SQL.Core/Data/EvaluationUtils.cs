@@ -56,17 +56,33 @@ namespace ETL_SQL.Core.Data
             if (a.IsNull()) return -1;
             if (b.IsNull()) return 1;
 
-            string sa = a.ToString() ?? "";
-            string sb = b.ToString() ?? "";
+            string sa = a?.ToString() ?? "";
+            string sb = b?.ToString() ?? "";
 
-            if (decimal.TryParse(sa, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var da) && 
-                decimal.TryParse(sb, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var db)) 
+            decimal da, db;
+            try
+            {
+                // Attempt to parse as decimal for precision, allow scientific notation
+                da = decimal.Parse(a?.ToString() ?? "0", System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture);
+                db = decimal.Parse(b?.ToString() ?? "0", System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture);
                 return da.CompareTo(db);
+            }
+            catch
+            {
+                // Fallback to date or string comparison
+            }
 
-            if (SafeTryParseDate(sa, out var dta) && SafeTryParseDate(sb, out var dtb)) 
+            if (TryToDateTime(a, out var dta) && TryToDateTime(b, out var dtb)) 
                 return dta.CompareTo(dtb);
 
             return string.Compare(sa, sb, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool TryToDateTime(object? val, out DateTime dt)
+        {
+            if (val is DateTime d) { dt = d; return true; }
+            if (val is DateTimeOffset dto) { dt = dto.DateTime; return true; }
+            return SafeTryParseDate(val?.ToString() ?? "", out dt);
         }
 
         public static bool SafeTryParseDate(string s, out DateTime dt)

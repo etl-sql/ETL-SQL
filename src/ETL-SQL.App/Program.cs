@@ -30,15 +30,15 @@ namespace ETL_SQL
         /// <returns>Exit code (0 for success, non-zero for failure).</returns>
         static async Task<int> Main(string[] args)
         {
-            try 
+            try
             {
                 // Diagnostic breadcrumb for IDEs
                 Console.Error.WriteLine("[PROC_START] ETL-SQL Engine process identified.");
-                
+
                 ServiceProvider = DependencyInjectionSetup.BuildServiceProvider();
                 Console.Error.WriteLine("[DI_READY] Dependency injection logic completed.");
-                
-                
+
+
                 // Start scheduler
                 try
                 {

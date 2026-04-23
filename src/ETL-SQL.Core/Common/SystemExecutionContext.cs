@@ -91,6 +91,7 @@ namespace ETL_SQL.Core.Common
         public int MaxMessages { get; set; } = 1000;
         public Func<string, Task<bool>>? OnPrompt { get; set; }
         public bool IsPersistentSession { get; set; }
+        public List<object?>? Parameters { get; set; }
 
         public Stack<Row> OuterRowStack { get; } = new();
         public LruCache<Statement, object?> SubqueryCache { get; } = new(500);
@@ -191,7 +192,7 @@ namespace ETL_SQL.Core.Common
         public Task CommitTransaction() => Task.CompletedTask;
         public Task RollbackTransaction(string? name = null) => Task.CompletedTask;
 
-        public void Log(string message, ConsoleColor color = ConsoleColor.White) { }
+        public void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true) { }
 
         public Task<object?> EvaluateValue(Expression? expr, Row context) => Task.FromResult<object?>(null);
         public IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context) => AsyncEnumerable.Empty<Row>();
@@ -212,7 +213,7 @@ namespace ETL_SQL.Core.Common
         public bool FunctionExists(string name) => false;
         public bool ProcedureExists(string name) => false;
 
-        public void IncrementOperationCount(string? path = null, int count = 1) { }
+        public void IncrementOperationCount(OperationType type = OperationType.FileSystem, string? path = null, int count = 1) { }
         public List<string> GetIndexedColumns(Expression? cond, string alias) => new();
 
         public Task EvaluateCreateTable(CreateTableStatement stmt) => Task.CompletedTask;

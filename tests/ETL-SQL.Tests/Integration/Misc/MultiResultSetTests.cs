@@ -80,7 +80,7 @@ namespace ETL_SQL.Tests.Integration
         }
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000) { yield break; }
-        public Task WriteBatches(IAsyncEnumerable<DataTable> batches) => Task.CompletedTask;
+        public Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false) => Task.CompletedTask;
         public Task<string> GetVersionAsync() => Task.FromResult("Mock 1.0");
         public HashSet<string> GetSupportedFunctions() => new();
         public Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult(Enumerable.Empty<string>());

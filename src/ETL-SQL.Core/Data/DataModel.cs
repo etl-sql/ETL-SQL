@@ -261,6 +261,7 @@ namespace ETL_SQL.Data
         public List<string> ColumnNames => Schema.ColumnNames.ToList();
         
         public long ExecutionTimeMs { get; set; }
+        public int RowsAffected { get; set; } = -1; // -1 means not applicable/unknown
         public int TotalRowsMatched { get; set; }
         public int ResultSetIndex { get; set; }
         public bool IsCapped { get; set; }

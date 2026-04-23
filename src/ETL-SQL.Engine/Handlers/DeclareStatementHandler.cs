@@ -52,9 +52,8 @@ namespace ETL_SQL.Engine.Handlers
             {
                 if (context.VarContext.CurrentMetadata.TryGetValue(stmt.VariableName, out var existingMeta) && existingMeta.IsDeclared)
                 {
-                    throw new ExecutionException($"Variable {stmt.VariableName} has already been declared in this scope (Line {stmt.Line}, Col {stmt.Column}).");
+                    _logger.Debug("Variable {VariableName} already exists; overwriting as requested.", stmt.VariableName);
                 }
-                // Allowed if it was just injected as a parameter (IsDeclared = false)
             }
 
             var metadata = new VariableMetadata 

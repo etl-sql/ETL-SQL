@@ -9,6 +9,55 @@ namespace ETL_SQL.Core.Parser.Components
     {
         public DataParser(IParser parser, StatementParser parent) : base(parser, parent) { }
 
+        public Statement ParseGenerate(Token startToken)
+        {
+            var rowCount = ParseExpression();
+            Consume(TokenType.ROWS, "Expected 'ROWS' after count");
+            Consume(TokenType.INTO, "Expected 'INTO' after ROWS");
+            var target = _parser.ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);
+
+            Dictionary<string, Expression>? options = null;
+            if (Match(TokenType.WITH))
+            {
+                options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+                Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                while (!Match(TokenType.RPAREN))
+                {
+                    var keyTok = Advance();
+                    Consume(TokenType.EQUALS, "Expected '='");
+                    var valTok = ParseExpression();
+                    options[keyTok.Value] = valTok;
+                    if (!Match(TokenType.COMMA))
+                    {
+                        Consume(TokenType.RPAREN, "Expected ')' or ','");
+                        break;
+                    }
+                }
+            }
+
+            Consume(TokenType.AS, "Expected 'AS' before generation rules");
+            Consume(TokenType.LPAREN, "Expected '(' before rules list");
+
+            var rules = new List<GenerateRule>();
+            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+            {
+                var colName = ConsumeIdentifier("Expected column name").Value;
+                Consume(TokenType.EQUALS, "Expected '='");
+                var ruleStr = Consume(TokenType.STRING, "Expected rule string (e.g. 'SEQUENCE(...)')").Value;
+                rules.Add(new GenerateRule(colName, ruleStr.Trim('\'', '\"')));
+                if (!Match(TokenType.COMMA)) break;
+            }
+            Consume(TokenType.RPAREN, "Expected ')' after rules list");
+
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+
+            return new GenerateStatement(rowCount, target, rules, options)
+            {
+                Line = startToken.Line,
+                Column = startToken.Column
+            };
+        }
+
         public Statement ParseCreate(Token startToken)
         {
             bool orAlter = false;
@@ -435,8 +484,11 @@ namespace ETL_SQL.Core.Parser.Components
                 }
             }
 
+            OutputClause? output = null;
+            if (Match(TokenType.OUTPUT)) output = _parser.ParseOutputClause();
+
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new MergeStatement(targetTable, targetAlias, sourceTable, sourceAlias, onClause, whenMatched, whenNotMatched)
+            return new MergeStatement(targetTable, targetAlias, sourceTable, sourceAlias, onClause, whenMatched, whenNotMatched, output)
             {
                 Line = startToken.Line,
                 Column = startToken.Column
@@ -502,6 +554,8 @@ namespace ETL_SQL.Core.Parser.Components
                 bool hasParen = Match(TokenType.LPAREN);
                 if (hasParen && _parser.Current.Type == TokenType.RPAREN)
                     target = new LiteralExpression("", TokenType.STRING);
+                else if (!hasParen && (_parser.Current.Type == TokenType.WITH || _parser.Current.Type == TokenType.SEMICOLON))
+                    target = null;
                 else
                     target = ParseExpression();
                 if (hasParen) Consume(TokenType.RPAREN, "Expected ')' after target string");
@@ -645,8 +699,11 @@ namespace ETL_SQL.Core.Parser.Components
                     bool hasParen = Match(TokenType.LPAREN);
                     if (hasParen && _parser.Current.Type == TokenType.RPAREN)
                         target = new LiteralExpression("", TokenType.STRING);
+                    else if (!hasParen && (_parser.Current.Type == TokenType.WITH || _parser.Current.Type == TokenType.SEMICOLON))
+                        target = null;
                     else
                         target = ParseExpression();
+
                     if (hasParen) Consume(TokenType.RPAREN, "Expected ')' after target string");
                 }
             }
@@ -911,7 +968,7 @@ namespace ETL_SQL.Core.Parser.Components
                     var valExpr = ParseExpression();
                     if (valExpr is LiteralExpression lit && lit.Type == TokenType.NUMBER)
                     {
-                        int val = (int)Convert.ChangeType(lit.Value, typeof(int));
+                        int val = (int)(Convert.ChangeType(lit.Value, typeof(int)) ?? 0);
                         if (key == "MAX_RETRIES") maxRetries = val;
                         else if (key == "RETRY_DELAY" || key == "RETRY_DELAY_SECONDS") retryDelay = val;
                         else throw new SyntaxException($"Unknown JOB option: {key}", keyTok.Line, keyTok.Column);

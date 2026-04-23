@@ -33,7 +33,7 @@ namespace ETL_SQL.TUI.UI
         internal readonly AutocompleteController _autocomplete;
         internal readonly InputHandler _input;
         private readonly Dictionary<string, IDataSource> _connections;
-        
+
         private readonly SecurityService _security;
         private readonly EditorFileHandler _fileHandler;
         private string? _promptResult;
@@ -66,7 +66,6 @@ namespace ETL_SQL.TUI.UI
             if (_logger is LoggerService ls)
             {
                 ls.SuppressConsole = true;
-                ls.OnMessage += (msg, color) => _evaluator.Log(msg, color);
             }
         }
 
@@ -104,7 +103,7 @@ namespace ETL_SQL.TUI.UI
         {
             try { Console.Clear(); } catch (Exception ex) { _logger.Debug("[ConsoleEditor] Console.Clear() failed: {Message}", ex.Message); }
             _metadata.RefreshConnections(_buffer.GetText(), force: true);
-            
+
             while (!_isExiting)
             {
                 _renderer.Render(_buffer, _evaluator, _filePath, _isDirty, Console.WindowWidth, Console.WindowHeight);
@@ -146,16 +145,16 @@ namespace ETL_SQL.TUI.UI
             _renderer.PromptIsSecret = isSecret;
             _promptResolved = false;
             _promptResult = null;
-            
+
             while (!_promptResolved && !_isExiting)
             {
                 _renderer.Render(_buffer, _evaluator, _filePath, _isDirty, Console.WindowWidth, Console.WindowHeight);
                 var key = Console.ReadKey(true);
                 await _input.HandlePromptKey(key);
             }
-            
+
             var result = _promptResult;
-            
+
             _renderer.PromptTitle = null;
             _renderer.PromptValue = "";
             _renderer.PromptCursor = 0;
@@ -163,13 +162,13 @@ namespace ETL_SQL.TUI.UI
             _renderer.PromptIsSecret = false;
             _promptResolved = false;
             _promptResult = null;
-            
+
             return result;
         }
 
         /// <summary>Resolves the current prompt with a value.</summary>
-        public void ResolvePrompt(string? value) 
-        { 
+        public void ResolvePrompt(string? value)
+        {
             _promptResult = value;
             _promptResolved = true;
         }
@@ -185,13 +184,13 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>Saves the current buffer state for undo.</summary>
         public void SaveUndoState() => _undo.SaveState(_buffer.Lines);
-        
+
         /// <summary>Restores the previous buffer state.</summary>
         public void Undo() { var lines = _undo.Undo(_buffer.Lines); if (lines != null) _buffer.Load(lines); }
-        
+
         /// <summary>Restores the state that was undone.</summary>
         public void Redo() { var lines = _undo.Redo(_buffer.Lines); if (lines != null) _buffer.Load(lines); }
-        
+
         /// <summary>Marks the current document as modified.</summary>
         public void MarkDirty() => _isDirty = true;
 
@@ -257,7 +256,7 @@ namespace ETL_SQL.TUI.UI
         }
 
         /// <summary>Executes the entire script or the current selection.</summary>
-        public async Task RunScript() 
+        public async Task RunScript()
         {
             var selectedText = _buffer.GetSelectedText();
             if (!string.IsNullOrEmpty(selectedText))
@@ -282,10 +281,10 @@ namespace ETL_SQL.TUI.UI
 
         private async Task ExecuteSource(string source)
         {
-            try 
-            { 
+            try
+            {
                 var totalSw = System.Diagnostics.Stopwatch.StartNew();
-                
+
                 var lexSw = System.Diagnostics.Stopwatch.StartNew();
                 var tokens = new Lexer(source).Tokenize();
                 lexSw.Stop();
@@ -295,7 +294,7 @@ namespace ETL_SQL.TUI.UI
                 var script = new Parser(tokens).Parse();
                 parseSw.Stop();
                 _evaluator.LastParseTimeMs = parseSw.ElapsedMilliseconds;
-                
+
                 // 1. Show Parser Diagnostics
                 foreach (var diag in script.Diagnostics)
                 {
@@ -303,11 +302,12 @@ namespace ETL_SQL.TUI.UI
                 }
 
                 // 2. Run Linter
-                var lintContext = new DefaultLintContext {
+                var lintContext = new DefaultLintContext
+                {
                     Metadata = new ConsoleMetadataProvider(_metadata),
                     DocumentUri = _filePath
                 };
-                
+
                 var linter = new Linter();
                 foreach (var type in typeof(ILintRule).Assembly.GetTypes()
                     .Where(t => typeof(ILintRule).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract))
@@ -433,13 +433,13 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>Deletes the entire line at the current cursor position.</summary>
         public void DeleteLine() { SaveUndoState(); _buffer.DeleteLine(); MarkDirty(); }
-        
+
         /// <summary>Duplicates the current line below the cursor.</summary>
         public void DuplicateLine() { SaveUndoState(); _buffer.DuplicateLine(); MarkDirty(); }
 
         /// <summary>Moves the cursor to the top of the document.</summary>
         public void GoToTop() { _buffer.Top(); }
-        
+
         /// <summary>Moves the cursor to the bottom of the document.</summary>
         public void GoToBottom() { _buffer.Bottom(); }
     }

@@ -5,6 +5,8 @@ using Xunit;
 using ETL_SQL.Services;
 using ETL_SQL.Common;
 
+using ETL_SQL.Core;
+
 namespace ETL_SQL.Tests.Integration.Misc
 {
     public class ConfigVerificationTests
@@ -33,7 +35,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             
             // Verify logic reflects these values
             // 501 should fail, 500 should pass (if not in safe zone and not allowed large count)
-            var ex = Assert.Throws<SecurityException>(() => securityService.CheckRunawayProtection(501, 0, false, false, "C:\\external\\path.csv"));
+            var ex = Assert.Throws<SecurityException>(() => securityService.CheckRunawayProtection(OperationType.FileSystem, 501, 0, false, false, "C:\\external\\path.csv"));
             Assert.Contains("500", ex.Message);
         }
     }

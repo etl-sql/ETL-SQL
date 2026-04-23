@@ -1,0 +1,53 @@
+-- Reproduction script for FLATFILE and PARQUET issues
+
+PRINT '--- Testing FLATFILE INSERT ---';
+BEGIN TRY
+    DROP CONNECTION IF EXISTS MockGenerator;
+    CREATE CONNECTION MockGenerator ON FLATFILE('TestData\partner_feed.csv') WITH (HEADER='ON');
+    
+    INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) 
+    VALUES ('TXN100', 50.00, 'PAID', GETDATE());
+    
+    PRINT 'FLATFILE INSERT successful (Unexpected!)';
+END TRY
+BEGIN CATCH
+    PRINT 'FLATFILE INSERT failed as expected: ' + ERROR_MESSAGE();
+END CATCH
+
+PRINT '';
+PRINT '--- Testing PARQUET SELECT INTO ---';
+BEGIN TRY
+    DROP CONNECTION IF EXISTS m;
+    DROP CONNECTION IF EXISTS p;
+    CREATE CONNECTION m ON MOCKDB();
+    CREATE CONNECTION p ON PARQUET('TestData\Users.parquet');
+    
+    SELECT * INTO p.FILE FROM m.Users;
+    
+    PRINT 'PARQUET SELECT INTO finished.';
+    
+    -- Verify if file exists
+    IF FILE_EXISTS('TestData\Users.parquet')
+        PRINT 'PARQUET file exists.';
+    ELSE
+        PRINT 'PARQUET file DOES NOT exist!';
+END TRY
+BEGIN CATCH
+    PRINT 'PARQUET SELECT INTO failed: ' + ERROR_MESSAGE();
+END CATCH
+
+PRINT '';
+PRINT '--- Testing JSON Table FILE ---';
+BEGIN TRY
+    DROP CONNECTION IF EXISTS j;
+    -- Create a dummy json file
+    CREATE CONNECTION dummy_json ON FLATFILE('TestData\dummy.json');
+    INSERT INTO dummy_json.FILE (val) VALUES ('{"test": 1}');
+    
+    CREATE CONNECTION j ON JSON('TestData\dummy.json');
+    SELECT * FROM j.FILE;
+    PRINT 'JSON SELECT successful.';
+END TRY
+BEGIN CATCH
+    PRINT 'JSON SELECT failed: ' + ERROR_MESSAGE();
+END CATCH

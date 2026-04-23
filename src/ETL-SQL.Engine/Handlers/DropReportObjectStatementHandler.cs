@@ -66,7 +66,7 @@ namespace ETL_SQL.Engine.Handlers
                                 if (!resolvedPath.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
                                     throw new ExecutionException($"Security Violation: Cannot delete non-JSON file via DROP TEMPLATE. Target: {resolvedPath}", null, stmt.Line, stmt.Column);
 
-                                context.IncrementOperationCount(resolvedPath);
+                                context.IncrementOperationCount(OperationType.FileSystem, resolvedPath);
                                 File.Delete(resolvedPath);
                                 _logger.Debug("Deleted template file: {Path}", resolvedPath);
                             }

@@ -241,6 +241,7 @@ namespace ETL_SQL.Engine
                 TrimExpression trim => await EvaluateTrim(trim, context),
                 FunctionCallExpression f => await EvaluateFunction(f, context),
                 SubqueryExpression subq => await EvaluateSubquery(subq, context),
+                ParameterExpression p => EvaluateParameter(p),
                 _ => null
             };
         }
@@ -430,6 +431,25 @@ namespace ETL_SQL.Engine
                 throw new ExecutionException($"Undeclared: {v.Name}");
                 
             return _context.GetVariable(v.Name);
+        }
+
+        /// <summary>Evaluates a parameter reference (? or ?n).</summary>
+        private object? EvaluateParameter(ParameterExpression p)
+        {
+            // First check if the index exists in the context's parameters
+            if (p.Index.HasValue)
+            {
+                if (_context.Parameters != null && p.Index.Value <= _context.Parameters.Count)
+                {
+                    return _context.Parameters[p.Index.Value - 1];
+                }
+                throw new ExecutionException($"Parameter index {p.Index} is out of range. Provided: {_context.Parameters?.Count ?? 0}");
+            }
+            
+            // For standard '?', it's usually handled by the provider (e.g. MSSQL/Postgres)
+            // But if evaluating in engine context, we might want to pop from a queue?
+            // For now, we'll throw as it's ambiguous without a specific binding context
+            throw new ExecutionException($"Positional parameter '?' is not supported in this evaluation context. Use indexed parameters (?1, ?2) instead.");
         }
 
         /// <summary>Evaluates a member access expression (e.g., row.Member or object.Property).</summary>
