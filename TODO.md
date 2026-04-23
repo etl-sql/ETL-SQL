@@ -1,7 +1,7 @@
 # ETL-SQL Development Roadmap
 ## VS Code issues
 - [ ] **On Error should go directly to the messages tab**  Currently just sits there and doesn't give you any indication of what happened until you start looking around and see a failure on the messages tab.
-- [ ] **Showing multiple results broke**  This used to work there was an arrow left and right at the bottom to switch between results.  Now it just shows the last result.
+- [x] **Showing multiple results broke**  This used to work there was an arrow left and right at the bottom to switch between results.  Now it just shows the last result.
 - [ ] **When a new script is open the results, tree, messages, and performance tab should all be cleared**  Currently they are not.  
 - [ ] **Hovering over a function should show the help for that function**  Currently it doesn't show anything.
 - [ ] **Brainstorm if linting pushdown databases is possible**

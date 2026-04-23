@@ -7,7 +7,7 @@ import { PerformanceTab } from './components/PerformanceTab';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ReportTab } from './components/ReportTab';
 import type { ResultsMessage, PerformanceMessage, VariablesMessage, ReportManifest } from './types';
-import { RefreshCw, BarChart3, Database, Terminal, Activity, GitBranch, Variable as VariableIcon, Layout, ChevronLeft, ChevronRight } from 'lucide-react';
+import { RefreshCw, BarChart3, Database, Terminal, Activity, GitBranch, Variable as VariableIcon, Layout, ChevronLeft, ChevronRight, LayoutList } from 'lucide-react';
 import { extractPipelineNodes } from './utils/pipeline_utils';
 import { extractVariables } from './utils/variable_utils';
 import { SidebarExplorer } from './components/SidebarExplorer';
@@ -25,6 +25,7 @@ function App() {
   const { messages, status, postMessage } = useVsCodeApi();
   const [activeTab, setActiveTab] = useState<TabId>('pipeline');
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
+  const [isCompareMode, setIsCompareMode] = useState(false);
 
   // Allow switching view mode via query param in browser mode
   const currentView = useMemo(() => {
@@ -126,7 +127,7 @@ function App() {
     <ErrorBoundary>
       <div className="flex-1 flex flex-row h-full w-full overflow-hidden">
         {/* Sidebar Vertical Navigation */}
-        <nav className="sidebar-nav flex flex-col items-center w-14 shrink-0 bg-[var(--bg-darker)]/40 border-r border-[var(--border)] z-10">
+        <nav className="sidebar-nav flex flex-col items-center w-14 pt-4 shrink-0 bg-[var(--bg-darker)]/40 border-r border-[var(--border)] z-10">
           {tabs.map((tab) => (
             <button
               key={tab.id}
@@ -158,37 +159,81 @@ function App() {
           {activeTab === 'pipeline' && <PipelineTab nodes={pipeline} isFinished={status === 'finished'} />}
           {activeTab === 'results' && (
              <div className="flex-1 min-h-0 p-6 flex flex-col overflow-hidden">
-                {currentResult ? (
-                  <>
-                    <ResultGrid rows={currentResult.rows} columns={currentResult.columns} />
+                {isCompareMode ? (
+                  <div className="flex-1 overflow-auto space-y-12 scrollbar-fancy pb-20">
+                    {results.map((res, idx) => (
+                      <div key={idx} className="flex flex-col gap-4 animate-fade-in" style={{ animationDelay: `${idx * 100}ms` }}>
+                        <div className="flex items-center gap-4 px-2">
+                          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[var(--border)] to-transparent" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-bold font-display uppercase tracking-[0.3em] text-indigo-400/60">Result Set</span>
+                            <span className="text-[14px] font-bold font-display text-indigo-400">{idx + 1}</span>
+                          </div>
+                          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[var(--border)] to-transparent" />
+                        </div>
+                        <div className="px-1">
+                          <ResultGrid rows={res.rows} columns={res.columns} />
+                        </div>
+                      </div>
+                    ))}
                     
-                    {/* Result Set Navigation */}
-                    {results.length > 1 && (
-                      <div className="mt-4 flex items-center justify-center gap-4 bg-[var(--bg-darker)]/60 rounded-full px-4 py-2 border border-[var(--border)] self-center animate-slide-up">
-                        <button 
-                          onClick={() => setSelectedResultIndex(Math.max(0, selectedResultIndex - 1))}
-                          disabled={selectedResultIndex === 0}
-                          className="text-[var(--muted)] hover:text-indigo-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                    {/* Floating Toggle to exit Compare Mode */}
+                    <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50">
+                       <button 
+                          onClick={() => setIsCompareMode(false)}
+                          className="flex items-center gap-2 bg-indigo-500 text-white px-4 py-2 rounded-full shadow-lg shadow-indigo-500/40 hover:bg-indigo-600 transition-all font-display font-bold uppercase tracking-wider text-[10px]"
                         >
-                          <ChevronLeft size={18} />
+                          <LayoutList size={14} />
+                          Exit Compare
                         </button>
-                        
-                        <span className="text-[10px] font-bold font-display uppercase tracking-widest text-[var(--muted)]">
-                          Result Set <span className="text-indigo-400">{selectedResultIndex + 1}</span> of <span className="text-[var(--text-primary)]">{results.length}</span>
-                        </span>
+                    </div>
+                  </div>
+                ) : (
+                  currentResult ? (
+                    <>
+                      <ResultGrid rows={currentResult.rows} columns={currentResult.columns} />
+                      
+                      {/* Result Set Navigation */}
+                      <div className="mt-4 flex items-center justify-center gap-4 bg-[var(--bg-darker)]/80 backdrop-blur-md rounded-full px-4 py-2 border border-[var(--border)] self-center animate-slide-up shadow-xl">
+                        {results.length > 1 && (
+                          <>
+                            <button 
+                              onClick={() => setSelectedResultIndex(Math.max(0, selectedResultIndex - 1))}
+                              disabled={selectedResultIndex === 0}
+                              className="text-[var(--muted)] hover:text-indigo-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                            >
+                              <ChevronLeft size={18} />
+                            </button>
+                            
+                            <span className="text-[10px] font-bold font-display uppercase tracking-widest text-[var(--muted)] min-w-[120px] text-center">
+                              Result <span className="text-indigo-400">{selectedResultIndex + 1}</span> of <span className="text-[var(--text-primary)]">{results.length}</span>
+                            </span>
+
+                            <button 
+                              onClick={() => setSelectedResultIndex(Math.min(results.length - 1, selectedResultIndex + 1))}
+                              disabled={selectedResultIndex === results.length - 1}
+                              className="text-[var(--muted)] hover:text-indigo-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                            >
+                              <ChevronRight size={18} />
+                            </button>
+
+                            <div className="w-px h-4 bg-[var(--border)] mx-1" />
+                          </>
+                        )}
 
                         <button 
-                          onClick={() => setSelectedResultIndex(Math.min(results.length - 1, selectedResultIndex + 1))}
-                          disabled={selectedResultIndex === results.length - 1}
-                          className="text-[var(--muted)] hover:text-indigo-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                          onClick={() => setIsCompareMode(true)}
+                          className={`flex items-center gap-2 px-2 py-1 rounded transition-all hover:bg-white/5 ${isCompareMode ? 'text-indigo-400' : 'text-[var(--muted)]'}`}
+                          title="Compare All Results"
                         >
-                          <ChevronRight size={18} />
+                          <LayoutList size={14} />
+                          <span className="text-[9px] font-bold uppercase tracking-tighter">Compare</span>
                         </button>
                       </div>
-                    )}
-                  </>
-                ) : (
-                  <EmptyState icon={BarChart3} message="No Result Set Available" />
+                    </>
+                  ) : (
+                    <EmptyState icon={BarChart3} message="No Result Set Available" />
+                  )
                 )}
              </div>
           )}
