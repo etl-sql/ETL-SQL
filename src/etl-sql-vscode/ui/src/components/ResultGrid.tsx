@@ -24,7 +24,13 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
       columns.map((col) =>
         columnHelper.accessor(col, {
           header: col,
-          cell: (info) => info.getValue(),
+          cell: (info) => {
+            const val = info.getValue();
+            if (val === null || val === undefined) {
+              return <span className="opacity-30 italic text-[10px] tracking-tighter">NULL</span>;
+            }
+            return typeof val === 'object' ? JSON.stringify(val) : val;
+          },
           footer: col,
         })
       ),
