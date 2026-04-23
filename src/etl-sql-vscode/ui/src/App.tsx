@@ -7,7 +7,7 @@ import { PerformanceTab } from './components/PerformanceTab';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ReportTab } from './components/ReportTab';
 import type { ResultsMessage, PerformanceMessage, VariablesMessage, ReportManifest } from './types';
-import { RefreshCw, BarChart3, Database, Terminal, Activity, GitBranch, Variable as VariableIcon, Layout } from 'lucide-react';
+import { RefreshCw, BarChart3, Database, Terminal, Activity, GitBranch, Variable as VariableIcon, Layout, ChevronLeft, ChevronRight } from 'lucide-react';
 import { extractPipelineNodes } from './utils/pipeline_utils';
 import { extractVariables } from './utils/variable_utils';
 import { SidebarExplorer } from './components/SidebarExplorer';
@@ -24,6 +24,7 @@ type TabId = 'pipeline' | 'results' | 'messages' | 'performance' | 'variables' |
 function App() {
   const { messages, status, postMessage } = useVsCodeApi();
   const [activeTab, setActiveTab] = useState<TabId>('pipeline');
+  const [selectedResultIndex, setSelectedResultIndex] = useState(0);
 
   // Allow switching view mode via query param in browser mode
   const currentView = useMemo(() => {
@@ -67,10 +68,21 @@ function App() {
   // Extract relevant state from messages with defensive checks
   const pipeline = useMemo(() => extractPipelineNodes(messages), [messages]);
 
-  const latestResult = useMemo(() => {
-    const resultMessages = messages.filter(m => m.type === 'results') as ResultsMessage[];
-    return resultMessages.length > 0 ? resultMessages[resultMessages.length - 1] : null;
+  const results = useMemo(() => {
+    return messages.filter(m => m.type === 'results') as ResultsMessage[];
   }, [messages]);
+
+  // Auto-advance to latest result set when a new one arrives
+  useState(() => {
+    if (results.length > 0) setSelectedResultIndex(results.length - 1);
+  });
+
+  // Watch for length changes to auto-advance
+  useMemo(() => {
+    if (results.length > 0) setSelectedResultIndex(results.length - 1);
+  }, [results.length]);
+
+  const currentResult = results[selectedResultIndex] || results[results.length - 1];
 
   const perf = useMemo(() => {
     const perfMessages = messages.filter(m => m.type === 'performance') as PerformanceMessage[];
@@ -96,7 +108,7 @@ function App() {
 
   const tabs: { id: TabId, label: string, icon: any, badge?: number }[] = [
     { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
-    { id: 'results', label: 'Results', icon: Database, badge: latestResult?.rows.length },
+    { id: 'results', label: 'Results', icon: Database, badge: results.length > 1 ? results.length : currentResult?.rows.length },
     { id: 'messages', label: 'Messages', icon: Terminal },
     { id: 'performance', label: 'Performance', icon: Activity },
     { id: 'variables', label: 'Variables', icon: VariableIcon, badge: runtimeVars.length + scriptVars.length },
@@ -146,8 +158,35 @@ function App() {
           {activeTab === 'pipeline' && <PipelineTab nodes={pipeline} isFinished={status === 'finished'} />}
           {activeTab === 'results' && (
              <div className="flex-1 min-h-0 p-6 flex flex-col overflow-hidden">
-                {latestResult ? (
-                  <ResultGrid rows={latestResult.rows} columns={latestResult.columns} />
+                {currentResult ? (
+                  <>
+                    <ResultGrid rows={currentResult.rows} columns={currentResult.columns} />
+                    
+                    {/* Result Set Navigation */}
+                    {results.length > 1 && (
+                      <div className="mt-4 flex items-center justify-center gap-4 bg-[var(--bg-darker)]/60 rounded-full px-4 py-2 border border-[var(--border)] self-center animate-slide-up">
+                        <button 
+                          onClick={() => setSelectedResultIndex(Math.max(0, selectedResultIndex - 1))}
+                          disabled={selectedResultIndex === 0}
+                          className="text-[var(--muted)] hover:text-indigo-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <ChevronLeft size={18} />
+                        </button>
+                        
+                        <span className="text-[10px] font-bold font-display uppercase tracking-widest text-[var(--muted)]">
+                          Result Set <span className="text-indigo-400">{selectedResultIndex + 1}</span> of <span className="text-[var(--text-primary)]">{results.length}</span>
+                        </span>
+
+                        <button 
+                          onClick={() => setSelectedResultIndex(Math.min(results.length - 1, selectedResultIndex + 1))}
+                          disabled={selectedResultIndex === results.length - 1}
+                          className="text-[var(--muted)] hover:text-indigo-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                        >
+                          <ChevronRight size={18} />
+                        </button>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <EmptyState icon={BarChart3} message="No Result Set Available" />
                 )}

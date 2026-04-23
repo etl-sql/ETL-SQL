@@ -9,7 +9,7 @@
 - [ ] **Paths surrounded in "" the "" should be ignored** When you paste a path in a connection string with "" surrounding it the "" should be ignored.  
 - [ ] **Sometimes when executing there is a serious lag**  First why is it so slow to execute?  Second no visual indicator that its working.  Third the execute button should be disabled until its done running.
 - [x] **PARQUET was not being recognized by the suggestion engine**  I typed it all out but it never showed up as a suggestion. 
-- [ ] **Results pane doesn't show NULL only result** Using this code:
+- [x] **Results pane doesn't show NULL only result** Using this code:
 ```sql
 DECLARE @id int;
 SELECT @id;
@@ -23,9 +23,16 @@ This is what it should be:
 ENCRYPT_FILE('src', 'dest', 'password' [,OVERWRITE=ON|OFF])
 DECRYPT_FILE('src', 'dest', 'password' [,OVERWRITE=ON|OFF])
 ```
+-[x] **Variable already exists when running a second time**  I get the error: Variable @id has already been declared in this scope (Line 1, Col 9).  I like that it holds onto values so you can run the script a piece at a time.  For most objects we have the DROP IF EXISTS command.  For variables if we run them a second time it should just overwrite the value.
 
--[x] **Variable already exists when running a second time**  I get the error: Variable @id has already been declared in this scope (Line 1, Col 9).  I like that it holds onto values so you can run the script a piece at a time.  For most objects we have the DROP IF EXISTS command.  For variables if we run them a second time it should just overwrite the value.  
-
+-[ ] **Add CTE support for column names**  A valid CTE can also be written as:
+```sql
+WITH CTE (Col1, Col2, Col3) AS (
+    SELECT Col1, Col2, Col3 FROM #TempTable
+)
+SELECT * FROM CTE;
+```
+  
 ## Security
 
 ## Documentation

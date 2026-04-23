@@ -21,6 +21,10 @@ export const mockTrace: ProtocolMessage[] = [
         { id: 1, username: 'admin', email: 'admin@mock.db' },
         { id: 2, username: 'user1', email: 'user1@mock.db' }
     ]},
+    { type: 'message', text: 'Executing: SELECT COUNT(*) FROM m.Orders', level: 'sys' },
+    { type: 'results', columns: ['count'], rows: [
+        { count: 12450 }
+    ]},
     { type: 'performance', metrics: {
         executionMs: 85,
         rowsProcessed: 5000,
