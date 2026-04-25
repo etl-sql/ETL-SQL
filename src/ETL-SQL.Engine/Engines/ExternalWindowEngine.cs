@@ -94,6 +94,7 @@ namespace ETL_SQL.Engine.Engines
             }
 
             _logger.WriteLine($"[yellow]HYPER-SCALE: Processing {windowCols.Count} window functions across {groups.Count} signature groups.[/]");
+            _context.PartitionsCount = groups.Count;
 
             IAsyncEnumerable<Row> currentStream = inputStream;
 

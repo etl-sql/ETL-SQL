@@ -146,13 +146,23 @@ namespace ETL_SQL.Core
         // Support for stress tests
         public static void Generate(int count = 1000000)
         {
-            string filePath = "TestData/test_stress_BigTable.csv";
-            using (var sw = new System.IO.StreamWriter(filePath))
+            // 1. BigTable
+            string bigPath = "TestData/test_stress_BigTable.csv";
+            using (var sw = new System.IO.StreamWriter(bigPath))
             {
                 sw.WriteLine("ID,Value,Data");
                 var rnd = new Random();
                 for (int i = 1; i <= count; i++)
                     sw.WriteLine($"{rnd.Next(1, 1500)},Val_{i},RandomData_{rnd.Next(1000, 9999)}");
+            }
+
+            // 2. SmallTable (Expected by tests)
+            string smallPath = "TestData/test_stress_SmallTable.csv";
+            using (var sw = new System.IO.StreamWriter(smallPath))
+            {
+                sw.WriteLine("ID,Name");
+                for (int i = 1; i <= 1000; i++)
+                    sw.WriteLine($"{i},User_{i}");
             }
         }
     }

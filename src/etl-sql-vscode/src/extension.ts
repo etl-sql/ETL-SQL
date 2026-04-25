@@ -48,6 +48,25 @@ export function activate(context: vscode.ExtensionContext) {
         sidebarProvider.postMessage({ type: 'variables', variables: vars });
     });
 
+    let lastActiveUri: string | undefined = vscode.window.activeTextEditor?.document.uri.toString();
+
+    context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(editor => {
+        if (editor && (editor.document.languageId === 'etlsql' || editor.document.fileName.endsWith('.rptsql'))) {
+            const currentUri = editor.document.uri.toString();
+            if (currentUri !== lastActiveUri) {
+                // Clear UI on script switch to ensure clean state
+                ResultsPanel.postMessage({ type: 'clear' });
+                connectionsProvider.clearVariables();
+                sidebarProvider.postMessage({ type: 'variables', variables: [] });
+                lastActiveUri = currentUri;
+            }
+            
+            // Notify webviews of context change
+            ResultsPanel.postMessage({ type: 'activeEditorChanged', uri: currentUri });
+            sidebarProvider.postMessage({ type: 'activeEditorChanged', uri: currentUri });
+        }
+    }));
+
     // Register Results Panel (Bottom Panel)
     const resultsProvider = ResultsPanel.register(context);
     ResultsPanel.setOnMessageReceived((msg) => {
@@ -135,6 +154,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.runSelection', () => {
         runEtlSql(context, true);
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.stopScript', () => {
+        ReplManager.getInstance().stop();
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.showLineage', () => {
@@ -250,6 +273,11 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
         return;
     }
 
+    if (ReplManager.getInstance().isRunning()) {
+        vscode.window.showWarningMessage("ETL-SQL: A script is already running. Stop it first or wait for completion.");
+        return;
+    }
+
     const document = editor.document;
     if (!selectionOnly) {
         const diagnostics = vscode.languages.getDiagnostics(document.uri);
@@ -274,7 +302,9 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
 
     if (runMethod === 'Webview (Grid)') {
         ResultsPanel.postMessage({ type: 'clear' });
+        ResultsPanel.postMessage({ type: 'status', status: 'running' });
         connectionsProvider.clearVariables();
+        sidebarProvider.postMessage({ type: 'variables', variables: [] });
         ResultsPanel.postMessage({ type: 'message', text: `Executing: ${fileName}` });
 
         const sessionId = getSessionId(document);
@@ -284,10 +314,12 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
         replArgs.push('--perf', '--json', '--session', sessionId);
 
         try {
+            vscode.commands.executeCommand('setContext', 'etlsql.isRunning', true);
             await ReplManager.getInstance().execute(scriptText, exePath, replArgs);
         } catch (err: any) {
             vscode.window.showErrorMessage(`ETL-SQL Error: ${err.message}`);
         } finally {
+            vscode.commands.executeCommand('setContext', 'etlsql.isRunning', false);
             connectionsProvider.refresh();
             if (client && client.state === 2) {
                 client.sendNotification('etlsql/refreshMetadata', { uri: document.uri.toString() });

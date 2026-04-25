@@ -39,9 +39,13 @@ namespace ETL_SQL.Core.Data
             ["CHAR"] = v => v.ToString(),
             ["NCHAR"] = v => v.ToString(),
             ["JSON"] = v => v.ToString(),
+            ["VARCHAR2"] = v => v.ToString(),
             ["XML"] = v => v.ToString(),
             ["PATH"] = v => v.ToString(),
             ["ENCRYPTED"] = v => v.ToString(),
+            ["GEOMETRY"] = v => v.ToString(),
+            ["GEOGRAPHY"] = v => v.ToString(),
+            ["HIERARCHYID"] = v => v.ToString(),
             ["VARBINARY"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
             ["BINARY"] = v => v is byte[] b ? b : Convert.FromBase64String(v.ToString() ?? ""),
             ["IMAGE"] = v => {
@@ -64,12 +68,15 @@ namespace ETL_SQL.Core.Data
             ["GUID"] = v => v is Guid g ? g : Guid.Parse(v.ToString() ?? Guid.Empty.ToString()),
             ["UUID"] = v => v is Guid g ? g : Guid.Parse(v.ToString() ?? Guid.Empty.ToString()),
             ["DATETIMEOFFSET"] = v => DateTime.Parse(v.ToString() ?? ""),
-            ["VECTOR"] = v => v.ToString()
+            ["VECTOR"] = v => v.ToString(),
+            ["SENSITIVE"] = v => v,
+            ["SECRET"] = v => v
         };
 
         /// <summary>Casts a value to the specified SQL type name.</summary>
-        public static object? Cast(object value, string typeName)
+        public static object? Cast(object value, string? typeName)
         {
+            if (string.IsNullOrEmpty(typeName)) return value;
             var baseType = typeName.Split('(')[0].ToUpperInvariant();
             if (_converters.TryGetValue(baseType, out var converter))
             {

@@ -66,6 +66,7 @@ namespace ETL_SQL.Engine.Handlers
                 // 1. Read existing and filter
                 int deletedCount = 0;
                 var batches = connection.ReadBatches();
+                var rowInfos = new List<(Row? Before, Row? After, string? Action)>();
 
                 async IAsyncEnumerable<DataTable> FilterBatches()
                 {
@@ -76,6 +77,10 @@ namespace ETL_SQL.Engine.Handlers
                         {
                             if (stmt.WhereClause == null || await context.EvaluateCondition(stmt.WhereClause, row))
                             {
+                                if (stmt.Output != null)
+                                {
+                                    rowInfos.Add((row.Clone(), null, "DELETE"));
+                                }
                                 deletedCount++;
                             }
                             else
@@ -92,7 +97,15 @@ namespace ETL_SQL.Engine.Handlers
                 }
 
                 var filtered = FilterBatches();
-                await connection.WriteBatches(filtered);
+                var materialized = new List<DataTable>();
+                await foreach (var b in filtered) materialized.Add(b);
+
+                await connection.WriteBatches(materialized.ToAsyncEnumerable());
+
+                if (stmt.Output != null)
+                {
+                    await OutputClauseHelper.ProcessAsync(stmt.Output, context, rowInfos);
+                }
 
                 context.IncrementOperationCount(OperationType.EngineInternal, count: deletedCount);
                 context.RowsProcessed += deletedCount;

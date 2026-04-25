@@ -7,7 +7,7 @@ import { PerformanceTab } from './components/PerformanceTab';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ReportTab } from './components/ReportTab';
 import type { ResultsMessage, PerformanceMessage, VariablesMessage, ReportManifest } from './types';
-import { RefreshCw, BarChart3, Database, Terminal, Activity, GitBranch, Variable as VariableIcon, Layout, ChevronLeft, ChevronRight, LayoutList } from 'lucide-react';
+import { RefreshCw, BarChart3, Database, Terminal, Activity, GitBranch, Variable as VariableIcon, Layout, ChevronLeft, ChevronRight, LayoutList, Square } from 'lucide-react';
 import { extractPipelineNodes } from './utils/pipeline_utils';
 import { extractVariables } from './utils/variable_utils';
 import { SidebarExplorer } from './components/SidebarExplorer';
@@ -193,43 +193,41 @@ function App() {
                     <>
                       <ResultGrid rows={currentResult.rows} columns={currentResult.columns} />
                       
-                      {/* Result Set Navigation */}
-                      <div className="mt-4 flex items-center justify-center gap-4 bg-[var(--bg-darker)]/80 backdrop-blur-md rounded-full px-4 py-2 border border-[var(--border)] self-center animate-slide-up shadow-xl">
-                        {results.length > 1 && (
-                          <>
-                            <button 
-                              onClick={() => setSelectedResultIndex(Math.max(0, selectedResultIndex - 1))}
-                              disabled={selectedResultIndex === 0}
-                              className="text-[var(--muted)] hover:text-indigo-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-                            >
-                              <ChevronLeft size={18} />
-                            </button>
-                            
-                            <span className="text-[10px] font-bold font-display uppercase tracking-widest text-[var(--muted)] min-w-[120px] text-center">
-                              Result <span className="text-indigo-400">{selectedResultIndex + 1}</span> of <span className="text-[var(--text-primary)]">{results.length}</span>
-                            </span>
+                      {/* Result Set Navigation & Compare Toggle */}
+                      {results.length > 1 && (
+                        <div className="mt-4 flex items-center justify-center gap-4 bg-[var(--bg-darker)]/80 backdrop-blur-md rounded-full px-4 py-2 border border-[var(--border)] self-center animate-slide-up shadow-xl">
+                          <button 
+                            onClick={() => setSelectedResultIndex(Math.max(0, selectedResultIndex - 1))}
+                            disabled={selectedResultIndex === 0}
+                            className="text-[var(--muted)] hover:text-indigo-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <ChevronLeft size={18} />
+                          </button>
+                          
+                          <span className="text-[10px] font-bold font-display uppercase tracking-widest text-[var(--muted)] min-w-[120px] text-center">
+                            Result <span className="text-indigo-400">{selectedResultIndex + 1}</span> of <span className="text-[var(--text-primary)]">{results.length}</span>
+                          </span>
 
-                            <button 
-                              onClick={() => setSelectedResultIndex(Math.min(results.length - 1, selectedResultIndex + 1))}
-                              disabled={selectedResultIndex === results.length - 1}
-                              className="text-[var(--muted)] hover:text-indigo-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-                            >
-                              <ChevronRight size={18} />
-                            </button>
+                          <button 
+                            onClick={() => setSelectedResultIndex(Math.min(results.length - 1, selectedResultIndex + 1))}
+                            disabled={selectedResultIndex === results.length - 1}
+                            className="text-[var(--muted)] hover:text-indigo-400 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+                          >
+                            <ChevronRight size={18} />
+                          </button>
 
-                            <div className="w-px h-4 bg-[var(--border)] mx-1" />
-                          </>
-                        )}
+                          <div className="w-px h-4 bg-[var(--border)] mx-1" />
 
-                        <button 
-                          onClick={() => setIsCompareMode(true)}
-                          className={`flex items-center gap-2 px-2 py-1 rounded transition-all hover:bg-white/5 ${isCompareMode ? 'text-indigo-400' : 'text-[var(--muted)]'}`}
-                          title="Compare All Results"
-                        >
-                          <LayoutList size={14} />
-                          <span className="text-[9px] font-bold uppercase tracking-tighter">Compare</span>
-                        </button>
-                      </div>
+                          <button 
+                            onClick={() => setIsCompareMode(true)}
+                            className={`flex items-center gap-2 px-2 py-1 rounded transition-all hover:bg-white/5 ${isCompareMode ? 'text-indigo-400' : 'text-[var(--muted)]'}`}
+                            title="Compare All Results"
+                          >
+                            <LayoutList size={14} />
+                            <span className="text-[9px] font-bold uppercase tracking-tighter">Compare</span>
+                          </button>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <EmptyState icon={BarChart3} message="No Result Set Available" />
@@ -251,6 +249,15 @@ function App() {
             <span className="text-[9px] font-bold font-display uppercase tracking-widest text-[var(--text)] opacity-60">
               {statusConfig[status].label}
             </span>
+            {status === 'running' && (
+              <button 
+                onClick={() => postMessage({ type: 'cancel' })}
+                className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition-all text-[8px] font-bold uppercase tracking-tighter"
+                title="Stop Execution"
+              >
+                <Square size={10} fill="currentColor" /> Stop
+              </button>
+            )}
           </div>
         </div>
 

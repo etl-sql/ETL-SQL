@@ -78,7 +78,9 @@ export function useVsCodeApi() {
                 const message = event.data as ProtocolMessage;
                 if (message.type === 'clear') {
                     setMessages([]);
-                    setStatus('running');
+                    setStatus('ready');
+                } else if (message.type === 'status') {
+                    setStatus(message.status);
                 } else if (message.type === 'done') {
                     setStatus(message.exitCode === 0 ? 'finished' : 'error');
                 } else {

@@ -44,7 +44,8 @@ namespace ETL_SQL.Core.Parser
             TokenType.TEXT, TokenType.NTEXT, TokenType.BINARY, TokenType.VARBINARY, TokenType.IMAGE, 
             TokenType.UNIQUEIDENTIFIER, TokenType.UUID, TokenType.GUID, TokenType.GEOMETRY, 
             TokenType.GEOGRAPHY, TokenType.HIERARCHYID, TokenType.VARIANT, TokenType.SQL_VARIANT, 
-            TokenType.ANY, TokenType.TABLE
+            TokenType.ANY, TokenType.TABLE, TokenType.STRING, TokenType.SENSITIVE, TokenType.SECRET,
+            TokenType.VARCHAR2, TokenType.MINMAX, TokenType.MARKDOWN
         };
 
         /// <summary>
@@ -266,7 +267,7 @@ namespace ETL_SQL.Core.Parser
                 return ReconstructFromSource(startToken, endToken);
 
             // Fallback: reconstruct from tokens if source is missing
-            return string.Join(" ", tokens.Select(t => t.Type == TokenType.STRING ? $"'{t.Value.Replace("'", "''")}'" : t.Value));
+            return string.Join(" ", tokens.Select(t => t.Type == TokenType.STRING_LITERAL ? $"'{t.Value.Replace("'", "''")}'" : t.Value));
         }
 
         private string ReconstructFromSource(Token startToken, Token endToken)
@@ -544,13 +545,13 @@ namespace ETL_SQL.Core.Parser
                 {
                     if (Match(TokenType.LPAREN))
                     {
-                        rootName = Consume(TokenType.STRING, "Expected root name string").Value;
+                        rootName = Consume(TokenType.STRING_LITERAL, "Expected root name string").Value;
                         Consume(TokenType.RPAREN, "Expected ')' after root name");
                     }
                     else
                     {
                         // Some dialects allow ROOT without parens or with a string immediately
-                        if (Current.Type == TokenType.STRING) rootName = Advance().Value;
+                        if (Current.Type == TokenType.STRING_LITERAL) rootName = Advance().Value;
                         else rootName = "root";
                     }
                 }
@@ -676,9 +677,9 @@ namespace ETL_SQL.Core.Parser
                 {
                     parts.Add(Consume(TokenType.VARIABLE, "Expected variable table reference").Value);
                 }
-                else if (Current.Type == TokenType.STRING)
+                else if (Current.Type == TokenType.STRING_LITERAL)
                 {
-                    parts.Add(Consume(TokenType.STRING, "Expected string for table reference").Value);
+                    parts.Add(Consume(TokenType.STRING_LITERAL, "Expected string for table reference").Value);
                 }
                 else
                 {
@@ -912,7 +913,7 @@ namespace ETL_SQL.Core.Parser
             string? alias = null;
             if (Match(TokenType.AS))
             {
-                if (IsIdentifier(Current) || Current.Type == TokenType.STRING)
+                if (IsIdentifier(Current) || Current.Type == TokenType.STRING_LITERAL)
                 {
                     alias = Advance().Value;
                 }

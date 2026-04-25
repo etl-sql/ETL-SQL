@@ -307,10 +307,10 @@ namespace ETL_SQL.Core.Parser
                 var t = _parser.Previous;
                 return new LiteralExpression(null, TokenType.NULL) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
             }
-            if (_parser.Match(TokenType.STRING))
+            if (_parser.Match(TokenType.STRING_LITERAL))
             {
                 var t = _parser.Previous;
-                return new LiteralExpression(t.Value, TokenType.STRING) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+                return new LiteralExpression(t.Value, TokenType.STRING_LITERAL) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
             }
             if (_parser.Match(TokenType.CURRENT_TIMESTAMP) || _parser.Match(TokenType.CURRENT_DATE) || _parser.Match(TokenType.CURRENT_TIME) || _parser.Match(TokenType.SYSDATE))
             {
@@ -327,7 +327,7 @@ namespace ETL_SQL.Core.Parser
                 
                 string targetType = _parser.ParseType();
                 _parser.Consume(TokenType.RPAREN, "Expected ')' at end of CAST/TRY_CAST");
-                return new FunctionCallExpression(funcName, new List<Expression> { expr, new LiteralExpression(targetType, TokenType.STRING) }) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                return new FunctionCallExpression(funcName, new List<Expression> { expr, new LiteralExpression(targetType, TokenType.STRING_LITERAL) }) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
             if (_parser.Match(TokenType.CASE))
             {

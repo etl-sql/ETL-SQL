@@ -50,7 +50,7 @@ export interface ClearMessage {
 
 export interface StatusMessage {
     type: 'status';
-    status: 'ready';
+    status: 'ready' | 'running' | 'finished' | 'error';
     buildId?: string;
 }
 

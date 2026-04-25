@@ -92,6 +92,9 @@ namespace ETL_SQL.Engine.Handlers
                 case ThresholdType.MaxLastResultRows:
                     context.MaxLastResultRows = intVal;
                     break;
+                case ThresholdType.MaxGenerateRows:
+                    context.MaxGenerateRows = intVal;
+                    break;
             }
 
             if (context.IsVerbose)

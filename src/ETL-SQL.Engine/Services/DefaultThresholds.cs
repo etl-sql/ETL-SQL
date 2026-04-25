@@ -44,5 +44,8 @@ namespace ETL_SQL.Engine.Services
 
         public static bool SpillCompressionEnabled(IConfiguration? config)
             => config?.GetValue<bool>("Security:SpillCompressionEnabled") ?? true;
+
+        public static string SpillFormat(IConfiguration? config)
+            => config?.GetValue<string>("Security:SpillFormat") ?? "Arrow";
     }
 }

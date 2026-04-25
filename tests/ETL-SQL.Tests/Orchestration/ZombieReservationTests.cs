@@ -72,6 +72,7 @@ namespace ETL_SQL.Tests.Orchestration
                 provider.GetRequiredService<SessionStateManager>(),
                 provider.GetRequiredService<SecurityService>(),
                 provider.GetRequiredService<IEngineLogger>(),
+                new ETL_SQL.Core.Metadata.LanguageHelpRegistry(),
                 new EvaluatorComponentRegistry())
             {
                 SessionId = sessionId

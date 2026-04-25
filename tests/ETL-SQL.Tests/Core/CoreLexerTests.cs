@@ -38,7 +38,7 @@ namespace ETL_SQL.Tests.Core
             Assert.Equal(3 + 1, tokens.Count);
             Assert.Equal(TokenType.NUMBER, tokens[0].Type);
             Assert.Equal("123", tokens[0].Value.ToString());
-            Assert.Equal(TokenType.STRING, tokens[1].Type);
+            Assert.Equal(TokenType.STRING_LITERAL, tokens[1].Type);
             Assert.Equal("hello", tokens[1].Value.ToString());
             Assert.Equal(TokenType.NUMBER, tokens[2].Type);
             Assert.Equal("45.67", tokens[2].Value.ToString());

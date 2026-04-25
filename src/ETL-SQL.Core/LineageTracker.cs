@@ -79,6 +79,7 @@ namespace ETL_SQL.Core
                     Line = line,
                     Column = column,
                     EndLine = endLine,
+                    EndColumn = endColumn,
                     SourceFile = sourceFile
                 };
 

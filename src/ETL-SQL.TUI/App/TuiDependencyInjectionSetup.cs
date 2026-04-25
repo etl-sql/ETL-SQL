@@ -70,6 +70,9 @@ namespace ETL_SQL.TUI
             ETL_SQL.Engine.Functions.JsonFunctions.Register(registry);
             ETL_SQL.Engine.Functions.XmlFunctions.Register(registry);
             services.AddSingleton<Core.Functions.IFunctionRegistry>(registry);
+            
+            var helpRegistry = new Core.Metadata.LanguageHelpRegistry();
+            services.AddSingleton<Core.Interfaces.ILanguageHelpRegistry>(helpRegistry);
 
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();

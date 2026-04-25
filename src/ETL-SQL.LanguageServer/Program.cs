@@ -18,6 +18,7 @@ using ETL_SQL.Core.Linting;
 using ETL_SQL.Core.Linting.Rules;
 using ETL_SQL.Core.Formatting;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Functions;
 using LSPRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using TextDocumentSelector = OmniSharp.Extensions.LanguageServer.Protocol.Models.TextDocumentSelector;
 using TextDocumentSyncKind = OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities.TextDocumentSyncKind;
@@ -60,7 +61,18 @@ namespace ETL_SQL.LSP
                         registry.Register(new ETL_SQL.Connectors.FtpConnector());
                         registry.Register(new ETL_SQL.Connectors.Directory.DirectoryConnector());
 
+                        var functionRegistry = new Engine.Functions.FunctionRegistry();
+                        Engine.Functions.StandardFunctions.Register(functionRegistry);
+                        Engine.Functions.FileFunctions.Register(functionRegistry);
+                        Engine.Functions.JsonFunctions.Register(functionRegistry);
+                        Engine.Functions.XmlFunctions.Register(functionRegistry);
+                        Engine.Functions.RegexFunctions.Register(functionRegistry);
+                        Engine.Functions.LineageFunctions.Register(functionRegistry);
+
                         services.AddSingleton<IConnectorRegistry>(registry);
+                        var helpRegistry = new Core.Metadata.LanguageHelpRegistry();
+                        services.AddSingleton<Core.Interfaces.ILanguageHelpRegistry>(helpRegistry);
+                        services.AddSingleton<IFunctionRegistry>(functionRegistry);
                         services.AddSingleton<IMetadataManager, MetadataManager>();
                         services.AddSingleton<DocumentStateStore>();
                     })

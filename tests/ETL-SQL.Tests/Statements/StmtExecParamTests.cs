@@ -34,7 +34,7 @@ namespace ETL_SQL.Tests.Statements
                 CREATE CONNECTION MyDb ON MOCKDB('mock://localhost') WITH (dialect='MSSQL');
                 DECLARE @id = 123;
                 EXECUTE MyDb WITH (@id) BEGIN 
-                    SELECT * FROM Users WHERE UserID = ?1 OR AltID = ?1
+                    SELECT * FROM DiagnosticTableA WHERE UserID = ?1 OR AltID = ?1
                 END;
             ";
             await ev.Evaluate(Parse(script));
@@ -63,7 +63,7 @@ namespace ETL_SQL.Tests.Statements
                 DECLARE @c1 ANY = 'A';
                 DECLARE @c2 ANY = 'B';
                 EXECUTE MyDb WITH (@c1, @c2) BEGIN 
-                    SELECT * FROM Users WHERE Col1 = ? AND Col2 = ?2 AND Col3 = ?1
+                    SELECT * FROM DiagnosticTableB WHERE Col1 = ? AND Col2 = ?2 AND Col3 = ?1
                 END;
             ";
             await ev.Evaluate(Parse(script));
@@ -87,7 +87,7 @@ namespace ETL_SQL.Tests.Statements
                 CREATE CONNECTION MyDb ON MOCKDB('mock://localhost') WITH (dialect='MSSQL');
                 DECLARE @cat_id ANY = 5;
                 EXECUTE (
-                  'SELECT id, name FROM remote_table WHERE category_id = ?1'
+                  'SELECT id, name FROM DiagnosticTableC WHERE category_id = ?1'
                 ) AT MyDb INTO #target WITH (@cat_id);
             ";
             await ev.Evaluate(Parse(script));

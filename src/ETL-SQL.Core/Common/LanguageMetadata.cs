@@ -82,7 +82,8 @@ namespace ETL_SQL.Common
             "TOOLTIP", "BUTTON", "BACK", "REFRESH", "TEMPLATE_PATH", "MINMAX", "GENERATE", "ROWS",
             "FONT_SIZE", "CENTER", "INSIDE", "INSIDE_TOP", "INSIDE_BOTTOM", "INSIDE_LEFT", "INSIDE_RIGHT",
             "INSIDE_TOP_LEFT", "INSIDE_TOP_RIGHT", "INSIDE_BOTTOM_LEFT", "INSIDE_BOTTOM_RIGHT",
-            "NONE", "HEADER", "FOOTER", "CSS", "JS", "FAVICON", "LOGO", "BACKGROUND"
+            "NONE", "HEADER", "FOOTER", "CSS", "JS", "FAVICON", "LOGO", "BACKGROUND",
+            "MAX_GENERATE_ROWS", "ALLOW_FILE_OPERATIONS", "ALLOW_RECURSIVE_LAYERS"
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -90,9 +91,10 @@ namespace ETL_SQL.Common
             "INT", "INTEGER", "BIGINT", "SMALLINT", "TINYINT", "BIT", "BOOLEAN", "BOOL",
             "DECIMAL", "NUMERIC", "MONEY", "SMALLMONEY", "FLOAT", "REAL", "DOUBLE",
             "DATE", "DATETIME", "DATETIME2", "SMALLDATETIME", "DATETIMEOFFSET", "TIMESTAMP", "TIME",
-            "CHAR", "VARCHAR", "NCHAR", "NVARCHAR", "TEXT", "NTEXT", "BINARY", "VARBINARY", "IMAGE",
+            "CHAR", "VARCHAR", "VARCHAR2", "NCHAR", "NVARCHAR", "TEXT", "NTEXT", "BINARY", "VARBINARY", "IMAGE", "BLOB", "LOB", "STRING",
             "XML", "JSON", "UNIQUEIDENTIFIER", "UUID", "GUID", "GEOMETRY", "GEOGRAPHY", "HIERARCHYID",
-            "VARIANT", "SQL_VARIANT", "TABLE", "CURSOR", "ANY", "MARKDOWN", "MINMAX"
+            "VARIANT", "SQL_VARIANT", "TABLE", "CURSOR", "ANY", "MARKDOWN", "MINMAX", "VECTOR",
+            "SENSITIVE", "SECRET", "NUMBER"
         };
 
         public static readonly HashSet<string> Functions = new(StringComparer.OrdinalIgnoreCase)

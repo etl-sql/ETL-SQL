@@ -1,23 +1,24 @@
 # ETL-SQL Grammar & Orchestration Syntax
 
-This document is the authoritative reference for the ETL-SQL scripting language. It defines variables, control flow, querying, DML, DDL, and engine configuration — everything needed to write a complete ETL script.
+This document is the authoritative reference for the ETL-SQL scripting language. It defines every statement type, clause, and keyword — everything needed to write, administer, and automate with ETL-SQL.
+
+> **Sections marked `[PROPOSED]`** contain syntax designed during the Report Portal planning phase that has not yet been implemented. All other sections reflect the current engine.
 
 ---
 
 ## 1. Variable & State Management
 
-Variables in ETL-SQL are prefixed with `@` and are case-insensitive. Types can be declared explicitly or inferred.
-
 ### 1.1 `DECLARE`
 Defines one or more variables. The data type is optional; omitting it defaults to `ANY` (inferred from the assigned value).
 
 ```sql
-DECLARE @name STRING = 'Chuck';
-DECLARE @note MARKDOWN = '# Hello';
-DECLARE @id   INT    = 101;
-DECLARE @rate DECIMAL(10,4) = 1.2345;
-DECLARE @icon IMAGE = 'C:\Data\icon.png';
-DECLARE @range MINMAX(INT) = (1, 100);
+DECLARE @name    STRING        = 'Chuck';
+DECLARE @note    MARKDOWN      = '# Hello';
+DECLARE @id      INT           = 101;
+DECLARE @rate    DECIMAL(10,4) = 1.2345;
+DECLARE @icon    IMAGE         = 'C:\Data\icon.png';
+DECLARE @range   MINMAX(INT)   = (1, 100);
+DECLARE @files   LIST(PATH)    = ('C:\Data\1.csv', 'C:\Data\2.csv');
 
 -- Multiple variables in one statement
 DECLARE @list LIST = (1, 2, 3), @count INT = 0;
@@ -29,7 +30,36 @@ DECLARE @value = 'hello';
 DECLARE @inventory TABLE;
 ```
 
-### 1.2 `SET`
+**Supported Data Types:**
+
+| Category | Types |
+| :--- | :--- |
+| **Numeric** | `INT`, `INTEGER`, `BIGINT`, `SMALLINT`, `TINYINT`, `BIT`, `BOOLEAN`, `BOOL`, `DECIMAL`, `NUMERIC`, `MONEY`, `SMALLMONEY`, `FLOAT`, `REAL`, `DOUBLE` |
+| **Temporal** | `DATE`, `TIME`, `DATETIME`, `DATETIME2`, `SMALLDATETIME`, `DATETIMEOFFSET`, `TIMESTAMP` |
+| **Character** | `CHAR`, `VARCHAR`, `VARCHAR2`, `NCHAR`, `NVARCHAR`, `TEXT`, `NTEXT`, `STRING`, `MARKDOWN` |
+| **Binary** | `BINARY`, `VARBINARY`, `IMAGE`, `BLOB`, `LOB` |
+| **Specialized** | `XML`, `JSON`, `UNIQUEIDENTIFIER`, `UUID`, `GUID`, `GEOMETRY`, `GEOGRAPHY`, `HIERARCHYID`, `VARIANT`, `SQL_VARIANT`, `ANY`, `PATH`, `MINMAX`, `CURSOR`, `ENCRYPTED`, `VECTOR`, `SENSITIVE`, `SECRET` |
+| **Collections** | `LIST`, `LIST(<type>)`, `TABLE` |
+
+### 1.2 Specialty Types
+
+Specialty types carry semantic meaning and perform automatic normalization or validation.
+
+| Type | Properties & Behavior |
+| :--- | :--- |
+| `PATH` | Normalizes directory separators (`/` vs `\`) based on the host OS. Used by all filesystem and SFTP/FTP functions. |
+| `JSON` | Validates well-formedness on assignment. Enables `JSON_VALUE`, `JSON_QUERY` and dot-notation field access. |
+| `XML` | Validates well-formedness on assignment. Enables XPath-based extraction functions. |
+| `MARKDOWN` | Treated as rich text in the Report Portal. Supports headers, lists, and tables. |
+| `LIST` | An ordered collection of values. Can be strictly typed (e.g. `LIST(INT)`) or inferred. |
+| `ENCRYPTED` | Semantic alias for sensitive strings. Equivalent to using the `PASSWORD` keyword in `DECLARE`. |
+| `SENSITIVE` | Declares a variable whose value must be masked in logs, print output, and visuals. |
+| `SECRET` | Stronger variant of `SENSITIVE`; value is purged from memory as soon as the session ends. |
+
+> [!NOTE]
+> Any variable marked as `SENSITIVE`, `SECRET`, or declared with the `PASSWORD` keyword is automatically masked (e.g., `********`) in the execution log and `PRINT` output.
+
+### 1.3 `SET`
 Assigns a new value to an existing variable.
 
 ```sql
@@ -37,50 +67,46 @@ SET @name  = 'Charles';
 SET @count = @count + 1;
 SET @label = UPPER(@name) + '_PROCESSED';
 
--- Member Access Assignment (Property Setting)
+-- Member access assignment
 SET @range.MIN = 5;
 SET @range.MAX = 50;
 ```
 
-### 1.3 System Variables
-The engine provides built-in variables for session-level state. All system variables are read-only.
+### 1.4 System Variables
+Read-only. Available in any expression.
 
 | Variable | Description |
 | :--- | :--- |
-| `@@VERSION` | Full engine version and build metadata string. |
-| `@@TRANCOUNT` | Current transaction nesting level (0 = no active transaction). |
-| `@@RESULTSETS` | The number of result sets produced by the last executed multi-statement block or query. |
-| `@@ROWCOUNT` | The number of rows processed or affected by the **absolute last executed statement**. |
-| `@@ERROR` | The integer error code of the **preceding statement** (0 = success). |
-| `@@TOTAL_SPILLED_BYTES` | Total bytes written to disk for temporary spill-to-disk operations (joins, aggregates, windows, sorts). |
-| `@@PARTITIONS_COUNT` | The number of discrete disk partitions created during the last spilled operation. |
-| `@@AGGREGATE_GROUPS_COUNT` | Total number of unique grouping keys identified during the last aggregation. |
-| `@@AGGREGATE_EXPANSION_RATIO` | The multiplier of intermediate rows generated for Grouping Sets (e.g., 4.0 for CUBE on 2 columns). |
-| `@@LAST_EXEC_MS` | Total milliseconds taken by the absolute last statement executed. |
-| `@@PEAK_MEMORY_MB` | Peak working set memory used by the current engine process. |
-| `@@SUBQUERY_CACHE_HITS` | Total number of scalar subquery results retrieved from the session cache. |
-| `@@SORT_SPILLS` | Number of external sort runs that spilled to disk during the session. |
+| `@@VERSION` | Full engine version and build metadata string |
+| `@@TRANCOUNT` | Current transaction nesting level (0 = no active transaction) |
+| `@@RESULTSETS` | Number of result sets produced by the last multi-statement block |
+| `@@ROWCOUNT` | Rows processed or affected by the last executed statement |
+| `@@ERROR` | Integer error code of the preceding statement (0 = success) |
+| `@@TOTAL_SPILLED_BYTES` | Total bytes written to disk for spill operations this session |
+| `@@PARTITIONS_COUNT` | Disk partitions created during the last spilled operation |
+| `@@AGGREGATE_GROUPS_COUNT` | Unique grouping keys from the last aggregation |
+| `@@AGGREGATE_EXPANSION_RATIO` | Intermediate row multiplier for the last CUBE/GROUPING SETS |
+| `@@LAST_EXEC_MS` | Milliseconds taken by the last statement |
+| `@@PEAK_MEMORY_MB` | Peak working-set memory in MB for the current process |
+| `@@SUBQUERY_CACHE_HITS` | Scalar subquery results retrieved from session cache |
+| `@@SORT_SPILLS` | External sort runs that spilled to disk this session |
 
-
-### 1.4 `INPUT` and `OUTPUT` Variables
-Control how variables interact with the CLI or parent scripts via `RUN SCRIPT`.
-
-- **`INPUT`**: Value can be overridden by `--var` on the CLI or by `RUN SCRIPT ... WITH(...)`. If not provided by the caller, the declared default applies.
-- **`OUTPUT`**: Variable's final value is mapped back to the parent script scope when the sub-script finishes.
+### 1.5 `INPUT` and `OUTPUT` Variables
+Control how variables are passed to and from sub-scripts.
 
 ```sql
-DECLARE @BatchId   INT    INPUT  = 0;
+DECLARE @BatchId    INT    INPUT  = 0;
 DECLARE @ExitStatus STRING OUTPUT = 'Pending';
 ```
 
 *CLI usage:*
 ```bash
-ETL-SQL run my_script.etlsql --var @BatchId=42 --var @Env='PROD'
+ETL-SQL run my_script.etlsql --var @BatchId=42 --var @Env=PROD
 ```
 
 *Script orchestration:*
 ```sql
--- Parent script
+-- Parent
 DECLARE @SubResult STRING;
 RUN SCRIPT 'sub.etlsql' WITH (@Mode = 'FULL', @SubResult = @SubResult);
 PRINT 'Sub finished: ' + @SubResult;
@@ -90,135 +116,93 @@ DECLARE @Mode      STRING INPUT;
 DECLARE @SubResult STRING OUTPUT = 'OK';
 ```
 
-### 1.5 `USE PASSWORD`
-Sets the master decryption password for the session. Used to decrypt `ENC:` prefixed connection strings.
+### 1.6 `USE PASSWORD`
+Sets the master decryption password for the session, used to decrypt `ENC:` connection strings.
 
 ```sql
 USE PASSWORD = 'myMasterSecret';
 CREATE CONNECTION db ON MSSQL('ENC:U2FsdGVkX1+...');
 ```
 
-### 1.6 `CLEAR SESSION`
-Aggressively cleans the in-memory execution cache — deletes all temporary files, recovery manifests, and encrypted session state. Recommended for security-critical pipelines.
+### 1.7 `CLEAR SESSION`
+Deletes all temporary files, recovery manifests, and encrypted session state.
 
 ```sql
 CLEAR SESSION;
 ```
 
-### 1.7 Environment Sets (`CREATE SETS` / `USE SETS` / `DROP SETS`)
-Named groups of variable assignments for seamlessly switching between environments (DEV, QA, PROD).
+### 1.8 Environment Sets (`CREATE SETS` / `USE SETS` / `DROP SETS`)
+Named groups of variable assignments for switching between environments.
 
 ```sql
 CREATE SETS !DEV
 BEGIN
     @server   = 'dev-db.internal',
-    @database = 'DevWarehouse',
-    @schema   = 'dbo'
+    @database = 'DevWarehouse'
 END
 
 CREATE SETS !PROD
 BEGIN
     @server   = 'prod-db.internal',
-    @database = 'ProdWarehouse',
-    @schema   = 'dbo';
-    SET WITH_PROMPT ON;   -- Prompts for confirmation in interactive mode
+    @database = 'ProdWarehouse';
+    SET WITH_PROMPT ON;   -- prompts for confirmation in interactive mode
 END
 
--- Apply the DEV set
 USE SETS !DEV;
-
--- Remove a set
 DROP SETS IF EXISTS !STAGING;
 ```
 
-### 1.8 `REQUIRE VERSION`
-Ensures the script is running on a minimum version of the engine. If the condition is not met, the engine throws an error immediately before executing any further statements.
+### 1.9 `REQUIRE VERSION`
+Halts the script if the engine version does not meet the minimum.
 
 ```sql
 REQUIRE VERSION >= '0.5.0';
--- Optional keyword 'VERSION':
-REQUIRE >= '0.5.0';
+REQUIRE >= '0.5.0';   -- VERSION keyword is optional
 ```
 
 Supported operators: `=`, `>`, `>=`.
 
----
+### 1.10 Member Access (Dot Notation)
+Access columns of a row variable, fields of a JSON object, or properties of a system object.
 
+**Resolution order:** Row columns → JSON fields → C# reflection properties (case-insensitive).
 
-
-> [!TIP]
-> `SET WITH_PROMPT ON` inside a `CREATE SETS` block causes `USE SETS` to ask for confirmation before applying in interactive mode. In batch or scripted mode the set is applied automatically.
-
-### 1.9 Member Access (Dot Notation)
-The engine supports accessing members of complex objects using the `.` operator. This is used extensively with loops and metadata functions. All member lookups are **case-insensitive**.
-
-**Resolution Order:**
-1. **Row Columns**: If the variable is a `Row` (e.g., from a `SELECT` or `FILE_LIST`), the engine looks for a column matching the name.
-2. **JSON Fields**: If the variable contains a JSON object, the engine extracts the field with that name.
-3. **C# Properties/Fields**: If the variable is a system object (like a `FileInfo`), the engine uses reflection to access public properties.
-
-#### Known Object Schemas
-While many objects are dynamic, the following standard functions return objects with fixed, reliable property sets:
-
-| Object Context | Member Property | Description |
+| Object | Member | Description |
 | :--- | :--- | :--- |
-| **Local File** (`FILE_LIST`) | `.NAME` | The name of the file (e.g., `data.csv`) |
-| | `.PATH` | The absolute path to the file |
-| | `.EXTENSION` | The file extension (including the dot) |
-| | `.SIZE` | File size in bytes |
-| | `.LASTMODIFIED` | Datetime of the last write |
-| | `.ISREADONLY` | Boolean indicator |
-| | `.CREATIONTIME` | Datetime the file was created |
-| **Remote File** (`REMOTE_FILE_LIST`) | `.NAME` | Name of the remote file/directory |
-| | `.FULLPATH` | Full remote path |
-| | `.SIZE` | Size in bytes |
-| | `.LASTMODIFIED` | Last modified time from remote server |
-| | `.ISDIRECTORY` | Boolean indicator |
-| **Range Selection** (`MINMAX`) | `.MIN` | The minimum value of the range |
-| | `.MAX` | The maximum value of the range |
-| **Docker Helper** | `.CONNECTION_STRING` | Host-mapped connection string for a container |
-
-*Example using FOREACH with files:*
-```sql
-DECLARE @Drops = FILE_LIST('C:\Data\Drops');
-
-FOREACH @File IN @Drops
-BEGIN
-    PRINT 'Processing ' + @File.NAME + ' (' + @File.SIZE + ' bytes)';
-    -- Use .PATH for the source of a COPY or SELECT
-    COPY FILE @File.PATH TO 'C:\Archive\' + @File.NAME;
-END
-```
+| `FILE_LIST` | Returns `LIST(PATH)` (as a table). | Rows contains `.NAME`, `.PATH`, `.SIZE`, etc. |
+| `REMOTE_FILE_LIST` | Returns `LIST(PATH)` (as a table). | Rows contains `.NAME`, `.FULLPATH`, `.SIZE`, etc. |
+| `MINMAX` | `.MIN` `.MAX` | Range bounds |
+| Docker alias | `.CONNECTION_STRING` | Host-mapped connection string |
+| JSON variable | `.fieldName` | Dynamic field extraction |
 
 ---
 
 ## 2. Engine Configuration
 
 ### 2.1 `SET WHAT_IF`
-Dry-run mode. All side-effecting operations (`INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, file operations, `SEND EMAIL`, etc.) are **logged in yellow but not executed**.
+Dry-run mode. Side-effecting operations are logged but not executed.
 
 ```sql
 SET WHAT_IF ON;
-DELETE FROM prod_db.logs WHERE log_date < '2024-01-01';  -- Logged only
+DELETE FROM prod_db.logs WHERE log_date < '2024-01-01';  -- logged only
 SET WHAT_IF OFF;
 ```
 
-**What is suppressed:** `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, `BULK INSERT`, any file/directory operation, `SEND EMAIL`, Docker actions, DDL (`CREATE`/`DROP TABLE`, `CREATE`/`DROP INDEX`).
-
-**What is allowed:** `SELECT`, `DECLARE`, `SET`, `IF/WHILE`, `PRINT`, `CREATE CONNECTION`.
+**Suppressed:** `INSERT`, `UPDATE`, `DELETE`, `MERGE`, `TRUNCATE`, `BULK INSERT`, all file/directory operations, `SEND EMAIL`, Docker actions, DDL.  
+**Allowed:** `SELECT`, `DECLARE`, `SET`, `IF`/`WHILE`, `PRINT`, `CREATE CONNECTION`.
 
 ### 2.2 `SET PROFILING`
-Enables millisecond-level performance metrics for every statement.
+Enables per-statement millisecond metrics.
 
 ```sql
 SET PROFILING ON;
 RUN SCRIPT 'heavy_transform.etlsql';
 SET PROFILING OFF;
-SHOW PROFILE INTO #perf_results;
+SHOW PROFILE INTO #perf;
 ```
 
 ### 2.3 `SET SHOW_PASSWORD`
-Controls whether the `USE PASSWORD` value is echoed in plain text in the output. Default: `OFF`.
+Controls whether `USE PASSWORD` echoes the value in output. Default: `OFF`.
 
 ```sql
 SET SHOW_PASSWORD ON;
@@ -227,82 +211,220 @@ SET SHOW_PASSWORD OFF;
 ```
 
 ### 2.4 Security Overrides
-Formal commands to bypass standard engine safety limits. These are only honored if the path is within an **Approved Safe Zone** (configured in appsettings). All overrides trigger an audit log entry.
+Only honored when the path is within an approved Safe Zone. All overrides produce an audit entry.
 
 | Command | Description |
 | :--- | :--- |
-| `SET ALLOW_FILE_TYPE_ACCESS ON/OFF` | Allows processing files with extensions not in the standard whitelist (e.g., `.custom`). |
-| `SET ALLOW_GREATER_THAN_n_FILE ON/OFF` | Allows more than `n` (default 100) file operations in a single script. |
-| `SET ALLOW_RECURSIVE_GREATER_THAN_n_LAYERS ON/OFF` | Allows directory recursion deeper than `n` (default 5) levels. |
-
-*Example:*
-```sql
--- Override runaway protection for a large archive operation
-SET ALLOW_GREATER_THAN_100_FILE ON;
-COPY FILE 'C:\SafeZone\*.bak' TO 'D:\Archive\';
-SET ALLOW_GREATER_THAN_100_FILE OFF;
-```
+| `SET ALLOW_FILE_TYPE_ACCESS ON/OFF` | Allow file extensions not in the standard whitelist |
+| `SET ALLOW_FILE_TYPE_ACCESS = '.ext'` | Add a specific extension (e.g. '.bak') to the authorized session whitelist |
+| `SET ALLOW_FILE_OPERATIONS = n` | Overrides the default runaway protection limit (100) for file operations |
+| `SET ALLOW_RECURSIVE_LAYERS = n` | Overrides the default recursion limit (5) for directory operations |
+| `SET ALLOW_GREATER_THAN_n_FILE ON/OFF` | [Legacy] Alias for enabling large file counts |
+| `SET ALLOW_RECURSIVE_GREATER_THAN_n_LAYERS ON/OFF` | [Legacy] Alias for enabling deep recursion |
 
 ### 2.5 Performance & Spilling Thresholds
-
-These commands allow fine-tuning how the engine manages memory and disk during high-scale operations. These settings override the `appsettings.json` defaults for the current session.
+Override `appsettings.json` defaults for the current session.
 
 | Command | Default | Description |
 | :--- | :--- | :--- |
-| `SET JOIN_SPILL_THRESHOLD = n` | 100,000 | Rows held in memory before an internal join spills to a disk-based hash join. |
-| `SET WINDOW_SPILL_THRESHOLD = n` | 100,000 | Rows held in memory before window functions spill to a disk-based partitioned stream. |
-| `SET TEMP_TABLE_SPILL_THRESHOLD = n` | 1,000,000 | Row count at which `#temp` tables spill to disk via `SpillStore`. |
-| `SET EXTERNAL_HASH_PARTITIONS = n` | 32 | Number of discrete partitions used when spilling joins/windows to disk. |
-| `SET EXTERNAL_SORT_CHUNK_SIZE = n` | 50,000 | Rows per sort-block during external disk-sorting operations. |
-| `SET BATCHSIZE = n` | 10,000 | Number of rows processed per batch in the engine pipeline. |
-| `SET MAX_LAST_RESULT_ROWS = n` | 50,000 | Maximum rows held in the session result buffer for interactive display. |
-| `SET MAX_RECURSIVE_DEPTH = n` | 10,000 | Maximum allowed call depth for recursive CTEs or procedures. |
-| `SET MAX_IN_MEMORY_BATCHES = n` | 100 | Maximum number of batches held in memory for `#temp` tables before automatic spilling. |
-| `SET FOREACH_PAGE_SIZE = n` | 10,000 | Number of items fetched per page when iterating over large collections. |
-| `SET MAX_MESSAGES = n` | 1,000 | Limit on the number of captured log/print messages in the session buffer. |
-| `SET MAX_FILE_OPERATIONS = n` | 100 | Maximum filesystem operations (copy, move, delete, etc.) allowed in a single script before the security guardrail fires. |
-| `SET MAX_PARALLEL_DEGREE = n` | 8 | Maximum number of branches that can run concurrently inside a `PARALLEL` block. |
-| `SET MAX_STRING_RESULT_SIZE = n` | 5,242,880 | Maximum byte length of a string expression result (default 5 MB). Prevents runaway string concatenations. |
-| `SET REGEX_MATCH_TIMEOUT = n` | 1,000 | Milliseconds before a regex match operation is aborted (prevents catastrophic backtracking). |
-| `SET MAX_GROUPING_SETS = n` | 100 | Maximum grouping combinations from `CUBE` / `GROUPING SETS` before the engine aborts. |
-| `SET MAX_SESSION_SIZE = n` | 524,288,000 | Maximum session state in bytes (~500 MB) before the engine evicts the oldest cached data. |
-| `SET SPILL_ENCRYPTION = ON/OFF` | OFF | Encrypt spill-to-disk temporary files (AES-256). Adds CPU cost; disable for trusted-disk environments. |
-| `SET SPILL_COMPRESSION = ON/OFF` | OFF | Compress spill-to-disk temporary files (Brotli). Reduces I/O; disable when CPU is the bottleneck. |
-| `SET TELEMETRY = ON/OFF` | ON | Toggles collection of high-cost execution metrics (e.g., precise spill byte counting). |
-
-```sql
--- Tuning for ultra-large join
-SET JOIN_SPILL_THRESHOLD = 10000;
-SET EXTERNAL_HASH_PARTITIONS = 128;
-SELECT * INTO #big_join FROM src.A JOIN src.B ON A.id = B.id;
-```
-
-### 2.6 Diagnostic & Metadata Commands (`SHOW`)
-
-`SHOW` commands provide visibility into the active session, background jobs, and data catalog. All `SHOW` commands support an optional `INTO #tempTable` clause to capture their output for further processing.
-
-| Command | Description |
-| :--- | :--- |
-| `SHOW VERSION` | Displays the current engine version and build information. |
-| `SHOW CONNECTIONS` | Lists all active data connections and their types. |
-| `SHOW TABLES [ON conn]` | Lists tables in the default or specified connection. |
-| `SHOW COLUMNS FOR [table]` | Displays the schema (name, type, nullability) for the target table. |
-| `SHOW VARIABLES` | Lists all variables and their current values in the global scope. |
-| `SHOW LOCAL VARIABLES` | Lists variables in the current procedural/block scope. |
-| `SHOW JOBS` | Lists all active background jobs and their current execution `HistoryId` (used for `KILL JOB`). |
-| `SHOW JOB HISTORY [name]` | Displays execution logs and performance metrics for past jobs. |
-| `SHOW PROFILE` | Displays statement-level performance metrics (requires `SET PROFILING ON`). |
-| `SHOW LINEAGE [FOR table]` | Displays dependency metadata for the target table or the entire session. |
-| `SHOW SAFE ZONES` | Lists the absolute paths where security overrides are permitted. |
-| `SHOW TAGS FOR TABLE t [COLUMN c]` | Lists all lineage tags/metadata associated with a table or column. |
-| `KILL JOB <HistoryId>` | Terminates a running background job instance by its HistoryId. |
+| `SET JOIN_SPILL_THRESHOLD = n` | 100,000 | Rows before a join spills to disk |
+| `SET WINDOW_SPILL_THRESHOLD = n` | 100,000 | Rows before window functions spill to disk |
+| `SET TEMP_TABLE_SPILL_THRESHOLD = n` | 1,000,000 | Rows before a `#temp` table spills to disk |
+| `SET EXTERNAL_HASH_PARTITIONS = n` | 32 | Partitions used when spilling joins/windows |
+| `SET EXTERNAL_SORT_CHUNK_SIZE = n` | 50,000 | Rows per chunk during external sort |
+| `SET BATCHSIZE = n` | 10,000 | Rows per batch in the engine pipeline |
+| `SET MAX_LAST_RESULT_ROWS = n` | 50,000 | Rows in the interactive display buffer |
+| `SET MAX_RECURSIVE_DEPTH = n` | 10,000 | Max call depth for recursive CTEs or procedures |
+| `SET MAX_IN_MEMORY_BATCHES = n` | 100 | Batches held before automatic `#temp` spill |
+| `SET FOREACH_PAGE_SIZE = n` | 10,000 | Items fetched per page when iterating large collections |
+| `SET MAX_MESSAGES = n` | 1,000 | Log/print messages captured in the session buffer |
+| `SET MAX_FILE_OPERATIONS = n` | 100 | Filesystem operations allowed per script |
+| `SET MAX_GENERATE_ROWS = n` | 10,000 | Rows per `GENERATE` statement (prevents resource exhaustion) |
+| `SET MAX_PARALLEL_DEGREE = n` | 8 | Max concurrent branches inside a `PARALLEL` block |
+| `SET MAX_STRING_RESULT_SIZE = n` | 5,242,880 | Max byte length of a string expression result (5 MB) |
+| `SET REGEX_MATCH_TIMEOUT = n` | 1,000 | Milliseconds before a regex match is aborted |
+| `SET MAX_GROUPING_SETS = n` | 100 | Max `CUBE`/`GROUPING SETS` combinations before abort |
+| `SET MAX_SESSION_SIZE = n` | 524,288,000 | Max session state in bytes before eviction (~500 MB) |
+| `SET SPILL_ENCRYPTION = ON/OFF` | OFF | AES-256 encryption on spill files |
+| `SET SPILL_COMPRESSION = ON/OFF` | OFF | Brotli compression on spill files |
+| `SET TELEMETRY = ON/OFF` | ON | Collect high-cost execution metrics |
 
 ---
 
-## 3. Control Flow
+## 3. Connections
 
-### 3.1 `IF / ELSE IF / ELSE`
-Conditional branching. Multiple branches supported. Single-statement bodies do not require `BEGIN...END` but it is recommended.
+### 3.1 `CREATE CONNECTION`
+Registers a named data source in the current session.
+
+```sql
+-- General form
+CREATE CONNECTION <alias> ON <ConnectorType>(<connection-string>);
+
+-- Named-parameter form
+CREATE CONNECTION <alias> ON <ConnectorType>(
+    KEY = value [, ...]
+);
+
+-- Suppress error if already exists
+CREATE CONNECTION <alias> IF NOT EXISTS ON <ConnectorType>(...);
+
+-- Update existing connection
+CREATE OR ALTER CONNECTION <alias> ON <ConnectorType>(...);
+```
+
+**SQL Database Connectors**
+
+```sql
+-- SQL Server (Common options: HOST, DATABASE, USER, PASSWORD, TRUSTED_CONNECTION, 
+-- USE_SSL, TRUST_SERVER_CERTIFICATE, APPLICATION_INTENT, CONNECT_TIMEOUT, POOL_SIZE)
+CREATE CONNECTION prod ON MSSQL(
+    HOST = 'sql-server.company.com',
+    DATABASE = 'Warehouse',
+    TRUSTED_CONNECTION = TRUE,
+    APPLICATION_INTENT = READONLY
+);
+
+-- PostgreSQL (Common options: HOST, PORT, DATABASE, USER, PASSWORD, SSL_MODE, POOLING)
+CREATE CONNECTION pg ON POSTGRES(
+    HOST = 'pg-server.company.com',
+    DATABASE = 'analytics',
+    USER = 'etl',
+    PASSWORD = ENC:...,
+    SSL_MODE = 'REQUIRE'
+);
+
+-- Oracle (Common options: HOST, PORT, SERVICE_NAME, TNS_NAME, USER, PASSWORD)
+CREATE CONNECTION ora ON ORACLE(
+    HOST = 'ora-server.company.com',
+    SERVICE_NAME = 'ORCL',
+    USER = 'etl',
+    PASSWORD = ENC:...
+);
+
+-- ODBC (Common options: DSN, DRIVER, SERVER, DATABASE, UID, PWD)
+CREATE CONNECTION legacy ON ODBC(DSN = 'MyLegacyDSN');
+```
+
+**File Connectors**
+
+```sql
+-- Flat file (Common: PATH, FORMAT, DELIMITER, HEADER, ENCODING, SKIP, COMPRESS, ENCRYPT)
+CREATE CONNECTION sales_csv ON FLATFILE(
+    PATH = 'C:\Data\sales.csv',
+    FORMAT = 'CSV',
+    DELIMITER = ',',
+    HEADER = ON,
+    ENCODING = 'UTF8'
+);
+
+-- Parquet (Common: PATH, COMPRESSION)
+CREATE CONNECTION facts ON PARQUET(
+    PATH = 'C:\Data\facts.parquet',
+    COMPRESSION = 'SNAPPY'
+);
+
+-- JSON / XML (Common: PATH, ROOT_PATH, ENCODING)
+CREATE CONNECTION config ON JSON(PATH = 'C:\Data\config.json', ROOT_PATH = '$.settings');
+```
+
+**Transfer Connectors**
+
+```sql
+-- SFTP (Common: HOST, PORT, USER, PASSWORD, KEYFILE, PASSPHRASE)
+CREATE CONNECTION remote_sftp ON SFTP(
+    HOST = 'sftp.company.com',
+    USER = 'etl',
+    KEYFILE = 'C:\Keys\id_rsa'
+);
+
+-- Azure Blob Storage (Common: ACCOUNT_NAME, ACCOUNT_KEY, CONTAINER)
+CREATE CONNECTION blob ON AZUREBLOB(
+    ACCOUNT_NAME = 'mystorageaccount',
+    CONTAINER = 'mycontainer',
+    ACCOUNT_KEY = ENC:...
+);
+```
+
+**API & Notification Connectors**
+
+```sql
+-- REST API (Common: URL, METHOD, AUTH_TYPE, TOKEN, BODY, ROOT_PATH, PAG_TYPE, PAG_LIMIT)
+CREATE CONNECTION api ON REST(
+    URL = 'https://api.company.com/v1',
+    AUTH_TYPE = 'BEARER',
+    TOKEN = 'tkn_123',
+    ROOT_PATH = '$.items'
+);
+
+-- SMTP (Common: HOST, PORT, USER, PASSWORD, USE_SSL, DEFAULT_FROM)
+CREATE CONNECTION mailer ON SMTP(
+    HOST = 'smtp.company.com',
+    PORT = 587,
+    USER = 'alerts@company.com',
+    PASSWORD = ENC:...,
+    USE_SSL = TRUE
+);
+```
+
+**Testing Connectors**
+
+```sql
+-- In-memory mock database — useful for testing without a real database
+CREATE CONNECTION testdb ON MOCKDB();
+```
+
+**Service Connectors** `[PROPOSED]`
+
+```sql
+-- Report Portal
+CREATE CONNECTION portal ON REPORTPORTAL(
+    HOST = 'report-server.company.com',
+    PORT = 5001,
+    USER = 'admin',
+    PASSWORD = ENC:...
+);
+
+-- Orchestrator
+CREATE CONNECTION orch ON ORCHESTRATOR(
+    HOST = 'orch-server.company.com',
+    PORT = 5100,
+    USER = 'admin',
+    PASSWORD = ENC:...
+);
+```
+
+### 3.2 `ALTER CONNECTION`
+Modifies an existing connection. Use this to rotate passwords or update server addresses without dropping the connection.
+
+```sql
+ALTER CONNECTION prod ON MSSQL(
+    PASSWORD = ENC:...
+);
+
+-- Rename or change target only
+ALTER CONNECTION stage ON POSTGRES('prod-server-v2');
+```
+
+### 3.3 `DROP CONNECTION`
+
+```sql
+DROP CONNECTION prod;
+DROP CONNECTION prod IF EXISTS;
+```
+
+### 3.3 Credential Helpers
+
+| Form | Usage |
+| :--- | :--- |
+| `ENC:...` | AES-256 encrypted value generated by `ENCRYPT VALUE 'plaintext'` |
+| `USE PASSWORD = '...'` | Sets the session decryption key to unlock all `ENC:` values |
+| `USE PASSWORD PROMPT` | Prompts the user interactively; password never written to disk |
+
+---
+
+## 4. Control Flow
+
+### 4.1 `IF / ELSE IF / ELSE`
 
 ```sql
 IF @amount > 1000
@@ -319,38 +441,47 @@ BEGIN
 END
 ```
 
-### 3.2 `WHILE`
-Repeats a block while the condition is true.
+### 4.2 `WHILE`
 
 ```sql
 DECLARE @i INT = 0;
 WHILE @i < 10
 BEGIN
     SET @i = @i + 1;
-    IF @i = 5 CONTINUE;   -- Skip to next iteration
-    IF @i = 8 BREAK;      -- Exit loop
+    IF @i = 5 CONTINUE;
+    IF @i = 8 BREAK;
     PRINT @i;
 END
 ```
 
-### 3.3 `FOR`
-Iterates a variable through a numeric range with an optional step.
+### 4.3 `FOR` — Numeric Range
 
 ```sql
--- Count up
 FOR @idx = 1 TO 10
 BEGIN
     INSERT INTO #results (val) VALUES (@idx);
 END
 
--- Count down with step
 FOR @idx = 100 TO 95 STEP -1
 BEGIN
     PRINT @idx;
 END
 ```
 
-### 3.4 `FOREACH`
+### 4.4 `FOR @row IN` — Query Row Iteration
+Executes the body once per row returned by the query. `@row` exposes columns via dot notation.
+
+```sql
+FOR @row IN (SELECT id, name, amount FROM sales_db.Orders WHERE status = 'Open')
+BEGIN
+    PRINT 'Order ' + @row.id + ': ' + @row.name;
+    INSERT INTO #summary (OrderId, Name) VALUES (@row.id, @row.name);
+END
+```
+
+> For large result sets, consider using `SET FOREACH_PAGE_SIZE` to control how many rows are loaded at once.
+
+### 4.5 `FOREACH` — List Iteration
 Iterates through each item in a `LIST` variable.
 
 ```sql
@@ -359,30 +490,41 @@ DECLARE @months LIST = ('Jan', 'Feb', 'Mar', 'Apr');
 FOREACH @month IN @months
 BEGIN
     PRINT 'Processing: ' + @month;
-    INSERT INTO #monthly_log (Month) VALUES (@month);
+END
+
+-- Commonly used with FILE_LIST
+DECLARE @files = FILE_LIST('C:\Data\Drops\', '*.csv');
+FOREACH @file IN @files
+BEGIN
+    PRINT 'Loading: ' + @file.NAME;
+    BULK INSERT staging.daily FROM @file.PATH WITH (FORMAT = 'CSV', FIRSTROW = 2);
 END
 ```
 
-### 3.5 `BREAK` / `CONTINUE` / `RETURN`
+### 4.6 `BREAK` / `CONTINUE` / `RETURN`
 
 | Statement | Effect |
 | :--- | :--- |
-| `BREAK;` | Exit the innermost `WHILE`/`FOR`/`FOREACH` loop immediately |
-| `CONTINUE;` | Skip the remainder of the current loop iteration |
-| `RETURN;` | Exit the current script or sub-script immediately |
-| `RETURN <expr>;` | Exit and return a value to the caller (e.g. from `CREATE FUNCTION` or captured via `RUN SCRIPT` OUTPUT variable) |
+| `BREAK` | Exit the innermost `WHILE` / `FOR` / `FOREACH` loop |
+| `CONTINUE` | Skip the rest of the current loop iteration |
+| `RETURN` | Exit the current script or procedure immediately |
+| `RETURN <expr>` | Exit and return a value to the caller |
 
-### 3.6 `PRINT`
-Outputs a message to the console / messages panel.
+### 4.7 `PRINT`
 
 ```sql
-PRINT('Starting nightly load...');
-PRINT('Processed: ' + @count + ' rows', TRUE);          -- with timestamp
-PRINT(GETDATE(), TRUE, 'yyyy-MM-dd HH:mm:ss');          -- formatted date
+PRINT 'Starting nightly load...';
+PRINT 'Processed: ' + @count + ' rows', TRUE;           -- with timestamp
+PRINT GETDATE(), TRUE, 'yyyy-MM-dd HH:mm:ss';           -- formatted date
+
+-- Multiple arguments (comma-separated)
+PRINT 'User:', @Username, 'Status:', @Status;
 ```
 
-### 3.7 `TRY...CATCH`
-Traps runtime exceptions. `THROW` re-raises or raises a new error.
+> [!IMPORTANT]
+> `PRINT` automatically masks any variable or expression result that is of type `SENSITIVE`, `SECRET`, or was declared with `PASSWORD`.
+
+### 4.8 `TRY...CATCH`
 
 ```sql
 BEGIN TRY
@@ -393,110 +535,87 @@ END TRY
 BEGIN CATCH
     ROLLBACK;
     PRINT 'Error: ' + ERROR_MESSAGE();
-    THROW;   -- Re-escalate to caller
+    THROW;   -- re-escalate to caller
 END CATCH
 ```
 
-### 3.8 `RAISERROR` / `THROW`
-Manually raise an error to be trapped by a `CATCH` block.
+### 4.9 `RAISERROR` / `THROW`
 
 ```sql
 RAISERROR('Validation failed: missing required column', 16, 1);
 
--- THROW form (preferred)
 THROW 50001, 'Batch ID not found in control table', 1;
 ```
 
-### 3.9 `WAITFOR`
-Pauses execution for a fixed duration or until a specific clock time.
+### 4.10 `WAITFOR` / `WAIT UNTIL`
+Pauses script execution. This is an ETL-SQL extension and is not standard SQL.
 
 | Syntax | Behavior |
 | :--- | :--- |
-| `WAITFOR DELAY 'hh:mm:ss[.fff]';` | Pause for a fixed duration. Supports milliseconds via `.fff`. |
-| `WAITFOR TIME 'hh:mm:ss[.fff]';` | Pause until the specified time. If the time has already passed today, waits until **tomorrow**. |
-| `WAITFOR (condition);` | Polls the condition (expression or subquery) every **200ms** until it evaluates to truthy (non-zero, non-empty, or `true`). |
-| `WAIT UNTIL condition;` | Cleaner alternative to `WAITFOR (condition)`. |
+| `WAITFOR DELAY 'hh:mm:ss[.fff]'` | Pause for a fixed duration |
+| `WAITFOR TIME 'hh:mm:ss'` | Pause until a specific clock time |
+| `WAITFOR (condition)` | Poll every 200 ms until condition is truthy |
+| `WAIT UNTIL condition` | Preferred ELT-SQL alias for `WAITFOR (condition)` |
 
 ```sql
-WAITFOR DELAY '00:00:05';          -- 5 seconds
-WAITFOR DELAY '00:00:00.500';      -- 500 milliseconds
-WAITFOR TIME '23:30:00';           -- Until 11:30 PM
+WAITFOR DELAY '00:00:05';
+WAITFOR DELAY '00:00:00.500';
+WAITFOR TIME '23:30:00';
 
--- Polling for data
-WAITFOR (SELECT 1 FROM incoming_queue WHERE status = 'READY');
-WAIT UNTIL EXIST (SELECT 1 FROM #batch_done);
-
--- Dynamic delay using a variable
-DECLARE @pause = '00:00:02';
-WAITFOR DELAY @pause;
+-- Polling for external state
+WAIT UNTIL EXISTS (SELECT 1 FROM incoming_queue WHERE status = 'READY');
+WAIT UNTIL (SELECT COUNT(*) FROM #batch_done) = 1;
 ```
 
-### 3.10 `ASSERT`
-Enforces data quality rules. If the boolean condition evaluates to `FALSE` or `NULL`, an `ExecutionException` is thrown, halting the script (unless trapped by a `TRY...CATCH` block).
+### 4.11 `ASSERT`
+Throws an `ExecutionException` if the condition is `FALSE` or `NULL`.
 
 ```sql
--- Simple data quality check
 ASSERT (SELECT COUNT(*) FROM #staging) > 0, 'Staging table must not be empty';
-
--- Business logic validation
 ASSERT @total_amount >= 0, 'Negative balances are not allowed';
 ```
 
-### 3.11 `EXPECT SCHEMA`
-Detects schema drift by comparing a declared column manifest against the actual schema of a `#temp` table or named connection. Checks column presence and type family compatibility (e.g., `INT` and `BIGINT` are the same family; `INT` and `VARCHAR` are not).
+### 4.12 `EXPECT SCHEMA`
+Validates that a table or connection has the expected column names and type families.
 
 ```sql
-EXPECT SCHEMA <target> (
-    <column> <type> [NOT NULL] [, ...]
-) [ON DRIFT WARN];
-```
-
-- By default, a mismatch throws an `ExecutionException` and halts the script.
-- `ON DRIFT WARN` logs a warning instead of throwing, allowing the script to continue.
-- Only the declared columns are checked — extra columns in the actual table are ignored.
-- For connections that do not expose type metadata (REST, FTP, flat file), only column **presence** is verified.
-- `NOT NULL` is parsed and stored but not enforced in v1; it is reserved for future nullable checking.
-
-```sql
--- Halt on drift (default)
 EXPECT SCHEMA #staging (
     CustomerId INT,
     Name       VARCHAR,
     Amount     DECIMAL(18,2)
 );
 
--- Warn and continue on drift
+-- Warn instead of halting
 EXPECT SCHEMA #staging (
     CustomerId INT,
     Name       VARCHAR
 ) ON DRIFT WARN;
 
--- Works equally well against named connections
+-- Also works against named connections
 EXPECT SCHEMA myConnection (
-    OrderId    INT,
-    OrderDate  DATE,
-    Total      DECIMAL
+    OrderId   INT,
+    OrderDate DATE,
+    Total     DECIMAL
 );
 ```
 
-**Type families recognized:**
+**Type families:**
 
-| Family | Types matched |
+| Family | Matched types |
 | :--- | :--- |
 | Integer | `INT`, `INTEGER`, `BIGINT`, `SMALLINT`, `TINYINT` |
-| Decimal | `DECIMAL`, `NUMERIC`, `MONEY`, `SMALLMONEY`, `FLOAT`, `REAL`, `DOUBLE` |
-| String | `VARCHAR`, `NVARCHAR`, `CHAR`, `NCHAR`, `TEXT`, `NTEXT`, `CLOB`, `STRING` |
-| Date | `DATE`, `DATETIME`, `DATETIME2`, `SMALLDATETIME`, `TIMESTAMP`, `DATETIMEOFFSET` |
+| Decimal | `DECIMAL`, `NUMERIC`, `MONEY`, `FLOAT`, `REAL`, `DOUBLE` |
+| String | `VARCHAR`, `NVARCHAR`, `CHAR`, `TEXT`, `CLOB`, `STRING` |
+| Date | `DATE`, `DATETIME`, `DATETIME2`, `TIMESTAMP`, `DATETIMEOFFSET` |
 | Boolean | `BIT`, `BOOLEAN`, `BOOL` |
 | Binary | `VARBINARY`, `BINARY`, `BLOB`, `IMAGE` |
 | Range | `MINMAX` |
 
 ---
 
-## 4. Querying (`SELECT`)
+## 5. Querying (`SELECT`)
 
-### 4.1 Complete Clause Reference
-
+### 5.1 Complete Clause Reference
 Clauses must appear in this syntactic order:
 
 ```sql
@@ -504,26 +623,25 @@ SELECT [DISTINCT] [TOP n [PERCENT] [WITH TIES]]
     <columns>
 [INTO <target>]
 FROM <source> [AS alias]
-[JOIN | LEFT JOIN | RIGHT JOIN | FULL JOIN | CROSS JOIN | LEFT SEMI JOIN | LEFT ANTI JOIN <table>
-    [HASH | LOOP | MERGE]     -- optional join algorithm hint
+[JOIN | LEFT JOIN | RIGHT JOIN | FULL JOIN | CROSS JOIN
+ | LEFT SEMI JOIN | LEFT ANTI JOIN <table>
+    [HASH | LOOP | MERGE]          -- join algorithm hint
     ON <condition>]
 [CROSS APPLY | OUTER APPLY (<subquery>) <alias>]
 [WHERE <condition>]
 [GROUP BY <columns> | ROLLUP(<cols>) | CUBE(<cols>) | GROUPING SETS(<sets>)]
 [HAVING <condition>]
-[PIVOT (<agg> FOR <col> IN (<vals>)) AS <alias>]
+[PIVOT  (<agg> FOR <col> IN (<vals>)) AS <alias>]
 [UNPIVOT (<val_col> FOR <name_col> IN (<cols>)) AS <alias>]
 [ORDER BY <col> [ASC|DESC] [, ...]]
 [OFFSET n ROWS]
 [FETCH NEXT n ROWS ONLY]
 [LIMIT n]
 [FOR JSON AUTO | PATH | RAW [, ROOT('name')] [, INCLUDE_NULL_VALUES] [, WITHOUT_ARRAY_WRAPPER]]
-[FOR XML AUTO | PATH | RAW [, ROOT('name')] [, ELEMENTS]];
+[FOR XML  AUTO | PATH | RAW [, ROOT('name')] [, ELEMENTS]];
 ```
 
-### 4.2 `INTO` — Stream to a Target
-Writes the result set into a destination. Prefix with `#` for an in-memory staging table.
-
+### 5.2 `INTO` — Write Result to Target
 ```sql
 SELECT id, name, category
 INTO #temp_staging
@@ -531,30 +649,18 @@ FROM sales_db.transactions
 WHERE created_at >= '2026-01-01';
 ```
 
-### 4.3 `TOP` / `LIMIT` / `OFFSET FETCH`
-Three equivalent ways to cap returned rows:
-
+### 5.3 `TOP` / `LIMIT` / `OFFSET FETCH`
 ```sql
--- TOP (T-SQL style) — also supports PERCENT and WITH TIES
 SELECT TOP 10 * FROM #sales ORDER BY amount DESC;
 SELECT TOP 5 PERCENT WITH TIES * FROM #sales ORDER BY amount DESC;
-
--- LIMIT (ANSI style) — placed at the end
 SELECT * FROM #sales ORDER BY amount DESC LIMIT 10;
-
--- OFFSET / FETCH — for pagination (requires ORDER BY)
 SELECT * FROM #sales
 ORDER BY amount DESC
 OFFSET 20 ROWS
 FETCH NEXT 10 ROWS ONLY;
 ```
 
-### 4.4 `DISTINCT`
-```sql
-SELECT DISTINCT category, region FROM #sales;
-```
-
-### 4.5 JOIN Types
+### 5.4 JOIN Types
 
 | Syntax | Returns |
 | :--- | :--- |
@@ -563,86 +669,107 @@ SELECT DISTINCT category, region FROM #sales;
 | `RIGHT JOIN` / `RIGHT OUTER JOIN` | All right rows; NULLs for unmatched left |
 | `FULL JOIN` / `FULL OUTER JOIN` | All rows from both sides; NULLs for gaps |
 | `CROSS JOIN` | Cartesian product |
-| `LEFT SEMI JOIN` | Left rows where a match exists in the right |
-| `LEFT ANTI JOIN` | Left rows where no match exists in the right |
+| `LEFT SEMI JOIN` | Left rows where a match exists on the right |
+| `LEFT ANTI JOIN` | Left rows where no match exists on the right |
 
-**Join algorithm hints** (optional — force a specific execution strategy):
 ```sql
--- Force a hash join
 SELECT * FROM #large AS a
-HASH JOIN #lookup AS b ON a.id = b.id;
+HASH JOIN #lookup AS b ON a.id = b.id;   -- force hash join
 ```
 
-### 4.6 `CROSS APPLY` / `OUTER APPLY`
-Correlated subquery join — the subquery may reference columns from the left side.
-
+### 5.5 `CROSS APPLY` / `OUTER APPLY`
 ```sql
--- CROSS APPLY: like INNER JOIN; excludes rows with no result from the subquery
 SELECT o.OrderId, t.LineItem
 FROM Orders AS o
 CROSS APPLY (SELECT * FROM OrderLines WHERE OrderId = o.OrderId) AS t;
 
--- OUTER APPLY: like LEFT JOIN; includes rows even when the subquery returns no rows
 SELECT o.OrderId, t.LineItem
 FROM Orders AS o
 OUTER APPLY (SELECT TOP 1 * FROM OrderLines WHERE OrderId = o.OrderId) AS t;
 ```
 
-### 4.7 Hierarchical Aggregation (`ROLLUP`, `CUBE`, `GROUPING SETS`)
-
+### 5.6 Hierarchical Aggregation
 ```sql
--- ROLLUP: detail rows + per-region subtotals + grand total
 SELECT Region, Product, SUM(Amount) AS Total
 FROM #sales
-GROUP BY ROLLUP(Region, Product)
-ORDER BY Region, Product;
+GROUP BY ROLLUP(Region, Product);
 
--- CUBE: all combinations (Region×Product, Region only, Product only, grand total)
 SELECT Region, Product, SUM(Amount) AS Total
 FROM #sales
 GROUP BY CUBE(Region, Product);
 
--- GROUPING SETS: explicitly list which aggregations to compute
 SELECT Region, Product, SUM(Amount) AS Total
 FROM #sales
 GROUP BY GROUPING SETS((Region, Product), (Region), ());
--- () = grand total row
 ```
 
-### 4.8 `PIVOT` and `UNPIVOT`
-
+### 5.7 `PIVOT` / `UNPIVOT`
 ```sql
--- PIVOT: rotate Q1–Q4 rows into columns
 SELECT category, [Q1], [Q2], [Q3], [Q4]
 FROM (SELECT category, quarter, amount FROM #sales) AS src
 PIVOT (SUM(amount) FOR quarter IN ([Q1], [Q2], [Q3], [Q4])) AS pvt;
 
--- UNPIVOT: normalize Q1–Q4 columns back to rows
 SELECT category, quarter, amount
 FROM #quarterly_sales
 UNPIVOT (amount FOR quarter IN ([Q1], [Q2], [Q3], [Q4])) AS unpvt;
 ```
 
-### 4.9 `FOR JSON` / `FOR XML`
-
+### 5.8 `FOR JSON` / `FOR XML`
 ```sql
--- JSON output with root element and null values included
-SELECT id, name, amount
-FROM #sales
+SELECT id, name, amount FROM #sales
 FOR JSON PATH, ROOT('Sales'), INCLUDE_NULL_VALUES;
 
--- XML output with ROOT and ELEMENTS (column values as child elements)
-SELECT id, name
-FROM #sales
+SELECT id, name FROM #sales
 FOR XML PATH, ROOT('Employees'), ELEMENTS;
 ```
 
----
-
-## 5. Common Table Expressions (CTE)
+### 5.9 Window Functions
+Window functions compute a value across a set of rows related to the current row without collapsing them into a single group. They appear in the `SELECT` column list and require an `OVER` clause.
 
 ```sql
--- Standard CTE (readable sub-query factoring)
+SELECT
+    id,
+    name,
+    amount,
+    region,
+
+    -- Ranking
+    ROW_NUMBER()   OVER (PARTITION BY region ORDER BY amount DESC) AS row_num,
+    RANK()         OVER (PARTITION BY region ORDER BY amount DESC) AS rnk,
+    DENSE_RANK()   OVER (PARTITION BY region ORDER BY amount DESC) AS dense_rnk,
+    NTILE(4)       OVER (ORDER BY amount)                          AS quartile,
+
+    -- Offset
+    LAG(amount,  1, 0)  OVER (PARTITION BY region ORDER BY created_at) AS prev_amount,
+    LEAD(amount, 1, 0)  OVER (PARTITION BY region ORDER BY created_at) AS next_amount,
+    FIRST_VALUE(amount) OVER (PARTITION BY region ORDER BY created_at) AS first_in_region,
+    LAST_VALUE(amount)  OVER (PARTITION BY region ORDER BY created_at
+                              ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_in_region,
+
+    -- Aggregate over window
+    SUM(amount)   OVER (PARTITION BY region)                  AS region_total,
+    AVG(amount)   OVER (PARTITION BY region)                  AS region_avg,
+    COUNT(*)      OVER (PARTITION BY region)                  AS region_count,
+    SUM(amount)   OVER (ORDER BY created_at
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS running_total
+
+FROM #sales;
+```
+
+**Frame syntax:**
+
+| Clause | Meaning |
+| :--- | :--- |
+| `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` | All rows from the partition start to the current row |
+| `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` | Current row and one row on either side |
+| `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` | All rows in the partition |
+
+---
+
+## 6. Common Table Expressions (CTE)
+
+```sql
+-- Standard CTE
 WITH HighSales AS (
     SELECT category, SUM(price) AS Total
     FROM sales_db.transactions
@@ -650,7 +777,21 @@ WITH HighSales AS (
 )
 SELECT * FROM HighSales WHERE Total > 10000;
 
--- Recursive CTE (generates a hierarchy or sequence)
+-- CTE with explicit column aliases
+WITH HighSales (Cat, TotalPrice) AS (
+    SELECT category, SUM(price)
+    FROM sales_db.transactions
+    GROUP BY category
+)
+SELECT Cat FROM HighSales WHERE TotalPrice > 10000;
+
+-- Multiple CTEs
+WITH
+    CTE_A AS (SELECT ...),
+    CTE_B AS (SELECT ... FROM CTE_A WHERE ...)
+SELECT * FROM CTE_B;
+
+-- Recursive CTE
 WITH RECURSIVE Counter AS (
     SELECT 1 AS n
     UNION ALL
@@ -661,27 +802,21 @@ SELECT n FROM Counter;
 
 ---
 
-## 6. Set Operations
-
-Combine results from multiple queries into a single result set.
+## 7. Set Operations
 
 ```sql
--- UNION: de-duplicated combination
 SELECT region FROM #east_sales
 UNION
 SELECT region FROM #west_sales;
 
--- UNION ALL: all rows including duplicates (faster)
 SELECT id FROM #batch_a
 UNION ALL
 SELECT id FROM #batch_b;
 
--- EXCEPT: rows in the first query not present in the second
 SELECT id FROM #full_list
 EXCEPT
 SELECT id FROM #processed;
 
--- INTERSECT: rows present in both queries
 SELECT id FROM #active
 INTERSECT
 SELECT id FROM #eligible;
@@ -689,34 +824,29 @@ SELECT id FROM #eligible;
 
 ---
 
-## 7. Logical Operators & Filter Predicates
+## 8. Logical Operators & Filter Predicates
 
 ```sql
--- Standard comparisons
 WHERE amount >= 100 AND status <> 'Cancelled'
 
--- IN / NOT IN (list or @list variable)
 WHERE category IN ('Electronics', 'Apparel')
    OR status NOT IN @exclusionList
 
--- LIKE with ESCAPE
 WHERE email LIKE '%@company.com'
-  AND code LIKE 'US\_%' ESCAPE '\'
+  AND code  LIKE 'US\_%' ESCAPE '\'
 
--- EXISTS / NOT EXISTS
-WHERE EXISTS (SELECT 1 FROM #approved WHERE id = t.id)
+WHERE EXISTS     (SELECT 1 FROM #approved WHERE id = t.id)
+WHERE NOT EXISTS (SELECT 1 FROM #blocked  WHERE id = t.id)
 
--- IS NULL / IS NOT NULL
 WHERE region IS NOT NULL
-  AND notes IS NULL
+  AND notes  IS NULL
 ```
 
 ---
 
-## 8. Data Manipulation Language (DML)
+## 9. DML (Data Manipulation Language)
 
-### 8.1 `INSERT INTO`
-
+### 9.1 `INSERT INTO`
 ```sql
 INSERT INTO sales_db.archive (category, TotalSales)
 OUTPUT INSERTED.category, INSERTED.TotalSales INTO #AuditLog
@@ -724,8 +854,7 @@ SELECT category, SUM(amount) FROM #daily WHERE processed = 1
 GROUP BY category;
 ```
 
-### 8.2 `UPDATE`
-
+### 9.2 `UPDATE`
 ```sql
 UPDATE sales_db.archive
 SET status = 'Closed', closed_at = GETDATE()
@@ -733,17 +862,14 @@ OUTPUT DELETED.status AS OldStatus, INSERTED.status AS NewStatus INTO #ChangeLog
 WHERE created_at < '2020-01-01';
 ```
 
-### 8.3 `DELETE`
-
+### 9.3 `DELETE`
 ```sql
 DELETE FROM staging.temp_imports
 OUTPUT DELETED.id INTO #deleted_ids
 WHERE imported_at < DATEADD(DAY, -7, GETDATE());
 ```
 
-### 8.4 `MERGE` (UPSERT)
-Synchronizes a target with a source in one atomic statement — the cornerstone of incremental ETL.
-
+### 9.4 `MERGE` (Upsert)
 ```sql
 MERGE INTO target_db.Customers AS T
 USING (SELECT * FROM #staging) AS S
@@ -756,43 +882,27 @@ WHEN NOT MATCHED BY SOURCE THEN
     DELETE;
 ```
 
-### 8.5 `BULK INSERT`
-High-speed file-to-table ingestion using strict schema adherence.
-
+### 9.5 `BULK INSERT`
 ```sql
 BULK INSERT target_db.DailyLogs (Name, Region, Amount)
 FROM 'C:\Incoming\logs.csv'
 WITH (
-    FORMAT        = 'CSV',     -- CSV, PARQUET, AVRO, EXCEL
-    FIRSTROW      = 2,         -- Skip header row
-    BATCHSIZE     = 10000,     -- Rows per transaction
-    MAXERRORS     = 5,         -- Fail after this many parse errors
-    FIELDTERMINATOR = ',',     -- Column separator
-    ROWTERMINATOR   = '\n',    -- Row separator
-    DATE_FORMAT   = 'yyyy-MM-dd',
-    STRICT_SCHEMA = ON         -- Reject rows with wrong column count
+    FORMAT           = 'CSV',
+    FIRSTROW         = 2,
+    BATCHSIZE        = 10000,
+    MAXERRORS        = 5,
+    FIELDTERMINATOR  = ',',
+    ROWTERMINATOR    = '\n',
+    DATE_FORMAT      = 'yyyy-MM-dd',
+    STRICT_SCHEMA    = ON
 );
 ```
 
-### 8.6 `GENERATE`
-Produces mock data based on rules and writes it to a target `#temp` table or `@variable` table. Ideal for testing and development in air-gapped or restricted environments.
+Supported formats: `CSV`, `PARQUET`, `AVRO`, `EXCEL`.
 
-```sql
-GENERATE <rowCount> ROWS INTO <target>
-[WITH (SEED = <int>)]
-AS (
-    <column> = '<rule_function>',
-    ...
-);
-```
+### 9.6 `GENERATE`
+Produces synthetic data for testing.
 
-**Supported Rule Functions:**
-- `SEQUENCE(start, step [, unit])`: Generates a sequence. Unit can be `DAY`, `MONTH`, `YEAR` for dates.
-- `RANDOM(val1, val2, ...)`: Randomly selects from the provided list.
-- `RANDOM_INT(min, max)`: Random integer within range.
-- `RANDOM_DECIMAL(min, max)`: Random decimal within range.
-
-*Example:*
 ```sql
 GENERATE 100 ROWS INTO #test_data
 WITH (SEED = 42)
@@ -804,23 +914,22 @@ AS (
 );
 ```
 
-### 8.7 `TRUNCATE TABLE`
-Efficiently removes all rows without logging individual deletions.
+**Rule functions:** `SEQUENCE(start, step [, unit])`, `RANDOM(val1, val2, ...)`, `RANDOM_INT(min, max)`, `RANDOM_DECIMAL(min, max)`.
 
+### 9.7 `TRUNCATE TABLE`
 ```sql
 TRUNCATE TABLE staging.Daily_Import;
 ```
 
 ---
 
-## 9. DDL (Data Definition Language)
+## 10. DDL (Data Definition Language)
 
-### 9.1 `CREATE TABLE`
-
+### 10.1 `CREATE TABLE`
 ```sql
 CREATE TABLE #OrderItems (
-    OrderId    INT          IDENTITY PRIMARY KEY,
-    LineItem   INT          NOT NULL,
+    OrderId    INT           IDENTITY PRIMARY KEY,
+    LineItem   INT           NOT NULL,
     Amount     DECIMAL(18,2) NOT NULL CHECK(Amount >= 0),
     Status     VARCHAR(20)   DEFAULT 'Pending',
     CustomerId INT           REFERENCES Customers(Id),
@@ -828,60 +937,84 @@ CREATE TABLE #OrderItems (
 );
 ```
 
-### 9.2 `ALTER TABLE`
+> [!NOTE]
+> `CREATE OR ALTER` is not supported for tables. Use `DROP TABLE IF EXISTS` followed by `CREATE TABLE`, or use the `IF NOT EXISTS` clause.
 
+### 10.2 `ALTER TABLE`
 ```sql
 ALTER TABLE #staging ADD BatchId INT;
 ALTER TABLE #staging DROP COLUMN TempFlag;
 ALTER TABLE #staging RENAME COLUMN Name TO FullName;
 ```
 
-### 9.3 `DROP TABLE`
-
+### 10.3 `DROP TABLE`
 ```sql
 DROP TABLE IF EXISTS #temp_staging;
 ```
 
-### 9.4 `CREATE INDEX` / `DROP INDEX`
-
+### 10.4 `CREATE INDEX` / `DROP INDEX`
 ```sql
 CREATE UNIQUE INDEX IX_Customers_Email ON Customers (Email ASC);
 DROP INDEX Customers.IX_Customers_Email;
+DROP INDEX IF EXISTS Customers.IX_Customers_Email;
 ```
+
+> [!NOTE]
+> `CREATE OR ALTER` is not supported for indexes.
 
 ---
 
-## 10. Execution Blocks
+## 11. Execution Blocks
 
-### 10.1 `EXECUTE` — Remote Pushdown
-Pushes SQL natively to a remote connection. The remote block runs in the **connection's native SQL dialect**.
+### 11.1 `EXECUTE` — Database Remote Pushdown
+Pushes a SQL block to a remote connection in its native dialect.
 
-*Connection block form:*
 ```sql
-DECLARE @minId INT = 100;
+DECLARE @minId  INT         = 100;
 DECLARE @status VARCHAR(20) = 'Active';
 
-EXECUTE m_db INTO #results WITH(@minId, @status)
+EXECUTE m_db INTO #results WITH (@minId, @status)
 BEGIN
-    -- This is T-SQL (MSSQL dialect)
     SELECT t.id, t.name
     FROM dbo.Employee AS t
     WHERE t.id > ?1 AND t.status = ?2;
 END
 ```
 
-*String literal form (dynamic SQL):*
+Parameters: `?` = sequential, `?1`/`?2` = indexed.
+
+String literal form (dynamic SQL):
 ```sql
 EXECUTE ('SELECT id, name FROM dbo.Employee WHERE status = ''Active''') AT m_db INTO #results;
 ```
 
-**Key parameters:**
-- `INTO #table` — streams results into a local ETL-SQL staging table
-- `WITH (@vars)` — passes variables to the remote; `?` = sequential, `?1`, `?2` = indexed
+Stored procedure call:
+```sql
+DECLARE @Count INT;
+EXECUTE prod_db.dbo.sp_GetCustomerCount @Status = 'Active', @Count = @Count OUTPUT;
+```
 
-### 10.2 `PARALLEL`
-Fires independent operations concurrently. Execution waits for **all** branches to complete before continuing.
+### 11.2 `EXECUTE` — Service Admin Block `[PROPOSED]`
+Sends a block of admin statements to a REPORTPORTAL or ORCHESTRATOR connection. All statements in the block target that service. See **Appendix B** (portal) and **Appendix C** (orchestrator) for valid statement types.
 
+```sql
+EXECUTE portal BEGIN
+    CREATE USER 'john.doe' WITH (EMAIL = 'john@company.com', ROLE = Viewer);
+    CREATE GROUP 'Finance';
+    ADD USER 'john.doe' TO GROUP 'Finance';
+    GRANT READ ON FOLDER '/Finance' TO GROUP 'Finance';
+END
+
+EXECUTE orch BEGIN
+    CREATE JOB 'NightlyArchive' ON SCHEDULE EVERY 1 DAY AT '02:00' AS
+        RUN SCRIPT '/scripts/nightly.etlsql';
+    ENABLE JOB 'NightlyArchive';
+END
+```
+
+> **Error behavior:** Stop-on-first-error within each block. The block is not transactional — a failure mid-block leaves prior statements applied. `GO` as a sub-batch separator is a planned v1.1 extension.
+
+### 11.3 `PARALLEL`
 ```sql
 PARALLEL
 BEGIN
@@ -889,11 +1022,9 @@ BEGIN
     SELECT * INTO #Dim_Product FROM src.ProductDim;
     SELECT * INTO #Dim_Region  FROM src.RegionDim;
 END
--- All three above complete before this line runs
-PRINT 'Dimensions loaded.';
+PRINT 'All dimensions loaded.';
 
--- With concurrency limit — at most 4 branches run simultaneously
--- (remaining branches queue and start as running ones finish)
+-- With concurrency cap
 PARALLEL(4)
 BEGIN
     RUN SCRIPT 'load_region_north.etlsql';
@@ -901,24 +1032,32 @@ BEGIN
     RUN SCRIPT 'load_region_east.etlsql';
     RUN SCRIPT 'load_region_west.etlsql';
     RUN SCRIPT 'load_region_central.etlsql';
-    RUN SCRIPT 'load_region_pacific.etlsql';
 END
-PRINT 'All regions loaded.';
 ```
 
-### 10.3 `RUN SCRIPT`
-Executes another `.etlsql` script inline, with optional parameter mapping.
-
+### 11.4 `RUN SCRIPT`
 ```sql
 RUN SCRIPT 'sub_process.etlsql' WITH (@batchId = 1234, @env = 'PROD');
 ```
 
+### 11.5 `EXEC` — Dynamic Local Execution
+```sql
+-- Execute a string as an ETL-SQL script
+DECLARE @sql = 'SELECT * FROM #staging';
+EXEC (@sql) INTO #results;
+
+-- Execute a named block locally
+EXEC (PRINT 'Hello'; SET @x = 1;);
+
+-- Push a dynamic string to a remote connection
+EXEC ('SELECT TOP 10 * FROM Users ORDER BY LastLogin DESC') AT mssql_conn INTO #top_users;
+```
+
 ---
 
-## 11. Procedures & Functions
+## 12. Procedures & Functions
 
-### 11.1 `CREATE PROCEDURE`
-
+### 12.1 `CREATE PROCEDURE`
 ```sql
 CREATE PROCEDURE ArchiveSales @olderThan DATE
 AS
@@ -930,8 +1069,7 @@ END;
 EXEC ArchiveSales '2025-01-01';
 ```
 
-### 11.2 `CREATE FUNCTION`
-
+### 12.2 `CREATE FUNCTION`
 ```sql
 CREATE FUNCTION CalculateTax(@amount DECIMAL) RETURNS DECIMAL
 AS
@@ -942,128 +1080,266 @@ END;
 SELECT id, CalculateTax(price) AS Tax FROM #sales;
 ```
 
-### 11.3 Drop
-
+### 12.3 `CREATE OR ALTER` / `DROP`
 ```sql
-DROP FUNCTION IF EXISTS CalculateTax;
+CREATE OR ALTER PROCEDURE ArchiveSales @olderThan DATE AS BEGIN ... END;
+CREATE OR ALTER FUNCTION CalculateTax(@amount DECIMAL) RETURNS DECIMAL AS BEGIN ... END;
+
+DROP FUNCTION  IF EXISTS CalculateTax;
 DROP PROCEDURE IF EXISTS ArchiveSales;
 ```
 
 ---
 
-## 12. Transactions
+## 13. Transactions
 
 ```sql
-BEGIN TRANSACTION;     -- or BEGIN TRAN
+BEGIN TRANSACTION;   -- or BEGIN TRAN
 
 -- ... operations ...
 
 IF @@TRANCOUNT > 0
-    COMMIT;            -- or COMMIT TRAN
+    COMMIT;          -- or COMMIT TRAN
 
 -- On failure in CATCH:
-ROLLBACK;              -- or ROLLBACK TRAN
+ROLLBACK;            -- or ROLLBACK TRAN
 ```
 
 ---
 
-## 13. Job Scheduling
+## 14. Job Scheduling
 
-### 13.1 `CREATE JOB`
+### 14.1 `CREATE JOB` — Local Orchestrator
+Registers a job with the local Orchestrator service.
 
 ```sql
--- Run every 30 minutes
+-- EVERY interval syntax
 CREATE JOB CleanupJob ON SCHEDULE EVERY 30 MINUTES AS
     RUN SCRIPT 'scripts/cleanup.etlsql';
 
--- Daily at 2 AM
 CREATE JOB NightlyArchive ON SCHEDULE EVERY 1 DAY AT '02:00' AS
 BEGIN
     INSERT INTO archive SELECT * FROM prod.logs WHERE log_date < DATEADD(DAY,-30,GETDATE());
-    DELETE FROM prod.logs WHERE log_date < DATEADD(DAY, -30, GETDATE());
+    DELETE FROM prod.logs WHERE log_date < DATEADD(DAY,-30,GETDATE());
 END;
+
+-- Cron syntax (equivalent; both forms are valid)
+CREATE JOB WeeklyReport WITH (SCHEDULE = '0 8 * * MON') AS
+    RUN SCRIPT 'scripts/weekly_report.etlsql';
 ```
 
-Schedule intervals: `SECONDS`, `MINUTES`, `HOURS`, `DAYS`
+**Schedule intervals (EVERY form):** `SECONDS`, `MINUTES`, `HOURS`, `DAYS`  
+**Cron syntax:** standard 5-field cron expression in the `WITH (SCHEDULE = '...')` form.
 
-### 13.2 Job Management
+### 14.2 `CREATE JOB` — Remote Orchestrator `[PROPOSED]`
+Targets a specific remote Orchestrator using `AT <alias>`. The alias must be a connection created with `ON ORCHESTRATOR(...)`.
 
 ```sql
-SHOW JOBS;                          -- List all registered jobs
-SHOW JOB HISTORY;                   -- All execution history
-SHOW JOB HISTORY NightlyArchive;    -- History for a specific job
-DROP JOB IF EXISTS CleanupJob;
--- To halt a running job, use the Orchestrator REST API — there is no in-engine KILL JOB statement:
---   PUT http://localhost:5100/jobs/{jobName}/cancel
+CREATE JOB 'NightlyArchive' AT orch ON SCHEDULE EVERY 1 DAY AT '02:00' AS
+    RUN SCRIPT '/scripts/nightly_archive.etlsql';
+
+CREATE JOB 'WeeklyReport' AT orch WITH (SCHEDULE = '0 8 * * MON') AS
+    RUN SCRIPT '/scripts/weekly_report.etlsql';
+```
+
+> [!NOTE]
+> `CREATE OR ALTER` is not supported for jobs. Use `DROP JOB` and then `CREATE JOB` or use `ALTER JOB` to modify schedule/properties.
+
+### 14.3 Job Management
+
+```sql
+-- Local
+ALTER JOB CleanupJob    SET SCHEDULE = EVERY 1 HOUR;
+ALTER JOB WeeklyReport  SET SCHEDULE = '0 9 * * MON';   -- cron form
+ENABLE  JOB CleanupJob;
+DISABLE JOB CleanupJob;
+DROP    JOB IF EXISTS CleanupJob;
+TRIGGER JOB CleanupJob;         -- manual one-off run (does not affect next scheduled run)
+KILL    JOB <HistoryId>;        -- cancel a running instance by its history ID
+
+SHOW JOBS;
+SHOW JOB HISTORY;
+SHOW JOB HISTORY NightlyArchive;
+SHOW ACTIVE JOBS;               -- running instances only
+
+SHOW JOBS    INTO #jobs;
+SHOW JOB HISTORY INTO #history;
 ```
 
 ---
 
-## 14. Introspection & Diagnostics
+## 15. File Operations
 
+All paths are validated against the active Safe Zones before any I/O occurs. See `SET ALLOW_FILE_TYPE_ACCESS` and related overrides in §2.4.
+
+### 15.1 File Statements
 ```sql
-SHOW CONNECTIONS [INTO #temp];                   -- Active connections
-SHOW VERSION [INTO #temp];                       -- Engine version and metadata
-SHOW TABLES [ON conn] [INTO #temp];              -- Tables in a connection
-SHOW COLUMNS FOR conn.TableName [INTO #temp];    -- Columns for a table
-SHOW VARIABLES [INTO #temp];                     -- All session variables
-SHOW LOCAL VARIABLES [INTO #temp];               -- Variables in the current local scope (e.g. inside procedure)
-SHOW PROFILE [INTO #benchmarks];                 -- Last profiling results
+COPY FILE    '<source>' TO '<destination>' [WITH (OVERWRITE = ON|OFF)];
+MOVE FILE    '<source>' TO '<destination>' [WITH (OVERWRITE = ON|OFF)];
+RENAME FILE  '<source>' TO '<new_name>'   [WITH (OVERWRITE = ON|OFF)];
+DELETE FILE  '<path>';
+DELETE FILE  '<path>' IF EXISTS;
 
-EXPLAIN SELECT * FROM conn.Orders WHERE status = 'Open';   -- Execution plan
-LINT 'scripts/nightly_load.etlsql';                        -- Static analysis
-
-HELP CONNECTION MSSQL;    -- Connector-specific option help
-HELP VARIABLES;           -- List all @@ system variables
+-- Wildcard sources
+COPY FILE 'C:\Incoming\*.csv' TO 'C:\Archive\';
 ```
 
-### 14.1 Script Metadata Headers
-Scripts can include metadata in a special comment block at the very top of the file. This metadata is automatically captured by the engine and recorded in data lineage logs.
-
+### 15.2 File Encryption / Compression
 ```sql
-/* 
-   @author: Chuck 
-   @version: 1.2.3 
-   @description: Nightly cleanup of staging tables 
-*/
-
-DECLARE @BatchId INT;
-...
+COMPRESS FILE '<source>' TO '<destination>' [WITH (OVERWRITE = ON|OFF)];
+ENCRYPT FILE  '<source>' TO '<destination>' PASSWORD '<pwd>' [WITH (OVERWRITE = ON|OFF)];
+DECRYPT FILE  '<source>' TO '<destination>' PASSWORD '<pwd>' [WITH (OVERWRITE = ON|OFF)];
 ```
 
-Supported tags: `@author`, `@version`, `@description`, or any custom `@key: value` pair.
-If `@author` is omitted, it defaults to the current system user.
+### 15.3 Directory Statements
+```sql
+CREATE DIRECTORY '<path>' [IF NOT EXISTS];
+
+COPY DIRECTORY   '<src>' TO '<dest>'     [WITH (OVERWRITE = ON|OFF)];
+MOVE DIRECTORY   '<src>' TO '<dest>'     [WITH (OVERWRITE = ON|OFF)];
+RENAME DIRECTORY '<src>' TO '<new_name>' [WITH (OVERWRITE = ON|OFF)];
+
+DELETE DIRECTORY          '<path>' [IF EXISTS];
+DELETE DIRECTORY_CONTENTS '<path>' [WITH (RECURSIVE = ON|OFF)];
+
+COMPRESS DIRECTORY '<src>' TO '<dest.zip>' [WITH (OVERWRITE = ON|OFF)];
+ENCRYPT DIRECTORY  '<src>' TO '<dest>' PASSWORD '<pwd>' [WITH (OVERWRITE = ON|OFF, RECURSIVE = ON|OFF)];
+DECRYPT DIRECTORY  '<src>' TO '<dest>' PASSWORD '<pwd>' [WITH (OVERWRITE = ON|OFF, RECURSIVE = ON|OFF)];
+```
+
+### 15.4 File Function Aliases
+Underscore-style function aliases are available for backward compatibility:
+
+```sql
+COPY_FILE('src', 'dest' [, ON|OFF])
+MOVE_FILE('src', 'dest' [, ON|OFF])
+RENAME_FILE('src', 'new_name' [, ON|OFF])
+DELETE_FILE('path')
+COMPRESS_FILE('src', 'dest' [, ON|OFF])
+ENCRYPT_FILE('src', 'dest', 'pwd' [, ON|OFF])
+DECRYPT_FILE('src', 'dest', 'pwd' [, ON|OFF])
+CREATE_DIRECTORY('path' [, ON|OFF])
+DELETE_DIRECTORY('path')
+DELETE_DIRECTORY_CONTENTS('path' [, RECURSIVE = ON|OFF])
+```
+
+### 15.5 Remote File Transfer
+```sql
+-- Upload to remote
+SEND FILE '<local_path>' TO '<remote_path>' AT <connection> [WITH (OVERWRITE = ON|OFF)];
+
+-- Download from remote
+RECEIVE FILE FROM '<remote_path>' TO '<local_path>' AT <connection> [WITH (OVERWRITE = ON|OFF)];
+```
+
+### 15.6 Filesystem Query Functions
+
+| Function | Returns |
+| :--- | :--- |
+| `FILE_EXISTS(path)` | `TRUE` if the file exists |
+| `DIRECTORY_EXISTS(path)` | `TRUE` if the directory exists |
+| `FILE_LIST(path [, pattern [, recursive]])` | Table: `Name`, `Path`, `Extension`, `Size`, `LastModified` |
+| `REMOTE_FILE_LIST(conn, path)` | Table: `Name`, `FullPath`, `Size`, `LastModified`, `IsDirectory` |
+
+```sql
+IF FILE_EXISTS('C:\Incoming\payload.csv')
+    COPY FILE 'C:\Incoming\payload.csv' TO 'C:\Archive\';
+
+-- Query files as a table
+SELECT Name, Size, LastModified
+INTO #new_files
+FROM FILE_LIST('C:\Incoming\', '*.csv', TRUE)
+WHERE LastModified >= DATEADD(HOUR, -24, GETDATE())
+ORDER BY LastModified DESC;
+
+-- Remote directory listing
+SELECT Name, Size, LastModified
+INTO #remote_files
+FROM REMOTE_FILE_LIST(remote_sftp, '/var/ftp/incoming/')
+WHERE LastModified >= DATEADD(HOUR, -24, GETDATE());
+```
 
 ---
 
-## 15. Containerized Test Databases (`USE DOCKER`)
+## 16. Email
 
-Spins up an isolated containerized database for integration testing. The container is automatically provisioned, and the engine waits for the database to be ready before returning control. No separate readiness polling is needed.
+> **Syntax note:** `SEND EMAIL` is the canonical form. `EMAIL SEND` is a supported alias. `AT <connection>` is the standard keyword for specifying the SMTP connection, consistent with `SEND FILE ... AT conn`, `RECEIVE FILE ... AT conn`, and `CREATE JOB ... AT orch`.
 
-### 15.1 Spawning a Container
+### 16.1 `SEND EMAIL`
+```sql
+SEND EMAIL
+    TO      'recipient@company.com'
+    FROM    'sender@company.com'          -- omit to use DEFAULT_FROM on the SMTP connection
+    SUBJECT 'Pipeline Status'
+    BODY    'The nightly load completed successfully.'
+    [CC     'manager@company.com']
+    [BCC    'audit@company.com']
+    [ATTACH 'C:\Reports\summary.pdf']
+    [ATTACH 'C:\Reports\detail.csv']
+    AT mailer;
+```
 
+| Clause | Required | Notes |
+| :--- | :---: | :--- |
+| `TO` | Yes | One or more addresses |
+| `FROM` | No | Defaults to `DEFAULT_FROM` on the SMTP connector |
+| `SUBJECT` | Yes | |
+| `BODY` | Yes | Plain text or HTML |
+| `CC` | No | |
+| `BCC` | No | |
+| `ATTACH` | No | Local file path; repeatable |
+| `AT` | No | Defaults to the last configured SMTP connection |
+
+### 16.2 Example
+```sql
+CREATE CONNECTION mailer ON SMTP(
+    HOST         = 'smtp.company.com',
+    PORT         = 587,
+    USER         = 'alerts@company.com',
+    PASSWORD     = ENC:...,
+    USE_SSL      = true,
+    DEFAULT_FROM = 'alerts@company.com'
+);
+
+BEGIN TRY
+    -- ... pipeline work ...
+    SEND EMAIL
+        TO      'ops@company.com'
+        SUBJECT 'Nightly Load — SUCCESS'
+        BODY    'All ' + @rowCount + ' rows loaded.'
+        AT      mailer;
+END TRY
+BEGIN CATCH
+    SEND EMAIL
+        TO      'ops@company.com'
+        SUBJECT 'Nightly Load — FAILED'
+        BODY    'Error at step ' + @step + ': ' + ERROR_MESSAGE()
+        ATTACH  'C:\Logs\nightly_error.log'
+        AT      mailer;
+    THROW;
+END CATCH
+```
+
+---
+
+## 17. Containerized Test Databases (`USE DOCKER`)
+
+### 17.1 Spawning a Container
 ```sql
 USE DOCKER('<image>') [AS <alias>];
-```
 
-The image name is an expression, so variables are allowed. The optional alias becomes the handle for accessing the connection string and issuing lifecycle commands.
-
-```sql
 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS mssql_db;
-USE DOCKER('postgres:15-alpine') AS pg_db;
-USE DOCKER('gvenzl/oracle-free:latest') AS ora_db;
+USE DOCKER('postgres:15-alpine')                         AS pg_db;
+USE DOCKER('gvenzl/oracle-free:latest')                  AS ora_db;
 ```
 
-After startup, the connection string is available on the alias:
-
+After startup the connection string is available via the alias:
 ```sql
 DECLARE @conn VARCHAR(500) = mssql_db.CONNECTION_STRING;
 CREATE CONNECTION stage_db ON MSSQL(@conn);
 ```
 
-`DOCKER.CONNECTION_STRING` (without an alias) always returns the most recently started container.
-
-### 15.2 Supported Images and Default Credentials
+### 17.2 Supported Images
 
 | Database | Image pattern | Default credentials | Port |
 | :--- | :--- | :--- | :--- |
@@ -1071,245 +1347,152 @@ CREATE CONNECTION stage_db ON MSSQL(@conn);
 | PostgreSQL | contains `postgres` | `postgres` / `postgres` | 5432 |
 | Oracle | contains `oracle` | `system` / `oracle` | 1521 |
 
-Any image not matching these patterns throws an `ExecutionException` at runtime.
+### 17.3 Lifecycle Commands
 
-### 15.3 Spawn Lifecycle
-
-1. **Session cache check** — if a container with the same image/alias is already running in this session, the cached connection string is returned immediately (no second container is started).
-2. **System container discovery** — the engine queries the local Docker daemon for a container named `etlsql_<image>`. If found, it re-attaches and returns the existing connection string. This allows container reuse across multiple script runs in the same shell session.
-3. **Container creation** — if no existing container is found, a new one is built using Testcontainers (`MsSqlBuilder`, `PostgreSqlBuilder`, or `OracleBuilder`).
-4. **Readiness wait** — `StartAsync()` blocks until the database accepts connections. No manual `WAITFOR` is needed.
-5. **Registration** — the container handle and connection string are stored in the session cache.
-
-### 15.4 Container Lifecycle Commands
-
-| Syntax | Effect |
+| Command | Effect |
 | :--- | :--- |
-| `START DOCKER <alias>;` | Resumes a stopped container (state is preserved on disk) |
-| `STOP DOCKER <alias>;` | Stops the container (state is preserved on disk) |
-| `PAUSE DOCKER <alias>;` | Pauses a running container (suspends CPU; faster to resume than stop/start) |
-| `CLOSE DOCKER <alias>;` | Destroys the container and removes all state |
-| `CLOSE_DOCKER;` | Destroys **all** active containers in the session |
-| `CLOSE_DOCKER <alias>;` | Destroys a specific container by alias |
-| `CLOSE_DOCKER ('<image>');` | Destroys all containers matching the image name |
+| `START DOCKER <alias>` | Resume a stopped container |
+| `STOP DOCKER <alias>` | Stop the container (state preserved) |
+| `PAUSE DOCKER <alias>` | Suspend CPU (faster resume than stop/start) |
+| `CLOSE DOCKER <alias>` | Destroy container and all its state |
+| `CLOSE_DOCKER` | Destroy **all** containers in the session |
 
-Function-style keyword aliases are also supported:
+Function-style aliases: `START_DOCKER`, `STOP_DOCKER`, `CLOSE_DOCKER`.
 
-```sql
-START_DOCKER 'pg_test';
-STOP_DOCKER  'pg_test';
-CLOSE_DOCKER 'pg_test';
-```
+> Containers are **not** automatically closed when a script ends. Always include an explicit `CLOSE_DOCKER` or wrap in `TRY...CATCH`.
 
-### 15.5 Container Persistence and Cleanup
-
-**Containers are not automatically closed when a script ends.** This is intentional — it allows a container to be reused across multiple `RUN SCRIPT` calls or interactive sessions without paying the startup cost each time.
-
-Always include an explicit `CLOSE_DOCKER` at the end of tests or wrap the body in a `TRY...CATCH` to ensure cleanup:
-
-```sql
-BEGIN TRY
-    USE DOCKER('postgres:15-alpine') AS pg;
-    DECLARE @conn VARCHAR(500) = pg.CONNECTION_STRING;
-    CREATE CONNECTION testdb ON POSTGRES(@conn);
-
-    CREATE TABLE testdb.orders (id INT, total DECIMAL(10,2));
-    INSERT INTO testdb.orders VALUES (1, 99.99), (2, 149.50);
-
-    ASSERT (SELECT COUNT(*) FROM testdb.orders) = 2, 'Expected 2 orders';
-END TRY
-BEGIN CATCH
-    PRINT 'Test failed: ' + @@ERROR;
-END CATCH
-
-CLOSE_DOCKER pg;
-```
-
-### 15.6 Multiple Containers
-
-Multiple containers can run simultaneously, each with its own alias:
-
+### 17.4 Multiple Containers
 ```sql
 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS src;
-USE DOCKER('postgres:15-alpine') AS dst;
+USE DOCKER('postgres:15-alpine')                         AS dst;
 
-DECLARE @src_conn VARCHAR(500) = src.CONNECTION_STRING;
-DECLARE @dst_conn VARCHAR(500) = dst.CONNECTION_STRING;
+CREATE CONNECTION source_db ON MSSQL(src.CONNECTION_STRING);
+CREATE CONNECTION target_db ON POSTGRES(dst.CONNECTION_STRING);
 
-CREATE CONNECTION source_db ON MSSQL(@src_conn);
-CREATE CONNECTION target_db ON POSTGRES(@dst_conn);
-
-SELECT * FROM source_db.dbo.Customers INTO #tmp;
+SELECT * INTO #tmp FROM source_db.dbo.Customers;
 INSERT INTO target_db.public.customers SELECT * FROM #tmp;
 
-CLOSE_DOCKER;  -- close all at once
+CLOSE_DOCKER;
 ```
 
 ---
 
-## 16. Dynamic SQL & Remote Execution (EXEC)
+## 18. Introspection & Diagnostics
 
-The `EXEC` (or `EXECUTE`) statement is used to execute scripts dynamically or to push native SQL commands to remote connections.
-
-### 16.1 Dynamic Expression Execution
-
-Executes a string expression as an ETL-SQL script.
-
-**Syntax:**
+### 18.1 Metadata
 ```sql
-EXEC ( <sql_string_expression> ) [ AT <connection_name> ] [ INTO <#temp_table> ] [ WITH ( <param1>, <param2>, ... ) ];
+SHOW CONNECTIONS  [INTO #temp];
+SHOW TABLES [ON conn]  [INTO #temp];
+SHOW COLUMNS FOR conn.TableName [INTO #temp];
+SHOW VERSION  [INTO #temp];
+SHOW SAFE ZONES  [INTO #temp];
 ```
 
-- **Local Execution**: If `AT` is omitted, the string is parsed and executed in the current engine session. It can access local `#temp` tables and `@variables`.
-- **Remote Execution**: If `AT` is provided, the string is evaluated as a single command and sent to the remote database.
-- **`WITH` (Remote Only)**: Passes parameters to the remote engine. Remote SQL should use `@p0`, `@p1`, etc.
-
-**Example:**
+### 18.2 Session
 ```sql
-DECLARE @sql = 'SELECT * FROM #staging';
-EXEC(@sql) INTO #results;
+SHOW VARIABLES       [INTO #temp];
+SHOW LOCAL VARIABLES [INTO #temp];
+SHOW PROFILE         [INTO #temp];
+SHOW LINEAGE [FOR table]  [INTO #temp];
+SHOW TAGS FOR TABLE t [COLUMN c]  [INTO #temp];
 ```
 
-### 16.2 Remote Block Pushdown (Native SQL)
-
-Sends a block of code to a remote connection to be executed in its native dialect.
-
-**Syntax:**
+### 18.3 Jobs
 ```sql
-EXEC <connection_name> [ INTO <#temp_table> ] [ WITH ( <param1>, ... ) ]
-BEGIN
-    <native_sql_code>
-END;
+SHOW JOBS          [INTO #temp];
+SHOW ACTIVE JOBS   [INTO #temp];
+SHOW JOB HISTORY [<jobName>]  [INTO #temp];
+KILL JOB <HistoryId>;
 ```
 
-**Example:**
+### 18.4 Analysis
 ```sql
-EXEC mssql_conn INTO #top_users
-BEGIN
-    SELECT TOP 10 * FROM Users ORDER BY LastLogin DESC
-END;
+EXPLAIN SELECT * FROM conn.Orders WHERE status = 'Open';
+LINT 'scripts/nightly_load.etlsql';
 ```
 
-### 16.3 Stored Procedure Execution
-
-Executes a stored procedure on a remote connection.
-
-**Syntax:**
+### 18.5 Help
 ```sql
-EXEC <connection_name>.<procedure_name> [ [ @param_name = ] <value> [ OUTPUT | INPUT ], ... ];
+HELP CONNECTION MSSQL;       -- connector-specific options
+HELP CONNECTION POSTGRES;
+HELP VARIABLES;              -- list all @@ system variables
+HELP FUNCTIONS;              -- list all built-in functions
+HELP TARGET <name>;          -- documentation for a specific statement or keyword
+HELP TYPE <name>;            -- documentation for a data type (e.g. HELP TYPE MINMAX)
 ```
 
-**Example:**
+### 18.6 Script Metadata Header
 ```sql
-DECLARE @Count INT;
-EXEC prod_db.dbo.sp_GetCustomerCount @Status = 'Active', @Count = @Count OUTPUT;
+/*
+   @author:      Chuck
+   @version:     1.2.3
+   @description: Nightly cleanup of staging tables
+*/
 ```
 
-### 16.4 Local Statement Block
-
-Executes a group of ETL-SQL statements.
-
-**Syntax:**
-```sql
-EXEC ( <statement1>; <statement2>; ... );
-```
-
-**Example:**
-```sql
-EXEC ( PRINT 'Hello'; SET @x = 1; );
-```
-
----
-
-## 17. Display Commands (`SHOW`)
-
-Display commands are used to inspect metadata, session state, and performance logs. Most `SHOW` commands can be directed into an `@variable` or into a `#temp` table using the `INTO` clause.
-
-### 14.1 Database Metadata
-
-| Syntax | Description |
-| :--- | :--- |
-| `SHOW TABLES [ON connector]` | Lists all tables found on the specified connection (or current session). |
-| `SHOW COLUMNS FOR table` | Displays the schema (names, types, nullability) for the specified table. |
-| `SHOW CONNECTIONS` | Lists all active data source connections and their status. |
-
-### 14.2 Session & Environment
-
-| Syntax | Description |
-| :--- | :--- |
-| `SHOW VARIABLES [LOCAL]` | Lists all variables in the global or local scope. |
-| `SHOW VERSION` | Displays the detailed engine and assembly version information. |
-| `SHOW SAFE ZONES` | Lists all directory paths approved for file/directory operations. |
-
-### 14.3 Performance & Lineage
-
-| Syntax | Description |
-| :--- | :--- |
-| `SHOW PROFILE` | Displays a millisecond-level execution breakdown of previous statements. |
-| `SHOW LINEAGE FOR table` | Traces the source-to-target movement for the specified table's data. |
-| `SHOW TAGS FOR TABLE tbl [COLUMN c]` | Lists all metadata tags applied to a specific table or column. |
-
-### 14.4 Job Management
-
-| Syntax | Description |
-| :--- | :--- |
-| `SHOW JOBS` | Lists all currently scheduled and running background jobs. |
-| `SHOW JOB HISTORY [name]` | Displays execution logs for a specific job or all jobs. |
-
-*Example:*
-```sql
-SHOW COLUMNS FOR my_connector.customers INTO #schema;
-SELECT Column_Name, Type FROM #schema WHERE IsNullable = 1;
-```
+Supported tags: `@author`, `@version`, `@description`, or any custom `@key: value` pair. `@author` defaults to the current system user if omitted.
 
 ---
 
 ## Appendix A: Report-SQL Grammar (`.rptsql` files)
 
-`.rptsql` files are standard ETL-SQL scripts with the following additional statement types. For the full user guide including examples, see [Docs/Report_SQL_Guide.md](../Report_SQL_Guide.md).
+`.rptsql` files are standard ETL-SQL scripts with the following additional statement types. For the full user guide see `Docs/Report_SQL_Guide.md`.
 
-### A.1 SET REPORT TITLE / DESCRIPTION
-
+### A.1 `SET REPORT`
+```sql
+SET REPORT TITLE       = 'Monthly Sales Dashboard';
+SET REPORT DESCRIPTION = 'Revenue by region and product line.';
 ```
-SET REPORT TITLE       = '<string>';
-SET REPORT DESCRIPTION = '<string>';
+
+### A.2 `CREATE DATASET`
+```sql
+CREATE DATASET &<name>
+  [REFRESH EVERY '<interval>']
+  [TTL = '<duration>']
+  [COMPRESS = ON|OFF]
+  [ENCRYPT = MACHINE | PASSWORD | KEYFILE]
+  [PASSWORD = '<password>']
+  [KEYFILE  = '<path>']
+AS ( SELECT ... );
 ```
 
-### A.2 CREATE VISUAL
+Interval format: `<n>s`, `<n>m`, `<n>h`, `<n>d`.
 
-```
+### A.3 `CREATE VISUAL`
+```sql
 CREATE VISUAL <name> AS <type> (
-  [SOURCE    = &dataset | #table | ( SELECT ... ),]
-  [TITLE     = '<string>',]
-  [SUBTITLE  = '<string>',]
-  [MAPPINGS  ( role = column [, ...] ),]
-  [OPTIONS   ( key = value [, ...] [, X_AXIS (...)] [, Y_AXIS (...)]
-                            [, COLORS ( key = '#hex' [, ...] )]
-                            [, LEGEND ( position = top|bottom|left|right )] ),]
+  [SOURCE     = &dataset | #table | ( SELECT ... ),]
+  [TITLE      = '<string>',]
+  [SUBTITLE   = '<string>',]
+  [TOOLTIP    = '<string>',]
+  [MAPPINGS   ( role = column [, ...] ),]
+  [OPTIONS    ( key = value [, ...]
+                [, X_AXIS (...)] [, Y_AXIS (...)]
+                [, COLORS ( key = '#hex' [, ...] )]
+                [, LEGEND ( position = top|bottom|left|right )]
+                [, CROSS_FILTER = true] ),]
   [STYLE      ( key = value [, ...] ),]
   [SERIES     ( BAR|LINE column [, ...] ),]
   [FORMATTING ( column op threshold THEN '<color>' [, ...] ),]
+  [OVERLAYS   ( <VisualName> [, ...] ),]
   [ACTIONS    ( trigger = action [, ...] )]
 );
 ```
 
-Valid `<type>` values: `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `TABLE`, `CARD`, `TEXT`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
+**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `TABLE`, `CARD`, `TEXT`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
 
-`SOURCE` is required for all types except `TEXT`, `DATEPICKER`, `SLIDER`, and `SEARCH`.
+**FORMATTING operators:** `<`, `>`, `<=`, `>=`, `=`, `<>`
 
-Valid `op` values in `FORMATTING`: `<`, `>`, `<=`, `>=`, `=`, `<>`.
-
-`CROSS_FILTER = true` may be specified in `OPTIONS` to enable cross-filtering. Chart visuals broadcast a filter on click; TABLE visuals with this option become filter targets.
-
-Valid action forms:
+**Action forms:**
 ```
 ON_CLICK  = DRILL_DOWN(Target = <VisualName>, Key = <column>)
+ON_CLICK  = NAVIGATE(<PageName>)
 ON_CHANGE = SET_PARAMETER(@paramName, <columnRef>)
+ON_CLICK  = REFRESH
 ```
 
-### A.3 CREATE PAGE
-
-```
+### A.4 `CREATE PAGE`
+```sql
 CREATE PAGE <name> AS LAYOUT (
   STRUCTURE = '<css-grid-template-areas>',
   MAP (
@@ -1322,35 +1505,18 @@ CREATE PAGE <name> AS LAYOUT (
 ;
 ```
 
-`STRUCTURE` is a CSS grid-template-areas string: space-separated slot letters within a row, rows separated by `/`. Example: `'A A / B C'`.
+`STRUCTURE` uses CSS grid-template-areas: space-separated slot letters per row, rows separated by `/`. Example: `'A A / B C'`.
 
-### A.4 CREATE DATASET
-
-```
-CREATE DATASET &<name>
-  [REFRESH EVERY '<interval>']
-  [TTL = '<duration>']
-  [COMPRESS = ON|OFF]
-  [ENCRYPT = MACHINE | PASSWORD | KEYFILE]
-  [PASSWORD = '<password>']
-  [KEYFILE  = '<path>']
-AS ( SELECT ... );
-```
-
-Interval format: `<n>s`, `<n>m`, `<n>h`, or `<n>d`.
-
-### A.5 CREATE CONTAINER
-
-```
+### A.5 `CREATE CONTAINER`
+```sql
 CREATE CONTAINER <name> AS BOX|SCROLL (
   [STYLE   ( key = value [, ...] ),]
   VISUALS  ( <VisualName> [, ...] )
 );
 ```
 
-### A.6 CREATE NAVIGATION
-
-```
+### A.6 `CREATE NAVIGATION`
+```sql
 CREATE NAVIGATION <name> AS TAB|BUTTON|LINK (
   [ORIENTATION = HORIZONTAL|VERTICAL,]
   [DEFAULT = <PageName>]
@@ -1358,33 +1524,25 @@ CREATE NAVIGATION <name> AS TAB|BUTTON|LINK (
 WITH PAGES ( <PageName> [, ...] );
 ```
 
-### A.7 CREATE STYLE
-
-Defines a reusable CSS-like style object that can be applied to visuals, pages, and containers via `STYLE = <name>`.
-
-```
-CREATE STYLE <name> (
-  <property> = '<value>'
-  [, ...]
-);
-```
-
-Supported properties include `BACKGROUND-COLOR`, `COLOR`, `FONT-SIZE`, `FONT-WEIGHT`, `BORDER`, `BORDER-RADIUS`, `PADDING`, `MARGIN`, `HEIGHT`, `WIDTH`, and `THEME` (`light` | `dark`).
-
+### A.7 `CREATE STYLE`
 ```sql
-CREATE STYLE DarkCard (
+CREATE STYLE <name> (
   BACKGROUND-COLOR = '#1e1e2e',
   COLOR            = '#cdd6f4',
+  FONT-SIZE        = '14px',
+  FONT-WEIGHT      = 'bold',
+  BORDER           = '1px solid #ccc',
   BORDER-RADIUS    = '8px',
-  THEME            = dark
+  PADDING          = '12px',
+  MARGIN           = '4px',
+  HEIGHT           = '300px',
+  WIDTH            = '100%',
+  THEME            = light | dark
 );
 ```
 
-### A.8 CREATE BUTTON
-
-Creates an interactive button visual that can trigger navigation or parameter changes.
-
-```
+### A.8 `CREATE BUTTON`
+```sql
 CREATE BUTTON <name> (
   TITLE   = '<string>',
   [STYLE  = <StyleName> | ( key = value [, ...] ),]
@@ -1392,52 +1550,18 @@ CREATE BUTTON <name> (
 );
 ```
 
-Valid action triggers: `ON_CLICK`. Valid actions: `NAVIGATE(<PageName>)`, `SET_PARAMETER(@paramName, value)`, `REFRESH`.
+### A.9 `ALTER` / `DROP` / `CREATE OR ALTER`
+All report object types support these forms:
 
 ```sql
-CREATE BUTTON GoBack (
-  TITLE   = '← Return',
-  ACTIONS (ON_CLICK = NAVIGATE(Overview))
-);
-
-CREATE BUTTON RefreshData (
-  TITLE   = '🔄 Refresh',
-  ACTIONS (ON_CLICK = REFRESH)
-);
-```
-
-### A.9 OVERLAYS and TOOLTIP on CREATE VISUAL
-
-These optional clauses appear inside `CREATE VISUAL` blocks:
-
-- **`OVERLAYS ( <VisualName> [, ...] )`** — composites one or more visuals on top of this visual's chart area (e.g., overlaying a LINE on a BAR chart).
-- **`TOOLTIP = '<string>'`** — sets a hover tooltip shown when the user mouses over the visual.
-
-```sql
-CREATE VISUAL RevenueWithTrend AS BAR (
-  SOURCE   = &summary,
-  TITLE    = 'Revenue with Trend',
-  MAPPINGS (X = month, Y = revenue),
-  TOOLTIP  = 'Click a bar to filter the table below.',
-  OVERLAYS (TrendLine)
-);
-```
-
-### A.10 ALTER / DROP / CREATE OR ALTER
-
-All report object types support `ALTER`, `DROP [IF EXISTS]`, and `CREATE OR ALTER` forms:
-
-```sql
--- Modify one or more properties of an existing object
-ALTER VISUAL   <name> ( <clause> [, ...] );
-ALTER PAGE     <name> ( <clause> [, ...] );
+ALTER VISUAL    <name> ( <clause> [, ...] );
+ALTER PAGE      <name> ( <clause> [, ...] );
 ALTER CONTAINER <name> ( <clause> [, ...] );
-ALTER BUTTON   <name> ( <clause> [, ...] );
-ALTER STYLE    <name> ( <clause> [, ...] );
+ALTER BUTTON    <name> ( <clause> [, ...] );
+ALTER STYLE     <name> ( <clause> [, ...] );
 ALTER NAVIGATION <name> ( <clause> [, ...] );
-ALTER DATASET  <name> ( <clause> [, ...] );
+ALTER DATASET   <name> ( <clause> [, ...] );
 
--- Remove an object (IF EXISTS suppresses the error when object is absent)
 DROP VISUAL        [IF EXISTS] <name>;
 DROP PAGE          [IF EXISTS] <name>;
 DROP CONTAINER     [IF EXISTS] <name>;
@@ -1446,12 +1570,259 @@ DROP STYLE         [IF EXISTS] <name>;
 DROP NAVIGATION    [IF EXISTS] <name>;
 DROP DATASET       [IF EXISTS] <name>;
 
--- Idempotent create-or-update (equivalent to ALTER if the object exists, CREATE if not)
-CREATE OR ALTER VISUAL    <name> AS <type> ( ... );
-CREATE OR ALTER PAGE      <name> AS LAYOUT ( ... );
-CREATE OR ALTER DATASET   &<name> ... AS ( SELECT ... );
-CREATE OR ALTER STYLE     <name> ( ... );
-CREATE OR ALTER BUTTON    <name> ( ... );
-CREATE OR ALTER CONTAINER <name> AS BOX|SCROLL ( ... );
+CREATE OR ALTER VISUAL     <name> AS <type> ( ... );
+CREATE OR ALTER PAGE       <name> AS LAYOUT ( ... );
+CREATE OR ALTER DATASET    &<name> ... AS ( SELECT ... );
+CREATE OR ALTER STYLE      <name> ( ... );
+CREATE OR ALTER BUTTON     <name> ( ... );
+CREATE OR ALTER CONTAINER  <name> AS BOX|SCROLL ( ... );
 CREATE OR ALTER NAVIGATION <name> AS TAB|BUTTON|LINK ( ... ) WITH PAGES ( ... );
+```
+
+---
+
+## Appendix B: Report Portal Admin Language `[PROPOSED]`
+
+Portal admin statements execute inside an `EXECUTE portal BEGIN...END` block. The `portal` alias must be a connection created with `ON REPORTPORTAL(...)`.
+
+```sql
+CREATE CONNECTION portal ON REPORTPORTAL(
+    HOST = 'report-server.company.com',
+    PORT = 5001,
+    USER = 'admin',
+    PASSWORD = ENC:...
+);
+
+EXECUTE portal BEGIN
+
+    -- =========================================================
+    -- USERS
+    -- =========================================================
+    CREATE USER 'john.doe'
+        WITH (EMAIL = 'john@company.com', PASSWORD = ENC:..., ROLE = Viewer);
+
+    ALTER USER 'john.doe' SET EMAIL       = 'john.doe@newdomain.com';
+    ALTER USER 'john.doe' SET ROLE        = Publisher;
+    ALTER USER 'john.doe' SET PASSWORD    = ENC:...;
+    ALTER USER 'john.doe' ENABLE;
+    ALTER USER 'john.doe' DISABLE;
+
+    DROP USER 'john.doe';
+    DROP USER 'john.doe' CASCADE;   -- also removes subscriptions, sessions, group memberships
+
+    SHOW USERS         [INTO #users];
+    SHOW USER 'john.doe'  [INTO #detail];
+
+    -- =========================================================
+    -- GROUPS
+    -- =========================================================
+    CREATE GROUP 'Finance' WITH (DESCRIPTION = 'Finance department');
+    ALTER GROUP  'Finance' SET DESCRIPTION = 'Finance and Accounting';
+    DROP GROUP   'Finance';
+    DROP GROUP   'Finance' CASCADE;   -- removes memberships and ACL entries; users remain
+
+    ADD USER    'john.doe' TO GROUP   'Finance';
+    REMOVE USER 'john.doe' FROM GROUP 'Finance';
+
+    SHOW GROUPS                    [INTO #groups];
+    SHOW GROUP 'Finance'           [INTO #detail];   -- includes member list
+    SHOW GROUPS FOR USER 'john.doe' [INTO #groups];
+
+    -- =========================================================
+    -- FOLDERS
+    -- Folders are catalog containers — distinct from filesystem directories.
+    -- =========================================================
+    CREATE FOLDER '/Finance';
+    CREATE FOLDER '/Finance/Monthly';
+
+    ALTER FOLDER '/Finance/Monthly' SET NAME   = 'Monthly Reports';
+    ALTER FOLDER '/Finance/Monthly' SET PARENT = '/Shared';
+
+    DROP FOLDER '/Finance/Monthly Reports';
+    DROP FOLDER '/Finance' CASCADE;   -- removes all child folders and their reports
+
+    SHOW FOLDERS                    [INTO #folders];   -- full tree visible to caller
+    SHOW FOLDERS UNDER '/Finance'   [INTO #folders];   -- subtree only
+    SHOW FOLDER  '/Finance'         [INTO #detail];    -- detail + ACL entries + report count
+
+    -- =========================================================
+    -- PERMISSIONS
+    -- Permissions are granted to groups, not individual users.
+    -- Levels: READ < EXECUTE < MANAGE
+    -- =========================================================
+    GRANT READ    ON FOLDER '/Finance'        TO GROUP 'Finance';
+    GRANT EXECUTE ON FOLDER '/Finance'        TO GROUP 'FinanceAnalysts';
+    GRANT MANAGE  ON FOLDER '/Finance'        TO GROUP 'FinanceAdmins';
+    REVOKE READ   ON FOLDER '/Finance'        FROM GROUP 'Finance';
+
+    SHOW PERMISSIONS ON FOLDER '/Finance'     [INTO #perms];
+    SHOW PERMISSIONS FOR GROUP 'Finance'      [INTO #perms];
+
+    -- =========================================================
+    -- REPORT CATALOG
+    -- PUBLISH points the portal at an existing .rptsql file.
+    -- =========================================================
+    PUBLISH REPORT 'Monthly Sales'
+        FROM '/reports/finance/monthly_sales.rptsql'
+        IN FOLDER '/Finance'
+        WITH (DESCRIPTION = 'Monthly revenue by region');
+
+    ALTER REPORT 'Monthly Sales' SET FOLDER      = '/Finance/Archive';
+    ALTER REPORT 'Monthly Sales' SET DESCRIPTION = 'Archived monthly revenue report';
+    ALTER REPORT 'Monthly Sales' SET NAME        = 'Monthly Sales (Archive)';
+
+    DROP REPORT 'Monthly Sales';
+    DROP REPORT 'Monthly Sales' CASCADE;   -- also removes snapshots and subscriptions
+
+    SHOW REPORTS                         [INTO #reports];
+    SHOW REPORTS IN FOLDER '/Finance'    [INTO #reports];
+    SHOW REPORT  'Monthly Sales'         [INTO #detail];
+
+    -- =========================================================
+    -- SNAPSHOTS
+    -- =========================================================
+    DROP SNAPSHOT FOR REPORT 'Monthly Sales';        -- force rebuild on next view
+    REBUILD SNAPSHOT FOR REPORT 'Monthly Sales';     -- rebuild now in background
+
+    SHOW SNAPSHOTS                       [INTO #snaps];
+
+    -- =========================================================
+    -- SUBSCRIPTIONS
+    -- Group membership is evaluated at delivery time, not creation time.
+    -- =========================================================
+    CREATE SUBSCRIPTION FOR REPORT '/Finance/MonthlySales'
+        DELIVER TO 'john.doe'
+        SCHEDULE '0 8 * * MON'
+        FORMAT PDF
+        AT smtp;
+
+    CREATE SUBSCRIPTION FOR REPORT '/Finance/MonthlySales'
+        DELIVER TO GROUP 'Finance'
+        ON REFRESH                  -- fires whenever the dataset refreshes
+        FORMAT BOTH                 -- PDF and CSV
+        AT smtp;
+
+    ALTER SUBSCRIPTION 5 SET SCHEDULE = '0 9 * * MON';
+    ALTER SUBSCRIPTION 5 ENABLE;
+    ALTER SUBSCRIPTION 5 DISABLE;
+    DROP SUBSCRIPTION 5;
+
+    SHOW SUBSCRIPTIONS                                   [INTO #subs];
+    SHOW SUBSCRIPTIONS FOR REPORT '/Finance/MonthlySales' [INTO #subs];
+
+    -- =========================================================
+    -- SESSION MANAGEMENT
+    -- =========================================================
+    DISCONNECT USER 'dr.allen';          -- force logout; invalidates active session
+    REVOKE TOKENS FOR USER 'dr.allen';   -- invalidate all JWT refresh tokens
+
+    SHOW ACTIVE SESSIONS [INTO #sessions];
+
+    -- =========================================================
+    -- SERVICE CONTROL
+    -- RESTART sends 202 Accepted then restarts. SHUTDOWN sends 202 then stops.
+    -- START is not available via script (service is not running to receive it).
+    -- =========================================================
+    RESTART PORTAL;
+    SHUTDOWN PORTAL;
+
+    -- =========================================================
+    -- PORTAL METADATA QUERIES
+    -- Use the connection alias as a schema prefix.
+    -- All standard SELECT clauses (WHERE, ORDER BY, JOIN, etc.) are supported.
+    -- =========================================================
+    SELECT * FROM portal.Users;
+    SELECT * FROM portal.Groups;
+    SELECT * FROM portal.UserGroups;
+    SELECT * FROM portal.Folders;
+    SELECT * FROM portal.FolderAcl;
+    SELECT * FROM portal.Reports;
+    SELECT * FROM portal.ReportSnapshots;
+    SELECT * FROM portal.Subscriptions;
+    SELECT * FROM portal.ActiveSessions;
+    SELECT * FROM portal.AuditLog WHERE Action = 'LOGIN_FAILED' AND Timestamp > DATEADD(DAY,-7,GETDATE());
+
+    -- Example: who has access to the Finance folder?
+    SELECT u.Username, g.Name AS GroupName, a.Permission
+    FROM portal.Users u
+    JOIN portal.UserGroups ug ON u.Id = ug.UserId
+    JOIN portal.Groups g      ON ug.GroupId = g.Id
+    JOIN portal.FolderAcl a   ON a.GroupId = g.Id
+    JOIN portal.Folders f     ON a.FolderId = f.Id
+    WHERE f.Path = '/Finance'
+    ORDER BY a.Permission DESC, u.Username;
+
+END
+```
+
+**Permission levels:**
+
+| Level | Can do |
+| :--- | :--- |
+| `READ` | View the report exists; view cached snapshots and exports |
+| `EXECUTE` | Run the report with custom parameters; trigger manual refresh |
+| `MANAGE` | Edit metadata, schedules, ACL; delete reports and folders |
+| `Admin` role | Implicit MANAGE everywhere + user/group administration |
+| `Publisher` role | MANAGE in folders where granted |
+
+---
+
+## Appendix C: Orchestrator Remote Management `[PROPOSED]`
+
+Orchestrator admin statements execute inside an `EXECUTE orch BEGIN...END` block. The `orch` alias must be a connection created with `ON ORCHESTRATOR(...)`.
+
+For targeting a remote Orchestrator from a standalone `CREATE JOB` statement (outside a block), use the `AT <alias>` form documented in §14.2.
+
+```sql
+CREATE CONNECTION orch ON ORCHESTRATOR(
+    HOST = 'orch-server.company.com',
+    PORT = 5100,
+    USER = 'admin',
+    PASSWORD = ENC:...
+);
+
+EXECUTE orch BEGIN
+
+    -- =========================================================
+    -- JOB MANAGEMENT
+    -- Both EVERY and cron schedule forms are valid.
+    -- =========================================================
+    CREATE JOB 'NightlyArchive' ON SCHEDULE EVERY 1 DAY AT '02:00' AS
+        RUN SCRIPT '/scripts/nightly_archive.etlsql';
+
+    CREATE JOB 'WeeklyReport' WITH (SCHEDULE = '0 8 * * MON') AS
+        RUN SCRIPT '/scripts/weekly_report.etlsql';
+
+    ALTER JOB 'NightlyArchive' SET SCHEDULE = EVERY 1 DAY AT '03:00';
+    ALTER JOB 'WeeklyReport'   SET SCHEDULE = '0 9 * * MON';
+
+    ENABLE  JOB 'NightlyArchive';
+    DISABLE JOB 'NightlyArchive';
+    DROP    JOB 'NightlyArchive' IF EXISTS;
+
+    TRIGGER JOB 'NightlyArchive';       -- manual one-off; does not affect next scheduled run
+    KILL    JOB <HistoryId>;            -- cancel a running instance by its history ID
+
+    -- =========================================================
+    -- ORCHESTRATOR METADATA QUERIES
+    -- =========================================================
+    SHOW JOBS         [INTO #jobs];
+    SHOW ACTIVE JOBS  [INTO #active];
+    SHOW JOB HISTORY  [INTO #history];
+    SHOW JOB HISTORY 'NightlyArchive' [INTO #history];
+
+    SELECT * FROM orch.Jobs;
+    SELECT * FROM orch.JobHistory WHERE Status = 'FAILED' AND StartedAt > DATEADD(DAY,-7,GETDATE());
+    SELECT * FROM orch.ActiveJobs;
+
+    -- Example: jobs that failed more than once in the last week
+    SELECT JobName, COUNT(*) AS FailCount
+    FROM orch.JobHistory
+    WHERE Status = 'FAILED'
+      AND StartedAt > DATEADD(DAY, -7, GETDATE())
+    GROUP BY JobName
+    HAVING COUNT(*) > 1
+    ORDER BY FailCount DESC;
+
+END
 ```

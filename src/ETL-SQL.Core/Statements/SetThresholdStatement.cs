@@ -22,7 +22,8 @@ namespace ETL_SQL.Core
         MaxSessionSize,
         Telemetry,
         TempTableSpill,
-        MaxLastResultRows
+        MaxLastResultRows,
+        MaxGenerateRows
     }
 
     public record SetThresholdStatement(ThresholdType Type, Expression Value) : Statement

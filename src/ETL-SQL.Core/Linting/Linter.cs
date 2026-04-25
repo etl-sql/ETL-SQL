@@ -57,6 +57,18 @@ namespace ETL_SQL.Core.Linting
 
         private void DiscoverFromStatement(Statement statement, ScriptMetadataOverlay overlay)
         {
+            if (statement.Ctes != null)
+            {
+                foreach (var cte in statement.Ctes)
+                {
+                    overlay.RegisterTable("DEFAULT", cte.Name);
+                    if (cte.ColumnNames != null)
+                    {
+                        foreach (var col in cte.ColumnNames) overlay.RegisterColumn("DEFAULT", cte.Name, col);
+                    }
+                }
+            }
+
             if (statement is CreateConnectionStatement conn)
             {
                 overlay.RegisterConnection(conn.name, conn.type ?? "UNKNOWN");

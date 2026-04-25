@@ -55,6 +55,7 @@ namespace ETL_SQL.Tests.Integration
             services.AddSingleton<ETL_SQL.Core.Execution.ISystemResources, ETL_SQL.Core.Execution.DefaultSystemResources>();
             services.AddSingleton<ETL_SQL.Core.Execution.IBufferManager, ETL_SQL.Orchestrator.Execution.BufferManager>();
             services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new ETL_SQL.Core.Execution.BufferManagerOptions()));
+            services.AddSingleton<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry>(new ETL_SQL.Core.Metadata.LanguageHelpRegistry());
 
             services.AddTransient<Evaluator>();
             

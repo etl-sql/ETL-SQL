@@ -56,7 +56,8 @@ namespace ETL_SQL.Tests.Hardening
             services.AddTransient<IReportContext, ETL_SQL.Engine.Services.ReportRegistry>();
             services.AddSingleton<IJobHistoryStore>(new Mock<IJobHistoryStore>().Object);
             services.AddSingleton<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
-            
+            services.AddSingleton<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry, ETL_SQL.Core.Metadata.LanguageHelpRegistry>();
+
             services.AddSingleton<ISystemResources, DefaultSystemResources>();
             var bufferOptions = Options.Create(new BufferManagerOptions());
             var bufferLogger = new Mock<Microsoft.Extensions.Logging.ILogger<BufferManager>>();

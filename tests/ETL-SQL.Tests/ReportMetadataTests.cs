@@ -65,7 +65,8 @@ namespace ETL_SQL.Tests
                 mockConnectorRegistry.Object,
                 mockSessionManager.Object,
                 security,
-                mockLogger.Object
+                mockLogger.Object,
+                new ETL_SQL.Core.Metadata.LanguageHelpRegistry()
             );
 
             // 2. Act

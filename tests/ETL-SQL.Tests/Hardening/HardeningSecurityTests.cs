@@ -14,40 +14,55 @@ namespace ETL_SQL.Tests.Hardening.Hardening
 {
     public class SecurityHardeningTests
     {
-        private Evaluator CreateEvaluator()
-        {
-            var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();
-            eval.SecurityService.IsTestMode = false; // Force enforcement
-            return eval;
-        }
 
         [Fact]
         public async Task TestRootPathValidation_Throws()
         {
-            var eval = CreateEvaluator();
-            var rootPath = Path.GetPathRoot(Environment.CurrentDirectory);
-            var sql = $"DELETE FILE '{rootPath}';";
-            
-            var script = TestHelpers.Parse(sql);
-            var ex = await Assert.ThrowsAsync<SecurityException>(() => eval.Evaluate(script));
-            Assert.Contains("Unauthorized access to root directory", ex.Message);
+            var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var original = eval.SecurityService.IsTestMode;
+            eval.SecurityService.IsTestMode = false;
+            try
+            {
+                var rootPath = Path.GetPathRoot(Environment.CurrentDirectory);
+                var sql = $"DELETE FILE '{rootPath}';";
+                
+                var script = TestHelpers.Parse(sql);
+                var ex = await Assert.ThrowsAsync<SecurityException>(() => eval.Evaluate(script));
+                Assert.Contains("Unauthorized access to root directory", ex.Message);
+            }
+            finally
+            {
+                eval.SecurityService.IsTestMode = original;
+            }
         }
 
         [Fact]
         public async Task TestProtectedDirectory_Throws()
         {
-            var eval = CreateEvaluator();
-            var sql = "DELETE FILE '.git/config';";
-            
-            var script = TestHelpers.Parse(sql);
-            var ex = await Assert.ThrowsAsync<SecurityException>(() => eval.Evaluate(script));
-            Assert.Contains("protected system directory", ex.Message);
+            var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var original = eval.SecurityService.IsTestMode;
+            eval.SecurityService.IsTestMode = false;
+            try
+            {
+                var sql = "DELETE FILE '.git/config';";
+                
+                var script = TestHelpers.Parse(sql);
+                var ex = await Assert.ThrowsAsync<SecurityException>(() => eval.Evaluate(script));
+                Assert.Contains("protected system/environment directory", ex.Message);
+            }
+            finally
+            {
+                eval.SecurityService.IsTestMode = original;
+            }
         }
 
         [Fact]
         public async Task TestBlockedFileType_Throws()
         {
-            var eval = CreateEvaluator();
+            var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var original = eval.SecurityService.IsTestMode;
+            eval.SecurityService.IsTestMode = false;
+            
             var baseDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
             var securityService = eval.SecurityService;
             securityService.ApprovedSafeZones.Add(baseDir);
@@ -62,6 +77,7 @@ namespace ETL_SQL.Tests.Hardening.Hardening
             }
             finally
             {
+                securityService.IsTestMode = original;
                 securityService.ApprovedSafeZones.Remove(baseDir);
             }
         }
@@ -78,7 +94,7 @@ namespace ETL_SQL.Tests.Hardening.Hardening
 
             try
             {
-                var eval = CreateEvaluator();
+                var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();
                 var tempFile = Path.Combine(baseDir, "test_hardening_limit.csv");
                 var scriptSql = $"DELETE FILE '{tempFile.Replace("\\", "/")}';\n";
                 var fullSql = string.Concat(Enumerable.Repeat(scriptSql, 101));
@@ -149,7 +165,7 @@ namespace ETL_SQL.Tests.Hardening.Hardening
 
             try
             {
-                var eval = CreateEvaluator();
+                var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();
                 eval.CurrentRecursiveDepth = 6;
                 
                 var ex = Assert.Throws<SecurityException>(() => eval.IncrementOperationCount());

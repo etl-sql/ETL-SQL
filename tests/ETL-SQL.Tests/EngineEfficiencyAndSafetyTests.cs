@@ -160,7 +160,7 @@ SELECT * FROM #collision ORDER BY id;"));
 
             _services.Setup(s => s.GetService(typeof(IEnumerable<IStatementHandler>))).Returns(handlers);
 
-            return new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, l, new EvaluatorComponentRegistry());
+            return new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, l, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());
         }
 
         private class TestLogger : ILogger

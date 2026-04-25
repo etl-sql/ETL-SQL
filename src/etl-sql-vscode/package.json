@@ -137,6 +137,11 @@
         "command": "etlsql.browseFile",
         "title": "ETL-SQL: Browse for Flat File...",
         "icon": "$(file-add)"
+      },
+      {
+        "command": "etlsql.stopScript",
+        "title": "ETL-SQL: Stop Script",
+        "icon": "$(primitive-square)"
       }
     ],
     "keybindings": [
@@ -156,12 +161,17 @@
         {
           "command": "etlsql.runScript",
           "group": "etlsql",
-          "when": "resourceLangId == etlsql"
+          "when": "resourceLangId == etlsql && !etlsql.isRunning"
+        },
+        {
+          "command": "etlsql.stopScript",
+          "group": "etlsql",
+          "when": "resourceLangId == etlsql && etlsql.isRunning"
         },
         {
           "command": "etlsql.runSelection",
           "group": "etlsql",
-          "when": "resourceLangId == etlsql && editorHasSelection"
+          "when": "resourceLangId == etlsql && editorHasSelection && !etlsql.isRunning"
         },
         {
           "command": "etlsql.browseFile",
@@ -178,12 +188,17 @@
         {
           "command": "etlsql.runScript",
           "group": "navigation",
-          "when": "resourceLangId == etlsql"
+          "when": "resourceLangId == etlsql && !etlsql.isRunning"
+        },
+        {
+          "command": "etlsql.stopScript",
+          "group": "navigation",
+          "when": "resourceLangId == etlsql && etlsql.isRunning"
         },
         {
           "command": "etlsql.runSelection",
           "group": "navigation",
-          "when": "resourceLangId == etlsql && editorHasSelection"
+          "when": "resourceLangId == etlsql && editorHasSelection && !etlsql.isRunning"
         },
         {
           "command": "etlsql.previewReport",

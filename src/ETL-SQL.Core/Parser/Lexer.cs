@@ -58,6 +58,7 @@ namespace ETL_SQL.Core.Parser
             dict["EACH"] = TokenType.EACH;
             dict["FOREACH"] = TokenType.FOREACH;
             dict["RAISERROR"] = TokenType.RAISEERROR;
+            dict["NUMBER"] = TokenType.NUMERIC;
 
             // ── Report-SQL keywords (Phase 9A) ─────────────────────────────
             // These are registered so the lexer produces typed tokens inside
@@ -522,7 +523,7 @@ namespace ETL_SQL.Core.Parser
                     {
                         // Closing quote
                         Advance();
-                        return new Token(TokenType.STRING, sb.ToString(), line, column, _line, _column, startOffset, _position);
+                        return new Token(TokenType.STRING_LITERAL, sb.ToString(), line, column, _line, _column, startOffset, _position);
                     }
                 }
                 else

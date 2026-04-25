@@ -155,6 +155,7 @@ namespace ETL_SQL.Services
         public int MaxParallelDegree { get; set; } = DefaultMaxParallelDegree;
         public long MaxStringResultSize { get; set; } = DefaultMaxStringResultSize;
         public TimeSpan RegexMatchTimeout { get; set; } = DefaultRegexMatchTimeout;
+        public static readonly int DefaultMaxGenerateRows = 10000;
 
         public PathProtectionMode ProtectionMode { get; set; } = PathProtectionMode.Restricted;
 
@@ -273,13 +274,15 @@ namespace ETL_SQL.Services
             string? matchedZone = null;
             if (IsTestMode)
             {
-                var baseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                var tempPath = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                var currentDir = Directory.GetCurrentDirectory().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                var baseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                var tempPath = Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                var currentDir = Directory.GetCurrentDirectory().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
 
-                if (fullPath.StartsWith(baseDir, PathComparison) || 
-                    fullPath.StartsWith(tempPath, PathComparison) ||
-                    fullPath.StartsWith(currentDir, PathComparison))
+                var testFullPath = fullPath.EndsWith(Path.DirectorySeparatorChar) ? fullPath : fullPath + Path.DirectorySeparatorChar;
+
+                if (testFullPath.StartsWith(baseDir, PathComparison) || 
+                    testFullPath.StartsWith(tempPath, PathComparison) ||
+                    testFullPath.StartsWith(currentDir, PathComparison))
                 {
                     isSafeZone = true;
                 }
@@ -287,7 +290,12 @@ namespace ETL_SQL.Services
 
             if (!isSafeZone)
             {
-                matchedZone = ApprovedSafeZones.FirstOrDefault(z => fullPath.StartsWith(z, PathComparison));
+                matchedZone = ApprovedSafeZones.FirstOrDefault(z => 
+                {
+                    var zoneDir = z.EndsWith(Path.DirectorySeparatorChar) ? z : z + Path.DirectorySeparatorChar;
+                    var testFullPath = fullPath.EndsWith(Path.DirectorySeparatorChar) ? fullPath : fullPath + Path.DirectorySeparatorChar;
+                    return testFullPath.StartsWith(zoneDir, PathComparison);
+                });
                 if (matchedZone != null) isSafeZone = true;
             }
 
@@ -295,7 +303,7 @@ namespace ETL_SQL.Services
             // If the path is authorized via explicit Safe Zone, check if it's sensitive and log a warning.
             if (isSafeZone)
             {
-                if (IsSensitivePath(fullPath))
+                if (IsSensitivePath(fullPath) && !IsTestMode)
                 {
                     _logger.Warning("[SECURITY] Authorized access to sensitive path '{Path}' via safe zone '{Zone}'.", fullPath, matchedZone ?? "TestMode");
                 }
@@ -368,7 +376,7 @@ namespace ETL_SQL.Services
         /// <summary>
         /// Validates that a file's extension is safe to process.
         /// </summary>
-        public void ValidateFileType(string path, bool allowUnknown = false)
+        public void ValidateFileType(string path, bool allowUnknown = false, HashSet<string>? overrides = null)
         {
             if (string.IsNullOrWhiteSpace(path) || Directory.Exists(path)) return;
 
@@ -381,10 +389,10 @@ namespace ETL_SQL.Services
                 throw new SecurityException($"Access denied to dangerous file type: {ext}. These system-level file types are strictly forbidden.");
             }
 
-            // 2. Check whitelist
-            if (!AllowedExtensions.Contains(ext) && !allowUnknown)
+            // 2. Check whitelist and session overrides
+            if (!AllowedExtensions.Contains(ext) && !allowUnknown && (overrides == null || !overrides.Contains(ext)))
             {
-                throw new SecurityException($"File type '{ext}' is not in the allowed data-connector whitelist. Use 'SET ALLOW_FILE_TYPE_ACCESS ON;' override if necessary.");
+                throw new SecurityException($"File type '{ext}' is not in the allowed data-connector whitelist. Use 'SET ALLOW_FILE_TYPE_ACCESS = '{ext}';' override if necessary.");
             }
         }
 
@@ -420,7 +428,8 @@ namespace ETL_SQL.Services
             if (count > maxOps && !allowLargeCount)
             {
                 string typeName = type == OperationType.FileSystem ? "File" : "Internal/Mock";
-                throw new SecurityException($"Runaway protection: {typeName} operation count ({count}) exceeds the safety limit of {maxOps}. Use 'SET ALLOW_GREATER_THAN_{maxOps}_FILE ON;' override.");
+                string syntax = type == OperationType.FileSystem ? "SET ALLOW_FILE_OPERATIONS = n;" : "SET MAX_INTERNAL_OPERATIONS = n;";
+                throw new SecurityException($"Runaway protection: {typeName} operation count ({count}) exceeds the safety limit of {maxOps}. Use '{syntax}' override if allowed.");
             }
 
             if (count > maxOps && allowLargeCount && !isSafeZone && type == OperationType.FileSystem)
@@ -436,7 +445,7 @@ namespace ETL_SQL.Services
 
             if (depth > maxDepth && !allowDeepRecursion)
             {
-                throw new SecurityException($"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {maxDepth}. Use 'SET ALLOW_RECURSIVE_GREATER_THAN_{maxDepth}_LAYERS ON;' override.");
+                throw new SecurityException($"Runaway protection: Recursive operation depth ({depth}) exceeds the safety limit of {maxDepth}. Use 'SET ALLOW_RECURSIVE_LAYERS = n;' override if allowed.");
             }
 
             if (depth > maxDepth && allowDeepRecursion && isSafeZone)
@@ -495,6 +504,10 @@ namespace ETL_SQL.Services
                 case ThresholdType.MaxRecursiveDepth:
                     isExceeding = Convert.ToInt32(newValue) > MaxRecursiveDepth;
                     globalLimit = MaxRecursiveDepth;
+                    break;
+                case ThresholdType.MaxGenerateRows:
+                    isExceeding = Convert.ToInt32(newValue) > 1000000;
+                    globalLimit = 1000000;
                     break;
                 default:
                     // Other thresholds (JoinSpill, etc.) are tuning knobs, not security ceilings, 

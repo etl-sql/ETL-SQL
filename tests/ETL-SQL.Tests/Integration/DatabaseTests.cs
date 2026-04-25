@@ -26,7 +26,8 @@ namespace ETL_SQL.Tests.Integration
         private static async Task<object?> EvalFunc(Evaluator eval, string sql)
         {
             await Execute(eval, sql);
-            return eval.LastResult?.Rows.FirstOrDefault()?.Columns.Values.FirstOrDefault();
+            var row = eval.LastResult?.Rows.FirstOrDefault();
+            return row?["UserName"] ?? row?["ProductName"];
         }
 
         [Fact]
@@ -38,7 +39,8 @@ namespace ETL_SQL.Tests.Integration
             await Execute(eval, "CREATE CONNECTION MyMock ON MOCKDB('dummy_string');");
             
             // 2. Query mock table
-            var res = await EvalFunc(eval, "SELECT UserName FROM MyMock.Users WHERE UserID = 1;");
+            var sql = "SELECT UserName FROM MyMock.Users WHERE UserID = 1;";
+            var res = await EvalFunc(eval, sql);
             Assert.Equal("User_1", res?.ToString());
             
             // 3. Query another table

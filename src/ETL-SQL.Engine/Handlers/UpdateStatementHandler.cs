@@ -78,6 +78,7 @@ namespace ETL_SQL.Engine.Handlers
                 // 2. Read batches from source, transform, and stream to temp
                 int updatedCount = 0;
                 var batches = connection.ReadBatches();
+                var rowInfos = new List<(Row? Before, Row? After, string? Action)>();
                 
                 async IAsyncEnumerable<DataTable> ProcessBatches()
                 {
@@ -87,10 +88,18 @@ namespace ETL_SQL.Engine.Handlers
                         {
                             if (stmt.WhereClause == null || await context.EvaluateCondition(stmt.WhereClause, row))
                             {
+                                var before = stmt.Output != null ? row.Clone() : null;
+                                
                                 foreach (var a in stmt.Assignments)
                                 {
                                     row[a.ColumnName] = await context.EvaluateValue(a.Value, row);
                                 }
+                                
+                                if (stmt.Output != null)
+                                {
+                                    rowInfos.Add((before, row.Clone(), "UPDATE"));
+                                }
+                                
                                 updatedCount++;
                             }
                         }
@@ -103,7 +112,15 @@ namespace ETL_SQL.Engine.Handlers
                 // usually overwrites anyway.
                 
                 var processed = ProcessBatches();
-                await connection.WriteBatches(processed);
+                var materialized = new List<DataTable>();
+                await foreach (var b in processed) materialized.Add(b);
+
+                await connection.WriteBatches(materialized.ToAsyncEnumerable());
+
+                if (stmt.Output != null)
+                {
+                    await OutputClauseHelper.ProcessAsync(stmt.Output, context, rowInfos);
+                }
 
                 context.IncrementOperationCount(OperationType.EngineInternal, count: updatedCount);
                 context.RowsProcessed += updatedCount;

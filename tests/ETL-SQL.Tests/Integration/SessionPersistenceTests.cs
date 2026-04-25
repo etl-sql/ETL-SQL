@@ -155,7 +155,7 @@ namespace ETL_SQL.Tests.Integration.Integration
             // 9th run: DOCKER CLOSE & DROP CONNECTION
             AnsiConsole.MarkupLine("  - Step 9: Close Docker and drop connection 'm'");
             var (eval9, code9) = await RunSessionStep(@"
-                DOCKER CLOSE;
+                CLOSE DOCKER;
                 DROP CONNECTION m;
             ");
             Assert.Equal(0, code9);
@@ -227,7 +227,7 @@ namespace ETL_SQL.Tests.Integration.Integration
             // 18th run: Final cleanup
             AnsiConsole.MarkupLine("  - Step 18: Final Docker cleanup");
             var (eval18, code18) = await RunSessionStep(@"
-                DOCKER CLOSE;
+                CLOSE DOCKER;
                 DROP CONNECTION m;
             ");
             Assert.Equal(0, code18);

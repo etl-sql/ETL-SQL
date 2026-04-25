@@ -156,7 +156,7 @@ namespace ETL_SQL.Engine.Handlers
                                 context.SecurityService.ValidateWriteAccess(destination.Path);
                             }
                             
-                            await destination.WriteBatches(new[] { mappedBatch }.ToAsyncEnumerable());
+                            await destination.WriteBatches(new[] { mappedBatch }.ToAsyncEnumerable(), append: true);
                         }
                         count += mappedBatch.Rows.Count;
                     }
@@ -175,7 +175,7 @@ namespace ETL_SQL.Engine.Handlers
                                     var singleRowBatch = new DataTable();
                                     singleRowBatch.SetColumns(destColumns);
                                     await singleRowBatch.AddRowAsync(row);
-                                    await destination.WriteBatches(new[] { singleRowBatch }.ToAsyncEnumerable());
+                                    await destination.WriteBatches(new[] { singleRowBatch }.ToAsyncEnumerable(), append: true);
                                     count++;
                                 }
                                 catch (Exception rowEx)

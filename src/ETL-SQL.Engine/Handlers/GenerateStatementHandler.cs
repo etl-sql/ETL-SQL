@@ -33,6 +33,11 @@ namespace ETL_SQL.Engine.Handlers
                 throw new ExecutionException($"Invalid or negative row count for GENERATE: {rowCountObj}");
             }
 
+            if (context.MaxGenerateRows > 0 && rowCount > context.MaxGenerateRows)
+            {
+                throw new ExecutionException($"GENERATE row count {rowCount} exceeds the current limit of {context.MaxGenerateRows}. Use 'SET MAX_GENERATE_ROWS = {rowCount};' to override if allowed.");
+            }
+
             // 2. Evaluate Seed from Options
             int? seed = null;
             if (stmt.Options != null && stmt.Options.TryGetValue("SEED", out var seedExpr))

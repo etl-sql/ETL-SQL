@@ -191,11 +191,13 @@ namespace ETL_SQL.Core
     public record CteDefinition : AstNode
     {
         public string Name { get; }
+        public List<string>? ColumnNames { get; }
         public Statement Query { get; }
-        public CteDefinition(string name, Statement query)
+        public CteDefinition(string name, Statement query, List<string>? columnNames = null)
         {
             Name = name;
             Query = query;
+            ColumnNames = columnNames;
         }
     }
 
@@ -1933,11 +1935,12 @@ namespace ETL_SQL.Core
         FileTypeAccess,
         LargeFileCount,
         DeepRecursion,
-        LargeStringResults
+        LargeStringResults,
+        FileTypeExtension
     }
 
-    /// <summary>SET ALLOW_... ON/OFF</summary>
-    public record SetSecurityOverrideStatement(SecurityOverride Override, bool Enabled) : Statement
+    /// <summary>SET ALLOW_... ON/OFF or SET ALLOW_... = value</summary>
+    public record SetSecurityOverrideStatement(SecurityOverride Override, bool Enabled, Expression? Value = null) : Statement
     {
         public override string ToSql() => AstSerializer.Format(this);
     }

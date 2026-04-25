@@ -17,8 +17,8 @@ RENAME FILE  '<source>' TO '<new_name>'   [WITH(OVERWRITE=ON|OFF)];
 DELETE FILE  '<path>';
 
 COMPRESS FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];
-ENCRYPT FILE  '<source>' TO '<destination>' PASSWORD('<pwd>') [WITH(OVERWRITE=ON|OFF)];
-DECRYPT FILE  '<source>' TO '<destination>' PASSWORD('<pwd>') [WITH(OVERWRITE=ON|OFF)];
+ENCRYPT FILE  '<source>' TO '<destination>' PASSWORD 'pwd' [WITH(OVERWRITE=ON|OFF)];
+DECRYPT FILE  '<source>' TO '<destination>' PASSWORD 'pwd' [WITH(OVERWRITE=ON|OFF)];
 ```
 
 ### 1.2 File Functions (Underscore Style — Backward Compatible)
@@ -31,8 +31,8 @@ MOVE_FILE('src', 'dest' [, ON|OFF])
 RENAME_FILE('src', 'new_name' [, ON|OFF])
 DELETE_FILE('path')
 COMPRESS_FILE('src', 'dest' [, ON|OFF])
-ENCRYPT_FILE('src', 'dest' [, ON|OFF])
-DECRYPT_FILE('src', 'dest' [, ON|OFF])
+ENCRYPT_FILE('src', 'dest', 'pwd' [, ON|OFF])
+DECRYPT_FILE('src', 'dest', 'pwd' [, ON|OFF])
 ```
 
 ### 1.3 Directory Statements (SQL Style)
@@ -48,8 +48,8 @@ DELETE DIRECTORY          '<path>';
 DELETE DIRECTORY_CONTENTS '<path>' [WITH(RECURSIVE=ON|OFF)];
 
 COMPRESS DIRECTORY '<src>' TO '<dest.zip>'  [WITH(OVERWRITE=ON|OFF)];
-ENCRYPT DIRECTORY  '<src>' TO '<dest>' PASSWORD('<pwd>') [WITH(OVERWRITE=ON|OFF)];
-DECRYPT DIRECTORY  '<src>' TO '<dest>' PASSWORD('<pwd>') [WITH(OVERWRITE=ON|OFF)];
+ENCRYPT DIRECTORY  '<src>' TO '<dest>' PASSWORD 'pwd' [WITH(OVERWRITE=ON|OFF, RECURSIVE=ON|OFF)];
+DECRYPT DIRECTORY  '<src>' TO '<dest>' PASSWORD 'pwd' [WITH(OVERWRITE=ON|OFF, RECURSIVE=ON|OFF)];
 ```
 
 ### 1.4 Directory Functions (Underscore Style)
@@ -62,8 +62,8 @@ RENAME_DIRECTORY('src', 'new_name' [, ON|OFF])
 DELETE_DIRECTORY('path')
 DELETE_DIRECTORY_CONTENTS('path' [, RECURSIVE=ON|OFF])
 COMPRESS_DIRECTORY('src', 'dest' [, ON|OFF])
-ENCRYPT_DIRECTORY('src', 'dest', 'pwd' [, ON|OFF])
-DECRYPT_DIRECTORY('src', 'dest', 'pwd' [, ON|OFF])
+ENCRYPT_DIRECTORY('src', 'dest', 'pwd' [, ON|OFF [, ON|OFF]])
+DECRYPT_DIRECTORY('src', 'dest', 'pwd' [, ON|OFF [, ON|OFF]])
 ```
 
 ### 1.5 Examples

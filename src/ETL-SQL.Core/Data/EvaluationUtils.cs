@@ -181,7 +181,7 @@ namespace ETL_SQL.Core.Data
             return Regex.IsMatch(s, regexPattern, RegexOptions.IgnoreCase);
         }
 
-        public static object? CastToType(object? value, string type)
+        public static object? CastToType(object? value, string? type)
         {
             if (value == null) return null;
             try

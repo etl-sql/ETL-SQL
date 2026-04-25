@@ -13,6 +13,7 @@ export class ReplManager {
     private _debugMode: boolean = false;
     private _onVariablesChange: vscode.EventEmitter<any[]> = new vscode.EventEmitter<any[]>();
     public readonly onVariablesChange: vscode.Event<any[]> = this._onVariablesChange.event;
+    private _isRunning: boolean = false;
 
     public static getInstance(): ReplManager {
         if (!ReplManager._instance) {
@@ -116,8 +117,14 @@ export class ReplManager {
     }
 
     private _processNext() {
-        if (!this._isReady || this._commandQueue.length === 0 || this._currentHandler) return;
+        if (!this._isReady || this._commandQueue.length === 0 || this._currentHandler) {
+            if (this._commandQueue.length === 0 && !this._currentHandler) {
+                this._isRunning = false;
+            }
+            return;
+        }
 
+        this._isRunning = true;
         const cmd = this._commandQueue.shift()!;
 
         const timeout = setTimeout(() => {
@@ -167,6 +174,7 @@ export class ReplManager {
     }
 
     public stop() {
+        this._isRunning = false;
         // Reject any in-flight or queued commands so callers don't hang.
         if (this._currentHandler) {
             this._currentHandler({ type: 'done', exitCode: 1 });
@@ -183,5 +191,9 @@ export class ReplManager {
             this._process.kill();
             this._process = undefined;
         }
+    }
+    
+    public isRunning(): boolean {
+        return this._isRunning;
     }
 }

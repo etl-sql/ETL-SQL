@@ -16,10 +16,20 @@ namespace ETL_SQL.Core.Parser.Components
             do
             {
                 var varToken = Consume(TokenType.VARIABLE, "Expected variable name starting with '@'");
-                string type = "ANY";
-                if (_parser.IsIdentifier(_parser.Current)) type = _parser.ParseType();
+                string? type = null;
+                bool isSensitive = false;
 
-                bool isSensitive = Match(TokenType.PASSWORD);
+                if (_parser.IsIdentifier(_parser.Current)) 
+                {
+                    type = _parser.ParseType();
+                    if (type != null && (type.Equals("SENSITIVE", StringComparison.OrdinalIgnoreCase) || 
+                        type.Equals("SECRET", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        isSensitive = true;
+                    }
+                }
+
+                if (Match(TokenType.PASSWORD)) isSensitive = true;
                 bool isInput  = Match(TokenType.INPUT);
                 bool isOutput = Match(TokenType.OUTPUT);
 
@@ -131,11 +141,41 @@ namespace ETL_SQL.Core.Parser.Components
             SecurityOverride overrideType;
 
             if (val == "ALLOW_FILE_TYPE_ACCESS")
+            {
+                if (Match(TokenType.EQUALS))
+                {
+                    var expr = ParseExpression();
+                    if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+                    return new SetSecurityOverrideStatement(SecurityOverride.FileTypeExtension, true, expr) { Line = startToken.Line, Column = startToken.Column };
+                }
                 overrideType = SecurityOverride.FileTypeAccess;
-            else if (val.StartsWith("ALLOW_GREATER_THAN_") && val.EndsWith("_FILE"))
+            }
+            else if (val == "ALLOW_FILE_OPERATIONS" || (val.StartsWith("ALLOW_GREATER_THAN_") && val.EndsWith("_FILE")))
+            {
+                if (Match(TokenType.EQUALS) || val == "ALLOW_FILE_OPERATIONS")
+                {
+                    if (startToken.Value == "ALLOW_FILE_OPERATIONS" && !Match(TokenType.EQUALS))
+                         throw new SyntaxException("Expected '=' after ALLOW_FILE_OPERATIONS", startToken.Line, startToken.Column);
+                    
+                    var expr = ParseExpression();
+                    if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+                    return new SetThresholdStatement(ThresholdType.MaxFileOperations, expr) { Line = startToken.Line, Column = startToken.Column };
+                }
                 overrideType = SecurityOverride.LargeFileCount;
-            else if (val.StartsWith("ALLOW_RECURSIVE_GREATER_THAN_") && val.EndsWith("_LAYERS"))
+            }
+            else if (val == "ALLOW_RECURSIVE_LAYERS" || (val.StartsWith("ALLOW_RECURSIVE_GREATER_THAN_") && val.EndsWith("_LAYERS")))
+            {
+                if (Match(TokenType.EQUALS) || val == "ALLOW_RECURSIVE_LAYERS")
+                {
+                    if (startToken.Value == "ALLOW_RECURSIVE_LAYERS" && !Match(TokenType.EQUALS))
+                         throw new SyntaxException("Expected '=' after ALLOW_RECURSIVE_LAYERS", startToken.Line, startToken.Column);
+
+                    var expr = ParseExpression();
+                    if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+                    return new SetThresholdStatement(ThresholdType.MaxRecursiveDepth, expr) { Line = startToken.Line, Column = startToken.Column };
+                }
                 overrideType = SecurityOverride.DeepRecursion;
+            }
             else if (val == "ALLOW_LARGE_STRING_RESULTS")
                 overrideType = SecurityOverride.LargeStringResults;
             else
@@ -184,7 +224,7 @@ namespace ETL_SQL.Core.Parser.Components
                 throw new SyntaxException("Expected report metadata key after SET REPORT", _parser.Current.Line, _parser.Current.Column);
 
             Consume(TokenType.EQUALS, $"Expected '=' after SET REPORT {key}");
-            var valueToken = Consume(TokenType.STRING, $"Expected string value after SET REPORT {key} =");
+            var valueToken = Consume(TokenType.STRING_LITERAL, $"Expected string value after SET REPORT {key} =");
             Match(TokenType.SEMICOLON);
             return new SetReportMetadataStatement { Key = key, Value = valueToken.Value };
         }
@@ -242,7 +282,7 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.PASSWORD))
             {
                 Consume(TokenType.EQUALS, "Expected '=' after USE PASSWORD");
-                var password = Consume(TokenType.STRING, "Expected password string").Value;
+                var password = Consume(TokenType.STRING_LITERAL, "Expected password string").Value;
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new UsePasswordStatement(password) { Line = startToken.Line, Column = startToken.Column };
             }
@@ -302,7 +342,7 @@ namespace ETL_SQL.Core.Parser.Components
                 if (Match(TokenType.HISTORY))
                 {
                     string? jobName = null;
-                    if (_parser.Current.Type == TokenType.IDENTIFIER || _parser.Current.Type == TokenType.STRING)
+                    if (_parser.Current.Type == TokenType.IDENTIFIER || _parser.Current.Type == TokenType.STRING_LITERAL)
                         jobName = Advance().Value;
                     stmt = new ShowJobHistoryStatement(jobName);
                 }
@@ -459,7 +499,7 @@ namespace ETL_SQL.Core.Parser.Components
             else if (Match(TokenType.GREATER_THAN)) op = ">";
             else if (Match(TokenType.EQUALS)) op = "=";
             else throw new SyntaxException("Expected operator (>=, >, or =) after REQUIRE VERSION", _parser.Current.Line, _parser.Current.Column);
-            var version = Consume(TokenType.STRING, "Expected version string literal after REQUIRE operator").Value.Trim('\'', '\"');
+            var version = Consume(TokenType.STRING_LITERAL, "Expected version string literal after REQUIRE operator").Value.Trim('\'', '\"');
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new RequireVersionStatement(op, version) { Line = startToken.Line, Column = startToken.Column };
         }

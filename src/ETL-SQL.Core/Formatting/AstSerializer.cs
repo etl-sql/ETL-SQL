@@ -579,7 +579,7 @@ namespace ETL_SQL.Core.Formatting
             var valStr = e.Value.ToString() ?? "";
             if (e.Type == TokenType.TRUE)   return "TRUE";
             if (e.Type == TokenType.FALSE)  return "FALSE";
-            if (e.Type == TokenType.STRING) return $"'{valStr.Replace("'", "''")}'";
+            if (e.Type == TokenType.STRING_LITERAL) return $"'{valStr.Replace("'", "''")}'";
             return valStr;
         }
 

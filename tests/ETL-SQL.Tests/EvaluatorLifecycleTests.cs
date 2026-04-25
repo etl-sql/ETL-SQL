@@ -67,7 +67,7 @@ namespace ETL_SQL.Tests.Security
             var sessions = new Mock<SessionStateManager>(_logger.Object, _security, new Mock<IConfiguration>().Object, null);
             
             var handlers = new List<IStatementHandler>();
-            var evaluator = new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, _logger.Object, new EvaluatorComponentRegistry());
+            var evaluator = new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, _logger.Object, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());
 
             // Act
             var resolved = evaluator.ResolvePath(filePathViaLink);
@@ -86,7 +86,7 @@ namespace ETL_SQL.Tests.Security
             var sessions = new Mock<SessionStateManager>(_logger.Object, _security, new Mock<IConfiguration>().Object, null);
             
             var handlers = new List<IStatementHandler>();
-            var evaluator = new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, _logger.Object, new EvaluatorComponentRegistry());
+            var evaluator = new Evaluator(handlers, _services.Object, registry.Object, tracker.Object, docker.Object, _connectors.Object, sessions.Object, _security, _logger.Object, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());
 
             // 1. Begin a transaction manually
             await evaluator.BeginTransaction();

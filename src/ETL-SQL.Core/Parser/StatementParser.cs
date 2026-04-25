@@ -196,6 +196,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.MAX_GROUPING_SETS) || _parser.Match(TokenType.SET_CUBE_LIMIT)) return SystemParser.ParseSetThreshold(ThresholdType.MaxGroupingSets);
             if (_parser.Match(TokenType.MAX_SESSION_SIZE)) return SystemParser.ParseSetThreshold(ThresholdType.MaxSessionSize);
             if (_parser.Match(TokenType.MAX_LAST_RESULT_ROWS)) return SystemParser.ParseSetThreshold(ThresholdType.MaxLastResultRows);
+            if (_parser.Match(TokenType.MAX_GENERATE_ROWS)) return SystemParser.ParseSetThreshold(ThresholdType.MaxGenerateRows);
             if (_parser.Match(TokenType.TELEMETRY)) return SystemParser.ParseSetThreshold(ThresholdType.Telemetry);
 
             if (_parser.Match(TokenType.SPILL_ENCRYPTION)) return SystemParser.ParseSetSpillOption(SpillOptionType.Encryption);
@@ -251,11 +252,25 @@ namespace ETL_SQL.Core.Parser
                 else
                     throw new SyntaxException("Expected CTE name", _parser.Current.Line, _parser.Current.Column);
 
+                List<string>? columnNames = null;
+                if (_parser.Match(TokenType.LPAREN))
+                {
+                    columnNames = new List<string>();
+                    do
+                    {
+                        if (_parser.Current.Type == TokenType.IDENTIFIER || LanguageMetadata.IsKeyword(_parser.Current.Value))
+                            columnNames.Add(_parser.Advance().Value);
+                        else
+                            throw new SyntaxException("Expected column name in CTE definition", _parser.Current.Line, _parser.Current.Column);
+                    } while (_parser.Match(TokenType.COMMA));
+                    _parser.Consume(TokenType.RPAREN, "Expected ')' after CTE column list");
+                }
+
                 _parser.Consume(TokenType.AS, "Expected 'AS'");
                 _parser.Consume(TokenType.LPAREN, "Expected '('");
                 var subq = _parser.ParseQuery();
                 _parser.Consume(TokenType.RPAREN, "Expected ')'");
-                ctes.Add(new CteDefinition(name, subq));
+                ctes.Add(new CteDefinition(name, subq, columnNames));
             } while (_parser.Match(TokenType.COMMA));
             return ctes;
         }
@@ -271,7 +286,7 @@ namespace ETL_SQL.Core.Parser
                 if (depth == 0) break;
 
                 var t = _parser.Advance();
-                string val = t.Type == TokenType.STRING ? $"'{t.Value.Replace("'", "''")}'" : t.Value;
+                string val = t.Type == TokenType.STRING_LITERAL ? $"'{t.Value.Replace("'", "''")}'" : t.Value;
                 raw += val;
 
                 var next = _parser.Current.Type;

@@ -53,6 +53,7 @@ namespace ETL_SQL.Core.Common
         public ILineageTracker LineageTracker => throw new NotSupportedException();
         public IDockerManager DockerManager => throw new NotSupportedException();
         public IFunctionRegistry FunctionRegistry => throw new NotSupportedException();
+        public Interfaces.ILanguageHelpRegistry LanguageHelp { get; } = new Metadata.LanguageHelpRegistry();
         
         public IDictionary<string, object?> Variables => new Dictionary<string, object?>();
         public IDictionary<string, object?> CurrentVariables => new Dictionary<string, object?>();
@@ -130,6 +131,7 @@ namespace ETL_SQL.Core.Common
         public long MaxSessionSize { get; set; } = LanguageMetadata.DefaultMaxSessionSize;
         public bool SpillEncryptionEnabled { get; set; } = true;
         public bool SpillCompressionEnabled { get; set; } = true;
+        public string SpillFormat { get; set; } = "Arrow";
         public ISpillStore SpillStore => null!;
         public ISessionStateManager SessionStateManager { get; set; } = new NullSessionStateManager();
 
@@ -137,6 +139,8 @@ namespace ETL_SQL.Core.Common
         public bool AllowLargeFileOperationCount { get; set; }
         public bool AllowDeepRecursion { get; set; }
         public bool AllowLargeStringResults { get; set; }
+        public HashSet<string> AllowedFileTypeOverrides { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public int MaxGenerateRows { get; set; } = SecurityService.DefaultMaxGenerateRows;
 
         public IDictionary<string, CreateVisualStatement> VisualDefinitions { get; } = new Dictionary<string, CreateVisualStatement>();
         public IDictionary<string, CreatePageStatement> PageDefinitions { get; } = new Dictionary<string, CreatePageStatement>();

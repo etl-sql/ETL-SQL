@@ -1,1 +1,3 @@
-﻿
+﻿TransactionID,Amount,Status,CreatedAt,Reason
+TXN101,-15.00,FAILED,4/23/2026 6:39:45 PM,Validation Failure
+TXN102,0.00,INVALID,4/23/2026 6:39:45 PM,Validation Failure

@@ -2,6 +2,7 @@ using System;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -16,7 +17,7 @@ namespace ETL_SQL.Engine.Handlers
 
         public Type SupportedStatementType => typeof(SetSecurityOverrideStatement);
 
-        public Task Execute(Statement statement, IExecutionContext context)
+        public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (SetSecurityOverrideStatement)statement;
             
@@ -26,6 +27,19 @@ namespace ETL_SQL.Engine.Handlers
                 case SecurityOverride.FileTypeAccess:
                     context.AllowUnknownFileTypes = stmt.Enabled;
                     overrideName = "ALLOW_FILE_TYPE_ACCESS";
+                    break;
+                case SecurityOverride.FileTypeExtension:
+                    if (stmt.Value != null)
+                    {
+                        var extObj = await context.EvaluationContext.EvaluateValue(stmt.Value, new Row());
+                        string ext = extObj?.ToString() ?? "";
+                        if (!string.IsNullOrEmpty(ext))
+                        {
+                            if (!ext.StartsWith(".")) ext = "." + ext;
+                            context.AllowedFileTypeOverrides.Add(ext);
+                            overrideName = $"ALLOW_FILE_TYPE_ACCESS = '{ext}'";
+                        }
+                    }
                     break;
                 case SecurityOverride.LargeFileCount:
                     context.AllowLargeFileOperationCount = stmt.Enabled;
@@ -42,11 +56,10 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             string state = stmt.Enabled ? "ON" : "OFF";
+            if (stmt.Override == SecurityOverride.FileTypeExtension) state = "ADDED";
             
             // Mandatory audit log for security overrides
             _logger.WriteLine($"Audit: Security override {overrideName} turned {state} by script.", ConsoleColor.Yellow);
-            
-            return Task.CompletedTask;
         }
     }
 }

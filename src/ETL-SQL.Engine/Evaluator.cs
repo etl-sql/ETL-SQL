@@ -50,6 +50,7 @@ namespace ETL_SQL.Engine
         public SecurityService SecurityService => _securityService;
         private readonly SecurityService _securityService;
         private readonly ETL_SQL.Common.ILogger _logger;
+        private readonly Core.Interfaces.ILanguageHelpRegistry _languageHelp;
         private readonly ConcurrentDictionary<string, IDataSource> _connections;
         private readonly Dictionary<string, IDataSource> _localSources = new(StringComparer.OrdinalIgnoreCase);
         private readonly VariableScopeManager _variableScopeManager;
@@ -137,6 +138,7 @@ namespace ETL_SQL.Engine
         public bool AllowLargeFileOperationCount { get; set; }
         public bool AllowDeepRecursion { get; set; }
         public bool AllowLargeStringResults { get; set; }
+        public HashSet<string> AllowedFileTypeOverrides { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public int MaxParallelDegree { get; set; } = LanguageMetadata.DefaultMaxParallelDegree;
         public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
@@ -146,6 +148,7 @@ namespace ETL_SQL.Engine
         public int MaxGroupingSets { get; set; } = LanguageMetadata.DefaultMaxGroupingSets;
         public long MaxSessionSize { get; set; } = 200 * 1024 * 1024; // 200MB Default
         public int MaxLastResultRows { get; set; } = LanguageMetadata.DefaultMaxLastResultRows;
+        public int MaxGenerateRows { get; set; } = SecurityService.DefaultMaxGenerateRows;
         public bool IsPersistentSession { get; set; }
         public List<object?>? Parameters { get; set; }
         
@@ -342,6 +345,7 @@ namespace ETL_SQL.Engine
         public int WindowSpillThreshold { get; set; } = LanguageMetadata.DefaultWindowSpillThreshold;
         public bool SpillEncryptionEnabled { get; set; } = true;
         public bool SpillCompressionEnabled { get; set; } = true;
+        public string SpillFormat { get; set; } = "Arrow";
 
 
         /// <summary>The ID of the currently executing node in this task/context.</summary>
@@ -411,8 +415,11 @@ namespace ETL_SQL.Engine
         /// <summary>Stack of row contexts for correlated subquery resolution.</summary>
         public Stack<Row> OuterRowStack => _outerRowStack;
         
-        /// <summaryRegistry of all scalar and aggregate functions available in the session.</summary>
+        /// <summary>Registry of all scalar and aggregate functions available in the session.</summary>
         public Core.Functions.IFunctionRegistry FunctionRegistry => _functionRegistry;
+
+        /// <summary>Registry for shared language help documentation.</summary>
+        public Core.Interfaces.ILanguageHelpRegistry LanguageHelp => _languageHelp;
 
         // ── Interface Implementations (IDataContext, IVariableContext, IEngineContext, etc.) ────────────────
         public IDictionary<string, IDataSource> Connections => _connections;
@@ -481,6 +488,7 @@ namespace ETL_SQL.Engine
             ISessionStateManager sessionStateManager,
             SecurityService securityService,
             ILogger logger,
+            Core.Interfaces.ILanguageHelpRegistry languageHelp,
             EvaluatorComponentRegistry? registry = null,
             ConcurrentDictionary<string, IDataSource>? connections = null,
             VariableScopeManager? variableScopeManager = null,
@@ -496,6 +504,7 @@ namespace ETL_SQL.Engine
             _sessionStateManager = sessionStateManager;
             _securityService = securityService;
             _logger = logger;
+            _languageHelp = languageHelp;
             _registry = registry ?? new EvaluatorComponentRegistry();
 
             ExecutionTree = executionTree ?? new ExecutionTree();
@@ -518,6 +527,7 @@ namespace ETL_SQL.Engine
             Functions.RegexFunctions.Register(functionRegistry);
             Functions.JsonFunctions.Register(functionRegistry);
             Functions.XmlFunctions.Register(functionRegistry);
+            LanguageHelpService.Initialize(languageHelp);
 
             foreach (var h in handlers)
             {
@@ -549,6 +559,7 @@ namespace ETL_SQL.Engine
             TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
             SpillEncryptionEnabled = DefaultThresholds.SpillEncryptionEnabled(config);
             SpillCompressionEnabled = DefaultThresholds.SpillCompressionEnabled(config);
+            SpillFormat = DefaultThresholds.SpillFormat(config);
             MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);
 
             _logger.Info("Evaluator initialized.");
@@ -589,8 +600,7 @@ namespace ETL_SQL.Engine
                 var analyzer = new LineageAnalyzer(LineageTracker);
                 analyzer.Analyze(script);
 
-                if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
-                {
+                if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)) {
                     var firstError = script.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error);
                     throw new ExecutionException($"Syntax error: {firstError.Message} at {firstError.Line}:{firstError.Column}");
                 }
@@ -1071,7 +1081,7 @@ namespace ETL_SQL.Engine
             if (_securityService != null)
             {
                 _securityService.ValidatePath(fullPath);
-                _securityService.ValidateFileType(fullPath, AllowUnknownFileTypes);
+                _securityService.ValidateFileType(fullPath, AllowUnknownFileTypes, AllowedFileTypeOverrides);
             }
             else
             {
@@ -1120,7 +1130,7 @@ namespace ETL_SQL.Engine
         {
             var freshHandlers = _serviceProvider.GetServices<IStatementHandler>();
             var clonedReportContext = (_registry.ReportContext as ReportRegistry)?.Clone() ?? _registry.ReportContext;
-            var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _securityService, _logger, new EvaluatorComponentRegistry(), _connections, _variableScopeManager.Fork(), ExecutionTree, clonedReportContext)
+            var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _securityService, _logger, LanguageHelp, new EvaluatorComponentRegistry(), _connections, _variableScopeManager.Fork(), ExecutionTree, clonedReportContext)
             {
                 IsVerbose = IsVerbose,
                 RedirectOutput = RedirectOutput,

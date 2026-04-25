@@ -54,11 +54,18 @@ namespace ETL_SQL.Core.Linting.Rules
                 var tablesInScope = new List<(string Conn, string Table, string? Alias)>();
                 await ValidateTableRefAsync(insert.TargetTable, context, results, tablesInScope);
                 if (insert.SelectQuery != null) await AnalyzeStatementAsync(insert.SelectQuery, context, results);
-                // Validate columns in INTO clause
                 if (insert.Columns != null && tablesInScope.Any())
                 {
                     var scope = tablesInScope[0];
-                    var cols = await context.Metadata!.GetColumnsAsync(scope.Conn, scope.Table);
+                    var cols = (await context.Metadata!.GetColumnsAsync(scope.Conn, scope.Table)).ToList();
+                    
+                    // Relaxed validation for file connectors: if no columns are found, assume implied schema creation
+                    var connType = context.Metadata!.GetConnectionType(scope.Conn);
+                    if (cols.Count == 0 && IsFileConnector(connType))
+                    {
+                        return;
+                    }
+
                     foreach (var col in insert.Columns)
                     {
                         if (!cols.Any(c => string.Equals(c, col, StringComparison.OrdinalIgnoreCase)))
@@ -132,12 +139,9 @@ namespace ETL_SQL.Core.Linting.Rules
                 return;
             }
 
-            // Skip validation for reserved 'FILE' table in file connectors
             if (string.Equals(tableRef.TableName, "FILE", StringComparison.OrdinalIgnoreCase))
             {
-                var ftype = context.Metadata!.GetConnectionType(connName)?.ToUpperInvariant();
-                if (ftype == "FLATFILE" || ftype == "CSV" || ftype == "EXCEL" || ftype == "JSON" || 
-                    ftype == "XML" || ftype == "AVRO" || ftype == "PARQUET")
+                if (IsFileConnector(context.Metadata!.GetConnectionType(connName)))
                 {
                     tablesInScope.Add((connName, tableRef.TableName, tableRef.Alias));
                     return;
@@ -257,6 +261,14 @@ namespace ETL_SQL.Core.Linting.Rules
                 foreach (var arg in call.Arguments) await ValidateExpressionAsync(arg, context, results, tablesInScope);
             }
             // Add more expression types (Unary, etc.)
+        }
+
+        private bool IsFileConnector(string? type)
+        {
+            if (string.IsNullOrEmpty(type)) return false;
+            var t = type.ToUpperInvariant();
+            return t == "FLATFILE" || t == "CSV" || t == "EXCEL" || t == "JSON" || 
+                   t == "XML" || t == "AVRO" || t == "PARQUET";
         }
     }
 }

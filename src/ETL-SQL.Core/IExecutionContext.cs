@@ -135,6 +135,8 @@ namespace ETL_SQL.Core
         bool AllowLargeFileOperationCount { get; set; }
         bool AllowDeepRecursion { get; set; }
         bool AllowLargeStringResults { get; set; }
+        HashSet<string> AllowedFileTypeOverrides { get; }
+        int MaxGenerateRows { get; set; }
         
         /// <summary>Metadata about the last caught exception in this session.</summary>
         ErrorInfo? LastError { get; set; }
@@ -190,6 +192,7 @@ namespace ETL_SQL.Core
     public interface IEngineContext
     {
         Functions.IFunctionRegistry FunctionRegistry { get; }
+        Interfaces.ILanguageHelpRegistry LanguageHelp { get; }
         Task EvaluateStatement(Statement statement);
         Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default);
         IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt);
@@ -266,6 +269,7 @@ namespace ETL_SQL.Core
 
         bool SpillEncryptionEnabled { get; set; }
         bool SpillCompressionEnabled { get; set; }
+        string SpillFormat { get; set; }
         ISpillStore SpillStore { get; }
         Stack<Row> OuterRowStack { get; }
         Common.LruCache<Statement, object?> SubqueryCache { get; }

@@ -143,7 +143,7 @@ namespace ETL_SQL.Engine.Engines
             {
                 if (allRows.Count >= _context.WindowSpillThreshold)
                 {
-                    _logger.WriteLine($"[yellow]HYPER-SCALE: Switching to ExternalWindowEngine (Row count {allRows.Count} >= threshold {_context.WindowSpillThreshold}).[/]");
+                    _logger.WriteLine($"[yellow]HYPER-SCALE: Switching to ExternalWindowEngine. Row count {allRows.Count} >= threshold {_context.WindowSpillThreshold}. Session: {_context.SessionId}[/]");
                     var stream = ConvertToAsyncEnumerable(allRows);
                     var windowStream = _externalWindowEngine.ApplyWindowFunctionsExternal(stream, stmt);
                     

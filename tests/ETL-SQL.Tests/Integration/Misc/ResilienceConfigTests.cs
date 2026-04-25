@@ -42,6 +42,7 @@ namespace ETL_SQL.Tests.Integration.Misc
 
             services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager, ETL_SQL.Engine.Services.SessionStateManager>();
             services.AddSingleton<SecurityService>();
+            services.AddSingleton<ETL_SQL.Core.Interfaces.ILanguageHelpRegistry, ETL_SQL.Core.Metadata.LanguageHelpRegistry>();
 
             // Mimic DependencyInjectionSetup logic
             int joinSpillThreshold = int.TryParse(configuration["Engine:JoinSpillThreshold"], out var jst) ? jst : 100000;

@@ -43,7 +43,7 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 var colName = ConsumeIdentifier("Expected column name").Value;
                 Consume(TokenType.EQUALS, "Expected '='");
-                var ruleStr = Consume(TokenType.STRING, "Expected rule string (e.g. 'SEQUENCE(...)')").Value;
+                var ruleStr = Consume(TokenType.STRING_LITERAL, "Expected rule string (e.g. 'SEQUENCE(...)')").Value;
                 rules.Add(new GenerateRule(colName, ruleStr.Trim('\'', '\"')));
                 if (!Match(TokenType.COMMA)) break;
             }
@@ -529,7 +529,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            var optionsExpr = options?.ToDictionary(kv => kv.Key, kv => (Expression)new LiteralExpression(kv.Value, TokenType.STRING));
+            var optionsExpr = options?.ToDictionary(kv => kv.Key, kv => (Expression)new LiteralExpression(kv.Value, TokenType.STRING_LITERAL));
             return new BulkInsertStatement(targetTable, sourceFile.ToSql().Trim('\''), optionsExpr ?? new(), columns)
             {
                 Line = startToken.Line,
@@ -553,7 +553,7 @@ namespace ETL_SQL.Core.Parser.Components
 
                 bool hasParen = Match(TokenType.LPAREN);
                 if (hasParen && _parser.Current.Type == TokenType.RPAREN)
-                    target = new LiteralExpression("", TokenType.STRING);
+                    target = new LiteralExpression("", TokenType.STRING_LITERAL);
                 else if (!hasParen && (_parser.Current.Type == TokenType.WITH || _parser.Current.Type == TokenType.SEMICOLON))
                     target = null;
                 else
@@ -698,7 +698,7 @@ namespace ETL_SQL.Core.Parser.Components
 
                     bool hasParen = Match(TokenType.LPAREN);
                     if (hasParen && _parser.Current.Type == TokenType.RPAREN)
-                        target = new LiteralExpression("", TokenType.STRING);
+                        target = new LiteralExpression("", TokenType.STRING_LITERAL);
                     else if (!hasParen && (_parser.Current.Type == TokenType.WITH || _parser.Current.Type == TokenType.SEMICOLON))
                         target = null;
                     else
@@ -999,7 +999,7 @@ namespace ETL_SQL.Core.Parser.Components
             if (unit.EndsWith("S")) unit = unit.Substring(0, unit.Length - 1);
             string? atTime = null;
             if (Match(TokenType.AT))
-                atTime = Consume(TokenType.STRING, "Expected time string (e.g. '02:00') after AT").Value;
+                atTime = Consume(TokenType.STRING_LITERAL, "Expected time string (e.g. '02:00') after AT").Value;
             return new ScheduleInfo(interval, unit, atTime);
         }
 

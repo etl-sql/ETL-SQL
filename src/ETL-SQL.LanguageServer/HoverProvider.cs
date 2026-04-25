@@ -23,11 +23,15 @@ namespace ETL_SQL.LSP
     {
         private readonly ILogger<HoverProvider> _logger;
         private readonly DocumentStateStore _store;
+        private readonly Core.Functions.IFunctionRegistry _functionRegistry;
+        private readonly Core.Interfaces.ILanguageHelpRegistry _languageHelp;
 
-        public HoverProvider(ILogger<HoverProvider> logger, DocumentStateStore store)
+        public HoverProvider(ILogger<HoverProvider> logger, DocumentStateStore store, Core.Functions.IFunctionRegistry functionRegistry, Core.Interfaces.ILanguageHelpRegistry languageHelp)
         {
             _logger = logger;
             _store = store;
+            _functionRegistry = functionRegistry;
+            _languageHelp = languageHelp;
         }
 
         public Task<Hover?> Handle(HoverParams request, CancellationToken cancellationToken)
@@ -46,34 +50,70 @@ namespace ETL_SQL.LSP
                 (line > e.Line || (line == e.Line && col >= e.Column)) &&
                 (line < e.EndLine || (line == e.EndLine && col <= e.EndColumn)));
 
-            if (entry == null)
-                return Task.FromResult<Hover?>(null);
-
-            var renderer = new LineageGraphRenderer();
-            string graph = renderer.Render(state.Lineage, entry.TargetTable, entry.TargetColumn);
-
-            var md = new List<string>();
-            md.Add($"**Column**: `{entry.TargetColumn}`");
-
-            if (entry.Metadata.Count > 0)
+            // Word detection for function help
+            var lines = state.Text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+            string? word = null;
+            if (line <= lines.Length)
             {
-                md.Add("### Metadata");
-                foreach (var m in entry.Metadata)
+                var currentLine = lines[line - 1];
+                int start = (int)request.Position.Character;
+                if (start < currentLine.Length)
                 {
-                    var key = m.Key.Equals("d", StringComparison.OrdinalIgnoreCase) ? "Description" : m.Key;
-                    md.Add($"- **{key}**: {m.Value}");
+                    while (start > 0 && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '_')) start--;
+                    int end = (int)request.Position.Character;
+                    while (end < currentLine.Length && (char.IsLetterOrDigit(currentLine[end]) || currentLine[end] == '_')) end++;
+                    if (start < end) word = currentLine.Substring(start, end - start);
                 }
             }
-            else if (!string.IsNullOrEmpty(entry.Description))
+
+            string? functionHelp = word != null ? _functionRegistry.GetHelp(word) : null;
+            string? keywordHelp = (word != null && functionHelp == null) ? _languageHelp.GetHelp(word) : null;
+
+            if (entry == null && functionHelp == null && keywordHelp == null)
+                return Task.FromResult<Hover?>(null);
+
+            var md = new List<string>();
+
+            if (entry != null)
             {
-                md.Add($"**Description**: {entry.Description}");
+                md.Add($"**Column**: `{entry.TargetColumn}`");
+
+                if (entry.Metadata.Count > 0)
+                {
+                    md.Add("### Metadata");
+                    foreach (var m in entry.Metadata)
+                    {
+                        var key = m.Key.Equals("d", StringComparison.OrdinalIgnoreCase) ? "Description" : m.Key;
+                        md.Add($"- **{key}**: {m.Value}");
+                    }
+                }
+                else if (!string.IsNullOrEmpty(entry.Description))
+                {
+                    md.Add($"**Description**: {entry.Description}");
+                }
+
+                if (!string.IsNullOrEmpty(entry.DerivedFromDescriptions))
+                    md.Add($"> [!NOTE]\n> Derived from: {entry.DerivedFromDescriptions}");
+
+                var renderer = new LineageGraphRenderer();
+                string graph = renderer.Render(state.Lineage, entry.TargetTable, entry.TargetColumn);
+                md.Add("### Lineage Graph");
+                md.Add($"```text\n{graph.TrimEnd()}\n```");
             }
 
-            if (!string.IsNullOrEmpty(entry.DerivedFromDescriptions))
-                md.Add($"> [!NOTE]\n> Derived from: {entry.DerivedFromDescriptions}");
+            if (functionHelp != null)
+            {
+                if (md.Count > 0) md.Add("---");
+                md.Add("### Function Help");
+                md.Add(functionHelp);
+            }
 
-            md.Add("### Lineage Graph");
-            md.Add($"```text\n{graph.TrimEnd()}\n```");
+            if (keywordHelp != null)
+            {
+                if (md.Count > 0) md.Add("---");
+                md.Add("### Help");
+                md.Add(keywordHelp);
+            }
 
             var content = new MarkedStringsOrMarkupContent(new MarkupContent
             {

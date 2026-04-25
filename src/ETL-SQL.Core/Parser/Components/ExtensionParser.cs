@@ -147,13 +147,13 @@ namespace ETL_SQL.Core.Parser.Components
                     else if (Match(TokenType.AT)) { connectionName = ConsumeIdentifier("Expected connection name after AT").Value; }
                     else if (Match(TokenType.WITH)) { overwrite = ParseWithOverwrite(); }
                     else if (Match(TokenType.COMMA)) { continue; }
-                    else if (localPath == null && type == FileTransferType.Send && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING))
+                    else if (localPath == null && type == FileTransferType.Send && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                         localPath = ParseExpression();
                     else if (connectionName == null && _parser.Current.Type == TokenType.IDENTIFIER && !LanguageMetadata.IsKeyword(_parser.Current.Value))
                         connectionName = Advance().Value;
-                    else if (remotePath == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING))
+                    else if (remotePath == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                         remotePath = ParseExpression();
-                    else if (localPath == null && type == FileTransferType.Receive && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING))
+                    else if (localPath == null && type == FileTransferType.Receive && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                         localPath = ParseExpression();
                     else if (Match(TokenType.LF) || Match(TokenType.CR) || Match(TokenType.CRLF)) { continue; }
                     else break;
@@ -221,8 +221,19 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 source = ParseExpression();
                 if (Match(TokenType.COMMA)) dest = ParseExpression();
-                if (Match(TokenType.COMMA)) overwrite = ParseExpression();
-                if (Match(TokenType.COMMA)) password = ParseExpression();
+                if (Match(TokenType.COMMA))
+                {
+                    if (type == FileOpType.Encrypt || type == FileOpType.Decrypt)
+                    {
+                        password = ParseExpression();
+                        if (Match(TokenType.COMMA)) overwrite = ParseExpression();
+                    }
+                    else
+                    {
+                        overwrite = ParseExpression();
+                        if (Match(TokenType.COMMA)) password = ParseExpression();
+                    }
+                }
                 Consume(TokenType.RPAREN, "Expected ')' after arguments");
             }
             else
@@ -236,7 +247,7 @@ namespace ETL_SQL.Core.Parser.Components
                         else password = ParseExpression();
                     }
                     else if (Match(TokenType.WITH)) { overwrite = ParseWithOverwrite(); }
-                    else if (source == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING))
+                    else if (source == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                         source = ParseExpression();
                     else if (Match(TokenType.LF) || Match(TokenType.CR) || Match(TokenType.CRLF)) { continue; }
                     else break;
@@ -264,15 +275,28 @@ namespace ETL_SQL.Core.Parser.Components
                 _ => throw new SyntaxException($"Unexpected directory operation: {startToken.Type}", startToken.Line, startToken.Column)
             };
 
-            Expression? path = null, extra = null, overwrite = null, password = null;
+            Expression? path = null, extra = null, overwrite = null, recursive = null, password = null;
             bool isFunctionStyle = Match(TokenType.LPAREN);
 
             if (isFunctionStyle)
             {
                 path = ParseExpression();
                 if (Match(TokenType.COMMA)) extra = ParseExpression();
-                if (Match(TokenType.COMMA)) overwrite = ParseExpression();
-                if (Match(TokenType.COMMA)) password = ParseExpression();
+                if (Match(TokenType.COMMA))
+                {
+                    if (type == DirectoryOpType.Encrypt || type == DirectoryOpType.Decrypt)
+                    {
+                        password = ParseExpression();
+                        if (Match(TokenType.COMMA)) overwrite = ParseExpression();
+                        if (Match(TokenType.COMMA)) recursive = ParseExpression();
+                    }
+                    else
+                    {
+                        overwrite = ParseExpression();
+                        if (Match(TokenType.COMMA)) recursive = ParseExpression();
+                        if (Match(TokenType.COMMA)) password = ParseExpression();
+                    }
+                }
                 Consume(TokenType.RPAREN, "Expected ')' after arguments");
             }
             else
@@ -285,8 +309,25 @@ namespace ETL_SQL.Core.Parser.Components
                         if (_parser.Current.Type == TokenType.LPAREN) { Advance(); password = ParseExpression(); Consume(TokenType.RPAREN, "Expected ')' after PASSWORD value"); }
                         else password = ParseExpression();
                     }
-                    else if (Match(TokenType.WITH)) { overwrite = ParseWithOverwrite(); }
-                    else if (path == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING))
+                    else if (MatchIdentifier("RECURSIVE")) { recursive = ParseExpression(); }
+                    else if (Match(TokenType.WITH))
+                    {
+                        Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                        while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+                        {
+                            string key = Advance().Value;
+                            Consume(TokenType.EQUALS, "Expected '=' after option name");
+                            if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "OVERWRITE"))
+                                overwrite = ParseExpression();
+                            else if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "RECURSIVE"))
+                                recursive = ParseExpression();
+                            else
+                                ParseExpression();
+                            if (!Match(TokenType.COMMA)) break;
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' after WITH options");
+                    }
+                    else if (path == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                         path = ParseExpression();
                     else if (Match(TokenType.LF) || Match(TokenType.CR) || Match(TokenType.CRLF)) { continue; }
                     else break;
@@ -295,7 +336,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new DirectoryOperationStatement(type, path, extra, overwrite, null, password) { Line = startToken.Line, Column = startToken.Column };
+            return new DirectoryOperationStatement(type, path, extra, overwrite, recursive, password) { Line = startToken.Line, Column = startToken.Column };
         }
 
         public Statement ParseDockerVerb(DockerAction action)
@@ -303,6 +344,29 @@ namespace ETL_SQL.Core.Parser.Components
             var startToken = _parser.Previous;
             DockerTargetMode mode = DockerTargetMode.LastStarted;
             string? alias = null;
+
+            if (startToken.Type == TokenType.DOCKER)
+            {
+                // Legacy: DOCKER CLOSE [<alias>], DOCKER STOP, etc.
+                if (Match(TokenType.START)) action = DockerAction.Start;
+                else if (Match(TokenType.STOP))  action = DockerAction.Stop;
+                else if (Match(TokenType.PAUSE)) action = DockerAction.Pause;
+                else if (Match(TokenType.CLOSE)) action = DockerAction.Close;
+
+                if (_parser.Current.Type == TokenType.IDENTIFIER && !LanguageMetadata.IsKeyword(_parser.Current.Value))
+                {
+                    alias = Advance().Value;
+                    mode = DockerTargetMode.Single;
+                }
+                else if (_parser.Current.Type == TokenType.STRING_LITERAL)
+                {
+                    alias = Advance().Value.Trim('\'', '\"');
+                    mode = DockerTargetMode.Single;
+                }
+                
+                _parser.Match(TokenType.SEMICOLON);
+                return new DockerActionStatement(action, alias, mode) { Line = startToken.Line, Column = startToken.Column };
+            }
 
             if (Match(TokenType.ALL))
             {
@@ -317,9 +381,10 @@ namespace ETL_SQL.Core.Parser.Components
                     alias = Advance().Value;
                     mode = DockerTargetMode.Single;
                 }
-                else
+                else if (_parser.Current.Type == TokenType.STRING_LITERAL)
                 {
-                    mode = DockerTargetMode.LastStarted;
+                    alias = Advance().Value.Trim('\'', '\"');
+                    mode = DockerTargetMode.Single;
                 }
             }
             else
@@ -327,7 +392,7 @@ namespace ETL_SQL.Core.Parser.Components
                 throw new SyntaxException($"Expected DOCKER or ALL DOCKER after {startToken.Value}", _parser.Current.Line, _parser.Current.Column);
             }
 
-            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            _parser.Match(TokenType.SEMICOLON);
             return new DockerActionStatement(action, alias, mode) { Line = startToken.Line, Column = startToken.Column };
         }
 
@@ -339,7 +404,7 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.COMMA)) columnName = ConsumeIdentifier("Expected column name after comma").Value;
             Match(TokenType.RPAREN);
             string? exportPath = null;
-            if (Match(TokenType.TO)) exportPath = Consume(TokenType.STRING, "Expected file path after TO").Value;
+            if (Match(TokenType.TO)) exportPath = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new LineageStatement(targetTable, columnName, exportPath) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -347,7 +412,7 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParseLint(Token startToken)
         {
             string? path = null;
-            if (Match(TokenType.STRING)) path = _parser.Previous.Value;
+            if (Match(TokenType.STRING_LITERAL)) path = _parser.Previous.Value;
             Match(TokenType.SEMICOLON);
             return new LintStatement(path) { Line = startToken.Line, Column = startToken.Column };
         }
@@ -497,7 +562,7 @@ namespace ETL_SQL.Core.Parser.Components
                                 continue;
                             }
                             var t = Advance();
-                            string val = t.Type == TokenType.STRING ? $"'{t.Value.Replace("'", "''")}'" : t.Value;
+                            string val = t.Type == TokenType.STRING_LITERAL ? $"'{t.Value.Replace("'", "''")}'" : t.Value;
                             sqlText += val;
                             var next = _parser.Current.Type;
                             bool needsSpace = next != TokenType.DOT && next != TokenType.COMMA && next != TokenType.LPAREN && next != TokenType.RPAREN && next != TokenType.SEMICOLON

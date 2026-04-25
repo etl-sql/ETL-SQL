@@ -28,7 +28,7 @@ namespace ETL_SQL.Engine.Handlers
         /// </summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
-
+            _logger.Info($"[SELECT] Executing SelectStatement. Session: {context.SessionId}");
             // Handle pushdown if applicable (only if no INTO clause and ALL tables are on the same pushable connection)
             if (statement is SelectStatement selPush && selPush.IntoTable == null)
             {
@@ -36,8 +36,17 @@ namespace ETL_SQL.Engine.Handlers
                 bool allSameConn = (selPush.FromTable != null) && ((selPush.Joins == null || selPush.Joins.Count == 0) || 
                                    selPush.Joins.All(j => (j.Table.ConnectionName ?? j.Table.TableName).Equals(fromConn, StringComparison.OrdinalIgnoreCase)));
 
-                if (fromConn != null && allSameConn && context.IsSqlPushdown(fromConn))
-                {
+                    var aggEngine = new AggregateEngine(context, _logger);
+                    var winEngine = new WindowEngine(context, aggEngine, _logger);
+                    bool localRequired = selPush.Columns.Any(c => aggEngine.IsAggregate(c.Expression)) || 
+                                         selPush.GroupBy != null || 
+                                         selPush.Columns.Any(c => winEngine.IsWindowFunction(c.Expression)) ||
+                                         selPush.IsDistinct ||
+                                         (selPush.Joins != null && selPush.Joins.Count > 0) ||
+                                         selPush.OrderBy != null || selPush.Offset != null || selPush.LimitCount != null;
+
+                    if (!localRequired && fromConn != null && allSameConn && context.IsSqlPushdown(fromConn))
+                    {
                     _logger.Debug("Pushing down SELECT to remote connection: {ConnName}", fromConn);
                     var conn = (IDatabaseSource)context.Connections[fromConn];
                     var compiled = context.CompileQuery(selPush, conn.Dialect);
@@ -465,8 +474,17 @@ namespace ETL_SQL.Engine.Handlers
                     // 1. Evaluate Anchor Member
                     await foreach (var batch in context.ExecuteQuery(anchor!))
                     {
+                        if (cte.ColumnNames != null && cte.ColumnNames.Count > 0)
+                        {
+                             var oldNames = batch.ColumnNames.ToList();
+                             if (oldNames.Count != cte.ColumnNames.Count)
+                                 throw new ExecutionException($"CTE '{cte.Name}' has {cte.ColumnNames.Count} columns specified, but the anchor query returns {oldNames.Count} columns.", null, cte.Line, cte.Column);
+                             for (int i = 0; i < oldNames.Count; i++) batch.RenameColumn(oldNames[i], cte.ColumnNames[i]);
+                        }
+
                         if (finalResult.ColumnNames.Count == 0) finalResult.SetColumns(batch.ColumnNames);
-                        if (currentStep.ColumnNames.Count == 0) currentStep.SetColumns(batch.ColumnNames);
+                        if (currentStep.ColumnNames.Count == 0) currentStep.SetColumns(finalResult.ColumnNames);
+                        
                         foreach (var r in batch.Rows)
                         {
                             await finalResult.AddRowAsync(r);
@@ -562,6 +580,14 @@ namespace ETL_SQL.Engine.Handlers
                     var cteResult = new DataTable();
                     await foreach (var batch in context.ExecuteQuery(cte.Query))
                     {
+                        if (cte.ColumnNames != null && cte.ColumnNames.Count > 0)
+                        {
+                             var oldNames = batch.ColumnNames.ToList();
+                             if (oldNames.Count != cte.ColumnNames.Count)
+                                 throw new ExecutionException($"CTE '{cte.Name}' has {cte.ColumnNames.Count} columns specified, but the query returns {oldNames.Count} columns.", null, cte.Line, cte.Column);
+                             for (int i = 0; i < oldNames.Count; i++) batch.RenameColumn(oldNames[i], cte.ColumnNames[i]);
+                        }
+
                         if (cteResult.Schema.ColumnCount == 0) cteResult.SetColumns(batch.ColumnNames);
                         foreach (var r in batch.Rows) await cteResult.AddRowAsync(r);
                     }

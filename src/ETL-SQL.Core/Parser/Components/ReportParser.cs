@@ -181,14 +181,14 @@ namespace ETL_SQL.Core.Parser.Components
                 if (Match(TokenType.STRUCTURE))
                 {
                     Consume(TokenType.EQUALS, "Expected '=' after STRUCTURE");
-                    structure = Consume(TokenType.STRING, "Expected string literal for STRUCTURE").Value;
+                    structure = Consume(TokenType.STRING_LITERAL, "Expected string literal for STRUCTURE").Value;
                 }
                 else if (Match(TokenType.MAP))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after MAP");
                     while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
                     {
-                        var slot   = Consume(TokenType.STRING, "Expected slot letter (e.g. 'A')").Value;
+                        var slot   = Consume(TokenType.STRING_LITERAL, "Expected slot letter (e.g. 'A')").Value;
                         Consume(TokenType.EQUALS, "Expected '=' in MAP entry");
                         var visual = ConsumeIdentifier("Expected visual name after '='").Value;
                         slotMap[slot] = visual;
@@ -264,12 +264,12 @@ namespace ETL_SQL.Core.Parser.Components
                 if (Match(TokenType.REFRESH))
                 {
                     Consume(TokenType.EVERY, "Expected EVERY after REFRESH");
-                    refreshInterval = Consume(TokenType.STRING, "Expected interval string after REFRESH EVERY").Value;
+                    refreshInterval = Consume(TokenType.STRING_LITERAL, "Expected interval string after REFRESH EVERY").Value;
                 }
                 else if (Match(TokenType.TTL))
                 {
                     Match(TokenType.EQUALS);
-                    ttl = Consume(TokenType.STRING, "Expected TTL duration string").Value;
+                    ttl = Consume(TokenType.STRING_LITERAL, "Expected TTL duration string").Value;
                 }
                 else if (Match(TokenType.COMPRESS))
                 {
@@ -293,12 +293,12 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.PASSWORD))
                 {
                     Match(TokenType.EQUALS);
-                    encryptionPassword = Consume(TokenType.STRING, "Expected password string after PASSWORD =").Value;
+                    encryptionPassword = Consume(TokenType.STRING_LITERAL, "Expected password string after PASSWORD =").Value;
                 }
                 else if (Match(TokenType.KEYFILE))
                 {
                     Match(TokenType.EQUALS);
-                    keyFile = Consume(TokenType.STRING, "Expected key file path after KEYFILE").Value;
+                    keyFile = Consume(TokenType.STRING_LITERAL, "Expected key file path after KEYFILE").Value;
                 }
                 else
                 {
@@ -446,14 +446,14 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.STRUCTURE))
                 {
                     Consume(TokenType.EQUALS, "Expected '=' after STRUCTURE");
-                    structure = Consume(TokenType.STRING, "Expected string literal for STRUCTURE").Value;
+                    structure = Consume(TokenType.STRING_LITERAL, "Expected string literal for STRUCTURE").Value;
                 }
                 else if (Match(TokenType.MAP))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after MAP");
                     while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
                     {
-                        var slot   = Consume(TokenType.STRING, "Expected slot letter (e.g. 'A')").Value;
+                        var slot   = Consume(TokenType.STRING_LITERAL, "Expected slot letter (e.g. 'A')").Value;
                         Consume(TokenType.EQUALS, "Expected '=' in MAP entry");
                         var visual = ConsumeIdentifier("Expected visual or container name after '='").Value;
                         slotMap[slot] = visual;
@@ -624,7 +624,7 @@ namespace ETL_SQL.Core.Parser.Components
                 if (Match(TokenType.TITLE))
                 {
                     Match(TokenType.EQUALS);
-                    title = Consume(TokenType.STRING, "Expected button title string").Value;
+                    title = Consume(TokenType.STRING_LITERAL, "Expected button title string").Value;
                 }
                 else if (Match(TokenType.TOOLTIP))
                 {
@@ -701,12 +701,12 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.TITLE))
                 {
                     Match(TokenType.EQUALS);
-                    title = Consume(TokenType.STRING, "Expected title string").Value;
+                    title = Consume(TokenType.STRING_LITERAL, "Expected title string").Value;
                 }
                 else if (Match(TokenType.SUBTITLE))
                 {
                     Match(TokenType.EQUALS);
-                    subtitle = Consume(TokenType.STRING, "Expected subtitle string").Value;
+                    subtitle = Consume(TokenType.STRING_LITERAL, "Expected subtitle string").Value;
                 }
                 else if (Match(TokenType.TOOLTIP))
                 {
@@ -846,7 +846,7 @@ namespace ETL_SQL.Core.Parser.Components
                 return new VisualSourceExpression { InlineSelect = select };
             }
 
-            if (Match(TokenType.STRING))
+            if (Match(TokenType.STRING_LITERAL))
             {
                 var val = _parser.Previous.Value;
                 if (val.TrimStart().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
@@ -878,7 +878,7 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 else
                 {
-                    value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : Consume(TokenType.STRING, $"Expected string literal or variable for {propertyName}").Value;
+                    value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : Consume(TokenType.STRING_LITERAL, $"Expected string literal or variable for {propertyName}").Value;
                 }
                 Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
             }
@@ -890,7 +890,7 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 else
                 {
-                    value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : Consume(TokenType.STRING, $"Expected string literal or variable for {propertyName}").Value;
+                    value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : Consume(TokenType.STRING_LITERAL, $"Expected string literal or variable for {propertyName}").Value;
                 }
             }
             return (value, isMarkdown);
@@ -909,7 +909,7 @@ namespace ETL_SQL.Core.Parser.Components
                 string? markdown = null;
                 var visuals = new List<string>();
 
-                if (ReportCheck(TokenType.STRING))
+                if (ReportCheck(TokenType.STRING_LITERAL))
                 {
                     markdown = Advance().Value;
                     Match(TokenType.COMMA);
@@ -931,7 +931,7 @@ namespace ETL_SQL.Core.Parser.Components
                 return TooltipDefinition.Inline(markdown, visuals);
             }
 
-            if (ReportCheck(TokenType.STRING))
+            if (ReportCheck(TokenType.STRING_LITERAL))
                 return TooltipDefinition.Text(Advance().Value);
 
             return TooltipDefinition.Container(
@@ -982,7 +982,7 @@ namespace ETL_SQL.Core.Parser.Components
                     Consume(TokenType.LPAREN, "Expected '(' after COLORS");
                     while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
                     {
-                        var colorKey = _parser.Current.Type == TokenType.STRING
+                        var colorKey = _parser.Current.Type == TokenType.STRING_LITERAL
                             ? Advance().Value
                             : ConsumeIdentifier("Expected color key in COLORS").Value;
                         Consume(TokenType.EQUALS, "Expected '=' after color key");
@@ -1070,7 +1070,7 @@ namespace ETL_SQL.Core.Parser.Components
         private string ConsumeReportOptionValue()
         {
             var t = _parser.Current.Type;
-            if (t == TokenType.STRING   || t == TokenType.NUMBER  ||
+            if (t == TokenType.STRING_LITERAL   || t == TokenType.NUMBER  ||
                 t == TokenType.IDENTIFIER || t == TokenType.TRUE  || t == TokenType.FALSE ||
                 t == TokenType.ON       || t == TokenType.OFF     ||
                 t == TokenType.TOP      || t == TokenType.BOTTOM  ||
@@ -1193,7 +1193,7 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 var condition = _parser.ParseExpression();
                 Consume(TokenType.THEN, "Expected THEN after formatting condition");
-                var color = Consume(TokenType.STRING, "Expected color string after THEN").Value;
+                var color = Consume(TokenType.STRING_LITERAL, "Expected color string after THEN").Value;
                 result.Add(new FormattingRule { Condition = condition, Color = color });
                 Match(TokenType.COMMA);
             }
@@ -1260,13 +1260,13 @@ namespace ETL_SQL.Core.Parser.Components
                         if (Match(TokenType.COLOR))
                         {
                             Consume(TokenType.EQUALS, "Expected = after COLOR");
-                            color = Consume(TokenType.STRING, "Expected color string").Value;
+                            color = Consume(TokenType.STRING_LITERAL, "Expected color string").Value;
                         }
                         else if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("LABEL", StringComparison.OrdinalIgnoreCase))
                         {
                             Advance();
                             Consume(TokenType.EQUALS, "Expected = after LABEL");
-                            label = Consume(TokenType.STRING, "Expected label string").Value;
+                            label = Consume(TokenType.STRING_LITERAL, "Expected label string").Value;
                         }
                         else break;
                         Match(TokenType.COMMA);
@@ -1383,7 +1383,7 @@ namespace ETL_SQL.Core.Parser.Components
                 Consume(TokenType.EQUALS, $"Expected '=' after style key '{key}'");
                 string val;
                 var t = _parser.Current.Type;
-                if (t == TokenType.STRING || t == TokenType.NUMBER || t == TokenType.IDENTIFIER ||
+                if (t == TokenType.STRING_LITERAL || t == TokenType.NUMBER || t == TokenType.IDENTIFIER ||
                     t == TokenType.TRUE || t == TokenType.FALSE)
                 {
                     val = _parser.Current.Value;

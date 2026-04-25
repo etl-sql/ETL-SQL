@@ -88,6 +88,11 @@ namespace ETL_SQL.Tests.Integration
             string enc = "encrypt_test.enc";
             string dec = "decrypt_test.txt";
             
+            if (File.Exists(src)) File.Delete(src);
+            if (File.Exists(zip)) File.Delete(zip);
+            if (File.Exists(enc)) File.Delete(enc);
+            if (File.Exists(dec)) File.Delete(dec);
+
             await File.WriteAllTextAsync(src, "secret info");
 
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -95,10 +100,10 @@ namespace ETL_SQL.Tests.Integration
             await eval.Evaluate(new Lexer($"COMPRESS_FILE('{src}', '{zip}');").TokenizeToScript());
             Assert.True(File.Exists(zip), "COMPRESS_FILE failed to create zip");
             
-            await eval.Evaluate(new Lexer($"ENCRYPT_FILE('{src}', '{enc}', NULL, 'TestPass1');").TokenizeToScript());
+            await eval.Evaluate(new Lexer($"ENCRYPT_FILE('{src}', '{enc}', 'TestPass1', ON);").TokenizeToScript());
             Assert.True(File.Exists(enc), "ENCRYPT_FILE failed to create enc");
 
-            await eval.Evaluate(new Lexer($"DECRYPT_FILE('{enc}', '{dec}', NULL, 'TestPass1');").TokenizeToScript());
+            await eval.Evaluate(new Lexer($"DECRYPT_FILE('{enc}', '{dec}', 'TestPass1', ON);").TokenizeToScript());
             Assert.True(File.Exists(dec), "DECRYPT_FILE failed to create dec");
             
             string content = await File.ReadAllTextAsync(dec);
