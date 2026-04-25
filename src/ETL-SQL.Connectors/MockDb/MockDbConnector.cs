@@ -24,17 +24,17 @@ namespace ETL_SQL.Connectors.MockDb
         public string GetHelp() => "Mock DB Connector: Used for testing database interactions without a real server.";
         
         public IDataSource CreateDataSource(IExecutionContext context, string connectionString, Dictionary<string, string>? options = null) 
-            => new MockSqlDataSource(context, connectionString, "MockDB", new MockDataSeeder());
+            => new MockSqlDataSource(context, connectionString, "MockDB", options, new MockDataSeeder());
 
         public async Task<IEnumerable<string>> GetTablesAsync(IExecutionContext context, string connectionString) 
         {
-            var ds = new MockSqlDataSource(context, connectionString, "MockDB", new MockDataSeeder());
+            var ds = new MockSqlDataSource(context, connectionString, "MockDB", null, new MockDataSeeder());
             return await ds.GetTablesAsync();
         }
         public Task<IEnumerable<string>> GetViewsAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());
         public async Task<IEnumerable<string>> GetColumnsAsync(IExecutionContext context, string connectionString, string tableName) 
         {
-             var ds = new MockSqlDataSource(context, connectionString, "MockDB", new MockDataSeeder());
+             var ds = new MockSqlDataSource(context, connectionString, "MockDB", null, new MockDataSeeder());
              return await ds.GetColumnsAsync(tableName);
         }
         public Task<IEnumerable<string>> GetProceduresAsync(IExecutionContext context, string connectionString) => Task.FromResult(Enumerable.Empty<string>());

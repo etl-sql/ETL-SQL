@@ -6,6 +6,7 @@ import type { ExecutionNode } from '../types';
 interface PipelineTabProps {
   nodes: ExecutionNode[];
   isFinished?: boolean;
+  status?: string;
 }
 
 interface NodeWithPosition extends ExecutionNode {
@@ -13,7 +14,7 @@ interface NodeWithPosition extends ExecutionNode {
   index: number;
 }
 
-export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, isFinished }) => {
+export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, isFinished, status }) => {
   const [scale, setScale] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -68,6 +69,22 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, isFinished }) =
   };
 
   if (!nodes || nodes.length === 0) {
+    if (status === 'running') {
+      return (
+        <div className="flex flex-col items-center justify-center h-full space-y-4 font-display">
+          <div className="relative">
+            <PlayCircle size={48} strokeWidth={1} className="text-indigo-400 animate-pulse" />
+            <div className="absolute inset-0 rounded-full bg-indigo-500/10 animate-ping" />
+          </div>
+          <p className="text-sm font-bold uppercase tracking-[0.2em] text-indigo-400/60">Executing</p>
+          <div className="flex gap-1.5">
+            {[0, 1, 2].map(i => (
+              <div key={i} className="w-1.5 h-1.5 rounded-full bg-indigo-400/50 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
+            ))}
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center h-full opacity-20 space-y-4 font-display">
         <PlayCircle size={48} strokeWidth={1} />

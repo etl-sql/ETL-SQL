@@ -42,7 +42,7 @@ namespace ETL_SQL.Core.Linting.Rules
         {
             if (statement is DeclareStatement declare)
             {
-                bool isSensitive = declare.IsSensitive || declare.DataType.Equals("ENCRYPTED", StringComparison.OrdinalIgnoreCase) ||
+                bool isSensitive = declare.IsSensitive || (declare.DataType != null && declare.DataType.Equals("ENCRYPTED", StringComparison.OrdinalIgnoreCase)) ||
                                  _sensitiveKeywords.Any(k => declare.VariableName.Contains(k, StringComparison.OrdinalIgnoreCase));
                 scopes.Peek()[declare.VariableName] = isSensitive;
             }

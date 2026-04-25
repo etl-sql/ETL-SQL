@@ -27,8 +27,24 @@ namespace ETL_SQL.Engine.Engines
             if (setOp.Operation == SetOpType.UNION_ALL)
             {
                 _logger.Debug("[SET_OP] Executing streaming UNION ALL (no buffering)");
-                await foreach (var batch in _context.ExecuteQuery(setOp.Left)) yield return batch;
-                await foreach (var batch in _context.ExecuteQuery(setOp.Right)) yield return batch;
+                List<string>? leftColumns = null;
+                await foreach (var batch in _context.ExecuteQuery(setOp.Left))
+                {
+                    if (leftColumns == null) leftColumns = batch.ColumnNames.ToList();
+                    _logger.Debug($"[UNION ALL] Yielding Left batch: {batch.Rows.Count} rows");
+                    yield return batch;
+                }
+                
+                var rightBatches = _context.ExecuteQuery(setOp.Right);
+                if (leftColumns != null)
+                {
+                    rightBatches = _context.AlignColumns(rightBatches, leftColumns);
+                }
+                await foreach (var batch in rightBatches) 
+                {
+                    _logger.Debug($"[UNION ALL] Yielding Right batch: {batch.Rows.Count} rows");
+                    yield return batch;
+                }
                 yield break;
             }
 

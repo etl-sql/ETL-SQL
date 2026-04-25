@@ -6,7 +6,7 @@ export class ReplManager {
     private static _instance: ReplManager;
     private _process: cp.ChildProcess | undefined;
     private _isReady: boolean = false;
-    private _commandQueue: { script: string, resolve: (val: any) => void, reject: (err: any) => void }[] = [];
+    private _commandQueue: { script: string, scriptPath?: string, workspaceRoot?: string, resolve: (val: any) => void, reject: (err: any) => void }[] = [];
     private _currentHandler: ((msg: any) => void) | undefined;
     private _outputChannel: vscode.OutputChannel | undefined;
     private _currentSessionId: string | undefined;
@@ -30,7 +30,7 @@ export class ReplManager {
         this._debugMode = debug;
     }
 
-    public async execute(script: string, exePath: string, args: string[]): Promise<void> {
+    public async execute(script: string, exePath: string, args: string[], scriptPath?: string, workspaceRoot?: string): Promise<void> {
         // Extract sessionId from args for tracking
         let sessionId: string | undefined;
         const sessionIdx = args.indexOf('--session');
@@ -49,7 +49,7 @@ export class ReplManager {
         }
 
         return new Promise((resolve, reject) => {
-            this._commandQueue.push({ script, resolve, reject });
+            this._commandQueue.push({ script, scriptPath, workspaceRoot, resolve, reject });
             this._processNext();
         });
     }
@@ -151,7 +151,7 @@ export class ReplManager {
         };
 
         this._outputChannel?.appendLine(`[PROCESS] Running script (${cmd.script.length} bytes)...`);
-        this._process?.stdin?.write(JSON.stringify({ action: "run", script: cmd.script }) + "\n");
+        this._process?.stdin?.write(JSON.stringify({ action: "run", script: cmd.script, scriptPath: cmd.scriptPath, workspaceRoot: cmd.workspaceRoot }) + "\n");
     }
 
     private _handleMessage(msg: any) {
@@ -195,5 +195,19 @@ export class ReplManager {
     
     public isRunning(): boolean {
         return this._isRunning;
+    }
+
+    public warmup(exePath: string, args: string[]): void {
+        if (this._process) return;
+        const sessionIdx = args.indexOf('--session');
+        if (sessionIdx !== -1 && sessionIdx + 1 < args.length) {
+            this._currentSessionId = args[sessionIdx + 1];
+        }
+        this._start(exePath, args).catch(() => {
+            // Warmup failures are silent; execute() will retry when the user runs.
+            this._process = undefined;
+            this._isReady = false;
+            this._currentSessionId = undefined;
+        });
     }
 }

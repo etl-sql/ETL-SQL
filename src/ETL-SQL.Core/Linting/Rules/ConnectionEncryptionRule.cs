@@ -76,8 +76,10 @@ namespace ETL_SQL.Core.Linting.Rules
             if (!FileConnectors.Contains(conn.ConnectionType ?? "")) return;
             if (conn.Options == null) return;
 
-            bool isEncryptOn = conn.Options.TryGetValue("ENCRYPT", out var enc) && 
-                (enc.Equals("ON", StringComparison.OrdinalIgnoreCase) || enc.Equals("TRUE", StringComparison.OrdinalIgnoreCase));
+            string GetLiteral(Expression? expr) => expr is LiteralExpression lit ? lit.Value?.ToString() ?? "" : "";
+
+            var encVal = GetLiteral(conn.Options.GetValueOrDefault("ENCRYPT"));
+            bool isEncryptOn = encVal.Equals("ON", StringComparison.OrdinalIgnoreCase) || encVal.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
 
             if (isEncryptOn)
             {
@@ -96,9 +98,10 @@ namespace ETL_SQL.Core.Linting.Rules
                     });
                 }
 
-                if (conn.Options.TryGetValue("ALGORITHM", out var algo))
+                if (conn.Options.TryGetValue("ALGORITHM", out var algoExpr))
                 {
-                    if (!ValidAlgorithms.Contains(algo))
+                    var algo = GetLiteral(algoExpr);
+                    if (!string.IsNullOrEmpty(algo) && !ValidAlgorithms.Contains(algo))
                     {
                         results.Add(new LintResult
                         {

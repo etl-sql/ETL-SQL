@@ -60,12 +60,22 @@ export function activate(context: vscode.ExtensionContext) {
                 sidebarProvider.postMessage({ type: 'variables', variables: [] });
                 lastActiveUri = currentUri;
             }
-            
+
             // Notify webviews of context change
             ResultsPanel.postMessage({ type: 'activeEditorChanged', uri: currentUri });
             sidebarProvider.postMessage({ type: 'activeEditorChanged', uri: currentUri });
+
+            // Pre-warm the REPL process so first execution has no startup lag.
+            if (editor.document.languageId === 'etlsql') {
+                warmupRepl(context, editor.document);
+            }
         }
     }));
+
+    // Also warm up if an etlsql file is already open when the extension activates.
+    if (vscode.window.activeTextEditor?.document.languageId === 'etlsql') {
+        warmupRepl(context, vscode.window.activeTextEditor.document);
+    }
 
     // Register Results Panel (Bottom Panel)
     const resultsProvider = ResultsPanel.register(context);
@@ -314,8 +324,11 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
         replArgs.push('--perf', '--json', '--session', sessionId);
 
         try {
+            const scriptPath = document.isUntitled ? undefined : document.fileName;
+            const workspaceRoot = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath
+                ?? (scriptPath ? path.dirname(scriptPath) : undefined);
             vscode.commands.executeCommand('setContext', 'etlsql.isRunning', true);
-            await ReplManager.getInstance().execute(scriptText, exePath, replArgs);
+            await ReplManager.getInstance().execute(scriptText, exePath, replArgs, scriptPath, workspaceRoot);
         } catch (err: any) {
             vscode.window.showErrorMessage(`ETL-SQL Error: ${err.message}`);
         } finally {
@@ -338,6 +351,15 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
         }
         terminal.sendText(`& "${exePath}" run "${scriptPath}"`);
     }
+}
+
+function warmupRepl(context: vscode.ExtensionContext, document: vscode.TextDocument) {
+    if (ReplManager.getInstance().isRunning()) return;
+    const config = vscode.workspace.getConfiguration('etlsql');
+    const exePath = getExecutablePath(context, config);
+    const sessionId = getSessionId(document);
+    const args = ['--verbose', '--perf', '--json', '--session', sessionId];
+    ReplManager.getInstance().warmup(exePath, args);
 }
 
 function getExecutablePath(context: vscode.ExtensionContext, config: vscode.WorkspaceConfiguration): string {

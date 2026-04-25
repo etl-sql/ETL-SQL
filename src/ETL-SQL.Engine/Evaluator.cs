@@ -144,6 +144,7 @@ namespace ETL_SQL.Engine
         public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
         public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
         public string? CurrentScriptPath { get; set; }
+        public string WorkingDirectory { get; set; } = Directory.GetCurrentDirectory();
         public int MaxFileOperations { get; set; } = SecurityService.DefaultMaxFileOperations;
         public int MaxGroupingSets { get; set; } = LanguageMetadata.DefaultMaxGroupingSets;
         public long MaxSessionSize { get; set; } = 200 * 1024 * 1024; // 200MB Default
@@ -346,6 +347,18 @@ namespace ETL_SQL.Engine
         public bool SpillEncryptionEnabled { get; set; } = true;
         public bool SpillCompressionEnabled { get; set; } = true;
         public string SpillFormat { get; set; } = "Arrow";
+        
+        public string? DecryptValue(string? val)
+        {
+            if (string.IsNullOrEmpty(val)) return val;
+            if (!val.StartsWith("ENC:")) return val;
+
+            // Priority: ScriptPassword > MasterPassword > MachineKey
+            string? pwd = ScriptPassword ?? MasterPassword ?? ETL_SQL.Services.SecurityService.GetMachineKey();
+            if (string.IsNullOrEmpty(pwd)) return val;
+
+            return ETL_SQL.Common.CryptoUtils.Decrypt(val, pwd);
+        }
 
 
         /// <summary>The ID of the currently executing node in this task/context.</summary>
@@ -783,13 +796,13 @@ namespace ETL_SQL.Engine
         public Task<IDataSource> ResolveDataSourceAsync(TableReference table) => _dataSourceManager.ResolveDataSourceAsync(table, _connections, _transactionManager);
         public IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table) => _dataSourceManager.ResolveAndApplyOperators(table, _connections, _transactionManager, BatchSize);
 
-        public async Task<object?> ExecuteValue(string expression, Row? context = null)
+        public async Task<object?> ExecuteValue(string expression, Row? context = null, bool decryptSensitive = false)
         {
             var lexer = new ETL_SQL.Core.Parser.Lexer(expression);
             var tokens = lexer.Tokenize();
             var parser = new ETL_SQL.Core.Parser.Parser(tokens, expression);
             var expr = parser.ParseExpression();
-            return await EvaluateValue(expr, context ?? new Row());
+            return await EvaluateValue(expr, context ?? new Row(), decryptSensitive);
         }
 
         public async IAsyncEnumerable<DataTable> ExecuteQuery(Statement stmt)
@@ -815,7 +828,7 @@ namespace ETL_SQL.Engine
             return LastResult!;
         }
 
-        public Task<object?> EvaluateValue(Expression? expr, Row context) => _expressionEvaluator.Evaluate(expr, context);
+        public Task<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false) => _expressionEvaluator.Evaluate(expr, context, decryptSensitive);
         public IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context) => _expressionEvaluator.EvaluateStream(expr, context);
         public CompiledSql CompileExpression(Expression e, string d = "MSSQL") => _queryCompiler.CompileExpression(e, d);
         public CompiledSql CompileQuery(Statement s, string d = "MSSQL") => _queryCompiler.CompileQuery(s, d);
@@ -1056,6 +1069,10 @@ namespace ETL_SQL.Engine
         {
             if (string.IsNullOrEmpty(path)) return path;
 
+            // Strip surrounding double-quotes that Windows "Copy as path" adds (e.g. "C:\tmp\file.csv")
+            if (path.Length >= 2 && path[0] == '"' && path[^1] == '"')
+                path = path[1..^1];
+
             string resolved = path;
             var parts = path.Split(new[] { '/', '\\' }, 2);
             var connName = parts[0];
@@ -1076,7 +1093,9 @@ namespace ETL_SQL.Engine
                 return resolved;
             }
 
-            var fullPath = Path.GetFullPath(resolved);
+            var fullPath = Path.IsPathRooted(resolved)
+                ? Path.GetFullPath(resolved)
+                : Path.GetFullPath(resolved, WorkingDirectory);
 
             if (_securityService != null)
             {
@@ -1092,7 +1111,20 @@ namespace ETL_SQL.Engine
             return fullPath;
         }
 
-        public object? ResolveIdentifier(string name, Row? row) => _variableScopeManager.ResolveIdentifier(name, row);
+        public object? ResolveIdentifier(string name, Row? row)
+        {
+            // 1. Try current row
+            if (row != null && row.Columns.TryGetValue(name, out var val)) return val;
+            
+            // 2. Try outer row stack (for correlated subqueries)
+            foreach (var outer in _outerRowStack)
+            {
+                if (outer != null && outer.Columns.TryGetValue(name, out var oval)) return oval;
+            }
+
+            // 3. Try variables
+            return _variableScopeManager.ResolveIdentifier(name, null);
+        }
 
         public async ValueTask DisposeAsync()
         {

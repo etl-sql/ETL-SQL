@@ -142,7 +142,7 @@ namespace ETL_SQL.Engine.Handlers
                     case FileOpType.Encrypt:
                         if (dest != null)
                         {
-                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
+                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
                             pwd ??= context.SecurityService.MasterPassword;
                             if (pwd == null)
                                 throw new ExecutionException("ENCRYPT_FILE requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
@@ -152,7 +152,7 @@ namespace ETL_SQL.Engine.Handlers
                     case FileOpType.Decrypt:
                         if (dest != null)
                         {
-                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row()))?.ToString() : null;
+                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
                             pwd ??= context.SecurityService.MasterPassword;
                             if (pwd == null)
                                 throw new ExecutionException("DECRYPT_FILE requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);

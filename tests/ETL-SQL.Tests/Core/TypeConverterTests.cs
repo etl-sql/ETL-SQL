@@ -25,9 +25,11 @@ namespace ETL_SQL.Tests.Core
             {
                 Assert.Equal(Guid.Parse(expected.ToString()), (Guid)result);
             }
-            else if (typeName == "DECIMAL")
+            else if (typeName == "DECIMAL" || typeName == "INT")
             {
-                Assert.Equal(Convert.ToDecimal(expected), (decimal)result);
+                // INT and DECIMAL both store as decimal at runtime — the engine uses decimal as its
+                // universal numeric type. INT vs DECIMAL matters for schema validation, not CLR type.
+                Assert.Equal(Convert.ToDecimal(expected), Convert.ToDecimal(result));
             }
             else
             {

@@ -351,6 +351,13 @@ namespace ETL_SQL.Core.Parser.Components
             }
         }
 
+        private string ParseAssignmentTarget()
+        {
+            var first = ConsumeIdentifier("Expected column name").Value;
+            if (Match(TokenType.DOT)) return ConsumeIdentifier("Expected column name").Value;
+            return first;
+        }
+
         public Statement ParseUpdate(Token startToken)
         {
             var targetTable = ParseTableReference(false);
@@ -359,7 +366,7 @@ namespace ETL_SQL.Core.Parser.Components
             var assignments = new List<Assignment>();
             do
             {
-                var col = ConsumeIdentifier("Expected column name").Value;
+                var col = ParseAssignmentTarget();
                 Consume(TokenType.EQUALS, "Expected '=' in assignment");
                 var expr = ParseExpression();
                 assignments.Add(new Assignment(col, expr));
@@ -420,7 +427,7 @@ namespace ETL_SQL.Core.Parser.Components
                         var assignments = new List<Assignment>();
                         do
                         {
-                            var col = ConsumeIdentifier("Expected column name").Value;
+                            var col = ParseAssignmentTarget();
                             Consume(TokenType.EQUALS, "Expected '='");
                             var expr = ParseExpression();
                             assignments.Add(new Assignment(col, expr));
@@ -470,7 +477,7 @@ namespace ETL_SQL.Core.Parser.Components
                         var assignments = new List<Assignment>();
                         do
                         {
-                            var col = ConsumeIdentifier("Expected column name").Value;
+                            var col = ParseAssignmentTarget();
                             Consume(TokenType.EQUALS, "Expected '='");
                             var expr = ParseExpression();
                             assignments.Add(new Assignment(col, expr));
@@ -509,17 +516,17 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.FROM, "Expected FROM in BULK INSERT");
             var sourceFile = ParseExpression();
 
-            Dictionary<string, string>? options = null;
+            Dictionary<string, Expression>? options = null;
             if (Match(TokenType.WITH))
             {
-                options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
                 Consume(TokenType.LPAREN, "Expected '(' after WITH");
                 while (!Match(TokenType.RPAREN))
                 {
                     var keyTok = Advance();
                     Consume(TokenType.EQUALS, "Expected '='");
-                    var valTok = Advance();
-                    options[keyTok.Value] = valTok.Value;
+                    var val = ParseExpression();
+                    options[keyTok.Value] = val;
                     if (!Match(TokenType.COMMA))
                     {
                         Consume(TokenType.RPAREN, "Expected ')' or ','");
@@ -529,8 +536,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            var optionsExpr = options?.ToDictionary(kv => kv.Key, kv => (Expression)new LiteralExpression(kv.Value, TokenType.STRING_LITERAL));
-            return new BulkInsertStatement(targetTable, sourceFile.ToSql().Trim('\''), optionsExpr ?? new(), columns)
+            return new BulkInsertStatement(targetTable, sourceFile is LiteralExpression lit ? lit.Value?.ToString() ?? "" : sourceFile.ToSql().Trim('\''), options ?? new(), columns)
             {
                 Line = startToken.Line,
                 Column = startToken.Column
@@ -561,16 +567,16 @@ namespace ETL_SQL.Core.Parser.Components
                 if (hasParen) Consume(TokenType.RPAREN, "Expected ')' after target string");
             }
 
-            Dictionary<string, string>? options = null;
+            Dictionary<string, Expression>? options = null;
             if (Match(TokenType.WITH))
             {
-                options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
                 Consume(TokenType.LPAREN, "Expected '(' after WITH");
                 while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
                 {
                     string key = Advance().Value;
                     Consume(TokenType.EQUALS, "Expected '=' after option key");
-                    string val = Advance().Value;
+                    var val = ParseExpression();
                     options[key] = val;
                     if (!Match(TokenType.COMMA)) break;
                 }
@@ -708,16 +714,16 @@ namespace ETL_SQL.Core.Parser.Components
                 }
             }
 
-            Dictionary<string, string>? options = null;
+            Dictionary<string, Expression>? options = null;
             if (Match(TokenType.WITH))
             {
-                options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                options = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
                 Consume(TokenType.LPAREN, "Expected '(' after WITH clause");
                 while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
                 {
                     string key = Advance().Value;
                     Consume(TokenType.EQUALS, "Expected '=' after option key");
-                    string val = Advance().Value;
+                    var val = ParseExpression();
                     options[key] = val;
                     if (!Match(TokenType.COMMA)) break;
                 }

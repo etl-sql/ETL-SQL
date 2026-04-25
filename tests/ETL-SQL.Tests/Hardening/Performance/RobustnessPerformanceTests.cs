@@ -123,8 +123,8 @@ PRINT @topsecret_val;";
             );
 
             var context = new Mock<IExecutionContext>();
-            context.Setup(c => c.EvaluateValue(It.IsAny<Expression>(), It.IsAny<Row>()))
-                   .ReturnsAsync((Expression e, Row r) => (e as LiteralExpression)?.Value);
+            context.Setup(c => c.EvaluateValue(It.IsAny<Expression>(), It.IsAny<Row>(), It.IsAny<bool>()))
+                   .ReturnsAsync((Expression e, Row r, bool d) => (e as LiteralExpression)?.Value);
             
             // Mock connection for handler
             var mockSource = new Mock<IDataSource>();

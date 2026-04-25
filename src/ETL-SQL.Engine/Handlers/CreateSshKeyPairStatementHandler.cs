@@ -59,7 +59,7 @@ namespace ETL_SQL.Engine.Handlers
             string? passphrase = null;
             if (stmt.Passphrase != null)
             {
-                passphrase = (await context.EvaluateValue(stmt.Passphrase, new Row()))?.ToString();
+                passphrase = (await context.EvaluateValue(stmt.Passphrase, new Row(), decryptSensitive: true))?.ToString();
             }
 
             string? comment = null;

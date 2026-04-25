@@ -39,6 +39,7 @@ namespace ETL_SQL.Core.Formatting
 
             // ── DDL ──
             CreateConnectionStatement      s => FormatCreateConnection(s),
+            AlterConnectionStatement       s => FormatAlterConnection(s),
             CreateSshKeyPairStatement      s => FormatCreateSshKeyPair(s),
             CreateTableStatement           s => FormatCreateTable(s),
             AlterTableStatement            s => FormatAlterTable(s),
@@ -307,9 +308,18 @@ namespace ETL_SQL.Core.Formatting
             };
             var onStr      = (s.ConnectionType != null && s.TargetExpression != null) ? $" ON {s.ConnectionType}({s.TargetExpression.ToSql()})" : "";
             var optionsStr = s.Options != null && s.Options.Count > 0
-                ? " WITH (" + string.Join(", ", s.Options.Select(o => $"{o.Key}='{o.Value}'")) + ")"
+                ? " WITH (" + string.Join(", ", s.Options.Select(o => $"{o.Key}={o.Value.ToSql()}")) + ")"
                 : "";
             return $"{modeStr} CONNECTION {s.ConnectionName}{onStr}{optionsStr};";
+        }
+
+        private static string FormatAlterConnection(AlterConnectionStatement s)
+        {
+            var onStr      = (s.ConnectionType != null && s.TargetExpression != null) ? $" ON {s.ConnectionType}({s.TargetExpression.ToSql()})" : "";
+            var optionsStr = s.Options != null && s.Options.Count > 0
+                ? " WITH (" + string.Join(", ", s.Options.Select(o => $"{o.Key}={o.Value.ToSql()}")) + ")"
+                : "";
+            return $"ALTER CONNECTION {s.ConnectionName}{onStr}{optionsStr};";
         }
 
         private static string FormatCreateSshKeyPair(CreateSshKeyPairStatement s)

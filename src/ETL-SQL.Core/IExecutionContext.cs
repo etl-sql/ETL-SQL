@@ -93,7 +93,7 @@ namespace ETL_SQL.Core
 
     public interface IEvaluationContext
     {
-        Task<object?> EvaluateValue(Expression? expr, Row context);
+        Task<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false);
         IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context);
         Task<bool> EvaluateCondition(Expression? expr, Row context);
         Task<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context);
@@ -271,6 +271,10 @@ namespace ETL_SQL.Core
         bool SpillCompressionEnabled { get; set; }
         string SpillFormat { get; set; }
         ISpillStore SpillStore { get; }
+        
+        /// <summary>Decrypts an 'ENC:...' value using the current session context passwords.</summary>
+        string? DecryptValue(string? value);
+
         Stack<Row> OuterRowStack { get; }
         Common.LruCache<Statement, object?> SubqueryCache { get; }
         System.Threading.CancellationToken CancellationToken { get; }

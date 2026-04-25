@@ -132,9 +132,9 @@ namespace ETL_SQL.Engine
         }
 
         /// <summary>Evaluates an expression against a row context.</summary>
-        public async Task<object?> Evaluate(Expression? expr, Row context)
+        public async Task<object?> Evaluate(Expression? expr, Row context, bool decryptSensitive = false)
         {
-            return await EvaluateInternal(expr, context);
+            return await EvaluateInternal(expr, context, decryptSensitive);
         }
 
         /// <summary>Evaluates an expression as an asynchronous stream of rows.</summary>
@@ -217,29 +217,29 @@ namespace ETL_SQL.Engine
         }
 
         /// <summary>Internal recursive entry point for expression evaluation.</summary>
-        public async Task<object?> EvaluateInternal(Expression? expr, Row context)
+        public async Task<object?> EvaluateInternal(Expression? expr, Row context, bool decryptSensitive = false)
         {
             return expr switch
             {
                 null => null,
-                VariableExpression v => EvaluateVariable(v),
-                MemberAccessExpression ma => await EvaluateMemberAccess(ma, context),
-                LiteralExpression lit => lit.Value,
+                VariableExpression v => EvaluateVariable(v, decryptSensitive),
+                MemberAccessExpression ma => await EvaluateMemberAccess(ma, context, decryptSensitive),
+                LiteralExpression lit => (decryptSensitive && lit.Value is string s && s.StartsWith("ENC:")) ? _context.DecryptValue(s) : lit.Value,
                 IdentifierExpression id => EvaluateIdentifier(id, context),
-                BinaryExpression bin => await EvaluateBinary(bin, context),
-                LikeExpression like => await EvaluateLikeExpr(like, context),
-                IsNullExpression isNull => await EvaluateIsNull(isNull, context),
-                CaseExpression c => await EvaluateCase(c, context),
-                InExpression inExp => await EvaluateIn(inExp, context),
+                BinaryExpression bin => await EvaluateBinary(bin, context, decryptSensitive),
+                LikeExpression like => await EvaluateLikeExpr(like, context, decryptSensitive),
+                IsNullExpression isNull => await EvaluateIsNull(isNull, context, decryptSensitive),
+                CaseExpression c => await EvaluateCase(c, context, decryptSensitive),
+                InExpression inExp => await EvaluateIn(inExp, context, decryptSensitive),
                 ExistsExpression ex => await EvaluateExists(ex, context),
-                ListExpression listExpr => await EvaluateList(listExpr, context),
-                AtTimeZoneExpression atTz => await EvaluateAtTimeZone(atTz, context),
-                SubstringExpression sub => await EvaluateSubstring(sub, context),
-                PositionExpression pos => await EvaluatePosition(pos, context),
-                ExtractExpression ext => await EvaluateExtract(ext, context),
-                OverlayExpression ovl => await EvaluateOverlay(ovl, context),
-                TrimExpression trim => await EvaluateTrim(trim, context),
-                FunctionCallExpression f => await EvaluateFunction(f, context),
+                ListExpression listExpr => await EvaluateList(listExpr, context, decryptSensitive),
+                AtTimeZoneExpression atTz => await EvaluateAtTimeZone(atTz, context, decryptSensitive),
+                SubstringExpression sub => await EvaluateSubstring(sub, context, decryptSensitive),
+                PositionExpression pos => await EvaluatePosition(pos, context, decryptSensitive),
+                ExtractExpression ext => await EvaluateExtract(ext, context, decryptSensitive),
+                OverlayExpression ovl => await EvaluateOverlay(ovl, context, decryptSensitive),
+                TrimExpression trim => await EvaluateTrim(trim, context, decryptSensitive),
+                FunctionCallExpression f => await EvaluateFunction(f, context, decryptSensitive),
                 SubqueryExpression subq => await EvaluateSubquery(subq, context),
                 ParameterExpression p => EvaluateParameter(p),
                 _ => null
@@ -247,9 +247,9 @@ namespace ETL_SQL.Engine
         }
 
         /// <summary>Evaluates an IN expression (list or subquery).</summary>
-        private async Task<object?> EvaluateIn(InExpression inExp, Row context)
+        private async Task<object?> EvaluateIn(InExpression inExp, Row context, bool decryptSensitive = false)
         {
-            var l = await EvaluateInternal(inExp.Left, context);
+            var l = await EvaluateInternal(inExp.Left, context, decryptSensitive);
             bool found = false;
             var inSubq = inExp.Subquery ?? (inExp.Right as SubqueryExpression)?.Query;
             if (inSubq != null || inExp.Right is SubqueryExpression)
@@ -270,7 +270,7 @@ namespace ETL_SQL.Engine
             {
                 foreach (var item in list.Items)
                 {
-                    var itemVal = await EvaluateInternal(item, context);
+                    var itemVal = await EvaluateInternal(item, context, decryptSensitive);
                     if (!l.IsNull() && !itemVal.IsNull())
                     {
                         if (IsSoftEqual(l, itemVal)) { found = true; break; }
@@ -279,29 +279,41 @@ namespace ETL_SQL.Engine
             }
             return inExp.IsNot ? !found : found;
         }
+    
 
         /// <summary>Evaluates an EXISTS clause.</summary>
         private async Task<object?> EvaluateExists(ExistsExpression ex, Row context)
         {
             bool found = false;
-            await foreach (var row in EvaluateStream(new SubqueryExpression(ex.Subquery), context))
+            _context.OuterRowStack.Push(context);
+            try
             {
-                found = true;
-                break;
+                await foreach (var batch in _context.ExecuteQuery(ex.Subquery))
+                {
+                    if (batch.Rows.Count > 0)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                _context.OuterRowStack.Pop();
             }
             return ex.IsNot ? !found : found;
         }
 
         /// <summary>Evaluates a list of expressions.</summary>
-        private async Task<object?> EvaluateList(ListExpression listExpr, Row context)
+        private async Task<object?> EvaluateList(ListExpression listExpr, Row context, bool decryptSensitive = false)
         {
             var result = new List<object?>();
-            foreach (var item in listExpr.Items) result.Add(await EvaluateInternal(item, context));
+            foreach (var item in listExpr.Items) result.Add(await EvaluateInternal(item, context, decryptSensitive));
             return result;
         }
 
         /// <summary>Evaluates a scalar or aggregate function call.</summary>
-        public async Task<object?> EvaluateFunction(FunctionCallExpression f, Row context)
+        public async Task<object?> EvaluateFunction(FunctionCallExpression f, Row context, bool decryptSensitive = false)
         {
             if (f.Window != null) 
             {
@@ -318,7 +330,7 @@ namespace ETL_SQL.Engine
             // ANSI String length aliases
             if (fn == "CHARACTER_LENGTH" || fn == "CHAR_LENGTH" || fn == "OCTET_LENGTH")
             {
-                var val = await EvaluateInternal(f.Arguments.FirstOrDefault(), context ?? new Row());
+                var val = await EvaluateInternal(f.Arguments.FirstOrDefault(), context ?? new Row(), decryptSensitive);
                 if (val == null) return null;
                 var s = val.ToString() ?? "";
                 return fn == "OCTET_LENGTH" ? System.Text.Encoding.UTF8.GetByteCount(s) : s.Length;
@@ -338,7 +350,7 @@ namespace ETL_SQL.Engine
                 }
                 else
                 {
-                    args.Add(await EvaluateInternal(arg, context ?? new Row()));
+                    args.Add(await EvaluateInternal(arg, context ?? new Row(), decryptSensitive));
                 }
             }
 
@@ -351,10 +363,10 @@ namespace ETL_SQL.Engine
         }
 
         /// <summary>Evaluates the AT TIME ZONE expression.</summary>
-        private async Task<object?> EvaluateAtTimeZone(AtTimeZoneExpression atTz, Row context)
+        private async Task<object?> EvaluateAtTimeZone(AtTimeZoneExpression atTz, Row context, bool decryptSensitive = false)
         {
-            var val = await EvaluateInternal(atTz.Left, context);
-            var zone = await EvaluateInternal(atTz.TimeZone, context);
+            var val = await EvaluateInternal(atTz.Left, context, decryptSensitive);
+            var zone = await EvaluateInternal(atTz.TimeZone, context, decryptSensitive);
             if (val == null || zone == null) return val;
             
             DateTime dt = DateTime.Parse(val.ToString() ?? "");
@@ -409,7 +421,7 @@ namespace ETL_SQL.Engine
         public object? CastToType(object? value, string type) => EvaluationUtils.CastToType(value, type);
 
         /// <summary>Evaluates a variable reference (@var or #temp).</summary>
-        private object? EvaluateVariable(VariableExpression v)
+        private object? EvaluateVariable(VariableExpression v, bool decryptSensitive = false)
         {
             if (v.Name.Equals("@@TRANCOUNT", StringComparison.OrdinalIgnoreCase)) return _context.TranCount;
             if (v.Name.Equals("@@RESULTSETS", StringComparison.OrdinalIgnoreCase)) return _context.LastResultSets;
@@ -429,8 +441,18 @@ namespace ETL_SQL.Engine
             
             if (!_context.ContainsVariable(v.Name))
                 throw new ExecutionException($"Undeclared: {v.Name}");
+            
+            var val = _context.GetVariable(v.Name);
+            
+            if (decryptSensitive && val is string s && s.StartsWith("ENC:"))
+            {
+                if (_context.VariableMetadata.TryGetValue(v.Name, out var meta) && meta.IsSensitive)
+                {
+                    return _context.DecryptValue(s);
+                }
+            }
                 
-            return _context.GetVariable(v.Name);
+            return val;
         }
 
         /// <summary>Evaluates a parameter reference (? or ?n).</summary>
@@ -453,9 +475,9 @@ namespace ETL_SQL.Engine
         }
 
         /// <summary>Evaluates a member access expression (e.g., row.Member or object.Property).</summary>
-        private async Task<object?> EvaluateMemberAccess(MemberAccessExpression ma, Row context)
+        private async Task<object?> EvaluateMemberAccess(MemberAccessExpression ma, Row context, bool decryptSensitive = false)
         {
-            var val = await EvaluateInternal(ma.Expression, context);
+            var val = await EvaluateInternal(ma.Expression, context, decryptSensitive);
             if (val == null) return null;
             
             // Handle Row or IDictionary
@@ -531,15 +553,15 @@ namespace ETL_SQL.Engine
         }
 
         /// <summary>Evaluates a binary operation (arithmetic or logical).</summary>
-        private async Task<object?> EvaluateBinary(BinaryExpression bin, Row context)
+        private async Task<object?> EvaluateBinary(BinaryExpression bin, Row context, bool decryptSensitive = false)
         {
             if (bin.Operator == TokenType.AND)
             {
-                var lVal = await EvaluateInternal(bin.Left, context);
+                var lVal = await EvaluateInternal(bin.Left, context, decryptSensitive);
                 // IF L is FALSE, result is FALSE (Short-circuit)
                 if (!lVal.IsNull() && !Convert.ToBoolean(lVal)) return false;
 
-                var rVal = await EvaluateInternal(bin.Right, context);
+                var rVal = await EvaluateInternal(bin.Right, context, decryptSensitive);
                 // IF R is FALSE, result is FALSE
                 if (!rVal.IsNull() && !Convert.ToBoolean(rVal)) return false;
 
@@ -551,11 +573,11 @@ namespace ETL_SQL.Engine
             }
             if (bin.Operator == TokenType.OR)
             {
-                var lVal = await EvaluateInternal(bin.Left, context);
+                var lVal = await EvaluateInternal(bin.Left, context, decryptSensitive);
                 // IF L is TRUE, result is TRUE (Short-circuit)
                 if (!lVal.IsNull() && Convert.ToBoolean(lVal)) return true;
 
-                var rVal = await EvaluateInternal(bin.Right, context);
+                var rVal = await EvaluateInternal(bin.Right, context, decryptSensitive);
                 // IF R is TRUE, result is TRUE
                 if (!rVal.IsNull() && Convert.ToBoolean(rVal)) return true;
 
@@ -566,8 +588,8 @@ namespace ETL_SQL.Engine
                 return false;
             }
 
-            var leftVal = await EvaluateInternal(bin.Left, context);
-            var rightVal = await EvaluateInternal(bin.Right, context);
+            var leftVal = await EvaluateInternal(bin.Left, context, decryptSensitive);
+            var rightVal = await EvaluateInternal(bin.Right, context, decryptSensitive);
 
             // Use the registry for arithmetic and simple logical operators
             var result = BinaryOperatorFactory.Execute(bin.Operator, leftVal, rightVal);
@@ -592,14 +614,14 @@ namespace ETL_SQL.Engine
         }
 
         /// <summary>Evaluates a LIKE expression.</summary>
-        private async Task<object?> EvaluateLikeExpr(LikeExpression like, Row context)
+        private async Task<object?> EvaluateLikeExpr(LikeExpression like, Row context, bool decryptSensitive = false)
         {
-            var l = await EvaluateInternal(like.Left, context);
-            var r = await EvaluateInternal(like.Pattern, context);
+            var l = await EvaluateInternal(like.Left, context, decryptSensitive);
+            var r = await EvaluateInternal(like.Pattern, context, decryptSensitive);
             string? escapeStr = null;
             if (like.EscapeChar != null)
             {
-                var escVal = await EvaluateInternal(like.EscapeChar, context);
+                var escVal = await EvaluateInternal(like.EscapeChar, context, decryptSensitive);
                 escapeStr = escVal?.ToString();
             }
             bool res = EvaluateLike(l, r, escapeStr);
@@ -607,38 +629,38 @@ namespace ETL_SQL.Engine
         }
 
         /// <summary>Evaluates an IS NULL or IS NOT NULL expression.</summary>
-        private async Task<object?> EvaluateIsNull(IsNullExpression isNull, Row context)
+        private async Task<object?> EvaluateIsNull(IsNullExpression isNull, Row context, bool decryptSensitive = false)
         {
-            var val = await EvaluateInternal(isNull.Expression, context);
+            var val = await EvaluateInternal(isNull.Expression, context, decryptSensitive);
             bool res = val == null || val == DBNull.Value || (val is string s && string.IsNullOrEmpty(s) && _context.GetVariable("NULL_AS_EMPTY")?.ToString() == "TRUE");
             return isNull.Not ? !res : res;
         }
 
         /// <summary>Evaluates a CASE expression.</summary>
-        private async Task<object?> EvaluateCase(CaseExpression c, Row context)
+        private async Task<object?> EvaluateCase(CaseExpression c, Row context, bool decryptSensitive = false)
         {
             foreach (var clause in c.WhenClauses)
             {
-                var cond = await EvaluateInternal(clause.Condition, context);
-                if (cond != null && Convert.ToBoolean(cond)) return await EvaluateInternal(clause.Result, context);
+                var cond = await EvaluateInternal(clause.Condition, context, decryptSensitive);
+                if (cond != null && Convert.ToBoolean(cond)) return await EvaluateInternal(clause.Result, context, decryptSensitive);
             }
-            return await EvaluateInternal(c.ElseResult, context);
+            return await EvaluateInternal(c.ElseResult, context, decryptSensitive);
         }
 
-        private async Task<object?> EvaluateSubstring(SubstringExpression sub, Row context)
+        private async Task<object?> EvaluateSubstring(SubstringExpression sub, Row context, bool decryptSensitive = false)
         {
-            var val = await EvaluateInternal(sub.String, context);
+            var val = await EvaluateInternal(sub.String, context, decryptSensitive);
             if (val == null) return null;
             var s = val.ToString() ?? "";
             
-            var startVal = await EvaluateInternal(sub.Start, context);
+            var startVal = await EvaluateInternal(sub.Start, context, decryptSensitive);
             if (startVal == null) return null;
             int start = Convert.ToInt32(startVal);
             
             int? len = null;
             if (sub.Length != null)
             {
-                var lenVal = await EvaluateInternal(sub.Length, context);
+                var lenVal = await EvaluateInternal(sub.Length, context, decryptSensitive);
                 if (lenVal == null) return null;
                 len = Convert.ToInt32(lenVal);
                 if (len <= 0) return "";
@@ -656,10 +678,10 @@ namespace ETL_SQL.Engine
             return sb.ToString();
         }
 
-        private async Task<object?> EvaluatePosition(PositionExpression pos, Row context)
+        private async Task<object?> EvaluatePosition(PositionExpression pos, Row context, bool decryptSensitive = false)
         {
-            var substrVal = await EvaluateInternal(pos.Substring, context);
-            var strVal = await EvaluateInternal(pos.String, context);
+            var substrVal = await EvaluateInternal(pos.Substring, context, decryptSensitive);
+            var strVal = await EvaluateInternal(pos.String, context, decryptSensitive);
             if (substrVal == null || strVal == null) return 0;
             
             var substr = substrVal.ToString() ?? "";
@@ -670,9 +692,9 @@ namespace ETL_SQL.Engine
             return index + 1;
         }
 
-        private async Task<object?> EvaluateExtract(ExtractExpression ext, Row context)
+        private async Task<object?> EvaluateExtract(ExtractExpression ext, Row context, bool decryptSensitive = false)
         {
-            var val = await EvaluateInternal(ext.Source, context);
+            var val = await EvaluateInternal(ext.Source, context, decryptSensitive);
             if (val == null) return null;
             
             DateTime dt;
@@ -694,11 +716,11 @@ namespace ETL_SQL.Engine
             };
         }
 
-        private async Task<object?> EvaluateOverlay(OverlayExpression ovl, Row context)
+        private async Task<object?> EvaluateOverlay(OverlayExpression ovl, Row context, bool decryptSensitive = false)
         {
-            var strVal = await EvaluateInternal(ovl.String, context);
-            var ovlVal = await EvaluateInternal(ovl.Overlay, context);
-            var startVal = await EvaluateInternal(ovl.Start, context);
+            var strVal = await EvaluateInternal(ovl.String, context, decryptSensitive);
+            var ovlVal = await EvaluateInternal(ovl.Overlay, context, decryptSensitive);
+            var startVal = await EvaluateInternal(ovl.Start, context, decryptSensitive);
             
             if (strVal == null || ovlVal == null || startVal == null) return null;
             
@@ -712,7 +734,7 @@ namespace ETL_SQL.Engine
             int len = o.Length;
             if (ovl.Length != null)
             {
-                var lenVal = await EvaluateInternal(ovl.Length, context);
+                var lenVal = await EvaluateInternal(ovl.Length, context, decryptSensitive);
                 if (lenVal != null) len = Convert.ToInt32(lenVal);
             }
             
@@ -724,16 +746,16 @@ namespace ETL_SQL.Engine
             return prefix + o + suffix;
         }
 
-        private async Task<object?> EvaluateTrim(TrimExpression trim, Row context)
+        private async Task<object?> EvaluateTrim(TrimExpression trim, Row context, bool decryptSensitive = false)
         {
-            var val = await EvaluateInternal(trim.String, context);
+            var val = await EvaluateInternal(trim.String, context, decryptSensitive);
             if (val == null) return null;
             var s = val.ToString() ?? "";
             
             char[]? chars = null;
             if (trim.Characters != null)
             {
-                var cVal = await EvaluateInternal(trim.Characters, context);
+                var cVal = await EvaluateInternal(trim.Characters, context, decryptSensitive);
                 if (cVal != null) chars = cVal.ToString()?.ToCharArray();
             }
             

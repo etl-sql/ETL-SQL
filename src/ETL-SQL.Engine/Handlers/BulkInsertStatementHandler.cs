@@ -62,8 +62,8 @@ namespace ETL_SQL.Engine.Handlers
             var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var opt in stmt.Options)
             {
-                var val = await context.EvaluateValue(opt.Value, new Row());
-                options[opt.Key] = val?.ToString() ?? "";
+                var val = (await context.EvaluateValue(opt.Value, new Row(), decryptSensitive: true))?.ToString() ?? "";
+                options[opt.Key] = val;
             }
 
             // 3. Map Bulk Options to FlatFile Options

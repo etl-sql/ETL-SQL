@@ -38,6 +38,12 @@ namespace ETL_SQL.Core.Data
                 
                 if (a is DateTime dta && b is DateTime dtb) return dta.Year == dtb.Year && dta.Month == dtb.Month && dta.Day == dtb.Day && dta.Hour == dtb.Hour && dta.Minute == dtb.Minute && dta.Second == dtb.Second;
                 
+                // Support ON/OFF boolean literals vs string equivalents
+                if (a is bool ba && b is string sb1 && (sb1.Equals("ON", StringComparison.OrdinalIgnoreCase) || sb1.Equals("OFF", StringComparison.OrdinalIgnoreCase)))
+                    return ba == sb1.Equals("ON", StringComparison.OrdinalIgnoreCase);
+                if (b is bool bb && a is string sa1 && (sa1.Equals("ON", StringComparison.OrdinalIgnoreCase) || sa1.Equals("OFF", StringComparison.OrdinalIgnoreCase)))
+                    return bb == sa1.Equals("ON", StringComparison.OrdinalIgnoreCase);
+
                 if (decimal.TryParse(a?.ToString(), out var m1) && decimal.TryParse(b?.ToString(), out var m2)) return m1 == m2;
                 
                 if (DateTime.TryParse(a?.ToString(), out var dt1) && DateTime.TryParse(b?.ToString(), out var dt2)) return dt1.Year == dt2.Year && dt1.Month == dt2.Month && dt1.Day == dt2.Day && dt1.Hour == dt2.Hour && dt1.Minute == dt2.Minute && dt1.Second == dt2.Second;

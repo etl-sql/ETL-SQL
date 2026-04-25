@@ -58,6 +58,7 @@ Specialty types carry semantic meaning and perform automatic normalization or va
 
 > [!NOTE]
 > Any variable marked as `SENSITIVE`, `SECRET`, or declared with the `PASSWORD` keyword is automatically masked (e.g., `********`) in the execution log and `PRINT` output.
+> Starting with version 0.7.0, variables marked as `SENSITIVE` that contain encrypted strings (starting with `ENC:`) are automatically decrypted when passed to secure parameters (e.g., connector `PASSWORD`, `API_KEY`, or `SSH_KEY_PAIR.PASSPHRASE`).
 
 ### 1.3 `SET`
 Assigns a new value to an existing variable.
@@ -245,8 +246,8 @@ Override `appsettings.json` defaults for the current session.
 | `SET REGEX_MATCH_TIMEOUT = n` | 1,000 | Milliseconds before a regex match is aborted |
 | `SET MAX_GROUPING_SETS = n` | 100 | Max `CUBE`/`GROUPING SETS` combinations before abort |
 | `SET MAX_SESSION_SIZE = n` | 524,288,000 | Max session state in bytes before eviction (~500 MB) |
-| `SET SPILL_ENCRYPTION = ON/OFF` | OFF | AES-256 encryption on spill files |
-| `SET SPILL_COMPRESSION = ON/OFF` | OFF | Brotli compression on spill files |
+| `SET SPILL_ENCRYPTION = ON/OFF` | ON | AES-256 encryption on spill files |
+| `SET SPILL_COMPRESSION = ON/OFF` | ON | Brotli compression on spill files |
 | `SET TELEMETRY = ON/OFF` | ON | Collect high-cost execution metrics |
 
 ---
@@ -512,6 +513,9 @@ END
 
 ### 4.7 `PRINT`
 
+`PRINT` supports two forms: statement and function.
+
+**Statement form** — writes one or more expressions to the message log:
 ```sql
 PRINT 'Starting nightly load...';
 PRINT 'Processed: ' + @count + ' rows', TRUE;           -- with timestamp
@@ -519,6 +523,20 @@ PRINT GETDATE(), TRUE, 'yyyy-MM-dd HH:mm:ss';           -- formatted date
 
 -- Multiple arguments (comma-separated)
 PRINT 'User:', @Username, 'Status:', @Status;
+```
+
+**Function form** — `PRINT(expression)` — evaluates the expression and emits the result, useful inside compound expressions or when the statement form's comma-separation would be ambiguous:
+```sql
+PRINT(@@ROWCOUNT);
+PRINT('Rows: ' + @count);
+
+-- Inside a block where a single expression is expected
+IF @debug = 1 PRINT(@msg);
+```
+
+Both forms accept the same optional `TRUE` timestamp flag and format string as the second and third arguments:
+```sql
+PRINT(@msg, TRUE, 'HH:mm:ss');
 ```
 
 > [!IMPORTANT]

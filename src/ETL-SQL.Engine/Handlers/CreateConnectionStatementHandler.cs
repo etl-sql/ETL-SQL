@@ -42,8 +42,16 @@ namespace ETL_SQL.Engine.Handlers
                 connectionType ??= existingDataSource.ConnectorType;
                 options = new Dictionary<string, string>(existingDataSource.Options ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase);
                 target = existingDataSource.Path;
+                
                 if (stmt.Options != null)
-                    foreach (var kvp in stmt.Options) options[kvp.Key] = kvp.Value;
+                {
+                    foreach (var kvp in stmt.Options)
+                    {
+                        var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true));
+                        options[kvp.Key] = val;
+                    }
+                }
+
                 if (stmt.TargetExpression != null)
                     target = (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString() ?? "";
             }
@@ -52,44 +60,27 @@ namespace ETL_SQL.Engine.Handlers
                 // CREATE (new) or CREATE OR ALTER (not yet existing)
                 if (connectionType == null) throw new ExecutionException("Connection type must be specified for CREATE CONNECTION.");
                 target = stmt.TargetExpression != null
-                    ? (await context.EvaluateValue(stmt.TargetExpression, new Row()))?.ToString() ?? ""
+                    ? (await context.EvaluateValue(stmt.TargetExpression, new Row(), decryptSensitive: true))?.ToString() ?? ""
                     : "";
-                options = stmt.Options != null ? new Dictionary<string, string>(stmt.Options, StringComparer.OrdinalIgnoreCase) : null;
+                
+                options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (stmt.Options != null)
+                {
+                    foreach (var kvp in stmt.Options)
+                    {
+                        var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true));
+                        options[kvp.Key] = Interpolate(val);
+                    }
+                }
             }
 
             _logger.Debug("{Action} connection {ConnectionName} of type {ConnectionType}", alreadyExists ? "Upserting" : "Creating", stmt.ConnectionName, connectionType);
 
+            // Decrypt target if necessary (already handled by EvaluateValue if it was a variable, 
+            // but for literals or complex expressions we call DecryptValue directly)
             if (target != null && target.StartsWith("ENC:"))
             {
-                string? decryptionKey = context.MasterPassword ?? context.ScriptPassword;
-                if (string.IsNullOrEmpty(decryptionKey))
-                {
-                    throw new ExecutionException("A password is required to decrypt the connection string. Use 'USE PASSWORD' in the script or provide a master password.");
-                }
-                
-                try 
-                {
-                    target = CryptoUtils.Decrypt(target, decryptionKey);
-                }
-                catch
-                {
-                    // Security Hardening: If we have both keys, try the other one, but don't leak which one failed.
-                    if (context.MasterPassword != null && context.ScriptPassword != null && context.MasterPassword != context.ScriptPassword)
-                    {
-                         try 
-                         { 
-                             target = CryptoUtils.Decrypt(target, context.ScriptPassword); 
-                         }
-                         catch 
-                         { 
-                             throw new ExecutionException("Failed to decrypt connection string. Verify that the correct password has been set via USE PASSWORD or MasterPassword."); 
-                         }
-                    }
-                    else
-                    {
-                        throw new ExecutionException("Failed to decrypt connection string. Verify that the correct password has been set via USE PASSWORD or MasterPassword.");
-                    }
-                }
+                target = context.DecryptValue(target);
             }
             target = Interpolate(target ?? "");
 
@@ -108,19 +99,13 @@ namespace ETL_SQL.Engine.Handlers
                 if (mock != null) connector = mock;
             }
 
-            var interpolatedOptions = options?.ToDictionary(
-                kvp => kvp.Key,
-                kvp => Interpolate(kvp.Value),
-                StringComparer.OrdinalIgnoreCase
-            );
-
             if (connector != null)
             {
-                if (string.IsNullOrEmpty(target) && interpolatedOptions != null)
+                if (string.IsNullOrEmpty(target) && options != null)
                 {
                     try
                     {
-                        target = connector.BuildConnectionString(interpolatedOptions);
+                        target = connector.BuildConnectionString(options);
                     }
                     catch (Exception ex)
                     {
@@ -129,7 +114,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
 
                 IEnumerable<ColumnDefinition>? templateSchema = null;
-                if (interpolatedOptions != null && interpolatedOptions.TryGetValue("TEMPLATE", out var templateName))
+                if (options != null && options.TryGetValue("TEMPLATE", out var templateName))
                 {
                     if (context.Connections.TryGetValue(templateName, out var templateDs) && templateDs is InMemoryDataSource imds)
                     {
@@ -141,10 +126,10 @@ namespace ETL_SQL.Engine.Handlers
                     }
                 }
 
-                ds = connector.CreateDataSource(context, target, interpolatedOptions, templateSchema);
+                ds = connector.CreateDataSource(context, target, options, templateSchema);
 
                 // Security Hardening: Validate host for network-based connectors
-                var host = connector.GetHost(target, interpolatedOptions);
+                var host = connector.GetHost(target, options);
                 if (host != null)
                 {
                     context.SecurityService.ValidateHost(host);
@@ -192,6 +177,12 @@ namespace ETL_SQL.Engine.Handlers
             preview.TotalRowsMatched = preview.Rows.Count;
             preview.ExecutionTimeMs = 0; // Instant metadata preview
             context.LastResult = preview;
+        }
+        
+        private string StringifyOption(object? val)
+        {
+            if (val is bool b) return b ? "ON" : "OFF";
+            return val?.ToString() ?? "";
         }
 
         private string Interpolate(string value)

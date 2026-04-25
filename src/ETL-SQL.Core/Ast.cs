@@ -47,12 +47,12 @@ namespace ETL_SQL.Core
     {
     }
 
-    public record CreateConnectionStatement(string name, string? type = null, Expression? target = null, Dictionary<string, string>? options = null, ObjectCreationMode mode = ObjectCreationMode.Create) : Statement
+    public record CreateConnectionStatement(string name, string? type = null, Expression? target = null, Dictionary<string, Expression>? options = null, ObjectCreationMode mode = ObjectCreationMode.Create) : Statement
     {
         public string ConnectionName { get; } = name;
         public string? ConnectionType { get; } = type; // FILE, DATABASE, EXCEL
         public Expression? TargetExpression { get; } = target; 
-        public Dictionary<string, string>? Options { get; } = options;
+        public Dictionary<string, Expression>? Options { get; } = options;
         public ObjectCreationMode Mode { get; } = mode;
     }    public record CreateSshKeyPairStatement(Expression path, Expression? bits = null, Expression? algorithm = null, Expression? passphrase = null, Expression? comment = null) : Statement
     {
@@ -853,9 +853,9 @@ namespace ETL_SQL.Core
         /// <summary>New target/connection-string expression — null means keep the existing one.</summary>
         public Expression? TargetExpression { get; }
         /// <summary>Options to merge into the existing connection's option set.</summary>
-        public Dictionary<string, string>? Options { get; }
+        public Dictionary<string, Expression>? Options { get; }
 
-        public AlterConnectionStatement(string name, string? type, Expression? target, Dictionary<string, string>? options)
+        public AlterConnectionStatement(string name, string? type, Expression? target, Dictionary<string, Expression>? options)
         {
             ConnectionName   = name;
             ConnectionType   = type;

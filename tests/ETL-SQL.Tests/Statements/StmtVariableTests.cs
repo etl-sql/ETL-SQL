@@ -46,7 +46,7 @@ namespace ETL_SQL.Tests.Statements
             
             var countRow = results.Rows.FirstOrDefault(r => r["Name"].ToString() == "@count");
             Assert.NotNull(countRow);
-            Assert.Equal(42, countRow["Value"]);
+            Assert.Equal(42m, Convert.ToDecimal(countRow["Value"]));
             Assert.Equal("Global", countRow["Scope"]);
 
             var nameRow = results.Rows.FirstOrDefault(r => r["Name"].ToString() == "@name");
@@ -108,7 +108,7 @@ namespace ETL_SQL.Tests.Statements
             var results = eval.LastResult;
             Assert.NotNull(results);
             Assert.Single(results.Rows);
-            Assert.Equal(1, results.Rows[0]["Value"]);
+            Assert.Equal(1m, Convert.ToDecimal(results.Rows[0]["Value"]));
         }
 
         [Fact]

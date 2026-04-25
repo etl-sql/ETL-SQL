@@ -133,6 +133,7 @@ namespace ETL_SQL.Core.Common
         public bool SpillCompressionEnabled { get; set; } = true;
         public string SpillFormat { get; set; } = "Arrow";
         public ISpillStore SpillStore => null!;
+        public string? DecryptValue(string? value) => value;
         public ISessionStateManager SessionStateManager { get; set; } = new NullSessionStateManager();
 
         public bool AllowUnknownFileTypes { get; set; }
@@ -198,7 +199,7 @@ namespace ETL_SQL.Core.Common
 
         public void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true) { }
 
-        public Task<object?> EvaluateValue(Expression? expr, Row context) => Task.FromResult<object?>(null);
+        public Task<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false) => Task.FromResult<object?>(null);
         public IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context) => AsyncEnumerable.Empty<Row>();
         public Task<bool> EvaluateCondition(Expression? expr, Row context) => Task.FromResult(false);
         public Task<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context) => Task.FromResult<object?>(null);

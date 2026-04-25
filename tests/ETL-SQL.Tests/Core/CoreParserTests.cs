@@ -67,7 +67,9 @@ namespace ETL_SQL.Tests.Core
             Assert.Equal("my_conn", cc.ConnectionName);
             Assert.Equal("FLATFILE", cc.ConnectionType);
             Assert.Equal(2, cc.Options?.Count);
-            Assert.Equal("PIPE", cc.Options?["DELIMITER"]);
+            var delimExpr = cc.Options?["DELIMITER"];
+            var delimVal = delimExpr is LiteralExpression lit ? lit.Value?.ToString() : (delimExpr as IdentifierExpression)?.Name;
+            Assert.Equal("PIPE", delimVal);
         }
 
         [Fact]

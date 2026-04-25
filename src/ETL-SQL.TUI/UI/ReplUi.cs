@@ -82,6 +82,10 @@ namespace ETL_SQL.TUI.UI
                         if (cmd.Action == "exit") break;
                         if (cmd.Action == "run")
                         {
+                            if (cmd.WorkspaceRoot != null)
+                                _evaluator!.WorkingDirectory = cmd.WorkspaceRoot;
+                            if (cmd.ScriptPath != null)
+                                _evaluator!.CurrentScriptPath = cmd.ScriptPath;
                             await ExecuteScript(cmd.Script ?? "");
                         }
                         if (cmd.Action == "export")
@@ -312,6 +316,8 @@ namespace ETL_SQL.TUI.UI
             public string? Script { get; set; }
             public string? Path { get; set; }
             public string? Format { get; set; }
+            public string? ScriptPath { get; set; }
+            public string? WorkspaceRoot { get; set; }
         }
     }
 }

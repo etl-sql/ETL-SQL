@@ -23,11 +23,23 @@ namespace ETL_SQL.Engine.Handlers
             {
                 context.SpillEncryptionEnabled = stmt.Enabled;
                 _logger.Info("Disk spill encryption is now {Status}.", stmt.Enabled ? "ENABLED" : "DISABLED");
+                
+                if (!stmt.Enabled && context.SpillCompressionEnabled)
+                {
+                    context.SpillCompressionEnabled = false;
+                    _logger.Info("Disk spill compression was automatically DISABLED because encryption is required for compressed storage.");
+                }
             }
             else if (stmt.Option == SpillOptionType.Compression)
             {
                 context.SpillCompressionEnabled = stmt.Enabled;
                 _logger.Info("Disk spill compression is now {Status}.", stmt.Enabled ? "ENABLED" : "DISABLED");
+
+                if (stmt.Enabled && !context.SpillEncryptionEnabled)
+                {
+                    context.SpillEncryptionEnabled = true;
+                    _logger.Info("Disk spill encryption was automatically ENABLED because it is required for compressed storage.");
+                }
             }
 
             return Task.CompletedTask;

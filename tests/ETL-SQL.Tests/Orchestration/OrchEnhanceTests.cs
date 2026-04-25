@@ -54,7 +54,7 @@ namespace ETL_SQL.Tests.Orchestration
             await evaluator.Evaluate(script);
 
             // Assert
-            Assert.Equal(42, evaluator.GetVariable("@res"));
+            Assert.Equal(42m, Convert.ToDecimal(evaluator.GetVariable("@res")));
         }
 
         [Fact]
@@ -82,7 +82,7 @@ namespace ETL_SQL.Tests.Orchestration
             await evaluator.Evaluate(script);
 
             // Assert
-            Assert.Equal(2, evaluator.GetVariable("@finalCount")); // Only top directory
+            Assert.Equal(2m, Convert.ToDecimal(evaluator.GetVariable("@finalCount"))); // Only top directory
         }
 
         [Fact]
@@ -109,7 +109,7 @@ namespace ETL_SQL.Tests.Orchestration
             await evaluator.Evaluate(script);
 
             // Assert
-            Assert.Equal(2, evaluator.GetVariable("@finalCount"));
+            Assert.Equal(2m, Convert.ToDecimal(evaluator.GetVariable("@finalCount")));
         }
     }
 }

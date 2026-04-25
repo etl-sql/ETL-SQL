@@ -562,18 +562,52 @@ namespace ETL_SQL.Connectors.FlatFile
                             }
                             else if (_hasHeader)
                             {
-                                var headerFields = batch.ColumnNames.Select(n => FormatField(n));
-                                await writer.WriteLineAsync(string.Join(_delimiter.ToString(), headerFields)).ConfigureAwait(false);
+                                string headerLine;
+                                if (_fixedColumns != null)
+                                {
+                                    var sb = new System.Text.StringBuilder();
+                                    foreach (var col in _fixedColumns)
+                                    {
+                                        var name = col.Name;
+                                        sb.Append(name.Length >= col.Length
+                                            ? name[..col.Length]
+                                            : name.PadRight(col.Length));
+                                    }
+                                    headerLine = sb.ToString();
+                                }
+                                else
+                                {
+                                    headerLine = string.Join(_delimiter.ToString(), batch.ColumnNames.Select(n => FormatField(n)));
+                                }
+                                await writer.WriteLineAsync(headerLine).ConfigureAwait(false);
                             }
                             headersWritten = true;
                         }
 
                         foreach (var row in batch.Rows)
                         {
-                            var values = new List<string>();
-                            foreach (var col in batch.ColumnNames)
-                                values.Add(FormatField(row[col]?.ToString() ?? ""));
-                            await writer.WriteLineAsync(string.Join(_delimiter.ToString(), values)).ConfigureAwait(false);
+                            string line;
+                            if (_fixedColumns != null)
+                            {
+                                // Fixed-width: pad/truncate each field to its declared column width, no delimiter
+                                var sb = new System.Text.StringBuilder();
+                                foreach (var col in _fixedColumns)
+                                {
+                                    var raw = row[col.Name]?.ToString() ?? "";
+                                    sb.Append(raw.Length >= col.Length
+                                        ? raw[..col.Length]
+                                        : raw.PadRight(col.Length));
+                                }
+                                line = sb.ToString();
+                            }
+                            else
+                            {
+                                var values = new List<string>();
+                                foreach (var col in batch.ColumnNames)
+                                    values.Add(FormatField(row[col]?.ToString() ?? ""));
+                                line = string.Join(_delimiter.ToString(), values);
+                            }
+                            await writer.WriteLineAsync(line).ConfigureAwait(false);
                             totalRows++;
                         }
                     }

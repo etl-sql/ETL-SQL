@@ -416,11 +416,23 @@ namespace ETL_SQL.Engine.Handlers
                 limit = Convert.ToInt32(limVal);
             }
 
+            string fromName = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
             await foreach (var batch in batches)
             {
                 foreach (var row in batch.Rows)
                 {
-                    if (stmt.WhereClause != null && !await context.EvaluateCondition(stmt.WhereClause, row)) continue;
+                    // Qualify row for evaluation context (especially for correlated subqueries)
+                    var evalRow = row;
+                    if (!string.IsNullOrEmpty(fromName))
+                    {
+                        evalRow = row.Clone();
+                        foreach (var kv in row.Columns)
+                        {
+                            if (!kv.Key.Contains(".")) evalRow[$"{fromName}.{kv.Key}"] = kv.Value;
+                        }
+                    }
+
+                    if (stmt.WhereClause != null && !await context.EvaluateCondition(stmt.WhereClause, evalRow)) continue;
                     
                     if (rowsSkipped < offset)
                     {
@@ -428,11 +440,11 @@ namespace ETL_SQL.Engine.Handlers
                         continue;
                     }
 
-                    if (limit.HasValue && rowsYielded >= limit.Value) break;
+                    if (limit.HasValue && rowsYielded >= limit.Value) goto done;
 
                     var resRow = resultBatch.NewRow();
                     for (int i = 0; i < finalColumns.Count; i++)
-                        resRow[i] = await context.EvaluateValue(finalColumns[i].Expression, row);
+                        resRow[i] = await context.EvaluateValue(finalColumns[i].Expression, evalRow);
                     
                     await resultBatch.AddRowAsync(resRow);
                     rowsYielded++;
@@ -447,6 +459,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 if (limit.HasValue && rowsYielded >= limit.Value) break;
             }
+            done:
             if (resultBatch.Rows.Count > 0 || !yielded) yield return resultBatch;
         }
 

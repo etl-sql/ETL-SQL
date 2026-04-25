@@ -16,6 +16,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.Data
 {
@@ -204,6 +205,12 @@ namespace ETL_SQL.Data
             {
                 var col = kv.Value;
                 var val = row[col.ColumnName];
+
+                // 0. Type Coercion
+                if (val != null && val != DBNull.Value)
+                {
+                    row[col.ColumnName] = val = TypeConverter.Cast(val, col.DataType);
+                }
 
                 // 1. NOT NULL
                 if (!col.IsNullable && (val == null || val == DBNull.Value))

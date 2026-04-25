@@ -21,8 +21,20 @@ namespace ETL_SQL.Engine.Spill
     /// This implementation is session-aware and dynamically reacts to changes in
     /// SessionId or SessionRoot after initialization.
     /// </summary>
-    public class SpillStore : ISpillStore
+    public partial class SpillStore : ISpillStore
     {
+        private static object? UnwrapJsonValue(JsonElement element) =>
+            element.ValueKind switch
+            {
+                JsonValueKind.Number => element.TryGetDecimal(out var d) ? d : (object?)element.GetDouble(),
+                JsonValueKind.String => decimal.TryParse(element.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d) ? (object?)d : (DateTime.TryParse(element.GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : (object?)element.GetString()),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Null => null,
+                JsonValueKind.Array => element, 
+                JsonValueKind.Object => element,
+                _ => element.GetRawText()
+            };
         private string? _cachedRootPath;
         private byte[]? _cachedSessionKey;
         private string? _cachedSessionId;
@@ -288,18 +300,6 @@ namespace ETL_SQL.Engine.Spill
                 }
             }
 
-            private static object? UnwrapJsonValue(JsonElement element) =>
-                element.ValueKind switch
-                {
-                    JsonValueKind.Number => element.TryGetDecimal(out var d) ? d : (object?)element.GetDouble(),
-                    JsonValueKind.String => decimal.TryParse(element.GetString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d) ? (object?)d : (DateTime.TryParse(element.GetString() ?? "", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : (object?)element.GetString()),
-                    JsonValueKind.True => true,
-                    JsonValueKind.False => false,
-                    JsonValueKind.Null => null,
-                    JsonValueKind.Array => element,  // Preserve array for downstream unwrapping
-                    JsonValueKind.Object => element, // Preserve object
-                    _ => element.GetRawText()
-                };
 
             public async ValueTask DisposeAsync()
             {
@@ -644,7 +644,11 @@ namespace ETL_SQL.Engine.Spill
                 if (s == null) return null;
                 if (s.StartsWith(JsonPrefix, StringComparison.Ordinal))
                 {
-                    try { return JsonSerializer.Deserialize<JsonElement>(s.AsSpan(JsonPrefix.Length)); }
+                    try 
+                    { 
+                        var element = JsonSerializer.Deserialize<JsonElement>(s.AsSpan(JsonPrefix.Length));
+                        return UnwrapJsonValue(element);
+                    }
                     catch { }
                 }
                 // Match JSON reader: try numeric then date parse on plain strings

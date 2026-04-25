@@ -70,7 +70,7 @@ namespace ETL_SQL.Tests.Statements
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             string script = "WITH Cte AS (SELECT 1 AS ID) SELECT * FROM Cte;";
             var res = await ev.ExecuteQuery(Parse(script).Statements[0]).FirstAsync();
-            Assert.Equal(1m, res.Rows[0]["ID"]);
+            Assert.Equal(1m, Convert.ToDecimal(res.Rows[0]["ID"]));
         }
 
         [Fact]

@@ -84,8 +84,10 @@ namespace ETL_SQL.Core.Linting.Rules
             if (conn.Options == null || conn.Options.Count == 0)
                 return;
 
-            bool hasTrustedConnection = conn.Options.TryGetValue("TRUSTED_CONNECTION", out var tcValue)
-                && tcValue.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
+            string GetLiteral(Expression? expr) => expr is LiteralExpression lit ? lit.Value?.ToString() ?? "" : "";
+
+            var tcVal = GetLiteral(conn.Options.GetValueOrDefault("TRUSTED_CONNECTION"));
+            bool hasTrustedConnection = tcVal.Equals("TRUE", StringComparison.OrdinalIgnoreCase);
 
             if (!hasTrustedConnection)
                 return;

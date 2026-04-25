@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useVsCodeApi } from './hooks/useVsCodeApi';
 import { PipelineTab } from './components/PipelineTab';
 import { ExecutionConsole } from './components/ExecutionConsole';
@@ -26,6 +26,14 @@ function App() {
   const [activeTab, setActiveTab] = useState<TabId>('pipeline');
   const [selectedResultIndex, setSelectedResultIndex] = useState(0);
   const [isCompareMode, setIsCompareMode] = useState(false);
+  const prevStatusRef = useRef(status);
+
+  useEffect(() => {
+    if (status === 'error' && prevStatusRef.current !== 'error') {
+      setActiveTab('messages');
+    }
+    prevStatusRef.current = status;
+  }, [status]);
 
   // Allow switching view mode via query param in browser mode
   const currentView = useMemo(() => {
@@ -139,8 +147,14 @@ function App() {
               title={tab.label}
             >
               <div className="relative">
-                <tab.icon size={18} className={activeTab === tab.id ? 'text-indigo-400' : ''} />
-                {tab.badge !== undefined && tab.badge > 0 && (
+                <tab.icon size={18} className={
+                  status === 'error' && tab.id === 'pipeline' ? 'text-red-400' :
+                  activeTab === tab.id ? 'text-indigo-400' : ''
+                } />
+                {status === 'error' && tab.id === 'pipeline' && (
+                  <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.8)]" />
+                )}
+                {tab.badge !== undefined && tab.badge > 0 && !(status === 'error' && tab.id === 'pipeline') && (
                   <span className="absolute -top-2 -right-2 px-1 py-0.5 rounded-full bg-indigo-500 text-white text-[7px] font-bold shadow-lg">
                     {tab.badge}
                   </span>
@@ -156,7 +170,12 @@ function App() {
 
         {/* Main Content Area - Forced Visibility */}
         <main className="flex-1 min-h-0 overflow-hidden relative flex flex-col">
-          {activeTab === 'pipeline' && <PipelineTab nodes={pipeline} isFinished={status === 'finished'} />}
+          {status === 'running' && (
+            <div className="absolute top-0 left-0 right-0 h-0.5 z-50 overflow-hidden bg-indigo-500/10">
+              <div className="h-full w-2/5 bg-gradient-to-r from-transparent via-indigo-400 to-transparent animate-loading-bar" />
+            </div>
+          )}
+          {activeTab === 'pipeline' && <PipelineTab nodes={pipeline} isFinished={status === 'finished'} status={status} />}
           {activeTab === 'results' && (
              <div className="flex-1 min-h-0 p-6 flex flex-col overflow-hidden">
                 {isCompareMode ? (

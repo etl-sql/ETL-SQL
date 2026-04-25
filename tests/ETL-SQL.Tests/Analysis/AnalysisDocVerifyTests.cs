@@ -69,7 +69,7 @@ namespace ETL_SQL.Tests.Analysis
         public async Task Test_TryCast_Success()
         {
             var result = await EvaluateExpressionAsync("TRY_CAST('100' AS INT)");
-            Assert.Equal(100, result);
+            Assert.Equal(100m, Convert.ToDecimal(result));
         }
 
         [Fact]

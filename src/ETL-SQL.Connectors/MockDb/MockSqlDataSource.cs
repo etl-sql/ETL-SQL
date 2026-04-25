@@ -17,8 +17,9 @@ namespace ETL_SQL.Connectors.MockDb
         private readonly ILogger _logger;
         private readonly IExecutionContext _context;
         public string Path => "MOCK";
-        public Dictionary<string, string>? Options => null;
+        private readonly Dictionary<string, string>? _options;
         public string ConnectorType => "MOCKDB";
+        public Dictionary<string, string>? Options => _options ?? new Dictionary<string, string>();
         public IDataSource WithTable(string tableName) 
         {
             _activeTable = tableName;
@@ -32,11 +33,12 @@ namespace ETL_SQL.Connectors.MockDb
         private readonly IMockDataSeeder _seeder;
         private readonly Task _initTask;
 
-        public MockSqlDataSource(IExecutionContext context, string connectionString, string dialect, IMockDataSeeder? seeder = null)
+        public MockSqlDataSource(IExecutionContext context, string connectionString, string dialect, Dictionary<string, string>? options = null, IMockDataSeeder? seeder = null)
         {
             _context = context;
             _connectionString = connectionString;
             _dialect = dialect;
+            _options = options;
             _logger = context.Logger;
             _seeder = seeder ?? new MockDataSeeder();
             

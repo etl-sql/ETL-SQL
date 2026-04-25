@@ -12,8 +12,8 @@ namespace ETL_SQL.Core.Data
     {
         private static readonly Dictionary<string, Func<object, object?>> _converters = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["INT"] = v => Convert.ToInt32(v),
-            ["INTEGER"] = v => Convert.ToInt32(v),
+            ["INT"] = v => Convert.ToDecimal(v),
+            ["INTEGER"] = v => Convert.ToDecimal(v),
             ["DECIMAL"] = v => Convert.ToDecimal(v),
             ["MONEY"] = v => Convert.ToDecimal(v),
             ["NUMERIC"] = v => Convert.ToDecimal(v),
@@ -22,9 +22,9 @@ namespace ETL_SQL.Core.Data
             ["BIT"] = v => Convert.ToBoolean(v),
             ["BOOLEAN"] = v => Convert.ToBoolean(v),
             ["BOOL"] = v => Convert.ToBoolean(v),
-            ["TINYINT"] = v => Convert.ToByte(v),
-            ["SMALLINT"] = v => Convert.ToInt16(v),
-            ["BIGINT"] = v => Convert.ToInt64(v),
+            ["TINYINT"] = v => Convert.ToDecimal(v),
+            ["SMALLINT"] = v => Convert.ToDecimal(v),
+            ["BIGINT"] = v => Convert.ToDecimal(v),
             ["REAL"] = v => Convert.ToSingle(v),
             ["DATETIME"] = v => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt) ? dt : DateTime.Parse(v.ToString() ?? ""),
             ["DATE"] = v => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt) ? dt : DateTime.Parse(v.ToString() ?? ""),

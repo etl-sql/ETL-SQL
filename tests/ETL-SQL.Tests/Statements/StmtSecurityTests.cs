@@ -101,5 +101,22 @@ namespace ETL_SQL.Tests.Statements.Statements
             var ex = await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(() => eval.Evaluate(script));
             Assert.Contains("Failed to decrypt", ex.Message);
         }
+
+        [Fact]
+        public async Task ResolvePath_StripsWindowsCopyAsPathQuotes()
+        {
+            // Windows "Copy as path" wraps paths in double-quotes: "C:\tmp\file.csv"
+            // When pasted into a connection string the quotes must be silently stripped.
+            var eval = ETL_SQL.App.DependencyInjectionSetup.BuildServiceProvider()
+                           .GetRequiredService<Evaluator>();
+            eval.SecurityService.IsTestMode = true;
+
+            string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"qp_{System.Guid.NewGuid():N}.csv");
+            string quotedPath = $"\"{path}\""; // simulate Windows Copy-as-Path
+
+            // ResolvePath should strip the surrounding quotes and return the bare path
+            string resolved = eval.ResolvePath(quotedPath);
+            Assert.Equal(path, resolved);
+        }
     }
 }

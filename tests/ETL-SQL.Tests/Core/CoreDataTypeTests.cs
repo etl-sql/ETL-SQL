@@ -18,8 +18,8 @@ namespace ETL_SQL.Tests.Core
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
             await ev.Evaluate(Parse("DECLARE @t1 TINYINT = 255, @t2 BIGINT = 123456789012345;"));
-            Assert.Equal((byte)255, ev.Variables["@t1"]);
-            Assert.Equal(123456789012345L, ev.Variables["@t2"]);
+            Assert.Equal(255m, Convert.ToDecimal(ev.Variables["@t1"]));
+            Assert.Equal(123456789012345m, Convert.ToDecimal(ev.Variables["@t2"]));
         }
 
         [Fact]
