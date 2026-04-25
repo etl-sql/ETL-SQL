@@ -1,8 +1,32 @@
 # ETL-SQL Development Roadmap
 ## VS Code issues
-- [ ] **On Error should go directly to the messages tab**  Currently just sits there and doesn't give you any indication of what happened until you start looking around and see a failure on the messages tab.
+- [x] **On Error should go directly to the messages tab**  Auto-switches to Messages tab on status transition to `'error'`; Pipeline tab shows red glowing dot badge.
 - [x] **Paths surrounded in "" the "" should be ignored** `ResolvePath` now strips surrounding double-quotes before resolution, covering all file operations engine-wide.
-- [ ] **Sometimes when executing there is a serious lag**  First why is it so slow to execute?  Second no visual indicator that its working.  Third the execute button should be disabled until its done running.
+- [x] **Sometimes when executing there is a serious lag**  REPL process pre-warmed on `.etlsql` file activation; shimmer loading bar + animated Pipeline spinner added during execution.
+- [x] **Sample path resolution broken in VS Code debug mode**  `workspaceRoot` passed per-run in REPL JSON protocol; `Evaluator.WorkingDirectory` used as base for `ResolvePath` instead of process CWD.
+
+## TUI — Bug Fixes
+- [x] **Execution errors not appearing in Messages panel** (`ConsoleEditor.cs:344`)  When a statement handler throws (e.g., `CREATE CONNECTION` on a duplicate name), the exception is caught but only shown in the status bar — `evaluator.Messages` never receives it.  Fix: in the `catch (Exception ex)` block, also call `_evaluator.Log(ex.Message)` (or the equivalent `AddMessage`) so the message panel shows the error alongside the faulted tree node.
+
+## TUI — Status Bar Improvements
+- [x] **Left/center/right zones** — shortcuts left, file+mode pill center, cursor+elapsed right
+- [x] **Active mode pill** — colored: grey Pipeline, yellow Results/Focus, cyan Perf, magenta Compare, red Error
+- [x] **Elapsed time** — `⏱ Xms` shown after each run
+- [x] **Dirty indicator** — `●` unsaved, `○` clean
+
+## TUI — F1 Help Menu Improvements
+- [x] **Grouped by category** — View, Execution, File, Editing, Navigation sections
+- [x] **Live state annotations** — F6 shows `now: EDITOR/RESULTS`, F4 shows `now: PIPELINE/RESULTS/PERF`
+- [x] **Left-aligned overlay** — no longer clears half the screen
+- [x] **Any key to close**
+
+## TUI — Results Panel Improvements
+- [x] **Column filter** — Ctrl+F in Results focus; Escape clears; header shows match count
+- [x] **Export to CSV** — Ctrl+P; proper RFC 4180 escaping; exports active result set
+- [x] **Compare mode** — F7 enters; auto-maximizes; all sets stacked; F8 cycles pane; per-pane scroll+filter
+
+## TUI — SHOW Command Output
+- [x] **All SHOW commands surface in Results panel** — All 12 handlers now add to `context.LastResultSets`; `SHOW PROFILE` no longer calls `AnsiConsole.Write()` directly.
 
 ## Documentation
 

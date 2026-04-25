@@ -42,6 +42,9 @@ namespace ETL_SQL.Core.Common
         /// <summary>Number of times this node has been restated (reused) during loops.</summary>
         public int IterationCount { get; set; } = 1;
 
+        /// <summary>True when this node is a PARALLEL container whose children run concurrently.</summary>
+        public bool IsParallelBlock { get; set; }
+
         /// <summary>Increments the processed row count atomically.</summary>
         public void IncrementRows(long count = 1) => Interlocked.Add(ref _rowsProcessed, count);
 

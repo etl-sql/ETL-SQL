@@ -86,7 +86,13 @@ namespace ETL_SQL.TUI.UI
             if (key.Key == ConsoleKey.O && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await ShowOpenPrompt(); return; }
             if (key.Key == ConsoleKey.N && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.NewFile(); return; }
             if (key.Key == ConsoleKey.R && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor._evaluator.ClearResults(); _renderer.ShowStatus("Results cleared."); return; }
-            if (key.Key == ConsoleKey.F && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.Find(); return; }
+            if (key.Key == ConsoleKey.F && key.Modifiers.HasFlag(ConsoleModifiers.Control))
+            {
+                if (_renderer.CompareMode) await _editor.FilterComparePane(_renderer.CompareFocusIndex);
+                else if (_renderer.ResultsFocus) await _editor.FilterResults();
+                else await _editor.Find();
+                return;
+            }
             if (key.Key == ConsoleKey.F && key.Modifiers.HasFlag(ConsoleModifiers.Alt)) { _editor.FormatScript(); return; }
             if (key.Key == ConsoleKey.I && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.FormatScript(); return; }
             if (key.Key == ConsoleKey.H && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.Replace(); return; }
@@ -94,16 +100,25 @@ namespace ETL_SQL.TUI.UI
             if (key.Key == ConsoleKey.P && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.ExportResults(); return; }
             if (key.Key == ConsoleKey.C && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.Copy(); return; }
             if ((key.Key == ConsoleKey.V || key.Key == ConsoleKey.U) && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.Paste(); return; }
-            if (key.Key == ConsoleKey.X && key.Modifiers.HasFlag(ConsoleModifiers.Control)) 
-            {
-                if (_buffer.SelectionStartLine.HasValue) _editor.Cut();
-                else await _editor.HandleExit(); // Nano style Exit if no selection
-                return; 
-            }
+            if (key.Key == ConsoleKey.X && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.Cut(); return; }
             if (key.Key == ConsoleKey.D && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.DuplicateLine(); return; }
             if (key.Key == ConsoleKey.K && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.DeleteLine(); return; }
             if (key.Key == ConsoleKey.Home && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.GoToTop(); return; }
             if (key.Key == ConsoleKey.End && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.GoToBottom(); return; }
+            if (key.Key == ConsoleKey.Oem2 && key.Modifiers.HasFlag(ConsoleModifiers.Control))
+            {
+                _editor.MarkDirty(); _editor.SaveUndoState();
+                _buffer.ToggleLineComment();
+                return;
+            }
+
+            // Tab / Shift+Tab — indent or outdent (selection-aware, handled before selection-clear logic)
+            if (key.Key == ConsoleKey.Tab)
+            {
+                _editor.MarkDirty(); _editor.SaveUndoState();
+                _buffer.IndentSelection(key.Modifiers.HasFlag(ConsoleModifiers.Shift));
+                return;
+            }
 
             // ── Global Bottom Panel Scrolling ──
             if (key.Modifiers.HasFlag(ConsoleModifiers.Control))
@@ -112,19 +127,31 @@ namespace ETL_SQL.TUI.UI
                 if (key.Key == ConsoleKey.DownArrow) { _renderer.ResultScrollRow++; return; }
                 if (key.Key == ConsoleKey.PageUp) { _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 10); return; }
                 if (key.Key == ConsoleKey.PageDown) { _renderer.ResultScrollRow += 10; return; }
+
+                // Word jump — editor only (results focus handles Ctrl+Left/Right separately)
+                if (!_renderer.ResultsFocus && key.Key == ConsoleKey.LeftArrow)
+                {
+                    if (key.Modifiers.HasFlag(ConsoleModifiers.Shift))
+                    {
+                        if (!_buffer.SelectionStartLine.HasValue) { _buffer.SelectionStartLine = _buffer.CursorLine; _buffer.SelectionStartCol = _buffer.CursorColumn; }
+                    }
+                    else { _buffer.SelectionStartLine = null; }
+                    _buffer.WordLeft(); return;
+                }
+                if (!_renderer.ResultsFocus && key.Key == ConsoleKey.RightArrow)
+                {
+                    if (key.Modifiers.HasFlag(ConsoleModifiers.Shift))
+                    {
+                        if (!_buffer.SelectionStartLine.HasValue) { _buffer.SelectionStartLine = _buffer.CursorLine; _buffer.SelectionStartCol = _buffer.CursorColumn; }
+                    }
+                    else { _buffer.SelectionStartLine = null; }
+                    _buffer.WordRight(); return;
+                }
             }
 
-            // ── Message Panel Scrolling (Shift) ──
-            if (key.Modifiers.HasFlag(ConsoleModifiers.Shift))
-            {
-                if (key.Key == ConsoleKey.UpArrow) { _renderer.MessageScrollRow = Math.Max(0, _renderer.MessageScrollRow - 1); return; }
-                if (key.Key == ConsoleKey.DownArrow) { _renderer.MessageScrollRow++; return; }
-                if (key.Key == ConsoleKey.PageUp) { _renderer.MessageScrollRow = Math.Max(0, _renderer.MessageScrollRow - 5); return; }
-                if (key.Key == ConsoleKey.PageDown) { _renderer.MessageScrollRow += 5; return; }
-            }
 
-            // F3 - Focus Toggle
-            if (key.Key == ConsoleKey.F3)
+            // F6 - Focus Toggle
+            if (key.Key == ConsoleKey.F6)
             {
                 _renderer.ResultsFocus = !_renderer.ResultsFocus;
                 _renderer.AutocompleteVisible = false;
@@ -142,23 +169,61 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            // F4 - View Toggle (Results -> Perf -> Tree)
+            // F7 — Enter / exit compare mode
+            if (key.Key == ConsoleKey.F7)
+            {
+                if (_renderer.CompareMode)
+                {
+                    _renderer.CompareMode = false;
+                    _renderer.ForceFullRepaint();
+                    _renderer.ShowStatus("Compare mode off.");
+                }
+                else
+                {
+                    if (_editor._evaluator.LastResultSets.Count < 2)
+                    {
+                        _renderer.ShowStatus("Need at least 2 result sets to compare.");
+                    }
+                    else
+                    {
+                        _renderer.CompareMode = true;
+                        _renderer.CompareFocusIndex = 0;
+                        _renderer.CompareScrollRows = _editor._evaluator.LastResultSets.Select(_ => 0).ToList();
+                        _renderer.CompareFilters    = _editor._evaluator.LastResultSets.Select(_ => "").ToList();
+                        _renderer.ResultsVisible    = false;
+                        _renderer.PerformanceVisible = false;
+                        _renderer.IsBottomMaximized = true;
+                        _renderer.ForceFullRepaint();
+                        _renderer.ShowStatus($"Compare mode — {_editor._evaluator.LastResultSets.Count} sets. F7: next pane  Ctrl+F: filter  Escape: exit");
+                    }
+                }
+                return;
+            }
+
+            // F8 — cycle focused pane in compare mode
+            if (key.Key == ConsoleKey.F8 && _renderer.CompareMode)
+            {
+                _renderer.CompareFocusIndex = (_renderer.CompareFocusIndex + 1) % _editor._evaluator.LastResultSets.Count;
+                _renderer.ShowStatus($"Compare: pane {_renderer.CompareFocusIndex + 1} active");
+                return;
+            }
+
+            // F4 - Cycle lower panel: Pipeline+Messages → Results → Performance → (repeat)
             if (key.Key == ConsoleKey.F4)
             {
-                if (!_renderer.PerformanceVisible && !_renderer.TreeVisible) { _renderer.PerformanceVisible = true; _renderer.ShowStatus("View: Performance Metrics"); }
-                else if (_renderer.PerformanceVisible) { _renderer.PerformanceVisible = false; _renderer.TreeVisible = true; _renderer.ShowStatus("View: Execution Tree"); }
-                else { _renderer.TreeVisible = false; _renderer.ShowStatus("View: Query Results"); }
+                if (!_renderer.ResultsVisible && !_renderer.PerformanceVisible)
+                    { _renderer.ResultsVisible = true; _renderer.ShowStatus("View: Query Results"); }
+                else if (_renderer.ResultsVisible)
+                    { _renderer.ResultsVisible = false; _renderer.PerformanceVisible = true; _renderer.ShowStatus("View: Performance Metrics"); }
+                else
+                    { _renderer.PerformanceVisible = false; _renderer.ShowStatus("View: Pipeline & Messages"); }
                 _renderer.ForceFullRepaint();
                 return;
             }
 
-            // F6 - Tree Toggle
-            if (key.Key == ConsoleKey.F6)
+            if (_renderer.CompareMode)
             {
-                _renderer.TreeVisible = !_renderer.TreeVisible;
-                _renderer.PerformanceVisible = false;
-                _renderer.ForceFullRepaint();
-                _renderer.ShowStatus(_renderer.TreeVisible ? "View: Execution Tree" : "View: Query Results");
+                HandleCompareKey(key);
                 return;
             }
 
@@ -222,23 +287,71 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
+        private void HandleCompareKey(ConsoleKeyInfo key)
+        {
+            int idx = _renderer.CompareFocusIndex;
+            while (_renderer.CompareScrollRows.Count <= idx) _renderer.CompareScrollRows.Add(0);
+            while (_renderer.CompareFilters.Count    <= idx) _renderer.CompareFilters.Add("");
+
+            switch (key.Key)
+            {
+                case ConsoleKey.Escape:
+                    if (!string.IsNullOrEmpty(_renderer.CompareFilters[idx]))
+                    {
+                        _renderer.CompareFilters[idx] = "";
+                        _renderer.CompareScrollRows[idx] = 0;
+                        _renderer.ShowStatus("Filter cleared.");
+                    }
+                    else
+                    {
+                        _renderer.CompareMode = false;
+                        _renderer.ForceFullRepaint();
+                        _renderer.ShowStatus("Compare mode off.");
+                    }
+                    break;
+                case ConsoleKey.UpArrow:
+                    _renderer.CompareScrollRows[idx] = Math.Max(0, _renderer.CompareScrollRows[idx] - 1); break;
+                case ConsoleKey.DownArrow:
+                    _renderer.CompareScrollRows[idx]++; break;
+                case ConsoleKey.PageUp:
+                    _renderer.CompareScrollRows[idx] = Math.Max(0, _renderer.CompareScrollRows[idx] - 10); break;
+                case ConsoleKey.PageDown:
+                    _renderer.CompareScrollRows[idx] += 10; break;
+                case ConsoleKey.Home:
+                    _renderer.CompareScrollRows[idx] = 0; break;
+            }
+        }
+
         private void HandleResultsKey(ConsoleKeyInfo key)
         {
             switch (key.Key)
             {
+                case ConsoleKey.Escape:
+                    if (!string.IsNullOrEmpty(_renderer.FilterText))
+                    {
+                        _renderer.FilterText = "";
+                        _renderer.ResultScrollRow = 0;
+                        _renderer.ShowStatus("Filter cleared.");
+                    }
+                    else
+                    {
+                        _renderer.ResultsFocus = false;
+                        _renderer.ShowStatus("Focused: Editor");
+                    }
+                    break;
                 case ConsoleKey.UpArrow: 
                     _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 1); 
                     break;
                 case ConsoleKey.DownArrow: 
                     _renderer.ResultScrollRow++; 
                     break;
-                case ConsoleKey.LeftArrow: 
+                case ConsoleKey.LeftArrow:
                     if (key.Modifiers.HasFlag(ConsoleModifiers.Control)) _renderer.ResultScrollCol = Math.Max(0, _renderer.ResultScrollCol - 1);
-                    else { _renderer.ActiveResultSetIndex = Math.Max(0, _renderer.ActiveResultSetIndex - 1); _renderer.ResultScrollRow = 0; _renderer.ResultScrollCol = 0; }
+                    else { _renderer.ActiveResultSetIndex = Math.Max(0, _renderer.ActiveResultSetIndex - 1); _renderer.ResultScrollRow = 0; _renderer.ResultScrollCol = 0; _renderer.FilterText = ""; }
                     break;
-                case ConsoleKey.RightArrow: 
+                case ConsoleKey.RightArrow:
                     if (key.Modifiers.HasFlag(ConsoleModifiers.Control)) _renderer.ResultScrollCol++;
-                    else { _renderer.ActiveResultSetIndex = Math.Min(_editor._evaluator.LastResultSets.Count - 1, _renderer.ActiveResultSetIndex + 1); _renderer.ResultScrollRow = 0; _renderer.ResultScrollCol = 0; }
+                    else { _renderer.ActiveResultSetIndex = Math.Min(_editor._evaluator.LastResultSets.Count - 1, _renderer.ActiveResultSetIndex + 1); _renderer.ResultScrollRow = 0; _renderer.ResultScrollCol = 0; _renderer.FilterText = ""; }
                     break;
                 case ConsoleKey.PageUp: _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 10); break;
                 case ConsoleKey.PageDown: _renderer.ResultScrollRow += 10; break;

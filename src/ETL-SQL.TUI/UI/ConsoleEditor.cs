@@ -338,10 +338,23 @@ namespace ETL_SQL.TUI.UI
                 execSw.Stop();
                 _evaluator.LastExecTimeMs = execSw.ElapsedMilliseconds;
 
+                // After each run, show the last result set (most recently executed query)
+                if (_evaluator.LastResultSets.Count > 0)
+                {
+                    _renderer.ActiveResultSetIndex = _evaluator.LastResultSets.Count - 1;
+                    _renderer.ResultScrollRow = 0;
+                    _renderer.ResultScrollCol = 0;
+                    _renderer.FilterText = "";
+                }
+
                 totalSw.Stop();
                 _renderer.ShowStatus($"Query finished in {totalSw.ElapsedMilliseconds}ms.");
             }
-            catch (Exception ex) { _renderer.ShowStatus($"Error: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                _evaluator.Log($"[ERROR] {ex.Message}");
+                _renderer.ShowStatus($"Error: {ex.Message}");
+            }
             finally
             {
                 _renderer.MessageScrollRow = int.MaxValue; // Auto-scroll to latest messages
@@ -388,14 +401,67 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
-        /// <summary>Exports the most recent data result set to a CSV file.</summary>
+        /// <summary>Opens a filter prompt for the specified compare pane.</summary>
+        public async Task FilterComparePane(int paneIndex)
+        {
+            while (_renderer.CompareFilters.Count <= paneIndex) _renderer.CompareFilters.Add("");
+            var filter = await ShowPrompt($"Filter pane {paneIndex + 1}", _renderer.CompareFilters[paneIndex]);
+            if (filter == null) return;
+            _renderer.CompareFilters[paneIndex] = filter.Trim();
+            _renderer.CompareScrollRows[paneIndex] = 0;
+            _renderer.ShowStatus(string.IsNullOrEmpty(filter.Trim()) ? "Filter cleared." : $"Pane {paneIndex + 1} filter: {filter.Trim()}");
+        }
+
+        /// <summary>Opens a filter prompt for the active result set.</summary>
+        public async Task FilterResults()
+        {
+            var filter = await ShowPrompt("Filter rows", _renderer.FilterText);
+            if (filter == null) return;
+            _renderer.FilterText = filter.Trim();
+            _renderer.ResultScrollRow = 0;
+            _renderer.ShowStatus(string.IsNullOrEmpty(_renderer.FilterText) ? "Filter cleared." : $"Filtering: {_renderer.FilterText}");
+        }
+
+        /// <summary>Exports the active result set to a CSV file using the prompt system.</summary>
         public async Task ExportResults()
         {
-            if (_evaluator.LastResult == null) { _renderer.ShowStatus("No results to export."); return; }
-            string defaultPath = Path.ChangeExtension(_filePath, ".csv");
-            Console.SetCursorPosition(0, Console.WindowHeight - 1);
-            var path = AnsiConsole.Ask<string>("Export to CSV path:", defaultPath);
-            _renderer.ShowStatus($"Exported to {path}");
+            if (_evaluator.LastResultSets.Count == 0) { _renderer.ShowStatus("No results to export."); return; }
+
+            var res = _evaluator.LastResultSets[Math.Clamp(_renderer.ActiveResultSetIndex, 0, _evaluator.LastResultSets.Count - 1)];
+            string defaultPath = string.IsNullOrEmpty(_filePath)
+                ? Path.Combine(Directory.GetCurrentDirectory(), "export.csv")
+                : Path.ChangeExtension(_filePath, ".csv");
+
+            var path = await ShowPrompt("Export CSV path", defaultPath);
+            if (string.IsNullOrWhiteSpace(path)) { _renderer.ShowStatus("Export cancelled."); return; }
+
+            path = path.Trim('"');
+
+            try
+            {
+                await using var writer = new System.IO.StreamWriter(path, append: false, encoding: System.Text.Encoding.UTF8);
+
+                // Header row
+                var cols = res.ColumnNames;
+                await writer.WriteLineAsync(string.Join(",", cols.Select(CsvEscape)));
+
+                // Data rows
+                foreach (var row in res.Rows)
+                    await writer.WriteLineAsync(string.Join(",", cols.Select(c => CsvEscape(row[c]?.ToString() ?? ""))));
+
+                _renderer.ShowStatus($"Exported {res.Rows.Count} rows → {Path.GetFileName(path)}");
+            }
+            catch (Exception ex)
+            {
+                _renderer.ShowStatus($"Export failed: {ex.Message}");
+            }
+        }
+
+        private static string CsvEscape(string value)
+        {
+            if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
+                return $"\"{value.Replace("\"", "\"\"")}\"";
+            return value;
         }
 
         private static string? _clipboard;

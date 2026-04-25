@@ -42,12 +42,6 @@ namespace ETL_SQL.Engine.Handlers
                 await table.AddRowAsync(row);
             }
 
-            if (table.Rows.Count == 0)
-            {
-                context.Log("0 rows returned.", ConsoleColor.Cyan);
-            }
-            context.LastResult = table;
-
             if (stmt.IntoTable != null)
             {
                 if (!context.Connections.ContainsKey(stmt.IntoTable))
@@ -56,6 +50,15 @@ namespace ETL_SQL.Engine.Handlers
                 }
                 var destination = await context.ResolveDataSourceAsync(new TableReference(stmt.IntoTable));
                 await destination.WriteBatches(new[] { table }.ToAsyncEnumerable());
+            }
+            else
+            {
+                if (table.Rows.Count == 0)
+                {
+                    context.Log("0 rows returned.", ConsoleColor.Cyan);
+                }
+                context.LastResult = table;
+                context.LastResultSets.Add(table);
             }
         }
     }

@@ -65,6 +65,7 @@ namespace ETL_SQL.Engine.Handlers
                     context.Log("0 rows returned.", ConsoleColor.Cyan);
                 }
                 context.LastResult = table;
+                context.LastResultSets.Add(table);
             }
         }
 

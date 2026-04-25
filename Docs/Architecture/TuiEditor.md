@@ -13,19 +13,18 @@ The TUI is a **single-document editor** — one file is open at a time. There is
 ```
 ConsoleEditor.Run()  ←── Main loop
      │
-     ├─ EditorRenderer.Render()  ──► Terminal output (ANSI)
+     ├─ EditorRenderer.Render()  ──► Terminal output (ANSI via Spectre.Console)
      │        │
-     │        ├─ EditorPanel      (buffer + line numbers + highlighting)
-     │        ├─ MessagePanel     (execution logs)
-     │        ├─ ResultsPanel     (tabbed result sets)
-     │        ├─ PerformancePanel (metrics dashboard)
-     │        └─ TreePanel        (execution tree)
+     │        ├─ EditorPanel          (buffer + line numbers + syntax highlighting)
+     │        ├─ MessageTreePanel     (execution tree left, message log right)
+     │        ├─ ResultsPanel         (result grid, filter, compare mode)
+     │        └─ PerformancePanel     (metrics dashboard)
      │
      └─ InputHandler.HandleKey()  ──► Buffer mutations + command dispatch
               │
-              ├─ EditorBuffer     (text model + cursor + selection)
-              ├─ UndoManager      (undo/redo stack)
-              └─ AutocompleteController (suggestions overlay)
+              ├─ EditorBuffer              (text model + cursor + selection)
+              ├─ UndoManager               (undo/redo stack)
+              └─ AutocompleteController    (suggestions overlay)
 ```
 
 ---
@@ -42,7 +41,7 @@ while (!_isExiting)
 {
     _renderer.Render(_buffer, _evaluator, filePath, isDirty, width, height);
     var key = Console.ReadKey(intercept: true);
-    _input.HandleKey(key);
+    await _input.HandleKey(key);
 }
 ```
 
@@ -51,7 +50,8 @@ while (!_isExiting)
 2. `new Parser(tokens, source).Parse()` → `Script` with diagnostics
 3. `new Linter().AnalyzeAsync(script, context)` → lint diagnostics
 4. If no syntax errors: `await _evaluator.Evaluate(script)`
-5. Results, logs, and profiling metrics land on the `Evaluator` instance and are read back by the renderer
+5. On exception: `_evaluator.Log($"[ERROR] {ex.Message}")` ensures errors appear in the message panel
+6. Results, logs, and profiling metrics land on the `Evaluator` instance and are read back by the renderer
 
 **File operations:** `EditorFileHandler.LoadAsync()` / `SaveAsync()` handle encoding and BOM detection.
 
@@ -77,8 +77,11 @@ In-memory text model. Exposes the current content as `List<string> Lines` plus c
 | `InsertChar(char)` | Insert at cursor; auto-pairs `(`, `[`, `"`, `'` |
 | `Backspace()` | Delete char left; collapses selection if active |
 | `Delete()` | Delete char right |
-| `NewLine()` | Split line at cursor, preserve indentation |
-| `Tab()` | Insert 4 spaces |
+| `NewLine()` | Split line at cursor |
+| `Tab(bool reverse)` | Insert 4 spaces (or remove up to 4) |
+| `IndentSelection(bool reverse)` | Indent/dedent all selected lines by 4 spaces |
+| `ToggleLineComment()` | Prefix/remove `-- ` on selected lines; toggles if all are commented |
+| `WordLeft() / WordRight()` | Jump to previous/next word boundary |
 | `AddMultiCursor(int dy)` | Alt+Up/Down — add secondary cursor N lines away |
 | `GetSelectedText()` | Returns text span between anchor and cursor |
 | `DeleteSelection()` | Remove selected text, place cursor at start |
@@ -96,7 +99,7 @@ Undo()            → pop from undo, push current to redo
 Redo()            → pop from redo, push current to undo
 ```
 
-When the undo stack exceeds 100 entries the oldest entry is dropped. The full-copy approach keeps the implementation simple at the cost of memory for very large files.
+When the undo stack exceeds 100 entries the oldest entry is dropped.
 
 ---
 
@@ -115,8 +118,6 @@ Regex-based tokenizer for **terminal syntax coloring only** — it does not use 
 | 5 | Reserved keywords | Keyword / DdlKeyword / ControlFlow |
 | 6 | Built-in functions | Function |
 | 7 | Data type names | DataType |
-
-`Tokenize(string line)` returns `List<HighlightToken>` — each token has a start/length and a `HighlightColor` enum value. `Covered()` prevents double-coloring already-matched positions.
 
 ---
 
@@ -143,7 +144,7 @@ Manages the autocomplete overlay. Suggestions are fetched asynchronously from `E
 
 | Method | Behavior |
 |--------|----------|
-| `UpdateAsync()` | Refresh suggestion list; records fetch latency |
+| `UpdateAsync()` | Refresh suggestion list after each keystroke |
 | `HandleKey(key)` | Up/Down to navigate; Tab/Enter to accept; Escape to dismiss |
 | `Accept()` | Replace the current token with the selected suggestion |
 | `TrySuggestAsync()` | Expand `SELECT *` or `alias.*` to full column list |
@@ -152,77 +153,108 @@ Manages the autocomplete overlay. Suggestions are fetched asynchronously from `E
 
 ### `EditorRenderer`
 
-Computes the panel layout and writes ANSI escape sequences for each frame. All rendering is double-buffered — the renderer builds output into a string then writes it in one call to minimize flicker.
+Computes the panel layout and writes ANSI escape sequences for each frame via Spectre.Console.
 
-**Layout (approximate):**
+**Layout:**
 
 ```
-┌──────────────────────────────────────────┐  ← line numbers + syntax-colored buffer
-│  Editor area (~60% of terminal height)   │
-│  (file path, dirty indicator, cursor pos)│
-├──────────────────────────────────────────┤
-│  Messages (4 lines)                      │  ← execution logs / errors
-├──────────────────────────────────────────┤
-│  Results / Performance / Tree (selectable│  ← 40% of height, Ctrl+M to maximize
-│  panel, toggled with F4)                 │
-└──────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐  ← Header bar (file, focus state)
+│  Editor area (~60% of terminal height)                  │
+│  Line numbers │ Syntax-highlighted buffer               │
+├──────────────────────┬──────────────────────────────────┤
+│  Execution Tree      │  Message Log                     │  ← MessageTreePanel (default lower panel)
+│  (ASCII box-drawing) │  (execution output / errors)     │
+│  ├─ ✓ Step 1         │  [INFO] Connected                │
+│  ├─ ✓ PARALLEL (4)   │  [ERROR] Division by zero        │
+│  └─ ✗ Step 3         │                                  │
+└─────────────────────────────────────────────────────────┘
+ F1:Help  F5:Run  F6:Focus  F4:Panel  │  ○ script.etlsql  PIPELINE  │  Ln 1, Col 1  ⏱ 340ms
 ```
 
-**View toggles:**
+**Lower panel modes** (cycled with F4):
 
-| State | Activated by |
-|-------|-------------|
-| Results panel | Default; F3 to focus |
-| Performance panel | F4 (cycles) |
-| Execution tree panel | F6 / F4 |
-| Maximize bottom panel | Ctrl+M |
+| Mode | Panel | Activated by |
+|------|-------|-------------|
+| Default | `MessageTreePanel` — execution tree left, messages right | F4 (third press) |
+| Results | `ResultsPanel` — scrollable result grid with filter | F4 (first press) |
+| Performance | `PerformancePanel` — timing/memory/spill metrics | F4 (second press) |
+| Compare | `ResultsPanel.RenderCompare` — all result sets stacked | F7 |
 
-**Minimum height:** When the terminal window is too small to show the bottom panel, a message is displayed: *"Window too small — press Ctrl+M to maximize."*
+**Compare mode:**  
+`F7` enters compare mode, which auto-maximizes the lower panel and renders each result set as its own sub-pane with an independent scroll position and filter. `F8` cycles the active (magenta-bordered) pane. `Escape` exits compare mode (or clears the active pane's filter if one is set).
+
+**Status bar zones:**
+
+| Zone | Content |
+|------|---------|
+| Left | `F1:Help  F5:Run  F6:Focus  F4:Panel` — always visible |
+| Center | `● filename.etlsql` + active-mode pill (`PIPELINE` / `RESULTS` / `PERF` / `COMPARE` / `✗ ERROR`) |
+| Right | `Ln X, Col Y  ⏱ elapsed` |
+
+The mode pill is color-coded: grey for Pipeline, yellow for Results/Focus, cyan for Perf, magenta for Compare, red for Error.
+
+**State properties on `EditorRenderer`:**
+
+| Property | Purpose |
+|----------|---------|
+| `ResultsVisible` | ResultsPanel is the active lower panel |
+| `PerformanceVisible` | PerformancePanel is the active lower panel |
+| `ResultsFocus` | Arrow keys route to results scrolling |
+| `IsBottomMaximized` | Lower panel takes ~80% of terminal height |
+| `FilterText` | Active row filter for single results view |
+| `CompareMode` | Compare mode active |
+| `CompareFocusIndex` | Which pane has focus in compare mode |
+| `CompareScrollRows` | Per-pane scroll positions (List<int>) |
+| `CompareFilters` | Per-pane filter strings (List<string>) |
+| `ActiveResultSetIndex` | Which result set is shown in single-set view |
 
 ---
 
-### `InputHandler`
+### `MessageTreePanel`
 
-Routes `ConsoleKeyInfo` events to the correct handler. If the autocomplete overlay is active, key events go to `AutocompleteController` first.
+Split lower panel rendering execution tree (left, ~35% width) alongside the message log (right).
 
-**Full keyboard map:**
+The tree is rendered by `ExecutionTreeAsciiRenderer` — a pure C# class with no Spectre dependency that returns `List<TreeLine>` records. The panel applies Spectre markup for color. Parallel blocks with more than 5 children are collapsed to show the first 2, a summary line (`... N more  (X ●, Y ✗, Z ✓)`), and the last 1.
 
-| Key | Action |
-|-----|--------|
-| F1 | Help |
-| F3 | Toggle results focus |
-| F4 | Cycle view (Results → Performance → Tree) |
-| F5 | Run script (Shift+F5 = run from cursor position) |
-| F6 | Toggle execution tree panel |
-| Ctrl+Q | Exit |
-| Ctrl+A | Select all |
-| Ctrl+Z | Undo |
-| Ctrl+Y | Redo |
-| Ctrl+S | Save (Shift+S = Save As) |
-| Ctrl+O | Open file |
-| Ctrl+N | New file |
-| Ctrl+R | Clear results |
-| Ctrl+F | Find |
-| Alt+F / Ctrl+I | Format (SQL formatter) |
-| Ctrl+H | Find & Replace |
-| Ctrl+G | Go to line |
-| Ctrl+P | Export results |
-| Ctrl+C | Copy selection |
-| Ctrl+V | Paste |
-| Ctrl+U | Paste (alternate) |
-| Ctrl+X | Cut (or exit if no selection) |
-| Ctrl+D | Duplicate line |
-| Ctrl+K | Delete line |
-| Ctrl+Home / End | Jump to top / bottom |
-| Ctrl+↑ / ↓ | Scroll results panel |
-| Alt+↑ / ↓ | Add multi-cursor above / below |
-| Shift+Arrow | Extend selection |
+**Tree status icons:**
+
+| Icon | Color | Meaning |
+|------|-------|---------|
+| `✓` | Bold green | Completed |
+| `✗` | Bold red | Faulted |
+| `●` | Bold blue | Running |
+| `·` | Grey | Waiting |
+
+Independent scroll: `TreeScrollRow` for the tree column, `MessageScrollRow` for the message column.
+
+---
+
+### `ResultsPanel`
+
+Renders a single result set or all result sets stacked (compare mode).
+
+**Single-set rendering:**
+- Visible columns: `res.ColumnNames.Skip(ResultScrollCol).Take(10)`
+- Visible rows: `ResultScrollRow` to `ResultScrollRow + panelHeight - 4`
+- Row filter: case-insensitive substring match across all columns
+- Header shows: `Set N/M | Xms | Y rows` + filter indicator when active
+- Border turns yellow when `ResultsFocus` or a filter is active
+
+**Compare-mode rendering (`RenderCompare`):**
+- Height divided evenly across all result sets (minimum 4 rows each)
+- Active pane has magenta border and `◀` header marker
+- Each pane has its own scroll position (`CompareScrollRows[i]`) and filter (`CompareFilters[i]`)
+
+**Export (`ConsoleEditor.ExportResults`):**
+- Ctrl+P opens an inline path prompt pre-filled with `scriptname.csv`
+- Writes UTF-8 RFC 4180 CSV (commas, quotes, newlines in values all properly escaped)
+- Exports the currently active result set
 
 ---
 
 ### `PerformancePanel`
 
-Displays execution metrics sourced from `_evaluator.ProfileMetrics: List<ProfileMetric>`.
+Displays execution metrics sourced from `_evaluator.ProfileMetrics: List<ProfileMetric>`. Only populated when `SET PROFILING ON` is active.
 
 **Metrics shown:**
 
@@ -233,10 +265,56 @@ Displays execution metrics sourced from `_evaluator.ProfileMetrics: List<Profile
 | Rows/second | rows ÷ duration (guarded against divide-by-zero) |
 | Peak memory | `Process.GetCurrentProcess().PeakWorkingSet64` |
 | Disk spilled | Sum of `ProfileMetric.BytesSpilled` (shown only if > 0) |
-| Partition count | Aggregated from window/aggregate engines |
-| Recursion depth | From CTE execution context |
 
-**Layout:** Left side shows a mini BreakdownChart (execution time vs. memory delta); right side shows the stats table; bottom shows a scrollable per-statement profile table sorted by timestamp.
+---
+
+### `InputHandler`
+
+Routes `ConsoleKeyInfo` events to the correct handler. Autocomplete overlay captures keys first when visible. In compare mode, `HandleCompareKey` routes before the editor switch statement.
+
+**Full keyboard reference:**
+
+| Key | Action |
+|-----|--------|
+| **View** | |
+| F1 | Help overlay (any key to close) |
+| F4 | Cycle lower panel: Pipeline+Messages → Results → Perf |
+| F6 | Toggle focus: Editor ↔ Results panel |
+| F7 | Enter / exit Compare mode |
+| F8 | Cycle active pane in Compare mode |
+| Ctrl+M | Maximize / restore lower panel |
+| **Execution** | |
+| F5 | Run entire script |
+| Shift+F5 | Run statement at cursor |
+| Ctrl+R | Clear all results and output |
+| **File** | |
+| Ctrl+S | Save (Ctrl+Shift+S = Save As) |
+| Ctrl+O | Open file (with tab-completion) |
+| Ctrl+N | New file |
+| Ctrl+P | Export active result set to CSV |
+| Ctrl+Q | Exit |
+| **Editing** | |
+| Ctrl+Z / Ctrl+Y | Undo / Redo |
+| Ctrl+C / Ctrl+V | Copy / Paste |
+| Ctrl+X | Cut selection |
+| Ctrl+A | Select all |
+| Ctrl+D / Ctrl+K | Duplicate / Delete line |
+| Ctrl+/ | Toggle `--` line comment on selection |
+| Tab / Shift+Tab | Indent / dedent (selection-aware) |
+| Ctrl+I / Alt+F | Format SQL (Beautifier) |
+| Ctrl+Space | Trigger autocomplete |
+| Alt+Up / Down | Add cursor above / below |
+| Escape | Clear multi-cursors |
+| **Navigation** | |
+| Ctrl+F | Find text (Filter rows when Results focused) |
+| Ctrl+H | Replace text |
+| Ctrl+G | Go to line |
+| Ctrl+Home / End | Start / end of script |
+| Ctrl+Left / Right | Jump word left / right |
+| Ctrl+Shift+Left / Right | Select word left / right |
+| Shift+Arrows | Extend selection |
+| Ctrl+Up / Down | Scroll active panel (line) |
+| Ctrl+PgUp / PgDn | Scroll active panel (page) |
 
 ---
 
@@ -257,11 +335,15 @@ InputHandler → ConsoleEditor.RunScript()
     │         → Statement handlers execute in order
     │         → Results, messages, profiling captured on Evaluator
     │
+    ├─ catch (Exception ex):
+    │       _evaluator.Log($"[ERROR] {ex.Message}")   ← surfaces in MessageTreePanel
+    │       _renderer.ShowStatus($"Error: {ex.Message}")
+    │
     └─ EditorRenderer reads back:
-          Evaluator.LastResultSet  → ResultsPanel
-          Evaluator.Messages       → MessagePanel
-          Evaluator.ProfileMetrics → PerformancePanel
-          Evaluator.ExecutionTree  → TreePanel
+          Evaluator.LastResultSets   → ResultsPanel
+          Evaluator.Messages         → MessageTreePanel (right column)
+          Evaluator.ExecutionTree    → MessageTreePanel (left column)
+          Evaluator.ProfileMetrics   → PerformancePanel
 ```
 
 ---

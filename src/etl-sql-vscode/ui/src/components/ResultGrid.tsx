@@ -48,21 +48,25 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
     getFilteredRowModel: getFilteredRowModel(),
   });
 
+  const csvEscape = (val: unknown): string => {
+    const s = val == null ? '' : String(val);
+    return s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')
+      ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+
   const exportToCSV = () => {
-    const headers = columns.join(',');
-    const csvContent = rows.map(row => 
-      columns.map(col => {
-        const val = row[col];
-        return typeof val === 'string' && val.includes(',') ? `"${val}"` : val;
-      }).join(',')
-    ).join('\n');
-    
-    const blob = new Blob([`${headers}\n${csvContent}`], { type: 'text/csv' });
+    const lines = [
+      columns.map(csvEscape).join(','),
+      ...rows.map(row => columns.map(col => csvEscape(row[col])).join(','))
+    ].join('\r\n');
+
+    const blob = new Blob([lines], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = `etl_results_${new Date().getTime()}.csv`;
     link.click();
+    URL.revokeObjectURL(url);
   };
 
   if (!rows || rows.length === 0) return null;

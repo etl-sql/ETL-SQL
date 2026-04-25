@@ -5,7 +5,6 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
-using Spectre.Console;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -25,7 +24,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 if (!context.RedirectOutput && stmt.IntoTable == null)
                 {
-                    AnsiConsole.MarkupLine("[yellow]No profiling data captured. Ensure SET PROFILE ON; is called before your logic.[/]");
+                    context.Log("No profiling data captured. Ensure SET PROFILE ON; is called before your logic.", ConsoleColor.Yellow);
                 }
                 return;
             }
@@ -64,64 +63,10 @@ namespace ETL_SQL.Engine.Handlers
                 var destination = await context.ResolveDataSourceAsync(new TableReference(stmt.IntoTable));
                 await destination.WriteBatches(new[] { dataTable }.ToAsyncEnumerable());
             }
-            else if (context.RedirectOutput)
-            {
-                context.LastResult = dataTable;
-            }
             else
             {
-                // Console display using Spectre.Console
-                var table = new Table()
-                    .Border(TableBorder.Rounded)
-                    .Title("[bold cyan]Execution Profile[/]")
-                    .AddColumn("Time")
-                    .AddColumn("Statement")
-                    .AddColumn("Rows", c => c.RightAligned())
-                    .AddColumn("Index", c => c.Centered())
-                    .AddColumn("Duration (ms)", c => c.RightAligned())
-                    .AddColumn("Memory (KB)", c => c.RightAligned())
-                    .AddColumn("Spilled", c => c.RightAligned())
-                    .AddColumn("Parts", c => c.Centered());
-
-                foreach (var row in dataTable.Rows)
-                {
-                    table.AddRow(
-                        new Text(row["Timestamp"] is DateTime dt ? dt.ToString("HH:mm:ss.fff") : row["Timestamp"]?.ToString() ?? ""),
-                        new Text(row["Statement"]?.ToString() ?? ""),
-                        new Text(Convert.ToInt64(row["RowsProcessed"]).ToString("N0")),
-                        row["IndexUsed"]?.ToString() != "--" ? new Markup($"[green]{Markup.Escape(row["IndexUsed"]?.ToString() ?? "")}[/]") : new Markup("[grey]--[/]"),
-                        new Text(Convert.ToInt64(row["DurationMs"]).ToString("N0")),
-                        new Text(Convert.ToDouble(row["MemoryKB"]).ToString("N2")),
-                        new Text(Convert.ToInt64(row["SpilledBytes"]).ToString("N0")),
-                        new Text(Convert.ToInt32(row["Partitions"]).ToString())
-                    );
-                }
-
-                long totalTime = context.ProfileMetrics.Sum(m => m.DurationMs);
-                table.Caption($"[bold green]Total Script Execution Time: {totalTime:N0}ms[/]");
-
-                AnsiConsole.Write(table);
-
-                // Session Summary Panel
-                var peakMem = System.Diagnostics.Process.GetCurrentProcess().PeakWorkingSet64 / (1024 * 1024);
-                var cacheHits = context.SubqueryCacheHits;
-                var cacheMisses = context.SubqueryCacheMisses;
-                var hitRatio = (cacheHits + cacheMisses) > 0 ? (double)cacheHits / (cacheHits + cacheMisses) * 100 : 0;
-
-                var summary = new Table().NoBorder().HideHeaders();
-                summary.AddColumn("K"); summary.AddColumn("V");
-                summary.AddRow("[cyan]Peak Working Set:[/]", $"[white]{peakMem:N0} MB[/]");
-                summary.AddRow("[cyan]Subquery Cache:[/]", $"[white]{cacheHits} hits / {cacheMisses} misses ({hitRatio:N1}% ratio)[/]");
-                summary.AddRow("[cyan]Sort Spills:[/]", $"[white]{context.SortSpillCount} runs[/]");
-                summary.AddRow("[cyan]Aggregate Groups:[/]", $"[white]{context.AggregateGroupsCount:N0} unique keys[/]");
-                summary.AddRow("[cyan]Expansion Ratio:[/]", $"[white]{context.AggregateExpansionRatio:N2}x[/]");
-
-                AnsiConsole.Write(new Panel(summary)
-                {
-                    Header = new PanelHeader("[bold yellow] Session Performance Summary [/]", Justify.Center),
-                    Border = BoxBorder.Rounded,
-                    Padding = new Padding(1, 0, 1, 0)
-                });
+                context.LastResult = dataTable;
+                context.LastResultSets.Add(dataTable);
             }
 
             await Task.CompletedTask;

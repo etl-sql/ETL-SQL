@@ -62,6 +62,7 @@ namespace ETL_SQL.Engine.Handlers
             else
             {
                 context.LastResult = table;
+                context.LastResultSets.Add(table);
             }
         }
 

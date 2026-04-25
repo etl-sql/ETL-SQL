@@ -81,5 +81,27 @@ namespace ETL_SQL.Tests.Statements.Statements
              Assert.IsType<SetShowPasswordStatement>(script.Statements[0]);
              Assert.False(((SetShowPasswordStatement)script.Statements[0]).Enabled);
         }
+
+        [Fact]
+        public async Task ShowProfile_AfterMockDbSelect_AddsToLastResultSets()
+        {
+            var eval = NewEval();
+            eval.IsProfiling = true;
+            eval.RedirectOutput = true; // mirrors TUI ConsoleEditor
+
+            var script = TestHelpers.Parse(@"
+                CREATE CONNECTION m ON MOCKDB();
+                SELECT * FROM m.Users;
+                SHOW PROFILE;
+            ");
+
+            await eval.Evaluate(script);
+
+            // Should have 2 result sets: SELECT result + SHOW PROFILE result
+            Assert.Equal(2, eval.LastResultSets.Count);
+            var profileResult = eval.LastResultSets[1];
+            Assert.Contains("Statement", profileResult.ColumnNames);
+            Assert.True(profileResult.Rows.Count > 0);
+        }
     }
 }

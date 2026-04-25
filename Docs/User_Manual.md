@@ -848,6 +848,95 @@ SELECT * FROM test_src.Users;
 
 ---
 
+## 15. Interactive TUI Editor
+
+Launch the terminal IDE with:
+
+```bash
+dotnet run --project src/ETL-SQL.App -- --ui edit MyScript.etlsql
+```
+
+### 15.1 Layout
+
+The TUI is divided into three regions:
+
+```
+┌───────────────────────────────────────────────────────────────┐
+│  Header — filename, focus state                               │
+├───────────────────────────────────────────────────────────────┤
+│  Editor  (~60% height)                                        │
+│  Line numbers │ Syntax-highlighted script                     │
+├────────────────────────┬──────────────────────────────────────┤
+│  Execution Tree        │  Message Log                         │
+│  ├─ ✓ Step 1           │  [INFO] Connected to prod            │
+│  ├─ ✓ PARALLEL (4)     │  [ERROR] Division by zero            │
+│  └─ ✗ Step 3           │                                      │
+├───────────────────────────────────────────────────────────────┤
+│  F1:Help  F5:Run  F6:Focus  F4:Panel  │  ○ script.etlsql  PIPELINE  │  Ln 1, Col 1  ⏱ 340ms
+└───────────────────────────────────────────────────────────────┘
+```
+
+The **lower panel** cycles with `F4`: Pipeline+Messages → Results → Performance.
+
+### 15.2 Results Panel
+
+Press `F4` once to switch to the Results panel after execution.
+
+| Action | Key |
+|--------|-----|
+| Scroll rows | `↑ ↓ PgUp PgDn` (while focused — press `F6` first) |
+| Scroll columns | `Ctrl+Left / Right` |
+| Switch result sets | `Left / Right` arrows |
+| Filter rows | `Ctrl+F` — type a substring, Enter to apply, Escape to clear |
+| Export to CSV | `Ctrl+P` — prompts for a file path, writes RFC 4180 CSV |
+| Focus / unfocus | `F6` |
+
+When a filter is active the header shows `Filter: foo  12/847 rows` and the border turns yellow.
+
+### 15.3 Compare Mode
+
+When a script produces multiple result sets, `F7` enters Compare Mode:
+
+- All result sets are stacked vertically in a maximized panel
+- The active pane has a **magenta** border and `◀` marker — cycle with `F8`
+- Each pane scrolls and filters independently
+- `Escape` clears the active pane's filter, or exits Compare Mode if no filter is set
+- `Ctrl+M` toggles the panel size if you want to see more of the editor
+
+### 15.4 Performance Panel
+
+Press `F4` twice (or once from Results) to see the Performance panel. It populates when `SET PROFILING ON` is active and shows per-statement timing, row counts, memory usage, and disk-spill totals.
+
+```sql
+SET PROFILING ON;
+SELECT * FROM prod.Orders JOIN prod.Customers ON ...;
+SET PROFILING OFF;
+```
+
+### 15.5 Keyboard Reference
+
+Press `F1` inside the editor for the full interactive help overlay (shows live state for focus and active panel). Key highlights:
+
+| Key | Action |
+|-----|--------|
+| `F1` | Help overlay — any key to close |
+| `F4` | Cycle lower panel |
+| `F5` / `Shift+F5` | Run script / run current statement |
+| `F6` | Toggle Editor ↔ Results focus |
+| `F7` | Enter / exit Compare mode |
+| `F8` | Cycle active pane in Compare mode |
+| `Ctrl+M` | Maximize / restore lower panel |
+| `Ctrl+/` | Toggle `--` comment on selection |
+| `Tab` / `Shift+Tab` | Indent / dedent selected block |
+| `Ctrl+Left/Right` | Word jump |
+| `Ctrl+Shift+Left/Right` | Word select |
+| `Alt+Up/Down` | Add cursor above / below |
+| `Ctrl+F` | Find (or filter rows in Results focus) |
+| `Ctrl+P` | Export results to CSV |
+| `Ctrl+Q` | Exit |
+
+---
+
 ## Next Steps
 
 | Topic | Document |

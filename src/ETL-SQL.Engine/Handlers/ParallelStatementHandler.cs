@@ -23,24 +23,28 @@ namespace ETL_SQL.Engine.Handlers
             int safetyLimit = Math.Min(limit, context.MaxParallelDegree);
             
             var semaphore = new System.Threading.SemaphoreSlim(safetyLimit);
-            
+
+            // Mark the current tree node so the renderer shows it as a collapsible parallel block.
+            if (context.CurrentNodeId.HasValue)
+            {
+                var parallelNode = context.ExecutionTree.GetNode(context.CurrentNodeId.Value);
+                if (parallelNode != null) parallelNode.IsParallelBlock = true;
+            }
+
             // Phase 2: Launch all statements with throttling and index-based tracking
             var indexedTasks = stmt.Body.Statements.Select(async (s, index) => {
                 await semaphore.WaitAsync();
                 try
                 {
-                    System.Console.WriteLine($"PARALLEL: Launching index {index} statement: {s.GetType().Name}");
                     var fork = context.Fork();
-                    System.Console.WriteLine($"PARALLEL: Fork {index} created. Executing...");
                     await fork.EvaluateStatement(s);
-                    System.Console.WriteLine($"PARALLEL: Fork {index} execution complete.");
                     return (index, fork);
                 }
                 finally
                 {
                     semaphore.Release();
                 }
-            }).ToList(); 
+            }).ToList();
 
             // Phase 3: Wait for all to complete
             var results = await Task.WhenAll(indexedTasks);

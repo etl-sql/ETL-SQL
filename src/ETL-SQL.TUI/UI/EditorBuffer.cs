@@ -313,5 +313,98 @@ namespace ETL_SQL.TUI.UI
 
         public void Top() { CursorLine = 0; CursorColumn = 0; }
         public void Bottom() { CursorLine = Lines.Count - 1; CursorColumn = Lines[CursorLine].Length; }
+
+        public void IndentSelection(bool reverse)
+        {
+            if (!SelectionStartLine.HasValue) { Tab(reverse); return; }
+
+            var (startL, _, endL, endC) = GetSelectionBounds();
+            int lastLine = (endC == 0 && endL > startL) ? endL - 1 : endL;
+
+            for (int i = startL; i <= lastLine; i++)
+            {
+                if (reverse)
+                {
+                    int remove = Lines[i].StartsWith("    ") ? 4
+                               : Lines[i].StartsWith("   ")  ? 3
+                               : Lines[i].StartsWith("  ")   ? 2
+                               : Lines[i].StartsWith(" ")    ? 1 : 0;
+                    if (remove > 0) Lines[i] = Lines[i].Substring(remove);
+                    if (i == CursorLine) CursorColumn = Math.Max(0, CursorColumn - remove);
+                }
+                else
+                {
+                    Lines[i] = "    " + Lines[i];
+                    if (i == CursorLine) CursorColumn += 4;
+                }
+            }
+        }
+
+        public void ToggleLineComment()
+        {
+            int startL, endL;
+            if (SelectionStartLine.HasValue)
+            {
+                var (sl, _, el, ec) = GetSelectionBounds();
+                startL = sl;
+                endL = (ec == 0 && el > sl) ? el - 1 : el;
+            }
+            else { startL = endL = CursorLine; }
+
+            bool allCommented = true;
+            for (int i = startL; i <= endL; i++)
+            {
+                if (Lines[i].Trim().Length == 0) continue;
+                if (!Lines[i].TrimStart().StartsWith("--")) { allCommented = false; break; }
+            }
+
+            for (int i = startL; i <= endL; i++)
+            {
+                if (allCommented)
+                {
+                    int idx = Lines[i].IndexOf("--", StringComparison.Ordinal);
+                    if (idx < 0) continue;
+                    int remove = (idx + 2 < Lines[i].Length && Lines[i][idx + 2] == ' ') ? 3 : 2;
+                    Lines[i] = Lines[i].Remove(idx, remove);
+                    if (i == CursorLine) CursorColumn = Math.Max(0, CursorColumn - remove);
+                }
+                else
+                {
+                    Lines[i] = "-- " + Lines[i];
+                    if (i == CursorLine) CursorColumn += 3;
+                }
+            }
+        }
+
+        private static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+
+        public void WordRight()
+        {
+            var line = Lines[CursorLine];
+            int col = CursorColumn;
+            if (col >= line.Length)
+            {
+                if (CursorLine < Lines.Count - 1) { CursorLine++; CursorColumn = 0; }
+                return;
+            }
+            if (IsWordChar(line[col])) { while (col < line.Length && IsWordChar(line[col])) col++; }
+            else                       { while (col < line.Length && !IsWordChar(line[col])) col++; }
+            CursorColumn = col;
+        }
+
+        public void WordLeft()
+        {
+            int col = CursorColumn;
+            if (col == 0)
+            {
+                if (CursorLine > 0) { CursorLine--; CursorColumn = Lines[CursorLine].Length; }
+                return;
+            }
+            var line = Lines[CursorLine];
+            col--;
+            while (col > 0 && !IsWordChar(line[col])) col--;
+            while (col > 0 && IsWordChar(line[col - 1])) col--;
+            CursorColumn = col;
+        }
     }
 }

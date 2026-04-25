@@ -15,12 +15,21 @@ Experience a modern, terminal-based development environment designed for product
 
 - **Vibrant Syntax Highlighting**: Context-aware coloring for DML, DDL, Control Flow, and ETL-specific keywords.
 - **Intelligent Autocomplete**: Deep integration with data source schemas, variables, and file systems.
-- **Live Results Grid**: Interactive paging and multi-result set navigation directly in your terminal.
-- **Standardized Shortcuts**:
-  - `F5` / `Shift+F5`: Execute full script or current statement.
-  - `Ctrl+I`: Smart Auto-Formatter.
-  - `F1`: Instant Help Overlay.
-  - Standard `Undo/Redo`, `Duplicate`, and `File Management` shortcuts.
+- **Split Lower Panel**: Execution tree (left) and message log (right) side-by-side, with compact ASCII tree rendering and parallel branch collapse for large pipelines.
+- **Live Results Grid**: Interactive paging, column scrolling, multi-result set navigation, and inline row filtering (`Ctrl+F`) directly in your terminal.
+- **Compare Mode** (`F7`): Stack all result sets simultaneously in a maximized panel — each pane independently scrollable and filterable.
+- **Export to CSV** (`Ctrl+P`): RFC 4180-compliant export of the active result set via an inline path prompt.
+- **Performance Dashboard**: Per-statement timing, row counts, memory, and disk-spill metrics when `SET PROFILING ON`.
+- **Three-zone Status Bar**: Shortcuts left, file/mode pill center, cursor position and elapsed time right.
+- **Standard Shortcuts** — complete reference available in-editor via `F1`:
+  - `F5` / `Shift+F5`: Run full script or current statement.
+  - `F6`: Toggle focus between Editor and Results panel.
+  - `Ctrl+/`: Toggle SQL line comment (`--`) on selection.
+  - `Tab` / `Shift+Tab`: Indent / dedent selected block.
+  - `Ctrl+Left/Right`: Word jump; `Ctrl+Shift+Left/Right`: word select.
+  - `Alt+Up/Down`: Add cursor above / below (multi-cursor editing).
+  - `Ctrl+I` / `Alt+F`: Smart SQL formatter.
+  - `Ctrl+Q`: Exit.
 
 ### VS Code Extension Support
 Leverage the power of ETL-SQL within Visual Studio Code with our dedicated language extension — syntax highlighting, autocomplete, inline LINT, and a report preview panel for `.rptsql` files.

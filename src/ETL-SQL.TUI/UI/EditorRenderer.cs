@@ -26,6 +26,7 @@ namespace ETL_SQL.TUI.UI
         public int ResultScrollRow { get; set; } = 0;
         public int ResultScrollCol { get; set; } = 0;
         public int MessageScrollRow { get; set; } = 0;
+        public int TreeScrollRow { get; set; } = 0;
         public int ActiveResultSetIndex { get; set; } = 0;
         public bool IsBottomMaximized { get; set; } = false;
         private bool _forceFullRepaintPending = false;
@@ -39,16 +40,20 @@ namespace ETL_SQL.TUI.UI
         public int PromptSuggestionIndex { get; set; } = 0;
         public bool PromptIsSecret { get; set; } = false;
         public bool HelpVisible { get; set; } = false;
+        public string FilterText { get; set; } = "";
         public bool PerformanceVisible { get; set; } = false;
-        public bool TreeVisible { get; set; } = false;
+        public bool ResultsVisible { get; set; } = false;
+        public bool CompareMode { get; set; } = false;
+        public int CompareFocusIndex { get; set; } = 0;
+        public List<int> CompareScrollRows { get; set; } = new();
+        public List<string> CompareFilters { get; set; } = new();
         public bool PromptVisible => !string.IsNullOrEmpty(PromptTitle);
 
         private readonly IConsoleInterface _console;
         private readonly EditorPanel _editorPanel;
-        private readonly MessagePanel _messagePanel;
+        private readonly MessageTreePanel _messageTreePanel;
         private readonly ResultsPanel _resultsPanel;
         private readonly PerformancePanel _performancePanel;
-        private readonly TreePanel _treePanel;
 
         /// <summary>Initializes a new instance of the <see cref="EditorRenderer"/> class.</summary>
         /// <param name="buffer">The editor text buffer.</param>
@@ -58,10 +63,9 @@ namespace ETL_SQL.TUI.UI
         {
             _console = console ?? new PhysicalConsole();
             _editorPanel = new EditorPanel(buffer, this);
-            _messagePanel = new MessagePanel(evaluator);
+            _messageTreePanel = new MessageTreePanel(evaluator);
             _resultsPanel = new ResultsPanel(evaluator, this);
             _performancePanel = new PerformancePanel(evaluator, this);
-            _treePanel = new TreePanel(evaluator, this);
         }
 
         /// <summary>Renders the entire editor UI to the console.</summary>
@@ -83,36 +87,50 @@ namespace ETL_SQL.TUI.UI
 
             // ── Layout Definitions ──────────────────────────────────────────
             int editorAreaTop = 1;
-            int statusHeight = 1;
-            
-            // Adjust lower area height based on focus/maximize
-            int lowerAreaHeight = (int)(totalHeight * 0.4); 
-            if (IsBottomMaximized) lowerAreaHeight = Math.Max(5, totalHeight - editorAreaTop - statusHeight - 2);
-            
-            int messageAreaHeight = 4;
-            int resultAreaHeight = lowerAreaHeight - messageAreaHeight;
-            if (resultAreaHeight < 5) resultAreaHeight = 5; 
+            int statusHeight  = 1;
 
-            int editorAreaHeight = Math.Max(1, totalHeight - resultAreaHeight - messageAreaHeight - statusHeight - editorAreaTop);
+            int lowerAreaHeight = (int)(totalHeight * 0.4);
+            if (IsBottomMaximized || CompareMode) lowerAreaHeight = Math.Max(5, totalHeight - editorAreaTop - statusHeight - 2);
+            if (lowerAreaHeight < 5) lowerAreaHeight = 5;
+
+            int editorAreaHeight = Math.Max(1, totalHeight - lowerAreaHeight - statusHeight - editorAreaTop);
 
             // Viewport clamping
             if (buffer.CursorLine < ScrollLine) ScrollLine = buffer.CursorLine;
             if (buffer.CursorLine >= ScrollLine + editorAreaHeight) ScrollLine = buffer.CursorLine - editorAreaHeight + 1;
 
-            // Calculate scroll limits based on visible panel
-            int totalItems = 0;
-            if (PerformanceVisible) totalItems = evaluator.ProfileMetrics.Count;
-            else if (TreeVisible) totalItems = evaluator.ExecutionTree.GetAllNodes().Count();
-            else if (evaluator.LastResult != null) totalItems = evaluator.LastResult.Rows.Count;
+            // Scroll limits
+            if (PerformanceVisible)
+            {
+                int maxPerf = Math.Max(0, evaluator.ProfileMetrics.Count - (lowerAreaHeight - 4));
+                ResultScrollRow = Math.Clamp(ResultScrollRow, 0, maxPerf);
+            }
+            else if (ResultsVisible && evaluator.LastResult != null)
+            {
+                int maxResult = Math.Max(0, evaluator.LastResult.Rows.Count - (lowerAreaHeight - 4));
+                ResultScrollRow = Math.Clamp(ResultScrollRow, 0, maxResult);
+            }
+            else
+            {
+                // MessageTree panel — independent scroll for each column
+                int innerRows = lowerAreaHeight - 3;
+                int maxMsg  = Math.Max(0, evaluator.Messages.Count - innerRows);
+                int maxTree = Math.Max(0, evaluator.ExecutionTree.GetAllNodes().Count() - innerRows);
+                MessageScrollRow = Math.Clamp(MessageScrollRow, 0, maxMsg);
+                TreeScrollRow    = Math.Clamp(TreeScrollRow, 0, maxTree);
+            }
 
-            int maxScroll = Math.Max(0, totalItems - (resultAreaHeight - 4));
-            ResultScrollRow = Math.Clamp(ResultScrollRow, 0, maxScroll);
-
-            int maxMessageScroll = Math.Max(0, evaluator.Messages.Count - (messageAreaHeight - 2));
-            MessageScrollRow = Math.Clamp(MessageScrollRow, 0, maxMessageScroll);
-
-            if (ActiveResultSetIndex >= evaluator.LastResultSets.Count) 
+            if (ActiveResultSetIndex >= evaluator.LastResultSets.Count)
                 ActiveResultSetIndex = Math.Max(0, evaluator.LastResultSets.Count - 1);
+
+            // Ensure compare scroll/filter arrays are sized to match result sets
+            if (CompareMode)
+            {
+                while (CompareScrollRows.Count < evaluator.LastResultSets.Count) CompareScrollRows.Add(0);
+                while (CompareFilters.Count  < evaluator.LastResultSets.Count) CompareFilters.Add("");
+                if (CompareFocusIndex >= evaluator.LastResultSets.Count)
+                    CompareFocusIndex = Math.Max(0, evaluator.LastResultSets.Count - 1);
+            }
 
             int gutterWidth = (buffer.Lines.Count).ToString().Length + 2;
             int editorWidth = totalWidth - gutterWidth - 1;
@@ -132,52 +150,90 @@ namespace ETL_SQL.TUI.UI
             // 2. Main Panels
             if (!Headless)
             {
+                int lowerY = editorAreaTop + editorAreaHeight;
                 _editorPanel.Render(_console, 0, editorAreaTop, totalWidth, editorAreaHeight);
-                _messagePanel.Render(_console, 0, editorAreaTop + editorAreaHeight, totalWidth, messageAreaHeight, MessageScrollRow);
-                
-                int lowerY = editorAreaTop + editorAreaHeight + messageAreaHeight;
-                if (TreeVisible)
-                    _treePanel.Render(_console, 0, lowerY, totalWidth, resultAreaHeight);
+
+                if (CompareMode)
+                    _resultsPanel.RenderCompare(_console, 0, lowerY, totalWidth, lowerAreaHeight, evaluator, this);
                 else if (PerformanceVisible)
-                    _performancePanel.Render(_console, 0, lowerY, totalWidth, resultAreaHeight);
+                    _performancePanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight);
+                else if (ResultsVisible)
+                    _resultsPanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight, ResultScrollRow);
                 else
-                    _resultsPanel.Render(_console, 0, lowerY, totalWidth, resultAreaHeight);
+                    _messageTreePanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight, TreeScrollRow, MessageScrollRow);
             }
 
-            // 4. Status Bar
+            // 4. Status Bar  ── three zones: LEFT shortcuts │ CENTER file/mode │ RIGHT cursor
             if (!Headless)
             {
                 int statusRow = totalHeight - 1;
+
+                // ── LEFT zone: always-on shortcuts (plain text, no markup)
+                string left = " F1:Help  F5:Run  F6:Focus  F4:Panel ";
+
+                // ── CENTER zone: filename + dirty indicator + active-panel pill
+                string fileLabel2 = string.IsNullOrEmpty(filePath)
+                    ? "Untitled.etlsql"
+                    : System.IO.Path.GetFileName(filePath);
+                string dirtyDot = isDirty ? "● " : "○ ";
+
+                string panelPill;
+                bool hasError = evaluator.LastError != null;
+                if (CompareMode)
+                    panelPill = $"[bold magenta] COMPARE  pane {CompareFocusIndex + 1}/{Math.Max(1, evaluator.LastResultSets.Count)} [/]";
+                else if (ResultsFocus)
+                    panelPill = "[bold yellow] ▶ RESULTS FOCUS [/]";
+                else if (hasError)
+                    panelPill = "[bold red] ✗ ERROR [/]";
+                else if (PerformanceVisible)
+                    panelPill = "[bold cyan] PERF [/]";
+                else if (ResultsVisible)
+                    panelPill = "[bold yellow] RESULTS [/]";
+                else
+                    panelPill = "[grey] PIPELINE [/]";
+
+                // ── RIGHT zone: cursor position + elapsed time
+                string cursor3 = $" Ln {buffer.CursorLine + 1}, Col {buffer.CursorColumn + 1}";
+                if (evaluator.LastExecTimeMs > 0)
+                {
+                    string elapsed = evaluator.LastExecTimeMs >= 60_000
+                        ? $"{evaluator.LastExecTimeMs / 60_000.0:N1}m"
+                        : evaluator.LastExecTimeMs >= 1_000
+                            ? $"{evaluator.LastExecTimeMs / 1_000.0:N1}s"
+                            : $"{evaluator.LastExecTimeMs}ms";
+                    cursor3 += $"  ⏱ {elapsed}";
+                }
+                // Append transient status message (e.g. "Saved") to right zone
+                if (DateTime.Now < StatusMessageExpiry)
+                    cursor3 += $"  {StatusMessage ?? ""}";
+                cursor3 += " ";
+
+                // Plain-text lengths for layout math (markup tags don't count toward width)
+                int leftLen   = left.Length;
+                int rightLen  = cursor3.Length;
+                // Center plain text: dirtyDot + fileLabel + " " (pill width is approximate — pills are short)
+                int pillPlain = PerformanceVisible ? 6 : ResultsVisible ? 9 : hasError ? 7 : ResultsFocus ? 16 : 9;
+                int centerAvail = Math.Max(0, totalWidth - leftLen - rightLen - 3); // 3 for two "│" separators + space
+
+                string centerFile = dirtyDot + fileLabel2;
+                if (centerFile.Length > centerAvail - pillPlain - 2)
+                    centerFile = centerFile[..Math.Max(0, centerAvail - pillPlain - 5)] + "…";
+
+                // ── Assemble final markup line
+                string sep = "[grey] │ [/]";
+                string statusMarkup =
+                    $"[white on grey15]{Markup.Escape(left)}[/]" +
+                    sep +
+                    $"[white on grey15] {Markup.Escape(centerFile)} [/]" +
+                    panelPill +
+                    sep +
+                    $"[white on grey15]{Markup.Escape(cursor3)}[/]";
+
                 _console.SetCursorPosition(0, statusRow);
+                // Fill background first so trailing space after right zone is covered
                 _console.Markup($"[white on grey15]{new string(' ', totalWidth)}[/]");
                 _console.SetCursorPosition(0, statusRow);
-
-                var debugInfo2 = $"Ln {buffer.CursorLine + 1}, Col {buffer.CursorColumn + 1}";
-                var status2 = (DateTime.Now < StatusMessageExpiry) ? $" | {Markup.Escape(StatusMessage ?? "")}" : "";
-                var focusInfo2 = ResultsFocus ? "[bold yellow] FOCUS: RESULTS [/]" : " FOCUS: EDITOR";
-                var perfLabel = TreeVisible ? " F4:Results " : (PerformanceVisible ? " F4:Tree    " : " F4:Perf    ");
-                
-                // Build status text components
-                string shortcuts = " F1:Help ^S:Save ^O:Open ^F:Find F5:Run | F3:Focus |" + perfLabel + "| ^M:Exp | F6:Tree | " + focusInfo2;
-                string cursor = " | " + debugInfo2 + status2;
-                
-                // Combine and ensure it fits the width
-                string plainStatus2 = shortcuts + cursor;
-                if (plainStatus2.Length > totalWidth)
-                {
-                    // If too long, try removing focusInfo first
-                    shortcuts = " F1:Help ^S:Save ^O:Open ^F:Find F5:Run | F3:F |" + perfLabel;
-                    plainStatus2 = shortcuts + cursor;
-                    
-                    if (plainStatus2.Length > totalWidth)
-                    {
-                        // Still too long, truncate from right and ensure we don't wrap
-                        plainStatus2 = plainStatus2.Substring(0, Math.Max(0, totalWidth));
-                    }
-                }
-                
-                string renderedStatus = plainStatus2.PadRight(totalWidth);
-                _console.Markup($"[white on grey15]{Markup.Escape(renderedStatus)}[/]");
+                _console.Markup(statusMarkup);
             }
 
             // 5. Draw Prompt if active
@@ -277,49 +333,100 @@ namespace ETL_SQL.TUI.UI
 
         private void RenderHelpOverlay(int totalWidth, int totalHeight)
         {
-            var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Yellow).Expand();
-            table.AddColumn("[yellow]Shortcut[/]");
-            table.AddColumn("[white]Description[/]");
-            
-            table.AddRow("F1", "Show/Hide this help screen");
-            table.AddRow("F3", "Toggle Focus (Editor vs Results)");
-            table.AddRow("F4", "Cycle View (Results / Perf / Tree)");
-            table.AddRow("F5", "Run entire script (Shift+F5 for statement)");
-            table.AddRow("F6", "Toggle Execution Tree view");
-            table.AddRow("Ctrl+M", "Maximize / Restore active panel");
-            table.AddRow("Ctrl+S", "Save current script (Shift+S for Save As)");
-            table.AddRow("Ctrl+O", "Open script (with file autocomplete)");
-            table.AddRow("Ctrl+N", "New script");
-            table.AddRow("Ctrl+F", "Find text");
-            table.AddRow("Ctrl+I / Alt+F", "Format script (SQL Beautifier)");
-            table.AddRow("Ctrl+H", "Replace text");
-            table.AddRow("Ctrl+G", "Go to line");
-            table.AddRow("Ctrl+P", "Export results to CSV");
-            table.AddRow("Ctrl+R", "Clear all results and output");
-            table.AddRow("Ctrl+Space", "Trigger Autocomplete suggestions");
-            table.AddRow("Ctrl+X", "Exit or Cut (if text selected)");
-            table.AddRow("Ctrl+C / Ctrl+V", "Copy / Paste");
-            table.AddRow("Ctrl+Z / Ctrl+Y", "Undo / Redo");
-            table.AddRow("Ctrl+D / Ctrl+K", "Duplicate / Delete Line");
-            table.AddRow("Ctrl+Home / End", "Go to start/end of script");
-            table.AddRow("Ctrl+Up / Down", "Scroll active panel vertically (Line)");
-            table.AddRow("Ctrl+PgUp / PgDn", "Scroll active panel vertically (Page)");
-            table.AddRow("Ctrl+Left / Right", "Scroll results horizontally / Switch Set");
-            table.AddRow("Arrows / Tab", "Navigate Editor / Cycle Suggestions");
-            table.AddRow("Shift+Arrows", "Select text");
+            // Live state annotations
+            string focusState  = ResultsFocus    ? "[bold yellow]RESULTS[/]"  : "[grey]EDITOR[/]";
+            string panelState  = PerformanceVisible ? "[bold cyan]PERF[/]"
+                               : ResultsVisible     ? "[bold yellow]RESULTS[/]"
+                               :                      "[grey]PIPELINE[/]";
 
-            var panel = new Panel(table)
+            var table = new Table()
+                .Border(TableBorder.None)
+                .HideHeaders()
+                .AddColumn(new TableColumn("").Width(16))
+                .AddColumn(new TableColumn(""));
+
+            void Section(string title)
             {
-                Height = Math.Min(22, totalHeight - 4),
-                Width = Math.Min(60, totalWidth - 4),
+                table.AddRow(new Markup(""), new Markup($"[bold grey] ── {title} ──[/]"));
+            }
+
+            void Row(string key, string desc)
+            {
+                table.AddRow(new Markup($"[yellow]{Markup.Escape(key)}[/]"), new Markup(Markup.Escape(desc)));
+            }
+
+            void RowAnnotated(string key, string desc, string annotation)
+            {
+                table.AddRow(new Markup($"[yellow]{Markup.Escape(key)}[/]"), new Markup($"{Markup.Escape(desc)}  {annotation}"));
+            }
+
+            Section("View");
+            RowAnnotated("F6",             "Toggle focus: Editor / Results", $"now: {focusState}");
+            RowAnnotated("F4",             "Cycle lower panel",              $"now: {panelState}");
+            Row("Ctrl+M",                  "Maximize / Restore lower panel");
+            Row("F7",                      "Enter / exit Compare mode (2+ result sets)");
+            Row("F8",                      "Cycle active pane  [grey](Compare mode)[/]");
+            Row("F1",                      "Close this help screen");
+            Row("Escape",                  "Clear filter / Exit focus or Compare mode");
+
+            Section("Execution");
+            Row("F5",                      "Run entire script");
+            Row("Shift+F5",               "Run current statement only");
+            Row("Ctrl+R",                  "Clear all results and output");
+
+            Section("File");
+            Row("Ctrl+S",                  "Save");
+            Row("Ctrl+Shift+S",            "Save As");
+            Row("Ctrl+O",                  "Open (with file autocomplete)");
+            Row("Ctrl+N",                  "New script");
+            Row("Ctrl+P",                  "Export results to CSV");
+
+            Section("Editing");
+            Row("Ctrl+Z / Ctrl+Y",        "Undo / Redo");
+            Row("Ctrl+C / Ctrl+V",        "Copy / Paste");
+            Row("Ctrl+X",                  "Cut selection");
+            Row("Ctrl+A",                  "Select all");
+            Row("Ctrl+Q",                  "Exit");
+            Row("Ctrl+D / Ctrl+K",        "Duplicate / Delete line");
+            Row("Ctrl+/",                  "Toggle line comment (--)");
+            Row("Tab / Shift+Tab",        "Indent / Outdent (selection-aware)");
+            Row("Ctrl+I  / Alt+F",        "Format SQL (Beautifier)");
+            Row("Ctrl+Space",              "Autocomplete suggestions");
+            Row("Alt+Up / Down",           "Add cursor above / below");
+            Row("Escape",                  "Clear multi-cursors");
+
+            Section("Navigation");
+            Row("Ctrl+F",                  "Find text  [grey](Filter rows when Results focused)[/]");
+            Row("Ctrl+H",                  "Replace text");
+            Row("Ctrl+G",                  "Go to line");
+            Row("Ctrl+Home / Ctrl+End",   "Start / End of script");
+            Row("Ctrl+Left / Right",       "Jump word left / right");
+            Row("Ctrl+Shift+Left / Right", "Select word left / right");
+            Row("Shift+Arrows",            "Select text");
+            Row("Ctrl+Up / Down",          "Scroll panel (line)");
+            Row("Ctrl+PgUp / PgDn",       "Scroll panel (page)");
+
+            int panelWidth  = Math.Min(72, totalWidth  - 4);
+            int panelHeight = Math.Min(32, totalHeight - 4);
+
+            var inner = new Rows(
+                table,
+                new Markup("[grey] ─────────────────────────────────────────────[/]"),
+                new Markup("[grey] Press any key to close[/]")
+            );
+
+            var panel = new Panel(inner)
+            {
+                Header = new PanelHeader("[bold yellow] ETL-SQL Keyboard Reference [/]"),
+                Height = panelHeight,
+                Width  = panelWidth,
                 Border = BoxBorder.Double
             };
 
-            int startRow = (totalHeight - (panel.Height ?? 20)) / 2;
-            int startCol = (totalWidth - (panel.Width ?? 60)) / 2;
+            int startRow = Math.Max(0, (totalHeight - panelHeight) / 2);
 
             _console.SetCursorPosition(0, startRow);
-            _console.WriteWidget(new Padder(panel, new Padding(startCol, 0, 0, 0)));
+            _console.WriteWidget(panel);
         }
 
         /// <summary>Displays a temporary status message in the status bar.</summary>
