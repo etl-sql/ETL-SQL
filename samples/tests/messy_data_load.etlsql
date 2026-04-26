@@ -5,7 +5,7 @@
 USE PASSWORD = 'test-password';
 
 -- 1. Create connections
-CREATE CONNECTION csv ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\test_data\sales_messy.csv');
+CREATE CONNECTION csv ON FLATFILE('test_data/sales_messy.csv');
 CREATE CONNECTION mock ON MOCKDB() WITH(DIALECT='MSSQL');
 
 BEGIN TRY

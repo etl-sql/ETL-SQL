@@ -14,7 +14,7 @@ namespace ETL_SQL.Core.Parser.Components
             while (_parser.Current.Type != TokenType.END && _parser.Current.Type != TokenType.EOF)
                 stmts.Add(_parser.ParseStatement());
             Consume(TokenType.END, "Expected END to close BEGIN block");
-            // Suffixes (TRY, CATCH, SEMICOLON) are handled by specific callers or the dispatcher
+            Match(TokenType.SEMICOLON); // optional trailing ; after END (e.g. nested WHILE/IF-ELSE)
             return new BlockStatement(stmts);
         }
 

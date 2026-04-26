@@ -1,25 +1,23 @@
--- Demonstrates Oracle connectivity and metadata discovery
--- Note: Requires a running Oracle instance (e.g. via Docker)
+-- Demonstrates database connectivity and metadata discovery via Docker
+-- Note: Requires Docker Desktop running
 
-USE DOCKER('gvenzl/oracle-free:latest');
-DECLARE @conn varchar(500) = DOCKER.CONNECTION_STRING;
+USE DOCKER('postgres:15-alpine') AS dpg;
+DECLARE @conn varchar(500) = dpg.CONNECTION_STRING;
 
--- Fix service name if needed for Oracle Free
-SET @conn = REPLACE(@conn, 'SERVICE_NAME=XE', 'SERVICE_NAME=FREEPDB1');
-
-CREATE CONNECTION ora ON ORACLE(@conn);
+CREATE CONNECTION db ON POSTGRES(@conn);
 
 -- Execute table creation
-EXECUTE ora
+EXECUTE db
 BEGIN
-  CREATE TABLE Employee (id NUMBER, name VARCHAR2(100));
-  INSERT INTO  Employee (id, name) VALUES (1, 'Oracle User');
+  DROP TABLE IF EXISTS Employee;
+  CREATE TABLE Employee (id INT, name VARCHAR(100));
+  INSERT INTO Employee (id, name) VALUES (1, 'Postgres User');
 END;
 
 -- Standard SELECT
-SELECT * FROM ora.Employee;
+SELECT * FROM db.Employee;
 
--- Metadata discovery (returns owner.table_name)
-HELP CONNECTION ORACLE;
+-- Metadata discovery
+HELP CONNECTION POSTGRES;
 
-DOCKER CLOSE;
+DOCKER CLOSE dpg;

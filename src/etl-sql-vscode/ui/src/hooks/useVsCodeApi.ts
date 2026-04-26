@@ -71,7 +71,7 @@ export function useVsCodeApi() {
                     setStatus('finished');
                     clearInterval(interval);
                 }
-            }, 1000);
+            }, 400);
             return () => clearInterval(interval);
         } else {
             const handler = (event: MessageEvent) => {

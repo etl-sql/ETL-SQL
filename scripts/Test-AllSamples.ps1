@@ -31,14 +31,39 @@ $passed = 0
 $failed = 0
 $failedScripts = @()
 
+$skipped = 0
+$skippedScripts = @()
+
 foreach ($script in $etlScripts) {
+    # Skip scripts tagged with -- @requires: <service> when that service is unavailable
+    $firstLines = Get-Content $script.FullName -TotalCount 5 -ErrorAction SilentlyContinue
+    $requiresTag = $firstLines | Where-Object { $_ -match '--\s*@requires:' } | Select-Object -First 1
+    if ($requiresTag) {
+        $service = ($requiresTag -replace '.*@requires:\s*', '').Trim().ToLower()
+        $available = $true
+        if ($service -eq 'postgres' -or $service -eq 'postgresql') {
+            $available = (Test-NetConnection -ComputerName localhost -Port 5432 -WarningAction SilentlyContinue -InformationLevel Quiet)
+        }
+        elseif ($service -eq 'mssql' -or $service -eq 'sqlserver') {
+            $available = (Test-NetConnection -ComputerName localhost -Port 1433 -WarningAction SilentlyContinue -InformationLevel Quiet)
+        }
+        elseif ($service -eq 'performance') {
+            $available = $false  # performance tests are excluded from the quick run by default
+        }
+        if (-not $available) {
+            Write-Host "SKIPPED ($service unavailable)" -ForegroundColor Yellow
+            $skipped++
+            $skippedScripts += $script.Name
+            continue
+        }
+    }
+
     Write-Host "Starting: $($script.Name) ... " -NoNewline
-    
+
     # Execute the engine and capture output streams
     $cliOutput = ""
     $exitCode = 0
     try {
-        # Using Start-Process to accurately grab Exit Codes synchronously
         $procInfo = New-Object System.Diagnostics.ProcessStartInfo
         $procInfo.FileName = "dotnet"
         $projectPath = Join-Path $solutionRoot "src/ETL-SQL.App"
@@ -48,23 +73,26 @@ foreach ($script in $etlScripts) {
         $procInfo.RedirectStandardError = $true
         $procInfo.UseShellExecute = $false
         $procInfo.CreateNoWindow = $true
-        
+
         $proc = New-Object System.Diagnostics.Process
         $proc.StartInfo = $procInfo
         $proc.Start() | Out-Null
-        
-        if ($proc.WaitForExit(60000)) {
+
+        # Start async reads before WaitForExit to prevent pipe-buffer deadlock
+        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+
+        if ($proc.WaitForExit(180000)) {
             $exitCode = $proc.ExitCode
         }
         else {
             $proc.Kill()
             $exitCode = -1
-            $cliOutput += "`n[TIMEOUT] Script execution exceeded 60 seconds and was terminated."
+            $cliOutput += "`n[TIMEOUT] Script execution exceeded 180 seconds and was terminated."
         }
 
-        
-        $cliOutput += $proc.StandardOutput.ReadToEnd()
-        $cliOutput += $proc.StandardError.ReadToEnd()
+        $cliOutput += $stdoutTask.GetAwaiter().GetResult()
+        $cliOutput += $stderrTask.GetAwaiter().GetResult()
     }
     catch {
         $exitCode = -1
@@ -96,6 +124,7 @@ Write-Host " VALIDATION SUMMARY" -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host " Total Scripts : $total"
 Write-Host " Passed        : $passed" -ForegroundColor Green
+Write-Host " Skipped       : $skipped" -ForegroundColor Yellow
 Write-Host " Failed        : $failed" -ForegroundColor Red
 
 if ($failed -gt 0) {

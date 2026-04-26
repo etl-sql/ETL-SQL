@@ -47,8 +47,8 @@ CREATE CONNECTION pg_ds ON POSTGRES(@pg_conn);
 PRINT 'Initializing Postgres Tables...';
 EXECUTE pg_ds
 BEGIN
-  DROP TABLE IF EXISTS EmployeeDeposits;
-  CREATE TABLE EmployeeDeposits (emp_id int, dep_date timestamp, ref_number varchar(100));
+  DROP TABLE IF EXISTS "EmployeeDeposits";
+  CREATE TABLE "EmployeeDeposits" (emp_id int, dep_date timestamp, ref_number varchar(100));
 END;
 
 -- 5. Data Generation (Local #Temp Tables)

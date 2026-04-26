@@ -1,6 +1,5 @@
--- scripts/test_sub/sub_nested.etlsql
+-- samples/test_sub/sub_nested.etlsql
 DECLARE @val INT INPUT OUTPUT;
 PRINT 'Nested wrapper starting with val: ' + CAST(@val AS VARCHAR);
-RUN SCRIPT 'scripts/test_sub/sub_increment.etlsql' WITH (@p1 = @val OUTPUT);
-SET @val = @p1;
+RUN SCRIPT 'samples/test_sub/sub_increment.etlsql' WITH (@p1 = @val);
 PRINT 'Nested wrapper ending with val: ' + CAST(@val AS VARCHAR);

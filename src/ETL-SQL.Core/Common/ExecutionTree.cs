@@ -94,9 +94,10 @@ namespace ETL_SQL.Core.Common
                 id = node.Id,
                 name = node.Name,
                 status = node.Status.ToString(),
-                rows = node.RowsProcessed,
+                rowsProcessed = node.RowsProcessed,
                 durationMs = node.GetElapsedMs(),
                 iterationCount = node.IterationCount,
+                isParallelBlock = node.IsParallelBlock,
                 velocity = node.GetVelocity(),
                 error = node.ErrorMessage,
                 children = children

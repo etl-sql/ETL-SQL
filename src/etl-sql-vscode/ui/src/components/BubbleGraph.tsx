@@ -24,7 +24,7 @@ export const BubbleGraph: React.FC<BubbleGraphProps> = ({ nodes }) => {
               w-16 h-16 rounded-full border-2 transition-all duration-500
               ${node.status === 'Running' ? 'node-running animate-pulse' : 
                 node.status === 'Completed' ? 'node-completed bg-emerald-500/10' : 
-                node.status === 'Error' ? 'node-error bg-red-500/10' : 'node-pending'}
+                node.status === 'Faulted' ? 'node-error bg-red-500/10' : 'node-pending'}
               glass-panel
             `}
           >
@@ -34,7 +34,7 @@ export const BubbleGraph: React.FC<BubbleGraphProps> = ({ nodes }) => {
                   <Check size={10} className="text-white" />
                 </div>
               )}
-              {node.status === 'Error' && (
+              {node.status === 'Faulted' && (
                 <div className="bg-red-500 rounded-full p-1 shadow-lg">
                   <X size={10} className="text-white" />
                 </div>

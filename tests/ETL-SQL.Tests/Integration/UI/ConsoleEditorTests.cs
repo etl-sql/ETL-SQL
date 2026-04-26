@@ -152,16 +152,16 @@ namespace ETL_SQL.Tests.Integration
             editor._buffer.CursorLine = 0;
             editor._renderer.Headless = true;
             
-            // Toggle focus to results
-            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F3, false, false, false));
+            // Toggle focus to results (F6)
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false));
             Assert.True(editor._renderer.ResultsFocus);
 
             // UP should scroll results, not move editor cursor
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.UpArrow, false, false, false));
             Assert.Equal(0, editor._buffer.CursorLine);
 
-            // F3 back to editor
-            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F3, false, false, false));
+            // F6 back to editor
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false));
             Assert.False(editor._renderer.ResultsFocus);
         }
 

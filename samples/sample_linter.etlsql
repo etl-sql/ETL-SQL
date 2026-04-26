@@ -5,7 +5,9 @@
 -- DELETE FROM MyTable; -- This would fail if uncommented
 
 -- Rule: AvoidSelectStar (WARNING)
-SELECT * FROM Customers;
+CREATE TABLE #Customers (Id INT, Name VARCHAR(100));
+INSERT INTO #Customers VALUES (1, 'Alice'), (2, 'Bob');
+SELECT * FROM #Customers;
 
 -- Rule: UndeclaredVariable (ERROR)
 -- SET @myVar = 10; -- Error: @myVar not declared if uncommented

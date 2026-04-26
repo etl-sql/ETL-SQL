@@ -1,74 +1,176 @@
-import React, { useMemo, useState, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { CheckCircle2, Circle, PlayCircle, AlertCircle, Clock, Database, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
-import type { ExecutionNode } from '../types';
+import React, { useEffect, useRef, useMemo } from 'react';
+import { PlayCircle } from 'lucide-react';
+import type { ExecutionNode, LogMessage, ProtocolMessage } from '../types';
 
 interface PipelineTabProps {
   nodes: ExecutionNode[];
+  messages: ProtocolMessage[];
   isFinished?: boolean;
   status?: string;
 }
 
-interface NodeWithPosition extends ExecutionNode {
-  level: number;
-  index: number;
+type NodeStatus = 'Waiting' | 'Running' | 'Completed' | 'Faulted';
+
+interface RenderLine {
+  indent: string;
+  connector: string;
+  label: string;
+  stats: string;
+  status: NodeStatus;
+  isSummary: boolean;
+  isRunning: boolean;
+  error?: string;
 }
 
-export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, isFinished, status }) => {
-  const [scale, setScale] = useState(1);
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
+const COLLAPSE_THRESHOLD = 5;
 
-  // Constants for compact layout
-  const NODE_WIDTH = 180;
-  const NODE_HEIGHT = 60;
-  const LEVEL_GAP = 100;
-  const NODE_GAP = 24;
+function statusIcon(status: NodeStatus): string {
+  switch (status) {
+    case 'Completed': return '✓';
+    case 'Faulted':   return '✗';
+    case 'Running':   return '●';
+    default:          return '·';
+  }
+}
 
-  const levels = useMemo(() => {
-    const result: NodeWithPosition[][] = [];
-    const traverse = (node: ExecutionNode, level: number) => {
-      if (!result[level]) result[level] = [];
-      const nodeWithPos: NodeWithPosition = { 
-        ...node, 
-        level, 
-        index: result[level].length,
-        status: (isFinished && (node.status === 'Running' || node.status === 'Pending')) 
-          ? 'Completed' : node.status
-      };
-      result[level].push(nodeWithPos);
-      if (node.children) node.children.forEach(child => traverse(child, level + 1));
-    };
-    nodes.forEach(root => traverse(root, 0));
-    return result;
+function statusColorClass(status: NodeStatus): string {
+  switch (status) {
+    case 'Completed': return 'text-emerald-400';
+    case 'Faulted':   return 'text-red-400';
+    case 'Running':   return 'text-blue-400';
+    default:          return 'text-slate-500';
+  }
+}
+
+function formatMs(ms: number): string {
+  if (ms >= 60_000) return `${(ms / 60_000).toFixed(1)}m`;
+  if (ms >= 1_000)  return `${(ms / 1_000).toFixed(1)}s`;
+  return `${Math.round(ms)}ms`;
+}
+
+function formatRows(r: number): string {
+  if (r >= 1_000_000) return `${(r / 1_000_000).toFixed(1)}M`;
+  if (r >= 1_000)     return `${(r / 1_000).toFixed(1)}k`;
+  return `${r}r`;
+}
+
+function formatStats(node: ExecutionNode): string {
+  if (node.status === 'Waiting') return '';
+  if (node.status === 'Running') {
+    return node.durationMs > 0 ? formatMs(node.durationMs) + '…' : '…';
+  }
+  const t = formatMs(node.durationMs);
+  return node.rowsProcessed > 0 ? `${t}  ${formatRows(node.rowsProcessed)}` : t;
+}
+
+function nodeLabel(node: ExecutionNode): string {
+  const childCount = (node.children || []).length;
+  return node.isParallelBlock ? `PARALLEL (${childCount})` : node.name;
+}
+
+function buildSummary(count: number, nodes: ExecutionNode[]): string {
+  const running   = nodes.filter(n => n.status === 'Running').length;
+  const faulted   = nodes.filter(n => n.status === 'Faulted').length;
+  const completed = nodes.filter(n => n.status === 'Completed').length;
+  const waiting   = nodes.filter(n => n.status === 'Waiting').length;
+  const parts: string[] = [];
+  if (running   > 0) parts.push(`${running} ●`);
+  if (faulted   > 0) parts.push(`${faulted} ✗`);
+  if (completed > 0) parts.push(`${completed} ✓`);
+  if (waiting   > 0) parts.push(`${waiting} ·`);
+  const desc = parts.length > 0 ? parts.join(', ') : 'all pending';
+  return `... ${count} more  (${desc})`;
+}
+
+function appendChildNode(node: ExecutionNode, indent: string, connector: string, childCont: string, lines: RenderLine[]) {
+  lines.push({
+    indent, connector,
+    label: nodeLabel(node),
+    stats: formatStats(node),
+    status: node.status as NodeStatus,
+    isSummary: false,
+    isRunning: node.status === 'Running',
+    error: node.error,
+  });
+  appendChildren(node, childCont, lines);
+}
+
+function appendChildren(node: ExecutionNode, continuation: string, lines: RenderLine[]) {
+  const children = node.children || [];
+  if (children.length === 0) return;
+  const collapse = node.isParallelBlock && children.length > COLLAPSE_THRESHOLD;
+  if (collapse) {
+    const showFirst = Math.min(2, children.length - 1);
+    for (let i = 0; i < showFirst; i++) {
+      appendChildNode(children[i], continuation, '├─ ', continuation + '│  ', lines);
+    }
+    const hiddenCount = children.length - showFirst - 1;
+    if (hiddenCount > 0) {
+      const hidden = children.slice(showFirst, showFirst + hiddenCount);
+      lines.push({ indent: continuation, connector: '┊  ', label: buildSummary(hiddenCount, hidden), stats: '', status: 'Waiting', isSummary: true, isRunning: false });
+    }
+    appendChildNode(children[children.length - 1], continuation, '└─ ', continuation + '   ', lines);
+  } else {
+    for (let i = 0; i < children.length; i++) {
+      const isLast = i === children.length - 1;
+      appendChildNode(children[i], continuation, isLast ? '└─ ' : '├─ ', continuation + (isLast ? '   ' : '│  '), lines);
+    }
+  }
+}
+
+function renderTree(nodes: ExecutionNode[]): RenderLine[] {
+  const lines: RenderLine[] = [];
+  for (const root of nodes) {
+    lines.push({
+      indent: '', connector: '',
+      label: nodeLabel(root),
+      stats: formatStats(root),
+      status: root.status as NodeStatus,
+      isSummary: false,
+      isRunning: root.status === 'Running',
+      error: root.error,
+    });
+    appendChildren(root, '', lines);
+  }
+  return lines;
+}
+
+function msgLevelClass(level: string): string {
+  switch ((level || 'info').toLowerCase()) {
+    case 'err':
+    case 'error':   return 'text-red-400';
+    case 'warn':
+    case 'warning': return 'text-yellow-400/80';
+    case 'sys':     return 'text-slate-500';
+    default:        return 'text-[var(--text-primary)] opacity-80';
+  }
+}
+
+export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFinished, status }) => {
+  const logRef = useRef<HTMLDivElement>(null);
+  const logs = useMemo(() => messages.filter(m => m.type === 'message') as LogMessage[], [messages]);
+
+  useEffect(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
+  }, [logs.length]);
+
+  const normalizedNodes = useMemo(() => {
+    if (!isFinished) return nodes;
+    const fix = (n: ExecutionNode): ExecutionNode => ({
+      ...n,
+      status: (n.status === 'Running' || n.status === 'Waiting') ? 'Completed' : n.status,
+      children: n.children?.map(fix),
+    });
+    return nodes.map(fix);
   }, [nodes, isFinished]);
 
-  // Zoom/Pan Handlers
-  const handleWheel = (e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      setScale(prev => Math.min(Math.max(0.2, prev * delta), 3));
-    } else {
-       setOffset(prev => ({ x: prev.x - e.deltaX, y: prev.y - e.deltaY }));
-    }
-  };
+  const lines = useMemo(() => renderTree(normalizedNodes), [normalizedNodes]);
 
-  const handleMouseDown = () => setIsDragging(true);
-  const handleMouseUp = () => setIsDragging(false);
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (isDragging) {
-      setOffset(prev => ({ x: prev.x + e.movementX, y: prev.y + e.movementY }));
-    }
-  };
+  const isEmpty = nodes.length === 0 && logs.length === 0;
 
-  const resetView = () => {
-    setScale(1);
-    setOffset({ x: 0, y: 0 });
-  };
-
-  if (!nodes || nodes.length === 0) {
+  if (isEmpty) {
     if (status === 'running') {
       return (
         <div className="flex flex-col items-center justify-center h-full space-y-4 font-display">
@@ -94,127 +196,62 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, isFinished, sta
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-[var(--bg-darker)]/40 font-sans">
-      {/* Zoom Controls Overlay */}
-      <div className="absolute bottom-6 right-6 z-50 flex items-center gap-2 bg-[var(--bg-darker)] backdrop-blur-md border border-[var(--border)] rounded-full p-2">
-         <button onClick={() => setScale(s => Math.min(s + 0.1, 3))} className="p-2 hover:bg-white/10 rounded-full transition-colors text-white/60 hover:text-white" title="Zoom In"><ZoomIn size={14} /></button>
-         <div className="w-[1px] h-4 bg-white/10 mx-1" />
-         <button onClick={() => setScale(s => Math.max(s - 0.1, 0.2))} className="p-2 hover:bg-white/10 rounded-full transition-colors text-white/60 hover:text-white" title="Zoom Out"><ZoomOut size={14} /></button>
-         <div className="w-[1px] h-4 bg-white/10 mx-1" />
-         <button onClick={resetView} className="p-2 hover:bg-white/10 rounded-full transition-colors text-white/60 hover:text-white" title="Reset View"><Maximize size={14} /></button>
-         <span className="px-3 text-[10px] font-bold text-indigo-400 font-mono">{Math.round(scale * 100)}%</span>
+    <div className="flex flex-row h-full overflow-hidden">
+      {/* Left: Execution tree (~40%) */}
+      <div className="w-[40%] min-w-[160px] flex flex-col border-r border-[var(--border)] overflow-hidden">
+        <div className="px-3 py-1.5 border-b border-[var(--border)] shrink-0 bg-[var(--bg-darker)]/40">
+          <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-cyan-400">Pipeline</span>
+        </div>
+        <div className="flex-1 overflow-auto scrollbar-fancy p-2 font-mono text-[12px] leading-[1.65]">
+          {lines.length === 0 ? (
+            <p className="text-[var(--muted)] text-[11px] italic px-1">No pipeline data.</p>
+          ) : (
+            lines.map((line, idx) => (
+              <div key={idx} className="flex items-baseline whitespace-pre min-w-0">
+                <span className="text-[var(--muted)] select-none">{line.indent}</span>
+                <span className="text-[var(--muted)] select-none">{line.connector}</span>
+                {!line.isSummary && (
+                  <span className={`mr-1.5 shrink-0 ${statusColorClass(line.status)} ${line.isRunning ? 'animate-pulse' : ''}`}>
+                    {statusIcon(line.status)}
+                  </span>
+                )}
+                <span className={
+                  line.isSummary ? 'text-[var(--muted)] italic text-[11px]' :
+                  line.status === 'Faulted' ? 'text-red-300' : 'text-[var(--text-primary)]'
+                }>
+                  {line.label}
+                </span>
+                {line.stats && (
+                  <span className="ml-3 text-[var(--muted)] text-[11px] shrink-0">{line.stats}</span>
+                )}
+                {line.error && (
+                  <span className="ml-2 text-red-400/70 text-[10px] italic truncate" title={line.error}>
+                    — {line.error}
+                  </span>
+                )}
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
-      <div 
-        ref={containerRef}
-        className={`h-full w-full cursor-grab ${isDragging ? 'cursor-grabbing' : ''}`}
-        onWheel={handleWheel}
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => setIsDragging(false)}
-      >
-        <div 
-          className="absolute origin-top-left transition-transform duration-75 ease-out min-h-[400px]"
-          style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`, padding: '8px' }}
-        >
-          {/* SVG Connections with adjusted math */}
-          <svg 
-            className="absolute inset-0 pointer-events-none opacity-20" 
-            style={{ 
-              width: levels.length * (NODE_WIDTH + LEVEL_GAP) + 500, 
-              height: '2000px' 
-            }}
-          >
-            {levels.map((levelNodes, lIdx) => 
-              levelNodes.map((node, nIdx) => 
-                node.children?.map((child) => {
-                  const x1 = lIdx * (NODE_WIDTH + LEVEL_GAP) + (NODE_WIDTH) + 100;
-                  const y1 = nIdx * (NODE_HEIGHT + NODE_GAP) + (NODE_HEIGHT / 2) + 100;
-                  const nextLevel = levels[lIdx + 1];
-                  if (!nextLevel) return null;
-                  
-                  const targetNodeIdx = nextLevel.findIndex(n => n.id === child?.id);
-                  if (targetNodeIdx === -1) return null;
-
-                  const x2 = (lIdx + 1) * (NODE_WIDTH + LEVEL_GAP) + 100;
-                  const y2 = targetNodeIdx * (NODE_HEIGHT + NODE_GAP) + (NODE_HEIGHT / 2) + 100;
-                  const midX = (x1 + x2) / 2;
-                  
-                  return (
-                    <path
-                      key={`${node.id}-${child.id}`}
-                      d={`M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`}
-                      stroke="var(--primary)"
-                      strokeWidth="1.5"
-                      fill="none"
-                    />
-                  );
-                })
-              )
-            )}
-          </svg>
-
-          <div className="flex gap-[100px] relative z-10">
-            {levels.map((levelNodes, lIdx) => (
-              <div key={lIdx} className="flex flex-col gap-6">
-                {levelNodes.map((node) => (
-                  <NodeItem key={node.id} node={node} />
-                ))}
+      {/* Right: Message log */}
+      <div ref={logRef} className="flex-1 flex flex-col overflow-hidden">
+        <div className="px-3 py-1.5 border-b border-[var(--border)] shrink-0 bg-[var(--bg-darker)]/40">
+          <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-yellow-400/70">Messages</span>
+        </div>
+        <div className="flex-1 overflow-auto scrollbar-fancy p-2 font-mono text-[11px] leading-[1.7]">
+          {logs.length === 0 ? (
+            <p className="text-[var(--muted)] italic px-1">No messages.</p>
+          ) : (
+            logs.map((msg, i) => (
+              <div key={i} className={msgLevelClass(msg.level)}>
+                {msg.text}
               </div>
-            ))}
-          </div>
+            ))
+          )}
         </div>
       </div>
     </div>
-  );
-};
-
-const NodeItem: React.FC<{ node: ExecutionNode }> = ({ node }) => {
-  const statusConfig = {
-    Pending: { icon: Circle, color: 'text-[var(--muted)]', border: 'border-[var(--border)]' },
-    Running: { icon: PlayCircle, color: 'text-blue-400', border: 'border-blue-500/30' },
-    Completed: { icon: CheckCircle2, color: 'text-emerald-400', border: 'border-emerald-500/30' },
-    Error: { icon: AlertCircle, color: 'text-red-400', border: 'border-red-500/30' },
-  };
-
-  const config = statusConfig[node.status as keyof typeof statusConfig] || statusConfig.Pending;
-  const Icon = config.icon;
-
-  return (
-    <motion.div
-      layout
-      className={`
-        flex items-center gap-2.5 px-3 py-2 w-[180px] h-[60px] glass-card border-l-2 ${config.border}
-        transition-all duration-300 hover:bg-white/[0.05] relative group
-      `}
-    >
-      <div className={`${config.color} shrink-0`}>
-        {node.status === 'Running' ? (
-          <Icon size={16} className="animate-spin-slow" />
-        ) : (
-          <Icon size={16} />
-        )}
-      </div>
-      
-      <div className="flex-1 min-w-0">
-        <div className="text-[10px] font-bold font-display truncate uppercase tracking-widest text-[var(--text)] opacity-80 group-hover:opacity-100 transition-opacity flex items-center gap-1.5">
-          {node.name}
-          {node.iterationCount && node.iterationCount > 1 && (
-            <span className="bg-indigo-500/20 text-indigo-400 px-1 rounded text-[8px] border border-indigo-500/20">
-              x{node.iterationCount}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 mt-0.5 opacity-40 text-[8px] font-mono font-bold">
-          <span className="flex items-center gap-0.5"><Clock size={8} />{node.durationMs ?? 0}ms</span>
-          <span className="flex items-center gap-0.5"><Database size={8} />{node.rowsProcessed?.toLocaleString() ?? 0}</span>
-        </div>
-      </div>
-
-      {node.status === 'Running' && (
-        <div className="absolute inset-0 bg-blue-500/[0.03] animate-pulse rounded-lg pointer-events-none" />
-      )}
-    </motion.div>
   );
 };

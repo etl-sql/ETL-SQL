@@ -151,48 +151,67 @@ namespace ETL_SQL.Connectors.Oracle
         public async IAsyncEnumerable<DataTable> ExecuteRawSql(string sql, IEnumerable<object?>? parameters = null)
         {
             using var conn = await OpenConnectionAsync();
-            
-            // Wire up InfoMessage if needed, Oracle doesn't have InfoMessage like SQL Server,
-            // but we can log execution start/finish if we want.
-            
-            using var cmd = new OracleCommand(sql, conn);
-            
-            int paramCount = 0;
-            if (parameters != null)
+
+            // Oracle ODP.NET does not support multi-statement batches. Split on ';' and execute individually.
+            var statements = SplitOracleStatements(sql);
+            var paramList = parameters?.ToList() ?? new List<object?>();
+
+            DataTable? lastResultBatch = null;
+            foreach (var stmtSql in statements)
             {
-                foreach (var param in parameters)
-                {
+                using var cmd = new OracleCommand(stmtSql, conn);
+                int paramCount = 0;
+                foreach (var param in paramList)
                     cmd.Parameters.Add(new OracleParameter($"p{paramCount++}", param ?? DBNull.Value));
-                }
-            }
-            
-            if (paramCount > 0)
-            {
-                cmd.CommandText = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(cmd.CommandText, ":");
-            }
+                if (paramCount > 0)
+                    cmd.CommandText = ETL_SQL.Core.Common.ParameterUtility.ProcessParameters(cmd.CommandText, ":");
 
-            using var reader = await cmd.ExecuteReaderAsync();
-
-            var columns = new List<string>();
-            for (int i = 0; i < reader.FieldCount; i++)
-            {
-                columns.Add(reader.GetName(i));
-            }
-
-            var resultBatch = new DataTable();
-            foreach (var col in columns) resultBatch.ColumnNames.Add(col);
-
-            while (await reader.ReadAsync())
-            {
-                var row = new Row();
+                using var reader = await cmd.ExecuteReaderAsync();
+                var columns = new List<string>();
                 for (int i = 0; i < reader.FieldCount; i++)
+                    columns.Add(reader.GetName(i));
+
+                var resultBatch = new DataTable();
+                foreach (var col in columns) resultBatch.ColumnNames.Add(col);
+                while (await reader.ReadAsync())
                 {
-                    row[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                    var row = new Row();
+                    for (int i = 0; i < reader.FieldCount; i++)
+                        row[columns[i]] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                    await resultBatch.AddRowAsync(row);
                 }
-                await resultBatch.AddRowAsync(row);
+                resultBatch.RowsAffected = (int)reader.RecordsAffected;
+                lastResultBatch = resultBatch;
             }
-            resultBatch.RowsAffected = (int)reader.RecordsAffected;
-            yield return resultBatch;
+            if (lastResultBatch != null)
+                yield return lastResultBatch;
+        }
+
+        private static IEnumerable<string> SplitOracleStatements(string sql)
+        {
+            // Split by semicolons outside string literals, skip empty segments.
+            var sb = new System.Text.StringBuilder();
+            bool inString = false;
+            for (int i = 0; i < sql.Length; i++)
+            {
+                char c = sql[i];
+                if (c == '\'' && !inString) { inString = true; sb.Append(c); }
+                else if (c == '\'' && inString)
+                {
+                    sb.Append(c);
+                    if (i + 1 < sql.Length && sql[i + 1] == '\'') { sb.Append(sql[++i]); } // escaped ''
+                    else inString = false;
+                }
+                else if (c == ';' && !inString)
+                {
+                    var stmt = sb.ToString().Trim();
+                    if (!string.IsNullOrEmpty(stmt)) yield return stmt;
+                    sb.Clear();
+                }
+                else sb.Append(c);
+            }
+            var last = sb.ToString().Trim();
+            if (!string.IsNullOrEmpty(last)) yield return last;
         }
 
         public Task<IEnumerable<string>> GetColumnsAsync()

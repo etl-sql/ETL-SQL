@@ -15,7 +15,7 @@ interface ResultGridProps {
 }
 
 export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
-  const columnHelper = createColumnHelper<any>();
+  const columnHelper = useMemo(() => createColumnHelper<any>(), []);
   const [columnFilters, setColumnFilters] = useState<any[]>([]);
   const [showFilters, setShowFilters] = useState(false);
 
@@ -69,7 +69,7 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
     URL.revokeObjectURL(url);
   };
 
-  if (!rows || rows.length === 0) return null;
+  if (!columns || columns.length === 0) return null;
 
   return (
     <div className="flex flex-row h-full min-h-0 animate-fade-in gap-1 p-1">
@@ -96,18 +96,26 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
             ))}
           </thead>
           <tbody>
-            {table.getRowModel().rows.map((row) => (
-              <tr key={row.id} className="hover:bg-indigo-500/[0.03] transition-colors group">
-                {row.getVisibleCells().map((cell) => (
-                  <td
-                    key={cell.id}
-                    className="px-2 py-0.5 border-b border-[var(--border)] whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px] text-[var(--text-primary)] opacity-90 group-hover:opacity-100 transition-opacity"
-                  >
-                    <span className="font-mono">{flexRender(cell.column.columnDef.cell, cell.getContext())}</span>
-                  </td>
-                ))}
+            {table.getRowModel().rows.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length} className="px-2 py-4 text-center text-[var(--muted)] text-[11px] italic opacity-50">
+                  0 rows returned
+                </td>
               </tr>
-            ))}
+            ) : (
+              table.getRowModel().rows.map((row) => (
+                <tr key={row.id} className="hover:bg-indigo-500/[0.03] transition-colors group">
+                  {row.getVisibleCells().map((cell) => (
+                    <td
+                      key={cell.id}
+                      className="px-2 py-0.5 border-b border-[var(--border)] whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px] text-[var(--text-primary)] opacity-90 group-hover:opacity-100 transition-opacity"
+                    >
+                      <span className="font-mono">{flexRender(cell.column.columnDef.cell, cell.getContext())}</span>
+                    </td>
+                  ))}
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

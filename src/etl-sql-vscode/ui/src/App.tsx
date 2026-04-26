@@ -1,17 +1,14 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useVsCodeApi } from './hooks/useVsCodeApi';
 import { PipelineTab } from './components/PipelineTab';
-import { ExecutionConsole } from './components/ExecutionConsole';
 import { ResultGrid } from './components/ResultGrid';
 import { PerformanceTab } from './components/PerformanceTab';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ReportTab } from './components/ReportTab';
-import type { ResultsMessage, PerformanceMessage, VariablesMessage, ReportManifest } from './types';
-import { RefreshCw, BarChart3, Database, Terminal, Activity, GitBranch, Variable as VariableIcon, Layout, ChevronLeft, ChevronRight, LayoutList, Square } from 'lucide-react';
+import type { ResultsMessage, PerformanceMessage, ReportManifest } from './types';
+import { RefreshCw, BarChart3, Database, Activity, GitBranch, Layout, ChevronLeft, ChevronRight, LayoutList, Square } from 'lucide-react';
 import { extractPipelineNodes } from './utils/pipeline_utils';
-import { extractVariables } from './utils/variable_utils';
 import { SidebarExplorer } from './components/SidebarExplorer';
-import { VariablesTab } from './components/VariablesTab';
 
 declare global {
   interface Window {
@@ -19,7 +16,7 @@ declare global {
   }
 }
 
-type TabId = 'pipeline' | 'results' | 'messages' | 'performance' | 'variables' | 'report';
+type TabId = 'pipeline' | 'results' | 'performance' | 'report';
 
 function App() {
   const { messages, status, postMessage } = useVsCodeApi();
@@ -30,7 +27,7 @@ function App() {
 
   useEffect(() => {
     if (status === 'error' && prevStatusRef.current !== 'error') {
-      setActiveTab('messages');
+      setActiveTab('pipeline');
     }
     prevStatusRef.current = status;
   }, [status]);
@@ -81,14 +78,14 @@ function App() {
     return messages.filter(m => m.type === 'results') as ResultsMessage[];
   }, [messages]);
 
-  // Auto-advance to latest result set when a new one arrives
-  useState(() => {
-    if (results.length > 0) setSelectedResultIndex(results.length - 1);
-  });
-
-  // Watch for length changes to auto-advance
-  useMemo(() => {
-    if (results.length > 0) setSelectedResultIndex(results.length - 1);
+  // Auto-advance to latest result set; reset compare mode when results are cleared
+  useEffect(() => {
+    if (results.length > 0) {
+      setSelectedResultIndex(results.length - 1);
+    } else {
+      setSelectedResultIndex(0);
+      setIsCompareMode(false);
+    }
   }, [results.length]);
 
   const currentResult = results[selectedResultIndex] || results[results.length - 1];
@@ -96,16 +93,6 @@ function App() {
   const perf = useMemo(() => {
     const perfMessages = messages.filter(m => m.type === 'performance') as PerformanceMessage[];
     return perfMessages.length > 0 ? perfMessages[perfMessages.length - 1].metrics : null;
-  }, [messages]);
-
-  const runtimeVars = useMemo(() => {
-    const runtimeMsg = [...messages].reverse().find(m => (m as any).type === 'variables');
-    return extractVariables(runtimeMsg as VariablesMessage);
-  }, [messages]);
-
-  const scriptVars = useMemo(() => {
-    const scriptMsg = [...messages].reverse().find(m => (m as any).type === 'scriptVariables');
-    return extractVariables(scriptMsg as VariablesMessage);
   }, [messages]);
 
   const statusConfig = {
@@ -118,9 +105,7 @@ function App() {
   const tabs: { id: TabId, label: string, icon: any, badge?: number }[] = [
     { id: 'pipeline', label: 'Pipeline', icon: GitBranch },
     { id: 'results', label: 'Results', icon: Database, badge: results.length > 1 ? results.length : currentResult?.rows.length },
-    { id: 'messages', label: 'Messages', icon: Terminal },
     { id: 'performance', label: 'Performance', icon: Activity },
-    { id: 'variables', label: 'Variables', icon: VariableIcon, badge: runtimeVars.length + scriptVars.length },
   ];
 
   const formatDuration = (ms: number) => {
@@ -175,7 +160,7 @@ function App() {
               <div className="h-full w-2/5 bg-gradient-to-r from-transparent via-indigo-400 to-transparent animate-loading-bar" />
             </div>
           )}
-          {activeTab === 'pipeline' && <PipelineTab nodes={pipeline} isFinished={status === 'finished'} status={status} />}
+          {activeTab === 'pipeline' && <PipelineTab nodes={pipeline} messages={messages} isFinished={status === 'finished'} status={status} />}
           {activeTab === 'results' && (
              <div className="flex-1 min-h-0 p-6 flex flex-col overflow-hidden">
                 {isCompareMode ? (
@@ -254,9 +239,7 @@ function App() {
                 )}
              </div>
           )}
-          {activeTab === 'messages' && <ExecutionConsole messages={messages} />}
-          {activeTab === 'performance' && <PerformanceTab metrics={perf} />}
-          {activeTab === 'variables' && <VariablesTab messages={messages} />}
+{activeTab === 'performance' && <PerformanceTab metrics={perf} />}
         </main>
       </div>
 

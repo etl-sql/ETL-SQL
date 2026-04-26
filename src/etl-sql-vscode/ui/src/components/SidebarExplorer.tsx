@@ -28,32 +28,7 @@ export const SidebarExplorer: React.FC<SidebarExplorerProps> = ({ messages, post
     return latestByUri.get(activeUri || '') || [];
   }, [messages, activeUri]);
 
-  const variables = useMemo(() => {
-    // 1. Get the latest runtime variables (from execution)
-    const runtimeMsg = [...messages].reverse().find(m => (m as any).type === 'variables');
-    const runtimeVars = extractVariables(runtimeMsg) as ScriptVar[];
-
-    // 2. Get the latest script variables (from LSP while typing)
-    const scriptMsg = [...messages].reverse().find(m => (m as any).type === 'scriptVariables');
-    const scriptVars = extractVariables(scriptMsg) as any[];
-
-    const merged = new Map<string, ScriptVar>();
-    scriptVars.forEach((v: any) => {
-      merged.set(v.name.toLowerCase(), {
-        name: v.name,
-        typeName: v.typeName,
-        value: v.value || '(declared)'
-      });
-    });
-
-    runtimeVars.forEach(v => {
-      merged.set(v.name.toLowerCase(), v);
-    });
-
-    return Array.from(merged.values());
-  }, [messages]);
-
-  useEffect(() => {
+useEffect(() => {
     const activeMsg = [...messages].reverse().find(m => (m as any).type === 'activeEditorChanged');
     if (activeMsg?.type === 'activeEditorChanged') {
       setActiveUri(activeMsg.uri);
@@ -64,6 +39,17 @@ export const SidebarExplorer: React.FC<SidebarExplorerProps> = ({ messages, post
     // Signal ready to extension to receive initial data
     postMessage({ type: 'ready' });
   }, []);
+
+  const variables = useMemo(() => {
+    const runtimeMsg = [...messages].reverse().find(m => (m as any).type === 'variables');
+    const runtimeVars = extractVariables(runtimeMsg) as ScriptVar[];
+    const scriptMsg = [...messages].reverse().find(m => (m as any).type === 'scriptVariables');
+    const scriptVars = extractVariables(scriptMsg) as any[];
+    const merged = new Map<string, ScriptVar>();
+    scriptVars.forEach((v: any) => merged.set(v.name.toLowerCase(), { name: v.name, typeName: v.typeName, value: v.value || '(declared)' }));
+    runtimeVars.forEach(v => merged.set(v.name.toLowerCase(), v));
+    return Array.from(merged.values());
+  }, [messages]);
 
   const filteredConnections = connections.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredVariables = variables.filter(v => v.name.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -150,7 +136,7 @@ export const SidebarExplorer: React.FC<SidebarExplorerProps> = ({ messages, post
               <Variable size={10} /> Script Variables
             </div>
             {filteredVariables.map(v => (
-              <MetadataItem 
+              <MetadataItem
                 key={v.name}
                 label={v.name}
                 type="variable"

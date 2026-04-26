@@ -39,17 +39,21 @@ namespace ETL_SQL
                 Console.Error.WriteLine("[DI_READY] Dependency injection logic completed.");
 
 
-                // Start scheduler
-                try
+                // Start scheduler only for interactive/daemon modes, not for one-shot script execution
+                bool isOneShot = args.Length > 0 && (args[0] == "run" || args[0] == "--run");
+                if (!isOneShot)
                 {
-                    var scheduler = ServiceProvider.GetRequiredService<SchedulerService>();
-                    scheduler.Start();
-                    Console.Error.WriteLine("[SCHEDULER_START] Background scheduler is active.");
-                    AppDomain.CurrentDomain.ProcessExit += (s, e) => scheduler.Stop();
-                }
-                catch (Exception schedEx)
-                {
-                    Console.Error.WriteLine($"[SCHEDULER_WARN] Background scheduler failed to start. Scheduled jobs will not run in this session. Error: {schedEx.Message}");
+                    try
+                    {
+                        var scheduler = ServiceProvider.GetRequiredService<SchedulerService>();
+                        scheduler.Start();
+                        Console.Error.WriteLine("[SCHEDULER_START] Background scheduler is active.");
+                        AppDomain.CurrentDomain.ProcessExit += (s, e) => scheduler.Stop();
+                    }
+                    catch (Exception schedEx)
+                    {
+                        Console.Error.WriteLine($"[SCHEDULER_WARN] Background scheduler failed to start. Scheduled jobs will not run in this session. Error: {schedEx.Message}");
+                    }
                 }
 
                 if (args.Length == 0 || (args.Length == 1 && (args[0] == "--help" || args[0] == "-h" || args[0] == "-?")))

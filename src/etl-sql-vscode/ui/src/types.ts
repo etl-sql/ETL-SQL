@@ -3,10 +3,13 @@ export type MessageLevel = 'info' | 'warn' | 'err' | 'sys';
 export interface ExecutionNode {
     id: string;
     name: string;
-    status: 'Pending' | 'Running' | 'Completed' | 'Error';
+    status: 'Waiting' | 'Running' | 'Completed' | 'Faulted';
     rowsProcessed: number;
     durationMs: number;
     iterationCount?: number;
+    isParallelBlock?: boolean;
+    velocity?: number;
+    error?: string;
     children?: ExecutionNode[];
 }
 
@@ -28,9 +31,7 @@ export interface ResultsMessage {
 
 export interface ProgressMessage {
     type: 'progress';
-    data: {
-        roots: ExecutionNode[];
-    };
+    data: ExecutionNode[];
 }
 
 export interface LogMessage {
