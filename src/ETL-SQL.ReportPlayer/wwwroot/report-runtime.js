@@ -11,11 +11,39 @@
 
     // Web mode  (single or multi-report server): window.__IS_WEB__ = true
     // VS Code mode (webview preview):           window.__MANIFEST__ set, no __IS_WEB__
-    const isWebMode = !!window.__IS_WEB__;
+    const isWebMode = window.location.protocol.startsWith('http');
+    
+    function getOption(options, key) {
+        if (!options) return null;
+        const lookup = key.toLowerCase();
+        for (let k in options) {
+            if (k.toLowerCase() === lookup) return options[k];
+        }
+        return null;
+    }
+
+    function getParam(params, name) {
+        if (!params || !name) return undefined;
+        const lookup = name.toLowerCase();
+        for (let k in params) {
+            if (k.toLowerCase() === lookup) return params[k];
+        }
+        return undefined;
+    }
+
+    function noDataEl(msg) {
+        const div = document.createElement('div');
+        div.className = 'no-data';
+        div.textContent = msg;
+        return div;
+    }
 
     // In multi-report mode the server injects window.__API_BASE__ = '/reports/{name}/api'.
     // Single-report and VS Code modes default to '/api'.
     const apiBase = (window.__API_BASE__ || '/api').replace(/\/$/, '');
+
+    // Current report parameters (for interactive controls)
+    const parameters = {};
 
     /**
      * Entry point: obtain manifest and render all visuals + pages.
@@ -46,18 +74,33 @@
     function renderManifest(manifest) {
         const root = document.getElementById('root');
         if (!root) return;
-        root.innerHTML = '';
+        root.innerHTML = ''; // Clear for full rebuild
+
+        // Update local parameters from manifest
+        if (manifest.parameters) {
+            Object.keys(manifest.parameters).forEach(k => {
+                parameters[k] = manifest.parameters[k];
+            });
+            syncParameters(manifest.parameters);
+        }
 
         // Navigation bar
         const navDef = manifest.navigations && manifest.navigations.length > 0
             ? manifest.navigations[0] : null;
 
         if (manifest.pages && manifest.pages.length > 0) {
-            // Render all pages (hidden by default when nav exists)
             const pageSections = {};
+            const defaultPageName = navDef ? (navDef.defaultPage || manifest.pages[0].name) : manifest.pages[0].name;
+
             manifest.pages.forEach(page => {
-                const section = renderPage(root, page, manifest, !!navDef);
-                pageSections[page.name] = section;
+                const pageStyles = page.styles || {};
+                const pageTheme = pageStyles['THEME'] || pageStyles['theme'] || null;
+                const section = renderPage(manifest, page, pageSections, pageTheme);
+                root.appendChild(section);
+
+                if (navDef && page.name !== defaultPageName) {
+                    section.style.display = 'none';
+                }
             });
 
             if (navDef) {
@@ -135,68 +178,47 @@
         });
     }
 
+    function syncParameters(params) {
+        if (!params) return;
+        for (let name in params) {
+            const val = params[name];
+            const elements = document.querySelectorAll(`[data-parameter]`);
+            elements.forEach(el => {
+                const paramKey = el.getAttribute('data-parameter');
+                if (paramKey && paramKey.toLowerCase() === name.toLowerCase()) {
+                    const targets = (el.tagName === 'SELECT' || el.tagName === 'INPUT') 
+                                    ? [el] 
+                                    : Array.from(el.querySelectorAll('select, input'));
+                    targets.forEach(t => {
+                        if (t.value !== val) t.value = val;
+                    });
+                }
+            });
+        }
+    }
+
     function resizeChartsIn(section) {
         section.querySelectorAll('.chart-wrapper').forEach(w => {
             if (w._echartsInst) w._echartsInst.resize();
         });
     }
 
-    function renderPage(container, page, manifest, hideByDefault) {
-        const section = document.createElement('section');
-        section.className = 'page' + (hideByDefault ? '' : ' active');
-        if (hideByDefault) section.style.display = 'none';
+    function renderPage(manifest, page, pageSections, pageTheme) {
+        const div = document.createElement('div');
+        div.className = 'page';
+        if (page.name) div.id = 'page-' + page.name.toLowerCase();
 
         const heading = document.createElement('h2');
         heading.textContent = page.name;
-        section.appendChild(heading);
+        div.appendChild(heading);
 
-        // Extract page-level theme for cascading to charts
-        const pageStyles = page.styles || {};
-        const pageTheme  = pageStyles['THEME'] || pageStyles['theme'] || null;
+        const content = document.createElement('div');
+        content.className = 'page-grid';
+        div.appendChild(content);
 
-        // Build CSS grid content div if structure is present
-        const contentDiv = document.createElement('div');
-        if (page.structure) {
-            contentDiv.className = 'page-grid';
-            // Parse STRUCTURE: 'A A / B C' → grid-template-areas
-            const rows = page.structure.split('/').map(r => '"' + r.trim() + '"');
-            contentDiv.style.gridTemplateAreas = rows.join(' ');
-            // Determine unique area letters to set grid-template-columns/rows
-            const uniquePerRow = page.structure.split('/').map(r => r.trim().split(/\s+/).filter((v, i, a) => a.indexOf(v) === i).length);
-            contentDiv.style.gridTemplateColumns = 'repeat(' + Math.max(...uniquePerRow) + ', 1fr)';
-        }
-        section.appendChild(contentDiv);
-
-        // Render visuals in slot order
-        const containers = manifest.containers || [];
-        const uniqueSlotValues = [...new Set(Object.values(page.slotMap || {}))];
-        uniqueSlotValues.forEach(slotValue => {
-            // Find the slot letter(s) for this value
-            const slotLetters = Object.keys(page.slotMap || {}).filter(k => page.slotMap[k] === slotValue);
-            const gridArea = slotLetters[0]; // use first letter as grid-area
-
-            // Check if slotValue refers to a container
-            const containerDef = containers.find(c => c.name.toLowerCase() === slotValue.toLowerCase());
-            if (containerDef) {
-                const wrapper = document.createElement('div');
-                wrapper.style.gridArea = gridArea;
-                renderContainer(wrapper, containerDef, manifest, pageTheme);
-                contentDiv.appendChild(wrapper);
-                return;
-            }
-
-            // Otherwise it's a visual
-            const visual = (manifest.visuals || []).find(v => v.name.toLowerCase() === slotValue.toLowerCase());
-            if (visual) {
-                const wrapper = document.createElement('div');
-                wrapper.style.gridArea = gridArea;
-                renderVisual(wrapper, visual, pageTheme);
-                contentDiv.appendChild(wrapper);
-            }
-        });
-
-        container.appendChild(section);
-        return section;
+        pageSections[page.name] = div;
+        renderLayout(content, page, manifest, pageTheme);
+        return div;
     }
 
     function renderContainer(container, containerDef, manifest, pageTheme) {
@@ -210,18 +232,65 @@
             div.style.maxHeight = height;
         }
 
-        (containerDef.visuals || []).forEach(visualName => {
-            const visual = (manifest.visuals || []).find(v => v.name.toLowerCase() === visualName.toLowerCase());
-            if (visual) renderVisual(div, visual, pageTheme);
-        });
-
+        renderLayout(div, containerDef, manifest, pageTheme);
         container.appendChild(div);
+    }
+
+    function renderLayout(container, layoutDef, manifest, pageTheme) {
+        if (layoutDef.structure) {
+            container.style.display = 'grid';
+            // CSS grid-template-areas needs each row quoted: "A A" "B C"
+            // The manifest structure is likely: A A / B C or multiline strings
+            container.style.gridTemplateAreas = layoutDef.structure
+                .split('/')
+                .map(r => r.trim())
+                .filter(r => r.length > 0)
+                .map(row => `"${row}"`)
+                .join(' ');
+            // Extract unique letters to set column count if needed (simplified fallback)
+            const areas = layoutDef.structure.split('/').map(r => r.trim()).filter(r => r);
+            if (areas.length > 0) {
+                const cols = areas[0].split(/\s+/).length;
+                container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+            }
+
+            const slotMap = layoutDef.slotMap || {};
+            Object.keys(slotMap).forEach(slotLetter => {
+                const item = slotMap[slotLetter];
+                if (!item) return;
+
+                const wrapper = document.createElement('div');
+                wrapper.style.gridArea = slotLetter;
+
+                // Item could be a visual or another container
+                const visual = (manifest.visuals || []).find(v => v.name.toLowerCase() === item.toLowerCase());
+                if (visual) {
+                    renderVisual(wrapper, visual, pageTheme, manifest);
+                } else {
+                    const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
+                    if (nested) renderContainer(wrapper, nested, manifest, pageTheme);
+                }
+                container.appendChild(wrapper);
+            });
+        } else {
+            const slotMap = layoutDef.slotMap || {};
+            const uniqueItems = [...new Set(Object.values(slotMap))];
+            uniqueItems.forEach(item => {
+                const visual = (manifest.visuals || []).find(v => v.name.toLowerCase() === item.toLowerCase());
+                if (visual) {
+                    renderVisual(container, visual, pageTheme, manifest);
+                } else {
+                    const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
+                    if (nested) renderContainer(container, nested, manifest, pageTheme);
+                }
+            });
+        }
     }
 
     // Filter types that render without requiring rows
     const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'DATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH']);
 
-    function renderVisual(container, visual, pageTheme) {
+    function renderVisual(container, visual, pageTheme, manifest) {
         const card = document.createElement('div');
         card.className = 'visual-card';
 
@@ -237,6 +306,11 @@
 
         const title = document.createElement('h3');
         title.textContent = visual.name;
+        
+        // Hide redundant header if chart/card has its own title/label
+        const specificTitle = getOption(visual.options, 'TITLE') || getOption(visual.options, 'mapping:label');
+        if (specificTitle) title.style.display = 'none';
+
         card.appendChild(title);
 
         if (visual.error) {
@@ -264,11 +338,11 @@
         switch (type) {
             case 'TABLE':       renderTable(card, visual);                        break;
             case 'CARD':        renderCard(card, visual);                         break;
-            case 'SLICER':      renderSlicer(card, visual);                       break;
+            case 'SLICER':      renderSlicer(card, visual, manifest);             break;
             case 'TEXT':        renderText(card, visual);                         break;
             case 'DATEPICKER':  renderDatePicker(card, visual);                   break;
             case 'SLIDER':      renderSlider(card, visual);                       break;
-            case 'MULTISELECT': renderMultiSelect(card, visual);                  break;
+            case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
             case 'SEARCH':      renderSearch(card, visual);                       break;
             default:            renderChart(card, visual, effectiveTheme);        break;
         }
@@ -440,6 +514,9 @@
 
         const wrapper = document.createElement('div');
         wrapper.className = 'table-wrapper' + (isClickable ? ' clickable' : '');
+        
+        let heightOpt = visual.styles ? (visual.styles['HEIGHT'] || visual.styles['height']) : null;
+        if (heightOpt) { wrapper.style.maxHeight = heightOpt; }
 
         const table = document.createElement('table');
         const thead = document.createElement('thead');
@@ -456,30 +533,28 @@
         (visual.rows || []).forEach(row => {
             const tr = document.createElement('tr');
             if (isClickable) tr.style.cursor = 'pointer';
+            // Evaluate table conditional formatting per row
+            let rowColor = null;
+            for (const rule of fmtRules) {
+                if (!rule.condition) continue;
+                try {
+                    const fn = new Function(...visual.columns, "return " + rule.condition + ";");
+                    const parsedRow = row.map(v => isNaN(parseFloat(v)) ? v : parseFloat(v));
+                    if (fn(...parsedRow)) {
+                        rowColor = rule.color;
+                        break;
+                    }
+                } catch(e) {}
+            }
+            if (rowColor) { tr.style.color = rowColor; }
+
             visual.columns.forEach((col, ci) => {
                 const td = document.createElement('td');
                 const cellVal = row[ci] != null ? String(row[ci]) : '';
-                td.textContent = cellVal;
-                // Apply conditional formatting rules for this column
-                for (const rule of fmtRules) {
-                    if (rule.column.toLowerCase() !== col.toLowerCase()) continue;
-                    const num = parseFloat(cellVal);
-                    const thr = parseFloat(rule.threshold);
-                    let match = false;
-                    if (!isNaN(num) && !isNaN(thr)) {
-                        match = rule.operator === '<'  ? num < thr
-                              : rule.operator === '>'  ? num > thr
-                              : rule.operator === '<=' ? num <= thr
-                              : rule.operator === '>=' ? num >= thr
-                              : rule.operator === '='  ? num === thr
-                              : rule.operator === '<>' ? num !== thr : false;
-                    } else {
-                        match = rule.operator === '='  ? cellVal === rule.threshold
-                              : rule.operator === '<>' ? cellVal !== rule.threshold : false;
-                    }
-                    if (match) { td.style.color = rule.color; break; }
-                }
+                const format  = (visual.options || {})['FORMAT'];
+                td.textContent = formatValue(cellVal, format);
                 tr.appendChild(td);
+
             });
             if (isClickable) {
                 tr.addEventListener('click', () => {
@@ -505,40 +580,89 @@
     function renderCard(container, visual) {
         const cardEl = document.createElement('div');
         cardEl.className = 'card-value';
-        const label = visual.columns && visual.columns[0] ? visual.columns[0] : visual.name;
-        const value = visual.rows && visual.rows[0] && visual.rows[0][0] != null
-            ? String(visual.rows[0][0])
-            : 'No data';
-        cardEl.innerHTML = '<span class="card-label">' + escHtml(label) + '</span>' +
-                           '<span class="card-number">' + escHtml(value) + '</span>';
+
+        // Use Mapppings if available; otherwise fallback to first column
+        let label = visual.options['mapping:label'] || visual.options['mapping:LABEL'];
+        let value = visual.options['mapping:value'] || visual.options['mapping:VALUE'];
+
+        // If mappings exist as column names, resolve them from the first row
+        const resolve = (colName, fallbackIdx) => {
+            if (!colName) return visual.columns[fallbackIdx] || null;
+            const idx = visual.columns.findIndex(c => c.toLowerCase() === colName.toLowerCase());
+            return idx >= 0 ? idx : fallbackIdx;
+        };
+
+        const labelIdx = resolve(label, 0);
+        const valueIdx = resolve(value, 0);
+
+        // Actual cell values
+        const row = (visual.rows && visual.rows[0]) ? visual.rows[0] : null;
+        
+        let displayLabel = label || visual.name;
+        if (row && visual.columns[labelIdx]) {
+            // If the label mapping pointed to a column, use the value from that column
+            displayLabel = row[labelIdx] || displayLabel;
+        }
+
+        let displayValue = row ? (row[valueIdx] ?? '0') : 'No data';
+        const formatOpt = visual.options ? (visual.options['FORMAT'] || visual.options['format']) : null;
+        if (formatOpt && displayValue !== 'No data') {
+            displayValue = formatValue(displayValue, formatOpt);
+        }
+
+        cardEl.innerHTML = `
+            <div class="card-label">${displayLabel}</div>
+            <div class="card-number">${displayValue}</div>
+        `;
         container.appendChild(cardEl);
     }
 
     // ── Slicer ──────────────────────────────────────────────────────────────
 
-    function renderSlicer(container, visual) {
+    function renderSlicer(container, visual, manifest) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'slicer-wrapper';
+        
+        // Find the parameter name from actions
+        const action = visual.actions.find(a => a.type === 'SET_PARAMETER');
+        const paramName = action ? action.parameterName : null;
+
+        const select = document.createElement('select');
+        // Attach parameter info to the interactive element for syncParameters
+        if (paramName) select.setAttribute('data-parameter', paramName);
+        
+        // Optional: Multi-select support
+        if (visual.visualType.toLowerCase() === 'multiselect') {
+            select.multiple = true;
+        }
+
+        // Add options
+        const valCol = (visual.options['mapping:value'] || 'value').toLowerCase();
+        const lblCol = (visual.options['mapping:label'] || 'label').toLowerCase();
+        
+        const valIdx = visual.columns.findIndex(c => c.toLowerCase() === valCol);
+        const lblIdx = visual.columns.findIndex(c => c.toLowerCase() === lblCol);
+        
+        const finalValIdx = valIdx >= 0 ? valIdx : 0;
+        const finalLblIdx = lblIdx >= 0 ? lblIdx : (visual.columns.length > 1 ? 1 : 0);
+
+        visual.rows.forEach(row => {
+            const opt = document.createElement('option');
+            opt.value = row[finalValIdx];
+            opt.textContent = row[finalLblIdx];
+            select.appendChild(opt);
+        });
+
+        // Set initial value from manifest parameters (case-insensitive)
+        if (paramName && manifest && manifest.parameters) {
+            const current = getParam(manifest.parameters, paramName);
+            if (current !== undefined) select.value = current;
+        }
+
         const changeActions = actionsFor(visual, 'ON_CHANGE')
             .filter(a => a.type === 'SET_PARAMETER');
 
-        const wrapper = document.createElement('div');
-        wrapper.className = 'slicer-wrapper';
-
         if (isWebMode && changeActions.length > 0) {
-            const select = document.createElement('select');
-
-            // Blank "All" option
-            const blank = document.createElement('option');
-            blank.value = '';
-            blank.textContent = '— All —';
-            select.appendChild(blank);
-
-            (visual.rows || []).forEach(row => {
-                const opt = document.createElement('option');
-                opt.value       = String(row[0] ?? '');
-                opt.textContent = String(row[0] ?? '');
-                select.appendChild(opt);
-            });
-
             select.addEventListener('change', () => {
                 changeActions.forEach(action => {
                     postParameter(action.parameterName, select.value)
@@ -564,7 +688,8 @@
 
     function renderText(container, visual) {
         const opts  = visual.options || {};
-        const value = opts['VALUE'] || opts['value'] || '';
+        const rawValue = opts['VALUE'] || opts['value'] || visual.defaultValue || '';
+        const value = String(rawValue).replace(/\\n/g, '\n');
         const align = (opts['ALIGN'] || opts['align'] || 'left').toLowerCase();
 
         const div = document.createElement('div');
@@ -809,6 +934,42 @@
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+    }
+
+    function formatValue(value, format) {
+        if (value == null || value === '' || !format) return value;
+        const num = parseFloat(value);
+        if (isNaN(num)) return value;
+
+        const type = format.charAt(0).toUpperCase();
+        const prec = parseInt(format.substring(1));
+        const precision = isNaN(prec) ? undefined : prec;
+
+        try {
+            switch (type) {
+                case 'C':
+                    return new Intl.NumberFormat('en-US', {
+                        style: 'currency', currency: 'USD',
+                        minimumFractionDigits: precision, maximumFractionDigits: precision
+                    }).format(num);
+                case 'N':
+                    return new Intl.NumberFormat('en-US', {
+                        minimumFractionDigits: precision, maximumFractionDigits: precision
+                    }).format(num);
+                case 'P':
+                    // If the value is > 1.0, it might be already in percent (e.g. 85 instead of 0.85)
+                    // But standard C# P format for 0.85 is 85%.
+                    // We'll follow C# behavior: num * 100.
+                    return new Intl.NumberFormat('en-US', {
+                        style: 'percent',
+                        minimumFractionDigits: precision, maximumFractionDigits: precision
+                    }).format(num);
+                default:
+                    return value;
+            }
+        } catch (e) {
+            return value;
+        }
     }
 
     // Boot on DOMContentLoaded

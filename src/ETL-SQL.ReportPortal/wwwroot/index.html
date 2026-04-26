@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ETL-SQL Report Portal</title>
+  <link rel="stylesheet" href="/css/portal.css">
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
+  <header class="topbar">
+    <span class="topbar-brand">ETL-SQL <span>Portal</span></span>
+    <nav class="topbar-nav">
+      <a href="/index.html" class="active">Reports</a>
+    </nav>
+    <span id="adminNav" style="display:none">
+      <nav class="topbar-nav"><a href="/admin.html">Admin</a></nav>
+    </span>
+    <span class="topbar-spacer"></span>
+    <span class="topbar-user" id="topbarUser"></span>
+    <button class="topbar-btn" id="logoutBtn">Sign Out</button>
+  </header>
+
+  <!-- ── App body ────────────────────────────────────────────────────────── -->
+  <div class="app-body">
+
+    <!-- Sidebar: folder tree -->
+    <aside class="sidebar">
+      <div class="sidebar-hdr">Folders</div>
+      <div class="sidebar-tree" id="folderTree">
+        <div class="text-muted text-sm" style="padding:8px 16px">Loading…</div>
+      </div>
+    </aside>
+
+    <!-- Main area: report list or viewer -->
+    <main class="main-content" id="mainContent">
+      <div class="empty-state">Select a folder to browse reports.</div>
+    </main>
+
+  </div>
+</div>
+
+<!-- ── Export modal ─────────────────────────────────────────────────────── -->
+<div id="exportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+     z-index:1000; display:none; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:8px; padding:24px; width:340px; box-shadow:0 8px 32px rgba(0,0,0,.2)">
+    <h3 style="margin:0 0 16px">Export Report</h3>
+    <p class="text-muted text-sm" style="margin:0 0 16px">Choose an export format.</p>
+    <div style="display:flex; gap:8px; justify-content:flex-end">
+      <button class="btn btn-outline" id="exportCsvBtn">CSV</button>
+      <button class="btn btn-outline" id="exportPdfBtn">PDF</button>
+      <button class="btn btn-outline" id="exportCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { auth, authApi, foldersApi, reportsApi } from '/js/api.js';
+
+if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────────
+let currentFolderId  = null;
+let currentReportId  = null;
+let currentFolderName = '';
+let isAdmin = false;
+
+async function init() {
+  // Decode JWT to get display name + role
+  try {
+    const payload = JSON.parse(atob(auth.getToken().split('.')[1]));
+    document.getElementById('topbarUser').textContent = payload.sub || payload.unique_name || '';
+    const roles = payload.role || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || [];
+    isAdmin = Array.isArray(roles) ? roles.includes('Admin') : roles === 'Admin';
+    if (isAdmin) document.getElementById('adminNav').style.display = '';
+  } catch {}
+
+  document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
+  await loadFolderTree();
+}
+
+// ── Folder tree ────────────────────────────────────────────────────────────────
+async function loadFolderTree() {
+  try {
+    const folders = await foldersApi.list();
+    const $tree = document.getElementById('folderTree');
+    $tree.innerHTML = '';
+    if (!folders.length) {
+      $tree.innerHTML = '<div class="text-muted text-sm" style="padding:8px 16px">No folders yet.</div>';
+      return;
+    }
+    renderFolderChildren($tree, buildTree(folders), 0);
+  } catch (err) {
+    document.getElementById('folderTree').innerHTML =
+      `<div class="text-muted text-sm" style="padding:8px 16px">Error loading folders.</div>`;
+  }
+}
+
+function buildTree(flat) {
+  const map = Object.fromEntries(flat.map(f => [f.id, { ...f, children: [] }]));
+  const roots = [];
+  flat.forEach(f => {
+    if (f.parentId && map[f.parentId]) map[f.parentId].children.push(map[f.id]);
+    else roots.push(map[f.id]);
+  });
+  return roots;
+}
+
+function renderFolderChildren($parent, nodes, depth) {
+  nodes.forEach(node => {
+    const $item = document.createElement('div');
+    $item.className = 'folder-item';
+    $item.dataset.id = node.id;
+    $item.innerHTML = `<span class="folder-icon">${node.children.length ? '📁' : '📂'}</span>
+                       <span class="folder-name">${esc(node.name)}</span>`;
+    $item.addEventListener('click', () => selectFolder(node.id, node.name));
+    $parent.appendChild($item);
+
+    if (node.children.length) {
+      const $sub = document.createElement('div');
+      $sub.className = 'folder-children';
+      renderFolderChildren($sub, node.children, depth + 1);
+      $parent.appendChild($sub);
+    }
+  });
+}
+
+function selectFolder(id, name) {
+  document.querySelectorAll('.folder-item').forEach(el =>
+    el.classList.toggle('active', el.dataset.id == id));
+  currentFolderId  = id;
+  currentFolderName = name;
+  currentReportId  = null;
+  loadReportList(id, name);
+}
+
+// ── Report list ────────────────────────────────────────────────────────────────
+async function loadReportList(folderId, folderName) {
+  const $main = document.getElementById('mainContent');
+  $main.innerHTML = `<div class="viewer-loading">Loading…</div>`;
+
+  try {
+    const reports = await reportsApi.list(folderId);
+    renderReportList(reports, folderName);
+  } catch {
+    $main.innerHTML = `<div class="empty-state">Failed to load reports.</div>`;
+  }
+}
+
+function renderReportList(reports, folderName) {
+  const $main = document.getElementById('mainContent');
+  if (!reports.length) {
+    $main.innerHTML = `
+      <div class="report-list-hdr"><h2>${esc(folderName)}</h2></div>
+      <div class="empty-state">No reports in this folder.</div>`;
+    return;
+  }
+
+  const cards = reports.map(r => {
+    const staleBadge = r.isStale   ? `<span class="badge badge-stale">Stale</span>` : '';
+    const builtAt    = r.lastBuiltAt ? new Date(r.lastBuiltAt).toLocaleString() : 'Never run';
+    return `
+      <div class="report-card" data-id="${r.id}">
+        <h3>${esc(r.name)}</h3>
+        <p>${esc(r.description || '')}</p>
+        <div class="report-card-meta">
+          <span>${builtAt}</span>
+          ${staleBadge}
+        </div>
+      </div>`;
+  }).join('');
+
+  $main.innerHTML = `
+    <div class="report-list-hdr">
+      <h2>${esc(folderName)}</h2>
+      <span class="badge badge-ok">${reports.length} report${reports.length !== 1 ? 's' : ''}</span>
+    </div>
+    <div class="report-grid">${cards}</div>`;
+
+  $main.querySelectorAll('.report-card').forEach(el =>
+    el.addEventListener('click', () => openReport(+el.dataset.id)));
+}
+
+// ── Report viewer ──────────────────────────────────────────────────────────────
+async function openReport(id) {
+  currentReportId = id;
+  const $main = document.getElementById('mainContent');
+  $main.innerHTML = `<div class="viewer-loading">Loading report…</div>`;
+
+  let report, snapshot;
+  try {
+    [report, snapshot] = await Promise.all([reportsApi.get(id), reportsApi.getSnapshot(id)]);
+  } catch (err) {
+    if (err.status === 404) {
+      // No snapshot yet — show execute prompt
+      renderNoSnapshot(id);
+      return;
+    }
+    $main.innerHTML = `<div class="empty-state">Failed to load report: ${esc(err.message)}</div>`;
+    return;
+  }
+
+  renderViewer(report, snapshot);
+}
+
+function renderNoSnapshot(id) {
+  const $main = document.getElementById('mainContent');
+  $main.innerHTML = `
+    <div class="viewer-header">
+      <div class="viewer-header-info">
+        <h2>Report</h2>
+        <p>This report has not been executed yet.</p>
+      </div>
+      <div class="viewer-actions">
+        <button class="btn btn-primary" id="execBtn">Run Report</button>
+        <button class="btn btn-outline" id="backBtn">← Back</button>
+      </div>
+    </div>
+    <div class="viewer-body empty-state">No snapshot available. Run the report to generate one.</div>`;
+
+  document.getElementById('execBtn').addEventListener('click', () => runAndPoll(id));
+  document.getElementById('backBtn').addEventListener('click', () =>
+    currentFolderId ? loadReportList(currentFolderId, currentFolderName) : null);
+}
+
+function renderViewer(report, snapshot) {
+  const $main = document.getElementById('mainContent');
+  const staleHtml = snapshot.isStale
+    ? `<div class="stale-banner">
+         ⚠ Snapshot is stale — the script has changed since last run.
+         <button class="btn btn-sm btn-outline" id="refreshBtn">Refresh Now</button>
+       </div>` : '';
+
+  $main.innerHTML = `
+    <div class="viewer-header">
+      <div class="viewer-header-info">
+        <h2>${esc(report.name)}</h2>
+        <p>${esc(report.description || '')} &nbsp;·&nbsp; Built: ${new Date(snapshot.builtAt).toLocaleString()}</p>
+      </div>
+      <div class="viewer-actions">
+        <button class="btn btn-outline btn-sm" id="refreshBtn2">Refresh</button>
+        <button class="btn btn-outline btn-sm" id="exportBtn">Export…</button>
+        <button class="btn btn-outline btn-sm" id="backBtn">← Back</button>
+      </div>
+    </div>
+    ${staleHtml}
+    <div class="viewer-body" id="reportFrame" style="padding:0; min-height:500px; overflow:auto">
+      <div class="viewer-loading">Rendering…</div>
+    </div>`;
+
+  document.getElementById('backBtn').addEventListener('click', () =>
+    currentFolderId ? loadReportList(currentFolderId, currentFolderName) : null);
+  document.getElementById('refreshBtn2').addEventListener('click', () => runAndPoll(report.id));
+  document.getElementById('exportBtn').addEventListener('click', () => showExport(report.id));
+  const staleBtn = document.getElementById('refreshBtn');
+  if (staleBtn) staleBtn.addEventListener('click', () => runAndPoll(report.id));
+
+  loadReportFrame(report.id);
+}
+
+function loadReportFrame(id) {
+  const $frame = document.getElementById('reportFrame');
+  if (!$frame) return;
+
+  // Set globals that report-runtime.js reads
+  window.__IS_WEB__   = true;
+  window.__API_BASE__ = `/api/reports/${id}`;
+
+  // Load runtime into an isolated iframe so its globals don't pollute the host page
+  const iframe = document.createElement('iframe');
+  iframe.style.cssText = 'width:100%;height:100%;border:none;min-height:500px';
+  iframe.srcdoc = buildRuntimeHtml(id);
+  $frame.innerHTML = '';
+  $frame.appendChild(iframe);
+}
+
+function buildRuntimeHtml(id) {
+  const token = auth.getToken() || '';
+  return `<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<link rel="stylesheet" href="/css/report-runtime.css">
+<script>
+  window.__IS_WEB__   = true;
+  window.__API_BASE__ = '/api/reports/${id}';
+  // Inject auth token into all /api/ fetches
+  const _f = window.fetch.bind(window);
+  window.fetch = (input, init={}) => {
+    const url = typeof input === 'string' ? input : input.url;
+    if (url.startsWith('/api/')) {
+      const h = new Headers(init.headers||{});
+      if (!h.has('Authorization')) h.set('Authorization', 'Bearer ${token.replace(/'/g, "\\'")}');
+      return _f(input, {...init, headers:h});
+    }
+    return _f(input, init);
+  };
+<\/script>
+</head><body style="margin:0">
+<div id="report-root"></div>
+<script src="/js/report-runtime.js"><\/script>
+</body></html>`;
+}
+
+// ── Execute / Refresh with polling ────────────────────────────────────────────
+async function runAndPoll(id) {
+  const $main = document.getElementById('mainContent');
+  $main.innerHTML = `
+    <div class="refresh-banner" id="pollBanner">
+      <span class="spinner"></span>&nbsp; Running report…
+    </div>
+    <div class="viewer-body empty-state">Waiting for results…</div>`;
+
+  let jobId;
+  try {
+    const res = await reportsApi.refresh(id);
+    jobId = res.jobId;
+  } catch (err) {
+    $main.innerHTML = `<div class="empty-state">Failed to start job: ${esc(err.message)}</div>`;
+    return;
+  }
+
+  // Poll until done
+  for (let i = 0; i < 120; i++) {
+    await sleep(1500);
+    try {
+      const job = await reportsApi.pollJob(jobId);
+      if (job.status === 'Completed') {
+        openReport(id);
+        return;
+      }
+      if (job.status === 'Failed') {
+        $main.innerHTML = `<div class="empty-state">Report execution failed: ${esc(job.error || 'unknown error')}</div>`;
+        return;
+      }
+    } catch {}
+  }
+  $main.innerHTML = `<div class="empty-state">Timed out waiting for report execution.</div>`;
+}
+
+// ── Export modal ───────────────────────────────────────────────────────────────
+function showExport(id) {
+  const $modal = document.getElementById('exportModal');
+  $modal.style.display = 'flex';
+
+  document.getElementById('exportCsvBtn').onclick = () => {
+    window.open(reportsApi.exportUrl(id, 'csv'));
+    $modal.style.display = 'none';
+  };
+  document.getElementById('exportPdfBtn').onclick = () => {
+    window.open(reportsApi.exportUrl(id, 'pdf'));
+    $modal.style.display = 'none';
+  };
+  document.getElementById('exportCancelBtn').onclick = () => {
+    $modal.style.display = 'none';
+  };
+}
+
+// ── Utilities ──────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+init();
+</script>
+</body>
+</html>

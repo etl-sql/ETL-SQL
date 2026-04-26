@@ -58,7 +58,7 @@ namespace ETL_SQL.Engine.Services
             {
                 // Found in global connections
             }
-            else if (name.StartsWith("#") && table.ConnectionName == null)
+            else if (table.ConnectionName == null && (table.TableName.StartsWith("#") || table.TableName.StartsWith("&")))
             {
                 var mem = new InMemoryDataSource();
                 mem.Validator = _evaluator;

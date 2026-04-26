@@ -18,6 +18,7 @@ namespace ETL_SQL.Core.Parser
         internal SystemParser    SystemParser    { get; }
         internal ExtensionParser ExtensionParser { get; }
         internal ReportParser    ReportParser    { get; }
+        internal PortalParser    PortalParser    { get; }
 
         public StatementParser(IParser parser)
         {
@@ -27,6 +28,7 @@ namespace ETL_SQL.Core.Parser
             SystemParser    = new SystemParser(parser, this);
             ExtensionParser = new ExtensionParser(parser, this);
             ReportParser    = new ReportParser(parser, this);
+            PortalParser    = new PortalParser(parser, this);
             InitializeDispatchMap();
         }
 
@@ -77,6 +79,25 @@ namespace ETL_SQL.Core.Parser
             _dispatchMap[TokenType.CLOSE]         = () => ExtensionParser.ParseDockerVerb(DockerAction.Close);
             _dispatchMap[TokenType.DOCKER]        = () => ExtensionParser.ParseDockerVerb(DockerAction.Start); // Fallback
             _dispatchMap[TokenType.STYLE]         = () => { var t = _parser.Previous; return ReportParser.ParseStyleStatement(t); };
+            _dispatchMap[TokenType.EXPORT]        = () => { var t = _parser.Previous; return ParseExportReport(t); };
+
+            // Portal admin statements (valid inside EXECUTE portal BEGIN…END)
+            _dispatchMap[TokenType.GRANT]        = () => { var t = _parser.Previous; return PortalParser.ParseGrant(t); };
+            _dispatchMap[TokenType.REVOKE]       = () => { var t = _parser.Previous; return PortalParser.ParseRevoke(t); };
+            _dispatchMap[TokenType.PUBLISH]      = () => { var t = _parser.Previous; return PortalParser.ParsePublishReport(t); };
+            _dispatchMap[TokenType.DISCONNECT]   = () => { var t = _parser.Previous; return PortalParser.ParseDisconnectUser(t); };
+            _dispatchMap[TokenType.RESTART]      = () => { var t = _parser.Previous; return PortalParser.ParseRestartPortal(t); };
+            _dispatchMap[TokenType.SHUTDOWN]     = () => { var t = _parser.Previous; return PortalParser.ParseShutdownPortal(t); };
+            _dispatchMap[TokenType.REBUILD]      = () => { var t = _parser.Previous; return PortalParser.ParseRebuildSnapshot(t); };
+            _dispatchMap[TokenType.ADD]          = () =>
+            {
+                var t = _parser.Previous;
+                if (_parser.Match(TokenType.USER)) return PortalParser.ParseAddUserToGroup(t);
+                throw new ETL_SQL.Core.Common.Exceptions.SyntaxException(
+                    $"Unexpected ADD target '{_parser.Current.Value}'",
+                    _parser.Current.Line, _parser.Current.Column);
+            };
+            _dispatchMap[TokenType.TOKENS]       = () => { var t = _parser.Previous; return PortalParser.ParseRevokeTokens(t); };
         }
 
         public Statement ParseStatement()
@@ -229,6 +250,27 @@ namespace ETL_SQL.Core.Parser
         }
 
         public ForeignKeyReference ParseForeignKeyReference() => DataParser.ParseForeignKeyReference();
+
+        // ── EXPORT REPORT 'path' FORMAT PDF|CSV|MARKDOWN TO 'output' ──────────
+        private Statement ParseExportReport(Token t)
+        {
+            _parser.Consume(TokenType.REPORT, "Expected REPORT after EXPORT");
+            var reportPath = _parser.ParseExpression();
+            _parser.Consume(TokenType.FORMAT, "Expected FORMAT");
+
+            string format;
+            if      (_parser.Match(TokenType.PDF))      format = "PDF";
+            else if (_parser.Match(TokenType.CSV))       format = "CSV";
+            else if (_parser.Match(TokenType.MARKDOWN))  format = "MARKDOWN";
+            else throw new ETL_SQL.Core.Common.Exceptions.SyntaxException(
+                    $"Expected PDF, CSV, or MARKDOWN after FORMAT, got '{_parser.Current.Value}'",
+                    _parser.Current.Line, _parser.Current.Column);
+
+            _parser.Consume(TokenType.TO, "Expected TO");
+            var outputPath = _parser.ParseExpression();
+            return new ExportReportStatement(reportPath, format, outputPath)
+                { Line = t.Line, Column = t.Column };
+        }
 
         private Statement ParseStatementWithCte()
         {

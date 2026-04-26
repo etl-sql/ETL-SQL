@@ -389,7 +389,7 @@ CREATE VISUAL RegionFilter AS SLICER (
 );
 ```
 
-The `DEFAULT` option on a SLICER pre-selects that value in the dropdown on load. It is cosmetic only — it does not declare the page parameter. The corresponding `WITH PARAMETERS (@region = 'All')` on the `CREATE PAGE` statement is what makes `@region` available to visual queries from the first render.
+The `DEFAULT` option on a SLICER pre-selects that value in the dropdown on load. It is cosmetic only — it does not declare the page parameter. The corresponding `DECLARE @region VARCHAR = 'All'` at the top of the script is what makes `@region` available to visual queries from the first render.
 
 #### MULTISELECT
 
@@ -1002,7 +1002,7 @@ STYLE (
 
 ### Variables and Parameters
 
-Report-SQL uses standard ETL-SQL `@variables` for all parameters. There is no need to declare parameters inside a `CREATE PAGE` statement. Simply use `@VariableName` in your visual queries, and the dashboard will automatically wire them to any `SLICER`, `SEARCH`, or `DATEPICKER` that fires a `SET_PARAMETER` action for that variable.
+Report-SQL uses standard ETL-SQL `@variables` for all parameters. Simply use `@VariableName` in your visual queries, and the dashboard will automatically wire them to any `SLICER`, `SEARCH`, or `DATEPICKER` that fires a `SET_PARAMETER` action for that variable.
 
 When a parameter changes, the DashboardService re-evaluates all visuals whose inline SELECTs reference that parameter. Unaffected visuals are not re-queried.
 

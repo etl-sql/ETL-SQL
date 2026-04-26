@@ -1,0 +1,102 @@
+using System.Collections.Concurrent;
+using ETL_SQL.ReportPlayer;
+
+namespace ETL_SQL.ReportPortal.Services;
+
+/// <summary>
+/// Per-user DashboardService pool with LRU eviction.
+/// Keyed on (reportId, userId) so each user has independent parameter state.
+/// On eviction the user's next interaction transparently rebuilds from the current snapshot.
+/// </summary>
+public class SessionCache : IHostedService, IDisposable
+{
+    private readonly record struct SessionKey(int ReportId, int UserId);
+
+    private readonly record struct Entry(DashboardService Service, string ScriptPath)
+    {
+        public DateTime LastAccess { get; init; } = DateTime.UtcNow;
+        public Entry Touch() => this with { LastAccess = DateTime.UtcNow };
+    }
+
+    private readonly ConcurrentDictionary<SessionKey, Entry> _sessions = new();
+    private readonly PortalConfig _config;
+    private readonly ILogger<SessionCache> _log;
+    private Timer? _evictionTimer;
+
+    public SessionCache(PortalConfig config, ILogger<SessionCache> log)
+    {
+        _config = config;
+        _log    = log;
+    }
+
+    /// <summary>Returns the existing session or creates a fresh one from scriptPath.</summary>
+    public DashboardService GetOrCreate(int reportId, int userId, string scriptPath)
+    {
+        var key = new SessionKey(reportId, userId);
+
+        if (_sessions.TryGetValue(key, out var existing) && existing.ScriptPath == scriptPath)
+        {
+            _sessions[key] = existing.Touch();
+            return existing.Service;
+        }
+
+        var svc   = new DashboardService(scriptPath);
+        var entry = new Entry(svc, scriptPath);
+        _sessions[key] = entry;
+
+        Evict();
+        return svc;
+    }
+
+    /// <summary>Removes all sessions for a report (called on snapshot invalidation).</summary>
+    public void InvalidateReport(int reportId)
+    {
+        foreach (var key in _sessions.Keys.Where(k => k.ReportId == reportId))
+            _sessions.TryRemove(key, out _);
+    }
+
+    // ── IHostedService ────────────────────────────────────────────────────────
+
+    public Task StartAsync(CancellationToken ct)
+    {
+        // Evict idle sessions every minute
+        _evictionTimer = new Timer(_ => Evict(), null, TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
+        return Task.CompletedTask;
+    }
+
+    public Task StopAsync(CancellationToken ct)
+    {
+        _evictionTimer?.Change(Timeout.Infinite, 0);
+        return Task.CompletedTask;
+    }
+
+    public void Dispose() => _evictionTimer?.Dispose();
+
+    // ── Eviction ──────────────────────────────────────────────────────────────
+
+    private void Evict()
+    {
+        var maxSize = _config.Resources.SessionCacheMaxSize;
+        var ttl     = TimeSpan.FromMinutes(_config.Resources.SessionCacheTtlMinutes);
+        var now     = DateTime.UtcNow;
+
+        // First remove idle sessions beyond TTL
+        foreach (var (key, entry) in _sessions)
+            if (now - entry.LastAccess > ttl)
+                _sessions.TryRemove(key, out _);
+
+        // Then trim to max size by evicting oldest
+        if (_sessions.Count > maxSize)
+        {
+            var evict = _sessions
+                .OrderBy(kv => kv.Value.LastAccess)
+                .Take(_sessions.Count - maxSize)
+                .Select(kv => kv.Key);
+
+            foreach (var key in evict)
+                _sessions.TryRemove(key, out _);
+
+            _log.LogDebug("SessionCache evicted to {Size} entries", _sessions.Count);
+        }
+    }
+}

@@ -67,9 +67,18 @@ else
 }
 
 var app = builder.Build();
-app.UseStaticFiles();
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
+        ctx.Context.Response.Headers.Append("Pragma", "no-cache");
+        ctx.Context.Response.Headers.Append("Expires", "0");
+    }
+});
 
 var noCache = new JsonSerializerOptions { WriteIndented = false };
+var webOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Multi-report routes
@@ -109,7 +118,7 @@ if (multiMode)
     {
         var svc = fac.GetService(name);
         if (svc == null) return Results.NotFound();
-        var body = await JsonSerializer.DeserializeAsync<ParameterUpdateRequest>(ctx.Request.Body);
+        var body = await JsonSerializer.DeserializeAsync<ParameterUpdateRequest>(ctx.Request.Body, webOptions);
         if (body == null || string.IsNullOrWhiteSpace(body.Name))
             return Results.BadRequest("name is required");
         return Results.Json(await svc.SetParameterAsync(body.Name, body.Value ?? ""), noCache);
@@ -120,7 +129,7 @@ if (multiMode)
     {
         var svc = fac.GetService(name);
         if (svc == null) return Results.NotFound();
-        var body = await JsonSerializer.DeserializeAsync<ParameterBatchRequest>(ctx.Request.Body);
+        var body = await JsonSerializer.DeserializeAsync<ParameterBatchRequest>(ctx.Request.Body, webOptions);
         if (body?.Params == null || body.Params.Count == 0)
             return Results.BadRequest("params array is required");
         var updates = body.Params
@@ -148,7 +157,7 @@ else
 
     app.MapPost("/api/parameter", async (HttpContext ctx, DashboardService svc) =>
     {
-        var body = await JsonSerializer.DeserializeAsync<ParameterUpdateRequest>(ctx.Request.Body);
+        var body = await JsonSerializer.DeserializeAsync<ParameterUpdateRequest>(ctx.Request.Body, webOptions);
         if (body == null || string.IsNullOrWhiteSpace(body.Name))
             return Results.BadRequest("name is required");
         return Results.Json(await svc.SetParameterAsync(body.Name, body.Value ?? ""), noCache);
@@ -156,7 +165,7 @@ else
 
     app.MapPost("/api/parameters", async (HttpContext ctx, DashboardService svc) =>
     {
-        var body = await JsonSerializer.DeserializeAsync<ParameterBatchRequest>(ctx.Request.Body);
+        var body = await JsonSerializer.DeserializeAsync<ParameterBatchRequest>(ctx.Request.Body, webOptions);
         if (body?.Params == null || body.Params.Count == 0)
             return Results.BadRequest("params array is required");
         var updates = body.Params
@@ -219,7 +228,7 @@ const string SharedCss = @"
   .visual-card  { background: #fff; border: 1px solid #ddd; border-radius: 6px;
                   padding: 16px; margin-bottom: 24px; }
   .chart-wrapper { width: 100%; max-width: 640px; height: 400px; }
-  .table-wrapper { overflow-x: auto; }
+  .table-wrapper { overflow: auto; max-height: 500px; }
   table { border-collapse: collapse; width: 100%; }
   th, td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; }
   th { background: #f0f0f0; }

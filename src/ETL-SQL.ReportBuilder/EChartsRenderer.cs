@@ -17,8 +17,32 @@ namespace ETL_SQL.ReportBuilder
         {
             WriteIndented            = false,
             PropertyNamingPolicy     = null,
-            DefaultIgnoreCondition   = JsonIgnoreCondition.WhenWritingNull
+            DefaultIgnoreCondition   = JsonIgnoreCondition.Never
         };
+
+        private static List<string> SortXLabels(List<string> labels)
+        {
+            if (labels == null || labels.Count <= 1) return labels ?? new List<string>();
+            var distinct = labels.Select(l => l?.Trim() ?? "").Distinct().ToList();
+            var validLabels = distinct.Where(l => !string.IsNullOrEmpty(l)).ToList();
+
+            if (validLabels.Count == 0) return distinct;
+
+            // Try Date Sort (robust)
+            var formats = new[] { "M/d/yyyy h:mm:ss tt", "M/d/yyyy", "yyyy-MM-dd", "yyyy-MM-dd HH:mm:ss" };
+            if (validLabels.All(l => DateTime.TryParse(l, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out _)))
+            {
+                return distinct
+                    .OrderBy(l => string.IsNullOrEmpty(l) ? DateTime.MinValue : DateTime.Parse(l, System.Globalization.CultureInfo.InvariantCulture))
+                    .ToList();
+            }
+
+            // Try Numeric Sort
+            if (validLabels.All(l => double.TryParse(l, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out _)))
+                return distinct.OrderBy(l => string.IsNullOrEmpty(l) ? double.MinValue : double.Parse(l, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture)).ToList();
+            
+            return distinct.OrderBy(l => l, StringComparer.OrdinalIgnoreCase).ToList();
+        }
 
         /// <summary>
         /// Returns an ECharts option JSON string, or null for non-chart visual types.
@@ -116,8 +140,8 @@ namespace ETL_SQL.ReportBuilder
             var xCol = FindRole(v, "x") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
             var yCol = FindRole(v, "y") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
 
-            int xi = xCol != null ? v.Columns.IndexOf(xCol) : 0;
-            int yi = yCol != null ? v.Columns.IndexOf(yCol) : 1;
+            int xi = xCol != null ? v.Columns.FindIndex(c => string.Equals(c, xCol, StringComparison.OrdinalIgnoreCase)) : 0;
+            int yi = yCol != null ? v.Columns.FindIndex(c => string.Equals(c, yCol, StringComparison.OrdinalIgnoreCase)) : 1;
 
             var data = v.Rows.Select(r => new[]
             {
@@ -248,8 +272,8 @@ namespace ETL_SQL.ReportBuilder
             var yCol  = FindRole(v, "y")     ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
             var valC  = FindRole(v, "value") ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
 
-            int xi = xCol != null ? v.Columns.IndexOf(xCol) : 0;
-            int yi = yCol != null ? v.Columns.IndexOf(yCol) : 1;
+            int xi = xCol != null ? v.Columns.FindIndex(c => string.Equals(c, xCol, StringComparison.OrdinalIgnoreCase)) : 0;
+            int yi = yCol != null ? v.Columns.FindIndex(c => string.Equals(c, yCol, StringComparison.OrdinalIgnoreCase)) : 1;
             int vi = valC != null ? v.Columns.IndexOf(valC) : 2;
 
             var xCats = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").Distinct().ToList();
@@ -286,17 +310,57 @@ namespace ETL_SQL.ReportBuilder
 
         private string RenderCombo(VisualManifest v)
         {
-            var xCol    = FindRole(v, "x") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
-            int xi      = xCol != null ? v.Columns.IndexOf(xCol) : 0;
-            var xLabels = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").ToList();
+            var xCol      = FindRole(v, "x")      ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var yCol      = FindRole(v, "y")      ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var seriesCol = FindRole(v, "series");
 
-            var seriesList = new List<object>();
-            var defs = v.SeriesDefs ?? new List<SeriesDefManifest>();
-            foreach (var def in defs)
+            int xi = xCol != null ? v.Columns.FindIndex(c => string.Equals(c, xCol, StringComparison.OrdinalIgnoreCase)) : 0;
+            int yi = yCol != null ? v.Columns.FindIndex(c => string.Equals(c, yCol, StringComparison.OrdinalIgnoreCase)) : 1;
+            int si = (seriesCol != null) ? v.Columns.FindIndex(c => string.Equals(c, seriesCol, StringComparison.OrdinalIgnoreCase)) : -1;
+
+            List<string> xLabels;
+            List<object> seriesList = new();
+
+            if (si < 0)
             {
-                int ci = v.Columns.IndexOf(def.Column);
-                var data = v.Rows.Select(r => (object?)(ci >= 0 && ci < r.Count ? ToDouble(r[ci]) : null)).ToList();
-                seriesList.Add(new { type = def.SeriesType.ToLowerInvariant(), name = def.Column, data });
+                // Simple mode (pre-pivoted)
+                xLabels = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").ToList();
+                var defs = v.SeriesDefs ?? new List<SeriesDefManifest>();
+                foreach (var def in defs)
+                {
+                    int ci = v.Columns.IndexOf(def.Column);
+                    var data = v.Rows.Select(r => (object?)(ci >= 0 && ci < r.Count ? ToDouble(r[ci]) : null)).ToList();
+                    seriesList.Add(new { type = def.SeriesType.ToLowerInvariant(), name = def.Column, data });
+                }
+            }
+            else
+            {
+                // Pivoted mode (group-by series column)
+                xLabels = SortXLabels(v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").ToList());
+                var xIndex = xLabels.Select((l, i) => (l, i)).ToDictionary(t => t.l, t => t.i, StringComparer.OrdinalIgnoreCase);
+                var seriesKeys = v.Rows.Select(r => si < r.Count ? r[si] ?? "" : "").Distinct().ToList();
+                
+                var defs = v.SeriesDefs ?? new List<SeriesDefManifest>();
+
+                foreach (var sk in seriesKeys)
+                {
+                    var vals = Enumerable.Repeat<object?>(null, xLabels.Count).ToList();
+                    var trimmedSk = sk.Trim();
+                    foreach (var row in v.Rows)
+                    {
+                        var rowSk = (si < row.Count ? row[si] ?? "" : "").Trim();
+                        if (!string.Equals(rowSk, trimmedSk, StringComparison.OrdinalIgnoreCase)) continue;
+                        
+                        var xl = (xi < row.Count ? row[xi] ?? "" : "").Trim();
+                        if (!xIndex.TryGetValue(xl, out var idx)) continue;
+                        vals[idx] = ToDouble(yi < row.Count ? row[yi] : null);
+                    }
+                    
+                    var typeDef = defs.FirstOrDefault(d => string.Equals(d.Column, sk, StringComparison.OrdinalIgnoreCase));
+                    var type = typeDef?.SeriesType?.ToLowerInvariant() ?? "line";
+                    
+                    seriesList.Add(new { type, name = sk, data = vals });
+                }
             }
 
             return Serialize(new
@@ -393,8 +457,8 @@ namespace ETL_SQL.ReportBuilder
             var xCol = FindRole(v, "x") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
             var yCol = FindRole(v, "y") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
 
-            int xi = xCol != null ? v.Columns.IndexOf(xCol) : 0;
-            int yi = yCol != null ? v.Columns.IndexOf(yCol) : 1;
+            int xi = xCol != null ? v.Columns.FindIndex(c => string.Equals(c, xCol, StringComparison.OrdinalIgnoreCase)) : 0;
+            int yi = yCol != null ? v.Columns.FindIndex(c => string.Equals(c, yCol, StringComparison.OrdinalIgnoreCase)) : 1;
 
             var categories = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").ToList();
             var rawVals    = v.Rows.Select(r => ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null) ?? 0.0).ToList();
@@ -438,29 +502,44 @@ namespace ETL_SQL.ReportBuilder
             var yCol      = FindRole(v, "y")      ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
             var seriesCol = FindRole(v, "series");
 
-            int xi = xCol      != null ? v.Columns.IndexOf(xCol)      : 0;
-            int yi = yCol      != null ? v.Columns.IndexOf(yCol)      : 1;
-            int si = seriesCol != null ? v.Columns.IndexOf(seriesCol) : -1;
+            int xi = xCol      != null ? v.Columns.FindIndex(c => string.Equals(c, xCol, StringComparison.OrdinalIgnoreCase)) : 0;
+            int yi = yCol      != null ? v.Columns.FindIndex(c => string.Equals(c, yCol, StringComparison.OrdinalIgnoreCase)) : 1;
+            int si = seriesCol != null ? v.Columns.FindIndex(c => string.Equals(c, seriesCol, StringComparison.OrdinalIgnoreCase)) : -1;
 
             if (si < 0)
             {
-                var labels = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").ToList();
-                var vals   = v.Rows.Select(r =>
+                // Ensure labels and data points are sorted chronologically
+                var rawPairs = v.Rows.Select(r =>
                 {
                     var xLabel = xi >= 0 && xi < r.Count ? r[xi] ?? "" : "";
                     var num    = ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null);
                     var color  = GetColor(v, xLabel);
-                    return color != null
+                    var valObj = color != null
                         ? (object?)new { value = num, itemStyle = new { color } }
                         : (object?)num;
+                    return new { xLabel, valObj };
                 }).ToList();
-                return (labels, new List<object> { new { type = seriesType, name = yCol ?? v.Name, data = vals } });
+
+                var sortedLabels = SortXLabels(rawPairs.Select(p => p.xLabel).Distinct().ToList());
+                var labelIndex   = sortedLabels.Select((l, i) => (l, i)).ToDictionary(t => t.l, t => t.i, StringComparer.OrdinalIgnoreCase);
+
+                var alignedVals = Enumerable.Repeat<object?>(null, sortedLabels.Count).ToList();
+                foreach (var pair in rawPairs)
+                {
+                    var lbl = pair.xLabel.Trim();
+                    if (labelIndex.TryGetValue(lbl, out var sortedIdx))
+                    {
+                        alignedVals[sortedIdx] = pair.valObj;
+                    }
+                }
+
+                return (sortedLabels, new List<object> { new { type = seriesType, name = yCol ?? v.Name, data = alignedVals } });
             }
             else
             {
-                var xLabels    = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").Distinct().ToList();
+                var xLabels    = SortXLabels(v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").Distinct().ToList());
                 var seriesKeys = v.Rows.Select(r => si < r.Count ? r[si] ?? "" : "").Distinct().ToList();
-                var xIndex     = xLabels.Select((l, i) => (l, i)).ToDictionary(t => t.l, t => t.i);
+                var xIndex     = xLabels.Select((l, i) => (l, i)).ToDictionary(t => t.l, t => t.i, StringComparer.OrdinalIgnoreCase);
 
                 bool fillGaps = IsOn(v.Options.GetValueOrDefault("SHOW_NO_DATA_PLACEHOLDER"));
 
@@ -468,10 +547,13 @@ namespace ETL_SQL.ReportBuilder
                 foreach (var sk in seriesKeys)
                 {
                     var vals = Enumerable.Repeat<object?>(fillGaps ? 0.0 : null, xLabels.Count).ToList();
+                    var trimmedSk = sk.Trim();
                     foreach (var row in v.Rows)
                     {
-                        if ((si < row.Count ? row[si] ?? "" : "") != sk) continue;
-                        var xl = xi < row.Count ? row[xi] ?? "" : "";
+                        var rowSk = (si < row.Count ? row[si] ?? "" : "").Trim();
+                        if (!string.Equals(rowSk, trimmedSk, StringComparison.OrdinalIgnoreCase)) continue;
+
+                        var xl = (xi < row.Count ? row[xi] ?? "" : "").Trim();
                         if (!xIndex.TryGetValue(xl, out var idx)) continue;
                         vals[idx] = ToDouble(yi < row.Count ? row[yi] : null) ?? (fillGaps ? 0.0 : null);
                     }
@@ -569,8 +651,12 @@ namespace ETL_SQL.ReportBuilder
 
         private static string? FindRole(VisualManifest v, string role)
         {
-            v.Options.TryGetValue("MAPPING:" + role.ToUpperInvariant(), out var col);
-            return col;
+            // VisualBuilder emits "mapping:" + role.ToLowerInvariant()
+            if (v.Options.TryGetValue("mapping:" + role.ToLowerInvariant(), out var col)) return col;
+            
+            // Fallback for case-insensitive dictionary or older payloads
+            var key = v.Options.Keys.FirstOrDefault(k => string.Equals(k, "mapping:" + role, StringComparison.OrdinalIgnoreCase));
+            return key != null ? v.Options[key] : null;
         }
 
         private static double? ToDouble(string? s)

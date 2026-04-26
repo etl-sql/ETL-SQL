@@ -80,12 +80,53 @@ namespace ETL_SQL.ReportBuilder
             }
             sb.AppendLine();
 
-            // Emit visuals referenced in slot map in slot order
-            foreach (var (_, visualName) in page.SlotMap.OrderBy(kv => kv.Key))
+            // Emit items referenced in slot map in slot order
+            foreach (var (_, itemName) in page.SlotMap.OrderBy(kv => kv.Key))
             {
                 var visual = manifest.Visuals.FirstOrDefault(v =>
-                    string.Equals(v.Name, visualName, StringComparison.OrdinalIgnoreCase));
-                if (visual != null) RenderVisual(sb, visual);
+                    string.Equals(v.Name, itemName, StringComparison.OrdinalIgnoreCase));
+                if (visual != null)
+                {
+                    RenderVisual(sb, visual);
+                }
+                else
+                {
+                    var container = manifest.Containers?.FirstOrDefault(c =>
+                        string.Equals(c.Name, itemName, StringComparison.OrdinalIgnoreCase));
+                    if (container != null)
+                        RenderContainer(sb, container, manifest);
+                }
+            }
+        }
+
+        private void RenderContainer(StringBuilder sb, ContainerManifest container, ReportManifest manifest)
+        {
+            // For Markdown, we just emit inner visuals in slot order.
+            if (!string.IsNullOrEmpty(container.Title))
+            {
+                if (container.TitleIsMarkdown) sb.AppendLine($"### {container.Title}");
+                else sb.AppendLine($"### {EscapeCell(container.Title)}");
+                sb.AppendLine();
+            }
+
+            if (container.SlotMap != null)
+            {
+                foreach (var (_, itemName) in container.SlotMap.OrderBy(kv => kv.Key))
+                {
+                    var visual = manifest.Visuals.FirstOrDefault(v =>
+                        string.Equals(v.Name, itemName, StringComparison.OrdinalIgnoreCase));
+                    if (visual != null)
+                    {
+                        RenderVisual(sb, visual);
+                    }
+                    else
+                    {
+                        var nested = manifest.Containers?.FirstOrDefault(c =>
+                            string.Equals(c.Name, itemName, StringComparison.OrdinalIgnoreCase));
+                        if (nested != null)
+                            RenderContainer(sb, nested, manifest);
+                    }
+                }
             }
         }
 
@@ -186,19 +227,29 @@ namespace ETL_SQL.ReportBuilder
             sb.AppendLine();
         }
 
-        private static void RenderCard(StringBuilder sb, VisualManifest v)
+        private void RenderCard(StringBuilder sb, VisualManifest v)
         {
-            // A CARD typically shows a single scalar value (first cell of first row)
-            if (v.Rows.Count > 0 && v.Rows[0].Count > 0)
+            // Use Mappings if available (VisualBuilder uses lowercase for these keys)
+            v.Options.TryGetValue("mapping:label", out var labelMapping);
+            v.Options.TryGetValue("mapping:value", out var valueMapping);
+
+            var row = v.Rows.FirstOrDefault();
+            string label = labelMapping ?? v.Name;
+            string value = "No data";
+
+            if (row != null)
             {
-                var label = v.Columns.Count > 0 ? v.Columns[0] : v.Name;
-                var value = v.Rows[0][0] ?? "";
-                sb.AppendLine($"> **{EscapeCell(label)}:** {EscapeCell(value)}");
+                int labelIdx = v.Columns.FindIndex(c => string.Equals(c, labelMapping, StringComparison.OrdinalIgnoreCase));
+                int valueIdx = v.Columns.FindIndex(c => string.Equals(c, valueMapping, StringComparison.OrdinalIgnoreCase));
+
+                if (labelIdx >= 0 && row.Count > labelIdx)
+                    label = row[labelIdx] ?? label;
+                
+                var rawValue = (valueIdx >= 0 && row.Count > valueIdx) ? row[valueIdx] : row.FirstOrDefault();
+                value = rawValue ?? "0";
             }
-            else
-            {
-                sb.AppendLine("> *No data*");
-            }
+
+            sb.AppendLine($"> **{EscapeCell(label)}:** {EscapeCell(value)}");
             sb.AppendLine();
         }
 

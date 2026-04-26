@@ -9,7 +9,7 @@ namespace ETL_SQL.Core.Parser
         INSERT, INTO, VALUES,
         UPDATE, SET,
         DELETE, TRUNCATE, PIVOT, UNPIVOT, MERGE, USING, MATCHED, SOURCE,
-        COPY, MOVE, COMPRESS, SEND, RECEIVE, EMAIL, ADD, COLUMN,
+        COPY, MOVE, COMPRESS, SEND, RECEIVE, EMAIL, ADD, COLUMN, EXPORT,
         DOCKER, CLOSE,
         DECLARE,
         AND, OR, NOT, AS, IS,
@@ -134,6 +134,13 @@ namespace ETL_SQL.Core.Parser
         CSS, JS, FAVICON, LOGO, BACKGROUND, NAV_OVERRIDE, HEAD,
 
         EXPECT, SCHEMA,   // EXPECT SCHEMA statement
+
+        // ── Portal admin tokens (Phase 10) ─────────────────────────────────
+        // Non-reserved: treated as keywords only inside EXECUTE portal BEGIN…END context.
+        USER, FOLDER, GRANT, REVOKE, PUBLISH, SUBSCRIPTION,
+        DISCONNECT, TOKENS, RESTART, SHUTDOWN, PORTAL, REPORTPORTAL,
+        REBUILD, SMTP, ACTIVE, DELIVER, RECIPIENTS, INTERVAL,
+        ENABLE, DISABLE, PDF, CSV,
 
         // ── Overlay tokens (Phase 9F) ──────────────────────────────────────
         OVERLAYS, GOAL, AVERAGE, MOVING_AVG, LINEAR, EXPONENTIAL, LOGARITHMIC, POLYNOMIAL, POWER,

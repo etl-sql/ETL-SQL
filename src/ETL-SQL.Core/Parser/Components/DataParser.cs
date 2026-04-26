@@ -120,6 +120,13 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.BUTTON))     return _parent.ReportParser.ParseCreateButton(startToken, mode);
             if (Match(TokenType.TEMPLATE))   return _parent.ReportParser.ParseCreateTemplate(startToken, mode);
 
+            // Portal admin
+            if (Match(TokenType.USER))       return _parent.PortalParser.ParseCreateUser(startToken);
+            if (Match(TokenType.GROUP))      return _parent.PortalParser.ParseCreateGroup(startToken);
+            if (Match(TokenType.FOLDER))     return _parent.PortalParser.ParseCreateFolder(startToken);
+            if (Match(TokenType.REFRESH))    return _parent.PortalParser.ParseCreateRefreshJob(startToken);
+            if (Match(TokenType.SUBSCRIPTION)) return _parent.PortalParser.ParseCreateSubscription(startToken);
+
             throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, or TEMPLATE after CREATE", _parser.Current.Line, _parser.Current.Column);
         }
 
@@ -138,6 +145,11 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.NAVIGATION)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Navigation);
             if (Match(TokenType.DATASET))    return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Dataset);
             if (Match(TokenType.TEMPLATE))   return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Template);
+
+            // Portal admin
+            if (Match(TokenType.USER))         return _parent.PortalParser.ParseAlterUser(startToken);
+            if (Match(TokenType.REPORT))       return _parent.PortalParser.ParseAlterReport(startToken);
+            if (Match(TokenType.SUBSCRIPTION)) return _parent.PortalParser.ParseAlterSubscription(startToken);
 
             throw new SyntaxException("Expected CONNECTION, PROCEDURE, FUNCTION, TABLE, or REPORT object after ALTER", _parser.Current.Line, _parser.Current.Column);
         }
@@ -245,6 +257,23 @@ namespace ETL_SQL.Core.Parser.Components
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new DropReportObjectStatement { ObjectType = ReportObjectType.Dataset, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column }; // Check if this is right for JOB
             }
+
+            // Portal admin
+            if (Match(TokenType.USER))
+                return _parent.PortalParser.ParseDropUser(startToken);
+            if (Match(TokenType.GROUP))
+                return _parent.PortalParser.ParseDropGroup(startToken);
+            if (Match(TokenType.FOLDER))
+                return _parent.PortalParser.ParseDropFolder(startToken);
+            if (Match(TokenType.REPORT))
+                return _parent.PortalParser.ParseDropReport(startToken);
+            if (Match(TokenType.REFRESH))
+                return _parent.PortalParser.ParseDropRefreshJob(startToken);
+            if (Match(TokenType.SUBSCRIPTION))
+                return _parent.PortalParser.ParseDropSubscription(startToken);
+            if (_parser.Current.Type == TokenType.IDENTIFIER &&
+                _parser.Current.Value.Equals("SNAPSHOT", StringComparison.OrdinalIgnoreCase))
+                return _parent.PortalParser.ParseDropSnapshot(startToken);
 
             throw new SyntaxException("Expected TABLE, CONNECTION, PROCEDURE, FUNCTION, INDEX, SETS, or REPORT object after DROP", _parser.Current.Line, _parser.Current.Column);
         }

@@ -27,6 +27,7 @@ namespace ETL_SQL.ReportPlayer
                 var varName = name.StartsWith('@') ? name : '@' + name;
                 evaluator.DeclareVariable(varName, value, new VariableMetadata { IsInput = true });
                 affectedNames.Add(name.TrimStart('@'));
+                manifest.Parameters[varName] = value;
             }
 
             var builder = new ManifestBuilder(evaluator);

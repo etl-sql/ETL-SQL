@@ -197,15 +197,21 @@ namespace ETL_SQL.App
             // IScriptExecutor — thin adapter used by SchedulerService for job execution
             services.AddTransient<IScriptExecutor, ScriptExecutorAdapter>();
 
-            // Register Handlers
-            var handlerAssembly = typeof(DeclareStatementHandler).Assembly;
-            var handlerTypes = handlerAssembly.GetTypes()
-                .Where(t => typeof(IStatementHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-            
-            foreach (var type in handlerTypes)
+            // Register handlers from Engine and ReportBuilder (auto-discovered by assembly scan)
+            var handlerAssemblies = new[]
             {
-                services.AddTransient(typeof(IStatementHandler), type);
-                services.AddTransient(type);
+                typeof(DeclareStatementHandler).Assembly,                    // ETL-SQL.Engine
+                typeof(ETL_SQL.ReportBuilder.ExportReportStatementHandler).Assembly  // ETL-SQL.ReportBuilder
+            };
+
+            foreach (var asm in handlerAssemblies)
+            {
+                foreach (var type in asm.GetTypes()
+                    .Where(t => typeof(IStatementHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract))
+                {
+                    services.AddTransient(typeof(IStatementHandler), type);
+                    services.AddTransient(type);
+                }
             }
 
             return services.BuildServiceProvider();

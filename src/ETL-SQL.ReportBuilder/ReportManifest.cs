@@ -99,6 +99,10 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("buttons")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<ButtonManifest>? Buttons { get; set; }
+
+        /// <summary>Current parameter values (Phase 9D interactivity).</summary>
+        [JsonPropertyName("parameters")]
+        public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>A single visual with its data snapshot and ECharts config.</summary>

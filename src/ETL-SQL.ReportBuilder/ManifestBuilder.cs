@@ -157,6 +157,16 @@ namespace ETL_SQL.ReportBuilder
                 manifest.Datasets.Add(dm);
             }
 
+            // ── Parameters ──────────────────────────────────────────────────
+            if (_ctx is IVariableContext vctx)
+            {
+                foreach (var (name, varMeta) in vctx.VariableMetadata)
+                {
+                    if (varMeta.IsInput)
+                        manifest.Parameters[name] = vctx.Variables.TryGetValue(name, out var val) ? val?.ToString() ?? "" : "";
+                }
+            }
+
             return manifest;
         }
 

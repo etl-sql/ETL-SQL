@@ -101,6 +101,7 @@ namespace ETL_SQL.Core.Parser
             dict["TEMPLATE_PATH"] = TokenType.TEMPLATE_PATH;
             dict["Y_AXIS"]        = TokenType.Y_AXIS;
             dict["REPORT"]        = TokenType.REPORT;
+            dict["EXPORT"]        = TokenType.EXPORT;
             dict["PAGES"]         = TokenType.PAGES;
             dict["DESCRIPTION"]   = TokenType.DESCRIPTION;
 
@@ -280,7 +281,7 @@ namespace ETL_SQL.Core.Parser
                     continue;
                 }
 
-                if (char.IsLetter(CurrentChar) || CurrentChar == '_' || CurrentChar == '#' || CurrentChar == '@')
+                if (char.IsLetter(CurrentChar) || CurrentChar == '_' || CurrentChar == '#' || CurrentChar == '@' || CurrentChar == '&')
                 {
                     tokens.Add(ReadIdentifierOrKeyword(startLine, startColumn, startOffset));
                     continue;
@@ -453,8 +454,8 @@ namespace ETL_SQL.Core.Parser
         {
             var sb = new StringBuilder();
             
-            // Temporary table prefix support and variables
-            if (CurrentChar == '#' || CurrentChar == '@')
+            // Temporary table prefix support, variables, and Report-SQL datasets
+            if (CurrentChar == '#' || CurrentChar == '@' || CurrentChar == '&')
             {
                 sb.Append(CurrentChar);
                 Advance();

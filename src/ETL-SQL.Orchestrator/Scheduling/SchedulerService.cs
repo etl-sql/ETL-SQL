@@ -260,9 +260,11 @@ namespace ETL_SQL.Orchestrator.Scheduling
             {
                 case "SECOND": next = now.AddSeconds(interval); break;
                 case "MINUTE": next = now.AddMinutes(interval); break;
-                case "HOUR": next = now.AddHours(interval); break;
-                case "DAY": next = now.AddDays(interval); break;
-                default: next = now.AddHours(1); break;
+                case "HOUR":   next = now.AddHours(interval); break;
+                case "DAY":    next = now.AddDays(interval); break;
+                case "WEEK":   next = now.AddDays(interval * 7); break;
+                case "MONTH":  next = now.AddMonths(interval); break;
+                default:       next = now.AddHours(1); break;
             }
 
             if (!string.IsNullOrEmpty(job.AtTime) && TimeSpan.TryParse(job.AtTime, out var atTime))

@@ -2,10 +2,11 @@ SET REPORT TITLE = 'Sales Dashboard';
 SET REPORT DESCRIPTION = 'Regional and product-level revenue by month.';
 
 DROP CONNECTION IF EXISTS c;
-CREATE CONNECTION c ON FLATFILE('\TestData\test_sales.csv');
+CREATE CONNECTION c ON FLATFILE('c:\Users\chuck\scratch\ETL-SQL\TestData\test_sales.csv');
+DECLARE @region varchar(200) = 'All';
 
 -- Shared base dataset (refreshed every hour)
-CREATE DATASET #summary
+CREATE DATASET &summary
   REFRESH EVERY '1h'
   ENCRYPT = MACHINE
   AS (SELECT month, region, product,
@@ -16,7 +17,7 @@ CREATE DATASET #summary
 
 -- Region filter slicer
 CREATE VISUAL RegionFilter AS SLICER (
-  SOURCE = (SELECT DISTINCT region FROM #summary ORDER BY region),
+  SOURCE = (SELECT region FROM (SELECT 'All' AS region UNION ALL SELECT DISTINCT region FROM &summary) AS t ORDER BY (CASE WHEN region = 'All' THEN 0 ELSE 1 END), region),
   MAPPINGS (VALUE = region),
   ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region)),
   DEFAULT = 'All'
@@ -25,7 +26,7 @@ CREATE VISUAL RegionFilter AS SLICER (
 -- KPI card: total revenue
 CREATE VISUAL TotalRevenue AS CARD (
   SOURCE = (SELECT SUM(revenue) AS val, 'Total Revenue' AS lbl
-            FROM #summary
+            FROM &summary
             WHERE @region = 'All' OR region = @region),
   TITLE    = 'Total Revenue',
   MAPPINGS (VALUE = val, LABEL = lbl),
@@ -35,7 +36,7 @@ CREATE VISUAL TotalRevenue AS CARD (
 -- Bar chart: revenue by region
 CREATE VISUAL RevenueByRegion AS BAR (
   SOURCE = (SELECT region, SUM(revenue) AS revenue
-            FROM #summary
+            FROM &summary
             WHERE @region = 'All' OR region = @region
             GROUP BY region),
   TITLE    = 'Revenue by Region',
@@ -49,17 +50,17 @@ CREATE VISUAL RevenueByRegion AS BAR (
 -- Multi-series bar: revenue by region and month
 CREATE VISUAL RevenueByRegionMonth AS BAR (
   SOURCE = (SELECT month, region, SUM(revenue) AS revenue
-            FROM #summary
+            FROM &summary
             GROUP BY month, region),
   TITLE    = 'Revenue by Region (Monthly)',
   MAPPINGS (X = month, Y = revenue, SERIES = region),
-  OPTIONS  (stacked = true, X_AXIS (label = 'Month'), Y_AXIS (label = 'Revenue ($)', min = 0))
+  OPTIONS  (stacked = ON, X_AXIS (label = 'Month'), Y_AXIS (label = 'Revenue ($)', min = 0))
 );
 
 -- Donut chart: revenue share by product
 CREATE VISUAL RevenueByProduct AS DONUT (
   SOURCE = (SELECT product, SUM(revenue) AS revenue
-            FROM #summary
+            FROM &summary
             GROUP BY product),
   TITLE    = 'Revenue by Product',
   MAPPINGS (LABEL = product, VALUE = revenue)
@@ -68,21 +69,22 @@ CREATE VISUAL RevenueByProduct AS DONUT (
 -- Line chart: units by month
 CREATE VISUAL UnitsByMonth AS LINE (
   SOURCE = (SELECT month, SUM(units) AS units
-            FROM #summary
+            FROM &summary
             GROUP BY month),
   TITLE    = 'Units Sold by Month',
   MAPPINGS (X = month, Y = units),
-  OPTIONS  (smooth = true, X_AXIS (label = 'Month'), Y_AXIS (label = 'Units Sold', min = 0))
+  OPTIONS  (smooth = ON, X_AXIS (label = 'Month'), Y_AXIS (label = 'Units Sold', min = 0))
 );
 
 -- Detail table: all rows
 CREATE VISUAL SalesTable AS TABLE (
-  SOURCE = #summary
+  SOURCE = (SELECT * FROM &summary WHERE @region = 'All' OR region = @region)
 );
 
 -- KPI container
 CREATE CONTAINER KpiRow AS BOX (
-  VISUALS (TotalRevenue)
+  STRUCTURE = 'A',
+  MAP('A' = TotalRevenue)
 );
 
 -- Navigation
@@ -101,14 +103,14 @@ CREATE PAGE Overview AS LAYOUT (
     'C' = RevenueByRegion,
     'D' = SalesTable
   )
-)
-WITH PARAMETERS (@region = 'All');
+);
 
 CREATE PAGE Trends AS LAYOUT (
-  STRUCTURE = 'A A / B C',
-  MAP (
-    'A' = RevenueByRegionMonth,
-    'B' = UnitsByMonth,
-    'C' = RevenueByProduct
-  )
+    TITLE = 'Market Trends',
+    STRUCTURE = 'A / B / C',
+    MAP (
+        'A' = RevenueByRegionMonth,
+        'B' = UnitsByMonth,
+        'C' = RevenueByProduct
+    )
 );

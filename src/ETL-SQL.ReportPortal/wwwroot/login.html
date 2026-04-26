@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign In — ETL-SQL Report Portal</title>
+  <link rel="stylesheet" href="/css/portal.css">
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <h1>ETL-SQL <span style="color:#5470c6">Report Portal</span></h1>
+    <p>Sign in to your account</p>
+
+    <div id="errorMsg" class="error-msg"></div>
+    <div id="mustChangeBanner" class="must-change-banner" style="display:none">
+      Your password is temporary. Please set a new password before continuing.
+    </div>
+
+    <!-- Login form -->
+    <div id="loginForm">
+      <label for="username">Username</label>
+      <input id="username" type="text" autocomplete="username" placeholder="admin">
+
+      <label for="password">Password</label>
+      <input id="password" type="password" autocomplete="current-password">
+
+      <button id="loginBtn" class="btn-primary" type="button">Sign In</button>
+    </div>
+
+    <!-- Change-password form (shown when MustChangePassword=true) -->
+    <div id="changeForm" style="display:none">
+      <label for="currentPwd">Current Password</label>
+      <input id="currentPwd" type="password" autocomplete="current-password">
+
+      <label for="newPwd">New Password</label>
+      <input id="newPwd" type="password" autocomplete="new-password">
+
+      <label for="confirmPwd">Confirm Password</label>
+      <input id="confirmPwd" type="password" autocomplete="new-password">
+
+      <button id="changeBtn" class="btn-primary" type="button">Set Password</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { auth, authApi } from '/js/api.js';
+
+// If bounced here because MustChangePassword was enforced mid-session,
+// show the change form immediately (user still holds a valid JWT).
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('changePassword') === 'true' && auth.isLoggedIn()) {
+  document.getElementById('mustChangeBanner').style.display = '';
+  document.getElementById('loginForm').style.display  = 'none';
+  document.getElementById('changeForm').style.display = '';
+} else if (auth.isLoggedIn()) {
+  window.location.href = '/index.html';
+}
+
+const $err    = document.getElementById('errorMsg');
+const $banner = document.getElementById('mustChangeBanner');
+const $login  = document.getElementById('loginForm');
+const $change = document.getElementById('changeForm');
+
+function showError(msg) {
+  $err.textContent = msg;
+  $err.classList.add('show');
+}
+function clearError() { $err.classList.remove('show'); }
+
+// ── Login ──────────────────────────────────────────────────────────────────────
+document.getElementById('loginBtn').addEventListener('click', doLogin);
+document.getElementById('password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+
+async function doLogin() {
+  clearError();
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  if (!username || !password) { showError('Username and password are required.'); return; }
+
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+
+  try {
+    const data = await authApi.login(username, password);
+    auth.setTokens(data.token, data.refreshToken);
+
+    if (data.mustChangePassword) {
+      $banner.style.display = '';
+      $login.style.display  = 'none';
+      $change.style.display = '';
+    } else {
+      window.location.href = '/index.html';
+    }
+  } catch (err) {
+    const msg = err.status === 401 ? 'Invalid username or password.'
+              : err.status === 423 ? 'Account locked. Try again in 15 minutes.'
+              : err.message || 'Sign-in failed.';
+    showError(msg);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Sign In';
+  }
+}
+
+// ── Change password ────────────────────────────────────────────────────────────
+document.getElementById('changeBtn').addEventListener('click', async () => {
+  clearError();
+  const np = document.getElementById('newPwd').value;
+  const cp = document.getElementById('confirmPwd').value;
+  if (!np || np.length < 8) { showError('Password must be at least 8 characters.'); return; }
+  if (np !== cp)             { showError('Passwords do not match.'); return; }
+
+  const btn = document.getElementById('changeBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  try {
+    const current = document.getElementById('currentPwd').value
+                 || document.getElementById('password').value;
+    await authApi.changePassword(current, np);
+    window.location.href = '/index.html';
+  } catch (err) {
+    showError(err.message || 'Password change failed.');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Set Password';
+  }
+});
+</script>
+</body>
+</html>

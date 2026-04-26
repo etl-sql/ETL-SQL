@@ -1,0 +1,74 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
+
+namespace ETL_SQL.ReportPortal.Data;
+
+public class PortalDbContext(DbContextOptions<PortalDbContext> options)
+    : IdentityDbContext<PortalUser, PortalRole, int,
+        IdentityUserClaim<int>, IdentityUserRole<int>, IdentityUserLogin<int>,
+        IdentityRoleClaim<int>, IdentityUserToken<int>>(options)
+{
+    public DbSet<Group>          Groups          => Set<Group>();
+    public DbSet<UserGroup>      UserGroups      => Set<UserGroup>();
+    public DbSet<Folder>         Folders         => Set<Folder>();
+    public DbSet<FolderAcl>      FolderAcls      => Set<FolderAcl>();
+    public DbSet<Report>         Reports         => Set<Report>();
+    public DbSet<ReportSnapshot> ReportSnapshots => Set<ReportSnapshot>();
+    public DbSet<Subscription>   Subscriptions   => Set<Subscription>();
+    public DbSet<SmtpConnection> SmtpConnections => Set<SmtpConnection>();
+    public DbSet<AuditLog>       AuditLogs       => Set<AuditLog>();
+    public DbSet<DatasetJob>     DatasetJobs     => Set<DatasetJob>();
+    public DbSet<RefreshToken>   RefreshTokens   => Set<RefreshToken>();
+
+    protected override void OnModelCreating(ModelBuilder builder)
+    {
+        base.OnModelCreating(builder);
+
+        builder.Entity<UserGroup>(e =>
+        {
+            e.HasKey(x => new { x.UserId, x.GroupId });
+            e.HasOne(x => x.User).WithMany(u => u.UserGroups).HasForeignKey(x => x.UserId);
+            e.HasOne(x => x.Group).WithMany(g => g.UserGroups).HasForeignKey(x => x.GroupId);
+        });
+
+        builder.Entity<FolderAcl>(e =>
+        {
+            e.HasOne(x => x.Folder).WithMany(f => f.Acls).HasForeignKey(x => x.FolderId);
+            e.HasOne(x => x.Group).WithMany(g => g.FolderAcls).HasForeignKey(x => x.GroupId);
+        });
+
+        builder.Entity<Folder>(e =>
+        {
+            e.HasOne(x => x.Parent).WithMany(f => f.Children).HasForeignKey(x => x.ParentId);
+            e.HasMany(x => x.Reports).WithOne(r => r.Folder).HasForeignKey(r => r.FolderId);
+        });
+
+        builder.Entity<Report>(e =>
+        {
+            e.HasMany(x => x.Snapshots).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
+            e.HasMany(x => x.Subscriptions).WithOne(s => s.Report).HasForeignKey(s => s.ReportId);
+            e.HasMany(x => x.DatasetJobs).WithOne(j => j.Report).HasForeignKey(j => j.ReportId);
+        });
+
+        builder.Entity<RefreshToken>(e =>
+        {
+            e.HasOne(x => x.User).WithMany(u => u.RefreshTokens).HasForeignKey(x => x.UserId);
+        });
+
+        builder.Entity<SmtpConnection>(e =>
+        {
+            e.HasIndex(x => x.Alias).IsUnique();
+        });
+
+        builder.Entity<Group>(e =>
+        {
+            e.HasIndex(x => x.Name).IsUnique();
+        });
+
+        builder.Entity<Folder>(e =>
+        {
+            e.HasIndex(x => x.Path).IsUnique();
+        });
+    }
+}

@@ -1,0 +1,215 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Models;
+using ETL_SQL.ReportPortal.Services;
+
+namespace ETL_SQL.ReportPortal.Controllers;
+
+[ApiController]
+[Route("api/folders")]
+[Authorize]
+public class FoldersController(PortalDbContext db, AuditService audit) : ControllerBase
+{
+    private int CurrentUserId =>
+        int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    private bool IsAdmin => User.IsInRole("Admin");
+
+    // ── ACL helpers ───────────────────────────────────────────────────────────
+
+    private async Task<ISet<int>> GetUserGroupIdsAsync(int userId)
+    {
+        var ids = await db.UserGroups
+            .Where(ug => ug.UserId == userId)
+            .Select(ug => ug.GroupId)
+            .ToListAsync();
+        return new HashSet<int>(ids);
+    }
+
+    private async Task<FolderPermission?> GetEffectivePermissionAsync(int folderId, ISet<int> groupIds)
+    {
+        if (IsAdmin) return FolderPermission.Manage;
+
+        var perms = await db.FolderAcls
+            .Where(a => a.FolderId == folderId && groupIds.Contains(a.GroupId))
+            .Select(a => a.Permission)
+            .ToListAsync();
+
+        if (!perms.Any()) return null;
+        return (FolderPermission)perms.Max(p => (int)p);
+    }
+
+    private async Task<bool> HasPermissionAsync(int folderId, FolderPermission required)
+    {
+        if (IsAdmin) return true;
+        var groupIds = await GetUserGroupIdsAsync(CurrentUserId);
+        var effective = await GetEffectivePermissionAsync(folderId, groupIds);
+        return effective.HasValue && effective.Value >= required;
+    }
+
+    // ── Endpoints ─────────────────────────────────────────────────────────────
+
+    [HttpGet]
+    public async Task<IActionResult> GetTree()
+    {
+        var all = await db.Folders
+            .Include(f => f.Acls)
+            .ToListAsync();
+
+        var groupIds = IsAdmin ? null : await GetUserGroupIdsAsync(CurrentUserId);
+
+        var visible = IsAdmin
+            ? all
+            : all.Where(f => f.Acls.Any(a => groupIds!.Contains(a.GroupId))).ToList();
+
+        var visibleIds = new HashSet<int>(visible.Select(f => f.Id));
+        var roots = visible.Where(f => f.ParentId == null || !visibleIds.Contains(f.ParentId.Value)).ToList();
+
+        FolderDto ToDto(Folder f) => new(
+            f.Id, f.ParentId, f.Name, f.Path,
+            visible.Where(c => c.ParentId == f.Id).Select(ToDto).ToList());
+
+        return Ok(roots.Select(ToDto));
+    }
+
+    [HttpPost]
+    [Authorize(Roles = "Admin,Publisher")]
+    public async Task<IActionResult> Create([FromBody] CreateFolderRequest req)
+    {
+        string path;
+        if (req.ParentId.HasValue)
+        {
+            var parent = await db.Folders.FindAsync(req.ParentId.Value);
+            if (parent is null) return NotFound("Parent folder not found");
+            if (!await HasPermissionAsync(parent.Id, FolderPermission.Manage))
+                return Forbid();
+            path = $"{parent.Path}/{req.Name}";
+        }
+        else
+        {
+            if (!IsAdmin) return Forbid();
+            path = $"/{req.Name}";
+        }
+
+        if (await db.Folders.AnyAsync(f => f.Path == path))
+            return Conflict(new { error = $"Folder '{path}' already exists" });
+
+        var folder = new Folder
+        {
+            ParentId = req.ParentId,
+            Name     = req.Name,
+            Path     = path,
+            OwnerId  = CurrentUserId
+        };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "CREATE_FOLDER", "Folder", folder.Id.ToString(), path);
+
+        return CreatedAtAction(nameof(GetById), new { id = folder.Id },
+            new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, []));
+    }
+
+    [HttpGet("{id:int}")]
+    public async Task<IActionResult> GetById(int id)
+    {
+        var folder = await db.Folders.FindAsync(id);
+        if (folder is null) return NotFound();
+        if (!IsAdmin && !await HasPermissionAsync(id, FolderPermission.Read))
+            return Forbid();
+
+        return Ok(new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, []));
+    }
+
+    [HttpDelete("{id:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(int id, [FromQuery] bool cascade = false)
+    {
+        var folder = await db.Folders
+            .Include(f => f.Children)
+            .Include(f => f.Reports)
+            .Include(f => f.Acls)
+            .FirstOrDefaultAsync(f => f.Id == id);
+        if (folder is null) return NotFound();
+
+        bool hasChildren = folder.Children.Any() || folder.Reports.Any(r => !r.IsDeleted);
+        if (hasChildren && !cascade)
+            return Conflict(new { error = "Folder has contents. Use ?cascade=true to delete recursively." });
+
+        await DeleteFolderRecursiveAsync(folder);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "DELETE_FOLDER", "Folder", id.ToString(), folder.Path);
+        return NoContent();
+    }
+
+    private async Task DeleteFolderRecursiveAsync(Folder folder)
+    {
+        var children = await db.Folders
+            .Include(f => f.Children)
+            .Include(f => f.Reports)
+            .Include(f => f.Acls)
+            .Where(f => f.ParentId == folder.Id)
+            .ToListAsync();
+
+        foreach (var child in children)
+            await DeleteFolderRecursiveAsync(child);
+
+        foreach (var report in folder.Reports)
+            report.IsDeleted = true;
+
+        db.FolderAcls.RemoveRange(folder.Acls);
+        db.Folders.Remove(folder);
+    }
+
+    // ── ACL endpoints ─────────────────────────────────────────────────────────
+
+    [HttpGet("{id:int}/acl")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAcl(int id)
+    {
+        var acls = await db.FolderAcls
+            .Include(a => a.Group)
+            .Where(a => a.FolderId == id)
+            .Select(a => new FolderAclDto(a.GroupId, a.Group.Name, a.Permission))
+            .ToListAsync();
+        return Ok(acls);
+    }
+
+    [HttpPost("{id:int}/acl")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Grant(int id, [FromBody] GrantPermissionRequest req)
+    {
+        if (!await db.Folders.AnyAsync(f => f.Id == id)) return NotFound("Folder not found");
+        if (!await db.Groups.AnyAsync(g => g.Id == req.GroupId)) return NotFound("Group not found");
+
+        var existing = await db.FolderAcls.FirstOrDefaultAsync(
+            a => a.FolderId == id && a.GroupId == req.GroupId);
+
+        if (existing is not null)
+            existing.Permission = req.Permission;
+        else
+            db.FolderAcls.Add(new FolderAcl { FolderId = id, GroupId = req.GroupId, Permission = req.Permission });
+
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "GRANT_PERMISSION", "Folder", id.ToString(),
+            $"group={req.GroupId} perm={req.Permission}");
+        return NoContent();
+    }
+
+    [HttpDelete("{id:int}/acl/{groupId:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Revoke(int id, int groupId)
+    {
+        var acl = await db.FolderAcls.FirstOrDefaultAsync(
+            a => a.FolderId == id && a.GroupId == groupId);
+        if (acl is null) return NotFound();
+
+        db.FolderAcls.Remove(acl);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "REVOKE_PERMISSION", "Folder", id.ToString(),
+            $"group={groupId}");
+        return NoContent();
+    }
+}

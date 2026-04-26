@@ -1412,6 +1412,12 @@ namespace ETL_SQL.Core
         }
     }
 
+    /// <summary>EXPORT REPORT 'path.rptsql' FORMAT PDF|CSV|MARKDOWN TO 'output.pdf'</summary>
+    public record ExportReportStatement(
+        Expression ReportPath,
+        string     Format,
+        Expression OutputPath) : Statement;
+
     public record ExportStatement : Statement
     {
         public Expression Source { get; }
@@ -1944,4 +1950,90 @@ namespace ETL_SQL.Core
     {
         public override string ToSql() => AstSerializer.Format(this);
     }
+
+    // ── Portal admin statements (Phase 10) ────────────────────────────────────
+    // These are only valid inside an EXECUTE portal BEGIN…END block targeting a
+    // REPORTPORTAL connection. The PortalConnector translates them into REST calls.
+
+    public record CreatePortalUserStatement(
+        string Username, string Email, Expression Password,
+        string Role, string? FirstName, string? LastName) : Statement;
+
+    public record AlterPortalUserStatement(
+        string Username,
+        string? NewRole,
+        string? NewEmail,
+        bool? SetActive,        // true = ENABLE, false = DISABLE
+        Expression? NewPassword) : Statement;
+
+    public record DropPortalUserStatement(string Username, bool Cascade) : Statement;
+
+    public record CreatePortalGroupStatement(string Name, string? Description) : Statement;
+
+    public record DropPortalGroupStatement(string Name, bool Cascade) : Statement;
+
+    public record AddUserToPortalGroupStatement(string Username, string GroupName) : Statement;
+
+    public record CreatePortalFolderStatement(string Path) : Statement;
+
+    public record DropPortalFolderStatement(string Path, bool Cascade) : Statement;
+
+    public enum PortalFolderPermission { Read, Execute, Manage }
+
+    public record GrantPortalPermissionStatement(
+        string FolderPath, string GroupName, PortalFolderPermission Permission) : Statement;
+
+    public record RevokePortalPermissionStatement(
+        string FolderPath, string GroupName, PortalFolderPermission Permission) : Statement;
+
+    public record PublishPortalReportStatement(
+        string ReportName, string ScriptPath, string FolderPath, string? Description) : Statement;
+
+    public record AlterPortalReportStatement(
+        string ReportName, string? NewFolder, string? NewDescription) : Statement;
+
+    public record DropPortalReportStatement(string ReportName, bool Cascade) : Statement;
+
+    public record CreatePortalRefreshJobStatement(
+        string ReportName, string Schedule, string OrchestratorAlias) : Statement;
+
+    public record TriggerPortalRefreshStatement(string ReportName) : Statement;
+
+    public record DropPortalRefreshJobStatement(string ReportName) : Statement;
+
+    public record DropPortalSnapshotStatement(string ReportName) : Statement;
+
+    public record RebuildPortalSnapshotStatement(string ReportName) : Statement;
+
+    public enum PortalSubscriptionFormat { Pdf, Csv, Both }
+
+    public record CreatePortalSubscriptionStatement(
+        string ReportPath,
+        string Recipient,        // username or group name
+        bool   IsGroup,
+        string? Schedule,
+        bool   OnRefresh,
+        PortalSubscriptionFormat Format,
+        string SmtpAlias) : Statement;
+
+    public record AlterPortalSubscriptionStatement(
+        int SubscriptionId,
+        string? NewSchedule,
+        bool? SetActive) : Statement;
+
+    public record DropPortalSubscriptionStatement(int SubscriptionId) : Statement;
+
+    public record DisconnectPortalUserStatement(string Username) : Statement;
+
+    public record RevokePortalTokensStatement(string Username) : Statement;
+
+    public record RestartPortalStatement : Statement;
+
+    public record ShutdownPortalStatement : Statement;
+
+    public record ShowPortalUsersStatement : Statement;
+
+    public record ShowPortalReportsStatement(string? FolderPath) : Statement;
+
+    public record ShowActivePortalSessionsStatement : Statement;
 }

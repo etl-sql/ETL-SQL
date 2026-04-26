@@ -148,9 +148,9 @@ CREATE VISUAL AboutText AS TEXT (
 
 CREATE PAGE Dashboard AS LAYOUT (
     STRUCTURE = '
-        A A B B
-        C C C D
-        E E F F
+        A A B B /
+        C C C D /
+        E E F F /
         G G G G
     ',
     MAP (

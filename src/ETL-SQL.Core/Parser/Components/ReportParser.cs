@@ -249,8 +249,8 @@ namespace ETL_SQL.Core.Parser.Components
 
         public Statement ParseCreateDataset(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
         {
-            var tableName = ConsumeIdentifier("Expected #datasetName after CREATE DATASET").Value;
-            if (!tableName.StartsWith("#")) tableName = "#" + tableName;
+            var tableName = ConsumeIdentifier("Expected &datasetName after CREATE DATASET").Value;
+            if (!tableName.StartsWith("&")) tableName = "&" + tableName;
 
             string? refreshInterval    = null;
             string? ttl                = null;
@@ -1041,7 +1041,7 @@ namespace ETL_SQL.Core.Parser.Components
                     var key = ConsumeIdentifier("Expected option key").Value.ToUpperInvariant();
                     Match(TokenType.EQUALS);
                     var val = ParseExpression();
-                    options.Add(new VisualOption { Key = key, Value = val.ToString() });
+                    options.Add(new VisualOption { Key = key, Value = val is LiteralExpression lit ? lit.Value?.ToString() ?? "" : val.ToSql() });
                 }
                 Match(TokenType.COMMA);
             }
@@ -1054,7 +1054,7 @@ namespace ETL_SQL.Core.Parser.Components
                 var key = ConsumeIdentifier("Expected axis option key").Value.ToUpperInvariant();
                 Match(TokenType.EQUALS);
                 var val = ParseExpression();
-                opts.Add(new VisualOption { Key = key, Value = val.ToString() });
+                opts.Add(new VisualOption { Key = key, Value = val is LiteralExpression lit ? lit.Value?.ToString() ?? "" : val.ToSql() });
                 Match(TokenType.COMMA);
             }
         }

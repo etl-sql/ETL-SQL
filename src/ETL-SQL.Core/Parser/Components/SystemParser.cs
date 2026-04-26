@@ -402,6 +402,28 @@ namespace ETL_SQL.Core.Parser.Components
                 stmt = new ShowSafeZonesStatement();
             }
             else if (Match(TokenType.SESSIONS)) stmt = new ShowSessionsStatement();
+            // Portal admin SHOW commands
+            else if (Match(TokenType.USER) || MatchIdentifier("USERS"))
+                stmt = new ShowPortalUsersStatement();
+            else if (Match(TokenType.REPORT) || MatchIdentifier("REPORTS"))
+            {
+                string? folder = null;
+                if (Match(TokenType.IN))
+                {
+                    Consume(TokenType.FOLDER, "Expected FOLDER");
+                    folder = _parser.Current.Type == TokenType.STRING_LITERAL
+                        ? Advance().Value
+                        : ConsumeIdentifier("Expected folder path").Value;
+                }
+                stmt = new ShowPortalReportsStatement(folder);
+            }
+            else if (Match(TokenType.ACTIVE))
+            {
+                if (Match(TokenType.SESSIONS) || MatchIdentifier("SESSIONS"))
+                    stmt = new ShowActivePortalSessionsStatement();
+                else
+                    throw new ETL_SQL.Core.Common.Exceptions.SyntaxException("Expected SESSIONS after SHOW ACTIVE", _parser.Current.Line, _parser.Current.Column);
+            }
 
             if (stmt == null)
                 throw new SyntaxException("Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, VARIABLES, TAGS, VERSION or LINEAGE after SHOW", _parser.Current.Line, _parser.Current.Column);

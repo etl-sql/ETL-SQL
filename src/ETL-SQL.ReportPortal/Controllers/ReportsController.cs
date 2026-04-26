@@ -1,0 +1,184 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Models;
+using ETL_SQL.ReportPortal.Services;
+
+namespace ETL_SQL.ReportPortal.Controllers;
+
+[ApiController]
+[Route("api")]
+[Authorize]
+public class ReportsController(PortalDbContext db, AuditService audit, PortalConfig config) : ControllerBase
+{
+    private int CurrentUserId =>
+        int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    private bool IsAdmin => User.IsInRole("Admin");
+
+    private async Task<FolderPermission?> GetEffectivePermissionAsync(int folderId)
+    {
+        if (IsAdmin) return FolderPermission.Manage;
+
+        var groupIds = await db.UserGroups
+            .Where(ug => ug.UserId == CurrentUserId)
+            .Select(ug => ug.GroupId)
+            .ToListAsync();
+
+        var perms = await db.FolderAcls
+            .Where(a => a.FolderId == folderId && groupIds.Contains(a.GroupId))
+            .Select(a => a.Permission)
+            .ToListAsync();
+
+        if (!perms.Any()) return null;
+        return (FolderPermission)perms.Max(p => (int)p);
+    }
+
+    private ReportDto ToDto(Report r, ReportSnapshot? snap)
+    {
+        bool isStale = false;
+        if (snap is not null && System.IO.File.Exists(r.ScriptPath))
+            isStale = System.IO.File.GetLastWriteTimeUtc(r.ScriptPath) > snap.BuiltAt;
+
+        return new ReportDto(
+            r.Id, r.FolderId, r.Folder?.Path ?? "",
+            r.Name, r.Description, r.ScriptPath,
+            r.ScriptLastModified,
+            snap is not null,
+            snap?.BuiltAt,
+            isStale);
+    }
+
+    // ── GET /api/folders/{id}/reports ─────────────────────────────────────────
+
+    [HttpGet("folders/{folderId:int}/reports")]
+    public async Task<IActionResult> GetByFolder(int folderId)
+    {
+        var perm = await GetEffectivePermissionAsync(folderId);
+        if (perm is null) return Forbid();
+
+        var reports = await db.Reports
+            .Include(r => r.Folder)
+            .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
+            .Where(r => r.FolderId == folderId && !r.IsDeleted)
+            .ToListAsync();
+
+        return Ok(reports.Select(r => ToDto(r, r.Snapshots.FirstOrDefault())));
+    }
+
+    // ── POST /api/reports ─────────────────────────────────────────────────────
+
+    [HttpPost("reports")]
+    [Authorize(Roles = "Admin,Publisher")]
+    public async Task<IActionResult> Publish([FromBody] PublishReportRequest req)
+    {
+        var perm = await GetEffectivePermissionAsync(req.FolderId);
+        if (perm is null || perm < FolderPermission.Manage)
+            return Forbid();
+
+        if (!await db.Folders.AnyAsync(f => f.Id == req.FolderId))
+            return NotFound("Folder not found");
+
+        // Resolve path within ScriptRootPath
+        var resolved = Path.GetFullPath(req.ScriptPath,
+            Path.GetFullPath(config.ScriptRootPath));
+        if (!resolved.StartsWith(Path.GetFullPath(config.ScriptRootPath), StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
+
+        var lastModified = System.IO.File.Exists(resolved)
+            ? System.IO.File.GetLastWriteTimeUtc(resolved)
+            : DateTime.UtcNow;
+
+        var report = new Report
+        {
+            FolderId           = req.FolderId,
+            Name               = req.Name,
+            Description        = req.Description,
+            ScriptPath         = resolved,
+            ScriptLastModified = lastModified,
+            CreatedBy          = CurrentUserId,
+            CreatedAt          = DateTime.UtcNow,
+            UpdatedAt          = DateTime.UtcNow
+        };
+        db.Reports.Add(report);
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "PUBLISH_REPORT", "Report", report.Id.ToString(), report.Name);
+
+        return CreatedAtAction(nameof(GetById), new { id = report.Id }, ToDto(report, null));
+    }
+
+    // ── GET /api/reports/{id} ─────────────────────────────────────────────────
+
+    [HttpGet("reports/{id:int}")]
+    public async Task<IActionResult> GetById(int id)
+    {
+        var report = await db.Reports
+            .Include(r => r.Folder)
+            .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+
+        if (report is null) return NotFound();
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null) return Forbid();
+
+        return Ok(ToDto(report, report.Snapshots.FirstOrDefault()));
+    }
+
+    // ── PUT /api/reports/{id} ─────────────────────────────────────────────────
+
+    [HttpPut("reports/{id:int}")]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateReportRequest req)
+    {
+        var report = await db.Reports
+            .Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+
+        if (req.Name is not null)        report.Name        = req.Name;
+        if (req.Description is not null) report.Description = req.Description;
+        if (req.FolderId.HasValue)
+        {
+            var targetPerm = await GetEffectivePermissionAsync(req.FolderId.Value);
+            if (targetPerm is null || targetPerm < FolderPermission.Manage)
+                return Forbid();
+            report.FolderId = req.FolderId.Value;
+        }
+        report.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "UPDATE_REPORT", "Report", id.ToString());
+
+        return Ok(ToDto(report, null));
+    }
+
+    // ── DELETE /api/reports/{id} ──────────────────────────────────────────────
+
+    [HttpDelete("reports/{id:int}")]
+    public async Task<IActionResult> Delete(int id, [FromQuery] bool cascade = false)
+    {
+        var report = await db.Reports
+            .Include(r => r.Subscriptions.Where(s => s.IsActive))
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null || perm < FolderPermission.Manage) return Forbid();
+
+        bool hasActive = report.Subscriptions.Any();
+        if (hasActive && !cascade)
+            return Conflict(new { error = "Report has active subscriptions. Use ?cascade=true." });
+
+        if (cascade)
+            foreach (var sub in report.Subscriptions)
+                sub.IsActive = false;
+
+        report.IsDeleted = true;
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "DELETE_REPORT", "Report", id.ToString(), report.Name);
+        return NoContent();
+    }
+}

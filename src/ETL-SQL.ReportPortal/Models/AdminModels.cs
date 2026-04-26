@@ -1,0 +1,46 @@
+namespace ETL_SQL.ReportPortal.Models;
+
+public record CreateUserRequest(
+    string Username,
+    string Email,
+    string Password,
+    string Role,
+    string? FirstName,
+    string? LastName);
+
+public record UserDto(
+    int Id,
+    string Username,
+    string? Email,
+    string? FirstName,
+    string? LastName,
+    bool IsActive,
+    bool MustChangePassword,
+    DateTime CreatedAt,
+    IList<string> Roles,
+    IList<string> Groups);
+
+public record UpdateUserRequest(
+    string? Email,
+    string? FirstName,
+    string? LastName,
+    string? Role,
+    bool? IsActive);
+
+public record CreateGroupRequest(string Name, string? Description);
+
+public record GroupDto(int Id, string Name, string? Description, int MemberCount);
+
+public record AddUserToGroupRequest(string? Username, int? UserId);
+
+public record AuditLogDto(
+    int Id,
+    int? UserId,
+    string? Username,
+    string Action,
+    string? ResourceType,
+    string? ResourceId,
+    DateTime Timestamp,
+    string? Detail);
+
+public record PagedResult<T>(IList<T> Items, int Total, int Page, int PageSize);

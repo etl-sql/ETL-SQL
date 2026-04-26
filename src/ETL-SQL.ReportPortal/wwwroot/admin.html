@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin — ETL-SQL Report Portal</title>
+  <link rel="stylesheet" href="/css/portal.css">
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ── Top bar ────────────────────────────────────────────────────────── -->
+  <header class="topbar">
+    <span class="topbar-brand">ETL-SQL <span>Portal</span></span>
+    <nav class="topbar-nav">
+      <a href="/index.html">Reports</a>
+      <a href="/admin.html" class="active">Admin</a>
+    </nav>
+    <span class="topbar-spacer"></span>
+    <span class="topbar-user" id="topbarUser"></span>
+    <button class="topbar-btn" id="logoutBtn">Sign Out</button>
+  </header>
+
+  <!-- ── Main body (no sidebar) ─────────────────────────────────────────── -->
+  <div class="app-body" style="display:block; overflow-y:auto">
+    <div class="main-content">
+
+      <h2 style="margin-bottom:20px">Administration</h2>
+
+      <!-- Tab strip -->
+      <div class="admin-tabs">
+        <button class="admin-tab active" data-tab="users">Users</button>
+        <button class="admin-tab" data-tab="groups">Groups</button>
+        <button class="admin-tab" data-tab="folders">Folders &amp; ACL</button>
+        <button class="admin-tab" data-tab="audit">Audit Log</button>
+      </div>
+
+      <!-- ── Users panel ─────────────────────────────────────────────── -->
+      <div class="admin-panel active" id="panel-users">
+        <div class="card">
+          <div class="card-header">
+            <h3>Users</h3>
+            <button class="btn btn-outline btn-sm" id="newUserBtn">+ New User</button>
+          </div>
+          <div id="userTableWrap"><div class="viewer-loading">Loading…</div></div>
+        </div>
+
+        <!-- Inline new-user form -->
+        <div class="card" id="newUserForm" style="display:none">
+          <div class="card-header"><h3>Create User</h3></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Username</label>
+              <input id="nu-username" type="text">
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input id="nu-email" type="email">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Temporary Password</label>
+              <input id="nu-password" type="password">
+            </div>
+            <div class="form-group">
+              <label>Role</label>
+              <select id="nu-role">
+                <option value="Viewer">Viewer</option>
+                <option value="Publisher">Publisher</option>
+                <option value="Admin">Admin</option>
+              </select>
+            </div>
+          </div>
+          <div id="nu-error" class="error-msg"></div>
+          <div style="display:flex; gap:8px">
+            <button class="btn btn-primary" id="nu-saveBtn">Create</button>
+            <button class="btn btn-outline" id="nu-cancelBtn">Cancel</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Groups panel ────────────────────────────────────────────── -->
+      <div class="admin-panel" id="panel-groups">
+        <div class="card">
+          <div class="card-header">
+            <h3>Groups</h3>
+            <button class="btn btn-outline btn-sm" id="newGroupBtn">+ New Group</button>
+          </div>
+          <div id="groupTableWrap"><div class="viewer-loading">Loading…</div></div>
+        </div>
+
+        <div class="card" id="newGroupForm" style="display:none">
+          <div class="card-header"><h3>Create Group</h3></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Group Name</label>
+              <input id="ng-name" type="text">
+            </div>
+          </div>
+          <div id="ng-error" class="error-msg"></div>
+          <div style="display:flex; gap:8px">
+            <button class="btn btn-primary" id="ng-saveBtn">Create</button>
+            <button class="btn btn-outline" id="ng-cancelBtn">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Members panel (shown when a group is selected) -->
+        <div class="card" id="membersPanel" style="display:none">
+          <div class="card-header">
+            <h3>Members of <span id="memberGroupName"></span></h3>
+            <button class="btn btn-outline btn-sm" id="addMemberBtn">+ Add Member</button>
+          </div>
+          <div id="memberTableWrap"></div>
+          <div id="addMemberForm" style="display:none; margin-top:12px">
+            <div class="form-row">
+              <div class="form-group">
+                <label>User</label>
+                <select id="addMemberSelect"></select>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px">
+              <button class="btn btn-primary" id="am-saveBtn">Add</button>
+              <button class="btn btn-outline" id="am-cancelBtn">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Folders & ACL panel ─────────────────────────────────────── -->
+      <div class="admin-panel" id="panel-folders">
+        <div class="card">
+          <div class="card-header">
+            <h3>Folders</h3>
+            <button class="btn btn-outline btn-sm" id="newFolderBtn">+ New Folder</button>
+          </div>
+          <div id="folderTableWrap"><div class="viewer-loading">Loading…</div></div>
+        </div>
+
+        <div class="card" id="newFolderForm" style="display:none">
+          <div class="card-header"><h3>Create Folder</h3></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Name</label>
+              <input id="nf-name" type="text">
+            </div>
+            <div class="form-group">
+              <label>Parent (optional)</label>
+              <select id="nf-parent"><option value="">— Root —</option></select>
+            </div>
+          </div>
+          <div id="nf-error" class="error-msg"></div>
+          <div style="display:flex; gap:8px">
+            <button class="btn btn-primary" id="nf-saveBtn">Create</button>
+            <button class="btn btn-outline" id="nf-cancelBtn">Cancel</button>
+          </div>
+        </div>
+
+        <!-- ACL sub-panel -->
+        <div class="card" id="aclPanel" style="display:none">
+          <div class="card-header">
+            <h3>Permissions for <span id="aclFolderName"></span></h3>
+            <button class="btn btn-outline btn-sm" id="addAclBtn">+ Grant</button>
+          </div>
+          <div id="aclTableWrap"></div>
+          <div id="addAclForm" style="display:none; margin-top:12px">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Group</label>
+                <select id="aclGroupSelect"></select>
+              </div>
+              <div class="form-group">
+                <label>Permission</label>
+                <select id="aclPermSelect">
+                  <option value="Read">Read</option>
+                  <option value="Execute">Execute</option>
+                  <option value="Manage">Manage</option>
+                </select>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px">
+              <button class="btn btn-primary" id="acl-saveBtn">Grant</button>
+              <button class="btn btn-outline" id="acl-cancelBtn">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Audit log panel ─────────────────────────────────────────── -->
+      <div class="admin-panel" id="panel-audit">
+        <div class="card">
+          <div class="card-header">
+            <h3>Audit Log</h3>
+            <div style="display:flex; gap:8px; align-items:center">
+              <input id="auditFilter" type="text" placeholder="Filter by action…"
+                     style="padding:4px 8px; border:1px solid #ccc; border-radius:4px; font-size:.85em; width:180px">
+              <button class="btn btn-outline btn-sm" id="auditRefreshBtn">Refresh</button>
+              <button class="btn btn-outline btn-sm" id="auditExportBtn">Export CSV</button>
+            </div>
+          </div>
+          <div id="auditTableWrap"><div class="viewer-loading">Loading…</div></div>
+          <div id="auditPager" style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { auth, authApi, foldersApi, adminApi } from '/js/api.js';
+
+if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────────
+try {
+  const payload = JSON.parse(atob(auth.getToken().split('.')[1]));
+  document.getElementById('topbarUser').textContent = payload.sub || payload.unique_name || '';
+  const roles = payload.role || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || [];
+  const isAdmin = Array.isArray(roles) ? roles.includes('Admin') : roles === 'Admin';
+  if (!isAdmin) window.location.href = '/index.html';
+} catch { window.location.href = '/login.html'; }
+
+document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
+
+// ── Tab switching ──────────────────────────────────────────────────────────────
+const panels = { users: null, groups: null, folders: null, audit: null };
+document.querySelectorAll('.admin-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    const id = `panel-${btn.dataset.tab}`;
+    document.getElementById(id).classList.add('active');
+    if (!panels[btn.dataset.tab]) {
+      panels[btn.dataset.tab] = true;
+      tabLoaders[btn.dataset.tab]?.();
+    }
+  });
+});
+
+const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, audit: loadAudit };
+// Load the initial tab (users)
+panels.users = true;
+loadUsers();
+
+// ── Users ──────────────────────────────────────────────────────────────────────
+let allUsers = [];
+
+async function loadUsers() {
+  const $wrap = document.getElementById('userTableWrap');
+  try {
+    allUsers = await adminApi.listUsers();
+    const rows = allUsers.map(u => `
+      <tr>
+        <td>${esc(u.userName)}</td>
+        <td>${esc(u.email || '')}</td>
+        <td>${(u.roles || []).map(r => `<span class="chip chip-${r.toLowerCase()}">${esc(r)}</span>`).join(' ')}</td>
+        <td><span class="chip ${u.isActive ? 'chip-active' : 'chip-inactive'}">${u.isActive ? 'Active' : 'Inactive'}</span></td>
+        <td>
+          <div class="table-actions">
+            <button class="btn btn-outline btn-sm" data-action="toggle" data-id="${u.id}" data-active="${u.isActive}">
+              ${u.isActive ? 'Disable' : 'Enable'}
+            </button>
+            <button class="btn btn-outline btn-sm" data-action="reset" data-id="${u.id}">Reset Pwd</button>
+            <button class="btn btn-danger btn-sm" data-action="delete" data-id="${u.id}">Delete</button>
+          </div>
+        </td>
+      </tr>`).join('');
+
+    $wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Username</th><th>Email</th><th>Roles</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" class="empty-state">No users.</td></tr>'}</tbody>
+      </table>`;
+
+    $wrap.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => handleUserAction(btn));
+    });
+  } catch { $wrap.innerHTML = `<div class="empty-state">Failed to load users.</div>`; }
+}
+
+async function handleUserAction(btn) {
+  const id = +btn.dataset.id;
+  const action = btn.dataset.action;
+  if (action === 'delete') {
+    if (!confirm('Delete this user? This cannot be undone.')) return;
+    await adminApi.deleteUser(id).catch(alertErr);
+    loadUsers();
+  } else if (action === 'toggle') {
+    const active = btn.dataset.active === 'true';
+    await adminApi.updateUser(id, { isActive: !active }).catch(alertErr);
+    loadUsers();
+  } else if (action === 'reset') {
+    const pwd = prompt('Enter new temporary password (min 8 chars):');
+    if (!pwd) return;
+    await adminApi.resetPassword(id, pwd).catch(alertErr);
+    alert('Password reset.');
+  }
+}
+
+// New user form
+document.getElementById('newUserBtn').addEventListener('click', () => {
+  document.getElementById('newUserForm').style.display = '';
+});
+document.getElementById('nu-cancelBtn').addEventListener('click', () => {
+  document.getElementById('newUserForm').style.display = 'none';
+});
+document.getElementById('nu-saveBtn').addEventListener('click', async () => {
+  const $err = document.getElementById('nu-error');
+  $err.classList.remove('show');
+  const body = {
+    userName: document.getElementById('nu-username').value.trim(),
+    email:    document.getElementById('nu-email').value.trim(),
+    password: document.getElementById('nu-password').value,
+    role:     document.getElementById('nu-role').value
+  };
+  if (!body.userName || !body.password) { $err.textContent = 'Username and password required.'; $err.classList.add('show'); return; }
+  try {
+    await adminApi.createUser(body);
+    document.getElementById('newUserForm').style.display = 'none';
+    loadUsers();
+  } catch (err) { $err.textContent = err.message; $err.classList.add('show'); }
+});
+
+// ── Groups ─────────────────────────────────────────────────────────────────────
+let selectedGroupId = null;
+let allGroups = [];
+
+async function loadGroups() {
+  const $wrap = document.getElementById('groupTableWrap');
+  try {
+    allGroups = await adminApi.listGroups();
+    const rows = allGroups.map(g => `
+      <tr>
+        <td>${esc(g.name)}</td>
+        <td>
+          <div class="table-actions">
+            <button class="btn btn-outline btn-sm" data-action="members" data-id="${g.id}" data-name="${esc(g.name)}">Members</button>
+            <button class="btn btn-danger btn-sm" data-action="delete" data-id="${g.id}">Delete</button>
+          </div>
+        </td>
+      </tr>`).join('');
+
+    $wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Group Name</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="2" class="empty-state">No groups.</td></tr>'}</tbody>
+      </table>`;
+
+    $wrap.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => handleGroupAction(btn));
+    });
+  } catch { $wrap.innerHTML = `<div class="empty-state">Failed to load groups.</div>`; }
+}
+
+async function handleGroupAction(btn) {
+  const id = +btn.dataset.id;
+  if (btn.dataset.action === 'delete') {
+    if (!confirm('Delete this group?')) return;
+    await adminApi.deleteGroup(id).catch(alertErr);
+    loadGroups();
+  } else if (btn.dataset.action === 'members') {
+    selectedGroupId = id;
+    document.getElementById('memberGroupName').textContent = btn.dataset.name;
+    document.getElementById('membersPanel').style.display = '';
+    loadMembers(id);
+  }
+}
+
+async function loadMembers(groupId) {
+  const $wrap = document.getElementById('memberTableWrap');
+  try {
+    const members = await adminApi.listMembers(groupId);
+    const rows = members.map(m => `
+      <tr>
+        <td>${esc(m.userName)}</td>
+        <td>
+          <button class="btn btn-danger btn-sm" data-uid="${m.id}">Remove</button>
+        </td>
+      </tr>`).join('');
+    $wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Username</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="2" class="empty-state">No members.</td></tr>'}</tbody>
+      </table>`;
+    $wrap.querySelectorAll('[data-uid]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await adminApi.removeMember(groupId, +btn.dataset.uid).catch(alertErr);
+        loadMembers(groupId);
+      });
+    });
+  } catch {}
+}
+
+document.getElementById('newGroupBtn').addEventListener('click', () => {
+  document.getElementById('newGroupForm').style.display = '';
+});
+document.getElementById('ng-cancelBtn').addEventListener('click', () => {
+  document.getElementById('newGroupForm').style.display = 'none';
+});
+document.getElementById('ng-saveBtn').addEventListener('click', async () => {
+  const $err = document.getElementById('ng-error');
+  $err.classList.remove('show');
+  const name = document.getElementById('ng-name').value.trim();
+  if (!name) { $err.textContent = 'Name is required.'; $err.classList.add('show'); return; }
+  try {
+    await adminApi.createGroup(name);
+    document.getElementById('newGroupForm').style.display = 'none';
+    loadGroups();
+  } catch (err) { $err.textContent = err.message; $err.classList.add('show'); }
+});
+
+document.getElementById('addMemberBtn').addEventListener('click', async () => {
+  const $form = document.getElementById('addMemberForm');
+  $form.style.display = '';
+  const $sel = document.getElementById('addMemberSelect');
+  $sel.innerHTML = allUsers.map(u => `<option value="${u.id}">${esc(u.userName)}</option>`).join('');
+});
+document.getElementById('am-cancelBtn').addEventListener('click', () => {
+  document.getElementById('addMemberForm').style.display = 'none';
+});
+document.getElementById('am-saveBtn').addEventListener('click', async () => {
+  const uid = +document.getElementById('addMemberSelect').value;
+  await adminApi.addMember(selectedGroupId, uid).catch(alertErr);
+  document.getElementById('addMemberForm').style.display = 'none';
+  loadMembers(selectedGroupId);
+});
+
+// ── Folders & ACL ──────────────────────────────────────────────────────────────
+let selectedFolderId = null;
+let allFolders = [];
+
+async function loadFolders() {
+  const $wrap = document.getElementById('folderTableWrap');
+  try {
+    allFolders = await foldersApi.list();
+    const rows = allFolders.map(f => `
+      <tr>
+        <td>${esc(f.path || f.name)}</td>
+        <td>
+          <div class="table-actions">
+            <button class="btn btn-outline btn-sm" data-action="acl" data-id="${f.id}" data-name="${esc(f.name)}">Permissions</button>
+            <button class="btn btn-danger btn-sm" data-action="delete" data-id="${f.id}">Delete</button>
+          </div>
+        </td>
+      </tr>`).join('');
+
+    $wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Folder Path</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="2" class="empty-state">No folders.</td></tr>'}</tbody>
+      </table>`;
+
+    // Populate parent dropdown for new folder form
+    const $parent = document.getElementById('nf-parent');
+    $parent.innerHTML = '<option value="">— Root —</option>' +
+      allFolders.map(f => `<option value="${f.id}">${esc(f.path || f.name)}</option>`).join('');
+
+    $wrap.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => handleFolderAction(btn));
+    });
+  } catch { $wrap.innerHTML = `<div class="empty-state">Failed to load folders.</div>`; }
+}
+
+async function handleFolderAction(btn) {
+  const id = +btn.dataset.id;
+  if (btn.dataset.action === 'delete') {
+    if (!confirm('Delete this folder? Reports inside will also be removed.')) return;
+    await foldersApi.delete(id, true).catch(alertErr);
+    loadFolders();
+  } else if (btn.dataset.action === 'acl') {
+    selectedFolderId = id;
+    document.getElementById('aclFolderName').textContent = btn.dataset.name;
+    document.getElementById('aclPanel').style.display = '';
+    loadAcl(id);
+  }
+}
+
+async function loadAcl(folderId) {
+  const $wrap = document.getElementById('aclTableWrap');
+  try {
+    const acls = await foldersApi.listAcl(folderId);
+    const rows = acls.map(a => `
+      <tr>
+        <td>${esc(a.groupName)}</td>
+        <td>${esc(a.permission)}</td>
+        <td>
+          <button class="btn btn-danger btn-sm" data-gid="${a.groupId}">Revoke</button>
+        </td>
+      </tr>`).join('');
+    $wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Group</th><th>Permission</th><th></th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="3" class="empty-state">No permissions set.</td></tr>'}</tbody>
+      </table>`;
+    $wrap.querySelectorAll('[data-gid]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await foldersApi.revokeAcl(folderId, +btn.dataset.gid).catch(alertErr);
+        loadAcl(folderId);
+      });
+    });
+  } catch {}
+}
+
+document.getElementById('newFolderBtn').addEventListener('click', () => {
+  document.getElementById('newFolderForm').style.display = '';
+});
+document.getElementById('nf-cancelBtn').addEventListener('click', () => {
+  document.getElementById('newFolderForm').style.display = 'none';
+});
+document.getElementById('nf-saveBtn').addEventListener('click', async () => {
+  const $err = document.getElementById('nf-error');
+  $err.classList.remove('show');
+  const name = document.getElementById('nf-name').value.trim();
+  const parentId = document.getElementById('nf-parent').value || null;
+  if (!name) { $err.textContent = 'Name is required.'; $err.classList.add('show'); return; }
+  try {
+    await foldersApi.create(name, parentId ? +parentId : null);
+    document.getElementById('newFolderForm').style.display = 'none';
+    loadFolders();
+  } catch (err) { $err.textContent = err.message; $err.classList.add('show'); }
+});
+
+document.getElementById('addAclBtn').addEventListener('click', async () => {
+  const $form = document.getElementById('addAclForm');
+  $form.style.display = '';
+  const groups = allGroups.length ? allGroups : await adminApi.listGroups().catch(() => []);
+  document.getElementById('aclGroupSelect').innerHTML =
+    groups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
+});
+document.getElementById('acl-cancelBtn').addEventListener('click', () => {
+  document.getElementById('addAclForm').style.display = 'none';
+});
+document.getElementById('acl-saveBtn').addEventListener('click', async () => {
+  const groupId    = +document.getElementById('aclGroupSelect').value;
+  const permission = document.getElementById('aclPermSelect').value;
+  await foldersApi.grantAcl(selectedFolderId, groupId, permission).catch(alertErr);
+  document.getElementById('addAclForm').style.display = 'none';
+  loadAcl(selectedFolderId);
+});
+
+// ── Audit log ──────────────────────────────────────────────────────────────────
+let auditPage = 1;
+const auditPageSize = 50;
+
+async function loadAudit() {
+  const $wrap = document.getElementById('auditTableWrap');
+  const action = document.getElementById('auditFilter').value.trim();
+  try {
+    const data = await adminApi.auditLog(auditPage, auditPageSize, action);
+    const rows = (data.items || data).map(e => `
+      <tr>
+        <td class="text-sm">${new Date(e.timestamp).toLocaleString()}</td>
+        <td>${esc(e.userName || '')}</td>
+        <td><code>${esc(e.action)}</code></td>
+        <td class="text-sm text-muted">${esc(e.resourceType || '')} ${esc(e.resourceId || '')}</td>
+        <td class="text-sm text-muted">${esc(e.detail || '')}</td>
+      </tr>`).join('');
+
+    $wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Resource</th><th>Detail</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" class="empty-state">No entries.</td></tr>'}</tbody>
+      </table>`;
+
+    const total = data.totalCount || (data.items || data).length;
+    renderAuditPager(total);
+  } catch { $wrap.innerHTML = `<div class="empty-state">Failed to load audit log.</div>`; }
+}
+
+function renderAuditPager(total) {
+  const pages = Math.ceil(total / auditPageSize);
+  const $p = document.getElementById('auditPager');
+  $p.innerHTML = '';
+  if (pages <= 1) return;
+  for (let i = 1; i <= Math.min(pages, 10); i++) {
+    const btn = document.createElement('button');
+    btn.className = `btn btn-outline btn-sm ${i === auditPage ? 'active' : ''}`;
+    btn.textContent = i;
+    btn.addEventListener('click', () => { auditPage = i; loadAudit(); });
+    $p.appendChild(btn);
+  }
+}
+
+document.getElementById('auditRefreshBtn').addEventListener('click', () => { auditPage = 1; loadAudit(); });
+document.getElementById('auditFilter').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { auditPage = 1; loadAudit(); }
+});
+document.getElementById('auditExportBtn').addEventListener('click', () => {
+  const action = document.getElementById('auditFilter').value.trim();
+  const qs = action ? `?action=${encodeURIComponent(action)}` : '';
+  const token = sessionStorage.getItem('jwt');
+  // Use a hidden <a> with the auth token embedded via fetch + blob URL
+  fetch(`/api/admin/audit/export/csv${qs}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  }).then(r => r.blob()).then(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit_log_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }).catch(() => alert('Export failed.'));
+});
+
+// ── Utilities ──────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function alertErr(err) { alert(err.message || 'An error occurred.'); }
+</script>
+</body>
+</html>

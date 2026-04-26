@@ -1,0 +1,218 @@
+using System.Text;
+using System.Text.Json;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.IdentityModel.Tokens;
+using ETL_SQL.ReportPortal;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Middleware;
+using ETL_SQL.ReportPortal.Services.HealthChecks;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// ── Configuration ─────────────────────────────────────────────────────────────
+var portalConfig = builder.Configuration.GetSection("Portal").Get<PortalConfig>()
+    ?? new PortalConfig();
+
+// JWT secret validation: registered as a hosted-service check so it fires AFTER
+// WebApplicationFactory has had a chance to inject test configuration.
+// A fatal startup error is raised via IHostApplicationLifetime if the secret is missing/short.
+
+builder.Services.AddSingleton(portalConfig);
+
+// Ensure required directories exist
+Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(portalConfig.DatabasePath))!);
+Directory.CreateDirectory(Path.GetFullPath(portalConfig.ScriptRootPath));
+Directory.CreateDirectory(Path.GetFullPath(portalConfig.SnapshotDirectory));
+
+// ── EF Core / SQLite ──────────────────────────────────────────────────────────
+var dbPath = Path.GetFullPath(portalConfig.DatabasePath);
+builder.Services.AddDbContext<PortalDbContext>(opt =>
+    opt.UseSqlite($"Data Source={dbPath}"));
+
+// ── Identity ──────────────────────────────────────────────────────────────────
+builder.Services.AddIdentity<PortalUser, PortalRole>(opt =>
+{
+    opt.Password.RequireDigit           = true;
+    opt.Password.RequiredLength         = 8;
+    opt.Password.RequireNonAlphanumeric = false;
+    opt.Lockout.DefaultLockoutTimeSpan  = TimeSpan.FromMinutes(15);
+    opt.Lockout.MaxFailedAccessAttempts = 5;
+    opt.Lockout.AllowedForNewUsers      = true;
+})
+.AddEntityFrameworkStores<PortalDbContext>()
+.AddDefaultTokenProviders();
+
+// ── JWT Authentication ────────────────────────────────────────────────────────
+// Use a zero-filled placeholder when no secret is configured so the service can start.
+// JwtSecretValidationService shuts down the app if the secret is missing/short in production.
+// In tests, ConfigureWebHost's PostConfigure<JwtBearerOptions> replaces the key.
+var rawSecret = string.IsNullOrEmpty(portalConfig.Jwt.Secret)
+    ? new byte[32]                                         // placeholder — 32 zero bytes
+    : Encoding.UTF8.GetBytes(portalConfig.Jwt.Secret);
+var signingKey = new SymmetricSecurityKey(rawSecret);
+
+builder.Services.AddAuthentication(opt =>
+{
+    opt.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    opt.DefaultChallengeScheme    = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(opt =>
+{
+    opt.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer           = false,
+        ValidateAudience         = false,
+        ValidateLifetime         = true,
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey         = signingKey,
+        ClockSkew                = TimeSpan.FromSeconds(30)
+    };
+});
+
+builder.Services.AddAuthorization();
+
+// ── Swagger ───────────────────────────────────────────────────────────────────
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new() { Title = "ETL-SQL Report Portal", Version = "v1" });
+    c.AddSecurityDefinition("Bearer", new()
+    {
+        Name   = "Authorization",
+        Type   = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In     = Microsoft.OpenApi.Models.ParameterLocation.Header
+    });
+    c.AddSecurityRequirement(new()
+    {
+        {
+            new() { Reference = new() { Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme, Id = "Bearer" } },
+            []
+        }
+    });
+});
+
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.TokenService>();
+builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SmtpPasswordProtector>();
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorDbLocator>();
+
+// Phase 2 — execution, session cache, Orchestrator poller
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SessionCache>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.SessionCache>());
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.ExecutionJobService>();
+builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.OrchestratorPollerService>();
+
+// JWT secret validation (runs after WebApplicationFactory can inject test configuration)
+builder.Services.AddHostedService<ETL_SQL.ReportPortal.Services.JwtSecretValidationService>();
+
+// Phase 5 — subscriptions (backed by Orchestrator jobs)
+
+// Phase 6 — health checks
+builder.Services.AddHealthChecks()
+    .AddCheck<PortalDbHealthCheck>     ("db",          HealthStatus.Unhealthy, ["ready"])
+    .AddCheck<OrchestratorHealthCheck> ("orchestrator", HealthStatus.Degraded,  ["live"])
+    .AddCheck<ExecutionCapacityHealthCheck>("execution", HealthStatus.Degraded,  ["live"]);
+
+builder.Services.AddControllers();
+
+// ── App pipeline ──────────────────────────────────────────────────────────────
+var app = builder.Build();
+
+// Apply EF migrations and enable WAL mode on startup
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+    db.Database.Migrate();
+    db.Database.ExecuteSqlRaw("PRAGMA journal_mode=WAL;");
+
+    await SeedFirstRunAsync(scope.ServiceProvider, portalConfig);
+}
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+else
+{
+    app.UseHttpsRedirection();
+    app.UseHsts();
+}
+
+app.UseStaticFiles();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseMiddleware<MustChangePasswordMiddleware>();
+app.MapControllers();
+
+// Health endpoint — detailed checks (db, orchestrator, execution capacity)
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = async (ctx, report) =>
+    {
+        ctx.Response.ContentType = "application/json";
+        var overall = report.Status switch
+        {
+            HealthStatus.Healthy  => "Healthy",
+            HealthStatus.Degraded => "Degraded",
+            _                     => "Unhealthy"
+        };
+        var result = new
+        {
+            status = overall,
+            checks = report.Entries.ToDictionary(
+                kv => kv.Key,
+                kv => new
+                {
+                    status      = kv.Value.Status.ToString(),
+                    description = kv.Value.Description,
+                    data        = kv.Value.Data.Count > 0 ? kv.Value.Data : null,
+                    error       = kv.Value.Exception?.Message
+                })
+        };
+        await ctx.Response.WriteAsync(JsonSerializer.Serialize(result,
+            new JsonSerializerOptions { WriteIndented = true }));
+    }
+}).AllowAnonymous();
+
+// Root → login
+app.MapGet("/", () => Results.Redirect("/login.html"))
+   .AllowAnonymous();
+
+app.Run();
+return 0;
+
+// ── First-run seed ────────────────────────────────────────────────────────────
+static async Task SeedFirstRunAsync(IServiceProvider services, PortalConfig config)
+{
+    var userMgr = services.GetRequiredService<UserManager<PortalUser>>();
+    var roleMgr = services.GetRequiredService<RoleManager<PortalRole>>();
+
+    foreach (var role in new[] { "Admin", "Publisher", "Viewer" })
+    {
+        if (!await roleMgr.RoleExistsAsync(role))
+            await roleMgr.CreateAsync(new PortalRole(role));
+    }
+
+    var adminUsername = config.FirstRun.AdminUsername;
+    if (await userMgr.FindByNameAsync(adminUsername) is null)
+    {
+        var admin = new PortalUser
+        {
+            UserName            = adminUsername,
+            Email               = $"{adminUsername}@localhost",
+            IsActive            = true,
+            MustChangePassword  = true
+        };
+        // Temporary password — must be changed on first login
+        var result = await userMgr.CreateAsync(admin, "Admin@12345!");
+        if (result.Succeeded)
+            await userMgr.AddToRoleAsync(admin, "Admin");
+    }
+}

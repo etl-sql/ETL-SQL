@@ -457,7 +457,7 @@ namespace ETL_SQL.Engine.Spill
                         {
                             var v = row.Columns.TryGetValue(field.Name, out var val) ? val : null;
                             if (v == null) b.AppendNull();
-                            else b.Append(Convert.ToDecimal(v));
+                            else b.Append(Math.Round(Convert.ToDecimal(v), dt.Scale));
                         }
                         return b.Build();
                     }
