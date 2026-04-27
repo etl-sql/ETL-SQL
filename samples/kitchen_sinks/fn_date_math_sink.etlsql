@@ -1,0 +1,48 @@
+-- COMPREHENSIVE FUNCTIONS SINK (Part 2: Date & Math)
+SET WHAT_IF OFF;
+
+-- Date & Time
+DECLARE @dt = '2026-04-26 12:34:56';
+SELECT 
+    GETDATE() AS [GETDATE],
+    DATEADD(YEAR, 1, @dt) AS [ADD_YR],
+    DATEDIFF(DAY, '2026-01-01', @dt) AS [DIFF],
+    DATEPART(MONTH, @dt) AS [PART],
+    DATENAME(MONTH, @dt) AS [NAME],
+    EXTRACT(YEAR FROM CAST(@dt AS DATETIME)) AS [EXTRACT],
+    YEAR(@dt) AS [YR],
+    MONTH(@dt) AS [MT],
+    DAY(@dt) AS [DY],
+    EOMONTH(@dt) AS [EOM],
+    ISDATE('2026-01-01') AS [ISDATE],
+    DATETIMEFROMPARTS(2026, 4, 1, 10, 0, 0, 0) AS [DTFP],
+    TIMEFROMPARTS(10, 0, 0, 0, 0) AS [TFP],
+    TRUNC(CAST(@dt AS DATETIME)) AS [TRUNC];
+
+-- Math
+SELECT 
+    ABS(-10) AS [ABS],
+    CEILING(1.1) AS [CEIL],
+    FLOOR(1.9) AS [FLR],
+    ROUND(1.555, 2) AS [RND],
+    SIGN(-5) AS [SIGN],
+    MOD(10, 3) AS [MOD],
+    10 % 3 AS [MOD_OP],
+    POWER(2, 3) AS [PWR],
+    SQRT(16) AS [SQRT],
+    EXP(1) AS [EXP],
+    LOG(2.71828) AS [LOG],
+    LOG10(100) AS [LOG10],
+    RAND() AS [RAND],
+    LEAST(1, 2, 3) AS [LEAST],
+    GREATEST(1, 2, 3) AS [GREATEST];
+
+-- Trig
+SELECT 
+    SIN(0) AS [SIN],
+    COS(0) AS [COS],
+    TAN(0) AS [TAN],
+    ASIN(0) AS [ASIN],
+    ACOS(1) AS [ACOS],
+    ATAN(0) AS [ATAN],
+    ATAN2(1, 1) AS [ATAN2];

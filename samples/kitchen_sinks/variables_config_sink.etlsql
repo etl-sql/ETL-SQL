@@ -1,0 +1,110 @@
+-- VARIABLES & ENGINE CONFIG Kitchen Sink
+-- Covers: DECLARE types, SET, USE PASSWORD, REQUIRE VERSION, CLEAR SESSION,
+--         EXPECT SCHEMA, ASSERT, CREATE SETS/USE SETS, INPUT/OUTPUT variables,
+--         ALTER/DROP CONNECTION, SHOW CONNECTIONS/VARIABLES/VERSION, SET WHAT_IF,
+--         SHOW WHAT_IF, dot notation member access, MINMAX type
+SET WHAT_IF OFF;
+
+-- 1. REQUIRE VERSION
+PRINT 'Testing REQUIRE VERSION...';
+REQUIRE VERSION >= '0.1.0';
+
+-- 2. Variable Declarations — all specialty types
+PRINT 'Testing specialty type declarations...';
+DECLARE @i       INT             = 42;
+DECLARE @s       STRING          = 'hello';
+DECLARE @b       BOOLEAN         = TRUE;
+DECLARE @dt      DATETIME        = GETDATE();
+DECLARE @dc      DECIMAL(10, 4)  = 3.1415;
+DECLARE @md      MARKDOWN        = '## Heading';
+DECLARE @pass    SENSITIVE       = 'TopSecret';
+DECLARE @sec     SECRET          = 'UltraPrivate';
+DECLARE @u       UUID            = NEWID();
+DECLARE @rng     MINMAX(INT)     = (1, 100);
+DECLARE @lst     LIST(INT)       = (10, 20, 30);
+DECLARE @tbl     TABLE;
+
+PRINT 'INT:', @i;
+PRINT 'STRING:', @s;
+PRINT 'BOOL:', @b;
+PRINT 'DECIMAL:', @dc;
+PRINT 'UUID:', @u;
+PRINT 'SENSITIVE (should be masked):', @pass;
+PRINT 'SECRET (should be masked):', @sec;
+
+-- 3. SET + member access on MINMAX
+PRINT 'Testing SET and MINMAX member access...';
+SET @rng.MIN = 5;
+SET @rng.MAX = 50;
+PRINT 'MINMAX.MIN:', @rng.MIN;
+PRINT 'MINMAX.MAX:', @rng.MAX;
+
+-- 4. Multiple DECLARE in one statement
+PRINT 'Testing multi-variable DECLARE...';
+DECLARE @a INT = 1, @c INT = 3;
+PRINT 'A:', @a, 'C:', @c;
+
+-- 5. USE PASSWORD (session decryption key)
+PRINT 'Testing USE PASSWORD...';
+USE PASSWORD = 'test_session_key';
+
+-- 6. CREATE SETS / USE SETS / DROP SETS
+PRINT 'Testing Environment Sets...';
+CREATE SETS !TEST_ENV
+BEGIN
+    @env_server   = 'dev-host',
+    @env_database = 'dev-db'
+END;
+
+USE SETS !TEST_ENV;
+PRINT 'Env Server:', @env_server;
+PRINT 'Env Database:', @env_database;
+
+DROP SETS IF EXISTS !TEST_ENV;
+
+-- 7. ALTER CONNECTION / DROP CONNECTION
+PRINT 'Testing ALTER / DROP CONNECTION...';
+CREATE CONNECTION tmp_conn ON MOCKDB();
+ALTER CONNECTION tmp_conn ON MOCKDB();
+DROP CONNECTION tmp_conn;
+DROP CONNECTION tmp_conn IF EXISTS;
+
+-- 8. SHOW CONNECTIONS / VARIABLES / VERSION
+PRINT 'Testing SHOW statements...';
+SHOW CONNECTIONS;
+SHOW VARIABLES;
+SHOW LOCAL VARIABLES;
+SHOW VERSION;
+
+-- 9. ASSERT
+PRINT 'Testing ASSERT...';
+ASSERT @i = 42, 'Expected @i to be 42';
+PRINT 'ASSERT passed.';
+
+-- 10. EXPECT SCHEMA
+PRINT 'Testing EXPECT SCHEMA...';
+SELECT 1 AS ID, 'Alice' AS Name INTO #schema_test;
+EXPECT SCHEMA #schema_test (
+    ID   INT,
+    Name VARCHAR
+);
+PRINT 'EXPECT SCHEMA passed.';
+
+-- 11. EXPECT SCHEMA with ON DRIFT WARN (schema drift, should not halt)
+PRINT 'Testing EXPECT SCHEMA ON DRIFT WARN...';
+EXPECT SCHEMA #schema_test (
+    ID        INT,
+    Name      VARCHAR,
+    ExtraCol  INT        -- column that doesn't exist
+) ON DRIFT WARN;
+PRINT 'EXPECT SCHEMA WARN passed.';
+
+-- 12. SET WHAT_IF ON/OFF (should suppress side effects)
+PRINT 'Testing SET WHAT_IF ON...';
+SET WHAT_IF ON;
+INSERT INTO #schema_test VALUES (99, 'Ghost');   -- should not execute
+SET WHAT_IF OFF;
+SELECT COUNT(*) AS RowCount FROM #schema_test;   -- should still be 1
+
+-- 13. INPUT / OUTPUT variables via RUN SCRIPT (tested in orchestration_sink)
+PRINT 'All variables_config tests complete.';

@@ -1,0 +1,42 @@
+-- GROUPING Kitchen Sink
+SET WHAT_IF OFF;
+
+SELECT 1 AS ID, 'A' AS Reg, 'IT' AS Dept, 100 AS Sol INTO #G;
+INSERT INTO #G VALUES (2, 'A', 'HR', 200);
+INSERT INTO #G VALUES (3, 'B', 'IT', 150);
+INSERT INTO #G VALUES (4, 'B', 'HR', 250);
+
+-- 1. ROLLUP
+PRINT 'Testing ROLLUP...';
+SELECT Reg, Dept, SUM(Sol) AS Total 
+FROM #G 
+GROUP BY ROLLUP(Reg, Dept) 
+ORDER BY Reg, Dept;
+
+-- 2. CUBE
+PRINT 'Testing CUBE...';
+SELECT Reg, Dept, SUM(Sol) AS Total 
+FROM #G 
+GROUP BY CUBE(Reg, Dept) 
+ORDER BY Reg, Dept;
+
+-- 3. GROUPING SETS
+PRINT 'Testing GROUPING SETS...';
+SELECT Reg, Dept, SUM(Sol) AS Total 
+FROM #G 
+GROUP BY GROUPING SETS((Reg, Dept), (Reg), ()) 
+ORDER BY Reg, Dept;
+
+-- 4. HAVING
+PRINT 'Testing HAVING...';
+SELECT Reg, SUM(Sol) AS Total 
+FROM #G 
+GROUP BY Reg 
+HAVING SUM(Sol) > 300 
+ORDER BY Total DESC;
+
+-- 5. Complex ORDER BY
+PRINT 'Testing Complex ORDER BY...';
+SELECT Reg, Dept, Sol 
+FROM #G 
+ORDER BY Reg DESC, Sol ASC;

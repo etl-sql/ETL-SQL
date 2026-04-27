@@ -1,0 +1,42 @@
+-- FILESYSTEM & AUTOMATION Kitchen Sink (Final Smoke)
+SET WHAT_IF OFF;
+
+-- 1. System Variables (Read-Only?)
+PRINT '@@ERROR: ' + @@ERROR;
+PRINT '@@ROWCOUNT: ' + @@ROWCOUNT;
+
+-- 2. Introspection
+PRINT 'Testing SHOW...';
+SHOW CONNECTIONS;
+
+-- 3. EXEC vs EXECUTE
+PRINT 'Testing EXEC vs EXECUTE Aliasing...';
+DECLARE @sql = 'PRINT ''Dynamic EXEC Works''';
+EXEC (@sql);
+EXECUTE (@sql);
+
+-- 4. WAITFOR
+PRINT 'Testing WAITFOR Delay...';
+WAITFOR DELAY '00:00:01';
+PRINT 'Wait Done.';
+
+-- 5. File Ops
+PRINT 'Testing FILE Ops...';
+DECLARE @tf = 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\smoke.txt';
+DECLARE @cp = 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\smoke_copy.txt';
+
+CREATE CONNECTION s_src ON FLATFILE(@tf);
+INSERT INTO s_src.FILE (Line) VALUES ('Smoke');
+
+COPY FILE @tf TO @cp;
+IF FILE_EXISTS(@cp) PRINT 'COPY FILE: Pass';
+
+DELETE FILE @cp;
+DELETE FILE @tf;
+PRINT 'DELETE FILE: Pass';
+
+-- 6. Directory Ops
+CREATE DIRECTORY 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\smoke_dir\';
+IF DIRECTORY_EXISTS('c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\smoke_dir\') PRINT 'CREATE DIRECTORY: Pass';
+DELETE DIRECTORY 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\smoke_dir\';
+PRINT 'DELETE DIRECTORY: Pass';

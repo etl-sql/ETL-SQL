@@ -1,0 +1,71 @@
+-- FLATFILE Kitchen Sink
+SET WHAT_IF OFF;
+SET ALLOW_FILE_TYPE_ACCESS = '.dat';
+
+-- Data preparation
+SELECT 1 AS ID, 'Alice' AS Name, 'HR' AS Dept, 5000.50 AS Salary, CAST('2026-01-15' AS DATE) AS JoinDate INTO #sample;
+INSERT INTO #sample VALUES (2, 'Bob', 'IT', 6000.00, '2026-02-20');
+INSERT INTO #sample VALUES (3, 'Charlie', 'IT', 5500.00, '2026-03-05');
+
+-- 1. Standard CSV (Comma, Header ON)
+PRINT 'Testing Standard CSV...';
+CREATE CONNECTION csv_std ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\std.csv') WITH(DELIMITER=',', HEADER=ON);
+INSERT INTO csv_std.FILE SELECT * FROM #sample;
+PRINT 'Inserted ' + @@ROWCOUNT + ' rows into std.csv';
+SELECT * FROM csv_std.FILE;
+
+-- 2. Pipe-delimited, Header OFF, ANSI encoding
+PRINT 'Testing Pipe-delimited, No Header, ANSI...';
+CREATE CONNECTION pipe_no_head ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\pipe.txt') WITH(DELIMITER='|', HEADER=OFF, ENCODING='ANSI');
+INSERT INTO pipe_no_head.FILE SELECT * FROM #sample;
+PRINT 'Inserted ' + @@ROWCOUNT + ' rows into pipe.txt';
+SELECT * FROM pipe_no_head.FILE;
+
+-- 3. Tab-delimited, GZip Compressed
+PRINT 'Testing Tab-delimited, Compressed...';
+CREATE CONNECTION tab_gz ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\data.tsv.gz') WITH(DELIMITER='	', COMPRESS=ON);
+INSERT INTO tab_gz.FILE SELECT * FROM #sample;
+PRINT 'Inserted ' + @@ROWCOUNT + ' rows into data.tsv.gz';
+SELECT * FROM tab_gz.FILE;
+
+-- 4. Encrypted CSV
+PRINT 'Testing Encrypted CSV...';
+CREATE CONNECTION csv_enc ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\secret.csv') WITH(ENCRYPT=ON, PASSWORD='super_secret_pass');
+INSERT INTO csv_enc.FILE SELECT * FROM #sample;
+PRINT 'Inserted ' + @@ROWCOUNT + ' rows into secret.csv';
+SELECT * FROM csv_enc.FILE;
+
+-- 5. Fixed Width
+PRINT 'Testing Fixed Width...';
+CREATE TABLE #FixedTemplate (
+    ID     INT         /* @width: 5 */,
+    Name   VARCHAR(10),
+    Dept   CHAR(4),
+    Salary DECIMAL(10,2) /* @width: 10 */,
+    JoinDate DATE      /* @width: 10 */
+);
+CREATE CONNECTION fixed_file ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\fixed.dat') WITH(FORMAT='FIXED', TEMPLATE=#FixedTemplate, HEADER=OFF);
+INSERT INTO fixed_file.FILE SELECT * FROM #sample;
+PRINT 'Inserted ' + @@ROWCOUNT + ' rows into fixed.dat';
+SELECT * FROM fixed_file.FILE;
+
+-- 6. Custom Date Format, Culture, and Null mapping
+PRINT 'Testing Custom Formats and Nulls...';
+INSERT INTO #sample VALUES (4, 'Dave', 'Sales', NULL, '2026-04-10');
+CREATE CONNECTION custom_fmt ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\custom.csv') 
+    WITH(DELIMITER=';', DATE_FORMAT='yyyy-MM-dd', CULTURE='de-DE', NULL_AS='EMPTY');
+INSERT INTO custom_fmt.FILE SELECT * FROM #sample;
+PRINT 'Inserted ' + @@ROWCOUNT + ' rows into custom.csv';
+SELECT * FROM custom_fmt.FILE;
+
+-- 7. Paging (START_AT, END_AT)
+PRINT 'Testing Paging...';
+CREATE CONNECTION paged ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\std.csv') WITH(HEADER=ON, START_AT=2, END_AT=3);
+SELECT * FROM paged.FILE;
+
+-- 8. Trim and Text Qualifier
+PRINT 'Testing Trim and Text Qualifier...';
+CREATE CONNECTION qual ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\qual.csv') WITH(TEXT_QUALIFIER=DOUBLEQUOTE, TRIM=ON);
+INSERT INTO qual.FILE SELECT '  LeadingSpace' AS C1, 'TrailingSpace  ' AS C2, '"WithQuotes"' AS C3;
+PRINT 'Inserted ' + @@ROWCOUNT + ' rows into qual.csv';
+SELECT * FROM qual.FILE;

@@ -1,0 +1,42 @@
+-- ERRORS Kitchen Sink
+SET WHAT_IF OFF;
+
+-- 1. Simple TRY...CATCH
+PRINT 'Testing TRY...CATCH (Divide by Zero)...';
+BEGIN TRY
+    SELECT 1 / 0;
+END TRY
+BEGIN CATCH
+    PRINT 'Caught Error: ' + ERROR_MESSAGE();
+    PRINT 'Error Number: ' + ERROR_NUMBER();
+    PRINT 'Error Line: ' + ERROR_LINE();
+END CATCH
+
+-- 2. THROW
+PRINT 'Testing THROW...';
+BEGIN TRY
+    THROW 50001, 'Custom Error Message', 1;
+END TRY
+BEGIN CATCH
+    PRINT 'Caught Custom Error: ' + ERROR_MESSAGE();
+END CATCH
+
+-- 3. @@ERROR
+PRINT 'Testing @@ERROR...';
+SELECT 1 / 0;
+PRINT 'Last Error ID: ' + @@ERROR;
+
+-- 4. Nested TRY...CATCH
+PRINT 'Testing Nested TRY...CATCH...';
+BEGIN TRY
+    BEGIN TRY
+        SELECT CAST('ABC' AS INT);
+    END TRY
+    BEGIN CATCH
+        PRINT 'Inner Catch: ' + ERROR_MESSAGE();
+        THROW; -- Rethrow
+    END CATCH
+END TRY
+BEGIN CATCH
+    PRINT 'Outer Catch: ' + ERROR_MESSAGE();
+END CATCH

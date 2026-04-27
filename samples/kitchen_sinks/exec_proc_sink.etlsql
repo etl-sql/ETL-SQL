@@ -1,0 +1,105 @@
+-- PROCEDURES & FUNCTIONS & EXEC Kitchen Sink
+-- Covers: CREATE PROCEDURE, CREATE FUNCTION, EXEC (stored proc), EXEC (dynamic local),
+--         EXEC (block pushdown with MOCKDB), CREATE OR ALTER, DROP PROCEDURE/FUNCTION,
+--         EXEC WITH params, EXEC INTO #temp, RAISERROR
+SET WHAT_IF OFF;
+
+-- 1. CREATE FUNCTION
+PRINT 'Testing CREATE FUNCTION...';
+CREATE FUNCTION DoubleIt(@n INT) RETURNS INT
+AS
+BEGIN
+    RETURN @n * 2;
+END;
+
+SELECT DoubleIt(5) AS Doubled, DoubleIt(21) AS DoubledB;
+
+-- 2. CREATE FUNCTION with multi-statement body
+PRINT 'Testing CREATE FUNCTION (multi-statement)...';
+CREATE FUNCTION TaxAmount(@amount DECIMAL) RETURNS DECIMAL
+AS
+BEGIN
+    DECLARE @tax DECIMAL = @amount * 0.10;
+    RETURN @tax;
+END;
+
+SELECT TaxAmount(250.00) AS Tax;
+
+-- 3. CREATE PROCEDURE
+PRINT 'Testing CREATE PROCEDURE...';
+CREATE PROCEDURE SummarizeData @minAmount INT
+AS
+BEGIN
+    SELECT 1 AS ID, 'Apple' AS Name, 100 AS Amount INTO #ProcData;
+    INSERT INTO #ProcData VALUES (2, 'Banana', 50), (3, 'Cherry', 200);
+    SELECT Name, Amount FROM #ProcData WHERE Amount >= @minAmount ORDER BY Amount DESC;
+END;
+
+EXEC SummarizeData 100;
+
+-- 4. EXEC stored procedure with named params
+PRINT 'Testing EXEC with named params...';
+EXEC SummarizeData @minAmount = 50;
+
+-- 5. CREATE OR ALTER (update existing)
+PRINT 'Testing CREATE OR ALTER FUNCTION...';
+CREATE OR ALTER FUNCTION DoubleIt(@n INT) RETURNS INT
+AS
+BEGIN
+    RETURN @n * 3;   -- now triples
+END;
+
+SELECT DoubleIt(5) AS Tripled;
+
+-- 6. CREATE OR ALTER PROCEDURE
+PRINT 'Testing CREATE OR ALTER PROCEDURE...';
+CREATE OR ALTER PROCEDURE SummarizeData @minAmount INT
+AS
+BEGIN
+    SELECT 1 AS ID, 'Revised' AS Name, 999 AS Amount INTO #ProcData2;
+    SELECT * FROM #ProcData2 WHERE Amount >= @minAmount;
+END;
+
+EXEC SummarizeData 500;
+
+-- 7. DROP FUNCTION / PROCEDURE IF EXISTS
+PRINT 'Testing DROP FUNCTION / PROCEDURE...';
+DROP FUNCTION  IF EXISTS DoubleIt;
+DROP FUNCTION  IF EXISTS TaxAmount;
+DROP PROCEDURE IF EXISTS SummarizeData;
+
+-- 8. EXEC dynamic local (string expression)
+PRINT 'Testing EXEC dynamic local...';
+DECLARE @sql STRING = 'SELECT 42 AS DynResult';
+EXEC (@sql);
+
+-- 9. EXEC dynamic local INTO #temp
+PRINT 'Testing EXEC dynamic local INTO...';
+DECLARE @sql2 STRING = 'SELECT 100 AS Val, ''Dynamic'' AS Label';
+EXEC (@sql2) INTO #DynResult;
+SELECT * FROM #DynResult;
+
+-- 10. EXEC local block style (anonymous block)
+PRINT 'Testing EXEC local block...';
+EXEC (
+    DECLARE @x INT = 7;
+    PRINT 'EXEC block x:', @x;
+);
+
+-- 11. RAISERROR
+PRINT 'Testing RAISERROR...';
+BEGIN TRY
+    RAISERROR('Test RAISERROR message', 16, 1);
+END TRY
+BEGIN CATCH
+    PRINT 'Caught RAISERROR: ' + ERROR_MESSAGE();
+END CATCH
+
+-- 12. EXEC with MOCKDB pushdown (simulates AT conn syntax)
+PRINT 'Testing EXEC AT MOCKDB...';
+CREATE CONNECTION mock_exec ON MOCKDB();
+EXEC ('SELECT 1 AS PushdownResult') AT mock_exec INTO #PushResult;
+SELECT * FROM #PushResult;
+DROP CONNECTION mock_exec;
+
+PRINT 'Procedures, Functions, and EXEC tests complete.';

@@ -1,0 +1,4 @@
+-- Testing Docker Capability
+USE DOCKER('postgres:15-alpine') AS pg_test;
+PRINT 'Postgres container spawned at: ' + pg_test.CONNECTION_STRING;
+CLOSE DOCKER pg_test;

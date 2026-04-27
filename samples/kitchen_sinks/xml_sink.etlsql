@@ -1,0 +1,24 @@
+-- XML Kitchen Sink
+SET WHAT_IF OFF;
+SELECT 1 AS ID, 'Alice' AS Name INTO #sample;
+
+-- 1. Standard XML
+PRINT 'Testing Standard XML...';
+CREATE CONNECTION xml_std ON XML('C:\Users\chuck\scratch\ETL-SQL\std.xml');
+INSERT INTO xml_std.FILE SELECT * FROM #sample;
+PRINT 'Inserted into std.xml';
+SELECT * FROM xml_std.FILE;
+
+-- 2. XML with Root Path (XPath)
+PRINT 'Testing XML with Root Path...';
+CREATE CONNECTION xml_root ON XML('C:\Users\chuck\scratch\ETL-SQL\root.xml') WITH(ROOT_PATH='/Data/Rows');
+INSERT INTO xml_root.FILE SELECT * FROM #sample;
+PRINT 'Inserted into root.xml';
+SELECT * FROM xml_root.FILE;
+
+-- 3. Compressed XML
+PRINT 'Testing Compressed XML...';
+CREATE CONNECTION xml_gz ON XML('C:\Users\chuck\scratch\ETL-SQL\data.xml.gz') WITH(COMPRESS=ON);
+INSERT INTO xml_gz.FILE SELECT * FROM #sample;
+PRINT 'Inserted into data.xml.gz';
+SELECT * FROM xml_gz.FILE;

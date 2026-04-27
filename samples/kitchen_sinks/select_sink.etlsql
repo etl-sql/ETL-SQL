@@ -1,0 +1,53 @@
+-- SELECT Kitchen Sink
+SET WHAT_IF OFF;
+
+-- Basic setup
+SELECT 1 AS ID, 'A' AS Val INTO #T1;
+INSERT INTO #T1 VALUES (2, 'B');
+INSERT INTO #T1 VALUES (3, 'C');
+
+SELECT 1 AS ID, 'X' AS Extra INTO #T2;
+INSERT INTO #T2 VALUES (2, 'Y');
+INSERT INTO #T2 VALUES (4, 'Z');
+
+-- 1. DISTINCT and TOP
+PRINT 'Testing DISTINCT and TOP...';
+SELECT DISTINCT TOP 2 * FROM #T1;
+
+-- 2. JOINs
+PRINT 'Testing JOINs...';
+SELECT a.ID, a.Val, b.Extra FROM #T1 a JOIN #T2 b ON a.ID = b.ID;
+SELECT a.ID, a.Val, b.Extra FROM #T1 a LEFT JOIN #T2 b ON a.ID = b.ID;
+SELECT a.ID, a.Val, b.Extra FROM #T1 a RIGHT JOIN #T2 b ON a.ID = b.ID;
+SELECT a.ID, a.Val, b.Extra FROM #T1 a FULL JOIN #T2 b ON a.ID = b.ID;
+SELECT a.ID, a.Val, b.Extra FROM #T1 a CROSS JOIN #T2 b;
+-- SELECT a.ID, a.Val FROM #T1 a LEFT SEMI JOIN #T2 b ON a.ID = b.ID;
+-- SELECT a.ID, a.Val FROM #T1 a LEFT ANTI JOIN #T2 b ON a.ID = b.ID;
+
+-- 3. JOIN Hints (NOTE: Currently failing in parser, logged as bug)
+PRINT 'Testing JOIN Hints (Expect Failures if uncommented)...';
+-- SELECT a.ID, a.Val, b.Extra FROM #T1 a HASH JOIN #T2 b ON a.ID = b.ID;
+-- SELECT a.ID, a.Val, b.Extra FROM #T1 a LOOP JOIN #T2 b ON a.ID = b.ID;
+-- SELECT a.ID, a.Val, b.Extra FROM #T1 a MERGE JOIN #T2 b ON a.ID = b.ID;
+
+-- 4. CROSS/OUTER APPLY
+PRINT 'Testing APPLY...';
+SELECT a.ID, b.Extra FROM #T1 a CROSS APPLY (SELECT * FROM #T2 WHERE ID = a.ID) b;
+SELECT a.ID, b.Extra FROM #T1 a OUTER APPLY (SELECT * FROM #T2 WHERE ID = a.ID) b;
+
+-- 5. GROUP BY Extensions
+PRINT 'Testing GROUP BY Extensions...';
+SELECT ID, SUM(ID) AS Total FROM #T1 GROUP BY ROLLUP(ID);
+SELECT ID, SUM(ID) AS Total FROM #T1 GROUP BY CUBE(ID);
+SELECT ID, SUM(ID) AS Total FROM #T1 GROUP BY GROUPING SETS((ID), ());
+
+-- 6. PIVOT / UNPIVOT
+PRINT 'Testing PIVOT...';
+SELECT 'Val' AS Category, [1], [2], [3]
+FROM (SELECT ID, Val FROM #T1) AS src
+PIVOT (MAX(Val) FOR ID IN ([1], [2], [3])) AS pvt;
+
+-- 7. FOR JSON / XML
+PRINT 'Testing FOR JSON/XML...';
+SELECT * FROM #T1 FOR JSON AUTO;
+SELECT * FROM #T1 FOR XML AUTO;

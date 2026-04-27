@@ -1,0 +1,24 @@
+-- JSON Kitchen Sink
+SET WHAT_IF OFF;
+
+SELECT 1 AS ID, 'Alice' AS Name, 'HR' AS Dept INTO #sample;
+INSERT INTO #sample VALUES (2, 'Bob', 'IT');
+
+-- 1. Standard JSON
+PRINT 'Testing Standard JSON...';
+CREATE CONNECTION json_std ON JSON('C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\std.json');
+INSERT INTO json_std.FILE SELECT * FROM #sample;
+PRINT 'Inserted into std.json';
+SELECT * FROM json_std.FILE;
+
+-- 2. JSON with Root Path
+PRINT 'Testing JSON with Root Path...';
+CREATE CONNECTION json_root ON JSON('C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\root.json') WITH(ROOT_PATH='$.data.orders');
+INSERT INTO json_root.FILE SELECT * FROM #sample;
+SELECT * FROM json_root.FILE;
+
+-- 3. Compressed JSON
+PRINT 'Testing Compressed JSON...';
+CREATE CONNECTION json_gz ON JSON('C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\data.json.gz') WITH(COMPRESS=ON);
+INSERT INTO json_gz.FILE SELECT * FROM #sample;
+SELECT * FROM json_gz.FILE;

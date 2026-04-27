@@ -1,0 +1,124 @@
+-- ADVANCED FILE OPERATIONS Kitchen Sink
+-- Covers: MOVE FILE, RENAME FILE, COMPRESS FILE, ENCRYPT FILE, DECRYPT FILE,
+--         function-style file ops (COPY_FILE, MOVE_FILE, etc.),
+--         DELETE DIRECTORY_CONTENTS, COMPRESS DIRECTORY, RENAME DIRECTORY,
+--         FILE_LIST, REMOTE_FILE_LIST (SFTP skipped — no live conn)
+SET WHAT_IF OFF;
+
+DECLARE @base  STRING = 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\';
+DECLARE @src   STRING = @base + 'adv_src.txt';
+DECLARE @dst   STRING = @base + 'adv_dst.txt';
+DECLARE @moved STRING = @base + 'adv_moved.txt';
+DECLARE @ren   STRING = @base + 'adv_renamed.txt';
+DECLARE @comp  STRING = @base + 'adv_compressed.gz';
+DECLARE @enc   STRING = @base + 'adv_encrypted.enc';
+DECLARE @dec   STRING = @base + 'adv_decrypted.txt';
+DECLARE @dir1  STRING = @base + 'adv_dir1\';
+DECLARE @dir2  STRING = @base + 'adv_dir2\';
+DECLARE @dir3  STRING = @base + 'adv_dir3\';
+DECLARE @compd STRING = @base + 'adv_dir_compressed.zip';
+
+-- Setup: write source file via FLATFILE
+CREATE CONNECTION adv_src ON FLATFILE(@src) WITH(DELIMITER = ',', HEADER = OFF);
+INSERT INTO adv_src.FILE (Line) VALUES ('Line1'), ('Line2'), ('Line3');
+PRINT 'Source file created.';
+
+-- 1. COPY FILE (statement style)
+PRINT 'Testing COPY FILE...';
+COPY FILE @src TO @dst WITH (OVERWRITE = ON);
+IF FILE_EXISTS(@dst) PRINT 'COPY FILE: Pass';
+
+-- 2. MOVE FILE
+PRINT 'Testing MOVE FILE...';
+MOVE FILE @dst TO @moved WITH (OVERWRITE = ON);
+IF FILE_EXISTS(@moved) PRINT 'MOVE FILE: Pass';
+IF NOT FILE_EXISTS(@dst)   PRINT 'Source removed after MOVE: Pass';
+
+-- 3. RENAME FILE
+PRINT 'Testing RENAME FILE...';
+RENAME FILE @moved TO @ren;
+IF FILE_EXISTS(@ren) PRINT 'RENAME FILE: Pass';
+
+-- 4. COMPRESS FILE
+PRINT 'Testing COMPRESS FILE...';
+COMPRESS FILE @ren TO @comp WITH (OVERWRITE = ON);
+IF FILE_EXISTS(@comp) PRINT 'COMPRESS FILE: Pass';
+
+-- 5. ENCRYPT FILE / DECRYPT FILE
+PRINT 'Testing ENCRYPT / DECRYPT FILE...';
+ENCRYPT FILE @ren TO @enc PASSWORD 'test_pass123' WITH (OVERWRITE = ON);
+IF FILE_EXISTS(@enc) PRINT 'ENCRYPT FILE: Pass';
+
+DECRYPT FILE @enc TO @dec PASSWORD 'test_pass123' WITH (OVERWRITE = ON);
+IF FILE_EXISTS(@dec) PRINT 'DECRYPT FILE: Pass';
+
+-- 6. Function-style file ops
+PRINT 'Testing function-style file ops...';
+COPY_FILE(@src, @base + 'fn_copy.txt');
+IF FILE_EXISTS(@base + 'fn_copy.txt') PRINT 'COPY_FILE(): Pass';
+
+MOVE_FILE(@base + 'fn_copy.txt', @base + 'fn_moved.txt');
+IF FILE_EXISTS(@base + 'fn_moved.txt') PRINT 'MOVE_FILE(): Pass';
+
+RENAME_FILE(@base + 'fn_moved.txt', @base + 'fn_renamed.txt');
+IF FILE_EXISTS(@base + 'fn_renamed.txt') PRINT 'RENAME_FILE(): Pass';
+
+DELETE_FILE(@base + 'fn_renamed.txt');
+PRINT 'DELETE_FILE(): done';
+
+-- Compress / Encrypt function style
+COMPRESS_FILE(@src, @base + 'fn_compressed.gz');
+IF FILE_EXISTS(@base + 'fn_compressed.gz') PRINT 'COMPRESS_FILE(): Pass';
+
+ENCRYPT_FILE(@src, @base + 'fn_enc.enc', 'funcpass');
+IF FILE_EXISTS(@base + 'fn_enc.enc') PRINT 'ENCRYPT_FILE(): Pass';
+
+DECRYPT_FILE(@base + 'fn_enc.enc', @base + 'fn_dec.txt', 'funcpass');
+IF FILE_EXISTS(@base + 'fn_dec.txt') PRINT 'DECRYPT_FILE(): Pass';
+
+-- 7. FILE_LIST as table
+PRINT 'Testing FILE_LIST...';
+SELECT Name, Extension, Size, LastModified
+FROM FILE_LIST(@base, '*.txt', FALSE)
+ORDER BY LastModified DESC;
+
+-- 8. Directory ops
+PRINT 'Testing COPY / RENAME / MOVE DIRECTORY...';
+CREATE DIRECTORY @dir1;
+-- Put a file inside dir1
+CREATE CONNECTION dir1_file ON FLATFILE(@dir1 + 'inner.txt') WITH (HEADER = OFF);
+INSERT INTO dir1_file.FILE (Line) VALUES ('inside');
+
+COPY DIRECTORY @dir1 TO @dir2 WITH (OVERWRITE = ON);
+IF DIRECTORY_EXISTS(@dir2) PRINT 'COPY DIRECTORY: Pass';
+
+RENAME DIRECTORY @dir2 TO @dir3;
+IF DIRECTORY_EXISTS(@dir3) PRINT 'RENAME DIRECTORY: Pass';
+
+MOVE DIRECTORY @dir3 TO @dir2 WITH (OVERWRITE = ON);
+IF DIRECTORY_EXISTS(@dir2) PRINT 'MOVE DIRECTORY: Pass';
+
+-- 9. DELETE DIRECTORY_CONTENTS
+PRINT 'Testing DELETE DIRECTORY_CONTENTS...';
+DELETE DIRECTORY_CONTENTS @dir1 WITH (RECURSIVE = ON);
+PRINT 'DELETE DIRECTORY_CONTENTS: done';
+
+-- 10. COMPRESS DIRECTORY
+PRINT 'Testing COMPRESS DIRECTORY...';
+COMPRESS DIRECTORY @dir2 TO @compd WITH (OVERWRITE = ON);
+IF FILE_EXISTS(@compd) PRINT 'COMPRESS DIRECTORY: Pass';
+
+-- 11. Cleanup
+PRINT 'Cleaning up...';
+DELETE FILE IF EXISTS @src;
+DELETE FILE IF EXISTS @ren;
+DELETE FILE IF EXISTS @comp;
+DELETE FILE IF EXISTS @enc;
+DELETE FILE IF EXISTS @dec;
+DELETE FILE IF EXISTS @base + 'fn_compressed.gz';
+DELETE FILE IF EXISTS @base + 'fn_enc.enc';
+DELETE FILE IF EXISTS @base + 'fn_dec.txt';
+DELETE FILE IF EXISTS @compd;
+DELETE DIRECTORY @dir1;
+DELETE DIRECTORY @dir2;
+PRINT 'Advanced file operations tests complete.';

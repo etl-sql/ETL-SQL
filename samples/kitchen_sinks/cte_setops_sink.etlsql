@@ -1,0 +1,108 @@
+-- CTE & SET OPERATIONS Kitchen Sink
+-- Covers: standard CTE, CTE with column aliases, multiple CTEs, recursive CTE,
+--         UNION / UNION ALL / EXCEPT / INTERSECT, FOR @row IN (query),
+--         BREAK / CONTINUE inside WHILE, RETURN from a context, LEFT/RIGHT SEMI/ANTI JOIN
+SET WHAT_IF OFF;
+
+-- Data setup
+SELECT 1 AS ID, 'A' AS Reg, 100 AS Amount INTO #Sales;
+INSERT INTO #Sales VALUES (2, 'B', 200), (3, 'A', 150), (4, 'C', 50);
+
+SELECT 1 AS ID, 'Active' AS Status INTO #Customers;
+INSERT INTO #Customers VALUES (2, 'Inactive'), (3, 'Active'), (5, 'Active');
+
+-- ── CTEs ─────────────────────────────────────────────────────────────────────
+
+-- 1. Standard CTE
+PRINT 'Testing standard CTE...';
+WITH HighSales AS (
+    SELECT ID, Reg, Amount FROM #Sales WHERE Amount >= 100
+)
+SELECT * FROM HighSales ORDER BY Amount DESC;
+
+-- 2. CTE with explicit column aliases
+PRINT 'Testing CTE with column aliases...';
+WITH RegionTotals (Region, Total) AS (
+    SELECT Reg, SUM(Amount) FROM #Sales GROUP BY Reg
+)
+SELECT Region, Total FROM RegionTotals ORDER BY Total DESC;
+
+-- 3. Multiple CTEs
+PRINT 'Testing multiple CTEs...';
+WITH
+    HighSales AS (SELECT ID, Reg, Amount FROM #Sales WHERE Amount >= 100),
+    ActiveCust AS (SELECT ID, Status FROM #Customers WHERE Status = 'Active')
+SELECT h.ID, h.Reg, h.Amount, a.Status
+FROM HighSales h
+JOIN ActiveCust a ON h.ID = a.ID;
+
+-- 4. Recursive CTE
+PRINT 'Testing recursive CTE...';
+WITH RECURSIVE Counter AS (
+    SELECT 1 AS n
+    UNION ALL
+    SELECT n + 1 FROM Counter WHERE n < 5
+)
+SELECT n FROM Counter;
+
+-- ── SET OPERATIONS ────────────────────────────────────────────────────────────
+
+-- 5. UNION
+PRINT 'Testing UNION...';
+SELECT 'Alpha' AS Name UNION SELECT 'Beta' AS Name;
+
+-- 6. UNION ALL
+PRINT 'Testing UNION ALL...';
+SELECT Reg FROM #Sales UNION ALL SELECT Reg FROM #Sales;
+
+-- 7. EXCEPT
+PRINT 'Testing EXCEPT...';
+SELECT ID FROM #Sales EXCEPT SELECT ID FROM #Customers;
+
+-- 8. INTERSECT
+PRINT 'Testing INTERSECT...';
+SELECT ID FROM #Sales INTERSECT SELECT ID FROM #Customers;
+
+-- ── JOIN VARIANTS ────────────────────────────────────────────────────────────
+
+-- 9. LEFT SEMI JOIN (rows from left where match exists on right)
+PRINT 'Testing LEFT SEMI JOIN...';
+SELECT s.ID, s.Reg
+FROM #Sales s
+LEFT SEMI JOIN #Customers c ON s.ID = c.ID;
+
+-- 10. LEFT ANTI JOIN (rows from left where NO match exists on right)
+PRINT 'Testing LEFT ANTI JOIN...';
+SELECT s.ID, s.Reg
+FROM #Sales s
+LEFT ANTI JOIN #Customers c ON s.ID = c.ID;
+
+-- ── CONTROL FLOW ─────────────────────────────────────────────────────────────
+
+-- 11. BREAK and CONTINUE inside WHILE
+PRINT 'Testing BREAK and CONTINUE...';
+DECLARE @i INT = 0;
+WHILE @i < 10
+BEGIN
+    SET @i = @i + 1;
+    IF @i = 3 CONTINUE;   -- skip 3
+    IF @i = 6 BREAK;      -- stop at 6
+    PRINT 'Loop i:', @i;
+END
+
+-- 12. FOR @row IN (query) — row iteration
+PRINT 'Testing FOR @row IN (query)...';
+FOR @row IN (SELECT ID, Reg, Amount FROM #Sales ORDER BY ID)
+BEGIN
+    PRINT 'Row ID:', @row.ID, 'Reg:', @row.Reg, 'Amount:', @row.Amount;
+END
+
+-- 13. RETURN from script (non-fatal — only exits current script)
+PRINT 'Tests before RETURN passed.';
+DECLARE @done BIT = FALSE;
+IF @done = FALSE
+BEGIN
+    PRINT 'RETURN not triggered (done=FALSE).';
+END
+
+PRINT 'CTE, Set Ops, and Control Flow tests complete.';

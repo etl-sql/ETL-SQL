@@ -1,0 +1,118 @@
+-- DIAGNOSTICS & SSH KEY Kitchen Sink
+-- Covers: SET PROFILING / SHOW PROFILE, EXPLAIN, LINT, SHOW VARIABLES,
+--         SHOW VERSION, CREATE SSH_KEY_PAIR, SHOW TAGS, LINEAGE(),
+--         GET_TAGS, GET_TAG_VALUE, script metadata header tags
+/* 
+   @author: Kitchen Sink Test
+   @version: 1.0.0
+   @description: Validates diagnostics and metadata features
+*/
+SET WHAT_IF OFF;
+
+-- 1. SHOW VERSION
+PRINT 'Testing SHOW VERSION...';
+SHOW VERSION;
+SHOW VERSION INTO #ver;
+SELECT * FROM #ver;
+
+-- 2. SET PROFILING / SHOW PROFILE
+PRINT 'Testing SET PROFILING...';
+SET PROFILING ON;
+
+SELECT 1 AS ID, 'Alpha' AS Name, 100 AS Amount INTO #Profile_Test;
+INSERT INTO #Profile_Test VALUES (2, 'Beta', 200), (3, 'Gamma', 150);
+SELECT * FROM #Profile_Test ORDER BY Amount DESC;
+
+SET PROFILING OFF;
+
+SHOW PROFILE;
+SHOW PROFILE INTO #prof_results;
+SELECT * FROM #prof_results ORDER BY DurationMs DESC;
+
+-- 3. EXPLAIN
+PRINT 'Testing EXPLAIN...';
+EXPLAIN
+SELECT * FROM #Profile_Test WHERE Amount > 100 ORDER BY Amount;
+
+-- 4. LINT
+PRINT 'Testing LINT (current buffer has no file path, expect graceful handling)...';
+BEGIN TRY
+    LINT 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\select_sink.etlsql';
+    PRINT 'LINT completed.';
+END TRY
+BEGIN CATCH
+    PRINT 'LINT errored: ' + ERROR_MESSAGE();
+END CATCH
+
+-- 5. SHOW VARIABLES
+PRINT 'Testing SHOW VARIABLES...';
+DECLARE @diag_var1 INT = 999;
+DECLARE @diag_var2 STRING = 'test';
+SHOW VARIABLES;
+SHOW VARIABLES INTO #vars;
+SELECT * FROM #vars;
+SHOW LOCAL VARIABLES;
+
+-- 6. Lineage Tagging & SHOW TAGS
+PRINT 'Testing Lineage Tags...';
+SELECT
+    1  AS UserId    /* @d: Internal user ID; @PII: true; */,
+    'A' AS UserName /* @d: Display name; @owner: SecurityTeam; */
+INTO #Tagged;
+
+-- Tag introspection statements
+SHOW TAGS FOR TABLE #Tagged;
+SHOW TAGS FOR TABLE #Tagged COLUMN UserId;
+SHOW TAG VALUE FOR TABLE #Tagged COLUMN UserId WITH TAG 'd';
+
+-- GET_TAGS / GET_TAG_VALUE as expressions
+DECLARE @tags = GET_TAGS('#Tagged', 'UserId');
+DECLARE @desc = GET_TAG_VALUE('#Tagged', 'UserId', 'd');
+PRINT 'Tags on UserId:', @tags;
+PRINT 'Description of UserId:', @desc;
+
+-- 7. LINEAGE()
+PRINT 'Testing LINEAGE()...';
+
+-- Console / messages view
+LINEAGE(#Tagged);
+
+-- Column-specific trace
+LINEAGE(#Tagged, 'UserId');
+
+-- Queryable source
+SELECT Operation, TargetTable, SourceTables
+INTO #lin_check
+FROM LINEAGE(#Tagged);
+SELECT * FROM #lin_check;
+
+-- Export to markdown (write to temp file)
+BEGIN TRY
+    LINEAGE(#Tagged) TO 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\lineage_output.md';
+    PRINT 'Lineage exported to file.';
+END TRY
+BEGIN CATCH
+    PRINT 'Lineage file export failed: ' + ERROR_MESSAGE();
+END CATCH
+
+-- 8. CREATE SSH_KEY_PAIR
+PRINT 'Testing CREATE SSH_KEY_PAIR...';
+BEGIN TRY
+    CREATE SSH_KEY_PAIR 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\test_key'
+        WITH (BITS = 2048, ALGORITHM = 'RSA', COMMENT = 'Kitchen Sink Test Key');
+    PRINT 'SSH key pair created.';
+END TRY
+BEGIN CATCH
+    PRINT 'SSH key creation failed: ' + ERROR_MESSAGE();
+END CATCH
+
+BEGIN TRY
+    CREATE SSH_KEY_PAIR 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\test_ed_key'
+        WITH (ALGORITHM = 'ED25519', COMMENT = 'ED25519 Test');
+    PRINT 'ED25519 key pair created.';
+END TRY
+BEGIN CATCH
+    PRINT 'ED25519 key creation failed: ' + ERROR_MESSAGE();
+END CATCH
+
+PRINT 'Diagnostics & SSH tests complete.';

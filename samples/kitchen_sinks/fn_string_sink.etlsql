@@ -1,0 +1,57 @@
+-- COMPREHENSIVE FUNCTIONS SINK (Part 1: String)
+SET WHAT_IF OFF;
+
+-- Case & Whitespace
+SELECT 
+    UPPER('abc') AS [UPPER],
+    LOWER('ABC') AS [LOWER],
+    INITCAP('hello world') AS [INITCAP],
+    TRIM('  x  ') AS [TRIM_DEF],
+    TRIM(BOTH 'x' FROM 'xyx') AS [TRIM_BOTH],
+    LTRIM('  x') AS [LTRIM],
+    RTRIM('x  ') AS [RTRIM],
+    REVERSE('abc') AS [REVERSE];
+
+-- Substrings & Search
+SELECT 
+    SUBSTRING('abcde', 2, 2) AS [SUBSTRING],
+    LEFT('abc', 2) AS [LEFT],
+    RIGHT('abc', 2) AS [RIGHT],
+    POSITION('b' IN 'abc') AS [POSITION],
+    CHARINDEX('b', 'abc') AS [CHARINDEX],
+    PATINDEX('%b%', 'abc') AS [PATINDEX],
+    OVERLAY('abcde' PLACING 'XX' FROM 2 FOR 2) AS [OVERLAY];
+
+-- Concatenation
+SELECT 
+    CONCAT('A', 'B') AS [CONCAT],
+    CONCAT_WS('-', 'A', 'B', 'C') AS [CONCAT_WS],
+    SPLIT_PART('A-B-C', '-', 2) AS [SPLIT_PART];
+
+-- Formatting
+SELECT 
+    FORMAT(GETDATE(), 'yyyy-MM-dd') AS [FORMAT_DT],
+    STR(123.45, 10, 2) AS [STR],
+    REPLICATE('X', 3) AS [REPLICATE],
+    SPACE(3) AS [SPACE],
+    QUOTENAME('table') AS [QUOTENAME],
+    TO_STR(123) AS [TO_STR];
+
+-- Encoding & Translation
+SELECT 
+    ASCII('A') AS [ASCII],
+    UNICODE('A') AS [UNICODE],
+    CHAR(65) AS [CHAR],
+    DATALENGTH('abc') AS [DATALENGTH],
+    TRANSLATE('abc', 'ab', '12') AS [TRANSLATE],
+    REPLACE('abc', 'b', 'Z') AS [REPLACE],
+    STRING_ESCAPE('{"a":1}', 'json') AS [ESCAPE],
+    LEN('abc') AS [LEN];
+
+-- Regex
+SELECT 
+    REGEXP_LIKE('abc', '^[a-z]+$') AS [LIKE],
+    REGEXP_SUBSTR('abc123def', '\d+') AS [SUBSTR],
+    REGEXP_REPLACE('abc123def', '\d', '*') AS [REPLACE],
+    REGEXP_INSTR('abc123def', '\d+') AS [INSTR],
+    REGEXP_COUNT('1 2 3', '\d') AS [COUNT];

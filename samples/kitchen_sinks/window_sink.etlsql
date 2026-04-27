@@ -1,0 +1,40 @@
+-- WINDOW Kitchen Sink
+SET WHAT_IF OFF;
+
+SELECT 1 AS ID, 'A' AS Region, 100 AS Amount, CAST('2026-01-01' AS DATE) AS CreatedAt INTO #W;
+INSERT INTO #W VALUES (2, 'A', 200, '2026-01-02');
+INSERT INTO #W VALUES (3, 'B', 150, '2026-01-01');
+INSERT INTO #W VALUES (4, 'B', 250, '2026-01-02');
+
+-- 1. ROW_NUMBER, RANK, DENSE_RANK
+PRINT 'Testing Ranking Functions...';
+SELECT 
+    ID, Region, Amount,
+    ROW_NUMBER() OVER (PARTITION BY Region ORDER BY Amount DESC) AS RowNum,
+    RANK() OVER (PARTITION BY Region ORDER BY Amount DESC) AS Rnk,
+    DENSE_RANK() OVER (PARTITION BY Region ORDER BY Amount DESC) AS DenseRnk
+FROM #W;
+
+-- 2. LAG, LEAD
+PRINT 'Testing Offset Functions...';
+SELECT 
+    ID, Region, Amount,
+    LAG(Amount, 1, 0) OVER (PARTITION BY Region ORDER BY CreatedAt) AS Prev,
+    LEAD(Amount, 1, 0) OVER (PARTITION BY Region ORDER BY CreatedAt) AS [Next]
+FROM #W;
+
+-- 3. Window Aggregates
+PRINT 'Testing Window Aggregates...';
+SELECT 
+    ID, Region, Amount,
+    SUM(Amount) OVER (PARTITION BY Region) AS RegionTotal,
+    AVG(Amount) OVER (PARTITION BY Region) AS RegionAvg,
+    COUNT(*) OVER (PARTITION BY Region) AS RegionCount
+FROM #W;
+
+-- 4. Frames
+PRINT 'Testing Frames...';
+SELECT 
+    ID, Amount,
+    SUM(Amount) OVER (ORDER BY CreatedAt ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS RunningTotal
+FROM #W;

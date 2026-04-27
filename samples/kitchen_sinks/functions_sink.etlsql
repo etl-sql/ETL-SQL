@@ -1,0 +1,75 @@
+-- FUNCTIONS Kitchen Sink
+SET WHAT_IF OFF;
+
+-- 1. String Functions
+PRINT 'Testing String Functions...';
+SELECT 
+    UPPER('hello') AS Up, 
+    LOWER('WORLD') AS Lw, 
+    INITCAP('hello world') AS Ic,
+    TRIM('  abc  ') AS Tr,
+    SUBSTRING('abcdef', 2, 3) AS Sub,
+    LEFT('abc', 2) AS Lft,
+    RIGHT('abc', 2) AS Rgt,
+    CHARINDEX('b', 'abc') AS Ci,
+    CONCAT('A', 'B', 'C') AS Cct,
+    REPLICATE('X', 3) AS Repl,
+    REPLACE('abc', 'b', 'Z') AS Rpl;
+
+-- 2. Date Functions
+PRINT 'Testing Date Functions...';
+DECLARE @d = '2026-01-01';
+SELECT 
+    DATEADD(DAY, 10, @d) AS AddDay,
+    DATEDIFF(DAY, @d, '2026-01-15') AS Diff,
+    YEAR(@d) AS Yr,
+    MONTH(@d) AS Mt,
+    DAY(@d) AS Dy,
+    EOMONTH(@d) AS EoM;
+
+-- 3. Math Functions
+PRINT 'Testing Math Functions...';
+SELECT 
+    ABS(-10) AS AbsVal,
+    CEILING(1.1) AS Ceil,
+    FLOOR(1.9) AS Flr,
+    ROUND(1.555, 2) AS Rnd,
+    SQRT(16) AS SqrtVal,
+    POWER(2, 3) AS Pwr,
+    LEAST(1, 5, 2) AS Lst,
+    GREATEST(1, 5, 2) AS Grt;
+
+-- 4. Conditional Functions
+PRINT 'Testing Conditional Functions...';
+SELECT 
+    COALESCE(NULL, NULL, 'Found') AS Coal,
+    ISNULL(NULL, 'Default') AS IsNl,
+    IIF(1=1, 'Yes', 'No') AS IifVal,
+    NULLIF(1, 1) AS NlIf,
+    CASE WHEN 1=2 THEN 'A' ELSE 'B' END AS CaseVal;
+
+-- 5. Regex Functions
+PRINT 'Testing Regex Functions...';
+SELECT 
+    REGEXP_LIKE('abc123def', '\d+') AS HasDigits,
+    REGEXP_SUBSTR('abc123def', '\d+') AS Digits,
+    REGEXP_REPLACE('abc123def', '\d', '*') AS Redacted;
+
+-- 6. Hashing
+PRINT 'Testing Hashing...';
+SELECT 
+    CHECKSUM('A', 'B') AS Chk,
+    HASHBYTES('SHA256', 'Secret') AS Hb;
+
+-- 7. List Functions
+PRINT 'Testing List Functions...';
+DECLARE @l = (3, 1, 2);
+SELECT 
+    LENGTH(@l) AS LstLen,
+    SORT_LIST(@l, 'ASC') AS Sorted;
+
+-- 8. JSON/XML
+PRINT 'Testing JSON/XML Functions...';
+SELECT 
+    JSON_VALUE('{"a":1}', '$.a') AS Jv,
+    XMLVALUE('<r a="1"/>', '/r/@a') AS Xv;

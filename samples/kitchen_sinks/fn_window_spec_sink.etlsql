@@ -1,0 +1,31 @@
+-- COMPREHENSIVE FUNCTIONS SINK (Part 5: Window & Specialized)
+SET WHAT_IF OFF;
+
+SELECT 1 AS ID, 'A' AS Val, 100 AS Sol INTO #T;
+INSERT INTO #T VALUES (2, 'A', 200), (3, 'B', 150);
+
+-- Window Functions
+SELECT 
+    ID, Val, Sol,
+    ROW_NUMBER() OVER(ORDER BY ID) AS [ROW_NUM],
+    RANK() OVER(ORDER BY Sol DESC) AS [RANK],
+    DENSE_RANK() OVER(ORDER BY Sol DESC) AS [D_RANK],
+    NTILE(2) OVER(ORDER BY ID) AS [NTILE],
+    LAG(Sol, 1, 0) OVER(ORDER BY ID) AS [LAG],
+    LEAD(Sol, 1, 0) OVER(ORDER BY ID) AS [LEAD],
+    FIRST_VALUE(Sol) OVER(PARTITION BY Val ORDER BY ID) AS [FIRST],
+    LAST_VALUE(Sol) OVER(PARTITION BY Val ORDER BY ID) AS [LAST];
+
+-- Lineage (Requires tagged columns)
+-- Test if these run without error even if data is empty
+SELECT GET_TAGS('#T') AS [TAB_TAGS];
+
+-- Data Gen
+-- These are for GENERATE statement, but let's see if they run as scalars (prob not)
+-- SELECT SEQUENCE(1, 1) AS [SEQ]; -- Expected to potentially fail outside GENERATE
+
+GENERATE 1 ROWS INTO #Mock AS (
+    id = 'SEQUENCE(1, 1)',
+    val = 'RANDOM(X, Y, Z)'
+);
+SELECT * FROM #Mock;

@@ -1,0 +1,121 @@
+-- DDL & DML Kitchen Sink
+-- Covers: CREATE TABLE (with constraints), ALTER TABLE, DROP TABLE, CREATE INDEX,
+--         INSERT...OUTPUT, UPDATE...OUTPUT, DELETE...OUTPUT, MERGE, TRUNCATE TABLE,
+--         BULK INSERT, GENERATE
+SET WHAT_IF OFF;
+
+-- ── DDL ──────────────────────────────────────────────────────────────────────
+
+-- 1. CREATE TABLE with full constraint syntax
+PRINT 'Testing CREATE TABLE...';
+CREATE TABLE #Orders (
+    OrderId    INT           NOT NULL,
+    CustomerId INT           NOT NULL,
+    Amount     DECIMAL(18,2) NOT NULL DEFAULT 0,
+    Status     VARCHAR(20)   DEFAULT 'Pending',
+    CreatedAt  DATETIME      DEFAULT GETDATE()
+);
+
+-- 2. ALTER TABLE — ADD / DROP COLUMN / RENAME COLUMN
+PRINT 'Testing ALTER TABLE...';
+ALTER TABLE #Orders ADD BatchId INT;
+ALTER TABLE #Orders DROP COLUMN BatchId;
+ALTER TABLE #Orders RENAME COLUMN Status TO OrderStatus;
+
+-- 3. DROP TABLE IF EXISTS
+PRINT 'Testing DROP TABLE IF EXISTS...';
+DROP TABLE IF EXISTS #TempToDrop;
+
+-- 4. CREATE INDEX / DROP INDEX
+PRINT 'Testing CREATE INDEX / DROP INDEX...';
+CREATE UNIQUE INDEX IX_Orders_OrderId ON #Orders (OrderId ASC);
+DROP INDEX #Orders.IX_Orders_OrderId;
+DROP INDEX IF EXISTS #Orders.IX_Orders_OrderId;
+
+-- ── DML ──────────────────────────────────────────────────────────────────────
+
+-- 5. INSERT with OUTPUT clause
+PRINT 'Testing INSERT...OUTPUT...';
+INSERT INTO #Orders (OrderId, CustomerId, Amount, OrderStatus)
+OUTPUT INSERTED.OrderId, INSERTED.Amount INTO #AuditLog (OrderId, Amount)
+VALUES (1, 100, 250.00, 'Open');
+SELECT * FROM #AuditLog;
+
+-- 6. UPDATE with OUTPUT clause
+PRINT 'Testing UPDATE...OUTPUT...';
+CREATE TABLE #ChangeLog (OldStatus VARCHAR(20), NewStatus VARCHAR(20));
+UPDATE #Orders
+SET OrderStatus = 'Processing'
+OUTPUT DELETED.OrderStatus AS OldStatus, INSERTED.OrderStatus AS NewStatus INTO #ChangeLog
+WHERE OrderId = 1;
+SELECT * FROM #ChangeLog;
+
+-- 7. DELETE with OUTPUT clause
+PRINT 'Testing DELETE...OUTPUT...';
+CREATE TABLE #DeletedIds (OrderId INT);
+INSERT INTO #Orders (OrderId, CustomerId, Amount, OrderStatus) VALUES (2, 200, 100.00, 'Cancelled');
+DELETE FROM #Orders
+OUTPUT DELETED.OrderId INTO #DeletedIds
+WHERE OrderStatus = 'Cancelled';
+SELECT * FROM #DeletedIds;
+
+-- 8. MERGE (upsert)
+PRINT 'Testing MERGE...';
+SELECT 1 AS OrderId, 'Alice' AS CustomerName, 300.00 AS Amount INTO #staging;
+INSERT INTO #staging VALUES (3, 'Bob', 450.00);
+
+CREATE TABLE #Target (OrderId INT, CustomerName VARCHAR(50), Amount DECIMAL(18,2));
+INSERT INTO #Target VALUES (1, 'OldAlice', 200.00);
+
+MERGE INTO #Target AS T
+USING #staging AS S ON T.OrderId = S.OrderId
+WHEN MATCHED THEN
+    UPDATE SET T.CustomerName = S.CustomerName, T.Amount = S.Amount
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (OrderId, CustomerName, Amount) VALUES (S.OrderId, S.CustomerName, S.Amount);
+
+SELECT * FROM #Target;
+
+-- 9. MERGE with NOT MATCHED BY SOURCE DELETE
+PRINT 'Testing MERGE with delete on source gap...';
+MERGE INTO #Target AS T
+USING (SELECT 1 AS OrderId, 'FinalAlice' AS CustomerName, 999.00 AS Amount) AS S
+ON T.OrderId = S.OrderId
+WHEN MATCHED THEN
+    UPDATE SET T.CustomerName = S.CustomerName, T.Amount = S.Amount
+WHEN NOT MATCHED BY TARGET THEN
+    INSERT (OrderId, CustomerName, Amount) VALUES (S.OrderId, S.CustomerName, S.Amount)
+WHEN NOT MATCHED BY SOURCE THEN
+    DELETE;
+SELECT * FROM #Target;
+
+-- 10. TRUNCATE TABLE
+PRINT 'Testing TRUNCATE TABLE...';
+TRUNCATE TABLE #AuditLog;
+SELECT COUNT(*) AS AuditRowCount FROM #AuditLog;
+
+-- 11. GENERATE synthetic data
+PRINT 'Testing GENERATE...';
+GENERATE 10 ROWS INTO #GenData
+WITH (SEED = 123)
+AS (
+    id       = 'SEQUENCE(1, 1)',
+    category = 'RANDOM(Electronics, Apparel, Home)',
+    price    = 'RANDOM_DECIMAL(10, 500)',
+    qty      = 'RANDOM_INT(1, 100)'
+);
+SELECT * FROM #GenData;
+
+-- 12. BULK INSERT (from a file written by flatfile tests — may fail if file missing)
+PRINT 'Testing BULK INSERT (may fail if CSV not present)...';
+BEGIN TRY
+    BULK INSERT #GenData (id, category, price, qty)
+    FROM 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\std.csv'
+    WITH (FORMAT = 'CSV', FIRSTROW = 2, BATCHSIZE = 1000, MAXERRORS = 0);
+    PRINT 'BULK INSERT succeeded.';
+END TRY
+BEGIN CATCH
+    PRINT 'BULK INSERT failed (expected if std.csv missing): ' + ERROR_MESSAGE();
+END CATCH
+
+PRINT 'DDL & DML tests complete.';

@@ -1,0 +1,30 @@
+-- LOOPS Kitchen Sink (Final Smoke Test)
+SET WHAT_IF OFF;
+
+-- 1. WHILE
+DECLARE @i = 1;
+WHILE @i <= 3
+BEGIN
+    PRINT 'WHILE:', @i;
+    SET @i = @i + 1;
+END
+
+-- 2. FOR (Range)
+FOR @j = 1 TO 3
+BEGIN
+    PRINT 'FOR Range:', @j;
+END
+
+-- 3. FOREACH (List)
+DECLARE @list LIST = ('A', 'B');
+FOREACH @item IN @list
+BEGIN
+    PRINT 'FOREACH Item:', @item;
+END
+
+-- 4. PARALLEL
+PARALLEL
+BEGIN
+    PRINT 'Parallel 1';
+    PRINT 'Parallel 2';
+END

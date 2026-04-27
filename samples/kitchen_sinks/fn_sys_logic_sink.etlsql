@@ -1,0 +1,39 @@
+-- COMPREHENSIVE FUNCTIONS SINK (Part 3: Logic, Sys, Lists)
+SET WHAT_IF OFF;
+
+-- Conditional
+SELECT 
+    COALESCE(NULL, 1) AS [COALESCE],
+    ISNULL(NULL, 1) AS [ISNULL],
+    NVL2(1, 'A', 'B') AS [NVL2],
+    NULLIF(1, 1) AS [NULLIF],
+    IS_NULL(NULL) AS [IS_NULL],
+    IS_NOT_NULL(1) AS [IS_NOT_NULL],
+    IIF(1=1, 'T', 'F') AS [IIF],
+    DECODE(1, 1, 'A', 'B') AS [DECODE];
+
+-- System
+SELECT 
+    NEWID() AS [NEWID],
+    @@VERSION AS [VERSION],
+    @@TRANCOUNT AS [TRAN],
+    @@ERROR AS [ERR],
+    FILE_EXISTS('c:\Users\chuck\scratch\ETL-SQL\README.md') AS [FE],
+    DIRECTORY_EXISTS('c:\Users\chuck\scratch\ETL-SQL\Docs\') AS [DE];
+
+-- Hashing
+SELECT 
+    CHECKSUM('A', 'B') AS [CHK],
+    BINARY_CHECKSUM('A') AS [BIN_CHK],
+    HASHBYTES('MD5', 'A') AS [MD5],
+    HASHBYTES('SHA256', 'A') AS [SHA256];
+
+-- Lists
+DECLARE @l LIST = (3, 1, 2);
+SELECT 
+    LENGTH(@l) AS [LEN],
+    SORT_LIST(@l, 'ASC') AS [SORTED];
+
+SET @l = APPEND_TO_LIST(@l, 4);
+SET @l = REMOVE_FROM_LIST(@l, 1);
+PRINT 'LIST AFTER OPS:', @l; -- BUG: PRINT only prints first arg

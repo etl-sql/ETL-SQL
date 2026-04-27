@@ -1,0 +1,41 @@
+-- ORCHESTRATION Kitchen Sink (Fixed)
+SET WHAT_IF OFF;
+
+-- 1. Transactions & Rollback
+PRINT 'Testing Transactions...';
+BEGIN TRANSACTION;
+    PRINT 'Transaction Count (Before): ' + @@TRANCOUNT;
+    SELECT 1 AS Val INTO #TransTest;
+    INSERT INTO #TransTest VALUES (2);
+COMMIT TRANSACTION;
+PRINT 'Transaction Count (After Commit): ' + @@TRANCOUNT;
+
+BEGIN TRANSACTION;
+    DELETE FROM #TransTest WHERE Val = 2;
+    PRINT 'Transaction Count (In Rollback): ' + @@TRANCOUNT;
+ROLLBACK TRANSACTION;
+PRINT 'Transaction Count (After Rollback): ' + @@TRANCOUNT;
+-- SELECT * FROM #TransTest; -- Removing redundant select if it causes noise
+
+-- 2. Lineage Tagging
+PRINT 'Testing Lineage Tagging...';
+-- Tagging during SELECT INTO
+SELECT 100 AS ID, 'Secret' AS Data 
+INTO #Lineage 
+WITH (TAGS = 'Source=Mock, Sensitivity=High, Retention=30d');
+
+-- Validating tags exist
+SELECT ID, Data, GET_TAGS('#Lineage') AS [Tags] FROM #Lineage;
+
+-- 3. Run Script with Parameters
+PRINT 'Testing RUN SCRIPT...';
+-- Note: Sub-script must exist
+RUN SCRIPT 'samples\kitchen_sinks\sub_script.etlsql' WITH (@param1 = 'KitchenSinkTest');
+
+-- 4. Job Management (Local)
+PRINT 'Testing Job Creation...';
+CREATE JOB 'KitchenSinkJob' ON SCHEDULE EVERY 5 MINUTES AS RUN SCRIPT 'samples\kitchen_sinks\sub_script.etlsql';
+
+PRINT 'Job Created. Verifying Listing...';
+SHOW JOBS;
+SHOW JOB HISTORY;

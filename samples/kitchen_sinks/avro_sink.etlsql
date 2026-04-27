@@ -1,0 +1,10 @@
+-- AVRO Kitchen Sink
+SET WHAT_IF OFF;
+SELECT 1 AS ID, 'Alice' AS Name INTO #samples;
+INSERT INTO #samples VALUES (2, 'Bob');
+
+PRINT 'Testing Avro (Default)...';
+CREATE CONNECTION avro_std ON AVRO('c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\std.avro');
+INSERT INTO avro_std.FILE SELECT * FROM #samples;
+PRINT 'Inserted into std.avro';
+SELECT * FROM avro_std.FILE;

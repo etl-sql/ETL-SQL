@@ -1,0 +1,28 @@
+-- VARIABLES & TYPES Kitchen Sink (Final Smoke Test)
+SET WHAT_IF OFF;
+
+-- 1. Standard Types
+DECLARE @i INT = 100, @s STRING = 'Test';
+DECLARE @b BIT = TRUE;
+DECLARE @d DATETIME = GETDATE();
+
+PRINT 'INT:', @i, 'STRING:', @s, 'BIT:', @b, 'DATETIME:', @d;
+
+-- 2. Sensitive Data (Should be masked in logs)
+PRINT 'Testing masking...';
+DECLARE @pass SENSITIVE = 'TopSecret123';
+DECLARE @secret SECRET = 'UltraPrivate456';
+PRINT 'The password is: ' + @pass;
+PRINT 'The secret is: ' + @secret;
+
+-- 3. Path & Lists
+DECLARE @l LIST = (1, 2, 3);
+DECLARE @p = 'C:\Temp\test.csv'; -- ANY
+PRINT 'List Length: ' + LENGTH(@l);
+PRINT 'Path (ANY): ' + @p;
+PRINT 'Casted Path: ' + CAST(@p AS PATH);
+
+-- 4. Casts
+SELECT 
+    TRY_CAST('123' AS INT) AS s2i,
+    TRY_CAST('2026-01-01' AS DATE) AS s2d;

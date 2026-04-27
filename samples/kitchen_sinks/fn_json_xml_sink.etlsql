@@ -1,0 +1,19 @@
+-- COMPREHENSIVE FUNCTIONS SINK (Part 4: JSON & XML)
+SET WHAT_IF OFF;
+
+DECLARE @j JSON = '{"id": 1, "arr": [1, 2], "obj": {"x": 10}}';
+DECLARE @x XML = '<root id="100"><item>A</item><item>B</item></root>';
+
+-- JSON
+SELECT 
+    JSON_VALUE(@j, '$.id') AS [VAL],
+    JSON_QUERY(@j, '$.obj') AS [QRY],
+    JSON_MODIFY(@j, '$.id', 2) AS [MOD],
+    ISJSON(@j) AS [ISJ],
+    JSON_EXISTS(@j, '$.arr') AS [EX];
+
+-- XML
+SELECT 
+    XMLVALUE(@x, '/root/@id') AS [VAL],
+    XMLEXISTS(@x, '/root/item') AS [EX],
+    XMLQUERY(@x, '/root/item[1]') AS [QRY];

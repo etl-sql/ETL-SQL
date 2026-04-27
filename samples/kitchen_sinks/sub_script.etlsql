@@ -1,0 +1,5 @@
+-- SUB-SCRIPT for RUN SCRIPT test
+PRINT '--- Sub-Script Start ---';
+DECLARE @param1 STRING = 'default';
+PRINT 'Received Param1: ' + @param1;
+PRINT '--- Sub-Script End ---';
