@@ -77,16 +77,14 @@ namespace ETL_SQL.Engine
             var strongMatches = new List<string>();
             var weakMatches = new List<string>();
 
-            // Optimization: Pre-calculate the set of all qualified names to avoid O(n^2) search
-            var allNames = context.Columns.Keys;
-            var qualifiedSuffixes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (qualifier != null)
-            {
-                foreach (var k in allNames)
-                {
-                    if (k.Contains(".")) qualifiedSuffixes.Add(k);
-                }
-            }
+            // BUG FIX: Must include dynamic columns (like qualified names from joins) when checking for overlaps.
+            // Using GetColumnNames() to avoid creating a full dictionary copy for every resolution.
+            var allNames = context.GetColumnNames();
+            
+            // Pre-scan for qualified suffixes only if we have a qualifier
+            var qualifiedSuffixes = qualifier != null 
+                ? allNames.Where(k => k.Contains(".")).ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : null;
 
             foreach (var k in allNames)
             {
@@ -225,7 +223,7 @@ namespace ETL_SQL.Engine
                 VariableExpression v => EvaluateVariable(v, decryptSensitive),
                 MemberAccessExpression ma => await EvaluateMemberAccess(ma, context, decryptSensitive),
                 LiteralExpression lit => (decryptSensitive && lit.Value is string s && s.StartsWith("ENC:")) ? _context.DecryptValue(s) : lit.Value,
-                IdentifierExpression id => EvaluateIdentifier(id, context),
+                IdentifierExpression id => await EvaluateIdentifier(id, context),
                 BinaryExpression bin => await EvaluateBinary(bin, context, decryptSensitive),
                 LikeExpression like => await EvaluateLikeExpr(like, context, decryptSensitive),
                 IsNullExpression isNull => await EvaluateIsNull(isNull, context, decryptSensitive),
@@ -516,10 +514,10 @@ namespace ETL_SQL.Engine
         }
 
         /// <summary>Evaluates an identifier (column name or special variable).</summary>
-        private object? EvaluateIdentifier(IdentifierExpression id, Row context)
+        private async Task<object?> EvaluateIdentifier(IdentifierExpression id, Row context)
         {
             var val = ResolveIdentifier(id.Name, context);
-            if (val != null || (context != null && context.Columns.ContainsKey(id.Name))) return val;
+            if (val != null || (context != null && context.HasColumn(id.Name))) return val;
 
             // Docker Connection Strings
             if (id.Name.Contains(".CONNECTION_STRING", StringComparison.OrdinalIgnoreCase))
@@ -536,15 +534,14 @@ namespace ETL_SQL.Engine
             // Existing connections
             if (_context.Connections.ContainsKey(id.Name)) return id.Name;
 
-            // Special identifiers that act as functions/literals
+            // Special identifiers
             if (id.Name.Equals("*", StringComparison.OrdinalIgnoreCase)) return "*";
-            if (id.Name.Equals("SYSDATE", StringComparison.OrdinalIgnoreCase) || 
-                id.Name.Equals("CURRENT_TIMESTAMP", StringComparison.OrdinalIgnoreCase))
-                return DateTime.Now;
-            if (id.Name.Equals("CURRENT_DATE", StringComparison.OrdinalIgnoreCase))
-                return DateTime.Today;
-            if (id.Name.Equals("CURRENT_TIME", StringComparison.OrdinalIgnoreCase))
-                return DateTime.Now.TimeOfDay;
+
+            // Check function registry for no-arg functions (e.g. SYSDATE, NOW, CURRENT_DATE)
+            if (_context.FunctionRegistry.IsRegistered(id.Name))
+            {
+                return await _context.FunctionRegistry.ExecuteAsync(id.Name, new List<object?>(), _context);
+            }
 
             // For date parts (year, month, etc.) and others, return name if Row is null
             if (context == null) return id.Name;

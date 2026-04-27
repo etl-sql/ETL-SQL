@@ -81,8 +81,10 @@ namespace ETL_SQL.Engine
         /// <summary>Current transaction nesting level.</summary>
         public int TranCount => _transactionManager.TranCount;
 
-        /// <summary>Whether to automatically rollback open transactions when a script finishes (Zero-Trust safety).</summary>
-        public bool AutoRollbackOnFinish { get; set; } = true;
+        private readonly EvaluatorOptions _options;
+        public EvaluatorOptions Options => _options;
+
+        public bool AutoRollbackOnFinish { get => _options.AutoRollbackOnFinish; set => _options.AutoRollbackOnFinish = value; }
 
         /// <summary>Total bytes spilled to disk for large joins/sorts.</summary>
         private long _totalSpilledBytes = 0;
@@ -91,7 +93,7 @@ namespace ETL_SQL.Engine
             get => System.Threading.Interlocked.Read(ref _totalSpilledBytes); 
             set => System.Threading.Interlocked.Exchange(ref _totalSpilledBytes, value); 
         }
-        public bool TelemetryEnabled { get; set; } = true;
+        public bool TelemetryEnabled { get => _options.TelemetryEnabled; set => _options.TelemetryEnabled = value; }
         
         private long _aggregateGroupsCount = 0;
         public long AggregateGroupsCount
@@ -126,30 +128,31 @@ namespace ETL_SQL.Engine
             get => _sortSpillCount;
             set => _sortSpillCount = value;
         }
-        public long TempTableSpillThresholdRows { get; set; }
-        public int MaxRecursiveDepth { get; set; } = 10000;
+
+        public long TempTableSpillThresholdRows { get => _options.TempTableSpillThresholdRows; set => _options.TempTableSpillThresholdRows = value; }
+        public int MaxRecursiveDepth { get => _options.MaxRecursiveDepth; set => _options.MaxRecursiveDepth = value; }
         public int CurrentRecursiveDepth { get; set; } = 0;
         public string? LastIndexUsedName { get; set; }
         public ErrorInfo? LastError { get; set; }
         public ErrorInfo? ActiveException { get; set; }
         public int PreviousErrorNumber { get; set; } = 0;
         
-        public bool AllowUnknownFileTypes { get; set; }
-        public bool AllowLargeFileOperationCount { get; set; }
-        public bool AllowDeepRecursion { get; set; }
-        public bool AllowLargeStringResults { get; set; }
-        public HashSet<string> AllowedFileTypeOverrides { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public bool AllowUnknownFileTypes { get => _options.AllowUnknownFileTypes; set => _options.AllowUnknownFileTypes = value; }
+        public bool AllowLargeFileOperationCount { get => _options.AllowLargeFileOperationCount; set => _options.AllowLargeFileOperationCount = value; }
+        public bool AllowDeepRecursion { get => _options.AllowDeepRecursion; set => _options.AllowDeepRecursion = value; }
+        public bool AllowLargeStringResults { get => _options.AllowLargeStringResults; set => _options.AllowLargeStringResults = value; }
+        public HashSet<string> AllowedFileTypeOverrides => _options.AllowedFileTypeOverrides;
 
-        public int MaxParallelDegree { get; set; } = LanguageMetadata.DefaultMaxParallelDegree;
-        public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
-        public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
+        public int MaxParallelDegree { get => _options.MaxParallelDegree; set => _options.MaxParallelDegree = value; }
+        public long MaxStringResultSize { get => _options.MaxStringResultSize; set => _options.MaxStringResultSize = value; }
+        public int RegexMatchTimeoutMs { get => _options.RegexMatchTimeoutMs; set => _options.RegexMatchTimeoutMs = value; }
         public string? CurrentScriptPath { get; set; }
         public string WorkingDirectory { get; set; } = Directory.GetCurrentDirectory();
-        public int MaxFileOperations { get; set; } = SecurityService.DefaultMaxFileOperations;
-        public int MaxGroupingSets { get; set; } = LanguageMetadata.DefaultMaxGroupingSets;
-        public long MaxSessionSize { get; set; } = 200 * 1024 * 1024; // 200MB Default
-        public int MaxLastResultRows { get; set; } = LanguageMetadata.DefaultMaxLastResultRows;
-        public int MaxGenerateRows { get; set; } = SecurityService.DefaultMaxGenerateRows;
+        public int MaxFileOperations { get => _options.MaxFileOperations; set => _options.MaxFileOperations = value; }
+        public int MaxGroupingSets { get => _options.MaxGroupingSets; set => _options.MaxGroupingSets = value; }
+        public long MaxSessionSize { get => _options.MaxSessionSize; set => _options.MaxSessionSize = value; }
+        public int MaxLastResultRows { get => _options.MaxLastResultRows; set => _options.MaxLastResultRows = value; }
+        public int MaxGenerateRows { get => _options.MaxGenerateRows; set => _options.MaxGenerateRows = value; }
         public bool IsPersistentSession { get; set; }
         public List<object?>? Parameters { get; set; }
         
@@ -162,15 +165,13 @@ namespace ETL_SQL.Engine
 
         
         /// <summary>Size of row batches used during streaming operations.</summary>
-        public int BatchSize { get; set; } = 10000;
+        public int BatchSize { get => _options.BatchSize; set => _options.BatchSize = value; }
         
         /// <summary>Number of batches held in memory before spilling to disk for #temp tables.</summary>
-        public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
+        public int MaxInMemoryBatches { get => _options.MaxInMemoryBatches; set => _options.MaxInMemoryBatches = value; }
 
         /// <summary>Maximum rows to fetch per page for remote FOREACH pushdown.</summary>
-        public int ForeachPageSize { get; set; } = 0;
-        
-        private bool _isVerbose;
+        public int ForeachPageSize { get => _options.ForeachPageSize; set => _options.ForeachPageSize = value; }
         
         /// <summary>
         /// Whether to output detailed execution logs for this evaluator instance.
@@ -180,21 +181,22 @@ namespace ETL_SQL.Engine
         /// </summary>
         public bool IsVerbose
         {
-            get => _isVerbose || _logger.IsVerbose;
-            set => _isVerbose = value;
+            get => _options.IsVerbose || _logger.IsVerbose;
+            set => _options.IsVerbose = value;
         }
         
         /// <summary>If true, Log messages are captured in the Messages list instead of direct console output.</summary>
-        public bool RedirectOutput { get; set; }
+        public bool RedirectOutput { get => _options.RedirectOutput; set => _options.RedirectOutput = value; }
         
         /// <summary>Limit the number of rows returned for previews.</summary>
-        public int? PreviewLimit { get; set; }
+        public int? PreviewLimit { get => _options.PreviewLimit; set => _options.PreviewLimit = value; }
         
         /// <summary>Preference for showing sensitive data in plain text in the UI.</summary>
-        public bool ShowPassword { get; set; }
+        public bool ShowPassword { get => _options.ShowPassword; set => _options.ShowPassword = value; }
         
         /// <summary>Master password for decrypting connection strings.</summary>
         public string? MasterPassword { get; set; }
+
 
         /// <summary>Script-level password for encryption/decryption of sensitive data within the script.</summary>
         public string? ScriptPassword { get; set; }
@@ -447,19 +449,12 @@ namespace ETL_SQL.Engine
         public void SetVariable(string name, object? value) => _variableScopeManager.SetVariable(name, value);
         public object? GetVariable(string name)
         {
-            if (name.Equals("@@TRANCOUNT", StringComparison.OrdinalIgnoreCase)) return TranCount;
-            if (name.Equals("@@RESULTSETS", StringComparison.OrdinalIgnoreCase)) return LastResultSets;
-            if (name.Equals("@@VERSION", StringComparison.OrdinalIgnoreCase)) return LanguageMetadata.GetFullVersionString();
-            if (name.Equals("@@ROWCOUNT", StringComparison.OrdinalIgnoreCase)) return LastStatementRowsProcessed;
-            if (name.Equals("@@ERROR", StringComparison.OrdinalIgnoreCase)) return PreviousErrorNumber;
-            if (name.Equals("@@TOTAL_SPILLED_BYTES", StringComparison.OrdinalIgnoreCase)) return TotalSpilledBytes;
-            if (name.Equals("@@PARTITIONS_COUNT", StringComparison.OrdinalIgnoreCase)) return PartitionsCount;
-            if (name.Equals("@@AGGREGATE_GROUPS_COUNT", StringComparison.OrdinalIgnoreCase)) return AggregateGroupsCount;
-            if (name.Equals("@@AGGREGATE_EXPANSION_RATIO", StringComparison.OrdinalIgnoreCase)) return AggregateExpansionRatio;
+            if (SystemVariableProvider.IsSystemVariable(name))
+                return SystemVariableProvider.Resolve(name, this);
             
             return _variableScopeManager.GetVariable(name);
-
         }
+
 
         public bool ContainsVariable(string name) => _variableScopeManager.ContainsVariable(name);
         public bool ContainsVariableInCurrentScope(string name) => _variableScopeManager.CurrentVariables.ContainsKey(name);
@@ -508,7 +503,8 @@ namespace ETL_SQL.Engine
             ConcurrentDictionary<string, IDataSource>? connections = null,
             VariableScopeManager? variableScopeManager = null,
             ExecutionTree? executionTree = null,
-            IReportContext? reportContext = null)
+            IReportContext? reportContext = null,
+            EvaluatorOptions? options = null)
         {
             _handlers = handlers;
             _serviceProvider = serviceProvider;
@@ -520,6 +516,8 @@ namespace ETL_SQL.Engine
             _securityService = securityService;
             _logger = logger;
             _languageHelp = languageHelp;
+            
+            _options = options ?? new EvaluatorOptions();
             _registry = registry ?? new EvaluatorComponentRegistry();
 
             ExecutionTree = executionTree ?? new ExecutionTree();
@@ -556,26 +554,7 @@ namespace ETL_SQL.Engine
 
             SessionId = Guid.NewGuid().ToString("N")[..8];
 
-            // Initialize TemplatePath and thresholds from configuration
-            var config = _serviceProvider?.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
-            if (config != null)
-            {
-                TemplatePath = config.GetValue<string>("Reporting:TemplatePath") ?? "./Templates";
-            }
-
-            MaxInMemoryBatches = DefaultThresholds.MaxInMemoryBatches(config);
-            ForeachPageSize = DefaultThresholds.ForeachPageSize(config);
-            JoinSpillThreshold = DefaultThresholds.JoinSpillThreshold(config);
-            ExternalHashPartitions = DefaultThresholds.ExternalHashPartitions(config);
-            BatchSize = DefaultThresholds.BatchSize(config);
-            MaxRecursiveDepth = DefaultThresholds.MaxRecursiveDepth(config);
-            ExternalSortChunkSize = DefaultThresholds.ExternalSortChunkSize(config);
-            WindowSpillThreshold = DefaultThresholds.WindowSpillThreshold(config);
-            TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
-            SpillEncryptionEnabled = DefaultThresholds.SpillEncryptionEnabled(config);
-            SpillCompressionEnabled = DefaultThresholds.SpillCompressionEnabled(config);
-            SpillFormat = DefaultThresholds.SpillFormat(config);
-            MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);
+            InitializeThresholds(_serviceProvider?.GetService<Microsoft.Extensions.Configuration.IConfiguration>());
 
             _logger.Info("Evaluator initialized.");
 
@@ -597,6 +576,30 @@ namespace ETL_SQL.Engine
             // Register for spill orchestration
             _serviceProvider?.GetService<IBufferManager>()?.RegisterSpillable(this);
         }
+
+        private void InitializeThresholds(Microsoft.Extensions.Configuration.IConfiguration? config)
+        {
+            if (config != null)
+            {
+                TemplatePath = config.GetValue<string>("Reporting:TemplatePath") ?? "./Templates";
+            }
+
+            MaxInMemoryBatches = DefaultThresholds.MaxInMemoryBatches(config);
+            ForeachPageSize = DefaultThresholds.ForeachPageSize(config);
+            JoinSpillThreshold = DefaultThresholds.JoinSpillThreshold(config);
+            ExternalHashPartitions = DefaultThresholds.ExternalHashPartitions(config);
+            BatchSize = DefaultThresholds.BatchSize(config);
+            MaxRecursiveDepth = DefaultThresholds.MaxRecursiveDepth(config);
+            ExternalSortChunkSize = DefaultThresholds.ExternalSortChunkSize(config);
+            WindowSpillThreshold = DefaultThresholds.WindowSpillThreshold(config);
+            TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
+            SpillEncryptionEnabled = DefaultThresholds.SpillEncryptionEnabled(config);
+            SpillCompressionEnabled = DefaultThresholds.SpillCompressionEnabled(config);
+            SpillFormat = DefaultThresholds.SpillFormat(config);
+            MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);
+            MaxMessages = config?.GetValue<int>("Engine:MaxMessages", 1000) ?? 1000;
+        }
+
 
         public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)
         {
@@ -1211,6 +1214,20 @@ namespace ETL_SQL.Engine
         {
             var total = System.Threading.Interlocked.Add(ref _operationCount, count);
             _securityService.CheckRunawayProtection(type, total, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, path);
+        }
+
+        public IDisposable EnterRecursiveScope()
+        {
+            CurrentRecursiveDepth++;
+            _securityService.CheckRunawayProtection(OperationType.FileSystem, _operationCount, CurrentRecursiveDepth, AllowLargeFileOperationCount, AllowDeepRecursion, null);
+            return new RecursiveScope(this);
+        }
+
+        private class RecursiveScope : IDisposable
+        {
+            private readonly Evaluator _evaluator;
+            public RecursiveScope(Evaluator evaluator) => _evaluator = evaluator;
+            public void Dispose() => _evaluator.CurrentRecursiveDepth--;
         }
 
         ETL_SQL.Services.SecurityService IExecutionContext.SecurityService => _securityService;

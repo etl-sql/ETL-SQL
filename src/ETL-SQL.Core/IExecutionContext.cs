@@ -117,6 +117,7 @@ namespace ETL_SQL.Core
         long RowsProcessed { get; set; }
         long LastStatementRowsProcessed { get; set; }
         long TotalSpilledBytes { get; set; }
+        string? LastIndexUsedName { get; set; }
         /// <summary>Whether to collect expensive execution metrics (e.g., spill byte counting). Default is ON.</summary>
         bool TelemetryEnabled { get; set; }
         int PartitionsCount { get; set; }
@@ -298,6 +299,7 @@ namespace ETL_SQL.Core
         ETL_SQL.Core.Execution.ISessionStateManager SessionStateManager { get; }
         
         void IncrementOperationCount(OperationType type = OperationType.FileSystem, string? path = null, int count = 1);
+        IDisposable EnterRecursiveScope();
 
         List<string> GetIndexedColumns(Expression? cond, string alias);
 

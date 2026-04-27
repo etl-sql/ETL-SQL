@@ -11,6 +11,8 @@ namespace ETL_SQL.Connectors.Directory
     {
         public string Name => "DIRECTORY";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
+        public bool IsFileBased => true;
+
 
         public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) => Task.FromResult("Directory Connector 1.0");
 

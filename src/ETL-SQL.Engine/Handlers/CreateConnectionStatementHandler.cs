@@ -83,17 +83,21 @@ namespace ETL_SQL.Engine.Handlers
                 target = context.DecryptValue(target);
             }
             target = Interpolate(target ?? "");
+            
+            var connector = _connectorRegistry.GetConnector(connectionType ?? string.Empty);
+            if (connector == null)
+            {
+                throw new ExecutionException($"Connection type '{connectionType}' is not registered or implemented.");
+            }
 
             // Security Hardening: Validate path for file-based connectors
-            var fileConnectors = new[] { "FLATFILE", "CSV", "JSON", "XML", "EXCEL", "PARQUET", "AVRO", "DIRECTORY", "SQLITE" };
-            if (fileConnectors.Contains(connectionType?.ToUpperInvariant()))
+            if (connector.IsFileBased)
             {
                 target = context.ResolvePath(target);
             }
 
             IDataSource ds;
-            var connector = _connectorRegistry.GetConnector(connectionType ?? string.Empty);
-            if (connector != null && (target.Contains("Demo", StringComparison.OrdinalIgnoreCase) || target.Contains("Sample", StringComparison.OrdinalIgnoreCase)))
+            if (target.Contains("Demo", StringComparison.OrdinalIgnoreCase) || target.Contains("Sample", StringComparison.OrdinalIgnoreCase))
             {
                 var mock = _connectorRegistry.GetConnector("MOCKDB");
                 if (mock != null) connector = mock;

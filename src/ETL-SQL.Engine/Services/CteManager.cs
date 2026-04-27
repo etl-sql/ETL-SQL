@@ -1,0 +1,194 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Data;
+using ETL_SQL.Common;
+
+namespace ETL_SQL.Engine.Services
+{
+    public class CteManager(ILogger logger)
+    {
+        private readonly ILogger _logger = logger;
+
+        public async Task RegisterCtes(List<CteDefinition> ctes, IExecutionContext context)
+        {
+            foreach (var cte in ctes)
+            {
+                if (IsRecursive(cte, out var anchor, out var recursive, out var isDistinct))
+                {
+                    await EvaluateRecursiveCte(cte, anchor!, recursive!, isDistinct, context);
+                }
+                else
+                {
+                    await EvaluateStandardCte(cte, context);
+                }
+            }
+        }
+
+        private async Task EvaluateRecursiveCte(CteDefinition cte, Statement anchor, Statement recursive, bool isDistinct, IExecutionContext context)
+        {
+            _logger.Debug("Evaluating RECURSIVE CTE: {CteName} ({UnionType})", cte.Name, isDistinct ? "UNION" : "UNION ALL");
+            var finalResult = new DataTable();
+            var currentStep = new DataTable();
+            var seenKeys = isDistinct ? new HashSet<CompoundKey>() : null;
+
+            // 1. Evaluate Anchor Member
+            await foreach (var batch in context.ExecuteQuery(anchor))
+            {
+                if (cte.ColumnNames != null && cte.ColumnNames.Count > 0)
+                {
+                     var oldNames = batch.ColumnNames.ToList();
+                     if (oldNames.Count != cte.ColumnNames.Count)
+                         throw new ExecutionException($"CTE '{cte.Name}' has {cte.ColumnNames.Count} columns specified, but the anchor query returns {oldNames.Count} columns.", null, cte.Line, cte.Column);
+                     for (int i = 0; i < oldNames.Count; i++) batch.RenameColumn(oldNames[i], cte.ColumnNames[i]);
+                }
+
+                if (finalResult.ColumnNames.Count == 0) finalResult.SetColumns(batch.ColumnNames);
+                if (currentStep.ColumnNames.Count == 0) currentStep.SetColumns(finalResult.ColumnNames);
+                
+                foreach (var r in batch.Rows)
+                {
+                    await finalResult.AddRowAsync(r);
+                    await currentStep.AddRowAsync(r);
+                    seenKeys?.Add(MakeRowKey(r, finalResult.ColumnNames));
+                }
+            }
+
+            // 2. Iterative Recursive Member
+            int depth = 0;
+            var colDefs = new List<ColumnDefinition>();
+
+            while (currentStep.Rows.Count > 0 && depth < context.MaxRecursiveDepth)
+            {
+                depth++;
+                context.CurrentRecursiveDepth = depth;
+                
+                // Register currentStep as the CTE source for this iteration
+                var mem = new InMemoryDataSource();
+                mem.Validator = context as IDataValidator;
+                mem.ExecutionContext = context;
+                mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
+                
+                // Type inference (only on first iteration to establish schema)
+                if (depth == 1 && currentStep.Rows.Count > 0)
+                {
+                    var firstRow = currentStep.Rows[0];
+                    foreach (var colName in currentStep.ColumnNames)
+                    {
+                        var val = firstRow[colName];
+                        string type = "STRING";
+                        if (val is int || val is long) type = "INT";
+                        else if (val is decimal || val is double || val is float) type = "DECIMAL";
+                        else if (val is DateTime) type = "DATETIME";
+                        else if (val is bool) type = "BOOLEAN";
+                        colDefs.Add(new ColumnDefinition(colName, type, true));
+                    }
+                }
+                else if (depth == 1)
+                {
+                   foreach (var colName in currentStep.ColumnNames) colDefs.Add(new ColumnDefinition(colName, "STRING", true));
+                }
+
+                mem.SetSchema(colDefs);
+                await mem.WriteBatches(new[] { currentStep }.ToAsyncEnumerable());
+                context.LocalSources[cte.Name] = mem;
+
+                var nextStep = new DataTable();
+                nextStep.SetColumns(currentStep.ColumnNames);
+
+                await foreach (var batch in context.ExecuteQuery(recursive))
+                {
+                    // Aligned by index to anchor schema
+                    var alignedBatch = context.AlignColumns(new[] { batch }.ToAsyncEnumerable(), currentStep.ColumnNames.ToList());
+                    await foreach (var aligned in alignedBatch)
+                    {
+                        foreach (var r in aligned.Rows)
+                        {
+                            if (isDistinct)
+                            {
+                                var key = MakeRowKey(r, nextStep.ColumnNames);
+                                if (seenKeys!.Add(key))
+                                {
+                                    await finalResult.AddRowAsync(r);
+                                    await nextStep.AddRowAsync(r);
+                                }
+                            }
+                            else
+                            {
+                                await finalResult.AddRowAsync(r);
+                                await nextStep.AddRowAsync(r);
+                            }
+                        }
+                    }
+                }
+                currentStep = nextStep;
+            }
+
+            if (depth >= context.MaxRecursiveDepth && currentStep.Rows.Count > 0)
+                throw new ExecutionException($"The maximum recursion {context.MaxRecursiveDepth} has been exhausted before statement completion for CTE '{cte.Name}'.", null, cte.Line, cte.Column);
+            
+            var finalMem = new InMemoryDataSource();
+            finalMem.Validator = context as IDataValidator;
+            finalMem.ExecutionContext = context;
+            finalMem.MaxInMemoryBatches = context.MaxInMemoryBatches;
+            finalMem.SetSchema(colDefs);
+            await finalMem.WriteBatches(new[] { finalResult }.ToAsyncEnumerable());
+            context.LocalSources[cte.Name] = finalMem;
+        }
+
+        private async Task EvaluateStandardCte(CteDefinition cte, IExecutionContext context)
+        {
+            var cteResult = new DataTable();
+            await foreach (var batch in context.ExecuteQuery(cte.Query))
+            {
+                if (cte.ColumnNames != null && cte.ColumnNames.Count > 0)
+                {
+                     var oldNames = batch.ColumnNames.ToList();
+                     if (oldNames.Count != cte.ColumnNames.Count)
+                         throw new ExecutionException($"CTE '{cte.Name}' has {cte.ColumnNames.Count} columns specified, but the query returns {oldNames.Count} columns.", null, cte.Line, cte.Column);
+                     for (int i = 0; i < oldNames.Count; i++) batch.RenameColumn(oldNames[i], cte.ColumnNames[i]);
+                }
+
+                if (cteResult.Schema.ColumnCount == 0) cteResult.SetColumns(batch.ColumnNames);
+                foreach (var r in batch.Rows) await cteResult.AddRowAsync(r);
+            }
+            var mem = new InMemoryDataSource();
+            mem.Validator = context as IDataValidator;
+            mem.ExecutionContext = context;
+            mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
+            mem.SetSchema(cteResult.ColumnNames.Select(c => new ColumnDefinition(c, "STRING", false)));
+            await mem.WriteBatches(new[] { cteResult }.ToAsyncEnumerable());
+            context.LocalSources[cte.Name] = mem;
+        }
+
+        private static CompoundKey MakeRowKey(Row r, IList<string> columnNames)
+        {
+            var values = new object?[columnNames.Count];
+            for (int i = 0; i < columnNames.Count; i++)
+                values[i] = r[columnNames[i]];
+            return new CompoundKey(values);
+        }
+
+        private bool IsRecursive(CteDefinition cte, out Statement? anchor, out Statement? recursive, out bool isDistinct)
+        {
+            anchor = null;
+            recursive = null;
+            isDistinct = false;
+            if (cte.Query is SetOperationStatement setOp && (setOp.Operation == SetOpType.UNION_ALL || setOp.Operation == SetOpType.UNION))
+            {
+                isDistinct = setOp.Operation == SetOpType.UNION;
+                if (setOp.Right.GetSourceTables().Contains(cte.Name, StringComparer.OrdinalIgnoreCase))
+                {
+                    anchor = setOp.Left;
+                    recursive = setOp.Right;
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+}

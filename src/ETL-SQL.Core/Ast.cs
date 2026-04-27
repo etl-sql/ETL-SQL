@@ -1635,7 +1635,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceTables() => Enumerable.Empty<string>();
     }
 
-    public record PositionExpression(Expression substring, Expression str) : Expression
+    public record PositionExpression(Expression substring, Expression str) : FunctionCallExpression("POSITION", new List<Expression> { substring, str })
     {
         public Expression Substring { get; } = substring;
         public Expression String { get; } = str;
@@ -1644,7 +1644,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => String.GetSourceColumns().Concat(Substring.GetSourceColumns());
     }
 
-    public record ExtractExpression(string field, Expression source) : Expression
+    public record ExtractExpression(string field, Expression source) : FunctionCallExpression("EXTRACT", new List<Expression> { new LiteralExpression(field, TokenType.IDENTIFIER), source })
     {
         public string Field { get; } = field;
         public Expression Source { get; } = source;
@@ -1653,7 +1653,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns() => Source.GetSourceColumns();
     }
 
-    public record OverlayExpression(Expression str, Expression overlay, Expression start, Expression? length = null) : Expression
+    public record OverlayExpression(Expression str, Expression overlay, Expression start, Expression? length = null) : FunctionCallExpression("OVERLAY", new List<Expression> { str, overlay, start, length ?? new LiteralExpression(null, TokenType.NULL) })
     {
         public Expression String { get; } = str;
         public Expression Overlay { get; } = overlay;
@@ -1666,7 +1666,7 @@ namespace ETL_SQL.Core
 
     public enum TrimType { BOTH, LEADING, TRAILING }
 
-    public record TrimExpression(TrimType type, Expression? characters, Expression str) : Expression
+    public record TrimExpression(TrimType type, Expression? characters, Expression str) : FunctionCallExpression("TRIM", new List<Expression> { new LiteralExpression(type.ToString(), TokenType.IDENTIFIER), characters ?? new LiteralExpression(null, TokenType.NULL), str })
     {
         public TrimType Type { get; } = type;
         public Expression? Characters { get; } = characters;

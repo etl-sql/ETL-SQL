@@ -14,6 +14,8 @@ namespace ETL_SQL.Connectors.Json
     {
         public string Name => "JSON";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
+        public bool IsFileBased => true;
+
 
         public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) => Task.FromResult("JSON FlatFile Engine 1.0");
 

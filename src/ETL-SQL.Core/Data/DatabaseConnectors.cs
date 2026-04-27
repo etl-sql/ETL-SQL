@@ -50,7 +50,11 @@ namespace ETL_SQL.Data
 
         /// <summary>Returns the target host for network-based connectors to support egress validation.</summary>
         string? GetHost(string connectionString, Dictionary<string, string>? options = null) => null;
+
+        /// <summary>Returns true if the connector is file-based (e.g., CSV, Parquet, SQLite), requiring path resolution.</summary>
+        bool IsFileBased => false;
     }
+
 
     public interface IConnectorRegistry
     {

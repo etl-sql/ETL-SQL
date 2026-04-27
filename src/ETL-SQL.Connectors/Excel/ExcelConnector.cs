@@ -12,6 +12,8 @@ namespace ETL_SQL.Connectors.Excel
     {
         public string Name => "EXCEL";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
+        public bool IsFileBased => true;
+
 
         public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) => Task.FromResult("Excel Engine 1.0");
 

@@ -130,6 +130,10 @@ namespace ETL_SQL.Core.Formatting
 
             // ── Expressions — more-derived before less-derived ──
             SubstringExpression    e => $"SUBSTRING({e.String.ToSql()} FROM {e.Start.ToSql()}{(e.Length != null ? $" FOR {e.Length.ToSql()}" : "")})",
+            PositionExpression     e => $"POSITION({e.Substring.ToSql()} IN {e.String.ToSql()})",
+            ExtractExpression      e => $"EXTRACT({e.Field} FROM {e.Source.ToSql()})",
+            OverlayExpression      e => $"OVERLAY({e.String.ToSql()} PLACING {e.Overlay.ToSql()} FROM {e.Start.ToSql()}{(e.Length != null ? $" FOR {e.Length.ToSql()}" : "")})",
+            TrimExpression         e => FormatTrim(e),
             FunctionCallExpression e => FormatFunctionCall(e),
             UnaryExpression        e => FormatUnary(e),
             BinaryExpression       e => FormatBinary(e),
@@ -145,10 +149,6 @@ namespace ETL_SQL.Core.Formatting
             ExistsExpression       e => $"{(e.IsNot ? "NOT " : "")}EXISTS ({e.Subquery.ToSql()})",
             CaseExpression         e => FormatCase(e),
             AtTimeZoneExpression   e => $"{e.Left.ToSql()} AT TIME ZONE {e.TimeZone.ToSql()}",
-            PositionExpression     e => $"POSITION({e.Substring.ToSql()} IN {e.String.ToSql()})",
-            ExtractExpression      e => $"EXTRACT({e.Field} FROM {e.Source.ToSql()})",
-            OverlayExpression      e => $"OVERLAY({e.String.ToSql()} PLACING {e.Overlay.ToSql()} FROM {e.Start.ToSql()}{(e.Length != null ? $" FOR {e.Length.ToSql()}" : "")})",
-            TrimExpression         e => FormatTrim(e),
 
             // ── AstNode helpers ──
             SelectColumn               n => n.Alias != null ? $"{n.Expression.ToSql()} AS {n.Alias}" : n.Expression.ToSql(),

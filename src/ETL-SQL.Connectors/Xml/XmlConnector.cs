@@ -15,6 +15,8 @@ namespace ETL_SQL.Connectors.Xml
     {
         public string Name => "XML";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
+        public bool IsFileBased => true;
+
 
         public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) => Task.FromResult("XML FlatFile Engine 1.0");
 

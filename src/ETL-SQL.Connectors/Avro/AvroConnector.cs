@@ -14,6 +14,8 @@ namespace ETL_SQL.Connectors.Avro
     {
         public string Name => "AVRO";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
+        public bool IsFileBased => true;
+
 
         public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) => Task.FromResult("Avro Data Connector v1.0 (Apache.Avro)");
 

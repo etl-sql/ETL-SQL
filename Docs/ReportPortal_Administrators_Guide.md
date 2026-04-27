@@ -14,6 +14,7 @@ This guide covers everything an administrator needs to deploy, configure, and op
 6. [Publishing Reports](#6-publishing-reports)
 7. [SMTP Connections](#7-smtp-connections)
 8. [Subscriptions](#8-subscriptions)
+   - [8.4 Scripted Subscription Management *(Proposed)*](#84-scripted-subscription-management)
 9. [Health Monitoring](#9-health-monitoring)
 10. [Audit Log](#10-audit-log)
 11. [Security Model](#11-security-model)
@@ -261,6 +262,145 @@ Subscription jobs are handed to the **ETL-SQL Orchestrator** for scheduling. If 
 ### 8.3 Delivery Failures
 
 Each subscription tracks a `FailCount`. After repeated failures the Orchestrator will stop retrying. Investigate via **Admin → Subscriptions → History** and correct the SMTP configuration or report script before re-enabling.
+
+### 8.4 Scripted Subscription Management
+
+> [!NOTE]
+> **Proposed** — This section describes functionality planned for a future release.
+
+Administrators can create and modify subscriptions using ETL-SQL script syntax. This is useful for bulk setup, deployment automation, or version-controlling subscription configuration alongside report scripts.
+
+#### CREATE SUBSCRIPTION
+
+```sql
+CREATE SUBSCRIPTION <name>
+FOR REPORT '<script-path>'
+DELIVER TO '<email>' | GROUP '<group-name>'
+SCHEDULE '<cron-expression>'
+FORMAT PDF | CSV | BOTH | LINK
+AT <smtp-alias>
+[ PARAMETERS (
+    @param1 = <value>,
+    @param2 = <value>,
+    ...
+) ];
+```
+
+The `<name>` is a human-readable label shown in subscription lists. It is optional — if omitted the subscription is identified by its generated ID.
+
+Parameter values use standard ETL-SQL quoting: strings in single quotes, numbers unquoted, `NULL` for no value.
+
+**Examples:**
+
+```sql
+-- Daily sales report: always yesterday's data
+CREATE SUBSCRIPTION DailySales
+FOR REPORT '/Reports/Sales/Daily'
+DELIVER TO 'john@example.com'
+SCHEDULE '0 6 * * *'
+FORMAT PDF
+AT corporate-smtp
+PARAMETERS (
+    @start  = 'D-1',
+    @end    = 'D',
+    @region = NULL
+);
+
+-- Monthly executive summary delivered to a group
+CREATE SUBSCRIPTION MonthlyExec
+FOR REPORT '/Reports/Executive/MonthlySummary'
+DELIVER TO GROUP 'Executives'
+SCHEDULE '0 7 1 * *'
+FORMAT PDF
+AT corporate-smtp
+PARAMETERS (
+    @period_start = 'M-1',
+    @period_end   = 'ME-1'
+);
+
+-- Fixed date range for a one-time review
+CREATE SUBSCRIPTION Q1Review
+FOR REPORT '/Reports/Finance/Quarterly'
+DELIVER TO 'cfo@example.com'
+SCHEDULE '0 8 * * 1'
+FORMAT PDF
+AT corporate-smtp
+PARAMETERS (
+    @start = '2026-01-01',
+    @end   = '2026-03-31'
+);
+```
+
+#### RELDATE parameter values
+
+When a report uses `RELDATE` INPUT parameters, the subscription stores the expression string — not a resolved date. The engine resolves it fresh each time the subscription fires. See [`Docs/Reference/RelativeDate_Parameters.md`](../Reference/RelativeDate_Parameters.md) for the full expression reference.
+
+Common expressions:
+
+| Expression | Resolves to at run time |
+| :--- | :--- |
+| `'D'` | Today at midnight |
+| `'D-1'` | Yesterday at midnight |
+| `'W-1'` | Start of last week |
+| `'ME-1'` | Last day of last month |
+| `'M-1'` | First day of last month |
+| `'QE-1'` | Last day of last quarter |
+| `'Y-1'` | January 1 of last year |
+| `'YE-1'` | December 31 of last year |
+| `'N-2H'` | Exactly 2 hours before the run |
+
+A fixed ISO date string (`'2026-01-01'`) can also be used to pin to a specific date.
+
+#### LIST parameter values
+
+Pass `LIST` parameters as a single quoted, comma-separated string. Wrap values containing commas in double quotes:
+
+```sql
+PARAMETERS (
+    @regions = 'North,South,East',
+    @brands  = '"Acme, Inc",Globex'
+);
+```
+
+#### ALTER SUBSCRIPTION
+
+Modify an existing subscription without recreating it:
+
+```sql
+ALTER SUBSCRIPTION <name-or-id>
+[ SET SCHEDULE '<cron-expression>' ]
+[ SET FORMAT PDF | CSV | BOTH | LINK ]
+[ SET ACTIVE | INACTIVE ]
+[ PARAMETERS (
+    @param1 = <value>,
+    ...
+) ];
+```
+
+The `PARAMETERS(...)` clause **replaces the full parameter set** for the subscription. To clear all parameters use `PARAMETERS ()` (empty). To leave parameters unchanged, omit the clause.
+
+```sql
+-- Change schedule only
+ALTER SUBSCRIPTION DailySales
+SET SCHEDULE '0 8 * * 1-5';
+
+-- Update parameters only
+ALTER SUBSCRIPTION DailySales
+PARAMETERS (
+    @start  = 'W-1',
+    @end    = 'W',
+    @region = 'North'
+);
+
+-- Pause a subscription
+ALTER SUBSCRIPTION MonthlyExec SET INACTIVE;
+```
+
+#### DROP SUBSCRIPTION
+
+```sql
+DROP SUBSCRIPTION <name-or-id>;
+```
 
 ---
 

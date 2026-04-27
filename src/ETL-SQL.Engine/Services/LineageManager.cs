@@ -1,0 +1,99 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using ETL_SQL.Core;
+
+namespace ETL_SQL.Engine.Services
+{
+    public class LineageManager(ILineageTracker tracker)
+    {
+        private readonly ILineageTracker _tracker = tracker;
+
+        public void RecordSelectIntoLineage(Statement statement, TableReference intoTable, IExecutionContext context)
+        {
+            string intoName = intoTable.ConnectionName ?? intoTable.TableName;
+
+            if (statement is SelectStatement select)
+            {
+                var aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                if (select.FromTable != null)
+                {
+                    var fromTable = (select.FromTable.Alias ?? select.FromTable.TableName);
+                    aliases[fromTable] = select.FromTable.TableName;
+                    if (select.FromTable.Metadata?.Any() == true)
+                        _tracker.Record(select.FromTable.TableName, new[] { select.FromTable.TableName }, "TABLE_TAGS", metadata: select.FromTable.Metadata, line: select.FromTable.Line, column: select.FromTable.Column);
+                }
+                foreach (var j in select.Joins)
+                {
+                    var joinTable = (j.Table.Alias ?? j.Table.TableName);
+                    aliases[joinTable] = j.Table.TableName;
+                    if (j.Table.Metadata?.Any() == true)
+                        _tracker.Record(j.Table.TableName, new[] { j.Table.TableName }, "TABLE_TAGS", metadata: j.Table.Metadata, line: j.Table.Line, column: j.Table.Column);
+                }
+
+                foreach (var col in select.Columns)
+                {
+                    string targetCol = col.Alias ?? (col.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"Expr{select.Columns.IndexOf(col)}");
+                    
+                    var resolvedSources = col.Expression.GetSourceTables()
+                        .Select(s => aliases.TryGetValue(s, out var real) ? real : s)
+                        .ToList();
+
+                    if (!resolvedSources.Any() && select.FromTable != null)
+                    {
+                        resolvedSources = select.GetSourceTables().ToList();
+                    }
+
+                    // Inherit descriptions and amalgamate
+                    var sourceCols = col.Expression.GetSourceColumns().ToList();
+                    var inherited = _tracker.InheritMetadata(resolvedSources, sourceCols, out var derived);
+                    
+                    col.DerivedFromDescriptions = derived;
+                    foreach (var m in inherited)
+                    {
+                        if (!col.Metadata.ContainsKey(m.Key)) col.Metadata[m.Key] = m.Value;
+                    }
+
+                    _tracker.Record(
+                        intoName, 
+                        resolvedSources, 
+                        "SELECT INTO", 
+                        targetColumn: targetCol, 
+                        sourceColumns: sourceCols,
+                        metadata: col.Metadata,
+                        derivedFromDescriptions: col.DerivedFromDescriptions,
+                        line: select.Line,
+                        column: select.Column);
+                }
+            }
+            else if (statement is SetOperationStatement setOp)
+            {
+                // For set operations, we derive column lineage from the left-hand query
+                if (setOp.Left is SelectStatement leftSelect)
+                {
+                    foreach (var col in leftSelect.Columns)
+                    {
+                        string targetCol = col.Alias ?? (col.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"Expr{leftSelect.Columns.IndexOf(col)}");
+                        _tracker.Record(
+                            intoName, 
+                            leftSelect.GetSourceTables(), 
+                            $"SELECT INTO ({setOp.Operation})", 
+                            targetColumn: targetCol, 
+                            metadata: col.Metadata,
+                            derivedFromDescriptions: col.DerivedFromDescriptions,
+                            line: statement.Line,
+                            column: statement.Column);
+                    }
+                }
+                else
+                {
+                    _tracker.Record(intoName, statement.GetSourceTables(), "SELECT INTO", line: statement.Line, column: statement.Column);
+                }
+            }
+            else
+            {
+                _tracker.Record(intoName, statement.GetSourceTables(), "SELECT INTO", line: statement.Line, column: statement.Column);
+            }
+        }
+    }
+}

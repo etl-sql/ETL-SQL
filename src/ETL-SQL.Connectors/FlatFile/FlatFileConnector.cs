@@ -17,6 +17,8 @@ namespace ETL_SQL.Connectors.FlatFile
     {
         public string Name => "FLATFILE";
         public IReadOnlyList<string> Aliases => new[] { "CSV", "FILE" };
+        public bool IsFileBased => true;
+
 
         public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) => Task.FromResult("FlatFile Engine 1.0");
 

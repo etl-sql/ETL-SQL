@@ -175,9 +175,10 @@ namespace ETL_SQL.Engine.Handlers
             }
             foreach (string subDir in Directory.GetDirectories(sourceDir))
             {
-                context.CurrentRecursiveDepth++;
-                EncryptDirectory(subDir, Path.Combine(destDir, Path.GetFileName(subDir)), password, overwrite, context);
-                context.CurrentRecursiveDepth--;
+                using (context.EnterRecursiveScope())
+                {
+                    EncryptDirectory(subDir, Path.Combine(destDir, Path.GetFileName(subDir)), password, overwrite, context);
+                }
             }
         }
 
@@ -194,9 +195,10 @@ namespace ETL_SQL.Engine.Handlers
             }
             foreach (string subDir in Directory.GetDirectories(sourceDir))
             {
-                context.CurrentRecursiveDepth++;
-                DecryptDirectory(subDir, Path.Combine(destDir, Path.GetFileName(subDir)), password, overwrite, context);
-                context.CurrentRecursiveDepth--;
+                using (context.EnterRecursiveScope())
+                {
+                    DecryptDirectory(subDir, Path.Combine(destDir, Path.GetFileName(subDir)), password, overwrite, context);
+                }
             }
         }
 
@@ -218,10 +220,11 @@ namespace ETL_SQL.Engine.Handlers
 
             foreach (DirectoryInfo subDir in dirs)
             {
-                context.CurrentRecursiveDepth++;
-                string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
-                CopyDirectory(subDir.FullName, newDestinationDir, overwrite, context);
-                context.CurrentRecursiveDepth--;
+                using (context.EnterRecursiveScope())
+                {
+                    string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
+                    CopyDirectory(subDir.FullName, newDestinationDir, overwrite, context);
+                }
             }
         }
 
@@ -241,9 +244,10 @@ namespace ETL_SQL.Engine.Handlers
             {
                 if (recursive)
                 {
-                    context.CurrentRecursiveDepth++;
-                    DeleteDirectoryContents(subDir.FullName, true, context);
-                    context.CurrentRecursiveDepth--;
+                    using (context.EnterRecursiveScope())
+                    {
+                        DeleteDirectoryContents(subDir.FullName, true, context);
+                    }
                 }
                 context.IncrementOperationCount(OperationType.FileSystem, subDir.FullName);
                 subDir.Delete(recursive);

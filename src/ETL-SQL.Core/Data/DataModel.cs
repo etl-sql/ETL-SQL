@@ -179,6 +179,23 @@ namespace ETL_SQL.Data
             return _dynamicColumns != null && _dynamicColumns.ContainsKey(columnName);
         }
 
+        /// <summary>
+        /// Returns an enumerable of all column names (both schema-defined and dynamic).
+        /// Optimized to avoid creating a full dictionary copy.
+        /// </summary>
+        public IEnumerable<string> GetColumnNames()
+        {
+            if (_schema != null)
+            {
+                foreach (var name in _schema.ColumnNames) yield return name;
+            }
+
+            if (_dynamicColumns != null)
+            {
+                foreach (var name in _dynamicColumns.Keys) yield return name;
+            }
+        }
+
         internal void SetSchema(TableSchema schema)
         {
             if (_schema == schema) return;

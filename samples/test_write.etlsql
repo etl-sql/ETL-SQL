@@ -1,0 +1,5 @@
+SET WHAT_IF OFF;
+SELECT 1 AS A INTO #T;
+CREATE CONNECTION c ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\test_output.csv');
+INSERT INTO c.FILE SELECT * FROM #T;
+PRINT 'Done. Rowcount: ' + @@ROWCOUNT;

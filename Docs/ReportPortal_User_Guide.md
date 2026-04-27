@@ -12,7 +12,9 @@ The Report Portal is a web application that lets you browse, run, and subscribe 
 4. [Running a Report](#4-running-a-report)
 5. [Viewing & Exporting Results](#5-viewing--exporting-results)
 6. [Subscribing to a Report](#6-subscribing-to-a-report)
+   - [6.1 Report Parameters *(Proposed)*](#61-report-parameters)
 7. [Managing Your Subscriptions](#7-managing-your-subscriptions)
+   - [7.1 Editing Parameters *(Proposed)*](#71-editing-parameters)
 8. [Changing Your Password](#8-changing-your-password)
 
 ---
@@ -107,12 +109,14 @@ A subscription delivers a report to your email inbox on a schedule.
 
 | Field | Description |
 | :--- | :--- |
+| **Name** | Optional label for this subscription (e.g. `My Daily Sales`). Shown in your subscriptions list. |
 | **Schedule** | `Daily`, `Weekly`, or `Monthly` |
 | **At Time** | Time of day for delivery (24-hour, e.g. `08:00`) |
 | **Format** | `PDF`, `CSV`, `Markdown`, or `Link` (portal URL only) |
 | **Recipient email** | Defaults to your account email; can be overridden |
 
-4. Click **Save**.
+4. If the report declares **parameters**, a **Parameters** section appears below the delivery options. Fill in a value for each parameter (see [6.1 Report Parameters](#61-report-parameters)).
+5. Click **Save**.
 
 > [!NOTE]
 > The **Link** format sends only a URL pointing to the live report — no attachment is generated. This is the fastest option and requires no file export.
@@ -120,15 +124,77 @@ A subscription delivers a report to your email inbox on a schedule.
 > [!TIP]
 > Your administrator must configure an SMTP connection before subscriptions with attachments can be delivered. If the SMTP connection is missing, choose the **Link** format as a fallback.
 
+### 6.1 Report Parameters
+
+> [!NOTE]
+> **Proposed** — This section describes functionality planned for a future release.
+
+Some reports are written with **INPUT parameters** — values that control what data is included each time the report runs (e.g. date range, region filter). When you subscribe, you can set a value for each parameter that will be used every time your subscription fires.
+
+#### Parameter controls by type
+
+| Parameter type | Control shown | Notes |
+| :--- | :--- | :--- |
+| Text (`VARCHAR`) | Text input | |
+| Number (`INT`, `DECIMAL`) | Number input | |
+| Date (`DATE`) | Date picker | |
+| Date + time (`DATETIME`) | Date and time picker | |
+| Relative date (`RELDATE`) | Quick-pick dropdown | See below |
+| Multi-value list (`LIST`) | Tag / chip input | Each chip is one value |
+
+#### Relative date parameters
+
+A **RELDATE** parameter lets you say "yesterday" or "start of last month" instead of picking a specific date. The portal resolves the expression to an actual date each time your subscription runs.
+
+The quick-pick dropdown covers the most common choices:
+
+| Label | What it means |
+| :--- | :--- |
+| Today | The current calendar day |
+| Yesterday | The day before the run date |
+| Start of this week | Monday (or your organization's configured week start) |
+| Start of last week | The Monday of last week |
+| End of last week | The Sunday of last week |
+| Start of this month | The 1st of the current month |
+| Start of last month | The 1st of last month |
+| End of last month | The last day of last month |
+| Start of this quarter | The 1st of the current quarter |
+| Start of last quarter | The 1st of last quarter |
+| End of last quarter | The last day of last quarter |
+| Start of this year | January 1 of the current year |
+| Start of last year | January 1 of last year |
+| End of last year | December 31 of last year |
+| Now | The exact time the subscription fires |
+
+Click **Advanced** to type a custom expression (e.g. `N-2H` for "2 hours ago"). The portal validates the expression before saving.
+
+You can also enter a fixed date (e.g. `2026-01-01`) to pin the subscription to a specific value that never changes.
+
+#### Multi-value list parameters
+
+Type a value and press **Enter** or **,** to add it as a chip. Click the × on a chip to remove it. You can add as many values as needed.
+
+#### Leaving a parameter blank
+
+An empty field means **no value** (`NULL`) is passed for that parameter. Most report writers interpret a NULL parameter as "no filter" — meaning the report will return data for all values of that dimension. Check the report's description or ask your administrator if you are unsure.
+
 ---
 
 ## 7. Managing Your Subscriptions
 
-Open **My Subscriptions** from the user menu (top-right). The list shows all subscriptions you own, with their schedule, next run time, and last delivery status.
+Open **My Subscriptions** from the user menu (top-right). The list shows all subscriptions you own, with their schedule, next run time, and last delivery status. A compact parameter summary is shown for each subscription (e.g. `@start=D-1  @end=D  @region=—`), where `—` indicates a null/unset value.
 
-- **Pause / Resume** — toggle the `IsActive` flag without deleting the subscription.
+- **Pause / Resume** — toggle active state without deleting the subscription.
+- **Edit Parameters** — opens a form pre-populated with your saved parameter values. Click the parameter summary text directly to open it quickly. Changes take effect on the next scheduled run.
 - **Delete** — removes the subscription and cancels any pending scheduled job.
 - **History** — shows the last delivery attempts with timestamps and any error messages.
+
+### 7.1 Editing Parameters
+
+> [!NOTE]
+> **Proposed** — This section describes functionality planned for a future release.
+
+Click **Edit Parameters** (or the parameter summary text) on any subscription row. The same per-type controls used in the Subscribe form appear, pre-populated with your saved values. Make your changes and click **Save**. The updated values are used on the next scheduled run — there is no need to recreate the subscription.
 
 ---
 

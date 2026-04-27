@@ -15,6 +15,8 @@ namespace ETL_SQL.Connectors.Parquet
     {
         public string Name => "PARQUET";
         public IReadOnlyList<string> Aliases => Array.Empty<string>();
+        public bool IsFileBased => true;
+
 
         public Task<string> GetVersionAsync(IExecutionContext context, string connectionString) => Task.FromResult("Parquet Engine 1.0 (Parquet.Net)");
 

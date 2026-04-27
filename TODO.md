@@ -1,95 +1,75 @@
 # ETL-SQL Development Roadmap
-## Report web server
- -[x] Chrome cached the report when it should load it fresh every time. Fixed: added a global `app.Use(...)` middleware in `ReportPlayer/Program.cs` that sets `Cache-Control: no-cache, no-store, must-revalidate` + `Pragma: no-cache` + `Expires: 0` on every response (both static files and API endpoints). **[Verified]**
-## VS Code issues
-
-## Rendering Bugs (Fixed)
-
-- [x] **`EChartsRenderer.TitleOpt` key case mismatch** — `TitleOpt` read `"TITLE"` (uppercase) but `VisualBuilder` stores `"title"` (lowercase), so every chart showed the visual variable name instead of the `TITLE` option. Fixed in `EChartsRenderer.cs`. **[Verified]**
-- [x] **`EChartsRenderer.BuildAxisOpts` key case mismatch** — Axis label/min/max options were stored as `"axis:x:label"` (lowercase) but read as `"AXIS:X:LABEL"` (uppercase), so all axis labels, minimums, and maximums were silently dropped from every chart. Fixed in `EChartsRenderer.cs`. **[Verified]**
-- [x] **COMBO chart dual Y-axis missing** — Revenue (~$100k) and ReturnRate (0–30%) shared a single Y-axis, making the ReturnRate line nearly invisible. Fixed: when `SERIES` contains exactly 2 mixed types (BAR + LINE), `RenderCombo` now generates a dual Y-axis ECharts config. Fixed in `EChartsRenderer.cs`. **[Verified]**
-- [x] **`CROSS_FILTER` detection always false** — `renderChart` checked `=== 'true'` but the manifest value is `"ON"`. Cross-filtering never activated. Fixed with `isOn()` helper. Fixed in `report-runtime.js`. **[Verified]**
-- [x] **`renderCard` displayed variable name instead of TITLE** — Broken index resolution mixed string column names with numeric indices, falling through to `visual.name` (e.g., "KpiRevenue") instead of the card's TITLE option ("Total Revenue"). Fixed in `report-runtime.js`. **[Verified]**
-- [x] **`DATEPICKER`, `SLIDER`, `SEARCH` parameter binding broken** — All three renderers read `opts['PARAMETER']` (an option key that doesn't exist) instead of reading `parameterName` from the `ON_CHANGE` action list. Controls never fired parameter updates. Fixed in `report-runtime.js`. **[Verified]**
-- [x] **Buttons never rendered in page layouts** — `renderLayout` only searched `manifest.visuals` and `manifest.containers`; it never checked `manifest.buttons`. Buttons placed in page MAP slots showed nothing. Added `renderButton()` and button lookup to `renderLayout`. Fixed in `report-runtime.js`. **[Verified]**
-- [x] **`LEFT(YrMo, 7)` on integer column in kitchen_sink** — `YrMo` is stored as an integer (e.g., 202601); `LEFT()` on an integer is fragile. Changed to `CAST(YrMo AS VARCHAR)`. Fixed in `kitchen_sink.rptsql`. **[Verified]**
-
-## Engine Bugs (found via kitchen_sink.rptsql validation)
-
-- [x] **Custom `CREATE BUTTON` types not supported** — Fixed in `ReportParser.cs`: after checking for `BACK` and `REFRESH`, any non-LPAREN/EOF token is now accepted as a custom button type and stored verbatim (uppercased) in the manifest. **[Verified]**
-- [x] **String concatenation with `+` treated as arithmetic** — Investigation confirmed `BinaryOperatorFactory` already falls back to string concatenation when `Convert.ToDecimal()` throws for either operand. `CAST(YEAR(d) AS VARCHAR)` returns a CLR string via `TypeConverter.Cast`; `"-"` is not parseable as decimal, so the catch fires and returns `"2026-"`. Bug was stale; no code change needed. **[Verified stale]**
-- [x] **`LAG()` / `LEAD()` window functions not supported in engine-side temp table SELECT** — Root cause: `IsWindowFunction()` only detected top-level window function calls; `Revenue - LAG(...)` has a `BinaryExpression` at top level so the pre-computation step was skipped entirely. Also, `LAG`/`LEAD` with a 3-argument default always returned `null` out-of-bounds instead of using `f.Arguments[2]`. Fixed: `ContainsWindowFunction()` deep tree walk added to `WindowEngine`; `CollectWindowCalls()` extracts all nested window calls so both `ApplyWindowFunctions` (in-memory) and `ExternalWindowEngine.ApplyWindowFunctionsExternal` (disk-spill) can compute them regardless of nesting depth. `AggregateEngine.IsWindowFunction` delegates to the static walker. 3-arg LAG/LEAD default fixed. **[Verified — 3 new tests: TestLag_ThreeArgDefault, TestLead_ThreeArgDefault, TestEmbeddedWindowFunction_InBinaryExpression — all 1112+ tests pass]**
-- [x] **`HBAR` visual renderer not implemented in web player** — `CREATE VISUAL AS HBAR` builds correctly but the web runtime returns "No chart config available". Investigation found `HBAR` was already handled in `EChartsRenderer.cs` (inverted axes). The kitchen_sink had been using a `BAR` workaround; reverted to true `HBAR`. **[Verified]**
-- [x] **`UNION ALL` not supported in inline visual `SOURCE` clause** — `ParseVisualSource` cast the result of `ParseStatement()` directly to `SelectStatement`; `UNION ALL` produces a `SetOperationStatement` and caused an `InvalidCastException`. Fixed: `VisualSourceExpression.InlineSelect` changed from `SelectStatement?` to `Statement?`; parser casts removed; `VisualMappingColumnExistsRule` now skips validation for non-`SelectStatement` inline sources. **[Verified]**
-- [x] **`STEP` option not recognized in `SLIDER` OPTIONS parser** — `STEP` is a reserved keyword so `ConsumeIdentifier` inside `ParseOptions` rejected it. Fixed in `ReportParser.cs`: the `else` branch now advances any non-RPAREN/EOF token as the option key instead of calling `ConsumeIdentifier`. **[Verified]**
-- [x] **`DEFAULT` inside `OPTIONS()` rejected for `DATEPICKER`, `SLIDER`, `SEARCH`** — same `ConsumeIdentifier` restriction as STEP. Fixed by the same `ParseOptions` change; `DEFAULT` and any other reserved keyword can now appear as option keys. **[Verified]**
-- [x] **`IMAGE` visual requires `SOURCE`** — Investigation confirmed `VisualSourceRequiredRule.cs` already falls through to `_ => false` for the IMAGE type, meaning SOURCE is NOT required. Bug was stale; no code change needed. **[Verified stale]**
-- [x] **`IMAGE` visual renderer not implemented in web player** — Added `renderImage()` function and `case 'IMAGE'` to the switch in `report-runtime.js`. Renders an `<img>` using `SRC`, `ALT`, and `FIT` (CSS object-fit) options. **[Verified]**
-- [x] **Hyphenated style keys (`BACKGROUND-COLOR`, `BORDER-RADIUS`) break the lexer** — the `-` is tokenized as a minus operator. Fixed in `ReportParser.cs` `ParseStyleBody()`: after the first identifier, consecutive `MINUS + IDENTIFIER` segments are consumed and concatenated with `-`, so `BACKGROUND-COLOR = '#1a1a2e'` now parses as a single key. Also added `using ETL_SQL.Common` so `LanguageMetadata.IsKeyword` is available for keyword-as-key detection. **[Verified]**
-- [x] **`SUMMARY` clause rejects reserved words as column names** — `Returns` (collides with `RETURNS` keyword) and `COUNT(*)` (wildcard) both fail. Fixed in `ReportParser.cs`: col now uses `_parser.Advance().Value` directly (accepts any token), with explicit `STAR` handling for `*`; alias after `AS` now accepts `STRING_LITERAL` so `AS 'Total Revenue'` works. **[Verified]**
-- [x] **`CREATE CONTAINER` — `Report_SQL_Guide.md` documents a `VISUALS (VisualA, VisualB, ...)` clause** — the parser never supported `VISUALS` inside `CREATE CONTAINER`; only `STRUCTURE`/`MAP` is valid. Removed the "Simple List (Legacy)" section from the guide and replaced with a single Grid Layout example showing correct syntax. Also fixed the tooltip container example that used `VISUALS(...)`. **[Verified]**
-- [x] **FLATFILE delimiter keywords (`COMMA`, `SEMICOLON`, `PIPE`, `TAB`) in `WITH()` cause parser errors** — `COMMA`/`PIPE`/`SEMICOLON` parsed as `IdentifierExpression` and evaluated to `null` against an empty row; `TAB` lexes as `NAV_TAB` (same outcome). Fixed in `CreateConnectionStatementHandler.StringifyOption`: when the evaluated value is `null` and the source expression is an `IdentifierExpression`, the identifier name is used as the string value. **[Verified]**
-- [x] **FLATFILE security guardrail blocks `.dat` extensions by default** — Added `.dat`, `.tsv`, `.psv`, and `.fixed` to `SecurityService.AllowedExtensions`. All four are common data-connector formats that were previously rejected by the file-type whitelist. **[Verified]**
-- [x] **`@@ROWCOUNT` is cumulative across statements** — `@@ROWCOUNT` returned `RowsProcessed` (session-total); `LastStatementRowsProcessed` was computed as the delta but only stored when `IsProfiling`. Fixed: always compute and store `LastStatementRowsProcessed = RowsProcessed - startRows` after each statement; changed `@@ROWCOUNT` in both `Evaluator.cs` and `ExpressionEvaluator.cs` to return it. Added property to `IExecutionContext` and `SystemExecutionContext`. **[Verified]**
-- [x] **File write to subdirectories fails for ALL file-based connectors** — Added `Directory.CreateDirectory(Path.GetDirectoryName(filePath))` before the final file write (or `File.Move`) in `FlatFileDataSource`, `JsonDataSource`, `XmlDataSource`, `ParquetDataSource`, and `AvroDataSource`. All five connectors now auto-create missing parent directories. **[Verified]**
-- [x] **`JOIN` hints (`HASH`, `LOOP`, `MERGE`) not supported in parser** — Investigation: `ParseJoins()` already has `HASH`, `LOOP`, `MERGE` in its while-condition and handles all combinations (`INNER HASH JOIN`, `LEFT LOOP JOIN`, bare `HASH JOIN`, etc.). Bug was stale. **[Verified stale]**
-- [x] **`SELECT` statement fails when `JOIN` hints are present** — Same investigation: handled in `ParseJoins` with dedicated `else if (Match(TokenType.HASH))` branches. Bug was stale. **[Verified stale]**
-- [x] **XML connector `ROOT_PATH` fails with "Name cannot begin with '/'"** — `GetElements` split only on `.`; `/Data/Rows` produced a segment starting with `/` which `XElement` rejected. Fixed: split on both `'.'` and `'/'` with `RemoveEmptyEntries`, making both `Data.Rows` and `/Data/Rows` style paths work. **[Verified]**
-- [x] **Hex literals (`0x...`) not supported in parser** — `ReadNumber` only consumed decimal digits; `0xFF` lexed as `NUMBER("0")` + `IDENTIFIER("xFF")`. Fixed in `Lexer.cs`: detect `0x`/`0X` prefix and consume hex digits, converting the value to decimal before emitting the token. **[Verified]**
-- [x] **`PATH` type fails in `DECLARE` and `CAST`** — `PATH` is a reserved keyword so `IsIdentifier` returned false, causing `ParseType` → `ConsumeIdentifier` to throw. Fixed: added `TokenType.PATH` to `DataTypeTokens` in `Parser.cs`; `IsDataType` now returns true for it, making it a valid type name. **[Verified]**
-- [x] **`DECLARE` does not support multiple variables** — Investigation: `SystemParser.ParseDeclare()` already uses `do { ... } while (Match(TokenType.COMMA))` and wraps multiple declarations in a `BlockStatement`. Bug was stale. **[Verified stale]**
-- [x] **`PRINT` statement ignores arguments after the first comma** — `PrintStatementHandler` only logged `stmt.Message`. Fixed: now evaluates all non-null args (`Message`, `ShowTimestamp`, `TimestampFormat`) and concatenates them with a space separator. **[Verified]**
-- [x] **`PARALLEL FOR` syntax not supported** — Added `ParallelForStatement` AST node, `ParseParallel()` branch in `FlowParser.cs` for `PARALLEL [n] FOR @i = start TO end [STEP n] BEGIN...END`, and `ParallelForStatementHandler` that fans out each iteration as a parallel task with the same semaphore-throttle pattern as `ParallelStatementHandler`. **[Verified]**
-- [x] **`FOR @row IN (query)` syntax not supported** — Fixed in `FlowParser.cs` `ParseFor()`: when `IN` follows the variable name instead of `=`, the result is parsed as a `ForeachStatement` (subquery iteration), which the existing `ForeachStatementHandler` already executes via streaming/paged pushdown. **[Verified]**
-- [x] **`ERROR_LINE()` returns 0** — `TryCatchStatementHandler` created `ErrorInfo` with `line=0` instead of using the line captured by `EvaluateStatement`. Fixed: initialize `line` from `context.LastError?.Line ?? 0` before checking the exception type; an `ExecutionException` with an explicit positive line still wins. **[Verified]**
-- [x] **Dot notation member access fails for keywords** — Fixed in `ExpressionParser.cs`: member access after `.` now accepts any token where `IsIdentifier` or `IsKeyword` is true; replaced `Consume(IDENTIFIER)` with an `Advance()` guarded by the combined check. **[Verified]**
-- [x] **`DECLARE` multi-variable fails in some contexts** — `ParseDeclare()` already uses `do { ... } while (Match(COMMA))` covering multi-variable + initial values. Could not reproduce "Unexpected token type COMMA"; no isolated test case. **[Verified stale]**
-- [x] **`DROP CONNECTION ... IF EXISTS` syntax error** — `ParseDrop` already handles both `DROP CONNECTION IF EXISTS Name` (pre-name) and `DROP CONNECTION Name IF EXISTS` (post-name). **[Verified stale]**
-- [x] **`CREATE UNIQUE INDEX` sorting syntax error** — Added `Match(TokenType.ASC); Match(TokenType.DESC);` after each column name in `ParseCreateIndex` (`DataParser.cs`). `(OrderId ASC, Total DESC)` now parses. **[Verified]**
-- [x] **`DROP INDEX` dotted notation fails** — Fixed in `DataParser.cs`: after reading the first name, a `DOT` triggers reading the second name as index with first as table (`DROP INDEX Table.Index`); post-name `IF EXISTS` also added. **[Verified]**
-- [x] **BUTTON DRILL_DOWN failure** — `renderButton` only handled `BACK` and `REFRESH` types; all custom types silently ignored `ON_CLICK` actions. Fixed: added an `else` branch that collects `ON_CLICK` actions, sends batched `SET_PARAMETER` updates via `postParameters`, then navigates to the `DRILL_DOWN.targetVisual` page by querying `[data-page=...]` (a new `data-page` attribute added to nav items). **[Verified]**
-- [x] **ExpressionParser build failure** — `LanguageMetadata` was referenced with incorrect namespace `ETL_SQL.Core.Common` instead of `ETL_SQL.Common`. **[Fixed]**
-- [x] **Multiple ON_CHANGE actions on DATEPICKER** — Fixed in `report-runtime.js`: `renderDatePicker`, `renderSlider`, and `renderSearch` now collect ALL `SET_PARAMETER` actions from `ON_CHANGE` and use `postParameters(batch)` to fire all of them in a single server round-trip. Previously only `changeActions[0]` was used. **[Verified]**
-- [x] **`LEFT SEMI JOIN` and `LEFT ANTI JOIN` not implemented** — Fixed in `Parser.cs` `ParseJoins()`: the `LEFT` branch now checks for `SEMI`/`ANTI` before falling through to hint-token handling. `LEFT SEMI JOIN` and `LEFT ANTI JOIN` now parse correctly. **[Verified]**
-- [x] **`CREATE PROCEDURE` parameter parser requires `AS` correction** — Fixed in `DataParser.cs` `ParseParameterDefinitions()`: added bare (no-paren) style: reads `@param TYPE` pairs separated by commas until a non-VARIABLE token. `CREATE PROCEDURE Name @p INT AS` now parses. **[Verified]**
-- [x] **`ED25519` SSH algorithm missing** — Removed from documentation. `ED25519` is not available in the .NET 10 BCL. Supported algorithms are `RSA` and `ECDSA`. **[Verified]**
-- [x] **`DELETE FILE IF EXISTS` syntax error** — Fixed in `ExtensionParser.cs` `ParseFileOperation()`: non-function-style while loop now has an `else if (Match(IF))` branch that consumes `EXISTS`. `DELETE FILE 'path' IF EXISTS` now parses. **[Verified]**
-- [x] **`SHOW JOBS` fails with missing table** — `SQLiteJobHistoryStore.InitializeAsync()` was only called by `SchedulerService` (not during headless execution). Fixed: added `EnsureInitializedAsync()` lazy-init guard (double-checked locking with `SemaphoreSlim`) called by all public methods. `SHOW JOBS` now auto-creates the schema on first access. **[Verified]**
-- [x] **XML connector `ROOT_PATH` with leading slash failure** — Fixed: `GetElements` now splits on both `'.'` and `'/'`, so `/Root/Path` style XPath works correctly. **[Verified]**
-
-## Documentation
-
-- [x] **`Docs/Architecture/Reporting.md` — document option key naming convention** — Added "Option Key Naming Convention" subsection under §6.1 `EChartsRenderer` explaining the uppercase parser-supplied vs lowercase internally-computed key split, why both tiers exist, and the silent-bug risk when cases are mixed. **[Verified]**
-- [x] **`Report_SQL_Guide.md` — clarify parameter binding for `DATEPICKER`, `SLIDER`, `SEARCH`** — Added "How Parameter Binding Works" callout section after the SEARCH example explaining the explicit `ACTIONS (ON_CHANGE = SET_PARAMETER(...))` mechanism, the `value` keyword for source-less controls vs column ref for SLICER/MULTISELECT, and a "Common mistake" note debunking the `OPTIONS(PARAMETER = ...)` anti-pattern. Also fixed the "automatically wire" language in the Variables and Parameters section. **[Verified]**
-
-## Missing Tests
-
-- [x] **`EChartsRendererTests.cs` — add unit test suite for chart JSON generation** — Added 4 regression tests to `ReportBuilderTests.cs`: (1) BAR with `axis:y:label` → `"name":"Revenue"` in JSON; (2) `title` key → `"text":"My Title"` in JSON; (3) COMBO BAR+LINE → `yAxis` is a JSON array (dual axis); (4) WATERFALL `COLOR:POSITIVE`/`COLOR:NEGATIVE` → custom colors appear in output. All 20 tests pass. **[Verified]**
-- [x] **`ReportRuntimeTests` — add JS rendering tests (Vitest + jsdom)** — Added `reportRuntime.test.ts` to the VS Code extension's Vitest suite (which already had `jsdom` installed). Added a `window.__reportRuntime__` test hook at the end of `report-runtime.js`. Tests cover: (1) `isOn()` with all truthy/falsy values; (2) `renderCard` uses TITLE option not visual name; (3) `renderDatePicker` binds default/min/max from OPTIONS; (4) `renderSlider` binds min/max/step/default; (5) `renderSearch` binds placeholder; (6) `renderButton` produces a `<button>` for both REFRESH and custom ON_CLICK types. All 62 JS tests pass. **[Verified]**
-- [x] **`ReportSqlParserTests` — fix pre-existing dataset name failures** — `ParseCreateDataset` prepended `&` unconditionally, converting `#summary` → `"&#summary"`. Fixed: `&` is only prepended when the name has no sigil prefix (`#`-prefixed names are stored verbatim). Both tests now pass. **[Verified]**
-
-## Architecture & Performance (Investigation Results)
-
-- [x] **`DashboardService.RebuildAsync` blocks on infinite loops** — Added `CancellationTokenSource(30s)` passed to `evaluator.Evaluate()` in `RebuildAsync`. **[Verified]**
-- [x] **`ReportPlayer` port contention in VS Code** — Added `--port`/`-p` CLI arg (port 0 = OS-assigned dynamic port). Moved URL config to `builder.WebHost` pre-build; switched to `StartAsync` + `WaitForShutdownAsync` so the actual bound address (resolved via `IServerAddressesFeature`) is printed as `REPORT_URL=<url>` for machine-readable consumption by the VS Code extension. **[Verified]**
-- [x] **`SessionStateManager` startup race condition** — `ReapStaleSessions()` was called synchronously in the constructor; simultaneous process starts raced to delete the same stale session dirs. Fixed: reaping is now deferred to a randomized background delay (5–30 s via `Task.Delay`) so concurrent startups are naturally spread out. Errors inside `ReapStaleSessions` are already caught-and-logged, so fire-and-forget is safe. **[Verified]**
-- [x] **`SnapshotStore` per-process lock isolation** — Two concurrent processes sharing the same `.snapshot.json.tmp` path could corrupt each other's in-progress write. Fixed: `SaveAsync` now uses a per-write unique temp path (`*.tmp.<guid>`) so each process writes to its own scratch file before the atomic rename (last-writer-wins; both produce valid JSON so no corruption). Also updated `CleanupOrphanedSnapshots` glob to match both old and new temp patterns. **[Verified]**
-- [x] **`etl-sql.exe` Shared DB Contention** — `SQLiteJobHistoryStore` defaulted to `"etlsql.db"` in CWD; instances in different directories had isolated DBs and could shadow each other. Fixed: added `DefaultDbPath()` static helper that returns `LocalApplicationData\ETL-SQL\etlsql.db`; default constructor uses it. Updated `OrchestratorDbLocator` in ReportPortal to check the global path first (legacy relative paths kept as fallback). **[Verified — builds clean]**
-- [x] **`JobThrottle` is multi-process blind** — Replaced in-memory `SemaphoreSlim` with SQLite-backed `ThrottleSlots` table in the shared DB (`LocalApplicationData/ETL-SQL/etlsql.db`). Each `AcquireAsync` runs a `BEGIN EXCLUSIVE` transaction that purges stale slots from dead processes (via `Process.GetProcessById`), counts live slots, and only inserts if `COUNT < max`. `SQLITE_BUSY` (error 5) is caught and retried on the next 500 ms poll tick. Slot row is deleted on `Dispose`. **[Verified — builds clean]**
-- [x] **`CreatePageStatementHandler` crash on BUTTON objects** — `CREATE PAGE` validation checked `VisualDefinitions` and `ContainerDefinitions` but not `ButtonDefinitions`; any button in a page MAP slot threw "not defined as visual or container". Added `bool isButton = context.ButtonDefinitions.ContainsKey(visualName)` to the validation check. **[Verified]**
-- [x] **EChartsRenderer title fallback** — Investigated: the fix from the previous session (`TitleOpt` checks both `"title"` and `"TITLE"` keys) is correct and in place. Bug was stale — title flow from parser → VisualBuilder → EChartsRenderer is correct. **[Verified stale]**
-- [x] **Waterfall/Donut/Pie/Funnel/Gauge/Treemap/Heatmap/BoxPlot data mapping: case-sensitive `IndexOf`** — Seven renderers used `v.Columns.IndexOf(col)` (case-sensitive) while `ExtractCartesianSeries` and others used `FindIndex(OrdinalIgnoreCase)`. A case mismatch between MAPPINGS column names and actual data column names silently returned -1, producing zero or wrong data. Fixed all occurrences to use `FindIndex(c => string.Equals(c, col, OrdinalIgnoreCase))`. **[Verified]**
-- [x] **Gauge raw decimal formatting** — Gauge `detail.formatter` was `"{value}"` (full precision). Changed to `"{value:.1f}"` for 1-decimal display. **[Verified]**
-- [x] **Missing SOURCE exemption for IMAGE visual** — Parser threw "missing SOURCE clause" for `CREATE VISUAL AS IMAGE` without a SOURCE. Added `VisualType.Image` to the no-source-required exemption list in `ReportParser.cs`. **[Verified]**
-- [x] **HBAR type string mismatch** — `VisualType.HorizontalBar.ToString()` returns `"HorizontalBar"`, which uppercased becomes `"HORIZONTALBAR"` — no match for `"HBAR"` in EChartsRenderer switch. Added `"HORIZONTALBAR"` as an OR-pattern alias: `"HBAR" or "HORIZONTALBAR" => RenderHorizontalBar(visual)`. **[Verified]**
-
 ## Up Next
-- [ ] **Web server subscription parameters** Strategize how to use all our existing INPUT parameters to make this work.
+- [ ] **Subscription Parameters** — Full strategy: [`Docs/Strategy/SubscriptionParameters_Strategy.md`](Strategy/SubscriptionParameters_Strategy.md). RELDATE/LIST types, `SET WEEK_START_DAY`, `CREATE/ALTER SUBSCRIPTION PARAMETERS(...)`, portal INPUT parameter UX. ~6.5 dev-days across 6 phases. Implementation tasks below.
+    - **Phase 1 — Engine: New Types** *(most isolated, start here)*
+        - [ ] `ETL-SQL.Core/Ast.cs`: Add `RelDateType`, `ListType` to type system; `SetWeekStartDayStatement` record; `INPUT` modifier on `DeclareStatement`.
+        - [ ] `ETL-SQL.Core/TokenType.cs` + `Lexer.cs`: Add `RELDATE`, `LIST`, `INPUT`, `WEEK_START_DAY` tokens/keywords.
+        - [ ] `ETL-SQL.Core/Parser`: Parse `DECLARE @var RELDATE = <expr> [INPUT]`, `DECLARE @var LIST(type) [= default] [INPUT]`, `SET WEEK_START_DAY = '<day>'`.
+        - [ ] `ETL-SQL.Engine/RelDateResolver.cs` *(new)*: Stateless resolver — anchor parse, period-shift arithmetic, N/NU inline units, fixed-date passthrough, `ExecutionException` on bad input. See spec in strategy doc.
+        - [ ] `ETL-SQL.Engine/SetWeekStartDayHandler.cs` *(new)*: Validate day name, store on `IExecutionContext`.
+        - [ ] `ETL-SQL.Engine/Evaluator.cs`: Surface `WeekStartDay` from `appsettings.json → Engine.StartOfWeek` (default Monday). Wire handler.
+        - [ ] `appsettings.json`: Add `Engine.StartOfWeek` string setting.
+        - [ ] `ExpressionEvaluator.cs`: Resolve `RELDATE` variable reads via `RelDateResolver` at runtime.
+        - [ ] Tests: `RelDateResolverTests.cs` (exhaustive), `SetWeekStartDayTests.cs`, `WeekStartArithmeticTests.cs`.
+    - **Phase 2 — Subscription SQL Syntax**
+        - [ ] `ETL-SQL.Core`: Add `Name?` + `Parameters: IReadOnlyList<SubscriptionParameter>` to `CreatePortalSubscriptionStatement`; new `SubscriptionParameter(Name, Value)` record; `AlterPortalSubscriptionStatement` record.
+        - [ ] `ETL-SQL.Core/Parser`: Parse optional `<name>` on `CREATE SUBSCRIPTION`; parse `PARAMETERS(...)` clause; parse `ALTER SUBSCRIPTION` statement.
+        - [ ] `ETL-SQL.Engine/CreatePortalSubscriptionHandler.cs`: Persist `Name` + `ParametersJson`.
+        - [ ] `ETL-SQL.Engine/AlterPortalSubscriptionHandler.cs` *(new)*: Update schedule/format/active/params; replace full param set when clause present; leave unchanged when absent; clear when clause is empty list.
+    - **Phase 3 — Portal Data Layer**
+        - [ ] `Subscription.cs` entity: Add `Name` (nullable `TEXT`) + `ParametersJson` (nullable `TEXT`).
+        - [ ] New EF Core migration: `AddSubscriptionNameAndParameters`.
+    - **Phase 4 — Portal API**
+        - [ ] `CreateSubscriptionRequest` / `UpdateSubscriptionRequest` models: Add `Name?`, `Parameters?`.
+        - [ ] Subscription response DTOs: Add `Name?`, `Parameters?`, `ParameterSummary` (server-built compact string).
+        - [ ] New endpoint: `GET /api/reports/{*path}/parameters` — parse script AST, return INPUT parameter metadata (name, type, default, required). No script execution.
+        - [ ] `POST /api/subscriptions`: Persist name + parameters JSON.
+        - [ ] `PUT /api/subscriptions/{id}`: Accept parameter replacement.
+        - [ ] `GET /api/subscriptions` (admin + mine): Include name, parameters, summary.
+        - [ ] Orchestrator job runner: Pass stored parameter values to script; resolve `RELDATE` expressions fresh at fire time.
+    - **Phase 5 — Portal UI**
+        - [ ] Subscribe modal: call `/api/reports/{path}/parameters` before render; append per-type INPUT controls (RELDATE=quick-pick+custom, LIST=chip input, etc.). Serialize to `{ "@name": "value" }` on save.
+        - [ ] My Subscriptions list: show parameter summary; **Edit Parameters** modal (pre-populated, saves via PATCH).
+        - [ ] Admin Subscriptions view: parameter summary column + Edit Parameters action.
+    - **Phase 6 — Documentation** *(update as phases land)*
+        - [ ] `Docs/Report_SQL_Guide.md`: Add `RELDATE`/`LIST`/`INPUT` to parameter type table; `INPUT` modifier section.
+        - [ ] `Docs/ReportPortal_User_Guide.md`: Sections 6 + 7 with parameter controls and Edit Parameters UX.
+        - [ ] `Docs/ReportPortal_Administrators_Guide.md`: Section 8 with `CREATE SUBSCRIPTION` / `ALTER SUBSCRIPTION` full syntax.
+        - [ ] `Docs/User_Manual.md`: `SET WEEK_START_DAY` in SET reference; `Engine.StartOfWeek` in config reference.
+        - [ ] `Docs/Reference/Grammar.md`: New productions for all added statements and types.
 - [ ] **Security Manifest**: Strategy document for script signing.
-- [ ] **Data Lake Connection brainstorm**: Strategy document complete.
+- [x] **Data Lake Connection brainstorm**: Strategy document complete. See [`Docs/Strategy/DataLake_Connectors_Strategy.md`](Strategy/DataLake_Connectors_Strategy.md). Revised scope: existing ODBC connector already covers Redshift, Databricks, Synapse, Trino, Dremio. Existing Parquet + Avro connectors already cover the file formats. Only Snowflake and BigQuery need new native connectors (complex auth not expressible in an ODBC string). DuckDB added as low-priority ergonomics improvement. ~6.5 dev-days across 4 phases.
+    - **Phase 1 — Snowflake native connector** *(most requested platform)*
+        - [ ] `ETL-SQL.Core/TokenType.cs`: Add `SNOWFLAKE` keyword.
+        - [ ] `ETL-SQL.Connectors/SnowflakeConnector.cs` (new): `Snowflake.Data.Client`. Auth: username+password and private-key JWT (`PRIVATE_KEY_FILE` option). Fields: `HOST`, `WAREHOUSE`, `DATABASE`, `SCHEMA`, `USERNAME`.
+        - [ ] `ISchemaProvider` via `INFORMATION_SCHEMA`.
+        - [ ] `DependencyInjectionSetup.cs`: Register connector.
+        - [ ] Unit tests with Snowflake mock transport; `Category=Integration` tests with 30-day trial. CI secret: `SNOWFLAKE_CONNECTION_STRING`.
+        - [ ] `Docs/Reference/Data_Connectors.md`: Snowflake section.
+    - **Phase 2 — BigQuery native connector** *(unique SQL dialect + GCP auth)*
+        - [ ] `ETL-SQL.Core/TokenType.cs`: Add `BIGQUERY` keyword.
+        - [ ] `ETL-SQL.Connectors/BigQueryConnector.cs` (new): `Google.Cloud.BigQuery.V2`. Auth: `CREDENTIAL_FILE` (service account JSON) or ADC (omit file for workload identity).
+        - [ ] Pushdown dialect: backtick `QuoteIdentifier`; `project.dataset.table` three-part name resolution via `ISqlCompilerContext`.
+        - [ ] `ISchemaProvider` via `INFORMATION_SCHEMA`.
+        - [ ] Unit tests against BigQuery emulator Docker image; `Category=Integration` tests using `bigquery-public-data` (no fixture setup). CI secret: `GCP_SA_KEY_JSON`.
+        - [ ] `Docs/Reference/Data_Connectors.md`: BigQuery section.
+    - **Phase 3 — Connector interface enhancements + ODBC docs**
+        - [ ] `IConnector` / connector metadata: Add `CommandTimeoutSeconds` (default 30 for OLTP, 1800 for warehouse connectors) and `ReadOnly` flag (default `true` for warehouse connectors).
+        - [ ] `CREATE CONNECTION OPTIONS(TIMEOUT_SECONDS = n)`: Parse and apply per-connection override.
+        - [ ] `appsettings.json`: Add `Connectors.DataWarehouse.DefaultCommandTimeoutSeconds`.
+        - [ ] LSP schema cache TTL: configurable per connection type; default 5 min for warehouse connections.
+        - [ ] `Docs/Reference/Data_Connectors.md`: **Data Warehouse via ODBC** section with connection string examples for Redshift, Databricks, Synapse, Trino, Dremio. Note which platforms need native connectors vs. ODBC.
+        - [ ] `Docs/Architecture/Connectors.md`: Document `CommandTimeoutSeconds` and `ReadOnly` fields.
+        - [ ] `Docs/Standards/Connectors_Standards.md`: Data warehouse connector checklist.
+    - **Phase 4 — DuckDB** *(low priority — ergonomics only; Parquet connector already covers file reading)*
+        - [ ] `ETL-SQL.Core/TokenType.cs`: Add `DUCKDB` keyword.
+        - [ ] `ETL-SQL.Connectors/DuckDbConnector.cs` (new): `DuckDB.NET.Data`. In-process analytical engine. `READ_PARQUET`, `READ_CSV`, `READ_JSON` passthrough. S3/ADLS via DuckDB extensions. No server, no credentials for local mode.
+        - [ ] Unit tests: in-process, no `Category=Integration`. Test Parquet file committed to `tests/TestData/`.
+        - [ ] `Docs/Reference/Data_Connectors.md`: DuckDB section — document as "embedded analytical engine," distinct from file connectors.
 - [ ] **Fresh Eyes Deep Code Architecture & Refactor Audit**
     - [ ] **De-bloat `Evaluator.cs`**: Extract concerns (Reporting, Metrics, Variable Scoping) to specialized services; current class is a "God Object" (60KB).
     - [ ] **Refactor `SelectStatementHandler.cs` (SRP Violation)**: Move CTE registration, Lineage tracking, and Pushdown logic to dedicated engines/helpers.
     - [ ] **Harden `CreateConnectionStatementHandler`**: Replace hardcoded `fileConnectors` list with interface-based capability detection for `ResolvePath` enforcement.
     - [ ] **Centralize Security Guardrails**: Move manual recursion and `IncrementOperationCount` logic in `DirectoryOperationStatementHandler` to a centralized file system security policy.
-    - [ ] **Simplify `ExpressionEvaluator`**: Move ANSI string/date functions (`SUBSTRING`, `OVERLAY`, etc.) to `FunctionRegistry` and investigate performance of `ResolveIdentifierFallback` on wide rows.
+    - [x] **Simplify `ExpressionEvaluator`**: Move ANSI string/date functions (`SUBSTRING`, `OVERLAY`, etc.) to `FunctionRegistry` and investigated performance of `ResolveIdentifierFallback` on wide rows (fixed shadowing bug & optimized name retrieval).
+13: - [ ] **Subquery Cache Optimization**: Implement a sophisticated subquery cache that supports correlated subqueries (currently disabled due to correctness issues). Subqueries should be cached based on both the AST node and the values of any captured outer references.

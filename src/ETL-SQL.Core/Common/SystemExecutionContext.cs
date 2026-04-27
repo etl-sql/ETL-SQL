@@ -73,6 +73,7 @@ namespace ETL_SQL.Core.Common
         public long RowsProcessed { get; set; }
         public long LastStatementRowsProcessed { get; set; }
         public long TotalSpilledBytes { get; set; }
+        public string? LastIndexUsedName { get; set; }
         public bool TelemetryEnabled { get; set; } = true;
         public int PartitionsCount { get; set; }
         public long AggregateGroupsCount { get; set; }
@@ -221,6 +222,8 @@ namespace ETL_SQL.Core.Common
         public bool ProcedureExists(string name) => false;
 
         public void IncrementOperationCount(OperationType type = OperationType.FileSystem, string? path = null, int count = 1) { }
+        public IDisposable EnterRecursiveScope() => new DummyDisposable();
+        private class DummyDisposable : IDisposable { public void Dispose() { } }
         public List<string> GetIndexedColumns(Expression? cond, string alias) => new();
 
         public Task EvaluateCreateTable(CreateTableStatement stmt) => Task.CompletedTask;

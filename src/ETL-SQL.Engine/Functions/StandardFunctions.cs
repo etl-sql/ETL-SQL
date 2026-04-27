@@ -78,7 +78,11 @@ namespace ETL_SQL.Engine.Functions
             registry.RegisterWithHelp("NVL", IsNull, "NVL(v1, v2): Alias for ISNULL.");
             registry.RegisterWithHelp("NULLIF", (args, ctx) => EvaluationUtils.IsSoftEqual(args.ElementAtOrDefault(0), args.ElementAtOrDefault(1)) ? null : args.ElementAtOrDefault(0), "NULLIF(v1, v2): Returns NULL if v1 equals v2, else v1.");
             registry.RegisterWithHelp("GETDATE", (args, ctx) => DateTime.Now, "GETDATE(): Returns the current system date and time.");
+            registry.RegisterWithHelp("SYSDATE", (args, ctx) => DateTime.Now, "SYSDATE(): Returns the current system date and time (Oracle style).");
             registry.RegisterWithHelp("NOW", (args, ctx) => DateTime.Now, "NOW(): Alias for GETDATE.");
+            registry.RegisterWithHelp("CURRENT_TIMESTAMP", (args, ctx) => DateTime.Now, "CURRENT_TIMESTAMP: Returns the current system date and time.");
+            registry.RegisterWithHelp("CURRENT_DATE", (args, ctx) => DateTime.Today, "CURRENT_DATE: Returns the current system date.");
+            registry.RegisterWithHelp("CURRENT_TIME", (args, ctx) => DateTime.Now.TimeOfDay, "CURRENT_TIME: Returns the current system time.");
             registry.RegisterWithHelp("CAST", (args, ctx) => args.Count >= 2 ? EvaluationUtils.CastToType(args[0], args[1]?.ToString() ?? "STRING") : args[0], "CAST(expr AS type): Converts an expression to a target data type.");
             registry.RegisterWithHelp("COUNT", Count, "COUNT(col): Returns the number of items in a collection.");
             registry.RegisterWithHelp("IS_NULL", (args, ctx) => args[0].IsNull(), "IS_NULL(expr): Returns TRUE if the expression is null.");

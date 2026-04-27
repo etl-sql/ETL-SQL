@@ -188,6 +188,8 @@ SELECT CAST('[0.1, 0.2]' AS VECTOR)    AS v;
 | `REPLACE` | `REPLACE(str, search, new)` | All occurrences of `search` replaced |
 | `STRING_ESCAPE` | `STRING_ESCAPE(text, type)` | Special chars escaped (e.g. `'json'`) |
 | `LEN` / `LENGTH` | `LEN(str)` | Character count of a string; item count of a list |
+| `CHARACTER_LENGTH` | `CHARACTER_LENGTH(str)` | ANSI-style character count |
+| `OCTET_LENGTH` | `OCTET_LENGTH(str)` | ANSI-style byte count (UTF-8) |
 
 ### 3.7 Regex (`PCRE`)
 

@@ -14,11 +14,15 @@ namespace ETL_SQL.Tests.Integration.Integration
 
         public ReplProtocolTests()
         {
-            // Resolve project path relative to bin/Debug/...
-            var baseDir = AppContext.BaseDirectory;
-            var root = baseDir.Substring(0, baseDir.IndexOf("\\tests\\"));
-            _projectPath = Path.Combine(root, "src", "ETL-SQL.App", "ETL-SQL.App.csproj");
-            _testExportPath = Path.Combine(root, "src", "ETL-SQL.App", "test_repl_export.csv");
+            // Resolve project path by searching upwards for the "src" directory
+            var currentDir = AppContext.BaseDirectory;
+            while (!Directory.Exists(Path.Combine(currentDir, "src")) && Directory.GetParent(currentDir) != null)
+            {
+                currentDir = Directory.GetParent(currentDir)!.FullName;
+            }
+
+            _projectPath = Path.Combine(currentDir, "src", "ETL-SQL.App", "ETL-SQL.App.csproj");
+            _testExportPath = Path.Combine(currentDir, "src", "ETL-SQL.App", "test_repl_export.csv");
 
             if (File.Exists(_testExportPath)) File.Delete(_testExportPath);
         }
@@ -42,8 +46,22 @@ namespace ETL_SQL.Tests.Integration.Integration
             using var process = new Process { StartInfo = startInfo };
             process.Start();
 
-            // 1. Wait for ready status
-            string? firstLine = await ReadUntilType(process.StandardOutput, "status");
+            // 1. Wait for ready status (with 10s timeout)
+            var stopwatch = Stopwatch.StartNew();
+            string? firstLine = null;
+            while (stopwatch.Elapsed < TimeSpan.FromSeconds(10))
+            {
+                firstLine = await ReadUntilType(process.StandardOutput, "status");
+                if (firstLine != null) break;
+                if (process.HasExited) break;
+                await Task.Delay(100);
+            }
+
+            if (firstLine == null)
+            {
+                var stderr = await process.StandardError.ReadToEndAsync();
+                Assert.Fail($"REPL failed to start or provide 'ready' status. \nProcess Exited: {process.HasExited}\nExit Code: {(process.HasExited ? process.ExitCode : "N/A")}\nStderr: {stderr}\nProjectPath: {_projectPath}");
+            }
             Assert.Contains("\"status\":\"ready\"", firstLine);
 
             // 2. Run a script with variables
