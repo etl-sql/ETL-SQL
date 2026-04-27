@@ -72,17 +72,21 @@ namespace ETL_SQL.Engine.Engines
         public async IAsyncEnumerable<Row> ApplyWindowFunctionsExternal(IAsyncEnumerable<Row> inputStream, SelectStatement stmt)
         {
             using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
-            var windowCols = stmt.Columns.Where(c => c.Expression is FunctionCallExpression f && f.Window != null).ToList();
-            if (windowCols.Count == 0)
+            var allWindowCalls = stmt.Columns
+                .Where(c => WindowEngine.ContainsWindowFunction(c.Expression))
+                .SelectMany(c => WindowEngine.CollectWindowCalls(c.Expression))
+                .GroupBy(f => f.ToSql().ToUpperInvariant())
+                .Select(g => g.First())
+                .ToList();
+            if (allWindowCalls.Count == 0)
             {
                 await foreach (var row in inputStream) yield return row;
                 yield break;
             }
 
             var groups = new List<WindowGroup>();
-            foreach (var col in windowCols)
+            foreach (var f in allWindowCalls)
             {
-                var f = (FunctionCallExpression)col.Expression;
                 var sig = new WindowSignature(f.Window!.PartitionBy, f.Window.OrderBy);
                 var group = groups.FirstOrDefault(g => g.Signature.Equals(sig));
                 if (group == null)
@@ -90,10 +94,10 @@ namespace ETL_SQL.Engine.Engines
                     group = new WindowGroup(sig);
                     groups.Add(group);
                 }
-                group.Columns.Add(col);
+                group.Columns.Add(new SelectColumn(f));
             }
 
-            _logger.WriteLine($"[yellow]HYPER-SCALE: Processing {windowCols.Count} window functions across {groups.Count} signature groups.[/]");
+            _logger.WriteLine($"[yellow]HYPER-SCALE: Processing {allWindowCalls.Count} window functions across {groups.Count} signature groups.[/]");
             _context.PartitionsCount = groups.Count;
 
             IAsyncEnumerable<Row> currentStream = inputStream;

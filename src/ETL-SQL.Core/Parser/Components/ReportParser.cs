@@ -224,8 +224,9 @@ namespace ETL_SQL.Core.Parser.Components
             }
             Consume(TokenType.RPAREN, "Expected ')' to close CREATE PAGE LAYOUT");
 
-            // Optional WITH (HIDDEN = ON) clause
+            // Optional WITH (HIDDEN = ON, REFRESH = <seconds>) clause
             bool isHidden = false;
+            int refreshSecs = 0;
             if (Match(TokenType.WITH))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after WITH");
@@ -237,6 +238,8 @@ namespace ETL_SQL.Core.Parser.Components
                     if (string.Equals(optKey, "HIDDEN", StringComparison.OrdinalIgnoreCase))
                         isHidden = string.Equals(optVal, "ON", StringComparison.OrdinalIgnoreCase)
                                 || string.Equals(optVal, "TRUE", StringComparison.OrdinalIgnoreCase);
+                    else if (string.Equals(optKey, "REFRESH", StringComparison.OrdinalIgnoreCase))
+                        int.TryParse(optVal, out refreshSecs);
                     Match(TokenType.COMMA);
                 }
                 Consume(TokenType.RPAREN, "Expected ')' to close WITH clause");
@@ -259,7 +262,8 @@ namespace ETL_SQL.Core.Parser.Components
                 Subtitle        = subtitle,
                 SubtitleIsMarkdown = subtitleMd,
                 Tooltip         = tooltip,
-                IsHidden        = isHidden,
+                IsHidden               = isHidden,
+                RefreshIntervalSeconds = refreshSecs,
                 Mode            = mode,
                 Line            = startToken.Line,
                 Column          = startToken.Column

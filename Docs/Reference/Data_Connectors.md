@@ -665,7 +665,7 @@ SSH_KEY_PAIR('<directory_path>' [, bits, 'algorithm', 'passphrase', 'comment']);
 | Option | Description | Default |
 | :--- | :--- | :--- |
 | `BITS` | Key size in bits (2048, 3072, 4096 for RSA; 256, 384, 521 for ECDSA) | `2048` |
-| `ALGORITHM` | `RSA`, `ECDSA`, `ED25519` | `RSA` |
+| `ALGORITHM` | `RSA`, `ECDSA` | `RSA` |
 | `PASSPHRASE` | Passphrase to encrypt the private key | *(none)* |
 | `COMMENT` | Comment embedded in the public key file | *(none)* |
 

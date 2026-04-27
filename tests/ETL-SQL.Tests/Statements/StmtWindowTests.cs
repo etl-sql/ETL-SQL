@@ -235,6 +235,58 @@ namespace ETL_SQL.Tests.Statements
             Assert.Equal(2m, Convert.ToDecimal(res.Rows[0]["Med"]));
         }
 
+        [Fact]
+        public async Task TestLag_ThreeArgDefault()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("CREATE TABLE #T (ID INT, Val INT); INSERT INTO #T VALUES (1, 100), (2, 200), (3, 300);"));
+
+            var res = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT Val, LAG(Val, 1, -1) OVER(ORDER BY ID) AS Prev FROM #T;")
+                .Statements[0]).FirstAsync();
+
+            // Row 1 has no predecessor: default -1 applies
+            Assert.Equal(-1m, res.Rows[0]["Prev"]);
+            Assert.Equal(100m, res.Rows[1]["Prev"]);
+            Assert.Equal(200m, res.Rows[2]["Prev"]);
+        }
+
+        [Fact]
+        public async Task TestLead_ThreeArgDefault()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("CREATE TABLE #T2 (ID INT, Val INT); INSERT INTO #T2 VALUES (1, 100), (2, 200), (3, 300);"));
+
+            var res = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT Val, LEAD(Val, 1, 0) OVER(ORDER BY ID) AS Next FROM #T2;")
+                .Statements[0]).FirstAsync();
+
+            Assert.Equal(200m, res.Rows[0]["Next"]);
+            Assert.Equal(300m, res.Rows[1]["Next"]);
+            // Row 3 has no successor: default 0 applies
+            Assert.Equal(0m, res.Rows[2]["Next"]);
+        }
+
+        [Fact]
+        public async Task TestEmbeddedWindowFunction_InBinaryExpression()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("CREATE TABLE #Revenue (Month INT, Revenue INT); INSERT INTO #Revenue VALUES (1, 100), (2, 150), (3, 200);"));
+
+            // Revenue - LAG(Revenue, 1, 0) OVER (ORDER BY Month) as Delta
+            var res = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT Month, Revenue, Revenue - LAG(Revenue, 1, 0) OVER(ORDER BY Month) AS Delta FROM #Revenue;")
+                .Statements[0]).FirstAsync();
+
+            Assert.Equal(3, res.Rows.Count);
+            // Month 1: Revenue=100, no previous (default 0), Delta = 100 - 0 = 100
+            Assert.Equal(100m, res.Rows[0]["Delta"]);
+            // Month 2: Revenue=150, previous=100, Delta = 150 - 100 = 50
+            Assert.Equal(50m, res.Rows[1]["Delta"]);
+            // Month 3: Revenue=200, previous=150, Delta = 200 - 150 = 50
+            Assert.Equal(50m, res.Rows[2]["Delta"]);
+        }
+
         private static Script Parse(string source)
         {
             var lexer = new Lexer(source);

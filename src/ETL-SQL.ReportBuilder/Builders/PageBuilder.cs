@@ -16,7 +16,8 @@ namespace ETL_SQL.ReportBuilder.Builders
             {
                 Name               = name,
                 Structure          = pStmt.Structure,
-                IsHidden           = pStmt.IsHidden,
+                IsHidden               = pStmt.IsHidden,
+                RefreshIntervalSeconds = pStmt.RefreshIntervalSeconds,
                 SlotMap            = pStmt.SlotMap.ToDictionary(kv => kv.Key, kv => kv.Value),
                 Title              = title,
                 TitleIsMarkdown    = titleMd,

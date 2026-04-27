@@ -224,10 +224,7 @@ namespace ETL_SQL.Engine.Engines
             return false;
         }
 
-        public bool IsWindowFunction(Expression expr)
-        {
-            return expr is FunctionCallExpression f && f.Window != null;
-        }
+        public bool IsWindowFunction(Expression expr) => WindowEngine.ContainsWindowFunction(expr);
 
         private void CollectAggregates(Expression expr, List<FunctionCallExpression> aggs)
         {

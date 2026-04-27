@@ -27,12 +27,16 @@ namespace ETL_SQL.Engine.Engines
         /// <summary>Calculates and appends window function results to the result set based on partitioning and ordering.</summary>
         public async Task<List<Row>> ApplyWindowFunctions(List<Row> allBufferedRows, SelectStatement stmt)
         {
-            var windowCols = stmt.Columns.Where(c => c.Expression is FunctionCallExpression f && f.Window != null).ToList();
-            if (windowCols.Count == 0) return allBufferedRows;
+            var windowFunctionCalls = stmt.Columns
+                .Where(c => ContainsWindowFunction(c.Expression))
+                .SelectMany(c => CollectWindowCalls(c.Expression))
+                .GroupBy(f => f.ToSql().ToUpperInvariant())
+                .Select(g => g.First())
+                .ToList();
+            if (windowFunctionCalls.Count == 0) return allBufferedRows;
 
-            foreach (var col in windowCols)
+            foreach (var f in windowFunctionCalls)
             {
-                var f = (FunctionCallExpression)col.Expression;
                 var name = f.FunctionName.ToUpperInvariant();
                 var window = f.Window!;
 
@@ -168,13 +172,23 @@ namespace ETL_SQL.Engine.Engines
                                 }
                                 break;
                             case "LAG":
+                            {
                                 int lag = f.Arguments.Count >= 2 ? Convert.ToInt32(await _context.EvaluateValue(f.Arguments[1], partitionRows[i])) : 1;
-                                winVal = (i - lag >= 0) ? await _context.EvaluateValue(f.Arguments[0], partitionRows[i - lag]) : null;
+                                if (i - lag >= 0)
+                                    winVal = await _context.EvaluateValue(f.Arguments[0], partitionRows[i - lag]);
+                                else
+                                    winVal = f.Arguments.Count >= 3 ? await _context.EvaluateValue(f.Arguments[2], partitionRows[i]) : null;
                                 break;
+                            }
                             case "LEAD":
+                            {
                                 int lead = f.Arguments.Count >= 2 ? Convert.ToInt32(await _context.EvaluateValue(f.Arguments[1], partitionRows[i])) : 1;
-                                winVal = (i + lead < partitionRows.Count) ? await _context.EvaluateValue(f.Arguments[0], partitionRows[i + lead]) : null;
+                                if (i + lead < partitionRows.Count)
+                                    winVal = await _context.EvaluateValue(f.Arguments[0], partitionRows[i + lead]);
+                                else
+                                    winVal = f.Arguments.Count >= 3 ? await _context.EvaluateValue(f.Arguments[2], partitionRows[i]) : null;
                                 break;
+                            }
                             case "FIRST_VALUE":
                                 winVal = partitionRows.Count > 0 ? await _context.EvaluateValue(f.Arguments[0], partitionRows[0]) : null;
                                 break;
@@ -216,9 +230,59 @@ namespace ETL_SQL.Engine.Engines
             return allBufferedRows;
         }
 
-        public bool IsWindowFunction(Expression expr)
+        /// <summary>
+        /// Returns true if the expression itself is a window function call OR contains one anywhere
+        /// in its sub-expression tree (e.g. Revenue - LAG(...) OVER (...) is a BinaryExpression
+        /// that *contains* a window function and must still trigger window pre-computation).
+        /// </summary>
+        public bool IsWindowFunction(Expression expr) => ContainsWindowFunction(expr);
+
+        public static bool ContainsWindowFunction(Expression? expr)
         {
-            return expr is FunctionCallExpression f && f.Window != null;
+            if (expr == null) return false;
+            if (expr is FunctionCallExpression fc)
+            {
+                if (fc.Window != null) return true;
+                return fc.Arguments.Any(ContainsWindowFunction);
+            }
+            if (expr is BinaryExpression b) return ContainsWindowFunction(b.Left) || ContainsWindowFunction(b.Right);
+            if (expr is UnaryExpression u) return ContainsWindowFunction(u.Expression);
+            if (expr is CaseExpression c)
+                return c.WhenClauses.Any(w => ContainsWindowFunction(w.Condition) || ContainsWindowFunction(w.Result))
+                    || ContainsWindowFunction(c.ElseResult);
+            if (expr is IsNullExpression isn) return ContainsWindowFunction(isn.Expression);
+            if (expr is InExpression inx) return ContainsWindowFunction(inx.Left) || ContainsWindowFunction(inx.Right);
+            if (expr is LikeExpression lk) return ContainsWindowFunction(lk.Left) || ContainsWindowFunction(lk.Pattern);
+            return false;
+        }
+
+        public static List<FunctionCallExpression> CollectWindowCalls(Expression? expr)
+        {
+            var result = new List<FunctionCallExpression>();
+            CollectWindowCallsInner(expr, result);
+            return result;
+        }
+
+        private static void CollectWindowCallsInner(Expression? expr, List<FunctionCallExpression> result)
+        {
+            if (expr == null) return;
+            if (expr is FunctionCallExpression fc)
+            {
+                if (fc.Window != null) { result.Add(fc); return; }
+                foreach (var arg in fc.Arguments) CollectWindowCallsInner(arg, result);
+                return;
+            }
+            if (expr is BinaryExpression b) { CollectWindowCallsInner(b.Left, result); CollectWindowCallsInner(b.Right, result); return; }
+            if (expr is UnaryExpression u) { CollectWindowCallsInner(u.Expression, result); return; }
+            if (expr is CaseExpression c)
+            {
+                foreach (var w in c.WhenClauses) { CollectWindowCallsInner(w.Condition, result); CollectWindowCallsInner(w.Result, result); }
+                CollectWindowCallsInner(c.ElseResult, result);
+                return;
+            }
+            if (expr is IsNullExpression isn) { CollectWindowCallsInner(isn.Expression, result); return; }
+            if (expr is InExpression inx) { CollectWindowCallsInner(inx.Left, result); CollectWindowCallsInner(inx.Right, result); return; }
+            if (expr is LikeExpression lk) { CollectWindowCallsInner(lk.Left, result); CollectWindowCallsInner(lk.Pattern, result); return; }
         }
 
         private async Task<(int Start, int End)> ResolveFrameRange(int currentIndex, List<Row> partitionRows, WindowClause window)

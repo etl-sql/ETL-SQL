@@ -361,7 +361,7 @@ SSH_KEY_PAIR('<directory_path>' [, bits, 'algorithm', 'passphrase', 'comment']);
 | Option | Values | Default | Notes |
 | :--- | :--- | :--- | :--- |
 | `BITS` | 2048, 3072, 4096 (RSA); 256, 384, 521 (ECDSA) | `2048` | Larger = stronger but slower |
-| `ALGORITHM` | `RSA`, `ECDSA`, `ED25519` | `RSA` | ED25519 is compact and modern |
+| `ALGORITHM` | `RSA`, `ECDSA` | `RSA` | ECDSA with P-256/P-384/P-521 curves |
 | `PASSPHRASE` | Any string | *(none)* | Encrypts the private key at rest |
 | `COMMENT` | Any string | *(none)* | Embedded in the `.pub` file |
 
@@ -374,8 +374,6 @@ CREATE SSH_KEY_PAIR 'C:\Keys\id_rsa';
 CREATE SSH_KEY_PAIR 'C:\Keys\prod_rsa'
     WITH(BITS=4096, PASSPHRASE='StrongPassword123!', COMMENT='Production ETL Service');
 
--- Modern ED25519 key (compact and fast)
-SSH_KEY_PAIR('C:\Keys\id_ed25519', 256, 'ED25519', 'keypass', 'Dev account');
 ```
 
 ---

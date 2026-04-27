@@ -51,6 +51,7 @@
 
     // Current report parameters (for interactive controls)
     const parameters = {};
+    let _refreshTimers = [];
 
     /**
      * Entry point: obtain manifest and render all visuals + pages.
@@ -79,6 +80,10 @@
     }
 
     function renderManifest(manifest) {
+        // Cancel any running per-page auto-refresh timers before rebuilding.
+        _refreshTimers.forEach(id => clearInterval(id));
+        _refreshTimers = [];
+
         const root = document.getElementById('root');
         if (!root) return;
         root.innerHTML = ''; // Clear for full rebuild
@@ -126,6 +131,23 @@
             }
         } else {
             (manifest.visuals || []).forEach(v => renderVisual(root, v, null));
+        }
+
+        // Set up per-page auto-refresh timers (web mode only; VS Code preview ignores).
+        if (isWebMode && manifest.pages) {
+            manifest.pages.forEach(page => {
+                if (!page.refreshIntervalSeconds || page.refreshIntervalSeconds <= 0) return;
+                const id = setInterval(() => {
+                    // Only refresh when the page section is visible.
+                    const section = document.getElementById('page-' + page.name.toLowerCase());
+                    if (!section || section.style.display === 'none') return;
+                    fetch(apiBase + '/manifest')
+                        .then(r => r.ok ? r.json() : null)
+                        .then(m => { if (m) renderManifest(m); })
+                        .catch(() => {});
+                }, page.refreshIntervalSeconds * 1000);
+                _refreshTimers.push(id);
+            });
         }
 
         renderFooter(root, manifest);

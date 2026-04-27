@@ -269,6 +269,11 @@ namespace ETL_SQL.ReportBuilder
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool IsHidden { get; set; }
 
+        /// <summary>Auto-refresh interval in seconds (0 = disabled).</summary>
+        [JsonPropertyName("refreshIntervalSeconds")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public int RefreshIntervalSeconds { get; set; }
+
         /// <summary>Slot letter → visual name.</summary>
         [JsonPropertyName("slotMap")]
         public Dictionary<string, string> SlotMap { get; set; } = new();
