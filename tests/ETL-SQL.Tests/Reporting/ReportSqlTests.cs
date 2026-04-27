@@ -51,7 +51,8 @@ namespace ETL_SQL.Tests.Reporting.Reporting
             Assert.Equal("SalesChart", stmt.Name);
             Assert.Equal("Global Sales Report", stmt.Title);
             Assert.NotNull(stmt.Source.InlineSelect);
-            Assert.Equal("Total", stmt.Source.InlineSelect.Columns[1].Alias);
+            var inlineSelect = Assert.IsType<SelectStatement>(stmt.Source.InlineSelect);
+            Assert.Equal("Total", inlineSelect.Columns[1].Alias);
         }
         
         [Fact]
@@ -67,6 +68,61 @@ namespace ETL_SQL.Tests.Reporting.Reporting
             
             var serialized = stmt.ToSql();
             Assert.Contains("INTO #Plan", serialized);
+        }
+
+        [Fact]
+        public void CreateTheme_ParsesNameAndProperties()
+        {
+            var sql = @"
+                CREATE THEME corporate AS (
+                    BACKGROUND   = '#1a1a2e',
+                    TEXT_COLOR   = '#eee',
+                    ACCENT_COLOR = '#4ecca3',
+                    COLORS       = '#4ecca3, #e94560, #f5a623'
+                );
+            ";
+            var tokens = new Lexer(sql).Tokenize();
+            var parser = new Parser(tokens, sql);
+            var stmt = (CreateThemeStatement)parser.ParseStatement();
+
+            Assert.Equal("corporate", stmt.Name);
+            Assert.Equal(ObjectCreationMode.Create, stmt.Mode);
+            Assert.Equal("#1a1a2e", stmt.Properties["BACKGROUND"]);
+            Assert.Equal("#eee",    stmt.Properties["TEXT_COLOR"]);
+            Assert.Equal("#4ecca3", stmt.Properties["ACCENT_COLOR"]);
+        }
+
+        [Fact]
+        public void CreateTheme_BuildEChartsTheme_MapsProperties()
+        {
+            var props = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["BACKGROUND"]   = "#1a1a2e",
+                ["TEXT_COLOR"]   = "#eeeeee",
+                ["ACCENT_COLOR"] = "#4ecca3",
+                ["GRID_COLOR"]   = "#333333"
+            };
+
+            var json = ETL_SQL.Engine.Handlers.CreateThemeStatementHandler.BuildEChartsTheme(props);
+
+            Assert.Equal("#1a1a2e", json["backgroundColor"]?.GetValue<string>());
+            Assert.Equal("#eeeeee", json["textStyle"]?["color"]?.GetValue<string>());
+            Assert.Equal("#4ecca3", json["color"]?[0]?.GetValue<string>());
+            // Axis objects should be present
+            Assert.NotNull(json["categoryAxis"]);
+        }
+
+        [Fact]
+        public void DropTheme_ParsesNameAndObjectType()
+        {
+            var sql = "DROP THEME corporate;";
+            var tokens = new Lexer(sql).Tokenize();
+            var parser = new Parser(tokens, sql);
+            var stmt = (DropReportObjectStatement)parser.ParseStatement();
+
+            Assert.Equal(ReportObjectType.Theme, stmt.ObjectType);
+            Assert.Equal("corporate", stmt.Name);
+            Assert.False(stmt.IfExists);
         }
     }
 }

@@ -115,6 +115,7 @@ namespace ETL_SQL.Core
         DataTable? LastResult { get; set; }
         List<DataTable> LastResultSets { get; }
         long RowsProcessed { get; set; }
+        long LastStatementRowsProcessed { get; set; }
         long TotalSpilledBytes { get; set; }
         /// <summary>Whether to collect expensive execution metrics (e.g., spill byte counting). Default is ON.</summary>
         bool TelemetryEnabled { get; set; }
@@ -228,6 +229,8 @@ namespace ETL_SQL.Core
         IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; }
         /// <summary>Named template definitions registered by CREATE TEMPLATE.</summary>
         IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; }
+        /// <summary>Named theme definitions registered by CREATE THEME.</summary>
+        IDictionary<string, CreateThemeStatement> ThemeDefinitions { get; }
         /// <summary>The directory where .json style templates are discovered.</summary>
         string TemplatePath { get; set; }
         /// <summary>Report-level title set by SET REPORT TITLE = '...'</summary>

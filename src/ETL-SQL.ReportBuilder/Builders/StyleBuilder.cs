@@ -22,7 +22,9 @@ namespace ETL_SQL.ReportBuilder.Builders
             }
 
             foreach (var kv in inlineStyles)
-                merged[kv.Key] = kv.Value;
+                merged[kv.Key] = kv.Value.StartsWith("@", StringComparison.Ordinal)
+                    ? ctx.VarContext.GetVariable(kv.Value)?.ToString() ?? kv.Value
+                    : kv.Value;
 
             return merged;
         }

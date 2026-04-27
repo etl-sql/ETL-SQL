@@ -103,6 +103,11 @@ namespace ETL_SQL.ReportBuilder
         /// <summary>Current parameter values (Phase 9D interactivity).</summary>
         [JsonPropertyName("parameters")]
         public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Custom ECharts theme definitions from CREATE THEME statements.</summary>
+        [JsonPropertyName("customThemes")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<ThemeManifest>? CustomThemes { get; set; }
     }
 
     /// <summary>A single visual with its data snapshot and ECharts config.</summary>
@@ -259,6 +264,10 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("tooltip")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public TooltipManifest? Tooltip { get; set; }
+
+        [JsonPropertyName("isHidden")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool IsHidden { get; set; }
 
         /// <summary>Slot letter → visual name.</summary>
         [JsonPropertyName("slotMap")]
@@ -423,5 +432,16 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }
+    }
+
+    /// <summary>A custom ECharts theme registered via CREATE THEME.</summary>
+    public class ThemeManifest
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        /// <summary>Raw ECharts theme JSON object (arbitrary structure).</summary>
+        [JsonPropertyName("config")]
+        public System.Text.Json.JsonElement Config { get; set; }
     }
 }

@@ -18,13 +18,22 @@ namespace ETL_SQL.Engine.Handlers
             _logger = logger;
         }
 
-        /// <summary>Executes the PRINT statement, evaluating the message expression and logging it.</summary>
+        /// <summary>Executes the PRINT statement, evaluating and concatenating all provided arguments.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (PrintStatement)statement;
-            
-            var val = await context.EvaluationContext.EvaluateValue(stmt.Message, new Row());
-            context.LoggingContext.Log(val?.ToString() ?? "NULL", ConsoleColor.White);
+            var row = new Row();
+
+            var parts = new System.Text.StringBuilder();
+            parts.Append((await context.EvaluationContext.EvaluateValue(stmt.Message, row))?.ToString() ?? "NULL");
+
+            if (stmt.ShowTimestamp != null)
+                parts.Append(' ').Append((await context.EvaluationContext.EvaluateValue(stmt.ShowTimestamp, row))?.ToString() ?? "NULL");
+
+            if (stmt.TimestampFormat != null)
+                parts.Append(' ').Append((await context.EvaluationContext.EvaluateValue(stmt.TimestampFormat, row))?.ToString() ?? "NULL");
+
+            context.LoggingContext.Log(parts.ToString(), ConsoleColor.White);
         }
     }
 }

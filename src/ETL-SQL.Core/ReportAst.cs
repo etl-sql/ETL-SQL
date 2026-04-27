@@ -44,7 +44,8 @@ namespace ETL_SQL.Core
         Navigation,
         Style,
         Button,
-        Template
+        Template,
+        Theme
     }
 
     public enum OverlayType
@@ -82,14 +83,14 @@ namespace ETL_SQL.Core
     // ── Sub-nodes (all must be records since AstNode is a record) ────────────
 
     /// <summary>
-    /// Source expression for a visual: either an inline SELECT or a &dataset reference.
+    /// Source expression for a visual: either an inline query (SELECT or UNION ALL) or a &dataset reference.
     /// Exactly one of InlineSelect / TempTableName is set; the other is null.
     /// </summary>
     public record VisualSourceExpression : AstNode
     {
-        public SelectStatement? InlineSelect { get; init; }
-        public string? TempTableName        { get; init; }
-        public bool IsInlineSelect          => InlineSelect != null;
+        public Statement? InlineSelect { get; init; }
+        public string? TempTableName  { get; init; }
+        public bool IsInlineSelect    => InlineSelect != null;
         public override string ToSql() => AstSerializer.Format(this);
     }
 
@@ -226,6 +227,7 @@ namespace ETL_SQL.Core
         public string? Subtitle                               { get; init; }
         public bool SubtitleIsMarkdown                       { get; init; }
         public TooltipDefinition? Tooltip                     { get; init; }
+        public bool IsHidden                                  { get; init; }
         public ObjectCreationMode Mode                         { get; init; } = ObjectCreationMode.Create;
     }
 
@@ -323,6 +325,18 @@ namespace ETL_SQL.Core
         public required string Name                  { get; init; }
         public Dictionary<string, string> Options    { get; init; } = new();
         public ObjectCreationMode Mode               { get; init; } = ObjectCreationMode.Create;
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
+    /// <summary>
+    /// CREATE THEME <name> AS (<style-key-value pairs>)
+    /// Theme properties are mapped to an ECharts theme JSON and saved to the themes directory.
+    /// </summary>
+    public record CreateThemeStatement : Statement
+    {
+        public required string Name                       { get; init; }
+        public Dictionary<string, string> Properties      { get; init; } = new();
+        public ObjectCreationMode Mode                    { get; init; } = ObjectCreationMode.Create;
         public override string ToSql() => AstSerializer.Format(this);
     }
 }

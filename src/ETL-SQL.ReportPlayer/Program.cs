@@ -5,9 +5,12 @@ using System.Linq;
 using System.Net;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using ETL_SQL.ReportBuilder;
 
 using ETL_SQL.ReportPlayer;
@@ -21,11 +24,15 @@ using ETL_SQL.ReportPlayer;
 
 string? scriptPath   = null;
 string? manifestPath = null;
+int?    portArg      = null;
 
 for (int i = 0; i < args.Length; i++)
 {
     if ((args[i] == "--manifest" || args[i] == "-m") && i + 1 < args.Length)
         manifestPath = args[++i];
+    else if ((args[i] == "--port" || args[i] == "-p") && i + 1 < args.Length
+             && int.TryParse(args[++i], out int p))
+        portArg = p;
     else if (!args[i].StartsWith("-"))
         scriptPath = args[i];
 }
@@ -52,6 +59,9 @@ else
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Resolve port: CLI arg > appsettings > default 5200. Port 0 = OS-assigned dynamic port.
+int port = portArg ?? builder.Configuration.GetValue<int>("ReportPlayer:Port", 5200);
+
 DashboardService?        singleSvc = null;
 DashboardServiceFactory? factory   = null;
 
@@ -67,15 +77,17 @@ else
 }
 
 var app = builder.Build();
-app.UseStaticFiles(new StaticFileOptions
+
+// Disable browser caching for all responses (static files and API alike) to prevent stale report data.
+app.Use(async (ctx, next) =>
 {
-    OnPrepareResponse = ctx =>
-    {
-        ctx.Context.Response.Headers.Append("Cache-Control", "no-cache, no-store, must-revalidate");
-        ctx.Context.Response.Headers.Append("Pragma", "no-cache");
-        ctx.Context.Response.Headers.Append("Expires", "0");
-    }
+    ctx.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
+    ctx.Response.Headers["Pragma"] = "no-cache";
+    ctx.Response.Headers["Expires"] = "0";
+    await next();
 });
+
+app.UseStaticFiles();
 
 var noCache = new JsonSerializerOptions { WriteIndented = false };
 var webOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
@@ -196,21 +208,29 @@ else
 // ─────────────────────────────────────────────────────────────────────────────
 // Start
 // ─────────────────────────────────────────────────────────────────────────────
-int port = builder.Configuration.GetValue<int>("ReportPlayer:Port", 5200);
+app.Urls.Add($"http://localhost:{port}");
+await app.StartAsync();
+
+// When port 0 was requested the OS assigns a free port — resolve the actual URL now.
+var boundAddresses = app.Services.GetRequiredService<IServer>()
+    .Features.Get<IServerAddressesFeature>()?.Addresses;
+var actualUrl = boundAddresses?.FirstOrDefault() ?? $"http://localhost:{port}";
 
 if (multiMode)
 {
     Console.WriteLine($"ReportPlayer: hosting {factory!.Reports.Count} report(s) from {Path.GetFileName(manifestPath)}");
-    Console.WriteLine($"Catalog: http://localhost:{port}");
+    Console.WriteLine($"Catalog: {actualUrl}");
 }
 else
 {
     Console.WriteLine($"ReportPlayer: serving {Path.GetFileName(scriptPath)}");
-    Console.WriteLine($"Dashboard: http://localhost:{port}");
+    Console.WriteLine($"Dashboard: {actualUrl}");
 }
 
-app.Urls.Add($"http://localhost:{port}");
-app.Run();
+// Machine-readable line so callers (e.g. VS Code extension) can parse the actual bound URL.
+Console.WriteLine($"REPORT_URL={actualUrl}");
+
+await app.WaitForShutdownAsync();
 
 
 // ── HTML builders ─────────────────────────────────────────────────────────────

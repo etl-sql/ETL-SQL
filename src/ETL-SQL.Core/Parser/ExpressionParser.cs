@@ -367,12 +367,14 @@ namespace ETL_SQL.Core.Parser
                 Expression expr = new VariableExpression(t.Value) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
                 while (_parser.Match(TokenType.DOT))
                 {
-                    var member = _parser.Consume(TokenType.IDENTIFIER, "Expected member name after '.'");
+                    if (!_parser.IsIdentifier(_parser.Current) && !LanguageMetadata.IsKeyword(_parser.Current.Value))
+                        throw new SyntaxException("Expected member name after '.'", _parser.Current.Line, _parser.Current.Column);
+                    var member = _parser.Advance();
                     expr = new MemberAccessExpression(expr, member.Value) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
                 }
                 return expr;
             }
-            
+
             if (_parser.IsIdentifier(_parser.Current))
             {
                 var t = _parser.Advance();

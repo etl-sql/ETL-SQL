@@ -235,6 +235,8 @@ namespace ETL_SQL.Engine
         /// <inheritdoc />
         public IDictionary<string, CreateTemplateStatement> TemplateDefinitions => _registry.ReportContext.TemplateDefinitions;
         /// <inheritdoc />
+        public IDictionary<string, CreateThemeStatement> ThemeDefinitions => _registry.ReportContext.ThemeDefinitions;
+        /// <inheritdoc />
         public string TemplatePath
         {
             get => _registry.ReportContext.TemplatePath;
@@ -448,7 +450,7 @@ namespace ETL_SQL.Engine
             if (name.Equals("@@TRANCOUNT", StringComparison.OrdinalIgnoreCase)) return TranCount;
             if (name.Equals("@@RESULTSETS", StringComparison.OrdinalIgnoreCase)) return LastResultSets;
             if (name.Equals("@@VERSION", StringComparison.OrdinalIgnoreCase)) return LanguageMetadata.GetFullVersionString();
-            if (name.Equals("@@ROWCOUNT", StringComparison.OrdinalIgnoreCase)) return RowsProcessed;
+            if (name.Equals("@@ROWCOUNT", StringComparison.OrdinalIgnoreCase)) return LastStatementRowsProcessed;
             if (name.Equals("@@ERROR", StringComparison.OrdinalIgnoreCase)) return PreviousErrorNumber;
             if (name.Equals("@@TOTAL_SPILLED_BYTES", StringComparison.OrdinalIgnoreCase)) return TotalSpilledBytes;
             if (name.Equals("@@PARTITIONS_COUNT", StringComparison.OrdinalIgnoreCase)) return PartitionsCount;
@@ -781,13 +783,14 @@ namespace ETL_SQL.Engine
                 throw new ExecutionException($"No handler registered for {statement.GetType().Name} at Line {statement.Line}");
             }
 
+            LastStatementRowsProcessed = RowsProcessed - startRows;
+
             if (sw != null)
             {
                 sw.Stop();
                 var elapsed = sw.ElapsedMilliseconds;
                 LastExecutionTimeMs = elapsed; // Track absolute last statement timing
                 _metricsReporter.ReportPostExecutionMetrics(statement, elapsed);
-                if (IsProfiling) LastStatementRowsProcessed = RowsProcessed - startRows;
                 if (IsVerbose) _metricsReporter.ProvideTips(statement);
                 LastIndexUsedName = null;
             }

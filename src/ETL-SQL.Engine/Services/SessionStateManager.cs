@@ -39,9 +39,12 @@ namespace ETL_SQL.Engine.Services
             SessionRoot = InitializeSessionRoot(customSessionDir);
             
             _ttlHours = int.TryParse(_configuration["Session:PersistentSessionTTLHours"], out var val) ? val : 24;
-            
-            // Clean up stale sessions on startup
-            ReapStaleSessions();
+
+            // Defer reaping to a randomized background delay (5–30 s) so simultaneous process
+            // starts do not race to delete the same stale session directories. Errors inside
+            // ReapStaleSessions are already caught and logged, so fire-and-forget is safe.
+            var reapDelay = TimeSpan.FromSeconds(Random.Shared.Next(5, 30));
+            _ = Task.Delay(reapDelay).ContinueWith(_ => ReapStaleSessions(), TaskScheduler.Default);
         }
 
         /// <summary>

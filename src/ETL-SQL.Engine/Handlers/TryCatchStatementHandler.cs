@@ -37,7 +37,7 @@ namespace ETL_SQL.Engine.Handlers
                 int number = 50000;
                 int severity = 16;
                 int state = 1;
-                int line = 0;
+                int line = context.LastError?.Line ?? 0; // EvaluateStatement sets this with statement.Line before rethrowing
                 string? message = ex.Message;
 
                 if (ex is ExecutionException ee)
@@ -45,7 +45,7 @@ namespace ETL_SQL.Engine.Handlers
                     number = ee.ErrorNumber;
                     severity = ee.Severity;
                     state = ee.State;
-                    line = ee.Line;
+                    if (ee.Line > 0) line = ee.Line; // explicit line wins over statement-level fallback
                 }
 
                 var errorInfo = new ErrorInfo(number, message, severity, state, line, null);

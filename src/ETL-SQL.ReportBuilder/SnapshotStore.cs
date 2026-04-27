@@ -36,7 +36,9 @@ namespace ETL_SQL.ReportBuilder
             var lockObj = _pathLocks.GetOrAdd(fullPath, _ => new AsyncReaderWriterLock());
 
             await lockObj.WriterLock.WaitAsync();
-            var tmpPath = fullPath + ".tmp";
+            // Use a per-write unique temp path so concurrent writes from different
+            // processes do not overwrite each other's in-progress temp file.
+            var tmpPath = fullPath + ".tmp." + Guid.NewGuid().ToString("N");
             try
             {
                 var dir = Path.GetDirectoryName(fullPath);
@@ -46,7 +48,8 @@ namespace ETL_SQL.ReportBuilder
                 var json = JsonSerializer.Serialize(manifest, _opts);
                 await File.WriteAllTextAsync(tmpPath, json);
 
-                // Atomic Replace: File.Move with overwrite handles the atomic swap on most filesystems
+                // Atomic Replace: File.Move with overwrite handles the atomic swap on most filesystems.
+                // Last-writer-wins across processes — both produce valid snapshots, so no corruption.
                 File.Move(tmpPath, fullPath, overwrite: true);
             }
             finally
@@ -94,7 +97,8 @@ namespace ETL_SQL.ReportBuilder
         {
             if (!Directory.Exists(directory)) return;
 
-            foreach (var file in Directory.GetFiles(directory, "*.snapshot.json.tmp"))
+            // Match both old *.snapshot.json.tmp and new *.snapshot.json.tmp.<guid> patterns.
+            foreach (var file in Directory.GetFiles(directory, "*.snapshot.json.tmp*"))
             {
                 try { File.Delete(file); } catch { /* ignore */ }
             }

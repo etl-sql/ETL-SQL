@@ -38,6 +38,13 @@
         return div;
     }
 
+    // Accepts "ON", "TRUE", "1" (case-insensitive) — mirrors server-side IsOn()
+    function isOn(val) {
+        if (!val) return false;
+        const v = String(val).toUpperCase();
+        return v === 'ON' || v === 'TRUE' || v === '1';
+    }
+
     // In multi-report mode the server injects window.__API_BASE__ = '/reports/{name}/api'.
     // Single-report and VS Code modes default to '/api'.
     const apiBase = (window.__API_BASE__ || '/api').replace(/\/$/, '');
@@ -76,6 +83,13 @@
         if (!root) return;
         root.innerHTML = ''; // Clear for full rebuild
 
+        // Register custom themes before any echarts.init() calls
+        if (typeof echarts !== 'undefined' && manifest.customThemes) {
+            manifest.customThemes.forEach(t => {
+                if (t.name && t.config) echarts.registerTheme(t.name, t.config);
+            });
+        }
+
         // Update local parameters from manifest
         if (manifest.parameters) {
             Object.keys(manifest.parameters).forEach(k => {
@@ -90,7 +104,10 @@
 
         if (manifest.pages && manifest.pages.length > 0) {
             const pageSections = {};
-            const defaultPageName = navDef ? (navDef.defaultPage || manifest.pages[0].name) : manifest.pages[0].name;
+            const firstVisible = manifest.pages.find(p => !p.isHidden);
+            const defaultPageName = navDef
+                ? (navDef.defaultPage || (firstVisible && firstVisible.name))
+                : (firstVisible && firstVisible.name);
 
             manifest.pages.forEach(page => {
                 const pageStyles = page.styles || {};
@@ -98,7 +115,8 @@
                 const section = renderPage(manifest, page, pageSections, pageTheme);
                 root.appendChild(section);
 
-                if (navDef && page.name !== defaultPageName) {
+                // Hidden pages start invisible; DRILL_DOWN can show them programmatically.
+                if (page.isHidden || (navDef && page.name !== defaultPageName)) {
                     section.style.display = 'none';
                 }
             });
@@ -145,6 +163,7 @@
             const isDefault = pageName === defaultPageName;
             if (isDefault) el.classList.add('active');
 
+            el.dataset.page = pageName; // allows programmatic navigation
             el.addEventListener('click', () => {
                 // Hide all, show clicked
                 navDef.pages.forEach(n => {
@@ -268,7 +287,12 @@
                     renderVisual(wrapper, visual, pageTheme, manifest);
                 } else {
                     const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
-                    if (nested) renderContainer(wrapper, nested, manifest, pageTheme);
+                    if (nested) {
+                        renderContainer(wrapper, nested, manifest, pageTheme);
+                    } else {
+                        const btn = (manifest.buttons || []).find(b => b.name.toLowerCase() === item.toLowerCase());
+                        if (btn) renderButton(wrapper, btn);
+                    }
                 }
                 container.appendChild(wrapper);
             });
@@ -281,7 +305,12 @@
                     renderVisual(container, visual, pageTheme, manifest);
                 } else {
                     const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
-                    if (nested) renderContainer(container, nested, manifest, pageTheme);
+                    if (nested) {
+                        renderContainer(container, nested, manifest, pageTheme);
+                    } else {
+                        const btn = (manifest.buttons || []).find(b => b.name.toLowerCase() === item.toLowerCase());
+                        if (btn) renderButton(container, btn);
+                    }
                 }
             });
         }
@@ -293,6 +322,8 @@
     function renderVisual(container, visual, pageTheme, manifest) {
         const card = document.createElement('div');
         card.className = 'visual-card';
+        card.setAttribute('data-visual-name', visual.name);
+        card._visualData = visual;
 
         // Apply WIDTH / HEIGHT / TOOLTIP from styles
         const vstyles = visual.styles || {};
@@ -340,10 +371,11 @@
             case 'CARD':        renderCard(card, visual);                         break;
             case 'SLICER':      renderSlicer(card, visual, manifest);             break;
             case 'TEXT':        renderText(card, visual);                         break;
-            case 'DATEPICKER':  renderDatePicker(card, visual);                   break;
-            case 'SLIDER':      renderSlider(card, visual);                       break;
+            case 'DATEPICKER':  renderDatePicker(card, visual, manifest);          break;
+            case 'SLIDER':      renderSlider(card, visual, manifest);             break;
             case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
-            case 'SEARCH':      renderSearch(card, visual);                       break;
+            case 'SEARCH':      renderSearch(card, visual, manifest);             break;
+            case 'IMAGE':       renderImage(card, visual);                        break;
             default:            renderChart(card, visual, effectiveTheme);        break;
         }
 
@@ -426,7 +458,7 @@
         wrapper._echartsInst = chart;  // stored so page-show can resize hidden charts
 
         const clickActions  = actionsFor(visual, 'ON_CLICK');
-        const crossFilter   = (visual.options || {})['CROSS_FILTER'] === 'true';
+        const crossFilter   = isOn((visual.options || {})['CROSS_FILTER']);
         const xMappingCol   = (visual.options || {})['mapping:x'];
 
         if (clickActions.length > 0 || crossFilter) {
@@ -462,6 +494,34 @@
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    function exportExcel(visual) {
+        const cols = visual.columns || [];
+        const rows = visual.rows    || [];
+        const esc  = v => escHtml(String(v ?? ''));
+        let html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+                   'xmlns:x="urn:schemas-microsoft-com:office:excel">' +
+                   '<head><meta charset="UTF-8"></head><body><table>';
+        html += '<tr>' + cols.map(c => `<th>${esc(c)}</th>`).join('') + '</tr>';
+        rows.forEach(r => {
+            html += '<tr>' + cols.map((_, i) => `<td>${esc(r[i])}</td>`).join('') + '</tr>';
+        });
+        html += '</table></body></html>';
+        const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = (visual.name || 'export') + '.xls';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    function findVisualData(targetName) {
+        const el = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`);
+        return el ? el._visualData : null;
     }
 
     // Lightweight singleton context menu for table right-click export
@@ -504,7 +564,7 @@
         const clickActions  = actionsFor(visual, 'ON_CLICK');
         const isClickable   = clickActions.length > 0;
         const fmtRules      = visual.formattingRules || [];
-        const crossFilter   = (visual.options || {})['CROSS_FILTER'] === 'true';
+        const crossFilter   = isOn((visual.options || {})['CROSS_FILTER']);
 
         // Register as a cross-filter target so applyPageCrossFilter can find it
         if (crossFilter) {
@@ -578,42 +638,30 @@
     // ── Card ────────────────────────────────────────────────────────────────
 
     function renderCard(container, visual) {
-        const cardEl = document.createElement('div');
-        cardEl.className = 'card-value';
+        const opts = visual.options || {};
+        // Title comes from the TITLE option (stored as lowercase "title" in manifest)
+        const cardTitle    = getOption(opts, 'title') || visual.name;
+        const cardSubtitle = getOption(opts, 'subtitle') || '';
 
-        // Use Mapppings if available; otherwise fallback to first column
-        let label = visual.options['mapping:label'] || visual.options['mapping:LABEL'];
-        let value = visual.options['mapping:value'] || visual.options['mapping:VALUE'];
+        const valueColName = getOption(opts, 'mapping:value');
+        const valIdx = valueColName
+            ? (visual.columns || []).findIndex(c => c.toLowerCase() === valueColName.toLowerCase())
+            : 0;
 
-        // If mappings exist as column names, resolve them from the first row
-        const resolve = (colName, fallbackIdx) => {
-            if (!colName) return visual.columns[fallbackIdx] || null;
-            const idx = visual.columns.findIndex(c => c.toLowerCase() === colName.toLowerCase());
-            return idx >= 0 ? idx : fallbackIdx;
-        };
+        const row = visual.rows && visual.rows[0] ? visual.rows[0] : null;
+        let displayValue = row ? (row[valIdx >= 0 ? valIdx : 0] ?? '0') : 'No data';
 
-        const labelIdx = resolve(label, 0);
-        const valueIdx = resolve(value, 0);
-
-        // Actual cell values
-        const row = (visual.rows && visual.rows[0]) ? visual.rows[0] : null;
-        
-        let displayLabel = label || visual.name;
-        if (row && visual.columns[labelIdx]) {
-            // If the label mapping pointed to a column, use the value from that column
-            displayLabel = row[labelIdx] || displayLabel;
-        }
-
-        let displayValue = row ? (row[valueIdx] ?? '0') : 'No data';
-        const formatOpt = visual.options ? (visual.options['FORMAT'] || visual.options['format']) : null;
+        const formatOpt = getOption(opts, 'format');
         if (formatOpt && displayValue !== 'No data') {
             displayValue = formatValue(displayValue, formatOpt);
         }
 
-        cardEl.innerHTML = `
-            <div class="card-label">${displayLabel}</div>
-            <div class="card-number">${displayValue}</div>
-        `;
+        const cardEl = document.createElement('div');
+        cardEl.className = 'card-value';
+        cardEl.innerHTML =
+            `<div class="card-label">${escHtml(cardTitle)}</div>` +
+            (cardSubtitle ? `<div class="card-subtitle">${escHtml(cardSubtitle)}</div>` : '') +
+            `<div class="card-number">${escHtml(String(displayValue))}</div>`;
         container.appendChild(cardEl);
     }
 
@@ -713,12 +761,20 @@
 
     // ── DatePicker ──────────────────────────────────────────────────────────
 
-    function renderDatePicker(container, visual) {
-        const opts  = visual.options || {};
-        const param = opts['PARAMETER'] || opts['parameter'] || null;
-        const min   = opts['MIN']  || opts['min']  || '';
-        const max   = opts['MAX']  || opts['max']  || '';
-        const def   = opts['DEFAULT'] || opts['default'] || '';
+    function renderDatePicker(container, visual, manifest) {
+        const opts          = visual.options || {};
+        // Parameter binding comes from ACTIONS (ON_CHANGE = SET_PARAMETER), not from OPTIONS
+        const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+        const param         = changeActions.length > 0 ? changeActions[0].parameterName : null;
+        const min           = opts['MIN'] || opts['min'] || '';
+        const max           = opts['MAX'] || opts['max'] || '';
+
+        // Initial value: current parameter value > DEFAULT clause > fallback empty
+        let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+        if (param && manifest && manifest.parameters) {
+            const current = getParam(manifest.parameters, param);
+            if (current !== undefined) def = current;
+        }
 
         const wrapper = document.createElement('div');
         wrapper.className = 'filter-wrapper';
@@ -728,12 +784,13 @@
         if (min) input.min = min;
         if (max) input.max = max;
         if (def) input.value = def;
+        if (param) input.setAttribute('data-parameter', param);
         wrapper.appendChild(input);
 
-        if (isWebMode && param) {
+        if (isWebMode && changeActions.length > 0) {
             input.addEventListener('change', () => {
-                postParameter(param, input.value)
-                    .then(m => { if (m) renderManifest(m); });
+                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = input.value; return o; }, {});
+                postParameters(batch).then(m => { if (m) renderManifest(m); });
             });
         }
         container.appendChild(wrapper);
@@ -741,13 +798,21 @@
 
     // ── Slider ──────────────────────────────────────────────────────────────
 
-    function renderSlider(container, visual) {
-        const opts  = visual.options || {};
-        const param = opts['PARAMETER'] || opts['parameter'] || null;
-        const min   = opts['MIN']  || opts['min']  || '0';
-        const max   = opts['MAX']  || opts['max']  || '100';
-        const step  = opts['STEP'] || opts['step'] || '1';
-        const def   = opts['DEFAULT'] || opts['default'] || min;
+    function renderSlider(container, visual, manifest) {
+        const opts          = visual.options || {};
+        // Parameter binding comes from ACTIONS (ON_CHANGE = SET_PARAMETER), not from OPTIONS
+        const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+        const param         = changeActions.length > 0 ? changeActions[0].parameterName : null;
+        const min           = opts['MIN']  || opts['min']  || '0';
+        const max           = opts['MAX']  || opts['max']  || '100';
+        const step          = opts['STEP'] || opts['step'] || '1';
+
+        // Initial value: current parameter value > DEFAULT clause > min
+        let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || min;
+        if (param && manifest && manifest.parameters) {
+            const current = getParam(manifest.parameters, param);
+            if (current !== undefined) def = current;
+        }
 
         const wrapper = document.createElement('div');
         wrapper.className = 'filter-wrapper';
@@ -758,6 +823,7 @@
         input.max   = max;
         input.step  = step;
         input.value = def;
+        if (param) input.setAttribute('data-parameter', param);
 
         const valueLabel = document.createElement('span');
         valueLabel.className   = 'range-value';
@@ -765,10 +831,10 @@
 
         input.addEventListener('input', () => { valueLabel.textContent = input.value; });
 
-        if (isWebMode && param) {
+        if (isWebMode && changeActions.length > 0) {
             input.addEventListener('change', () => {
-                postParameter(param, input.value)
-                    .then(m => { if (m) renderManifest(m); });
+                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = input.value; return o; }, {});
+                postParameters(batch).then(m => { if (m) renderManifest(m); });
             });
         }
 
@@ -815,32 +881,159 @@
 
     // ── Search ──────────────────────────────────────────────────────────────
 
-    function renderSearch(container, visual) {
-        const opts        = visual.options || {};
-        const param       = opts['PARAMETER']   || opts['parameter']   || null;
-        const placeholder = opts['PLACEHOLDER'] || opts['placeholder'] || 'Search…';
+    function renderSearch(container, visual, manifest) {
+        const opts          = visual.options || {};
+        // Parameter binding comes from ACTIONS (ON_CHANGE = SET_PARAMETER), not from OPTIONS
+        const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+        const param         = changeActions.length > 0 ? changeActions[0].parameterName : null;
+        const placeholder   = opts['PLACEHOLDER'] || opts['placeholder'] || 'Search…';
 
         const wrapper = document.createElement('div');
         wrapper.className = 'filter-wrapper';
 
-        const input         = document.createElement('input');
-        input.type          = 'search';
-        input.placeholder   = placeholder;
+        const input       = document.createElement('input');
+        input.type        = 'search';
+        input.placeholder = placeholder;
+        if (param) input.setAttribute('data-parameter', param);
+
+        // Restore current value from manifest parameters
+        if (param && manifest && manifest.parameters) {
+            const current = getParam(manifest.parameters, param);
+            if (current) input.value = current;
+        }
 
         wrapper.appendChild(input);
 
-        if (isWebMode && param) {
+        if (isWebMode && changeActions.length > 0) {
             let debounceTimer = null;
             input.addEventListener('input', () => {
                 clearTimeout(debounceTimer);
                 debounceTimer = setTimeout(() => {
-                    postParameter(param, input.value)
-                        .then(m => { if (m) renderManifest(m); });
+                    const batch = changeActions.reduce((o, a) => { o[a.parameterName] = input.value; return o; }, {});
+                    postParameters(batch).then(m => { if (m) renderManifest(m); });
                 }, 350);
             });
         }
 
         container.appendChild(wrapper);
+    }
+
+    // ── Image ───────────────────────────────────────────────────────────────
+
+    function renderImage(container, visual) {
+        const opts = visual.options || {};
+        const src  = opts['SRC'] || opts['src'] || '';
+        const alt  = opts['ALT'] || opts['alt'] || '';
+        const fit  = (opts['FIT'] || opts['fit'] || 'contain').toLowerCase();
+
+        const wrapper = document.createElement('div');
+        wrapper.style.width  = '100%';
+        wrapper.style.height = '100%';
+        wrapper.style.display = 'flex';
+        wrapper.style.alignItems = 'center';
+        wrapper.style.justifyContent = 'center';
+
+        const img = document.createElement('img');
+        img.src   = src;
+        img.alt   = alt;
+        img.style.maxWidth  = '100%';
+        img.style.maxHeight = '100%';
+        img.style.objectFit = fit;
+
+        wrapper.appendChild(img);
+        container.appendChild(wrapper);
+    }
+
+    // ── Button ──────────────────────────────────────────────────────────────
+
+    function renderButton(container, btn) {
+        const styles = btn.styles || {};
+        const btnEl = document.createElement('button');
+        btnEl.className = 'report-btn';
+        btnEl.textContent = btn.title || btn.name;
+        if (btn.tooltip && btn.tooltip.text) btnEl.title = btn.tooltip.text;
+
+        // Apply inline styles from STYLE definition
+        const bg  = styles['BACKGROUND'] || styles['background'];
+        const fg  = styles['COLOR']      || styles['color'];
+        const pad = styles['PADDING']    || styles['padding'];
+        if (bg)  btnEl.style.background = bg;
+        if (fg)  btnEl.style.color      = fg;
+        if (pad) btnEl.style.padding    = pad;
+        btnEl.style.cursor      = 'pointer';
+        btnEl.style.borderRadius = '4px';
+        btnEl.style.border       = 'none';
+        btnEl.style.fontWeight   = '600';
+
+        const type = (btn.buttonType || '').toUpperCase();
+        btnEl.addEventListener('click', () => {
+            if (type === 'BACK') {
+                window.history.back();
+            } else if (type === 'EXPORT_CSV' || type === 'EXPORT_EXCEL') {
+                const targetName = (btn.options || {})['TARGET'];
+                const visual = targetName ? findVisualData(targetName) : null;
+                if (!visual) { console.warn('EXPORT button: no TARGET visual found:', targetName); return; }
+                if (type === 'EXPORT_CSV') exportCsv(visual);
+                else exportExcel(visual);
+            } else if (type === 'REFRESH') {
+                if (isWebMode) {
+                    fetch(apiBase + '/manifest')
+                        .then(r => r.json())
+                        .then(m => renderManifest(m))
+                        .catch(e => console.error('Refresh failed:', e));
+                }
+            } else {
+                // Custom button — execute ON_CLICK actions
+                const clickActions = actionsFor(btn, 'ON_CLICK');
+                if (clickActions.length === 0) return;
+
+                const setParamActions  = clickActions.filter(a => a.type === 'SET_PARAMETER');
+                const drillDownActions = clickActions.filter(a => a.type === 'DRILL_DOWN');
+
+                // Try page navigation first (DRILL_DOWN on a button = navigate to the target page)
+                if (drillDownActions.length > 0 && !isWebMode) {
+                    drillDownActions.forEach(a => {
+                        const navItem = document.querySelector(`[data-page="${a.targetVisual}"]`);
+                        if (navItem) navItem.click();
+                    });
+                    return;
+                }
+
+                // In web mode, batch SET_PARAMETER and DRILL_DOWN parameter updates
+                const batch = {};
+                drillDownActions.forEach(a => {
+                    if (a.keyColumn) batch['@' + a.keyColumn] = '';
+                });
+                setParamActions.forEach(a => {
+                    if (a.parameterName) batch[a.parameterName] = a.valueExpression || '';
+                });
+
+                if (Object.keys(batch).length > 0 && isWebMode) {
+                    postParameters(batch).then(m => {
+                        if (m) {
+                            renderManifest(m);
+                            // After re-render, navigate to DRILL_DOWN target page if specified
+                            drillDownActions.forEach(a => {
+                                if (a.targetVisual) {
+                                    const navItem = document.querySelector(`[data-page="${a.targetVisual}"]`);
+                                    if (navItem) navItem.click();
+                                }
+                            });
+                        }
+                    });
+                } else if (drillDownActions.length > 0) {
+                    // Navigate without parameter change
+                    drillDownActions.forEach(a => {
+                        if (a.targetVisual) {
+                            const navItem = document.querySelector(`[data-page="${a.targetVisual}"]`);
+                            if (navItem) navItem.click();
+                        }
+                    });
+                }
+            }
+        });
+
+        container.appendChild(btnEl);
     }
 
     // ── Footer ──────────────────────────────────────────────────────────────
@@ -977,5 +1170,11 @@
         document.addEventListener('DOMContentLoaded', boot);
     } else {
         boot();
+    }
+
+    // Test escape hatch: exposes pure functions for automated testing.
+    // Harmless in production (just sets a window property that nothing reads).
+    if (typeof window !== 'undefined') {
+        window.__reportRuntime__ = { isOn, renderCard, renderDatePicker, renderSlider, renderSearch, renderButton, renderChart };
     }
 })();

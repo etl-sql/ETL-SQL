@@ -52,7 +52,7 @@ namespace ETL_SQL.ReportBuilder
             {
                 "BAR"          => RenderCartesian(visual, "bar"),
                 "LINE"         => RenderCartesian(visual, "line"),
-                "HBAR"         => RenderHorizontalBar(visual),
+                "HBAR" or "HORIZONTALBAR" => RenderHorizontalBar(visual),
                 "PIE"          => RenderPie(visual, donut: false),
                 "DONUT"        => RenderPie(visual, donut: true),
                 "SCATTER"      => RenderScatter(visual),
@@ -109,8 +109,8 @@ namespace ETL_SQL.ReportBuilder
             var labelCol = FindRole(v, "label") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
             var valueCol = FindRole(v, "value") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
 
-            int li = labelCol != null ? v.Columns.IndexOf(labelCol) : 0;
-            int vi = valueCol != null ? v.Columns.IndexOf(valueCol) : 1;
+            int li = labelCol != null ? v.Columns.FindIndex(c => string.Equals(c, labelCol, StringComparison.OrdinalIgnoreCase)) : 0;
+            int vi = valueCol != null ? v.Columns.FindIndex(c => string.Equals(c, valueCol, StringComparison.OrdinalIgnoreCase)) : 1;
 
             var data = v.Rows.Select(r =>
             {
@@ -174,7 +174,7 @@ namespace ETL_SQL.ReportBuilder
             var maxC  = FindRole(v, "max");
             var yCol  = FindRole(v, "y")      ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
 
-            int xi    = xCol != null ? v.Columns.IndexOf(xCol) : 0;
+            int xi    = xCol != null ? v.Columns.FindIndex(c => string.Equals(c, xCol, StringComparison.OrdinalIgnoreCase)) : 0;
             bool hasStats = minC != null && q1C != null && medC != null && q3C != null && maxC != null;
 
             List<string> categories;
@@ -182,11 +182,11 @@ namespace ETL_SQL.ReportBuilder
 
             if (hasStats)
             {
-                int minI = v.Columns.IndexOf(minC!);
-                int q1I  = v.Columns.IndexOf(q1C!);
-                int medI = v.Columns.IndexOf(medC!);
-                int q3I  = v.Columns.IndexOf(q3C!);
-                int maxI = v.Columns.IndexOf(maxC!);
+                int minI = v.Columns.FindIndex(c => string.Equals(c, minC, StringComparison.OrdinalIgnoreCase));
+                int q1I  = v.Columns.FindIndex(c => string.Equals(c, q1C,  StringComparison.OrdinalIgnoreCase));
+                int medI = v.Columns.FindIndex(c => string.Equals(c, medC, StringComparison.OrdinalIgnoreCase));
+                int q3I  = v.Columns.FindIndex(c => string.Equals(c, q3C,  StringComparison.OrdinalIgnoreCase));
+                int maxI = v.Columns.FindIndex(c => string.Equals(c, maxC, StringComparison.OrdinalIgnoreCase));
 
                 categories = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").ToList();
                 boxData = v.Rows.Select(r => new[]
@@ -241,8 +241,8 @@ namespace ETL_SQL.ReportBuilder
             var nameCol  = FindRole(v, "label") ?? FindRole(v, "name") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
             var valueCol = FindRole(v, "value") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
 
-            int ni = nameCol  != null ? v.Columns.IndexOf(nameCol)  : 0;
-            int vi = valueCol != null ? v.Columns.IndexOf(valueCol) : 1;
+            int ni = nameCol  != null ? v.Columns.FindIndex(c => string.Equals(c, nameCol,  StringComparison.OrdinalIgnoreCase)) : 0;
+            int vi = valueCol != null ? v.Columns.FindIndex(c => string.Equals(c, valueCol, StringComparison.OrdinalIgnoreCase)) : 1;
 
             var data = v.Rows.Select(r => (object)new
             {
@@ -274,7 +274,7 @@ namespace ETL_SQL.ReportBuilder
 
             int xi = xCol != null ? v.Columns.FindIndex(c => string.Equals(c, xCol, StringComparison.OrdinalIgnoreCase)) : 0;
             int yi = yCol != null ? v.Columns.FindIndex(c => string.Equals(c, yCol, StringComparison.OrdinalIgnoreCase)) : 1;
-            int vi = valC != null ? v.Columns.IndexOf(valC) : 2;
+            int vi = valC != null ? v.Columns.FindIndex(c => string.Equals(c, valC, StringComparison.OrdinalIgnoreCase)) : 2;
 
             var xCats = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").Distinct().ToList();
             var yCats = v.Rows.Select(r => yi >= 0 && yi < r.Count ? r[yi] ?? "" : "").Distinct().ToList();
@@ -313,6 +313,7 @@ namespace ETL_SQL.ReportBuilder
             var xCol      = FindRole(v, "x")      ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
             var yCol      = FindRole(v, "y")      ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
             var seriesCol = FindRole(v, "series");
+            var defs      = v.SeriesDefs ?? new List<SeriesDefManifest>();
 
             int xi = xCol != null ? v.Columns.FindIndex(c => string.Equals(c, xCol, StringComparison.OrdinalIgnoreCase)) : 0;
             int yi = yCol != null ? v.Columns.FindIndex(c => string.Equals(c, yCol, StringComparison.OrdinalIgnoreCase)) : 1;
@@ -325,10 +326,9 @@ namespace ETL_SQL.ReportBuilder
             {
                 // Simple mode (pre-pivoted)
                 xLabels = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").ToList();
-                var defs = v.SeriesDefs ?? new List<SeriesDefManifest>();
                 foreach (var def in defs)
                 {
-                    int ci = v.Columns.IndexOf(def.Column);
+                    int ci = v.Columns.FindIndex(c => string.Equals(c, def.Column, StringComparison.OrdinalIgnoreCase));
                     var data = v.Rows.Select(r => (object?)(ci >= 0 && ci < r.Count ? ToDouble(r[ci]) : null)).ToList();
                     seriesList.Add(new { type = def.SeriesType.ToLowerInvariant(), name = def.Column, data });
                 }
@@ -339,8 +339,6 @@ namespace ETL_SQL.ReportBuilder
                 xLabels = SortXLabels(v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").ToList());
                 var xIndex = xLabels.Select((l, i) => (l, i)).ToDictionary(t => t.l, t => t.i, StringComparer.OrdinalIgnoreCase);
                 var seriesKeys = v.Rows.Select(r => si < r.Count ? r[si] ?? "" : "").Distinct().ToList();
-                
-                var defs = v.SeriesDefs ?? new List<SeriesDefManifest>();
 
                 foreach (var sk in seriesKeys)
                 {
@@ -361,6 +359,40 @@ namespace ETL_SQL.ReportBuilder
                     
                     seriesList.Add(new { type, name = sk, data = vals });
                 }
+            }
+
+            // When there are exactly 2 series with mixed types (e.g., BAR + LINE),
+            // use dual Y-axes so the two series don't crush each other's scale.
+            bool dualAxis = si < 0 && defs.Count == 2
+                && defs.Select(d => d.SeriesType.ToLowerInvariant()).Distinct().Count() > 1;
+
+            if (dualAxis)
+            {
+                // Assign each series to its Y-axis: bar→0 (left), line→1 (right)
+                var dualSeriesList = new List<object>();
+                for (int i = 0; i < seriesList.Count && i < defs.Count; i++)
+                {
+                    string defType = defs[i].SeriesType.ToLowerInvariant();
+                    var json2 = JsonSerializer.Serialize(seriesList[i], _json);
+                    var dict2 = JsonSerializer.Deserialize<Dictionary<string, object>>(json2)!;
+                    dict2["yAxisIndex"] = string.Equals(defType, "line", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+                    dualSeriesList.Add(dict2);
+                }
+
+                return Serialize(new
+                {
+                    title   = TitleOpt(v),
+                    tooltip = new { trigger = "axis" },
+                    legend  = LegendOpt(v),
+                    xAxis   = BuildAxisOpts(v, "x", "category", xLabels),
+                    yAxis   = new object[]
+                    {
+                        BuildAxisOpts(v, "y", "value"),
+                        new Dictionary<string, object?> { ["type"] = "value", ["position"] = "right",
+                            ["splitLine"] = new { show = false } }
+                    },
+                    series  = ApplyCommonSeriesOptions(v, dualSeriesList, stacked: false, smooth: false)
+                });
             }
 
             return Serialize(new
@@ -384,9 +416,9 @@ namespace ETL_SQL.ReportBuilder
             var labelCol = FindRole(v, "label") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
             var maxCol   = FindRole(v, "max");
 
-            int vi = valueCol != null ? v.Columns.IndexOf(valueCol) : 0;
-            int li = labelCol != null ? v.Columns.IndexOf(labelCol) : -1;
-            int mi = maxCol   != null ? v.Columns.IndexOf(maxCol)   : -1;
+            int vi = valueCol != null ? v.Columns.FindIndex(c => string.Equals(c, valueCol, StringComparison.OrdinalIgnoreCase)) : 0;
+            int li = labelCol != null ? v.Columns.FindIndex(c => string.Equals(c, labelCol, StringComparison.OrdinalIgnoreCase)) : -1;
+            int mi = maxCol   != null ? v.Columns.FindIndex(c => string.Equals(c, maxCol,   StringComparison.OrdinalIgnoreCase)) : -1;
 
             var firstRow = v.Rows.Count > 0 ? v.Rows[0] : null;
             var value    = firstRow != null ? ToDouble(vi >= 0 && vi < firstRow.Count ? firstRow[vi] : null) ?? 0.0 : 0.0;
@@ -411,7 +443,7 @@ namespace ETL_SQL.ReportBuilder
                 {
                     new { type = "gauge", min = gaugeMin, max = gaugeMax,
                           progress = new { show = isProgress },
-                          detail = new { valueAnimation = true, formatter = "{value}" },
+                          detail = new { valueAnimation = true, formatter = "{value:.1f}" },
                           data = new[] { new { value, name } } }
                 }
             });
@@ -425,8 +457,8 @@ namespace ETL_SQL.ReportBuilder
             var labelCol = FindRole(v, "label") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
             var valueCol = FindRole(v, "value") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
 
-            int li = labelCol != null ? v.Columns.IndexOf(labelCol) : 0;
-            int vi = valueCol != null ? v.Columns.IndexOf(valueCol) : 1;
+            int li = labelCol != null ? v.Columns.FindIndex(c => string.Equals(c, labelCol, StringComparison.OrdinalIgnoreCase)) : 0;
+            int vi = valueCol != null ? v.Columns.FindIndex(c => string.Equals(c, valueCol, StringComparison.OrdinalIgnoreCase)) : 1;
 
             var data = v.Rows.Select(r => (object)new
             {
@@ -565,7 +597,10 @@ namespace ETL_SQL.ReportBuilder
 
         private static object TitleOpt(VisualManifest v)
         {
-            var text = v.Options.GetValueOrDefault("TITLE", v.Name);
+            // VisualBuilder stores as lowercase "title"; fall back to visual name
+            var text = v.Options.GetValueOrDefault("title", null)
+                    ?? v.Options.GetValueOrDefault("TITLE", null)
+                    ?? v.Name;
             return new { text };
         }
 
@@ -587,12 +622,13 @@ namespace ETL_SQL.ReportBuilder
         {
             var opts = new Dictionary<string, object?> { ["type"] = type };
             if (data != null) opts["data"] = data;
-            var axisUpper = axis.ToUpperInvariant();
-            if (v.Options.TryGetValue($"AXIS:{axisUpper}:LABEL", out var label))
+            // VisualBuilder stores axis options with lowercase prefix: "axis:x:label"
+            var axisLower = axis.ToLowerInvariant();
+            if (v.Options.TryGetValue($"axis:{axisLower}:label", out var label))
                 opts["name"] = label;
-            if (v.Options.TryGetValue($"AXIS:{axisUpper}:MIN", out var min))
+            if (v.Options.TryGetValue($"axis:{axisLower}:min", out var min))
                 opts["min"] = ParseAxisBound(min);
-            if (v.Options.TryGetValue($"AXIS:{axisUpper}:MAX", out var max))
+            if (v.Options.TryGetValue($"axis:{axisLower}:max", out var max))
                 opts["max"] = ParseAxisBound(max);
             return opts;
         }

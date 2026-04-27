@@ -76,6 +76,99 @@ namespace ETL_SQL.Tests.Reporting.Reporting
             Assert.Contains("\"data\"", config);
         }
 
+        [Fact]
+        public void EChartsRenderer_Bar_YAxisLabel_AppearsInJson()
+        {
+            // VisualBuilder writes axis label as "axis:y:label" (lowercase computed key).
+            // Regression guard: earlier code read "AXIS:Y:LABEL" (uppercase) and silently dropped labels.
+            var visual = MakeSampleVisual("BAR");
+            visual.Options["axis:y:label"] = "Revenue";
+            var renderer = new EChartsRenderer();
+
+            var config = renderer.Render(visual)!;
+
+            Assert.Contains("\"name\":\"Revenue\"", config);
+        }
+
+        [Fact]
+        public void EChartsRenderer_Title_AppearsInJson()
+        {
+            // VisualBuilder writes the title as lowercase "title"; EChartsRenderer must read it the same way.
+            // Regression guard: earlier code read "TITLE" (uppercase) and fell back to visual.Name.
+            var visual = MakeSampleVisual("BAR");
+            visual.Options["title"] = "My Report Title";
+            var renderer = new EChartsRenderer();
+
+            var config = renderer.Render(visual)!;
+
+            Assert.Contains("\"text\":\"My Report Title\"", config);
+            Assert.DoesNotContain("SampleVisual", config.Split("\"text\":")[1].Split("\"")[1]);
+        }
+
+        [Fact]
+        public void EChartsRenderer_Combo_DualYAxis_WhenBarAndLineMixed()
+        {
+            // A COMBO with exactly 2 series of different types (BAR + LINE) must produce
+            // a dual Y-axis array so the two scales don't crush each other.
+            var visual = new VisualManifest
+            {
+                Name       = "ComboChart",
+                VisualType = "COMBO",
+                Columns    = new List<string> { "Month", "Revenue", "ReturnRate" },
+                Rows       = new List<List<string?>>
+                {
+                    new List<string?> { "Jan", "100000", "5.2" },
+                    new List<string?> { "Feb", "120000", "4.8" }
+                },
+                SeriesDefs = new List<SeriesDefManifest>
+                {
+                    new SeriesDefManifest { Column = "Revenue",    SeriesType = "BAR"  },
+                    new SeriesDefManifest { Column = "ReturnRate", SeriesType = "LINE" }
+                },
+                Options = new Dictionary<string, string>
+                {
+                    { "mapping:x", "Month" }
+                }
+            };
+
+            var config = new EChartsRenderer().Render(visual)!;
+
+            // Dual Y-axis: "yAxis" must be a JSON array, not a single object.
+            Assert.Contains("\"yAxis\":[", config);
+            // Both series must be present
+            Assert.Contains("\"Revenue\"", config);
+            Assert.Contains("\"ReturnRate\"", config);
+        }
+
+        [Fact]
+        public void EChartsRenderer_Waterfall_CustomColors_AppearedInDeltas()
+        {
+            // GetColor reads "COLOR:POSITIVE" / "COLOR:NEGATIVE" from Options.
+            // Regression guard: earlier case-insensitive lookup issue could drop colors.
+            var visual = new VisualManifest
+            {
+                Name       = "WaterfallChart",
+                VisualType = "WATERFALL",
+                Columns    = new List<string> { "Step", "Amount" },
+                Rows       = new List<List<string?>>
+                {
+                    new List<string?> { "Start",    "1000" },
+                    new List<string?> { "Increase",  "500" },
+                    new List<string?> { "Decrease", "-200" }
+                },
+                Options = new Dictionary<string, string>
+                {
+                    { "COLOR:POSITIVE", "#00cc44" },
+                    { "COLOR:NEGATIVE", "#cc0044" }
+                }
+            };
+
+            var config = new EChartsRenderer().Render(visual)!;
+
+            Assert.Contains("#00cc44", config);
+            Assert.Contains("#cc0044", config);
+        }
+
         // ── MarkdownRenderer ─────────────────────────────────────────────────
 
         [Fact]

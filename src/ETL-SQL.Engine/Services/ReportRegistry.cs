@@ -19,6 +19,7 @@ namespace ETL_SQL.Engine.Services
         public IDictionary<string, CreateStyleStatement> StyleDefinitions { get; private set; }
         public IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; private set; }
         public IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; private set; }
+        public IDictionary<string, CreateThemeStatement> ThemeDefinitions { get; private set; }
 
         public string TemplatePath { get; set; } = "./Templates";
         public string? ReportTitle { get; set; }
@@ -45,6 +46,7 @@ namespace ETL_SQL.Engine.Services
             StyleDefinitions = new Dictionary<string, CreateStyleStatement>(StringComparer.OrdinalIgnoreCase);
             ButtonDefinitions = new Dictionary<string, CreateButtonStatement>(StringComparer.OrdinalIgnoreCase);
             TemplateDefinitions = new Dictionary<string, CreateTemplateStatement>(StringComparer.OrdinalIgnoreCase);
+            ThemeDefinitions = new Dictionary<string, CreateThemeStatement>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>Creates a thread-safe shallow clone of the registry for parallel execution branches.</summary>
@@ -60,6 +62,7 @@ namespace ETL_SQL.Engine.Services
                 StyleDefinitions = new Dictionary<string, CreateStyleStatement>(StyleDefinitions, StringComparer.OrdinalIgnoreCase),
                 ButtonDefinitions = new Dictionary<string, CreateButtonStatement>(ButtonDefinitions, StringComparer.OrdinalIgnoreCase),
                 TemplateDefinitions = new Dictionary<string, CreateTemplateStatement>(TemplateDefinitions, StringComparer.OrdinalIgnoreCase),
+                ThemeDefinitions = new Dictionary<string, CreateThemeStatement>(ThemeDefinitions, StringComparer.OrdinalIgnoreCase),
                 TemplatePath = this.TemplatePath,
                 ReportTitle = this.ReportTitle,
                 ReportDescription = this.ReportDescription,

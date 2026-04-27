@@ -626,6 +626,8 @@ namespace ETL_SQL.Connectors.FlatFile
                 {
                     string zipPath = _filePath;
                     if (!zipPath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)) zipPath += ".zip";
+                    var zipDir = System.IO.Path.GetDirectoryName(zipPath);
+                    if (!string.IsNullOrEmpty(zipDir)) System.IO.Directory.CreateDirectory(zipDir);
                     if (System.IO.File.Exists(zipPath)) System.IO.File.Delete(zipPath);
                     using (var zip = System.IO.Compression.ZipFile.Open(zipPath, System.IO.Compression.ZipArchiveMode.Create))
                     {
@@ -634,6 +636,8 @@ namespace ETL_SQL.Connectors.FlatFile
                 }
                 else
                 {
+                    var dir = System.IO.Path.GetDirectoryName(_filePath);
+                    if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
                     System.IO.File.Move(tempFile, _filePath, true);
                 }
             }

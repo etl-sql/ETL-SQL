@@ -134,7 +134,7 @@ namespace ETL_SQL.ReportPlayer
                 var evaluator = provider.GetRequiredService<Evaluator>();
                 evaluator.RedirectOutput = true;
 
-                // Security Hardening (CR-S1): Inject current parameter values directly into the scope 
+                // Security Hardening (CR-S1): Inject current parameter values directly into the scope
                 // instead of concatenating source text. This prevents script injection.
                 foreach (var (name, value) in _parameters)
                 {
@@ -142,7 +142,9 @@ namespace ETL_SQL.ReportPlayer
                     evaluator.DeclareVariable(varName, value, new VariableMetadata { IsInput = true });
                 }
 
-                await evaluator.Evaluate(script);
+                // 30s timeout prevents infinite loops from deadlocking the lock forever
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                await evaluator.Evaluate(script, cts.Token);
 
                 var builder   = new ManifestBuilder(evaluator);
                 _evaluator    = evaluator;

@@ -260,7 +260,8 @@ CREATE VISUAL RegionSparkline AS LINE (
 );
 
 CREATE CONTAINER RegionTooltip AS BOX (
-  VISUALS (RegionSparkline)
+  STRUCTURE = 'A',
+  MAP ('A' = RegionSparkline)
 );
 
 CREATE VISUAL RevenueByRegion AS BAR (
@@ -458,6 +459,22 @@ CREATE VISUAL ProductSearch AS SEARCH (
 |------------|-------------|
 | `PLACEHOLDER` | Ghost text shown when the box is empty. |
 | `DEFAULT` | Initial text value when the page loads. |
+
+#### How Parameter Binding Works
+
+Parameter binding for `DATEPICKER`, `SLIDER`, and `SEARCH` (and for `SLICER` / `MULTISELECT`) is **always explicit** — there is no automatic wiring. The mechanism is:
+
+1. Declare a variable at the top of your script: `DECLARE @year INT = 2024`
+2. Use `@year` inside the inline `SELECT` of any visual that should react to it.
+3. Add `ACTIONS (ON_CHANGE = SET_PARAMETER(@year, value))` to the control visual.
+
+The second argument to `SET_PARAMETER` is a column reference:
+- For **`SLIDER`**, **`DATEPICKER`**, and **`SEARCH`**: use the literal word `value` — it refers to the control's current value at the time the event fires.
+- For **`SLICER`** and **`MULTISELECT`**: use the column name from your `SOURCE` query that holds the selectable value (e.g., `region`).
+
+When the user interacts with a control, the dashboard posts the new value to the server, which re-evaluates only the visuals whose `SELECT` queries reference the updated variable. Visuals that do not reference the changed variable are not re-queried.
+
+> **Common mistake:** There is no `OPTIONS(PARAMETER = @varName)` key. If you have seen this pattern in early examples it is incorrect; the binding mechanism is always `ACTIONS (ON_CHANGE = SET_PARAMETER(...))`.
 
 ### Filter Visuals & Variable Type Mapping
 
@@ -788,22 +805,58 @@ Multiple `GOAL` lines are supported — just add additional `GOAL(n)` entries. `
 
 ### CROSS_FILTER
 
-Setting `CROSS_FILTER = ON` in the `OPTIONS` clause of a chart visual makes it act as a cross-filter source. Clicking a data point broadcasts a filter to all TABLE visuals on the same page that also have `CROSS_FILTER = ON`. Clicking the same value again clears the filter.
+Cross-filtering lets a chart act as an interactive filter for other visuals on the same page — no parameters, no actions, no server round-trip needed.
+
+**How it works**
+
+- Add `OPTIONS (CROSS_FILTER = ON)` to any chart visual (BAR, LINE, PIE, etc.) to make it a **filter source**.
+- Add `OPTIONS (CROSS_FILTER = ON)` to any TABLE visual on the same page to make it a **filter target**.
+- Clicking a data point in the chart filters every TABLE target to rows that match the clicked X-axis value.
+- Clicking the same value a second time **clears** the filter (toggle behavior).
+
+**Full example**
 
 ```sql
+-- Load data
+SELECT Region, Product, Revenue
+INTO #sales
+FROM orders;
+
+-- Chart: clicking a bar filters the table below
 CREATE VISUAL SalesByRegion AS BAR (
-  SOURCE = (SELECT Region, Revenue FROM #sales),
+  SOURCE   = (SELECT Region, SUM(Revenue) AS Revenue FROM #sales GROUP BY Region),
   MAPPINGS (X = Region, Y = Revenue),
+  OPTIONS  (CROSS_FILTER = ON)
+);
+
+-- Table: receives the filter broadcast from the chart above
+CREATE VISUAL SalesDetail AS TABLE (
+  SOURCE  = (SELECT Region, Product, Revenue FROM #sales),
   OPTIONS (CROSS_FILTER = ON)
 );
 
-CREATE VISUAL SalesDetail AS TABLE (
-  SOURCE = (SELECT Region, Product, Revenue FROM #sales),
-  OPTIONS (CROSS_FILTER = ON)  -- becomes a filter target
+-- Place both on the same page
+CREATE PAGE Overview AS LAYOUT (
+  GRID 2 x 1
+  MAP (
+    [0,0] = SalesByRegion,
+    [1,0] = SalesDetail
+  )
 );
 ```
 
-When the user clicks "West" in the bar chart, the TABLE is filtered to show only rows where `Region = 'West'`. Cross-filtering operates client-side using the data already in the manifest — no server round-trip is needed.
+When the user clicks the "West" bar, `SalesDetail` is filtered to show only rows where `Region = 'West'`. Clicking "West" again restores all rows.
+
+**Rules and limitations**
+
+| Rule | Detail |
+|---|---|
+| Same-page only | Cross-filtering is scoped to the page section in the DOM. Visuals on other pages are unaffected. |
+| Chart → TABLE | The filter source must be a chart type (BAR, LINE, PIE, etc.). TABLE → TABLE cross-filtering is not supported. |
+| X-axis column | The filter column is the X-axis mapping column (the `MAPPINGS (X = ...)` value). It must exist in the TABLE's data. |
+| Client-side | No server round-trip. The full dataset is in the manifest; filtering is done in the browser. Large datasets (>10k rows) may cause visible filter latency. |
+| Multiple targets | One chart can filter multiple TABLE visuals on the same page simultaneously. |
+| Multiple sources | Multiple charts on the same page can each be filter sources, but only one filter is active at a time per page — the most recently clicked chart wins. |
 
 ### STYLE
 
@@ -953,8 +1006,31 @@ CREATE [OR ALTER] PAGE <name> AS LAYOUT (
     ...
   )
   [, STYLE = <styleName> | STYLE (key = value, ...)]
+)
+[WITH (HIDDEN = ON)];
+```
+
+#### Hidden Pages
+
+Adding `WITH (HIDDEN = ON)` after the LAYOUT body hides the page from the navigation bar while still rendering it in the DOM. Hidden pages are only reachable via `DRILL_DOWN` or programmatic navigation.
+
+```sql
+CREATE PAGE DetailView AS LAYOUT (
+  STRUCTURE = 'A',
+  MAP ('A' = DetailTable)
+) WITH (HIDDEN = ON);
+```
+
+A button or chart click action can navigate to a hidden page:
+
+```sql
+CREATE BUTTON ShowDetail AS CUSTOM (
+  LABEL   = 'View Details',
+  ACTIONS (ON_CLICK = DRILL_DOWN(Target = DetailView, Key = id))
 );
 ```
+
+Hidden pages are useful for drill-through flows where the detail page should not appear as a permanent nav item.
 
 ### STRUCTURE string
 
@@ -1002,7 +1078,7 @@ STYLE (
 
 ### Variables and Parameters
 
-Report-SQL uses standard ETL-SQL `@variables` for all parameters. Simply use `@VariableName` in your visual queries, and the dashboard will automatically wire them to any `SLICER`, `SEARCH`, or `DATEPICKER` that fires a `SET_PARAMETER` action for that variable.
+Report-SQL uses standard ETL-SQL `@variables` for all parameters. Declare them at the top of your script with `DECLARE`, use them inside visual `SELECT` queries, and bind them to filter controls via `ACTIONS (ON_CHANGE = SET_PARAMETER(@varName, value))`. See the [How Parameter Binding Works](#how-parameter-binding-works) section for the full mechanism.
 
 When a parameter changes, the DashboardService re-evaluates all visuals whose inline SELECTs reference that parameter. Unaffected visuals are not re-queried.
 
@@ -1020,6 +1096,53 @@ CREATE PAGE Overview AS LAYOUT (
   STYLE (THEME = dark)
 );
 ```
+
+---
+
+## CREATE THEME
+
+Defines a custom ECharts color theme that can be applied to any visual or page with `STYLE (THEME = themeName)`. Themes are saved as JSON files to `{TemplatePath}/Themes/` and embedded in the report manifest so the web player can register them at render time.
+
+```sql
+CREATE THEME corporate AS (
+  BACKGROUND   = '#1a1a2e',       -- chart / card background
+  TEXT_COLOR   = '#eeeeee',       -- title, legend, axis labels
+  ACCENT_COLOR = '#4ecca3',       -- primary series color
+  COLORS       = '#4ecca3, #e94560, #f5a623, #0078d4',  -- full palette
+  GRID_COLOR   = '#2a2a4e'        -- axis grid lines
+);
+```
+
+Apply the theme just like any built-in ECharts theme:
+
+```sql
+CREATE VISUAL RevenueChart AS BAR (
+  SOURCE   = (SELECT Month, Revenue FROM #data),
+  MAPPINGS (X = Month, Y = Revenue),
+  STYLE    (THEME = corporate)
+);
+```
+
+### Supported theme properties
+
+| Property | Maps to ECharts | Description |
+|---|---|---|
+| `BACKGROUND` | `backgroundColor` | Chart background fill |
+| `TEXT_COLOR` | `textStyle.color`, title, legend, axis label colors | Default text color everywhere |
+| `ACCENT_COLOR` | `color[0]` | First (primary) series color |
+| `COLORS` | `color` array | Comma-separated hex list for all series |
+| `AXIS_COLOR` | Axis line, tick, and label colors | If omitted, inherits `TEXT_COLOR` |
+| `GRID_COLOR` | `splitLine.lineStyle.color` | Axis grid line color |
+| Any other key | Passed through as-is to root | Use for ECharts-specific overrides |
+
+### DROP THEME
+
+```sql
+DROP THEME corporate;
+DROP THEME corporate IF EXISTS;
+```
+
+Removes the theme from memory and deletes the `.json` file from disk.
 
 ---
 
@@ -1107,23 +1230,22 @@ CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL (
 | `BOX` | Layout region. If `VISUALS` is used, they are stacked. If `STRUCTURE` is used, it follows the grid layout. |
 | `SCROLL` | Scrollable region. Overflow content scrolls within fixed container height. |
 
-### Layout vs Simple List
+### Layout
 
-Containers support two layout modes:
-
-**1. Simple List (Legacy)**
-Visuals are stacked vertically or horizontally depending on the container type and styles.
+Containers use the same `STRUCTURE` and `MAP` logic as pages, enabling arbitrarily nested grid layouts. Every container must have a `STRUCTURE` and a `MAP`.
 
 ```sql
+-- Single visual (single-slot STRUCTURE)
 CREATE CONTAINER KpiRow AS BOX (
-  VISUALS (TotalRevenue, TotalUnits, AvgOrderValue)
+  STRUCTURE = 'A B C',
+  MAP (
+    'A' = TotalRevenue,
+    'B' = TotalUnits,
+    'C' = AvgOrderValue
+  )
 );
-```
 
-**2. Grid Layout (Modern)**
-Uses the same `STRUCTURE` and `MAP` logic as pages, enabling nested layouts.
-
-```sql
+-- Multi-row layout
 CREATE CONTAINER InfoPanel AS BOX (
   TITLE = 'Product Insights',
   STRUCTURE = 'A B / C C',
@@ -1225,12 +1347,38 @@ CREATE BUTTON RefreshData AS REFRESH (
   STYLE (BACKGROUND-COLOR = '#2563eb', COLOR = '#ffffff', BORDER-RADIUS = '4px')
 );
 
+-- Export a specific visual's data to CSV
+CREATE BUTTON DownloadCsv AS EXPORT_CSV (
+  TITLE   = 'Download CSV',
+  OPTIONS (TARGET = SalesDetail)
+);
+
+-- Export a specific visual's data to Excel
+CREATE BUTTON DownloadExcel AS EXPORT_EXCEL (
+  TITLE   = 'Download Excel',
+  OPTIONS (TARGET = SalesDetail),
+  STYLE (BACKGROUND-COLOR = '#217346', COLOR = '#ffffff')
+);
+
 -- Custom action button
-CREATE BUTTON ExportBtn AS EXPORT (
-  TITLE   = 'Export CSV',
-  ACTIONS (ON_CLICK = SET_PARAMETER(@export, 'csv'))
+CREATE BUTTON DrillBtn AS CUSTOM (
+  TITLE   = 'View Detail',
+  ACTIONS (ON_CLICK = DRILL_DOWN(Target = DetailPage, Key = id))
 );
 ```
+
+### Built-in button types
+
+| Type | Behavior |
+|---|---|
+| `BACK` | Calls `window.history.back()` |
+| `REFRESH` | Reloads the manifest from the server and re-renders all visuals |
+| `EXPORT_CSV` | Downloads the `TARGET` visual's data as a `.csv` file (client-side, no server round-trip) |
+| `EXPORT_EXCEL` | Downloads the `TARGET` visual's data as a `.xls` file (Excel-compatible HTML table format) |
+| Any other string | Custom button — executes `ON_CLICK` actions (`SET_PARAMETER`, `DRILL_DOWN`) |
+
+`EXPORT_CSV` and `EXPORT_EXCEL` require `OPTIONS (TARGET = VisualName)` where `VisualName` is the name of any visual currently rendered on the same page. The exported data reflects the rows in the manifest — if the visual is cross-filtered, the full dataset (not the filtered view) is exported.
+
 
 Place buttons in a page layout exactly like any visual:
 

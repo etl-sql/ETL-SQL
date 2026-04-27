@@ -77,6 +77,23 @@ namespace ETL_SQL.Engine.Handlers
                         }
                     }
                     break;
+                case ReportObjectType.Theme:
+                    removed = context.ThemeDefinitions.Remove(stmt.Name);
+                    if (removed)
+                    {
+                        try
+                        {
+                            var themeDir = Path.Combine(context.TemplatePath, "Themes");
+                            string fileName = stmt.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? stmt.Name : stmt.Name + ".json";
+                            string filePath = context.ResolvePath(Path.Combine(themeDir, fileName));
+                            if (File.Exists(filePath)) File.Delete(filePath);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.Warning("Failed to delete theme file for '{ThemeName}': {Message}", stmt.Name, ex.Message);
+                        }
+                    }
+                    break;
                 default:
                     throw new ExecutionException($"Unsupported report object type: {stmt.ObjectType}", null, stmt.Line, stmt.Column);
             }

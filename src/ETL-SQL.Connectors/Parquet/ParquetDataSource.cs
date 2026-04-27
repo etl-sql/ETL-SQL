@@ -155,6 +155,9 @@ namespace ETL_SQL.Connectors.Parquet
                 targetPath = tempFile;
             }
 
+            var dir = System.IO.Path.GetDirectoryName(_filePath);
+            if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
+
             var schema = new ParquetSchema(fields);
 
             try

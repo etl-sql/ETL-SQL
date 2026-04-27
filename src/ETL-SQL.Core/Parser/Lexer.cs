@@ -491,8 +491,18 @@ namespace ETL_SQL.Core.Parser
         private Token ReadNumber(int line, int column, int startOffset)
         {
             var sb = new StringBuilder();
-            bool hasDecimal = false;
 
+            // Hex literal: 0x... or 0X...
+            if (CurrentChar == '0' && (Peek() == 'x' || Peek() == 'X'))
+            {
+                Advance(); Advance(); // skip "0x"
+                while (IsHexDigit(CurrentChar)) { sb.Append(CurrentChar); Advance(); }
+                // Convert hex string to decimal so the rest of the engine sees a plain number.
+                long hexValue = Convert.ToInt64(sb.ToString(), 16);
+                return new Token(TokenType.NUMBER, hexValue.ToString(), line, column, _line, _column, startOffset, _position);
+            }
+
+            bool hasDecimal = false;
             while (char.IsDigit(CurrentChar) || (CurrentChar == '.' && !hasDecimal))
             {
                 if (CurrentChar == '.') hasDecimal = true;
@@ -502,6 +512,9 @@ namespace ETL_SQL.Core.Parser
 
             return new Token(TokenType.NUMBER, sb.ToString(), line, column, _line, _column, startOffset, _position);
         }
+
+        private static bool IsHexDigit(char c) =>
+            (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 
         private Token ReadString(int line, int column, int startOffset)
         {

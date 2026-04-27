@@ -24,8 +24,8 @@ namespace ETL_SQL.Core.Linting.Rules
                 if (stmt is not CreateVisualStatement visual) continue;
                 if (!visual.Source.IsInlineSelect) continue;
 
-                var select = visual.Source.InlineSelect;
-                if (select == null) continue;
+                // Only validate plain SELECT; UNION ALL / set-operations are not statically enumerable.
+                if (visual.Source.InlineSelect is not SelectStatement select) continue;
 
                 // Collect the alias / column names produced by the SELECT
                 var selectColumns = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);

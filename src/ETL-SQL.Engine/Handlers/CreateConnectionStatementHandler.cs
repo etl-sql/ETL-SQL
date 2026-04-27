@@ -47,7 +47,7 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     foreach (var kvp in stmt.Options)
                     {
-                        var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true));
+                        var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true), kvp.Value);
                         options[kvp.Key] = val;
                     }
                 }
@@ -62,13 +62,13 @@ namespace ETL_SQL.Engine.Handlers
                 target = stmt.TargetExpression != null
                     ? (await context.EvaluateValue(stmt.TargetExpression, new Row(), decryptSensitive: true))?.ToString() ?? ""
                     : "";
-                
+
                 options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                 if (stmt.Options != null)
                 {
                     foreach (var kvp in stmt.Options)
                     {
-                        var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true));
+                        var val = StringifyOption(await context.EvaluateValue(kvp.Value, new Row(), decryptSensitive: true), kvp.Value);
                         options[kvp.Key] = Interpolate(val);
                     }
                 }
@@ -179,10 +179,13 @@ namespace ETL_SQL.Engine.Handlers
             context.LastResult = preview;
         }
         
-        private string StringifyOption(object? val)
+        private string StringifyOption(object? val, Expression? expr = null)
         {
             if (val is bool b) return b ? "ON" : "OFF";
-            return val?.ToString() ?? "";
+            if (val != null) return val.ToString()!;
+            // Unquoted bareword identifiers (e.g. DELIMITER = COMMA) — use the identifier name directly.
+            if (expr is IdentifierExpression id) return id.Name;
+            return "";
         }
 
         private string Interpolate(string value)

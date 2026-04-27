@@ -90,22 +90,27 @@ namespace ETL_SQL.Tests.Hardening
             var loaded = await store.LoadAsync(snapshotPath);
             Assert.Equal("Original", loaded.Source);
 
-            // We can't easily "crash" the process mid-move without a lot of mocking,
-            // but we can verify the .tmp path is handled.
-            var tmpPath = snapshotPath + ".tmp";
-            File.WriteAllText(tmpPath, "CORRUPT PARTIAL JSON");
+            // Simulate a crashed write by leaving a corrupt file at the old fixed .tmp path.
+            // Each SaveAsync now uses a unique GUID-based temp path, so the corrupt file
+            // is NOT touched by a subsequent save — it is cleaned up by CleanupOrphanedSnapshots.
+            var corruptTmpPath = snapshotPath + ".tmp";
+            File.WriteAllText(corruptTmpPath, "CORRUPT PARTIAL JSON");
 
-            // Load should still return Original because the tmp file isn't the real file
+            // Load should still return Original because the corrupt tmp file isn't the real file
             loaded = await store.LoadAsync(snapshotPath);
             Assert.Equal("Original", loaded.Source);
 
-            // Now perform a real save, it should overwrite/cleanup the corrupt tmp file
+            // A new save succeeds and leaves the original intact until the atomic move.
             var newManifest = new ReportManifest { Source = "New", BuiltAt = DateTime.UtcNow };
             await store.SaveAsync(newManifest, snapshotPath);
 
             loaded = await store.LoadAsync(snapshotPath);
             Assert.Equal("New", loaded.Source);
-            Assert.False(File.Exists(tmpPath));
+
+            // The corrupt file from the simulated crash is NOT cleaned by SaveAsync (it uses a
+            // unique temp path now). CleanupOrphanedSnapshots handles leftover temp files.
+            SnapshotStore.CleanupOrphanedSnapshots(_testDir);
+            Assert.False(File.Exists(corruptTmpPath));
         }
 
         [Fact]

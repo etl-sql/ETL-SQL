@@ -175,7 +175,7 @@ namespace ETL_SQL.Connectors.Xml
             }
             
             var current = doc.Root;
-            var parts = _rootPath.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            var parts = _rootPath.Split(new[] { '.', '/' }, StringSplitOptions.RemoveEmptyEntries);
             foreach (var part in parts)
             {
                 if (current == null) break;
@@ -263,6 +263,8 @@ namespace ETL_SQL.Connectors.Xml
                 }
                 else
                 {
+                    var dir = System.IO.Path.GetDirectoryName(_filePath);
+                    if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
                     if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
                     System.IO.File.Move(tempFile, _filePath);
                 }

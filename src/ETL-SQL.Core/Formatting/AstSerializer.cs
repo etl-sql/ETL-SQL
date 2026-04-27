@@ -109,6 +109,7 @@ namespace ETL_SQL.Core.Formatting
             DropReportObjectStatement      s => $"DROP {s.ObjectType.ToString().ToUpper()} {(s.IfExists ? "IF EXISTS " : "")}{s.Name};",
             AlterReportObjectStatement     s => $"ALTER {s.ObjectType.ToString().ToUpper()} {s.Name} ...", // Summarized
             CreateTemplateStatement        s => FormatCreateTemplate(s),
+            CreateThemeStatement           s => FormatCreateTheme(s),
             SetTemplatePathStatement       s => s.ToSql(),
 
             // ── SETS ──
@@ -779,6 +780,18 @@ namespace ETL_SQL.Core.Formatting
                 _ => "CREATE"
             };
             return $"{modeStr} TEMPLATE {s.Name} AS ({options});";
+        }
+
+        private static string FormatCreateTheme(CreateThemeStatement s)
+        {
+            var props = string.Join(", ", s.Properties.Select(p => $"{p.Key} = '{p.Value.Replace("'", "''")}'"));
+            var modeStr = s.Mode switch
+            {
+                ObjectCreationMode.Alter => "ALTER",
+                ObjectCreationMode.CreateOrAlter => "CREATE OR ALTER",
+                _ => "CREATE"
+            };
+            return $"{modeStr} THEME {s.Name} AS ({props});";
         }
     }
 }

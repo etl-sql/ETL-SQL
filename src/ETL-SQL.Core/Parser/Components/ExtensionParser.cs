@@ -249,6 +249,7 @@ namespace ETL_SQL.Core.Parser.Components
                     else if (Match(TokenType.WITH)) { overwrite = ParseWithOverwrite(); }
                     else if (source == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                         source = ParseExpression();
+                    else if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS after IF"); } // IF EXISTS suffix — handler already guards with File.Exists
                     else if (Match(TokenType.LF) || Match(TokenType.CR) || Match(TokenType.CRLF)) { continue; }
                     else break;
                 }

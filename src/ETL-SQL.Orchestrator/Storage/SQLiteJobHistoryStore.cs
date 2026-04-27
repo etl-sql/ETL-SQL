@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 using ETL_SQL.Core.Data;
@@ -12,10 +13,33 @@ namespace ETL_SQL.Orchestrator.Storage
     public class SQLiteJobHistoryStore : IJobHistoryStore
     {
         private readonly string _connectionString;
+        private bool _initialized;
+        private readonly System.Threading.SemaphoreSlim _initLock = new(1, 1);
 
-        public SQLiteJobHistoryStore(string dbPath = "etlsql.db")
+        /// <summary>
+        /// Returns the canonical global DB path in LocalApplicationData so all instances on the
+        /// same machine share the same job history regardless of their working directory.
+        /// </summary>
+        public static string DefaultDbPath()
         {
-            _connectionString = $"Data Source={dbPath}";
+            var dir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ETL-SQL");
+            Directory.CreateDirectory(dir);
+            return Path.Combine(dir, "etlsql.db");
+        }
+
+        public SQLiteJobHistoryStore(string? dbPath = null)
+        {
+            _connectionString = $"Data Source={dbPath ?? DefaultDbPath()}";
+        }
+
+        private async Task EnsureInitializedAsync()
+        {
+            if (_initialized) return;
+            await _initLock.WaitAsync();
+            try { if (!_initialized) { await InitializeAsync(); _initialized = true; } }
+            finally { _initLock.Release(); }
         }
 
         /// <summary>Initializes the SQLite database and creates the necessary tables if they don't exist.</summary>
@@ -110,6 +134,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
         public async Task SaveJobAsync(JobDefinition job)
         {
+            await EnsureInitializedAsync();
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 
@@ -135,6 +160,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
         public async Task<IEnumerable<JobDefinition>> GetActiveJobsAsync()
         {
+            await EnsureInitializedAsync();
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 
@@ -164,6 +190,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
         public async Task DeleteJobAsync(string name)
         {
+            await EnsureInitializedAsync();
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 
@@ -195,6 +222,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
         public async Task UpdateJobLastRunAsync(string name, DateTime lastRun, DateTime? nextRun)
         {
+            await EnsureInitializedAsync();
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 
@@ -209,6 +237,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
         public async Task<long> LogJobStartAsync(string jobName)
         {
+            await EnsureInitializedAsync();
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 
@@ -223,6 +252,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
         public async Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0)
         {
+            await EnsureInitializedAsync();
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 
@@ -242,6 +272,7 @@ namespace ETL_SQL.Orchestrator.Storage
 
         public async Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100)
         {
+            await EnsureInitializedAsync();
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 

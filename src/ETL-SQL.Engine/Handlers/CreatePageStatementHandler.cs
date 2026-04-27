@@ -46,16 +46,17 @@ namespace ETL_SQL.Engine.Handlers
                         null, stmt.Line, stmt.Column);
             }
 
-            // Phase 2: Validate that every visual slot references a known visual or container definition
+            // Phase 2: Validate that every slot references a known visual, container, or button
             foreach (var (slot, visualName) in stmt.SlotMap)
             {
-                bool isVisual = context.VisualDefinitions.ContainsKey(visualName);
+                bool isVisual    = context.VisualDefinitions.ContainsKey(visualName);
                 bool isContainer = context.ContainerDefinitions.ContainsKey(visualName);
+                bool isButton    = context.ButtonDefinitions.ContainsKey(visualName);
 
-                if (!isVisual && !isContainer)
+                if (!isVisual && !isContainer && !isButton)
                 {
                     throw new ExecutionException(
-                        $"CREATE PAGE '{stmt.Name}': slot '{slot}' references visual or container '{visualName}' which has not been defined.",
+                        $"CREATE PAGE '{stmt.Name}': slot '{slot}' references '{visualName}' which has not been defined as a visual, container, or button.",
                         null, stmt.Line, stmt.Column);
                 }
             }

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Core.Parser.Components
 {
@@ -125,7 +126,8 @@ namespace ETL_SQL.Core.Parser.Components
                     || visualType == VisualType.Slider
                     || visualType == VisualType.Search
                     || visualType == VisualType.Slicer
-                    || visualType == VisualType.MultiSelect)
+                    || visualType == VisualType.MultiSelect
+                    || visualType == VisualType.Image)
                     source = new VisualSourceExpression();
                 else
                     throw new SyntaxException($"CREATE VISUAL '{name}' is missing a SOURCE clause.", startToken.Line, startToken.Column);
@@ -222,6 +224,24 @@ namespace ETL_SQL.Core.Parser.Components
             }
             Consume(TokenType.RPAREN, "Expected ')' to close CREATE PAGE LAYOUT");
 
+            // Optional WITH (HIDDEN = ON) clause
+            bool isHidden = false;
+            if (Match(TokenType.WITH))
+            {
+                Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                {
+                    var optKey = _parser.Advance().Value;
+                    Consume(TokenType.EQUALS, $"Expected '=' after '{optKey}' in WITH clause");
+                    var optVal = _parser.Advance().Value;
+                    if (string.Equals(optKey, "HIDDEN", StringComparison.OrdinalIgnoreCase))
+                        isHidden = string.Equals(optVal, "ON", StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(optVal, "TRUE", StringComparison.OrdinalIgnoreCase);
+                    Match(TokenType.COMMA);
+                }
+                Consume(TokenType.RPAREN, "Expected ')' to close WITH clause");
+            }
+
             Match(TokenType.SEMICOLON);
 
             if (structure == null)
@@ -239,6 +259,7 @@ namespace ETL_SQL.Core.Parser.Components
                 Subtitle        = subtitle,
                 SubtitleIsMarkdown = subtitleMd,
                 Tooltip         = tooltip,
+                IsHidden        = isHidden,
                 Mode            = mode,
                 Line            = startToken.Line,
                 Column          = startToken.Column
@@ -250,7 +271,8 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParseCreateDataset(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
         {
             var tableName = ConsumeIdentifier("Expected &datasetName after CREATE DATASET").Value;
-            if (!tableName.StartsWith("&")) tableName = "&" + tableName;
+            // Only prepend '&' when the name has no sigil; '#'-prefixed temp-table names are kept as-is.
+            if (!tableName.StartsWith("&") && !tableName.StartsWith("#")) tableName = "&" + tableName;
 
             string? refreshInterval    = null;
             string? ttl                = null;
@@ -396,6 +418,37 @@ namespace ETL_SQL.Core.Parser.Components
                 Mode    = mode,
                 Line    = startToken.Line,
                 Column  = startToken.Column
+            };
+        }
+
+        // ── CREATE THEME ─────────────────────────────────────────────────────
+
+        public Statement ParseCreateTheme(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
+        {
+            var name = ConsumeIdentifier("Expected theme name after CREATE THEME").Value;
+            Consume(TokenType.AS, "Expected AS after theme name");
+            Consume(TokenType.LPAREN, "Expected '(' after AS");
+
+            var properties = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                var key = _parser.Advance().Value;
+                Match(TokenType.EQUALS);
+                var val = ConsumeReportOptionValue();
+                properties[key] = val;
+                Match(TokenType.COMMA);
+            }
+
+            Consume(TokenType.RPAREN, "Expected ')' to close CREATE THEME");
+            Match(TokenType.SEMICOLON);
+
+            return new CreateThemeStatement
+            {
+                Name       = name,
+                Properties = properties,
+                Mode       = mode,
+                Line       = startToken.Line,
+                Column     = startToken.Column
             };
         }
 
@@ -605,10 +658,11 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.AS, "Expected AS after button name");
 
             string buttonType;
-            if (Match(TokenType.BACK))           buttonType = "BACK";
-            else if (Match(TokenType.REFRESH))   buttonType = "REFRESH";
-            else if (Match(TokenType.IDENTIFIER)) buttonType = _parser.Previous.Value.ToUpperInvariant();
-            else throw new SyntaxException("Expected button type (BACK, REFRESH, etc.) after AS", _parser.Current.Line, _parser.Current.Column);
+            if (Match(TokenType.BACK))         buttonType = "BACK";
+            else if (Match(TokenType.REFRESH)) buttonType = "REFRESH";
+            else if (_parser.Current.Type != TokenType.LPAREN && _parser.Current.Type != TokenType.EOF)
+                buttonType = _parser.Advance().Value.ToUpperInvariant(); // accept any keyword as custom button type
+            else throw new SyntaxException("Expected button type (BACK, REFRESH, or custom identifier) after AS", _parser.Current.Line, _parser.Current.Column);
 
             Consume(TokenType.LPAREN, "Expected '(' after button type");
 
@@ -835,15 +889,15 @@ namespace ETL_SQL.Core.Parser.Components
         {
             if (Match(TokenType.LPAREN))
             {
-                var select = (SelectStatement)_parser.ParseStatement();
+                var query = _parser.ParseStatement();
                 Consume(TokenType.RPAREN, "Expected ')' to close SOURCE subquery");
-                return new VisualSourceExpression { InlineSelect = select };
+                return new VisualSourceExpression { InlineSelect = query };
             }
 
             if (_parser.Current.Type == TokenType.SELECT)
             {
-                var select = (SelectStatement)_parser.ParseStatement();
-                return new VisualSourceExpression { InlineSelect = select };
+                var query = _parser.ParseStatement();
+                return new VisualSourceExpression { InlineSelect = query };
             }
 
             if (Match(TokenType.STRING_LITERAL))
@@ -1038,7 +1092,12 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 else
                 {
-                    var key = ConsumeIdentifier("Expected option key").Value.ToUpperInvariant();
+                    // Accept any token as an option key — reserved keywords like STEP and DEFAULT
+                    // are valid option names inside an OPTIONS() block.
+                    if (_parser.Current.Type == TokenType.RPAREN || _parser.Current.Type == TokenType.EOF)
+                        break;
+                    var keyToken = _parser.Advance();
+                    var key = keyToken.Value.ToUpperInvariant();
                     Match(TokenType.EQUALS);
                     var val = ParseExpression();
                     options.Add(new VisualOption { Key = key, Value = val is LiteralExpression lit ? lit.Value?.ToString() ?? "" : val.ToSql() });
@@ -1337,12 +1396,25 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     var agg = Advance().Value.ToUpperInvariant();
                     Consume(TokenType.LPAREN, $"Expected '(' after {agg}");
-                    var col = ConsumeIdentifier("Expected column name in aggregate").Value;
-                    Consume(TokenType.RPAREN, $"Expected ')' after {col}");
+                    string col;
+                    if (_parser.Current.Type == TokenType.STAR)
+                    {
+                        _parser.Advance();
+                        col = "*";
+                    }
+                    else
+                    {
+                        col = _parser.Advance().Value; // accept keywords (e.g. Returns) as column names
+                    }
+                    Consume(TokenType.RPAREN, $"Expected ')' after column in aggregate");
                     string? alias = null;
                     if (Match(TokenType.AS))
                     {
-                        alias = ConsumeIdentifier("Expected alias after AS").Value;
+                        // Accept identifiers or quoted string literals as aliases (e.g. AS 'Total Revenue')
+                        if (_parser.Current.Type == TokenType.STRING_LITERAL || _parser.IsIdentifier(_parser.Current))
+                            alias = _parser.Advance().Value;
+                        else
+                            alias = ConsumeIdentifier("Expected alias after AS").Value;
                     }
                     summaries.Add(new TableSummaryItem(agg, col, alias));
                 }
@@ -1379,21 +1451,22 @@ namespace ETL_SQL.Core.Parser.Components
         {
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
-                var key = ConsumeIdentifier("Expected style key").Value;
+                // Accept any token as the start of a style key (keywords like THEME, TRUE, etc.)
+                var keyTok = _parser.IsIdentifier(_parser.Current) || LanguageMetadata.IsKeyword(_parser.Current.Value)
+                    ? _parser.Advance()
+                    : throw new SyntaxException("Expected style key", _parser.Current.Line, _parser.Current.Column);
+                var key = keyTok.Value;
+                // Consume hyphenated segments: BACKGROUND - COLOR → "BACKGROUND-COLOR"
+                while (_parser.Current.Type == TokenType.MINUS &&
+                       (_parser.IsIdentifier(_parser.Peek) || LanguageMetadata.IsKeyword(_parser.Peek.Value)))
+                {
+                    Advance(); // consume '-'
+                    key += "-" + _parser.Advance().Value;
+                }
                 Consume(TokenType.EQUALS, $"Expected '=' after style key '{key}'");
                 string val;
-                var t = _parser.Current.Type;
-                if (t == TokenType.STRING_LITERAL || t == TokenType.NUMBER || t == TokenType.IDENTIFIER ||
-                    t == TokenType.TRUE || t == TokenType.FALSE)
-                {
-                    val = _parser.Current.Value;
-                    Advance();
-                }
-                else
-                {
-                    val = _parser.Current.Value;
-                    Advance();
-                }
+                val = _parser.Current.Value;
+                Advance();
                 styles[key] = val;
                 Match(TokenType.COMMA);
             }

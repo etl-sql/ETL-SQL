@@ -1142,6 +1142,26 @@ namespace ETL_SQL.Core
         }
     }
 
+    public record ParallelForStatement : Statement
+    {
+        public string VariableName { get; }
+        public Expression StartValue { get; }
+        public Expression EndValue { get; }
+        public Expression? StepValue { get; }
+        public Statement Body { get; }
+        public int ConcurrencyLimit { get; }
+
+        public ParallelForStatement(string variableName, Expression startValue, Expression endValue, Expression? stepValue, Statement body, int concurrencyLimit = 0)
+        {
+            VariableName = variableName;
+            StartValue = startValue;
+            EndValue = endValue;
+            StepValue = stepValue;
+            Body = body;
+            ConcurrencyLimit = concurrencyLimit;
+        }
+    }
+
     public record BulkInsertStatement : Statement
     {
         public TableReference TargetTable { get; }

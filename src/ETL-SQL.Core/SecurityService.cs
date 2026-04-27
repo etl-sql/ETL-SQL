@@ -117,7 +117,7 @@ namespace ETL_SQL.Services
             RegexMatchTimeout = int.TryParse(section["RegexMatchTimeoutMs"], out var rmt) ? TimeSpan.FromMilliseconds(rmt) : DefaultRegexMatchTimeout;
         }
 
-        private static readonly string[] AllowedExtensions = { ".csv", ".json", ".parquet", ".avro", ".db", ".enc", ".gz", ".7z", ".txt", ".sql", ".log", ".xlsx", ".xml", ".yaml", ".yml", ".ini", ".md", ".zip" };
+        private static readonly string[] AllowedExtensions = { ".csv", ".json", ".parquet", ".avro", ".db", ".enc", ".gz", ".7z", ".txt", ".sql", ".log", ".xlsx", ".xml", ".yaml", ".yml", ".ini", ".md", ".zip", ".dat", ".tsv", ".psv", ".fixed" };
         private static readonly string[] BlockedExtensions = { ".dll", ".exe", ".bat", ".cmd", ".sh", ".msi", ".sys", ".com", ".pfx", ".cer" };
         
         // Final guardrail: Scripts cannot edit other scripts (Human-Authoring Only)

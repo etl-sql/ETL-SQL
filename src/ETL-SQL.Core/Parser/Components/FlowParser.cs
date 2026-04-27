@@ -85,14 +85,30 @@ namespace ETL_SQL.Core.Parser.Components
         {
             var startToken = _parser.Previous;
             var varToken = Consume(TokenType.VARIABLE, "Expected variable name starting with '@' for FOR loop");
-            Consume(TokenType.EQUALS, "Expected '=' in FOR loop assignment");
+
+            // FOR @row IN (query) — result-set iteration, same semantics as FOREACH @row IN (subquery)
+            if (Match(TokenType.IN))
+            {
+                var listExpr = ParseExpression();
+                var body = _parser.ParseStatement();
+                return new ForeachStatement(varToken.Value, listExpr, body)
+                {
+                    Line = startToken.Line,
+                    Column = startToken.Column,
+                    EndLine = _parser.LastTokenEndLine,
+                    EndColumn = _parser.LastTokenEndColumn
+                };
+            }
+
+            // FOR @i = start TO end [STEP n] — numeric range iteration
+            Consume(TokenType.EQUALS, "Expected '=' or 'IN' in FOR loop");
             var startExpr = ParseExpression();
             Consume(TokenType.TO, "Expected TO in FOR loop limits");
             var endExpr = ParseExpression();
             Expression? stepExpr = null;
             if (Match(TokenType.STEP)) stepExpr = ParseExpression();
-            var body = _parser.ParseStatement();
-            return new ForStatement(varToken.Value, startExpr, endExpr, stepExpr, body)
+            var rangeBody = _parser.ParseStatement();
+            return new ForStatement(varToken.Value, startExpr, endExpr, stepExpr, rangeBody)
             {
                 Line = startToken.Line,
                 Column = startToken.Column,
@@ -125,6 +141,25 @@ namespace ETL_SQL.Core.Parser.Components
                 concurrencyLimit = int.Parse(Consume(TokenType.NUMBER, "Expected concurrency limit number after '('").Value);
                 Consume(TokenType.RPAREN, "Expected ')' after concurrency limit");
             }
+
+            // PARALLEL [n] FOR @i = start TO end [STEP n] BEGIN...END
+            if (Match(TokenType.FOR))
+            {
+                var varToken = Consume(TokenType.VARIABLE, "Expected loop variable after PARALLEL FOR");
+                Consume(TokenType.EQUALS, "Expected '=' in PARALLEL FOR range");
+                var startExpr = ParseExpression();
+                Consume(TokenType.TO, "Expected TO in PARALLEL FOR range");
+                var endExpr = ParseExpression();
+                Expression? stepExpr = null;
+                if (Match(TokenType.STEP)) stepExpr = ParseExpression();
+                Consume(TokenType.BEGIN, "Expected BEGIN after PARALLEL FOR range");
+                var forBody = ParseBlock();
+                return new ParallelForStatement(varToken.Value, startExpr, endExpr, stepExpr, forBody, concurrencyLimit)
+                {
+                    Line = startToken.Line, Column = startToken.Column
+                };
+            }
+
             Consume(TokenType.BEGIN, "Expected BEGIN after PARALLEL");
             var body = ParseBlock();
             return new ParallelStatement(body, concurrencyLimit) { Line = startToken.Line, Column = startToken.Column };

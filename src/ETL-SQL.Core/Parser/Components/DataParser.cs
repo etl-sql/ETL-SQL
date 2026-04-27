@@ -119,6 +119,7 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.STYLE))      return _parent.ReportParser.ParseCreateStyle(startToken, mode);
             if (Match(TokenType.BUTTON))     return _parent.ReportParser.ParseCreateButton(startToken, mode);
             if (Match(TokenType.TEMPLATE))   return _parent.ReportParser.ParseCreateTemplate(startToken, mode);
+            if (Match(TokenType.THEME))      return _parent.ReportParser.ParseCreateTheme(startToken, mode);
 
             // Portal admin
             if (Match(TokenType.USER))       return _parent.PortalParser.ParseCreateUser(startToken);
@@ -127,7 +128,7 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.REFRESH))    return _parent.PortalParser.ParseCreateRefreshJob(startToken);
             if (Match(TokenType.SUBSCRIPTION)) return _parent.PortalParser.ParseCreateSubscription(startToken);
 
-            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, or TEMPLATE after CREATE", _parser.Current.Line, _parser.Current.Column);
+            throw new SyntaxException("Expected CONNECTION, TABLE, PROCEDURE, FUNCTION, INDEX, SETS, SSH_KEY_PAIR, VISUAL, PAGE, DATASET, CONTAINER, NAVIGATION, STYLE, BUTTON, TEMPLATE, or THEME after CREATE", _parser.Current.Line, _parser.Current.Column);
         }
 
         public Statement ParseAlter(Token startToken)
@@ -168,6 +169,7 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
                 var name = ConsumeIdentifier("Expected connection name").Value;
+                if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new DropConnectionStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
             }
@@ -175,6 +177,7 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
                 var name = ConsumeIdentifier("Expected procedure name").Value;
+                if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new DropProcedureStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
             }
@@ -182,17 +185,26 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
                 var name = ConsumeIdentifier("Expected function name").Value;
+                if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new DropFunctionStatement(name, ifExists) { Line = startToken.Line, Column = startToken.Column };
             }
             else if (Match(TokenType.INDEX))
             {
                 if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
-                var name = ConsumeIdentifier("Expected index name").Value;
+                var idxName = ConsumeIdentifier("Expected index name").Value;
                 TableReference? target = null;
-                if (Match(TokenType.ON)) target = ParseTableReference();
+                // Support dotted notation: DROP INDEX TableName.IndexName
+                if (Match(TokenType.DOT))
+                {
+                    var indexPart = ConsumeIdentifier("Expected index name after '.'").Value;
+                    target = new TableReference(idxName);
+                    idxName = indexPart;
+                }
+                else if (Match(TokenType.ON)) target = ParseTableReference();
+                if (!ifExists && Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-                return new DropIndexStatement(name, target, ifExists) { Line = startToken.Line, Column = startToken.Column };
+                return new DropIndexStatement(idxName, target, ifExists) { Line = startToken.Line, Column = startToken.Column };
             }
             else if (Match(TokenType.SETS))
             {
@@ -250,6 +262,13 @@ namespace ETL_SQL.Core.Parser.Components
                 var name = ConsumeIdentifier("Expected template name").Value;
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new DropReportObjectStatement { ObjectType = ReportObjectType.Template, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
+            }
+            else if (Match(TokenType.THEME))
+            {
+                if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
+                var name = ConsumeIdentifier("Expected theme name").Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+                return new DropReportObjectStatement { ObjectType = ReportObjectType.Theme, Name = name, IfExists = ifExists, Line = startToken.Line, Column = startToken.Column };
             }
             else if (Match(TokenType.JOB))
             {
@@ -708,6 +727,17 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 Consume(TokenType.RPAREN, "Expected ')' after parameter list");
             }
+            else
+            {
+                // Support SQL Server bare-style: CREATE PROCEDURE Name @param1 INT, @param2 INT AS ...
+                while (_parser.Current.Type == TokenType.VARIABLE)
+                {
+                    var pName = Consume(TokenType.VARIABLE, "Expected parameter name starting with '@'").Value;
+                    var pType = _parser.ParseType();
+                    parameters.Add(new ParameterDefinition(pName, pType));
+                    if (!Match(TokenType.COMMA)) break;
+                }
+            }
             return parameters;
         }
 
@@ -925,8 +955,12 @@ namespace ETL_SQL.Core.Parser.Components
             var targetTable = ParseTableReference(false);
             Consume(TokenType.LPAREN, "Expected '(' before index columns");
             var columns = new List<string> { ConsumeIdentifier("Expected column name").Value };
+            Match(TokenType.ASC); Match(TokenType.DESC); // optional sort direction per column
             while (Match(TokenType.COMMA))
+            {
                 columns.Add(ConsumeIdentifier("Expected column name").Value);
+                Match(TokenType.ASC); Match(TokenType.DESC);
+            }
             Consume(TokenType.RPAREN, "Expected ')' after column list");
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new CreateIndexStatement(indexName, targetTable, columns, isUnique) { Line = startToken.Line, Column = startToken.Column };

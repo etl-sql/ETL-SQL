@@ -45,7 +45,7 @@ namespace ETL_SQL.Core.Parser
             TokenType.UNIQUEIDENTIFIER, TokenType.UUID, TokenType.GUID, TokenType.GEOMETRY, 
             TokenType.GEOGRAPHY, TokenType.HIERARCHYID, TokenType.VARIANT, TokenType.SQL_VARIANT, 
             TokenType.ANY, TokenType.TABLE, TokenType.STRING, TokenType.SENSITIVE, TokenType.SECRET,
-            TokenType.VARCHAR2, TokenType.MINMAX, TokenType.MARKDOWN
+            TokenType.VARCHAR2, TokenType.MINMAX, TokenType.MARKDOWN, TokenType.PATH
         };
 
         /// <summary>
@@ -988,13 +988,18 @@ namespace ETL_SQL.Core.Parser
                     else if (Match(TokenType.MERGE)) hint = JoinHint.Merge;
                     Consume(TokenType.JOIN, "Expected 'JOIN' after INNER [hint]"); 
                 }
-                else if (Match(TokenType.LEFT)) 
-                { 
-                    joinType = "LEFT"; Match(TokenType.OUTER); 
-                    if (Match(TokenType.HASH)) hint = JoinHint.Hash;
-                    else if (Match(TokenType.LOOP)) hint = JoinHint.Loop;
-                    else if (Match(TokenType.MERGE)) hint = JoinHint.Merge;
-                    Consume(TokenType.JOIN, "Expected 'JOIN'"); 
+                else if (Match(TokenType.LEFT))
+                {
+                    joinType = "LEFT"; Match(TokenType.OUTER);
+                    if (Match(TokenType.SEMI)) { joinType = "LEFT SEMI"; Consume(TokenType.JOIN, "Expected 'JOIN' after LEFT SEMI"); }
+                    else if (Match(TokenType.ANTI)) { joinType = "LEFT ANTI"; Consume(TokenType.JOIN, "Expected 'JOIN' after LEFT ANTI"); }
+                    else
+                    {
+                        if (Match(TokenType.HASH)) hint = JoinHint.Hash;
+                        else if (Match(TokenType.LOOP)) hint = JoinHint.Loop;
+                        else if (Match(TokenType.MERGE)) hint = JoinHint.Merge;
+                        Consume(TokenType.JOIN, "Expected 'JOIN'");
+                    }
                 }
                 else if (Match(TokenType.RIGHT)) 
                 { 

@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Handlers;
 using ETL_SQL.ReportBuilder.Builders;
 
 namespace ETL_SQL.ReportBuilder
@@ -100,13 +102,19 @@ namespace ETL_SQL.ReportBuilder
                 manifest.Navigations = new();
                 foreach (var (name, nStmt) in _ctx.NavigationDefinitions)
                 {
+                    // Hidden pages are not shown in the nav bar (they are still rendered
+                    // as sections so DRILL_DOWN can navigate to them programmatically).
+                    var visiblePages = nStmt.Pages
+                        .Where(p => !(_ctx.PageDefinitions.TryGetValue(p, out var pd) && pd.IsHidden))
+                        .ToList();
+
                     manifest.Navigations.Add(new NavigationManifest
                     {
                         Name        = name,
                         NavType     = nStmt.NavType.ToString().ToUpperInvariant(),
                         Orientation = nStmt.Orientation.ToString().ToUpperInvariant(),
                         DefaultPage = nStmt.DefaultPage,
-                        Pages       = new List<string>(nStmt.Pages)
+                        Pages       = visiblePages
                     });
                 }
             }
@@ -164,6 +172,22 @@ namespace ETL_SQL.ReportBuilder
                 {
                     if (varMeta.IsInput)
                         manifest.Parameters[name] = vctx.Variables.TryGetValue(name, out var val) ? val?.ToString() ?? "" : "";
+                }
+            }
+
+            // ── Custom Themes ────────────────────────────────────────────────
+            if (_ctx.ThemeDefinitions.Count > 0)
+            {
+                manifest.CustomThemes = new();
+                foreach (var (themeName, themeStmt) in _ctx.ThemeDefinitions)
+                {
+                    var themeJson = CreateThemeStatementHandler.BuildEChartsTheme(themeStmt.Properties);
+                    using var doc = JsonDocument.Parse(themeJson.ToJsonString());
+                    manifest.CustomThemes.Add(new ThemeManifest
+                    {
+                        Name   = themeName,
+                        Config = doc.RootElement.Clone()
+                    });
                 }
             }
 

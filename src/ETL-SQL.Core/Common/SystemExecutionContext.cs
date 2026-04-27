@@ -71,6 +71,7 @@ namespace ETL_SQL.Core.Common
         public DataTable? LastResult { get; set; }
         public List<DataTable> LastResultSets { get; } = new();
         public long RowsProcessed { get; set; }
+        public long LastStatementRowsProcessed { get; set; }
         public long TotalSpilledBytes { get; set; }
         public bool TelemetryEnabled { get; set; } = true;
         public int PartitionsCount { get; set; }
@@ -151,6 +152,7 @@ namespace ETL_SQL.Core.Common
         public IDictionary<string, CreateStyleStatement> StyleDefinitions { get; } = new Dictionary<string, CreateStyleStatement>(StringComparer.OrdinalIgnoreCase);
         public IDictionary<string, CreateButtonStatement> ButtonDefinitions { get; } = new Dictionary<string, CreateButtonStatement>(StringComparer.OrdinalIgnoreCase);
         public IDictionary<string, CreateTemplateStatement> TemplateDefinitions { get; } = new Dictionary<string, CreateTemplateStatement>(StringComparer.OrdinalIgnoreCase);
+        public IDictionary<string, CreateThemeStatement> ThemeDefinitions { get; } = new Dictionary<string, CreateThemeStatement>(StringComparer.OrdinalIgnoreCase);
         public string TemplatePath { get; set; } = "./Templates";
         public string? ReportTitle { get; set; }
         public bool ReportTitleIsMarkdown { get; set; }

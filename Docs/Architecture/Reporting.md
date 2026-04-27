@@ -374,6 +374,22 @@ For multi-series charts, rows with a `series` column are pivoted: each distinct 
 
 The `LEGEND_POSITION` flat option in `vm.Options` controls ECharts legend placement (`TOP`, `BOTTOM`, `LEFT`, `RIGHT`).
 
+#### Option Key Naming Convention
+
+`VisualManifest.Options` is a `Dictionary<string, string>` shared between `VisualBuilder` (writer) and `EChartsRenderer` / the client runtime (readers). Keys follow a strict two-tier convention:
+
+| Tier | Case | Written by | Examples |
+|---|---|---|---|
+| **Parser-supplied** | **UPPERCASE** | `VisualBuilder` — copied verbatim from the parsed option name | `STACKED`, `SMOOTH`, `CROSS_FILTER`, `FORMAT`, `LEGEND_POSITION`, `TITLE`, `SUBTITLE` |
+| **Internally-computed** | **lowercase with colons** | `VisualBuilder` — synthesized during manifest build | `title`, `subtitle`, `mapping:x`, `mapping:value`, `axis:x:label`, `axis:y:min`, `color:Revenue` |
+
+**Why two tiers?** Parser-supplied keys come directly from the source script (`OPTIONS(STACKED = ON)`), so they are stored as-is in uppercase to match the grammar. Internally-computed keys are synthesized by `VisualBuilder` from structured AST nodes (`AxisOptions`, `MappingHints`, `TypedSeries`) — they use lowercase-with-colon namespace notation to avoid clashing with any future parser keyword.
+
+**Reading rules:**
+- `EChartsRenderer` must read parser-supplied keys in **UPPERCASE** (e.g., `vm.Options.TryGetValue("TITLE", ...)`).
+- `EChartsRenderer` must read internally-computed keys in **lowercase** (e.g., `vm.Options.TryGetValue("axis:x:label", ...)`).
+- Mixing the cases is a silent bug — the dictionary lookup returns `null` and the option is silently dropped. Three rendering bugs in the project history were caused by this mismatch.
+
 ### 6.2 `SvgChartRenderer`
 
 Server-side SVG generation used by `PdfExporter`. Produces static SVG markup for chart types without requiring a browser.

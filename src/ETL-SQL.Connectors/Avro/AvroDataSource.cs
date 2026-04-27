@@ -129,6 +129,9 @@ namespace ETL_SQL.Connectors.Avro
                 targetPath = tempFile;
             }
 
+            var dir = System.IO.Path.GetDirectoryName(_filePath);
+            if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
+
             try
             {
                 using (var stream = System.IO.File.Create(targetPath))

@@ -161,6 +161,8 @@ namespace ETL_SQL.Connectors.Json
                 }
                 else
                 {
+                    var dir = System.IO.Path.GetDirectoryName(_filePath);
+                    if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
                     if (System.IO.File.Exists(_filePath)) System.IO.File.Delete(_filePath);
                     System.IO.File.Move(tempFile, _filePath);
                 }
