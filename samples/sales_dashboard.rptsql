@@ -1,0 +1,115 @@
+-- Advanced Sales Dashboard
+SET REPORT TITLE = 'Global Sales Insights';
+SET REPORT DESCRIPTION = 'Strategic overview of regional performance and long-term trends.';
+
+-- Connections
+CREATE CONNECTION sales_data ON FLATFILE('c:\Users\chuck\scratch\ETL-SQL\TestData\test_sales.csv') WITH(HEADER=TRUE);
+
+-- Last Month Calculation (March 2026)
+DECLARE @last_month_start DATE = '2026-03-01';
+DECLARE @last_month_end   DATE = '2026-03-31';
+
+-- Data Preparation: Region KPIs
+SELECT 
+    region,
+    SUM(revenue) as LastMonthRevenue
+INTO #region_kpis
+FROM sales_data.FILE
+WHERE date >= @last_month_start AND date <= @last_month_end
+GROUP BY region;
+
+-- Data Preparation: Trends (Last 2 Years)
+SELECT 
+    month,
+    region,
+    SUM(revenue) as MonthlyRevenue
+INTO #trends
+FROM sales_data.FILE
+WHERE date >= '2024-01-01'
+GROUP BY month, region
+ORDER BY month ASC;
+
+-- Visuals: KPI Cards
+CREATE VISUAL KpiNorth AS CARD (
+    SOURCE = (SELECT LastMonthRevenue FROM #region_kpis WHERE region = 'North'),
+    MAPPINGS (VALUE = LastMonthRevenue),
+    STYLE (TITLE = 'North Revenue', FORMAT = '$#,##0', COLOR = '#3498db', SUBTITLE = 'March 2026')
+);
+CREATE VISUAL KpiSouth AS CARD (
+    SOURCE = (SELECT LastMonthRevenue FROM #region_kpis WHERE region = 'South'),
+    MAPPINGS (VALUE = LastMonthRevenue),
+    STYLE (TITLE = 'South Revenue', FORMAT = '$#,##0', COLOR = '#e67e22', SUBTITLE = 'March 2026')
+);
+CREATE VISUAL KpiEast AS CARD (
+    SOURCE = (SELECT LastMonthRevenue FROM #region_kpis WHERE region = 'East'),
+    MAPPINGS (VALUE = LastMonthRevenue),
+    STYLE (TITLE = 'East Revenue', FORMAT = '$#,##0', COLOR = '#2ecc71', SUBTITLE = 'March 2026')
+);
+CREATE VISUAL KpiWest AS CARD (
+    SOURCE = (SELECT LastMonthRevenue FROM #region_kpis WHERE region = 'West'),
+    MAPPINGS (VALUE = LastMonthRevenue),
+    STYLE (TITLE = 'West Revenue', FORMAT = '$#,##0', COLOR = '#e74c3c', SUBTITLE = 'March 2026')
+);
+CREATE VISUAL KpiCentral AS CARD (
+    SOURCE = (SELECT LastMonthRevenue FROM #region_kpis WHERE region = 'Central'),
+    MAPPINGS (VALUE = LastMonthRevenue),
+    STYLE (TITLE = 'Central Revenue', FORMAT = '$#,##0', COLOR = '#9b59b6', SUBTITLE = 'March 2026')
+);
+
+-- Visuals: Trend Chart
+CREATE VISUAL SalesTrend AS LINE (
+    SOURCE = #trends,
+    MAPPINGS (X = month, Y = MonthlyRevenue, SERIES = region),
+    STYLE (TITLE = 'Regional Sales Trends (2024-2026)', SMOOTH = TRUE, STACKED = FALSE)
+);
+
+-- Buttons
+CREATE BUTTON GoToDetails AS PRIMARY (
+    TITLE = 'View Raw Transaction History',
+    STYLE (ICON = 'list'),
+    ACTIONS (ON_CLICK = DRILL_DOWN(TARGET = DetailsTable, KEY = region))
+);
+
+CREATE VISUAL DetailsTable AS TABLE (
+    SOURCE = (SELECT TOP 1000 * FROM sales_data.FILE ORDER BY date DESC),
+    STYLE (TITLE = 'Recent Transactions', HEIGHT = '600px')
+);
+
+CREATE BUTTON BackButton AS BACK (
+    TITLE = 'Back to Dashboard'
+);
+
+-- Layout
+CREATE PAGE Main AS LAYOUT (
+    STRUCTURE = 'N S E W C / T T T T T / B B . . .',
+    MAP (
+        'N' = KpiNorth,
+        'S' = KpiSouth,
+        'E' = KpiEast,
+        'W' = KpiWest,
+        'C' = KpiCentral,
+        'T' = SalesTrend,
+        'B' = GoToDetails
+    )
+);
+
+CREATE PAGE DeepDive AS LAYOUT (
+    STRUCTURE = 'K K / D D',
+    MAP (
+        'K' = BackButton,
+        'D' = DetailsTable
+    )
+);
+
+CREATE NAVIGATION DashboardNav AS TAB (
+  ORIENTATION = HORIZONTAL,
+  DEFAULT = Main
+)
+WITH PAGES (Main, DeepDive);
+
+STYLE (
+    THEME = dark, 
+    PRIMARY_COLOR = '#1abc9c', 
+    SECONDARY_COLOR = '#34495e',
+    FONT_FAMILY = 'Inter, sans-serif'
+);

@@ -1,0 +1,105 @@
+-- Daily Sales Performance Report
+SET REPORT TITLE = 'Daily Sales Performance';
+SET REPORT DESCRIPTION = 'Monitor regional sales metrics and drill down into transaction details.';
+
+-- Connections
+CREATE CONNECTION sales_data ON FLATFILE('c:\Users\chuck\scratch\ETL-SQL\TestData\test_sales.csv') WITH(HEADER=TRUE);
+
+-- Parameters for interactivity
+DECLARE @date_start DATE = '2026-04-26' INPUT;
+DECLARE @date_end DATE   = '2026-04-26' INPUT;
+DECLARE @selected_region VARCHAR = '%' INPUT;
+
+-- Data Preparation
+SELECT * 
+INTO #daily_sales
+FROM sales_data.FILE
+WHERE date >= @date_start 
+  AND date <= @date_end
+  AND region LIKE @selected_region;
+
+SELECT 
+    region,
+    SUM(units) as TotalUnits,
+    SUM(revenue) as TotalRevenue,
+    COUNT(*) as TransactionCount
+INTO #summary
+FROM #daily_sales
+GROUP BY region;
+
+SELECT 
+    SUM(TotalRevenue) as GrandTotalRevenue,
+    SUM(TotalUnits) as GrandTotalUnits,
+    SUM(TransactionCount) as GrandTotalTransactions
+INTO #kpis
+FROM #summary;
+
+-- Visuals
+CREATE VISUAL DateFilter AS DATEPICKER (
+    TITLE = 'Select Date Reference',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@date_start, value), ON_CHANGE = SET_PARAMETER(@date_end, value))
+);
+
+CREATE VISUAL RegionFilter AS SLICER (
+    SOURCE = (SELECT DISTINCT region FROM sales_data.FILE),
+    MAPPINGS (VALUE = region),
+    TITLE = 'Filter by Region',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@selected_region, region))
+);
+
+CREATE VISUAL KpiRevenue AS CARD (
+    SOURCE = #kpis,
+    MAPPINGS (VALUE = GrandTotalRevenue),
+    STYLE (TITLE = 'Total Revenue', FORMAT = '$#,##0.00', ICON = 'payments', COLOR = '#2ecc71')
+);
+
+CREATE VISUAL KpiUnits AS CARD (
+    SOURCE = #kpis,
+    MAPPINGS (VALUE = GrandTotalUnits),
+    STYLE (TITLE = 'Units Sold', FORMAT = '#,##0', ICON = 'shopping_bag', COLOR = '#3498db')
+);
+
+CREATE VISUAL KpiCount AS CARD (
+    SOURCE = #kpis,
+    MAPPINGS (VALUE = GrandTotalTransactions),
+    STYLE (TITLE = 'Transactions', FORMAT = '#,##0', ICON = 'receipt_long', COLOR = '#9b59b6')
+);
+
+CREATE VISUAL RegionalBar AS BAR (
+    SOURCE = #summary,
+    MAPPINGS (X = region, Y = TotalRevenue),
+    STYLE (TITLE = 'Revenue by Region', COLOR = '#34495e')
+);
+
+CREATE VISUAL SalesDetails AS TABLE (
+    SOURCE = #daily_sales,
+    STYLE (TITLE = 'Transaction Line Items', HEIGHT = '400px')
+);
+
+-- Layout
+CREATE PAGE Overview AS LAYOUT (
+    STRUCTURE = 'A B / C C / D E / F F',
+    MAP (
+        'A' = DateFilter,
+        'B' = RegionFilter,
+        'C' = KpiRevenue,
+        'D' = KpiUnits,
+        'E' = KpiCount,
+        'F' = RegionalBar
+    )
+);
+
+CREATE PAGE Details AS LAYOUT (
+    STRUCTURE = 'A A',
+    MAP (
+        'A' = SalesDetails
+    )
+);
+
+CREATE NAVIGATION AppNav AS TAB (
+  ORIENTATION = HORIZONTAL,
+  DEFAULT = Overview
+)
+WITH PAGES (Overview, Details);
+
+STYLE (THEME = modern, PRIMARY_COLOR = '#2c3e50', BACKGROUND_COLOR = '#f8f9fa');

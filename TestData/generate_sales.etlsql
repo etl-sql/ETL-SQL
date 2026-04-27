@@ -1,0 +1,48 @@
+-- Generate test sales data using CROSS JOINs
+CREATE CONNECTION csv ON FLATFILE('c:\Users\chuck\scratch\ETL-SQL\TestData\test_sales.csv') WITH(HEADER=TRUE);
+
+CREATE TABLE #seeds (i INT);
+INSERT INTO #seeds (i) VALUES (0);
+INSERT INTO #seeds (i) VALUES (1);
+INSERT INTO #seeds (i) VALUES (2);
+INSERT INTO #seeds (i) VALUES (3);
+INSERT INTO #seeds (i) VALUES (4);
+INSERT INTO #seeds (i) VALUES (5);
+INSERT INTO #seeds (i) VALUES (6);
+INSERT INTO #seeds (i) VALUES (7);
+INSERT INTO #seeds (i) VALUES (8);
+INSERT INTO #seeds (i) VALUES (9);
+
+-- 10,000 rows
+SELECT (a.i * 1000 + b.i * 100 + c.i * 10 + d.i) as id
+INTO #ids
+FROM #seeds AS a
+CROSS JOIN #seeds AS b
+CROSS JOIN #seeds AS c
+CROSS JOIN #seeds AS d;
+
+SELECT 
+    CASE (id % 5)
+        WHEN 0 THEN 'North'
+        WHEN 1 THEN 'South'
+        WHEN 2 THEN 'East'
+        WHEN 3 THEN 'West'
+        ELSE 'Central'
+    END as region,
+    CASE (id % 4)
+        WHEN 0 THEN 'Widget A'
+        WHEN 1 THEN 'Widget B'
+        WHEN 2 THEN 'Widget C'
+        ELSE 'Widget D'
+    END as product,
+    1 + (id % 100) as units,
+    CAST((1 + (id % 100)) * (CASE (id % 4) WHEN 0 THEN 50 WHEN 1 THEN 120 WHEN 2 THEN 80 ELSE 200 END) as DECIMAL(18,2)) as revenue,
+    FORMAT(DATEADD(DAY, -(id % 1200), '2026-04-27'), 'yyyy-MM') as month,
+    FORMAT(DATEADD(DAY, -(id % 1200), '2026-04-27'), 'yyyy-MM-dd') as date
+INTO #final
+FROM #ids;
+
+-- Write to CSV
+INSERT INTO csv.FILE SELECT * FROM #final;
+
+PRINT 'Generated 10,000 rows of test sales data.';
