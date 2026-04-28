@@ -38,9 +38,19 @@ namespace ETL_SQL.Core.Data
             ["NTEXT"] = v => v.ToString(),
             ["CHAR"] = v => v.ToString(),
             ["NCHAR"] = v => v.ToString(),
-            ["JSON"] = v => v.ToString(),
+            ["JSON"] = v => {
+                var s = v.ToString() ?? "";
+                if (string.IsNullOrWhiteSpace(s)) return s;
+                System.Text.Json.JsonDocument.Parse(s); // Validates JSON structure
+                return s;
+            },
             ["VARCHAR2"] = v => v.ToString(),
-            ["XML"] = v => v.ToString(),
+            ["XML"] = v => {
+                var s = v.ToString() ?? "";
+                if (string.IsNullOrWhiteSpace(s)) return s;
+                System.Xml.Linq.XDocument.Parse(s); // Validates XML structure
+                return s;
+            },
             ["PATH"] = v => v.ToString(),
             ["ENCRYPTED"] = v => v.ToString(),
             ["GEOMETRY"] = v => v.ToString(),

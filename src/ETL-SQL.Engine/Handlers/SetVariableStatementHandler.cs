@@ -32,7 +32,9 @@ namespace ETL_SQL.Engine.Handlers
                 if (!context.VarContext.ContainsVariable(varName))
                     throw new ExecutionException($"Variable {varName} must be declared before it can be assigned.");
 
-                var val = await context.EvaluationContext.EvaluateValue(stmt.Value, new Row());
+                context.VarContext.VariableMetadata.TryGetValue(varName, out var targetMeta);
+                bool decrypt = !(targetMeta?.IsSensitive ?? false);
+                var val = await context.EvaluationContext.EvaluateValue(stmt.Value, new Row(), decrypt);
                 context.VarContext.SetVariable(varName, val);
             }
             else if (stmt.Target is MemberAccessExpression ma)

@@ -35,7 +35,7 @@ namespace ETL_SQL.Tests.Security
         }
 
         [Fact]
-        public async Task NormalVariable_WithEncString_ShouldNOTAutoDecrypt()
+        public async Task NormalVariable_WithEncString_ShouldAutoDecrypt()
         {
             var evaluator = CreateEvaluator();
             evaluator.ScriptPassword = "test-password";
@@ -49,8 +49,8 @@ namespace ETL_SQL.Tests.Security
             var expr = new VariableExpression("@pwd");
             var result = await evaluator.EvaluateValue(expr, new Row(), decryptSensitive: true);
             
-            // Should still be encrypted because it's not marked SENSITIVE
-            Assert.Equal(encValue, result?.ToString());
+            // Should be decrypted because it was assigned to a non-SENSITIVE target
+            Assert.Equal(rawValue, result?.ToString());
         }
 
         [Fact]

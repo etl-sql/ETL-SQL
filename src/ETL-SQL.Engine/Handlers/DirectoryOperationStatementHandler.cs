@@ -5,6 +5,7 @@ using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -70,6 +71,8 @@ namespace ETL_SQL.Engine.Handlers
             // Security Hardening: Count this as a directory operation
             context.IncrementOperationCount(OperationType.FileSystem, path);
 
+            var fsService = new FileSystemService(_logger);
+
             try
             {
                 switch (stmt.Type)
@@ -115,12 +118,12 @@ namespace ETL_SQL.Engine.Handlers
                 case DirectoryOpType.Copy:
                     if (dest != null)
                     {
-                        CopyDirectory(path, dest, overwrite, context);
+                        await fsService.CopyDirectory(path, dest, overwrite, context);
                         _logger.WriteLine($"Directory copied: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
                 case DirectoryOpType.DeleteContents:
-                    DeleteDirectoryContents(path, recursive, context);
+                    fsService.DeleteDirectoryContents(path, recursive, context);
                     _logger.WriteLine($"Directory contents deleted: {path}", ConsoleColor.Green);
                     break;
                 case DirectoryOpType.Compress:
@@ -142,7 +145,7 @@ namespace ETL_SQL.Engine.Handlers
                         pwd ??= context.SecurityService.MasterPassword;
                         if (pwd == null)
                             throw new ExecutionException("ENCRYPT_DIRECTORY requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
-                        EncryptDirectory(path, dest, pwd, overwrite, context);
+                        await fsService.EncryptDirectory(path, dest, pwd, overwrite, context);
                         _logger.WriteLine($"Directory encrypted: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
@@ -153,109 +156,18 @@ namespace ETL_SQL.Engine.Handlers
                         pwd ??= context.SecurityService.MasterPassword;
                         if (pwd == null)
                             throw new ExecutionException("DECRYPT_DIRECTORY requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
-                        DecryptDirectory(path, dest, pwd, overwrite, context);
+                        await fsService.DecryptDirectory(path, dest, pwd, overwrite, context);
                         _logger.WriteLine($"Directory decrypted: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
+                }
             }
-        }
-        catch (ExecutionException) { throw; }
-        catch (Exception ex)
-        {
-            throw new ExecutionException($"Directory operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
-        }
+            catch (ExecutionException) { throw; }
+            catch (Exception ex)
+            {
+                throw new ExecutionException($"Directory operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);
+            }
             await Task.CompletedTask;
-        }
-
-        private void EncryptDirectory(string sourceDir, string destDir, string password, bool overwrite, IExecutionContext context)
-        {
-            context.IncrementOperationCount(OperationType.FileSystem, sourceDir);
-            if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
-            foreach (string file in Directory.GetFiles(sourceDir))
-            {
-                context.IncrementOperationCount(OperationType.FileSystem, file);
-                string destFile = Path.Combine(destDir, Path.GetFileName(file) + ".enc");
-                CryptoUtils.EncryptFile(file, destFile, password, overwrite);
-            }
-            foreach (string subDir in Directory.GetDirectories(sourceDir))
-            {
-                using (context.EnterRecursiveScope())
-                {
-                    EncryptDirectory(subDir, Path.Combine(destDir, Path.GetFileName(subDir)), password, overwrite, context);
-                }
-            }
-        }
-
-        private void DecryptDirectory(string sourceDir, string destDir, string password, bool overwrite, IExecutionContext context)
-        {
-            context.IncrementOperationCount(OperationType.FileSystem, sourceDir);
-            if (!Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
-            foreach (string file in Directory.GetFiles(sourceDir))
-            {
-                if (!file.EndsWith(".enc")) continue;
-                context.IncrementOperationCount(OperationType.FileSystem, file);
-                string destFile = Path.Combine(destDir, Path.GetFileNameWithoutExtension(file));
-                CryptoUtils.DecryptFile(file, destFile, password, overwrite);
-            }
-            foreach (string subDir in Directory.GetDirectories(sourceDir))
-            {
-                using (context.EnterRecursiveScope())
-                {
-                    DecryptDirectory(subDir, Path.Combine(destDir, Path.GetFileName(subDir)), password, overwrite, context);
-                }
-            }
-        }
-
-        private void CopyDirectory(string sourceDir, string destinationDir, bool overwrite, IExecutionContext context)
-        {
-            context.IncrementOperationCount(OperationType.FileSystem, sourceDir);
-            var dir = new DirectoryInfo(sourceDir);
-            if (!dir.Exists) throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
-
-            DirectoryInfo[] dirs = dir.GetDirectories();
-            Directory.CreateDirectory(destinationDir);
-
-            foreach (FileInfo file in dir.GetFiles())
-            {
-                context.IncrementOperationCount(OperationType.FileSystem, file.FullName);
-                string targetFilePath = Path.Combine(destinationDir, file.Name);
-                file.CopyTo(targetFilePath, overwrite);
-            }
-
-            foreach (DirectoryInfo subDir in dirs)
-            {
-                using (context.EnterRecursiveScope())
-                {
-                    string newDestinationDir = Path.Combine(destinationDir, subDir.Name);
-                    CopyDirectory(subDir.FullName, newDestinationDir, overwrite, context);
-                }
-            }
-        }
-
-        private void DeleteDirectoryContents(string path, bool recursive, IExecutionContext context)
-        {
-            context.IncrementOperationCount(OperationType.FileSystem, path);
-            var dir = new DirectoryInfo(path);
-            if (!dir.Exists) return;
-
-            foreach (FileInfo file in dir.GetFiles()) 
-            {
-                context.IncrementOperationCount(OperationType.FileSystem, file.FullName);
-                file.Delete();
-            }
-            
-            foreach (DirectoryInfo subDir in dir.GetDirectories()) 
-            {
-                if (recursive)
-                {
-                    using (context.EnterRecursiveScope())
-                    {
-                        DeleteDirectoryContents(subDir.FullName, true, context);
-                    }
-                }
-                context.IncrementOperationCount(OperationType.FileSystem, subDir.FullName);
-                subDir.Delete(recursive);
-            }
         }
     }
 }

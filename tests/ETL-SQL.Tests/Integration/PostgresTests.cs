@@ -40,7 +40,7 @@ namespace ETL_SQL.Tests.Integration
             await eval.Evaluate(new Parser(new Lexer($"CREATE CONNECTION db ON POSTGRES('{connStr}');").Tokenize()).Parse());
             
             string sql = @"
-                CREATE TABLE db.TypeTest (
+                CREATE TABLE db.typetest (
                     ID INT,
                     BigIntCol BIGINT,
                     BooleanCol BOOLEAN,
@@ -53,11 +53,11 @@ namespace ETL_SQL.Tests.Integration
             await eval.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
             
             string insert = @"
-                INSERT INTO db.TypeTest (ID, BigIntCol, BooleanCol, NumericCol, TextCol, VarcharCol, DateCol, TimestampCol) 
+                INSERT INTO db.typetest (ID, BigIntCol, BooleanCol, NumericCol, TextCol, VarcharCol, DateCol, TimestampCol) 
                 VALUES (1, 9223372036854775807, true, 123.45, 'Large text block...', 'Hello', '2023-01-01', '2023-01-01 12:00:00');";
             await eval.Evaluate(new Parser(new Lexer(insert).Tokenize()).Parse());
             
-            await eval.Evaluate(new Parser(new Lexer("SELECT * FROM db.TypeTest;").Tokenize()).Parse());
+            await eval.Evaluate(new Parser(new Lexer("SELECT * FROM db.typetest;").Tokenize()).Parse());
             var res = eval.LastResult;
             
             Assert.NotNull(res);
@@ -72,13 +72,13 @@ namespace ETL_SQL.Tests.Integration
         {
             AnsiConsole.MarkupLine("  - Testing Postgres Specific Functions...");
             
-            await eval.Evaluate(new Parser(new Lexer("SELECT STRPOS('Hello World', 'World') AS Pos FROM db.TypeTest LIMIT 1;").Tokenize()).Parse());
+            await eval.Evaluate(new Parser(new Lexer("SELECT STRPOS('Hello World', 'World') AS Pos FROM db.typetest LIMIT 1;").Tokenize()).Parse());
             Assert.Equal(7, Convert.ToInt32(eval.LastResult?.Rows[0]["POS"]));
 
             await eval.Evaluate(new Parser(new Lexer("SELECT NOW() AS Now;").Tokenize()).Parse());
             Assert.NotNull(eval.LastResult?.Rows[0]["NOW"]);
             
-            string sql = "SELECT * FROM db.TypeTest WHERE LENGTH(VarcharCol) = 5;";
+            string sql = "SELECT * FROM db.typetest WHERE LENGTH(VarcharCol) = 5;";
             await eval.Evaluate(new Parser(new Lexer(sql).Tokenize()).Parse());
             Assert.Single(eval.LastResult?.Rows);
         }

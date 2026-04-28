@@ -901,6 +901,7 @@ namespace ETL_SQL.Core
         public string DataType { get; }
         public Expression? InitialValue { get; }
         public bool IsSensitive { get; set; }
+        public bool IsSecret { get; set; }
         public bool IsInput { get; set; }
         public bool IsOutput { get; set; }
         public Dictionary<string, string> Metadata { get; }

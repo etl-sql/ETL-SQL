@@ -104,38 +104,17 @@ namespace ETL_SQL.Engine.Handlers
         {
             var aggregateEngine = new AggregateEngine(context, _logger);
             var windowEngine = new WindowEngine(context, aggregateEngine, _logger);
+            var metadataHelper = new QueryMetadataHelper(_logger);
+            var streamingEngine = new StreamingQueryEngine(context, _logger);
 
-            // 1. Handle Remote Pushdown (No aggregation/sorting allowed in streaming pushdown here)
-            if (stmt.IntoTable == null)
+            // 1. Handle Remote Pushdown (delegate to PushdownEngine)
+            if (stmt.IntoTable == null && _pushdownEngine.IsPushdownPossible(stmt, context, out var connName))
             {
-                var fromConn = stmt.FromTable.ConnectionName ?? stmt.FromTable.TableName;
-                bool allSameConn = (stmt.Joins == null || stmt.Joins.Count == 0) || 
-                                   stmt.Joins.All(j => (j.Table.ConnectionName ?? j.Table.TableName).Equals(fromConn, StringComparison.OrdinalIgnoreCase));
-
-                if (allSameConn && context.IsSqlPushdown(fromConn))
-                {
-                    // Check for local engines (aggregation, window functions, distinct, join)
-                    // If none of those are present, we can push down the entire query including OFFSET/LIMIT.
-                    // If those are present, we must fall through to the Heavy Pipeline.
-                    bool localEngineRequired = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || 
-                                               stmt.GroupBy != null || 
-                                               stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression)) ||
-                                               stmt.IsDistinct ||
-                                               (stmt.Joins != null && stmt.Joins.Count > 0);
-
-                    if (!localEngineRequired)
-                    {
-                        _logger.Debug("[SELECT] Pushing down query (possibly paged) to remote: {ConnName}", fromConn);
-                        var conn = (IDatabaseSource)context.Connections[fromConn];
-                        var compiled = context.CompileQuery(stmt, conn.Dialect);
-                        await foreach (var batch in conn.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values)) yield return batch;
-                        yield break;
-                    }
-                }
+                await foreach (var batch in _pushdownEngine.ExecuteStreamingPushdown(stmt, connName!, context)) yield return batch;
+                yield break;
             }
 
-            // 2. Prepare Engines (Engines already prepared above)
-            
+            // 2. Resolve Source
             _logger.Debug("[SELECT] Evaluating local engine for {TableName}", stmt.FromTable.TableName);
             var batches = context.ResolveAndApplyOperators(stmt.FromTable);
 
@@ -145,8 +124,8 @@ namespace ETL_SQL.Engine.Handlers
             try { if (await enumerator.MoveNextAsync()) firstBatch = enumerator.Current; }
             catch { await enumerator.DisposeAsync(); throw; }
 
-            var effectiveBatches = ReplayBatches(firstBatch, enumerator);
-            var (finalColumns, colNames) = await ExpandColumns(stmt, firstBatch?.ColumnNames ?? new List<string>());
+            var effectiveBatches = streamingEngine.ReplayBatches(firstBatch, enumerator);
+            var (finalColumns, colNames) = await metadataHelper.ExpandColumns(stmt, firstBatch?.ColumnNames ?? new List<string>());
 
             // 4. Strategy Selection
             bool hasAgg = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || stmt.GroupBy != null;
@@ -156,7 +135,7 @@ namespace ETL_SQL.Engine.Handlers
             if (!isComplex)
             {
                 _logger.Debug("[SELECT] Execution Strategy: Fast Streaming");
-                await foreach (var batch in ExecuteStreamingSelect(stmt, effectiveBatches, finalColumns, colNames, context)) yield return batch;
+                await foreach (var batch in streamingEngine.ExecuteStreamingSelect(stmt, effectiveBatches, finalColumns, colNames)) yield return batch;
             }
             else
             {
@@ -164,104 +143,6 @@ namespace ETL_SQL.Engine.Handlers
                 var executionEngine = new SelectExecutionEngine(context, _logger);
                 await foreach (var batch in executionEngine.ExecuteHeavyPipeline(stmt, effectiveBatches, finalColumns, colNames)) yield return batch;
             }
-        }
-
-        private async Task<(List<SelectColumn> Columns, List<string> Names)> ExpandColumns(SelectStatement stmt, List<string> sourceColumns)
-        {
-            var final = new List<SelectColumn>();
-            foreach (var col in stmt.Columns)
-            {
-                if (col.Expression is IdentifierExpression id && (id.Name == "*" || id.Name.EndsWith(".*")))
-                {
-                    foreach (var sc in sourceColumns) final.Add(new SelectColumn(new IdentifierExpression(sc), sc));
-                }
-                else final.Add(col);
-            }
-            var names = final.Select(c => c.Alias ?? (c.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"Expr{final.IndexOf(c)}")).ToList();
-            return (final, names);
-        }
-
-        private async IAsyncEnumerable<DataTable> ExecuteStreamingSelect(
-            SelectStatement stmt, 
-            IAsyncEnumerable<DataTable> batches, 
-            List<SelectColumn> finalColumns, 
-            List<string> colNames, 
-            IExecutionContext context)
-        {
-            var resultBatch = new DataTable();
-            resultBatch.SetColumns(colNames);
-
-            bool yielded = false;
-            int rowsYielded = 0;
-            int rowsSkipped = 0;
-            int offset = 0;
-            if (stmt.Offset != null)
-            {
-                var offVal = await context.EvaluateValue(stmt.Offset, new Row());
-                offset = Convert.ToInt32(offVal);
-            }
-            int? limit = null;
-            if (stmt.LimitCount != null)
-            {
-                var limVal = await context.EvaluateValue(stmt.LimitCount, new Row());
-                limit = Convert.ToInt32(limVal);
-            }
-
-            string fromName = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
-            await foreach (var batch in batches)
-            {
-                foreach (var row in batch.Rows)
-                {
-                    // Qualify row for evaluation context (especially for correlated subqueries)
-                    var evalRow = row;
-                    if (!string.IsNullOrEmpty(fromName))
-                    {
-                        evalRow = row.Clone();
-                        foreach (var kv in row.Columns)
-                        {
-                            if (!kv.Key.Contains(".")) evalRow[$"{fromName}.{kv.Key}"] = kv.Value;
-                        }
-                    }
-
-                    if (stmt.WhereClause != null && !await context.EvaluateCondition(stmt.WhereClause, evalRow)) continue;
-                    
-                    if (rowsSkipped < offset)
-                    {
-                        rowsSkipped++;
-                        continue;
-                    }
-
-                    if (limit.HasValue && rowsYielded >= limit.Value) goto done;
-
-                    var resRow = resultBatch.NewRow();
-                    for (int i = 0; i < finalColumns.Count; i++)
-                        resRow[i] = await context.EvaluateValue(finalColumns[i].Expression, evalRow);
-                    
-                    await resultBatch.AddRowAsync(resRow);
-                    rowsYielded++;
-
-                    if (resultBatch.Rows.Count >= context.BatchSize)
-                    {
-                        yield return resultBatch;
-                        yielded = true;
-                        resultBatch = new DataTable();
-                        resultBatch.SetColumns(colNames);
-                    }
-                }
-                if (limit.HasValue && rowsYielded >= limit.Value) break;
-            }
-            done:
-            if (resultBatch.Rows.Count > 0 || !yielded) yield return resultBatch;
-        }
-
-        private async IAsyncEnumerable<DataTable> ReplayBatches(DataTable? first, IAsyncEnumerator<DataTable> e)
-        {
-            try
-            {
-                if (first != null) yield return first;
-                while (await e.MoveNextAsync()) yield return e.Current;
-            }
-            finally { await e.DisposeAsync(); }
         }
     }
 }

@@ -44,7 +44,11 @@ namespace ETL_SQL.Engine
 
             foreach (var row in batch.Rows)
             {
-                var values = batch.ColumnNames.Select(c => Markup.Escape(row[c]?.ToString() ?? "NULL")).ToArray();
+                var values = batch.ColumnNames.Select(c => {
+                    var val = row[c];
+                    if (val is string s && s.StartsWith("ENC:")) return "ENC:********";
+                    return Markup.Escape(val?.ToString() ?? "NULL");
+                }).ToArray();
                 table.AddRow(values);
             }
 

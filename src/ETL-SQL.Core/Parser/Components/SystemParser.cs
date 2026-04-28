@@ -23,7 +23,8 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     type = _parser.ParseType();
                     if (type != null && (type.Equals("SENSITIVE", StringComparison.OrdinalIgnoreCase) || 
-                        type.Equals("SECRET", StringComparison.OrdinalIgnoreCase)))
+                        type.Equals("SECRET", StringComparison.OrdinalIgnoreCase) ||
+                        type.Equals("ENCRYPTED", StringComparison.OrdinalIgnoreCase)))
                     {
                         isSensitive = true;
                     }
@@ -47,6 +48,8 @@ namespace ETL_SQL.Core.Parser.Components
                     _parser.ParseMetadataTags(_parser.Previous.Value, metadata);
                 }
 
+                bool isSecret = type != null && type.Equals("SECRET", StringComparison.OrdinalIgnoreCase);
+
                 var stmt = new DeclareStatement(varToken.Value, type ?? "", initialValue, isSensitive, isInput, isOutput, metadata)
                 {
                     Line        = varToken.Line,
@@ -54,6 +57,7 @@ namespace ETL_SQL.Core.Parser.Components
                     EndLine     = _parser.LastTokenEndLine,
                     EndColumn   = _parser.LastTokenEndColumn,
                     IsSensitive = isSensitive,
+                    IsSecret    = isSecret,
                     IsInput     = isInput,
                     IsOutput    = isOutput
                 };

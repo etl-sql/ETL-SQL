@@ -28,7 +28,7 @@ namespace ETL_SQL.Engine.Services
             if (!_scopeManager.TryGetFunction(f.FunctionName, out var funcStmt) || funcStmt == null)
             {
                 _context.CurrentRecursiveDepth--;
-                return args.Count > 0 ? args[0] : null;
+                throw new ExecutionException($"Unknown function: {f.FunctionName}. If this is a database-specific function, check that the query is being pushed down to the remote source (e.g. by avoiding local-only operations like joins with CSV files).");
             }
 
             var localVars = BuildParameterDictionary(funcStmt.Parameters, args.Select(v => ((string?)null, v)).ToList());

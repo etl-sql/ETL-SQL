@@ -341,8 +341,15 @@ namespace ETL_SQL.Connectors.Postgres
 
         private static string QuoteIdentifier(string name)
         {
+            if (string.IsNullOrEmpty(name)) return name;
             var parts = name.Split('.');
-            return string.Join(".", parts.Select(p => $"\"{p.Replace("\"", "\"\"")}\""));
+            return string.Join(".", parts.Select(p => {
+                if (p.StartsWith("\"")) return p;
+                // For Postgres, we only quote if the identifier contains special characters 
+                // that REQUIRE quoting. This prevents accidental case-sensitivity issues.
+                bool needsQuoting = p.Any(c => !char.IsLetterOrDigit(c) && c != '_');
+                return needsQuoting ? $"\"{p.Replace("\"", "\"\"")}\"" : p;
+            }));
         }
 
         public async ValueTask DisposeAsync()

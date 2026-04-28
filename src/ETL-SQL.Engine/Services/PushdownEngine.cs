@@ -35,8 +35,7 @@ namespace ETL_SQL.Engine.Services
                                        stmt.GroupBy != null || 
                                        stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression)) ||
                                        stmt.IsDistinct ||
-                                       (stmt.Joins != null && stmt.Joins.Count > 0) ||
-                                       stmt.OrderBy != null || stmt.Offset != null || stmt.LimitCount != null;
+                                       (stmt.Joins != null && stmt.Joins.Count > 0);
 
             return !localEngineRequired;
         }
@@ -102,6 +101,17 @@ namespace ETL_SQL.Engine.Services
             result.TotalRowsMatched = (int)Math.Min(totalRows, int.MaxValue);
             context.Telemetry.RowsProcessed += totalRows;
             return result;
+        }
+
+        public async IAsyncEnumerable<DataTable> ExecuteStreamingPushdown(SelectStatement stmt, string connectionName, IExecutionContext context)
+        {
+            _logger.Debug("[SELECT] Pushing down query (possibly paged) to remote: {ConnName}", connectionName);
+            var conn = (IDatabaseSource)context.Connections[connectionName];
+            var compiled = context.CompileQuery(stmt, conn.Dialect);
+            await foreach (var batch in conn.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values))
+            {
+                yield return batch;
+            }
         }
     }
 }

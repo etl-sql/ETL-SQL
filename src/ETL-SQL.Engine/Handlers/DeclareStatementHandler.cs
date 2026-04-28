@@ -39,7 +39,7 @@ namespace ETL_SQL.Engine.Handlers
             }
             else if (stmt.InitialValue != null)
             {
-                val = await context.EvaluationContext.EvaluateValue(stmt.InitialValue, new Row());
+                val = await context.EvaluationContext.EvaluateValue(stmt.InitialValue, new Row(), !stmt.IsSensitive);
                 val = context.EvaluationContext.CastToType(val, stmt.DataType);
             }
             else if ((stmt.IsInput || stmt.IsOutput || stmt.IsSensitive) && context.VarContext.CurrentVariables.TryGetValue(stmt.VariableName, out existing))
@@ -61,6 +61,7 @@ namespace ETL_SQL.Engine.Handlers
                 IsInput = stmt.IsInput, 
                 IsOutput = stmt.IsOutput, 
                 IsSensitive = stmt.IsSensitive,
+                IsSecret = stmt.IsSecret,
                 IsDeclared = true,
                 DataType = stmt.DataType
             };

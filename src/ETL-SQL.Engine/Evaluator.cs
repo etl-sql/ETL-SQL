@@ -553,6 +553,7 @@ namespace ETL_SQL.Engine
             finally
             {
                 _subqueryCache.Clear();
+                _variableScopeManager.PurgeSecretVariables();
                 if (TranCount > 0 && AutoRollbackOnFinish)
                 {
                     _logger.Warning("Script execution ended with {Count} open transactions. Performing emergency rollback.", TranCount);
