@@ -231,6 +231,40 @@ namespace ETL_SQL.Engine.Services
             }
         }
 
+        /// <summary>Purges values of variables flagged as SECRET to reclaim security-sensitive memory.</summary>
+        public void PurgeSecretVariables()
+        {
+            lock (_lock)
+            {
+                // Purge globals
+                var globalSecretKeys = _variableMetadata
+                    .Where(kv => kv.Value.IsSecret)
+                    .Select(kv => kv.Key)
+                    .ToList();
+
+                foreach (var key in globalSecretKeys)
+                {
+                    _variables[key] = null;
+                }
+
+                // Purge all stacked scopes
+                int stackIdx = 0;
+                var scopeList = _scopeStack.ToList();
+                var metaList = _metadataStack.ToList();
+                
+                for(int i = 0; i < metaList.Count; i++)
+                {
+                    var scope = scopeList[i];
+                    var meta = metaList[i];
+                    var localSecrets = meta.Where(kv => kv.Value.IsSecret).Select(kv => kv.Key).ToList();
+                    foreach(var key in localSecrets)
+                    {
+                        scope[key] = null;
+                    }
+                }
+            }
+        }
+
         /// <summary>Merges changes from a forked scope back into this one.</summary>
         public void Merge(VariableScopeManager spawned)
         {

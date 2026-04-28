@@ -126,6 +126,28 @@ namespace ETL_SQL.Engine.Functions
                 return string.Concat(Enumerable.Repeat(s, n));
             }, "REPLICATE(str, n): Repeats a string n times.");
             registry.RegisterWithHelp("TRY_CAST", TryCast, "TRY_CAST(expr AS type): Converts to type or returns NULL on failure.");
+            registry.RegisterWithHelp("TRUNC", Trunc, "TRUNC(val[, part]): Truncates a date to the specified part (default 'DAY') or a number to decimals.");
+            registry.RegisterWithHelp("TO_DATE", (args, ctx) => args.Count >= 1 ? EvaluationUtils.CastToType(args[0], "DATETIME") : null, "TO_DATE(str[, fmt]): Converts a string to a date.");
+
+            // Math Extension Suite
+            registry.RegisterWithHelp("EXP", (args, ctx) => args[0] == null ? null : (decimal)Math.Exp(Convert.ToDouble(args[0])), "EXP(n): Returns e raised to the power of n.");
+            registry.RegisterWithHelp("LOG", (args, ctx) => args.Count >= 2 ? (decimal)Math.Log(Convert.ToDouble(args[0]), Convert.ToDouble(args[1])) : (args[0] == null ? null : (decimal)Math.Log(Convert.ToDouble(args[0]))), "LOG(n[, base]): Returns the logarithm of n.");
+            registry.RegisterWithHelp("LOG10", (args, ctx) => args[0] == null ? null : (decimal)Math.Log10(Convert.ToDouble(args[0])), "LOG10(n): Returns the base-10 logarithm of n.");
+            registry.RegisterWithHelp("RAND", (args, ctx) => (decimal)_random.NextDouble(), "RAND([seed]): Returns a random number between 0 and 1.");
+
+            // String Extension Suite
+            registry.RegisterWithHelp("CONCAT_WS", ConcatWs, "CONCAT_WS(sep, str1, str2, ...): Concatenates strings with a separator.");
+            registry.RegisterWithHelp("SPLIT_PART", SplitPart, "SPLIT_PART(str, sep, part): Returns the nth part of a string after splitting by a separator.");
+            registry.RegisterWithHelp("SPACE", (args, ctx) => args[0] == null ? null : new string(' ', Math.Max(0, Convert.ToInt32(args[0]))), "SPACE(n): Returns a string of n spaces.");
+            registry.RegisterWithHelp("REGEXP_LIKE", RegexpLike, "REGEXP_LIKE(str, pattern): Returns 1 if the string matches the pattern, 0 otherwise.");
+            registry.RegisterWithHelp("REGEXP_SUBSTR", RegexpSubstr, "REGEXP_SUBSTR(str, pattern): Returns the substring that matches the pattern.");
+            registry.RegisterWithHelp("REGEXP_REPLACE", RegexpReplace, "REGEXP_REPLACE(str, pat, repl): Replaces matches of a pattern with a replacement string.");
+            registry.RegisterWithHelp("REGEXP_INSTR", RegexpInstr, "REGEXP_INSTR(str, pattern): Returns the 1-based position of the first pattern match.");
+            registry.RegisterWithHelp("REGEXP_COUNT", RegexpCount, "REGEXP_COUNT(str, pattern): Returns the number of times a pattern occurs in the string.");
+
+            // Logic Extension Suite
+            registry.RegisterWithHelp("NVL2", (args, ctx) => args.Count >= 3 ? (!args[0].IsNull() ? args[1] : args[2]) : args.FirstOrDefault(), "NVL2(v, if_not_null, if_null): Returns if_not_null if v is not null, else if_null.");
+            registry.RegisterWithHelp("DECODE", Decode, "DECODE(val, search, result, ..., default): Returns the result matching the value, or the default.");
 
             // Item 13 - Math Extension Suite
             registry.RegisterWithHelp("SIN", (args, ctx) => args[0] == null ? null : (decimal)Math.Sin(Convert.ToDouble(args[0])), "SIN(f): Sine (input in radians).");
@@ -207,7 +229,6 @@ namespace ETL_SQL.Engine.Functions
 
             if (len != null && len <= 0) return "";
 
-            ctx.Logger.Error($"[SUBSTRING] start={start}, len={len}");
             var sb = new System.Text.StringBuilder();
             for (int i = 0; i < s.Length; i++)
             {
@@ -530,6 +551,39 @@ namespace ETL_SQL.Engine.Functions
             }
         }
 
+        private static object? Trunc(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 1 || args[0] == null) return null;
+
+            // Handle Numeric Truncation
+            if (decimal.TryParse(args[0]?.ToString(), out var n))
+            {
+                int decimals = args.Count >= 2 && int.TryParse(args[1]?.ToString(), out var d) ? d : 0;
+                var factor = (decimal)Math.Pow(10, decimals);
+                return Math.Truncate(n * factor) / factor;
+            }
+
+            // Handle Date Truncation
+            if (EvaluationUtils.TryToDateTime(args[0], out var dt))
+            {
+                string part = args.Count >= 2 ? args[1]?.ToString()?.ToUpperInvariant() ?? "DAY" : "DAY";
+                return part switch
+                {
+                    "YEAR" or "YYYY" or "YY" => new DateTime(dt.Year, 1, 1),
+                    "QUARTER" or "QQ" or "Q" => new DateTime(dt.Year, ((dt.Month - 1) / 3) * 3 + 1, 1),
+                    "MONTH" or "MM" or "M" => new DateTime(dt.Year, dt.Month, 1),
+                    "WEEK" or "WW" or "WK" => GetStartOfWeek(dt),
+                    "DAY" or "DD" or "D" => dt.Date,
+                    "HOUR" or "HH" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, 0, 0),
+                    "MINUTE" or "MI" or "N" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, 0),
+                    "SECOND" or "SS" or "S" => new DateTime(dt.Year, dt.Month, dt.Day, dt.Hour, dt.Minute, dt.Second),
+                    _ => dt.Date
+                };
+            }
+
+            return null;
+        }
+
         private static object? DateAdd(List<object?> args, IExecutionContext ctx)
         {
             if (args.Count < 3 || args[2] == null) return null;
@@ -602,6 +656,69 @@ namespace ETL_SQL.Engine.Functions
             double avg = (double)nums.Average();
             double sum = nums.Sum(d => Math.Pow((double)d - avg, 2));
             return (decimal)(sum / (nums.Count - 1));
+        }
+        private static readonly Random _random = new();
+
+        private static object? ConcatWs(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 2) return null;
+            string sep = args[0]?.ToString() ?? "";
+            var values = args.Skip(1).Where(a => !a.IsNull()).Select(a => a?.ToString() ?? "");
+            return string.Join(sep, values);
+        }
+
+        private static object? SplitPart(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 3 || args[0] == null) return null;
+            string s = args[0]!.ToString()!;
+            string sep = args[1]?.ToString() ?? "";
+            int part = Convert.ToInt32(args[2]);
+            if (part <= 0) return null;
+            var parts = s.Split(new[] { sep }, StringSplitOptions.None);
+            return part <= parts.Length ? parts[part - 1] : "";
+        }
+
+        private static object? RegexpLike(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 2 || args[0] == null || args[1] == null) return 0m;
+            return System.Text.RegularExpressions.Regex.IsMatch(args[0]!.ToString()!, args[1]!.ToString()!, System.Text.RegularExpressions.RegexOptions.IgnoreCase) ? 1m : 0m;
+        }
+
+        private static object? RegexpSubstr(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 2 || args[0] == null || args[1] == null) return null;
+            var match = System.Text.RegularExpressions.Regex.Match(args[0]!.ToString()!, args[1]!.ToString()!, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return match.Success ? match.Value : null;
+        }
+
+        private static object? RegexpReplace(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 3 || args[0] == null || args[1] == null) return args.FirstOrDefault();
+            return System.Text.RegularExpressions.Regex.Replace(args[0]!.ToString()!, args[1]!.ToString()!, args[2]?.ToString() ?? "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        }
+
+        private static object? RegexpInstr(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 2 || args[0] == null || args[1] == null) return 0m;
+            var match = System.Text.RegularExpressions.Regex.Match(args[0]!.ToString()!, args[1]!.ToString()!, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            return match.Success ? (decimal)(match.Index + 1) : 0m;
+        }
+
+        private static object? RegexpCount(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 2 || args[0] == null || args[1] == null) return 0m;
+            return (decimal)System.Text.RegularExpressions.Regex.Matches(args[0]!.ToString()!, args[1]!.ToString()!, System.Text.RegularExpressions.RegexOptions.IgnoreCase).Count;
+        }
+
+        private static object? Decode(List<object?> args, IExecutionContext ctx)
+        {
+            if (args.Count < 3) return args.FirstOrDefault();
+            var val = args[0];
+            for (int i = 1; i < args.Count - 1; i += 2)
+            {
+                if (EvaluationUtils.IsSoftEqual(val, args[i])) return args[i + 1];
+            }
+            return args.Count % 2 == 0 ? args.Last() : null;
         }
     }
 }

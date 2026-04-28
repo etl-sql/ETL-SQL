@@ -49,14 +49,14 @@ Specialty types carry semantic meaning beyond a plain string or number. They inf
 | Type | Stored as | When behavior activates |
 | :--- | :--- | :--- |
 | `PATH` | String | At file I/O — normalizes separators, resolves relative paths, validates security boundaries |
-| `JSON` | String | At assignment — validates well-formedness; enables `JSON_VALUE`, `JSON_QUERY`, and the full JSON function set |
-| `XML` | String | At assignment — validates well-formedness; enables `XMLVALUE`, `XMLQUERY`, and XPath functions |
+| `JSON` | String | At assignment — validates well-formedness immediately; enables `JSON_VALUE`, `JSON_QUERY`, etc. |
+| `XML` | String | At assignment — validates well-formedness immediately; enables `XMLVALUE`, `XMLQUERY`, etc. |
 | `MARKDOWN` | String | At render time — Report Portal renders as rich text; CLI treats as plain string |
 | `LIST` | Collection | At iteration or index access — can be strictly typed, e.g. `LIST(INT)` |
 | `MINMAX` | Struct | At declaration — gives a `.MIN` and `.MAX` member; inner type annotation is documentary |
-| `ENCRYPTED` | String | At runtime — masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values for secure parameters; SEC-4 warns on PRINT/EMAIL |
-| `SENSITIVE` | Any | At runtime — masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values for secure parameters |
-| `SECRET` | Any | Same as `SENSITIVE` — convention signals the value must not persist beyond the current operation |
+| `ENCRYPTED` | String | At runtime — masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values when assigned to non-SENSITIVE targets or passed to secure parameters |
+| `SENSITIVE` | Any | At runtime — masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values when assigned to non-SENSITIVE targets or passed to secure parameters |
+| `SECRET` | Any | At session end — nullified in memory automatically; same masking/auto-decryption as `SENSITIVE` |
 
 ---
 
@@ -123,13 +123,13 @@ SELECT XMLVALUE(@doc, '//item[@id=1]') AS name;
 
 #### `MARKDOWN`
 
-Stored as a plain string. In script execution (CLI, headless), it is treated identically to `STRING`. In the **Report Portal**, a `MARKDOWN` variable bound to a visual component is rendered as HTML-formatted rich text — headers, bold, lists, tables, and code blocks are all interpreted.
+Stored as a plain string. No validation is performed at assignment (any string is technically valid markdown). In script execution (CLI, headless), it is treated identically to `STRING`. In the **Report Portal**, a `MARKDOWN` variable bound to a visual component is rendered as HTML-formatted rich text — headers, bold, lists, tables, and code blocks are all interpreted.
 
 ```sql
 DECLARE @summary MARKDOWN = '## Run Complete\n- Records: 1000\n- Errors: 0';
 ```
 
-Use `MARKDOWN` when the variable will be bound to a report text component. It has no runtime cost and signals rendering intent to both the engine and AI agents building reports.
+Use `MARKDOWN` as a rendering hint for the Report Portal. It has no runtime overhead and signals intent to both the engine and AI agents building dashboards.
 
 ---
 
@@ -169,19 +169,24 @@ Common uses: date window boundaries, numeric filter ranges, batch size limits.
 
 #### `ENCRYPTED`
 
-The canonical type for variables that hold an `ENC:...` value — a ciphertext string produced by `ENCRYPT()` or stored in the credentials vault. Use this for database passwords, API keys, and connection credentials that are protected with `USE SCRIPT PASSWORD`.
+The canonical type for variables that hold an `ENC:...` value — a ciphertext string produced by `ENCRYPT()` or stored in the credentials vault. This type ensures the value is protected throughout its lifecycle in the engine.
 
-What it does:
-- **Runtime masking:** The variable is treated as sensitive — `SHOW VARIABLES` displays `*******` instead of the raw `ENC:...` text.
-- **Auto-decryption:** When the variable is passed to a secure connector parameter (`PASSWORD`, `API_KEY`, `SSH_KEY_PAIR.PASSPHRASE`, etc.), the engine decrypts it automatically using the active script or master password. The connector always receives the plaintext credential, never the cipher string.
-- **Lint layer (SEC-4):** `CredentialLeakRule` warns if the variable is referenced in `PRINT`, `RAISERROR`, or `SEND EMAIL`.
+**Engine Behaviors:**
+- **Runtime Masking:** The variable is marked as sensitive. `SHOW VARIABLES` and `PRINT` output will mask the value (displaying `*******` or `ENC:*******`) unless `SET SHOW_PASSWORD ON` is active.
+- **Auto-Decryption:** The engine automatically decrypts the `ENC:` value in two scenarios:
+  1. When passed to a secure connector parameter (`PASSWORD`, `API_KEY`, `SSH_KEY_PAIR.PASSPHRASE`, etc.).
+  2. When evaluated in an expression that is assigned to a non-SENSITIVE target or used in a comparison.
+- **Lint Protection (SEC-4):** The linter flags any attempt to concatenate or pass an `ENCRYPTED` variable to insecure sinks (like `SEND EMAIL` bodies or file writes).
 
 ```sql
-USE SCRIPT PASSWORD 'my-master-key';
+USE PASSWORD = 'my-master-key';
 DECLARE @pwd ENCRYPTED = 'ENC:abc123==';
 
-OPEN CONNECTION MyDb WITH (PASSWORD = @pwd);  -- decrypted automatically at connect time
-PRINT @pwd;                                   -- SEC-4 lint warning; prints ENC:******** in log
+-- Connection automatically handles decryption
+CREATE CONNECTION MyDb ON MSSQL(PASSWORD = @pwd); 
+
+-- Linter will warn here, and runtime will mask output
+PRINT 'The password is: ' + @pwd; 
 ```
 
 ---
@@ -206,16 +211,14 @@ OPEN CONNECTION MyDb WITH (PASSWORD = @dbPass);  -- @dbPass decrypted here autom
 
 #### `SECRET`
 
-Identical to `SENSITIVE` in runtime behavior — both set `IsSensitive = true` and produce the same masking and auto-decryption effects. The difference is **naming convention**:
+Implicitly sets `IsSensitive = true`, providing the same masking and auto-decryption effects as `SENSITIVE`. However, it introduces a strict **Zero-Trust memory policy**:
 
-- Use `SENSITIVE` for credentials that persist across multiple operations within a session (database passwords, stored API keys).
-- Use `SECRET` for short-lived credentials that must not outlive the current operation (OAuth bearer tokens, one-time SFTP session keys, temporary SAS tokens).
-
-Choosing the right keyword communicates lifetime intent to other developers and to AI agents constructing or auditing scripts.
+- **Session-End Purge:** To minimize exposure of ultra-sensitive data (like MFA tokens or temporary access keys), variables declared as `SECRET` are explicitly nullified in **all** memory scopes (global and nested) immediately after the evaluator finishes execution, regardless of whether the script succeeded or failed.
+- **Transience Hint:** Signals to the engine and auditors that this value is a short-lived token that should never be persisted or logged.
 
 ```sql
-DECLARE @dbPassword  SENSITIVE = 'ENC:abc123==';      -- reused throughout the script
-DECLARE @bearerToken SECRET   = GetBearerToken(...);  -- used once, then discarded
+DECLARE @dbPassword  SENSITIVE = 'ENC:abc123==';      -- persistent for session
+DECLARE @bearerToken SECRET    = GetBearerToken(...);  -- purged from RAM on finish
 ```
 
 > [!NOTE]
