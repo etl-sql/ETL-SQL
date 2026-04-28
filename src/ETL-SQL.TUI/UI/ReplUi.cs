@@ -52,7 +52,7 @@ namespace ETL_SQL.TUI.UI
                 _evaluator.RedirectOutput = true;
                 _evaluator.SessionId = _ctx.SessionId;
                 _evaluator.DisplayExecuteTree = true;
-                _evaluator.IsProfiling = true;
+                _evaluator.Telemetry.IsProfiling = true;
 
                 // Route engine log messages to the IDE as JSON on stdout.
                 // We subscribe to the DI-injected ILogger which handles all modernized handlers.
@@ -111,8 +111,8 @@ namespace ETL_SQL.TUI.UI
         {
             try
             {
-                _evaluator!.RowsProcessed = 0;
-                _evaluator.TotalSpilledBytes = 0;
+                _evaluator!.Telemetry.RowsProcessed = 0;
+                _evaluator.Telemetry.TotalSpilledBytes = 0;
                 _evaluator.Messages.Clear();
 
                 var originalOnResultSet = _evaluator.OnResultSet;
@@ -161,7 +161,7 @@ namespace ETL_SQL.TUI.UI
                 using var treeCts = new CancellationTokenSource();
 
                 // Start heartbeat for real-time graphical progress (10Hz)
-                var tree = _evaluator.ExecutionTree;
+                var tree = _evaluator.Telemetry.ExecutionTree;
                 var heartbeatTask = Task.Run(async () =>
                 {
                     while (!treeCts.Token.IsCancellationRequested)
@@ -188,7 +188,7 @@ namespace ETL_SQL.TUI.UI
                     treeCts.Cancel();
                     await heartbeatTask;
                     var elapsed = execTime.ElapsedMilliseconds;
-                    _evaluator.LastExecTimeMs = elapsed;
+                    _evaluator.Telemetry.LastExecutionTimeMs = elapsed;
                     _evaluator.LastLexTimeMs = lexTime.ElapsedMilliseconds;
                     _evaluator.LastParseTimeMs = parseTime.ElapsedMilliseconds;
                     _evaluator.OnResultSet = originalOnResultSet;
@@ -200,8 +200,8 @@ namespace ETL_SQL.TUI.UI
                 // Emit final performance metrics for the IDE dashboard
                 double memUsageMb = Math.Round((double)GC.GetTotalMemory(false) / (1024 * 1024), 2);
                 double rowsPerSec = execTime.Elapsed.TotalSeconds > 0 
-                    ? Math.Round(_evaluator.RowsProcessed / execTime.Elapsed.TotalSeconds, 0) 
-                    : _evaluator.RowsProcessed;
+                    ? Math.Round(_evaluator.Telemetry.RowsProcessed / execTime.Elapsed.TotalSeconds, 0) 
+                    : _evaluator.Telemetry.RowsProcessed;
 
                 WriteJson(new { 
                     type = "performance", 
@@ -210,9 +210,9 @@ namespace ETL_SQL.TUI.UI
                         parserMs = parseTime.ElapsedMilliseconds,
                         executionMs = execTime.ElapsedMilliseconds,
                         memoryMb = memUsageMb,
-                        rowsProcessed = _evaluator.RowsProcessed,
+                        rowsProcessed = _evaluator.Telemetry.RowsProcessed,
                         rowsPerSecond = rowsPerSec,
-                        statements = _evaluator.ProfileMetrics.Select(m => {
+                        statements = _evaluator.Telemetry.ProfileMetrics.Select(m => {
                             string sqlClean = m.Sql?.Trim() ?? "";
                             string type = sqlClean.Length > 0 ? sqlClean.Split(' ', 2)[0].ToUpper() : "UNKNOWN";
                             return new {

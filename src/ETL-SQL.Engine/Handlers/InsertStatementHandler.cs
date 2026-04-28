@@ -101,7 +101,7 @@ namespace ETL_SQL.Engine.Handlers
                     {
                         await foreach (var batch in sqlDest.ExecuteRawSql(sql, compiledSelect.Parameters.Values)) 
                         {
-                            if (batch.RowsAffected >= 0) context.RowsProcessed += batch.RowsAffected;
+                            if (batch.RowsAffected >= 0) context.Telemetry.RowsProcessed += batch.RowsAffected;
                         }
                     }
                 }
@@ -126,7 +126,7 @@ namespace ETL_SQL.Engine.Handlers
                     {
                         await foreach (var batch in sqlDest.ExecuteRawSql(sql)) 
                         {
-                            if (batch.RowsAffected >= 0) context.RowsProcessed += batch.RowsAffected;
+                            if (batch.RowsAffected >= 0) context.Telemetry.RowsProcessed += batch.RowsAffected;
                         }
                     }
                 }
@@ -197,7 +197,7 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     _logger.WriteLine($"WHAT IF: Would insert {count} rows into {connName} via batch transfer.", ConsoleColor.Yellow);
                 }
-                context.RowsProcessed += count;
+                context.Telemetry.RowsProcessed += count;
 
                 if (stmt.Output != null && allInsertedRows.Count > 0)
                 {
@@ -270,7 +270,7 @@ namespace ETL_SQL.Engine.Handlers
                     await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true);
                 }
                 context.IncrementOperationCount(OperationType.EngineInternal, count: stmt.Values.Count);
-                context.RowsProcessed += stmt.Values.Count;
+                context.Telemetry.RowsProcessed += stmt.Values.Count;
 
                 if (stmt.Output != null && batch.Rows.Count > 0)
                 {
@@ -291,3 +291,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

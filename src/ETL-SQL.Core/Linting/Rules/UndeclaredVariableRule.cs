@@ -108,7 +108,7 @@ namespace ETL_SQL.Core.Linting.Rules
             }
             else if (statement is PrintStatement print)
             {
-                AnalyzeExpression(print.Message, declaredVariables, results);
+                foreach (var expr in print.Arguments) AnalyzeExpression(expr, declaredVariables, results);
                 if (print.ShowTimestamp != null) AnalyzeExpression(print.ShowTimestamp, declaredVariables, results);
                 if (print.TimestampFormat != null) AnalyzeExpression(print.TimestampFormat, declaredVariables, results);
             }
@@ -132,6 +132,96 @@ namespace ETL_SQL.Core.Linting.Rules
                 var funcVars = new HashSet<string>(declaredVariables, StringComparer.OrdinalIgnoreCase);
                 foreach (var p in func.Parameters) funcVars.Add(p.Name);
                 if (func.Body != null) AnalyzeStatement(func.Body, funcVars, results);
+            }
+            else if (statement is CreateSetsStatement createSets)
+            {
+                foreach (var assign in createSets.Assignments)
+                {
+                    AnalyzeExpression(assign.Value, declaredVariables, results);
+                    string varName = assign.VariableName;
+                    if (!varName.StartsWith("@")) varName = "@" + varName;
+                    declaredVariables.Add(varName);
+                }
+            }
+            else if (statement is UseSetsStatement useSets)
+            {
+                 // USE SETS !name - ideally we'd know what variables are in the set, 
+                 // but for now we assume they were defined in a CREATE SETS earlier in this script.
+            }
+            else if (statement is AssertStatement assert)
+            {
+                AnalyzeExpression(assert.Condition, declaredVariables, results);
+                if (assert.Message != null) AnalyzeExpression(assert.Message, declaredVariables, results);
+            }
+            else if (statement is FileOperationStatement fileOp)
+            {
+                AnalyzeExpression(fileOp.Source, declaredVariables, results);
+                if (fileOp.Destination != null) AnalyzeExpression(fileOp.Destination, declaredVariables, results);
+                if (fileOp.Overwrite != null) AnalyzeExpression(fileOp.Overwrite, declaredVariables, results);
+                if (fileOp.Password != null) AnalyzeExpression(fileOp.Password, declaredVariables, results);
+            }
+            else if (statement is DirectoryOperationStatement dirOp)
+            {
+                AnalyzeExpression(dirOp.Path, declaredVariables, results);
+                if (dirOp.Destination != null) AnalyzeExpression(dirOp.Destination, declaredVariables, results);
+                if (dirOp.Overwrite != null) AnalyzeExpression(dirOp.Overwrite, declaredVariables, results);
+                if (dirOp.Recursive != null) AnalyzeExpression(dirOp.Recursive, declaredVariables, results);
+            }
+            else if (statement is WaitForStatement wait)
+            {
+                AnalyzeExpression(wait.Expression, declaredVariables, results);
+            }
+            else if (statement is ParallelStatement parallel)
+            {
+                AnalyzeStatement(parallel.Body, declaredVariables, results);
+            }
+            else if (statement is ParallelForStatement pFor)
+            {
+                AnalyzeExpression(pFor.StartValue, declaredVariables, results);
+                AnalyzeExpression(pFor.EndValue, declaredVariables, results);
+                if (pFor.StepValue != null) AnalyzeExpression(pFor.StepValue, declaredVariables, results);
+                
+                var loopVars = new HashSet<string>(declaredVariables, StringComparer.OrdinalIgnoreCase);
+                loopVars.Add(pFor.VariableName); 
+                AnalyzeStatement(pFor.Body, loopVars, results);
+            }
+            else if (statement is BulkInsertStatement bulk)
+            {
+                foreach (var opt in bulk.Options.Values) AnalyzeExpression(opt, declaredVariables, results);
+            }
+            else if (statement is ExportReportStatement exportRpt)
+            {
+                AnalyzeExpression(exportRpt.ReportPath, declaredVariables, results);
+                AnalyzeExpression(exportRpt.OutputPath, declaredVariables, results);
+            }
+            else if (statement is ExportStatement export)
+            {
+                AnalyzeExpression(export.Source, declaredVariables, results);
+            }
+            else if (statement is EmailStatement email)
+            {
+                AnalyzeExpression(email.To, declaredVariables, results);
+                AnalyzeExpression(email.From, declaredVariables, results);
+                AnalyzeExpression(email.Subject, declaredVariables, results);
+                AnalyzeExpression(email.Body, declaredVariables, results);
+                if (email.ConnectionName != null) AnalyzeExpression(email.ConnectionName, declaredVariables, results);
+                if (email.Attachments != null) foreach (var a in email.Attachments) AnalyzeExpression(a, declaredVariables, results);
+            }
+            else if (statement is RaiseErrorStatement raise)
+            {
+                AnalyzeExpression(raise.Message, declaredVariables, results);
+                AnalyzeExpression(raise.Severity, declaredVariables, results);
+                foreach (var p in raise.Parameters) AnalyzeExpression(p, declaredVariables, results);
+            }
+            else if (statement is ThrowStatement thr)
+            {
+                if (thr.ErrorNumber != null) AnalyzeExpression(thr.ErrorNumber, declaredVariables, results);
+                if (thr.Message != null) AnalyzeExpression(thr.Message, declaredVariables, results);
+                if (thr.State != null) AnalyzeExpression(thr.State, declaredVariables, results);
+            }
+            else if (statement is ReturnStatement ret)
+            {
+                if (ret.ReturnValue != null) AnalyzeExpression(ret.ReturnValue, declaredVariables, results);
             }
             else if (statement is TryCatchStatement tryCatch)
             {

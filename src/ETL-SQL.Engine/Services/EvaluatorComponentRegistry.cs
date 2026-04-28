@@ -19,12 +19,14 @@ namespace ETL_SQL.Engine.Services
         public SchemaManager SchemaManager { get; private set; } = null!;
         public ProcedureExecutor ProcedureExecutor { get; private set; } = null!;
         public IReportContext ReportContext { get; private set; } = null!;
+        public ExecutionTelemetryManager TelemetryManager { get; private set; } = null!;
 
         /// <summary>
         /// Initializes all components with the provided context.
         /// </summary>
         public void Initialize(Evaluator evaluator, ILogger logger, VariableScopeManager variableScopeManager, IReportContext? reportContext = null)
         {
+            TelemetryManager = new ExecutionTelemetryManager();
             QueryCompiler = new QueryCompiler(evaluator);
             MetricsReporter = new ExecutionMetricsReporter(evaluator);
             ExpressionEvaluator = new ExpressionEvaluator(evaluator);

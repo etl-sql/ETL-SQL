@@ -19,12 +19,12 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (CreateButtonStatement)statement;
 
-            if (stmt.Mode == ObjectCreationMode.Create && context.ButtonDefinitions.ContainsKey(stmt.Name))
+            if (stmt.Mode == ObjectCreationMode.Create && context.ReportContext.ButtonDefinitions.ContainsKey(stmt.Name))
             {
                 throw new ExecutionException($"Button '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP BUTTON first.", null, stmt.Line, stmt.Column);
             }
 
-            context.ButtonDefinitions[stmt.Name] = stmt;
+            context.ReportContext.ButtonDefinitions[stmt.Name] = stmt;
 
             _logger.Debug("Button '{ButtonName}' ({ButtonType}) registered.", stmt.Name, stmt.ButtonType);
             context.Log($"Button '{stmt.Name}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}.");
@@ -33,3 +33,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

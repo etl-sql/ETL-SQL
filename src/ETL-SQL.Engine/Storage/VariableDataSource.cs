@@ -38,9 +38,9 @@ namespace ETL_SQL.Engine.Storage
         private async Task EnsureLoaded()
         {
             if (_loaded) return;
-            if (_context.ContainsVariable(_variableName))
+            if (_context.VarContext.ContainsVariable(_variableName))
             {
-                var val = _context.GetVariable(_variableName);
+                var val = _context.VarContext.GetVariable(_variableName);
                 if (val is DataTable dt)
                 {
                     await _inner.WriteBatches(new[] { dt }.ToAsyncEnumerable());
@@ -80,13 +80,13 @@ namespace ETL_SQL.Engine.Storage
                 }
             }
             
-            if (!_context.ContainsVariable(_variableName))
+            if (!_context.VarContext.ContainsVariable(_variableName))
             {
-                _context.DeclareVariable(_variableName, result);
+                _context.VarContext.DeclareVariable(_variableName, result);
             }
             else
             {
-                _context.SetVariable(_variableName, result);
+                _context.VarContext.SetVariable(_variableName, result);
             }
 
         }
@@ -107,3 +107,4 @@ namespace ETL_SQL.Engine.Storage
         }
     }
 }
+

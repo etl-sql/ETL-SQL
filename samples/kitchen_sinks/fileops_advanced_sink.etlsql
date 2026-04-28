@@ -21,7 +21,9 @@ DECLARE @compd STRING = @base + 'adv_dir_compressed.zip';
 -- Setup: write source file via FLATFILE
 CREATE CONNECTION adv_src ON FLATFILE(@src) WITH(DELIMITER = ',', HEADER = OFF);
 INSERT INTO adv_src.FILE (Line) VALUES ('Line1'), ('Line2'), ('Line3');
-PRINT 'Source file created.';
+PRINT 'Source file created at: ' + @src;
+IF FILE_EXISTS(@src) PRINT 'Verified: Source file exists on disk.';
+ELSE PRINT 'ERROR: Source file NOT found on disk immediately after INSERT!';
 
 -- 1. COPY FILE (statement style)
 PRINT 'Testing COPY FILE...';

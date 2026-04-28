@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Core.Data
 {
@@ -56,8 +57,8 @@ namespace ETL_SQL.Core.Data
                     "+" => da + db,
                     "-" => da - db,
                     "*" => da * db,
-                    "/" => db == 0 ? throw new DivideByZeroException() : da / db,
-                    "%" => da % db,
+                    "/" => db == 0 ? throw new ExecutionException("Divide by zero error encountered.", null, 0, 0, 8134, 16, 1) : da / db,
+                    "%" => db == 0 ? throw new ExecutionException("Divide by zero error encountered.", null, 0, 0, 8134, 16, 1) : da % db,
                     _ => null
                 };
             }

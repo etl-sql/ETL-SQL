@@ -27,10 +27,11 @@ namespace ETL_SQL.Engine.Handlers
             // Security: Use context.ResolvePath to ensure it's within allowed bounds
             string resolvedPath = context.ResolvePath(path);
             
-            context.TemplatePath = resolvedPath;
+            context.ReportContext.TemplatePath = resolvedPath;
             
             _logger.Debug("Template path set to '{Path}'", resolvedPath);
             context.Log($"Template path set to '{resolvedPath}'.");
         }
     }
 }
+

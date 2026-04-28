@@ -379,6 +379,8 @@ namespace ETL_SQL.ReportBuilder
                     dualSeriesList.Add(dict2);
                 }
 
+                AppendOverlaySeries(v, dualSeriesList, xLabels, horizontal: false);
+
                 return Serialize(new
                 {
                     title   = TitleOpt(v),
@@ -394,6 +396,8 @@ namespace ETL_SQL.ReportBuilder
                     series  = ApplyCommonSeriesOptions(v, dualSeriesList, stacked: false, smooth: false)
                 });
             }
+
+            AppendOverlaySeries(v, seriesList, xLabels, horizontal: false);
 
             return Serialize(new
             {
@@ -716,14 +720,32 @@ namespace ETL_SQL.ReportBuilder
         // MOVING_AVG / LINEAR / EXPONENTIAL / LOGARITHMIC / POWER / POLYNOMIAL
         //   → additional computed line series appended after data series.
 
-        private void AppendOverlaySeries(VisualManifest v, List<object> series,
+        private void AppendOverlaySeries(VisualManifest v, List<object> seriesList,
             List<string> xLabels, bool horizontal)
         {
-            if (v.Overlays == null || v.Overlays.Count == 0) return;
+            if (v.Overlays == null || v.Overlays.Count == 0 || xLabels == null || xLabels.Count == 0) return;
 
-            var yCol  = FindRole(v, "y") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
-            int yi    = yCol != null ? v.Columns.IndexOf(yCol) : 1;
-            var yVals = v.Rows.Select(r => ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null) ?? 0.0).ToList();
+            // Resolve columns robustly
+            var xRole = horizontal ? "y" : "x";
+            var yRole = horizontal ? "x" : "y";
+            var xCol = FindRole(v, xRole) ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var yCol = FindRole(v, yRole) ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+
+            int xi = xCol != null ? v.Columns.FindIndex(c => string.Equals(c, xCol, StringComparison.OrdinalIgnoreCase)) : 0;
+            int yi = yCol != null ? v.Columns.FindIndex(c => string.Equals(c, yCol, StringComparison.OrdinalIgnoreCase)) : 1;
+
+            // Correctly aggregate y-values by x-label to support multi-series visuals (pivoted rows)
+            var xIndex = xLabels.Select((l, i) => (l, i)).ToDictionary(t => t.l, t => t.i, StringComparer.OrdinalIgnoreCase);
+            var aggregated = new double[xLabels.Count];
+            foreach (var row in v.Rows)
+            {
+                var xl = (xi >= 0 && xi < row.Count ? row[xi] ?? "" : "").Trim();
+                if (xIndex.TryGetValue(xl, out var idx))
+                {
+                    aggregated[idx] += ToDouble(yi >= 0 && yi < row.Count ? row[yi] : null) ?? 0.0;
+                }
+            }
+            var yVals = aggregated.ToList();
 
             var markLines = new List<object>();
             var extraSeries = new List<object>();
@@ -748,11 +770,14 @@ namespace ETL_SQL.ReportBuilder
                         break;
 
                     case "Average":
-                        markLines.Add(new
+                        var avg = yVals.Count > 0 ? yVals.Average() : 0.0;
+                        var axisAvg = horizontal ? "xAxis" : "yAxis";
+                        markLines.Add(new Dictionary<string, object?>
                         {
-                            type = "average", name = label,
-                            lineStyle = new { type = ls, color },
-                            label = new { formatter = label, color }
+                            [axisAvg] = avg,
+                            ["name"] = label,
+                            ["lineStyle"] = new { type = ls, color },
+                            ["label"] = new { formatter = label, color }
                         });
                         break;
 
@@ -834,15 +859,15 @@ namespace ETL_SQL.ReportBuilder
             }
 
             // Attach markLine entries to the first data series
-            if (markLines.Count > 0 && series.Count > 0)
+            if (markLines.Count > 0 && seriesList.Count > 0)
             {
-                var first = series[0];
+                var first = seriesList[0];
                 // Merge markLine into existing anonymous object by rebuilding with markLine property
                 var merged = MergeMarkLine(first, markLines);
-                series[0] = merged;
+                seriesList[0] = merged;
             }
 
-            series.AddRange(extraSeries);
+            seriesList.AddRange(extraSeries);
         }
 
         private static object MergeMarkLine(object series, List<object> markLineData)

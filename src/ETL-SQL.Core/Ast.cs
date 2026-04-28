@@ -1042,19 +1042,51 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record PrintStatement : Statement
-    {
-        public Expression Message { get; }
-        public Expression? ShowTimestamp { get; }
-        public Expression? TimestampFormat { get; }
+    public record PrintStatement(List<Expression> Arguments, Expression? ShowTimestamp = null, Expression? TimestampFormat = null) : Statement;
 
-        public PrintStatement(Expression message, Expression? showTimestamp = null, Expression? timestampFormat = null)
+    public record FileOperationStatement : Statement
+    {
+        public FileOpType Type { get; }
+        public Expression Source { get; }
+        public Expression? Destination { get; }
+        public Expression? Overwrite { get; }
+        public Expression? Password { get; }
+        public bool IfExists { get; set; }
+
+        public FileOperationStatement(FileOpType type, Expression source, Expression? destination = null, Expression? overwrite = null, Expression? password = null, bool ifExists = false)
         {
-            Message = message;
-            ShowTimestamp = showTimestamp;
-            TimestampFormat = timestampFormat;
+            Type = type;
+            Source = source;
+            Destination = destination;
+            Overwrite = overwrite;
+            Password = password;
+            IfExists = ifExists;
         }
     }
+
+    public record DirectoryOperationStatement : Statement
+    {
+        public DirectoryOpType Type { get; }
+        public Expression Path { get; }
+        public Expression? Destination { get; }
+        public Expression? Overwrite { get; }
+        public Expression? Recursive { get; }
+        public Expression? Password { get; }
+        public bool IfExists { get; set; }
+
+        public DirectoryOperationStatement(DirectoryOpType type, Expression path, Expression? destination = null, Expression? overwrite = null, Expression? recursive = null, Expression? password = null, bool ifExists = false)
+        {
+            Type = type;
+            Path = path;
+            Destination = destination;
+            Overwrite = overwrite;
+            Recursive = recursive;
+            Password = password;
+            IfExists = ifExists;
+        }
+    }
+
+
 
     public enum WaitType { Delay, Time, Until }
 
@@ -1104,19 +1136,7 @@ namespace ETL_SQL.Core
         public bool WarnOnDrift                              { get; init; }
     }
 
-    public record ExecuteParameter : AstNode
-    {
-        public Expression Expression { get; }
-        public bool IsOutput { get; }
-        public bool IsInput { get; }
-
-        public ExecuteParameter(Expression expression, bool isOutput = false, bool isInput = false)
-        {
-            Expression = expression;
-            IsOutput = isOutput;
-            IsInput = isInput;
-        }
-    }
+    public record ExecuteParameter(Expression Expression, string? Name = null, bool IsOutput = false, bool IsInput = false) : AstNode;
 
     public record ExecuteStatement : Statement
     {
@@ -1743,46 +1763,7 @@ namespace ETL_SQL.Core
     }
 
     public enum FileOpType { Copy, Move, Rename, Delete, Compress, Encrypt, Decrypt }
-
-    public record FileOperationStatement : Statement
-    {
-        public FileOpType Type { get; }
-        public Expression Source { get; }
-        public Expression? Destination { get; }
-        public Expression? Overwrite { get; set; }
-        public Expression? Password { get; set; }
-
-        public FileOperationStatement(FileOpType type, Expression source, Expression? destination = null, Expression? overwrite = null, Expression? password = null)
-        {
-            Type = type;
-            Source = source;
-            Destination = destination;
-            Overwrite = overwrite;
-            Password = password;
-        }
-    }
-
     public enum DirectoryOpType { Create, Delete, Rename, Move, Copy, DeleteContents, Compress, Encrypt, Decrypt }
-
-    public record DirectoryOperationStatement : Statement
-    {
-        public DirectoryOpType Type { get; }
-        public Expression Path { get; }
-        public Expression? NewNameOrDest { get; }
-        public Expression? Overwrite { get; set; }
-        public Expression? Recursive { get; set; }
-        public Expression? Password { get; set; }
-
-        public DirectoryOperationStatement(DirectoryOpType type, Expression path, Expression? newNameOrDest = null, Expression? overwrite = null, Expression? recursive = null, Expression? password = null)
-        {
-            Type = type;
-            Path = path;
-            NewNameOrDest = newNameOrDest;
-            Overwrite = overwrite;
-            Recursive = recursive;
-            Password = password;
-        }
-    }
 
     public enum FileTransferType { Send, Receive }
 

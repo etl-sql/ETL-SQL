@@ -120,8 +120,8 @@ namespace ETL_SQL.Engine.Engines
                         await writers[i].DisposeAsync();
                     }
                 }
-                _context.PartitionsCount += usedPartitions;
-                _logger.Debug("Finished partitioning {Prefix}. Used {UsedPartitions} partitions. Context PartitionsCount: {PartitionsCount}", prefix, usedPartitions, _context.PartitionsCount);
+                _context.Telemetry.PartitionsCount += usedPartitions;
+                _logger.Debug("Finished partitioning {Prefix}. Used {UsedPartitions} partitions. Context PartitionsCount: {PartitionsCount}", prefix, usedPartitions, _context.Telemetry.PartitionsCount);
             }
 
             return names;
@@ -145,3 +145,4 @@ namespace ETL_SQL.Engine.Engines
         }
     }
 }
+

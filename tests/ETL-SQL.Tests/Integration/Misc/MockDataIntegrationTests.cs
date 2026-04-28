@@ -39,7 +39,7 @@ SELECT * FROM #temp;
             await evaluator.Evaluate(Parse(sql));
             
             // Verify rows processed (5 from generate)
-            Assert.True(evaluator.RowsProcessed >= 5);
+            Assert.True(evaluator.Telemetry.RowsProcessed >= 5);
             
             var results = await evaluator.ExecuteQuery(((Script)Parse("SELECT * FROM #temp;")).Statements[0]).ToListAsync();
             var table = results.FirstOrDefault();

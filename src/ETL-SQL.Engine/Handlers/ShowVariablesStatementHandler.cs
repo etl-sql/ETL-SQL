@@ -27,8 +27,8 @@ namespace ETL_SQL.Engine.Handlers
             table.AddColumn("Scope");
             table.AddColumn("IsSensitive");
 
-            var variables = stmt.IsLocalOnly ? context.CurrentVariables : context.Variables;
-            var metadata = stmt.IsLocalOnly ? context.CurrentMetadata : context.VariableMetadata;
+            var variables = stmt.IsLocalOnly ? context.VarContext.CurrentVariables : context.VarContext.Variables;
+            var metadata = stmt.IsLocalOnly ? context.VarContext.CurrentMetadata : context.VarContext.VariableMetadata;
 
             foreach (var variable in variables.OrderBy(v => v.Key))
             {
@@ -89,3 +89,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

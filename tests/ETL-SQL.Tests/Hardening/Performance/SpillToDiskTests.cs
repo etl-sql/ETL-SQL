@@ -93,15 +93,15 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var e    = NewEvaluator();
             var rows = BuildRows(COUNT, reversed: true);
 
-            long spillBefore = e.TotalSpilledBytes;
+            long spillBefore = e.Telemetry.TotalSpilledBytes;
             var engine = new ExternalSortEngine(e, NullLogger.Instance);
             var result = await engine.SortExternal(rows, OrderById());
 
             Assert.Equal(COUNT, result.Count);
             Assert.Equal(0,         Convert.ToInt32(result[0]["Id"]));
             Assert.Equal(COUNT - 1, Convert.ToInt32(result[COUNT - 1]["Id"]));
-            Assert.True(e.TotalSpilledBytes > spillBefore, "Expected spilled bytes to increase.");
-            _output.WriteLine($"Spilled {e.TotalSpilledBytes - spillBefore:N0} bytes for {COUNT} rows.");
+            Assert.True(e.Telemetry.TotalSpilledBytes > spillBefore, "Expected spilled bytes to increase.");
+            _output.WriteLine($"Spilled {e.Telemetry.TotalSpilledBytes - spillBefore:N0} bytes for {COUNT} rows.");
         }
 
         [Fact]
@@ -240,15 +240,15 @@ namespace ETL_SQL.Tests.Hardening.Performance
                 }
             }
 
-            long before = e.TotalSpilledBytes;
+            long before = e.Telemetry.TotalSpilledBytes;
             var engine  = new ExternalJoinEngine(e, NullLogger.Instance);
             await engine.ApplyHashJoinExternal(
                 LeftStream(), RightStream(), InnerJoinOnId(),
                 new List<string> { "Id" }, new List<string> { "Id" });
 
-            Assert.True(e.TotalSpilledBytes > before,
-                $"Expected TotalSpilledBytes to increase. Before: {before}, After: {e.TotalSpilledBytes}");
-            _output.WriteLine($"ExternalJoinEngine spilled {e.TotalSpilledBytes - before:N0} bytes for {SIDE_COUNT}x{SIDE_COUNT} join.");
+            Assert.True(e.Telemetry.TotalSpilledBytes > before,
+                $"Expected TotalSpilledBytes to increase. Before: {before}, After: {e.Telemetry.TotalSpilledBytes}");
+            _output.WriteLine($"ExternalJoinEngine spilled {e.Telemetry.TotalSpilledBytes - before:N0} bytes for {SIDE_COUNT}x{SIDE_COUNT} join.");
         }
 
         // ─── JoinEngine threshold integration ────────────────────────────────────
@@ -288,7 +288,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             await rightMem.WriteBatches(new[] { rightTable }.ToAsyncEnumerable());
             e.Connections["#right"] = rightMem;
 
-            long before = e.TotalSpilledBytes;
+            long before = e.Telemetry.TotalSpilledBytes;
 
             // ORDER BY forces the multi-pass pipeline that checks the spill threshold
             var script = "SELECT L.Id, L.LeftV, R.RightV FROM #left AS L INNER JOIN #right AS R ON L.Id = R.Id ORDER BY L.Id;";
@@ -296,9 +296,9 @@ namespace ETL_SQL.Tests.Hardening.Performance
 
             Assert.NotNull(e.LastResult);
             Assert.Equal(LEFT_SIDE, e.LastResult.TotalRowsMatched);
-            Assert.True(e.TotalSpilledBytes > before,
-                $"Expected spill for {LEFT_SIDE}x{RIGHT_SIDE} join. Before={before}, After={e.TotalSpilledBytes}");
-            _output.WriteLine($"JoinEngine spilled {e.TotalSpilledBytes - before:N0} bytes. Result rows: {e.LastResult.TotalRowsMatched:N0}");
+            Assert.True(e.Telemetry.TotalSpilledBytes > before,
+                $"Expected spill for {LEFT_SIDE}x{RIGHT_SIDE} join. Before={before}, After={e.Telemetry.TotalSpilledBytes}");
+            _output.WriteLine($"JoinEngine spilled {e.Telemetry.TotalSpilledBytes - before:N0} bytes. Result rows: {e.LastResult.TotalRowsMatched:N0}");
         }
 
         // ─── Streaming aggregate (8A-1) ──────────────────────────────────────────
@@ -361,15 +361,15 @@ namespace ETL_SQL.Tests.Hardening.Performance
             // ExternalAgg always writes partition files, so TotalSpilledBytes must increase.
             const int ROWS = 150_000;
             var e    = await EvaluatorWithLargeSource(ROWS);
-            long before = e.TotalSpilledBytes;
+            long before = e.Telemetry.TotalSpilledBytes;
 
             await e.Evaluate(new Parser(new Lexer(
                 "SELECT category, SUM(value) AS total FROM #large GROUP BY category;")
                 .Tokenize()).Parse());
 
-            Assert.True(e.TotalSpilledBytes > before,
-                $"Expected TotalSpilledBytes to increase. Before={before}, After={e.TotalSpilledBytes}");
-            _output.WriteLine($"Streaming aggregate spilled {e.TotalSpilledBytes - before:N0} bytes for {ROWS:N0} rows.");
+            Assert.True(e.Telemetry.TotalSpilledBytes > before,
+                $"Expected TotalSpilledBytes to increase. Before={before}, After={e.Telemetry.TotalSpilledBytes}");
+            _output.WriteLine($"Streaming aggregate spilled {e.Telemetry.TotalSpilledBytes - before:N0} bytes for {ROWS:N0} rows.");
         }
 
         [Fact]

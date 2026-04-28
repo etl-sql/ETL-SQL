@@ -71,7 +71,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             await rightMem.WriteBatches(new[] { rightTable }.ToAsyncEnumerable());
             e.Connections["#right"] = rightMem;
 
-            long before = e.TotalSpilledBytes;
+            long before = e.Telemetry.TotalSpilledBytes;
             
             // This triggers the complex pipeline in SelectStatementHandler because of the JOIN
             var script = "SELECT L.Id FROM #left AS L INNER JOIN #right AS R ON L.Id = R.Id ORDER BY L.Id;";
@@ -82,9 +82,9 @@ namespace ETL_SQL.Tests.Hardening.Performance
             // If CR-B1 exists, we only get matches from rows 100k+, which is zero in this test case.
             // If fixed, we get all 20k matches.
             Assert.Equal(RIGHT_ROWS, e.LastResult.TotalRowsMatched);
-            Assert.True(e.TotalSpilledBytes > before, "External fallback should have spilled bytes.");
+            Assert.True(e.Telemetry.TotalSpilledBytes > before, "External fallback should have spilled bytes.");
             
-            _output.WriteLine($"Total Matches: {e.LastResult.TotalRowsMatched:N0}. Spilled: {e.TotalSpilledBytes - before:N0} bytes.");
+            _output.WriteLine($"Total Matches: {e.LastResult.TotalRowsMatched:N0}. Spilled: {e.Telemetry.TotalSpilledBytes - before:N0} bytes.");
         }
 
         [Fact]

@@ -51,7 +51,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             
             // 250 input rows expanded into 4 sets each = 1000 intermediate rows spilled.
             // After aggregation, unique groups will vary based on data.
-            Assert.True(eval.TotalSpilledBytes > 0);
+            Assert.True(eval.Telemetry.TotalSpilledBytes > 0);
             Assert.True(eval.AggregateGroupsCount > 0);
             Assert.Equal(4.0, eval.AggregateExpansionRatio); // 4 sets for CUBE(A, B)
 
@@ -86,7 +86,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             await Execute(eval, sql);
 
             Assert.Equal(4.0, eval.AggregateExpansionRatio);
-            Assert.True(eval.TotalSpilledBytes > 0);
+            Assert.True(eval.Telemetry.TotalSpilledBytes > 0);
         }
     }
 }

@@ -100,8 +100,8 @@ namespace ETL_SQL.Engine.Engines
                         }
                     }
                     
-                    _context.SortSpillCount++;
-                    _context.PartitionsCount++;
+                    _context.Telemetry.SortSpillCount++;
+                    _context.Telemetry.PartitionsCount++;
                     currentChunk.Clear();
                 }
             }
@@ -121,8 +121,8 @@ namespace ETL_SQL.Engine.Engines
                         await writer.WriteRowAsync(entry.Row);
                     }
                 }
-                _context.SortSpillCount++;
-                _context.PartitionsCount++;
+                _context.Telemetry.SortSpillCount++;
+                _context.Telemetry.PartitionsCount++;
             }
 
             // 3. K-way Merge and yield
@@ -189,3 +189,4 @@ namespace ETL_SQL.Engine.Engines
 
     }
 }
+

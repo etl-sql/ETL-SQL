@@ -90,7 +90,7 @@ namespace ETL_SQL.Tests.Operations.Operations
             var (eval, logger) = BuildContext();
             var engine = new ExternalAggregateEngine(eval, logger);
 
-            long spillBefore = eval.TotalSpilledBytes;
+            long spillBefore = eval.Telemetry.TotalSpilledBytes;
 
             // ApplyAggregationExternal always spills to disk unconditionally for batch processing,
             // regardless of the 100k row memory threshold used by the higher-level SelectStatementHandler.
@@ -110,7 +110,7 @@ namespace ETL_SQL.Tests.Operations.Operations
                 finalColumns, new List<string> { "category", "cnt" }).ToListAsync();
 
             // Spilling 60 rows should have written bytes to temp
-            Assert.True(eval.TotalSpilledBytes > spillBefore,
+            Assert.True(eval.Telemetry.TotalSpilledBytes > spillBefore,
                 "TotalSpilledBytes should increase after external aggregation");
         }
 

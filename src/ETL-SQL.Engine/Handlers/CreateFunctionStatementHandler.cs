@@ -16,18 +16,14 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (CreateFunctionStatement)statement;
             
-            
-            bool exists = context.FunctionExists(stmt.FunctionName);
+            bool exists = context.VarContext.TryGetFunction(stmt.FunctionName, out _);
             if (stmt.Mode == ObjectCreationMode.Alter && !exists)
                 throw new ExecutionException($"Function {stmt.FunctionName} does not exist.");
             if (stmt.Mode == ObjectCreationMode.Create && exists)
                 throw new ExecutionException($"Function {stmt.FunctionName} already exists.");
 
-            context.EvaluateCreateFunction(stmt);
+            context.VarContext.SetFunction(stmt.FunctionName, stmt);
             return Task.CompletedTask;
         }
     }
 }
-
-
-

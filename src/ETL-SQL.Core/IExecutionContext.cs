@@ -33,7 +33,13 @@ namespace ETL_SQL.Core
         /// <summary>Checks if a variable was declared in the current local scope only.</summary>
         bool ContainsVariableInCurrentScope(string name);
         void DeclareVariable(string name, object? value, VariableMetadata? metadata = null);
-        Dictionary<string, object?> GetVariablesWithMetadata(Func<VariableMetadata, bool> predicate);
+        bool RemoveProcedure(string name);
+        void SetProcedure(string name, CreateProcedureStatement stmt);
+        bool TryGetProcedure(string name, out CreateProcedureStatement? stmt);
+        void SetFunction(string name, CreateFunctionStatement stmt);
+        bool RemoveFunction(string name);
+        bool TryGetFunction(string name, out CreateFunctionStatement? stmt);
+        IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null);
     }
 
     public interface IQueryContext
@@ -103,6 +109,25 @@ namespace ETL_SQL.Core
         object? CastToType(object? value, string dataType);
     }
 
+    public interface ITelemetryContext
+    {
+        long RowsProcessed { get; set; }
+        long LastStatementRowsProcessed { get; set; }
+        long TotalSpilledBytes { get; set; }
+        bool TelemetryEnabled { get; set; }
+        int PartitionsCount { get; set; }
+        long AggregateGroupsCount { get; set; }
+        double AggregateExpansionRatio { get; set; }
+        long LastExecutionTimeMs { get; set; }
+        long SubqueryCacheHits { get; set; }
+        long SubqueryCacheMisses { get; set; }
+        int SortSpillCount { get; set; }
+        bool IsProfiling { get; set; }
+        List<ExecutionMetrics> ProfileMetrics { get; }
+        Common.ExecutionTree ExecutionTree { get; }
+        void Clear();
+    }
+
     public interface IDataContext
     {
         string? SessionId { get; }
@@ -114,19 +139,7 @@ namespace ETL_SQL.Core
         string? ScriptPassword { get; set; }
         DataTable? LastResult { get; set; }
         List<DataTable> LastResultSets { get; }
-        long RowsProcessed { get; set; }
-        long LastStatementRowsProcessed { get; set; }
-        long TotalSpilledBytes { get; set; }
         string? LastIndexUsedName { get; set; }
-        /// <summary>Whether to collect expensive execution metrics (e.g., spill byte counting). Default is ON.</summary>
-        bool TelemetryEnabled { get; set; }
-        int PartitionsCount { get; set; }
-        long AggregateGroupsCount { get; set; }
-        double AggregateExpansionRatio { get; set; }
-        long LastExecutionTimeMs { get; set; }
-        long SubqueryCacheHits { get; set; }
-        long SubqueryCacheMisses { get; set; }
-        int SortSpillCount { get; set; }
         Action<DataTable>? OnResultSet { get; set; }
         bool IsSqlPushdown(string connName);
         /// <summary>Named environment sets created by CREATE SETS.</summary>
@@ -198,7 +211,7 @@ namespace ETL_SQL.Core
         Task EvaluateStatement(Statement statement);
         Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default);
         IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt);
-        Task EvaluateProcedure(string name, List<object?> args);
+        Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args);
         string ResolvePath(string path);
         int MaxRecursiveDepth { get; set; }
         int CurrentRecursiveDepth { get; set; }
@@ -255,13 +268,15 @@ namespace ETL_SQL.Core
     /// The primary interface for script execution state, providing access to variables, connections,
     /// expression evaluation, and system services (Docker, Lineage, Transactions).
     /// </summary>
-    public interface IExecutionContext : IVariableContext, IQueryContext, ISqlCompilerContext,
+    public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
                                         ITransactionContext, ILineageContext, IDockerContext,
-                                        ILoggingContext, IEvaluationContext, IDataContext, IEngineContext,
-                                        IReportContext
+                                        ILoggingContext, IEvaluationContext, IDataContext, IEngineContext
     {
         // Property-based access to sub-contexts for better interface segregation (TODO-91)
-        IVariableContext VarContext => this;
+        IVariableContext VarContext { get; }
+        IReportContext ReportContext { get; }
+        ITelemetryContext Telemetry { get; }
+        
         IEvaluationContext EvaluationContext => this;
         IDataContext DataContext => this;
         IQueryContext QueryContext => this;
@@ -269,7 +284,6 @@ namespace ETL_SQL.Core
         ILoggingContext LoggingContext => this;
         ITransactionContext TransactionContext => this;
         ILineageContext LineageContext => this;
-        IReportContext ReportContext => this;
 
         bool SpillEncryptionEnabled { get; set; }
         bool SpillCompressionEnabled { get; set; }
@@ -284,11 +298,8 @@ namespace ETL_SQL.Core
         System.Threading.CancellationToken CancellationToken { get; }
         IServiceProvider ServiceProvider { get; }
         
-        bool IsProfiling { get; set; }
         bool IsWhatIf { get; set; }
         bool DisplayExecuteTree { get; set; }
-        List<ExecutionMetrics> ProfileMetrics { get; }
-        Common.ExecutionTree ExecutionTree { get; }
         /// <summary>The ID of the currently executing node in this task/context.</summary>
         Guid? CurrentNodeId { get; set; }
 
@@ -303,16 +314,8 @@ namespace ETL_SQL.Core
 
         List<string> GetIndexedColumns(Expression? cond, string alias);
 
-        Task EvaluateCreateTable(CreateTableStatement stmt);
-        Task EvaluateCreateIndex(CreateIndexStatement stmt);
-        void EvaluateCreateFunction(CreateFunctionStatement stmt);
-        void EvaluateCreateProcedure(CreateProcedureStatement stmt);
-        Task EvaluateDropConnection(DropConnectionStatement stmt);
-        void EvaluateDropFunction(DropFunctionStatement stmt);
-        Task EvaluateDropIndex(DropIndexStatement stmt);
-        void EvaluateDropProcedure(DropProcedureStatement stmt);
-        Task EvaluateDropTable(DropTableStatement stmt);
-        Task EvaluateClearSession(ClearSessionStatement stmt);
+
+
 
         /// <summary>Creates a thread-safe shallow clone of the context for parallel execution branches.</summary>
         IExecutionContext Fork();

@@ -62,7 +62,6 @@ namespace ETL_SQL.Tests.Core
 
             Assert.Single(script.Statements);
             Assert.IsType<CreateConnectionStatement>(script.Statements[0]);
-            
             var cc = (CreateConnectionStatement)script.Statements[0];
             Assert.Equal("my_conn", cc.ConnectionName);
             Assert.Equal("FLATFILE", cc.ConnectionType);
@@ -83,9 +82,10 @@ namespace ETL_SQL.Tests.Core
 
             Assert.IsType<PrintStatement>(script.Statements[0]);
             var print = (PrintStatement)script.Statements[0];
-            Assert.IsType<BinaryExpression>(print.Message);
+            Assert.Single(print.Arguments);
+            Assert.IsType<BinaryExpression>(print.Arguments[0]);
             
-            var bin = (BinaryExpression)print.Message;
+            var bin = (BinaryExpression)print.Arguments[0];
             // 1 + (2 * 3) -> Top level should be +
             Assert.Equal(TokenType.PLUS, bin.Operator);
             Assert.IsType<BinaryExpression>(bin.Right);

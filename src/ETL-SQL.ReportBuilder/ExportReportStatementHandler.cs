@@ -45,7 +45,7 @@ namespace ETL_SQL.ReportBuilder
 
             string? oldPath = context.CurrentScriptPath;
             context.CurrentScriptPath = Path.GetFullPath(reportPath);
-            context.PushScope(new System.Collections.Generic.Dictionary<string, object?>(),
+            context.VarContext.PushScope(new System.Collections.Generic.Dictionary<string, object?>(),
                               new System.Collections.Generic.Dictionary<string, VariableMetadata>());
             try
             {
@@ -53,7 +53,7 @@ namespace ETL_SQL.ReportBuilder
             }
             finally
             {
-                context.PopScope();
+                context.VarContext.PopScope();
                 context.CurrentScriptPath = oldPath;
             }
 

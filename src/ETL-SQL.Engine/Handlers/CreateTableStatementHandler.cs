@@ -13,13 +13,15 @@ namespace ETL_SQL.Engine.Handlers
         public Type SupportedStatementType => typeof(CreateTableStatement);
 
 
-        /// <summary>Executes the CREATE TABLE statement in the current context.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (CreateTableStatement)statement;
             
             _logger.Debug("Creating table {TableName} on {ConnectionName}", stmt.TargetTable.TableName, stmt.TargetTable.ConnectionName ?? "local");
-            await context.EvaluateCreateTable(stmt);
+            if (context.EngineContext is ETL_SQL.Engine.Evaluator eval)
+            {
+                await eval.SchemaManager.EvaluateCreateTable(stmt, context.DataContext.Connections);
+            }
         }
     }
 }

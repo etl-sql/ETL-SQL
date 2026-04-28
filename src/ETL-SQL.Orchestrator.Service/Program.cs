@@ -136,17 +136,17 @@ try
     builder.Services.AddSingleton<CliContext>(new CliContext());
     builder.Services.AddTransient<ExecutionSession>();
     builder.Services.AddTransient<Evaluator>();
-    builder.Services.AddTransient<IExecutionContext>(sp => sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<IVariableContext>(sp => sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<IQueryContext>(sp => sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<ILineageContext>(sp => sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<ISqlCompilerContext>(sp => sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<ITransactionContext>(sp => sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<IDockerContext>(sp => sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<ILoggingContext>(sp => sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<IEvaluationContext>(sp => sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<IDataContext>(sp => sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<IEngineContext>(sp => sp.GetRequiredService<Evaluator>());
+    builder.Services.AddTransient<IExecutionContext>(sp => (IExecutionContext)sp.GetRequiredService<Evaluator>());
+    builder.Services.AddTransient<IVariableContext>(sp => (IVariableContext)sp.GetRequiredService<Evaluator>());
+    builder.Services.AddTransient<IQueryContext>(sp => (IQueryContext)sp.GetRequiredService<Evaluator>());
+    builder.Services.AddTransient<ILineageContext>(sp => (ILineageContext)sp.GetRequiredService<Evaluator>());
+    builder.Services.AddTransient<ISqlCompilerContext>(sp => (ISqlCompilerContext)sp.GetRequiredService<Evaluator>());
+    builder.Services.AddTransient<ITransactionContext>(sp => (ITransactionContext)sp.GetRequiredService<Evaluator>());
+    builder.Services.AddTransient<IDockerContext>(sp => (IDockerContext)sp.GetRequiredService<Evaluator>());
+    builder.Services.AddTransient<ILoggingContext>(sp => (ILoggingContext)sp.GetRequiredService<Evaluator>());
+    builder.Services.AddTransient<IEvaluationContext>(sp => (IEvaluationContext)sp.GetRequiredService<Evaluator>());
+    builder.Services.AddTransient<IDataContext>(sp => (IDataContext)sp.GetRequiredService<Evaluator>());
+    builder.Services.AddTransient<IEngineContext>(sp => (IEngineContext)sp.GetRequiredService<Evaluator>());
 
     var handlerTypes = typeof(DeclareStatementHandler).Assembly.GetTypes()
         .Where(t => typeof(IStatementHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);

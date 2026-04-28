@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
@@ -19,21 +20,27 @@ namespace ETL_SQL.Engine.Handlers
         }
 
         /// <summary>Executes the PRINT statement, evaluating and concatenating all provided arguments.</summary>
+        /// <summary>Executes the PRINT statement, evaluating and concatenating all provided arguments.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (PrintStatement)statement;
-            var row = new Row();
+            var values = new List<string>();
 
-            var parts = new System.Text.StringBuilder();
-            parts.Append((await context.EvaluationContext.EvaluateValue(stmt.Message, row))?.ToString() ?? "NULL");
+            foreach (var arg in stmt.Arguments)
+            {
+                var val = await context.EvaluateValue(arg, new Row());
+                values.Add(val?.ToString() ?? "NULL");
+            }
 
-            if (stmt.ShowTimestamp != null)
-                parts.Append(' ').Append((await context.EvaluationContext.EvaluateValue(stmt.ShowTimestamp, row))?.ToString() ?? "NULL");
+            var message = string.Join(" ", values);
 
-            if (stmt.TimestampFormat != null)
-                parts.Append(' ').Append((await context.EvaluationContext.EvaluateValue(stmt.TimestampFormat, row))?.ToString() ?? "NULL");
+            if (stmt.ShowTimestamp != null && (bool)(await context.EvaluateValue(stmt.ShowTimestamp, new Row()) ?? false))
+            {
+                string format = (await context.EvaluateValue(stmt.TimestampFormat, new Row()))?.ToString() ?? "yyyy-MM-dd HH:mm:ss";
+                message = $"[{DateTime.Now.ToString(format)}] {message}";
+            }
 
-            context.LoggingContext.Log(parts.ToString(), ConsoleColor.White);
+            context.Log(message);
         }
     }
 }

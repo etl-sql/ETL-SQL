@@ -23,8 +23,13 @@ END CATCH
 
 -- 3. @@ERROR
 PRINT 'Testing @@ERROR...';
-SELECT 1 / 0;
-PRINT 'Last Error ID: ' + @@ERROR;
+BEGIN TRY
+    SELECT 1 / 0;
+END TRY
+BEGIN CATCH
+    PRINT 'Last Error ID (from catch): ' + @@ERROR;
+END CATCH
+PRINT 'Last Error ID (after catch): ' + @@ERROR;
 
 -- 4. Nested TRY...CATCH
 PRINT 'Testing Nested TRY...CATCH...';

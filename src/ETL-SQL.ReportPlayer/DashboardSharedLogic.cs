@@ -33,7 +33,7 @@ namespace ETL_SQL.ReportPlayer
             var builder = new ManifestBuilder(evaluator);
             int refreshCount = 0;
 
-            foreach (var visualDef in evaluator.VisualDefinitions.Values)
+            foreach (var visualDef in evaluator.ReportContext.VisualDefinitions.Values)
             {
                 if (affectedNames.Any(n => DependsOnVariable(visualDef, n)))
                 {

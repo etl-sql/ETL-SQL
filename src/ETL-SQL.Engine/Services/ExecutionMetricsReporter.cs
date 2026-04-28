@@ -19,18 +19,18 @@ namespace ETL_SQL.Engine.Services
         private int _lastPartitionsCount;
         private long _startRows;
 
-        public List<ExecutionMetrics> ProfileMetrics => _context.ProfileMetrics;
+        public List<ExecutionMetrics> ProfileMetrics => _context.Telemetry.ProfileMetrics;
 
         /// <summary>
         /// Captures baseline metrics before a statement begins execution.
         /// </summary>
         public void ReportPreExecutionMetrics(Statement s)
         {
-            if (!_context.IsProfiling) return;
+            if (!_context.Telemetry.IsProfiling) return;
             _lastMemoryUsage = GC.GetTotalMemory(false);
-            _lastSpilledBytes = _context.TotalSpilledBytes;
-            _lastPartitionsCount = _context.PartitionsCount;
-            _startRows = _context.RowsProcessed;
+            _lastSpilledBytes = _context.Telemetry.TotalSpilledBytes;
+            _lastPartitionsCount = _context.Telemetry.PartitionsCount;
+            _startRows = _context.Telemetry.RowsProcessed;
         }
 
         /// <summary>
@@ -38,28 +38,25 @@ namespace ETL_SQL.Engine.Services
         /// </summary>
         public void ReportPostExecutionMetrics(Statement s, long ms)
         {
-            if (!_context.IsProfiling) return;
+            if (!_context.Telemetry.IsProfiling) return;
             
             var currentMemory = GC.GetTotalMemory(false);
-            var rowsProcessed = _context.RowsProcessed - _startRows;
+            var rowsProcessed = _context.Telemetry.RowsProcessed - _startRows;
             
             // Note: We still update the context's LastStatementRowsProcessed so @@ROWCOUNT works
-            if (_context is Evaluator eval)
-            {
-                eval.LastStatementRowsProcessed = rowsProcessed;
-            }
+            _context.Telemetry.LastStatementRowsProcessed = rowsProcessed;
 
-            _context.ProfileMetrics.Add(new ExecutionMetrics
+            _context.Telemetry.ProfileMetrics.Add(new ExecutionMetrics
             {
                 Sql = s.ToSql(),
                 DurationMs = ms,
                 MemoryDeltaBytes = currentMemory - _lastMemoryUsage,
                 RowsProcessed = rowsProcessed,
-                IndexName = _context.LastIndexUsedName,
+                IndexName = _context.DataContext.LastIndexUsedName,
                 Timestamp = DateTime.Now,
-                SpilledBytes = _context.TotalSpilledBytes - _lastSpilledBytes,
-                PartitionsCount = _context.PartitionsCount - _lastPartitionsCount,
-                RecursiveDepth = _context.CurrentRecursiveDepth
+                SpilledBytes = _context.Telemetry.TotalSpilledBytes - _lastSpilledBytes,
+                PartitionsCount = _context.Telemetry.PartitionsCount - _lastPartitionsCount,
+                RecursiveDepth = _context.EngineContext.CurrentRecursiveDepth
             });
         }
 
@@ -68,12 +65,12 @@ namespace ETL_SQL.Engine.Services
         /// </summary>
         public void ProvideTips(Statement s)
         {
-            if (s is SelectStatement sel && sel.Joins?.Count > 1 && string.IsNullOrEmpty(_context.LastIndexUsedName))
+            if (s is SelectStatement sel && sel.Joins?.Count > 1 && string.IsNullOrEmpty(_context.DataContext.LastIndexUsedName))
             {
-                _context.Logger.Warning("Performance Tip: Multi-join query detected without index usage. Consider adding indexes to JOIN columns.");
+                _context.LoggingContext.Logger.Warning("Performance Tip: Multi-join query detected without index usage. Consider adding indexes to JOIN columns.");
             }
         }
 
-        public void Clear() => _context.ProfileMetrics.Clear();
+        public void Clear() => _context.Telemetry.ProfileMetrics.Clear();
     }
 }

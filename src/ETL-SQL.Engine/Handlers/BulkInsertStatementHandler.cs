@@ -196,7 +196,7 @@ namespace ETL_SQL.Engine.Handlers
                     }
                 }
                 
-                context.RowsProcessed += count;
+                context.Telemetry.RowsProcessed += count;
                 _logger.WriteLine($"Bulk insert completed. {count} rows loaded. {errorCount} errors skipped.");
             }
             finally
@@ -206,3 +206,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

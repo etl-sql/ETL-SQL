@@ -404,9 +404,10 @@ namespace ETL_SQL.Core.Formatting
 
         private static string FormatPrint(PrintStatement s)
         {
+            var msg = string.Join(", ", s.Arguments.Select(e => e.ToSql()));
             var ts  = s.ShowTimestamp   != null ? $", {s.ShowTimestamp.ToSql()}"   : "";
             var fmt = s.TimestampFormat != null ? $", {s.TimestampFormat.ToSql()}" : "";
-            return $"PRINT({s.Message.ToSql()}{ts}{fmt});";
+            return $"PRINT({msg}{ts}{fmt});";
         }
 
         private static string FormatRaiseError(RaiseErrorStatement s)
@@ -463,7 +464,7 @@ namespace ETL_SQL.Core.Formatting
         private static string FormatDirectoryOperation(DirectoryOperationStatement s)
         {
             var op    = s.Type.ToString().ToUpper() + " DIRECTORY" + (s.Type == DirectoryOpType.DeleteContents ? "_CONTENTS" : "");
-            var extra = s.NewNameOrDest != null ? " TO " + s.NewNameOrDest.ToSql() : "";
+            var extra = s.Destination != null ? " TO " + s.Destination.ToSql() : "";
             var opts  = new List<string>();
             if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
             if (s.Recursive != null) opts.Add($"RECURSIVE={s.Recursive.ToSql()}");

@@ -98,7 +98,7 @@ namespace ETL_SQL.Engine.Engines
             }
 
             _logger.WriteLine($"[yellow]HYPER-SCALE: Processing {allWindowCalls.Count} window functions across {groups.Count} signature groups.[/]");
-            _context.PartitionsCount = groups.Count;
+            _context.Telemetry.PartitionsCount = groups.Count;
 
             IAsyncEnumerable<Row> currentStream = inputStream;
 
@@ -313,7 +313,7 @@ namespace ETL_SQL.Engine.Engines
                         await w.DisposeAsync();
                     }
                 }
-                _context.PartitionsCount += usedCount;
+                _context.Telemetry.PartitionsCount += usedCount;
             }
 
             return names.Select((p, i) => new PartitionInfo(p, counts[i])).ToArray();
@@ -344,3 +344,4 @@ namespace ETL_SQL.Engine.Engines
 
     }
 }
+

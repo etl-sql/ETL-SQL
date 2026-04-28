@@ -102,7 +102,7 @@ namespace ETL_SQL.TUI.UI
             // Scroll limits
             if (PerformanceVisible)
             {
-                int maxPerf = Math.Max(0, evaluator.ProfileMetrics.Count - (lowerAreaHeight - 4));
+                int maxPerf = Math.Max(0, evaluator.Telemetry.ProfileMetrics.Count - (lowerAreaHeight - 4));
                 ResultScrollRow = Math.Clamp(ResultScrollRow, 0, maxPerf);
             }
             else if (ResultsVisible && evaluator.LastResult != null)
@@ -115,7 +115,7 @@ namespace ETL_SQL.TUI.UI
                 // MessageTree panel — independent scroll for each column
                 int innerRows = lowerAreaHeight - 3;
                 int maxMsg  = Math.Max(0, evaluator.Messages.Count - innerRows);
-                int maxTree = Math.Max(0, evaluator.ExecutionTree.GetAllNodes().Count() - innerRows);
+                int maxTree = Math.Max(0, evaluator.Telemetry.ExecutionTree.GetAllNodes().Count() - innerRows);
                 MessageScrollRow = Math.Clamp(MessageScrollRow, 0, maxMsg);
                 TreeScrollRow    = Math.Clamp(TreeScrollRow, 0, maxTree);
             }

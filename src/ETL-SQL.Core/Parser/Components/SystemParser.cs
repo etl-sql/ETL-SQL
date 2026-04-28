@@ -47,7 +47,7 @@ namespace ETL_SQL.Core.Parser.Components
                     _parser.ParseMetadataTags(_parser.Previous.Value, metadata);
                 }
 
-                var stmt = new DeclareStatement(varToken.Value, type, initialValue, isSensitive, isInput, isOutput, metadata)
+                var stmt = new DeclareStatement(varToken.Value, type ?? "", initialValue, isSensitive, isInput, isOutput, metadata)
                 {
                     Line        = varToken.Line,
                     Column      = varToken.Column,
@@ -76,7 +76,9 @@ namespace ETL_SQL.Core.Parser.Components
                 target = new VariableExpression(varToken.Value) { Line = varToken.Line, Column = varToken.Column };
                 while (Match(TokenType.DOT))
                 {
-                    var member = Consume(TokenType.IDENTIFIER, "Expected member name after '.'");
+                    if (!_parser.IsIdentifier(_parser.Current) && !ETL_SQL.Common.LanguageMetadata.IsKeyword(_parser.Current.Value))
+                        throw new SyntaxException("Expected member name after '.'", _parser.Current.Line, _parser.Current.Column);
+                    var member = Advance();
                     target = new MemberAccessExpression(target, member.Value) { Line = varToken.Line, Column = varToken.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
                 }
             }
@@ -474,17 +476,15 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParsePrint()
         {
             bool hasParen = Match(TokenType.LPAREN);
-            var message = ParseExpression();
-            Expression? showTimestamp = null;
-            Expression? format = null;
-            if (Match(TokenType.COMMA))
+            var args = new List<Expression>();
+            args.Add(ParseExpression());
+            while (Match(TokenType.COMMA))
             {
-                showTimestamp = ParseExpression();
-                if (Match(TokenType.COMMA)) format = ParseExpression();
+                args.Add(ParseExpression());
             }
             if (hasParen) Consume(TokenType.RPAREN, "Expected ')' after PRINT arguments");
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new PrintStatement(message, showTimestamp, format);
+            return new PrintStatement(args);
         }
 
         public Statement ParseBeginTransaction()

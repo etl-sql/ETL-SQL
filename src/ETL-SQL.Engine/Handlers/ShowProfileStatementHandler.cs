@@ -20,7 +20,7 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (ShowProfileStatement)statement;
 
-            if (context.ProfileMetrics.Count == 0)
+            if (context.Telemetry.ProfileMetrics.Count == 0)
             {
                 if (!context.RedirectOutput && stmt.IntoTable == null)
                 {
@@ -40,7 +40,7 @@ namespace ETL_SQL.Engine.Handlers
             dataTable.AddColumn("SpilledBytes");
             dataTable.AddColumn("Partitions");
 
-            foreach (var m in context.ProfileMetrics)
+            foreach (var m in context.Telemetry.ProfileMetrics)
             {
                 var row = new Row();
                 row["Timestamp"] = m.Timestamp;

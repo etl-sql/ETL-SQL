@@ -198,12 +198,12 @@ namespace ETL_SQL.Tests.Operations.Operations
             };
             var colNames = new List<string> { "cat", "cnt" };
 
-            long spillBefore = eval.TotalSpilledBytes;
+            long spillBefore = eval.Telemetry.TotalSpilledBytes;
 
             await engine.ApplyAggregationExternal(rows, null, finalColumns, colNames, null, groupingSet).ToListAsync();
 
             // Should have spilled 100 * 8 = 800 intermediate rows to dynamic partitions
-            Assert.True(eval.TotalSpilledBytes > spillBefore);
+            Assert.True(eval.Telemetry.TotalSpilledBytes > spillBefore);
             Assert.Equal(8.0, eval.AggregateExpansionRatio, 1);
         }
     }

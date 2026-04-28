@@ -101,7 +101,7 @@ namespace ETL_SQL.Tests.Statements
                 // 3. Assert
                 Assert.Equal(3, failingDs.Rows.Count); // Alice, Bob, Charlie should be in
                 Assert.Equal(3, failingDs.FailedWrites); // 1 batch failure + 2 individual row failures
-                Assert.Equal(3, (int)_evaluator.RowsProcessed);
+                Assert.Equal(3, (int)_evaluator.Telemetry.RowsProcessed);
             }
             finally
             {

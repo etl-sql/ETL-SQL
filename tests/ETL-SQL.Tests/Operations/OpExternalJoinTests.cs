@@ -41,8 +41,8 @@ namespace ETL_SQL.Tests.Operations.Operations
                 new BinaryExpression(new IdentifierExpression("id"), TokenType.EQUALS, new IdentifierExpression("id"))
             );
 
-            var startSpill = eval.TotalSpilledBytes;
-            var startParts = eval.PartitionsCount;
+            var startSpill = eval.Telemetry.TotalSpilledBytes;
+            var startParts = eval.Telemetry.PartitionsCount;
 
             var results = await engine.ApplyHashJoinExternal(
                 leftRows.ToAsyncEnumerable(), 
@@ -54,8 +54,8 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.Equal(10, results.Count);
             Assert.All(results, r => Assert.Equal(r["lval"]?.ToString().Replace("l-", ""), r["rval"]?.ToString().Replace("r-", "")));
 
-            Assert.True(eval.TotalSpilledBytes > startSpill, "Should have reported spilled bytes");
-            Assert.True(eval.PartitionsCount > startParts, "Should have reported used partition count");
+            Assert.True(eval.Telemetry.TotalSpilledBytes > startSpill, "Should have reported spilled bytes");
+            Assert.True(eval.Telemetry.PartitionsCount > startParts, "Should have reported used partition count");
         }
 
         [Fact]

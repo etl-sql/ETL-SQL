@@ -579,7 +579,15 @@ namespace ETL_SQL.Data
             if (!append) await TruncateAsync();
             await foreach (var b in batches)
             {
-                if (_columnOrder.Count == 0) _columnOrder.AddRange(b.ColumnNames);
+                if (_columnOrder.Count == 0)
+                {
+                    _columnOrder.AddRange(b.ColumnNames);
+                    foreach (var col in _columnOrder)
+                    {
+                        if (!Schema.ContainsKey(col))
+                            Schema[col] = new ColumnDefinition(col, "UNKNOWN", false);
+                    }
+                }
                 
                 await _lock.WaitAsync();
                 try
@@ -600,8 +608,8 @@ namespace ETL_SQL.Data
                             _spillChunkNames.Add(chunkName);
                             _totalRowCount += b.Rows.Count;
 
-                            if (ExecutionContext.IsProfiling)
-                                ExecutionContext.Logger.Debug("Temp table threshold reached ({Threshold} rows). Spilled batch to chunk: {ChunkName}", threshold, chunkName);
+                            if (ExecutionContext.Telemetry.IsProfiling)
+                                ExecutionContext.LoggingContext.Logger.Debug("Temp table threshold reached ({Threshold} rows). Spilled batch to chunk: {ChunkName}", threshold, chunkName);
                             
                             continue;
                         }

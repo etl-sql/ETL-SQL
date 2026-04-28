@@ -37,7 +37,26 @@
         - [ ] `Docs/ReportPortal_Administrators_Guide.md`: Section 8 with `CREATE SUBSCRIPTION` / `ALTER SUBSCRIPTION` full syntax.
         - [ ] `Docs/User_Manual.md`: `SET WEEK_START_DAY` in SET reference; `Engine.StartOfWeek` in config reference.
         - [ ] `Docs/Reference/Grammar.md`: New productions for all added statements and types.
-- [ ] **Security Manifest**: Strategy document for script signing.
+- [x] **Security Manifest**: Strategy document complete. See [`Docs/Strategy/ScriptSecurity_Strategy.md`](Strategy/ScriptSecurity_Strategy.md). Full PKI signing not recommended — disproportionate key management overhead. **Hash pinning** instead: store SHA-256 of script at schedule/publish time, compare at run time, warn or block on mismatch. ~2 dev-days across 3 phases.
+    - **Phase 1 — Orchestrator hash pinning**
+        - [ ] `OrchestratorJob` entity: Add `ScriptHash` (TEXT) + `HashPolicy` (`Warn`/`Block`, default `Warn`).
+        - [ ] New EF Core migration: `AddJobScriptHash`.
+        - [ ] `JobScheduler`: Compute and store hash at schedule time.
+        - [ ] `JobRunner`: Recompute at run time; compare; apply policy; log result.
+        - [ ] `ExecutionHistory` entity: Add `ScriptHashAtRunTime` (TEXT) + `HashMatched` (bool).
+        - [ ] `appsettings.json`: Add `Engine.ScriptHashPolicy` global default.
+        - [ ] `SET SCRIPT_HASH_POLICY` statement: Parse + apply per-script override.
+        - [ ] Tests: match → runs; mismatch+Warn → runs with log; mismatch+Block → `ExecutionException`.
+    - **Phase 2 — Report Portal hash pinning**
+        - [ ] `Report` entity: Add `PublishedScriptHash` (TEXT).
+        - [ ] Publish flow: Compute and store hash.
+        - [ ] Snapshot builder: Compare hash; log `ScriptHashAtRunTime` + `HashMatched` on snapshot record.
+        - [ ] Admin → Reports view: Show "script changed since published" (distinct from generic stale indicator).
+        - [ ] Audit log: Include `ScriptHash` on `EXECUTE_REPORT` events.
+    - **Phase 3 — Documentation**
+        - [ ] `Docs/Administrators_Guide.md`: Add `Engine.ScriptHashPolicy` to config reference.
+        - [ ] `Docs/ReportPortal_Administrators_Guide.md`: Hash tracking in publishing + execution sections.
+        - [ ] `Docs/Architecture/Orchestrator.md`: Hash fields on job and execution history entities.
 - [x] **Data Lake Connection brainstorm**: Strategy document complete. See [`Docs/Strategy/DataLake_Connectors_Strategy.md`](Strategy/DataLake_Connectors_Strategy.md). Revised scope: existing ODBC connector already covers Redshift, Databricks, Synapse, Trino, Dremio. Existing Parquet + Avro connectors already cover the file formats. Only Snowflake and BigQuery need new native connectors (complex auth not expressible in an ODBC string). DuckDB added as low-priority ergonomics improvement. ~6.5 dev-days across 4 phases.
     - **Phase 1 — Snowflake native connector** *(most requested platform)*
         - [ ] `ETL-SQL.Core/TokenType.cs`: Add `SNOWFLAKE` keyword.
@@ -67,9 +86,16 @@
         - [ ] Unit tests: in-process, no `Category=Integration`. Test Parquet file committed to `tests/TestData/`.
         - [ ] `Docs/Reference/Data_Connectors.md`: DuckDB section — document as "embedded analytical engine," distinct from file connectors.
 - [ ] **Fresh Eyes Deep Code Architecture & Refactor Audit**
-    - [ ] **De-bloat `Evaluator.cs`**: Extract concerns (Reporting, Metrics, Variable Scoping) to specialized services; current class is a "God Object" (60KB).
+    - [x] **De-bloat `Evaluator.cs`**: Extract concerns (Reporting, Metrics, Variable Scoping) to specialized services; current class is a "God Object" (60KB). (Completed: migrated to composition-based sub-contexts: ITelemetryContext, IVariableContext, IReportContext).
     - [ ] **Refactor `SelectStatementHandler.cs` (SRP Violation)**: Move CTE registration, Lineage tracking, and Pushdown logic to dedicated engines/helpers.
     - [ ] **Harden `CreateConnectionStatementHandler`**: Replace hardcoded `fileConnectors` list with interface-based capability detection for `ResolvePath` enforcement.
     - [ ] **Centralize Security Guardrails**: Move manual recursion and `IncrementOperationCount` logic in `DirectoryOperationStatementHandler` to a centralized file system security policy.
     - [x] **Simplify `ExpressionEvaluator`**: Move ANSI string/date functions (`SUBSTRING`, `OVERLAY`, etc.) to `FunctionRegistry` and investigated performance of `ResolveIdentifierFallback` on wide rows (fixed shadowing bug & optimized name retrieval).
-13: - [ ] **Subquery Cache Optimization**: Implement a sophisticated subquery cache that supports correlated subqueries (currently disabled due to correctness issues). Subqueries should be cached based on both the AST node and the values of any captured outer references.
+- [ ] **Type System Bugs** — Specialty type behaviors are broken or incomplete (discovered during Grammar.md audit).
+    - [ ] **JSON validation at assignment** (`ETL-SQL.Core/Data/TypeConverter.cs`): The `JSON` converter just calls `v.ToString()`. It must call `JsonDocument.Parse()` and re-throw as `ExecutionException` on failure so a malformed JSON string errors at the `DECLARE` line, not buried in a `JSON_VALUE` call later.
+    - [ ] **XML validation at assignment** (`ETL-SQL.Core/Data/TypeConverter.cs`): Same issue — the `XML` converter just calls `v.ToString()`. Must call `XDocument.Parse()` and re-throw as `ExecutionException` on failure.
+    - [ ] **ENCRYPTED doesn't protect at runtime** (`ETL-SQL.Core/Parser/Components/SystemParser.cs`): `ENCRYPTED` is the canonical type for `ENC:...` passwords and connection string credentials, but the parser does NOT set `IsSensitive = true` for it — only `SENSITIVE` and `SECRET` get that flag. Consequence: `SHOW VARIABLES` displays raw `ENC:...` strings for ENCRYPTED variables, and the auto-decrypt path in `ExpressionEvaluator` (which checks `meta.IsSensitive`) silently skips them, passing the raw cipher text to connectors. Fix: add `"ENCRYPTED"` to the `isSensitive` check in `ParseDeclare()` alongside `SENSITIVE` and `SECRET`. Verify connector auth actually works end-to-end after the fix.
+    - [ ] **SECRET is a no-op alias for SENSITIVE** (`ETL-SQL.Core/Parser/Components/SystemParser.cs`, `ETL-SQL.Engine`): Both types set `IsSensitive = true` and nothing else — the documented "purged from memory on session end" behavior for `SECRET` does not exist. Need to immplement session-end variable purge for `SECRET` (clear the variable from all scopes when the evaluator tears down) Grammar.md must be updated to show the differences.
+    - [ ] **Grammar.md section 1.2 cleanup**: After the bugs above are fixed, update the `MARKDOWN` description to make clear it carries no validation (all strings are valid markdown) and is a rendering hint only. Update `ENCRYPTED` to accurately reflect its now-fixed runtime masking and auto-decrypt behavior.
+- [ ] **Subquery Cache Optimization**: Implement a sophisticated subquery cache that supports correlated subqueries (currently disabled due to correctness issues). Subqueries should be cached based on both the AST node and the values of any captured outer references.  Can this not sure the same model as teh CTE?
+- [ ] **Report portal https** Add a way for the report portal to use HTTPS.

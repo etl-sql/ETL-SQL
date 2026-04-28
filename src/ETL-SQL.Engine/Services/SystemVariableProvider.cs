@@ -17,14 +17,15 @@ namespace ETL_SQL.Engine.Services
             if (name.Equals("@@TRANCOUNT", StringComparison.OrdinalIgnoreCase)) return context.TranCount;
             if (name.Equals("@@RESULTSETS", StringComparison.OrdinalIgnoreCase)) return context.LastResultSets;
             if (name.Equals("@@VERSION", StringComparison.OrdinalIgnoreCase)) return LanguageMetadata.GetFullVersionString();
-            if (name.Equals("@@ROWCOUNT", StringComparison.OrdinalIgnoreCase)) return context.LastStatementRowsProcessed;
+            if (name.Equals("@@ROWCOUNT", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.LastStatementRowsProcessed;
             if (name.Equals("@@ERROR", StringComparison.OrdinalIgnoreCase)) return context.PreviousErrorNumber;
-            if (name.Equals("@@TOTAL_SPILLED_BYTES", StringComparison.OrdinalIgnoreCase)) return context.TotalSpilledBytes;
-            if (name.Equals("@@PARTITIONS_COUNT", StringComparison.OrdinalIgnoreCase)) return context.PartitionsCount;
-            if (name.Equals("@@AGGREGATE_GROUPS_COUNT", StringComparison.OrdinalIgnoreCase)) return context.AggregateGroupsCount;
-            if (name.Equals("@@AGGREGATE_EXPANSION_RATIO", StringComparison.OrdinalIgnoreCase)) return context.AggregateExpansionRatio;
+            if (name.Equals("@@TOTAL_SPILLED_BYTES", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.TotalSpilledBytes;
+            if (name.Equals("@@PARTITIONS_COUNT", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.PartitionsCount;
+            if (name.Equals("@@AGGREGATE_GROUPS_COUNT", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.AggregateGroupsCount;
+            if (name.Equals("@@AGGREGATE_EXPANSION_RATIO", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.AggregateExpansionRatio;
             
             return null;
         }
     }
 }
+

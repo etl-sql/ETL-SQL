@@ -148,7 +148,7 @@ namespace ETL_SQL.Engine.Handlers
                 
                 int totalRows = results.Sum(r => r.Rows.Count);
                 _logger.WriteLine($"Loaded {totalRows} rows into {tableName}.", ConsoleColor.Green);
-                context.RowsProcessed += totalRows;
+                context.Telemetry.RowsProcessed += totalRows;
             }
             else
             {
@@ -175,3 +175,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

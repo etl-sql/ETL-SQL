@@ -24,12 +24,12 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (CreateTemplateStatement)statement;
 
             // 1. Register in memory
-            if (stmt.Mode == ObjectCreationMode.Create && context.TemplateDefinitions.ContainsKey(stmt.Name))
+            if (stmt.Mode == ObjectCreationMode.Create && context.ReportContext.TemplateDefinitions.ContainsKey(stmt.Name))
             {
                 throw new ExecutionException($"Template '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP TEMPLATE first.", null, stmt.Line, stmt.Column);
             }
 
-            context.TemplateDefinitions[stmt.Name] = stmt;
+            context.ReportContext.TemplateDefinitions[stmt.Name] = stmt;
 
             // 2. Persist to disk
             try
@@ -50,7 +50,7 @@ namespace ETL_SQL.Engine.Handlers
 
         private void SaveTemplateToDisk(CreateTemplateStatement stmt, IExecutionContext context)
         {
-            var templateDir = context.TemplatePath;
+            var templateDir = context.ReportContext.TemplatePath;
             
             // Ensure directory exists
             if (!Directory.Exists(templateDir))
@@ -87,3 +87,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

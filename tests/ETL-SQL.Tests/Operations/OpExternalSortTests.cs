@@ -41,7 +41,7 @@ namespace ETL_SQL.Tests.Operations.Operations
                 new OrderByClause(new IdentifierExpression("id"), false) // ASC
             };
 
-            var startSpill = eval.TotalSpilledBytes;
+            var startSpill = eval.Telemetry.TotalSpilledBytes;
             var sorted = await engine.SortExternal(rows, orderBy);
 
             Assert.Equal(10, sorted.Count);
@@ -50,7 +50,7 @@ namespace ETL_SQL.Tests.Operations.Operations
                 Assert.Equal((decimal)(i + 1), Convert.ToDecimal(sorted[i]["id"]));
             }
 
-            Assert.True(eval.TotalSpilledBytes > startSpill, "Should have reported spilled bytes to context");
+            Assert.True(eval.Telemetry.TotalSpilledBytes > startSpill, "Should have reported spilled bytes to context");
         }
 
         [Fact]

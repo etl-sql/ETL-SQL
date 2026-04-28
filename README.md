@@ -112,21 +112,21 @@ your_report.rptsql
         │
         ▼  etl-sql-report build / serve
 ┌─────────────────────────┐
-│  ETL-SQL Engine          │   ← same evaluator as .etlsql scripts
-│  CREATE VISUAL           │
-│  CREATE PAGE             │
-│  CREATE DATASET          │
-│  CREATE CONTAINER        │
-│  CREATE NAVIGATION       │
+│  ETL-SQL Engine         │   ← same evaluator as .etlsql scripts
+│  CREATE VISUAL          │
+│  CREATE PAGE            │
+│  CREATE DATASET         │
+│  CREATE CONTAINER       │
+│  CREATE NAVIGATION      │
 └────────────┬────────────┘
              │ builds ReportManifest
              ▼
 ┌─────────────────────────┐
-│  ManifestBuilder         │
-│  EChartsRenderer         │   → Apache ECharts v5 option JSON
-│  SvgChartRenderer        │   → server-side SVG for PDF
-│  PdfExporter (QuestPDF)  │   → .pdf
-│  MarkdownRenderer        │   → .md
+│  ManifestBuilder        │
+│  EChartsRenderer        │   → Apache ECharts v5 option JSON
+│  SvgChartRenderer       │   → server-side SVG for PDF
+│  PdfExporter (QuestPDF) │   → .pdf
+│  MarkdownRenderer       │   → .md
 └────────────┬────────────┘
              │
     ┌────────┴─────────┐

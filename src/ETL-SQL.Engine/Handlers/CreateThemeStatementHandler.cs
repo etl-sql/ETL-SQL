@@ -25,10 +25,10 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (CreateThemeStatement)statement;
 
-            if (stmt.Mode == ObjectCreationMode.Create && context.ThemeDefinitions.ContainsKey(stmt.Name))
+            if (stmt.Mode == ObjectCreationMode.Create && context.ReportContext.ThemeDefinitions.ContainsKey(stmt.Name))
                 throw new ExecutionException($"Theme '{stmt.Name}' already exists. Use CREATE OR ALTER THEME.", null, stmt.Line, stmt.Column);
 
-            context.ThemeDefinitions[stmt.Name] = stmt;
+            context.ReportContext.ThemeDefinitions[stmt.Name] = stmt;
 
             try
             {
@@ -46,7 +46,7 @@ namespace ETL_SQL.Engine.Handlers
 
         private void SaveThemeToDisk(CreateThemeStatement stmt, IExecutionContext context)
         {
-            var themeDir = Path.Combine(context.TemplatePath, "Themes");
+            var themeDir = Path.Combine(context.ReportContext.TemplatePath, "Themes");
             Directory.CreateDirectory(themeDir);
 
             var fileName = stmt.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
@@ -157,3 +157,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

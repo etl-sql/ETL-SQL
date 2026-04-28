@@ -19,6 +19,7 @@ DECLARE @rate    DECIMAL(10,4) = 1.2345;
 DECLARE @icon    IMAGE         = 'C:\Data\icon.png';
 DECLARE @range   MINMAX(INT)   = (1, 100);
 DECLARE @files   LIST(PATH)    = ('C:\Data\1.csv', 'C:\Data\2.csv');
+DECLARE @path    PATH          = 'C:\Data\1.csv';
 
 -- Multiple variables in one statement
 DECLARE @list LIST = (1, 2, 3), @count INT = 0;
@@ -43,22 +44,182 @@ DECLARE @inventory TABLE;
 
 ### 1.2 Specialty Types
 
-Specialty types carry semantic meaning and perform automatic normalization or validation.
+Specialty types carry semantic meaning beyond a plain string or number. They influence how values are stored, validated, masked, or rendered. The table below gives a quick summary; detailed notes follow.
 
-| Type | Properties & Behavior |
+| Type | Stored as | When behavior activates |
+| :--- | :--- | :--- |
+| `PATH` | String | At file I/O — normalizes separators, resolves relative paths, validates security boundaries |
+| `JSON` | String | At assignment — validates well-formedness; enables `JSON_VALUE`, `JSON_QUERY`, and the full JSON function set |
+| `XML` | String | At assignment — validates well-formedness; enables `XMLVALUE`, `XMLQUERY`, and XPath functions |
+| `MARKDOWN` | String | At render time — Report Portal renders as rich text; CLI treats as plain string |
+| `LIST` | Collection | At iteration or index access — can be strictly typed, e.g. `LIST(INT)` |
+| `MINMAX` | Struct | At declaration — gives a `.MIN` and `.MAX` member; inner type annotation is documentary |
+| `ENCRYPTED` | String | At runtime — masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values for secure parameters; SEC-4 warns on PRINT/EMAIL |
+| `SENSITIVE` | Any | At runtime — masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values for secure parameters |
+| `SECRET` | Any | Same as `SENSITIVE` — convention signals the value must not persist beyond the current operation |
+
+---
+
+#### `PATH`
+
+Stored as a string at declaration time. When the value is passed to any file I/O operation, `ResolvePath()` activates and:
+
+- Strips surrounding double-quotes that Windows *Copy as path* adds (e.g. `"C:\tmp\file.csv"`)
+- Accepts a connector name as the root segment: `MyDrive/subdir/file.csv` where `MyDrive` is a configured file or SFTP connector
+- Resolves relative paths against the script's working directory
+- Validates the resolved path against configured security boundaries (allowed root paths, permitted file extensions)
+
+```sql
+DECLARE @out PATH = 'C:\Data\results.csv';       -- absolute
+DECLARE @src PATH = 'SftpServer/inbox/feed.csv'; -- connector-relative
+```
+
+Use `PATH` instead of `STRING` whenever a variable holds a filesystem path. This makes intent explicit to the LSP, agents, and the security layer.
+
+---
+
+#### `JSON`
+
+Validated at assignment — an invalid JSON string raises an `ExecutionException` immediately at the `DECLARE` or `SET` line. Stored as a string internally after passing validation.
+
+Declaring a variable as `JSON` unlocks the full JSON function set on that value:
+
+| Function | Purpose |
 | :--- | :--- |
-| `PATH` | Normalizes directory separators (`/` vs `\`) based on the host OS. Used by all filesystem and SFTP/FTP functions. |
-| `JSON` | Validates well-formedness on assignment. Enables `JSON_VALUE`, `JSON_QUERY` and dot-notation field access. |
-| `XML` | Validates well-formedness on assignment. Enables XPath-based extraction functions. |
-| `MARKDOWN` | Treated as rich text in the Report Portal. Supports headers, lists, and tables. |
-| `LIST` | An ordered collection of values. Can be strictly typed (e.g. `LIST(INT)`) or inferred. |
-| `ENCRYPTED` | Semantic alias for sensitive strings. Equivalent to using the `PASSWORD` keyword in `DECLARE`. |
-| `SENSITIVE` | Declares a variable whose value must be masked in logs, print output, and visuals. |
-| `SECRET` | Stronger variant of `SENSITIVE`; value is purged from memory as soon as the session ends. |
+| `JSON_VALUE(@v, '$.path')` | Extract a scalar value at the given JSONPath |
+| `JSON_QUERY(@v, '$.path')` | Extract an object or array fragment |
+| `JSON_MODIFY(@v, '$.path', val)` | Return a copy with a value updated or inserted |
+| `ISJSON(@v)` | Returns `1` if the string is valid JSON, `0` otherwise |
+| `JSON_EXISTS(@v, '$.path')` | Returns `1` if the path exists |
+| `JSON_TABLE(@v, '$.path')` | Expand a JSON array into a table |
+| `OPENJSON(@v)` | SQL-Server-style JSON rowset expansion |
+
+```sql
+DECLARE @payload JSON = '{"order":{"id":42,"total":99.95}}';
+SELECT JSON_VALUE(@payload, '$.order.id')    AS id,
+       JSON_VALUE(@payload, '$.order.total') AS total;
+```
+
+---
+
+#### `XML`
+
+Validated at assignment — an invalid XML string raises an `ExecutionException` immediately at the `DECLARE` or `SET` line. Stored as a string internally after passing validation.
+
+| Function | Purpose |
+| :--- | :--- |
+| `XMLVALUE(@v, xpath)` | Extract a scalar value using XPath |
+| `XMLQUERY(@v, xpath)` | Extract an XML fragment |
+| `XMLTABLE(@v, xpath)` | Expand an XML document into a table |
+| `XMLEXISTS(@v, xpath)` | Returns `1` if the XPath matches any node |
+| `XMLELEMENT(name, content)` | Construct an XML element |
+
+```sql
+DECLARE @doc XML = '<root><item id="1">Alpha</item></root>';
+SELECT XMLVALUE(@doc, '//item[@id=1]') AS name;
+```
+
+---
+
+#### `MARKDOWN`
+
+Stored as a plain string. In script execution (CLI, headless), it is treated identically to `STRING`. In the **Report Portal**, a `MARKDOWN` variable bound to a visual component is rendered as HTML-formatted rich text — headers, bold, lists, tables, and code blocks are all interpreted.
+
+```sql
+DECLARE @summary MARKDOWN = '## Run Complete\n- Records: 1000\n- Errors: 0';
+```
+
+Use `MARKDOWN` when the variable will be bound to a report text component. It has no runtime cost and signals rendering intent to both the engine and AI agents building reports.
+
+---
+
+#### `LIST`
+
+An ordered, index-accessible collection. Elements can be iterated with `FOREACH` or accessed by position. Optionally strongly typed:
+
+```sql
+DECLARE @ids   LIST(INT)  = (1, 2, 3);
+DECLARE @paths LIST(PATH) = ('C:\a.csv', 'C:\b.csv');
+DECLARE @mixed LIST       = ('hello', 42, NULL);   -- inferred
+```
+
+The inner type annotation (e.g. `LIST(INT)`) is enforced as a cast — assigning a non-castable value raises an error. `LIST` without a type accepts any value.
+
+---
+
+#### `MINMAX`
+
+A structured two-value type with `.MIN` and `.MAX` members. It is the only non-collection specialty type that provides member access via dot notation.
+
+```sql
+DECLARE @range MINMAX(INT) = (1, 100);
+
+PRINT @range.MIN;   -- 1
+PRINT @range.MAX;   -- 100
+
+SET @range.MIN = 10;
+SET @range.MAX = 90;
+```
+
+The inner type annotation (`MINMAX(INT)`, `MINMAX(DECIMAL)`, etc.) is documentary — the engine stores `.MIN` and `.MAX` as generic `object` values and does not enforce the inner type at runtime. Use it to communicate intent.
+
+Common uses: date window boundaries, numeric filter ranges, batch size limits.
+
+---
+
+#### `ENCRYPTED`
+
+The canonical type for variables that hold an `ENC:...` value — a ciphertext string produced by `ENCRYPT()` or stored in the credentials vault. Use this for database passwords, API keys, and connection credentials that are protected with `USE SCRIPT PASSWORD`.
+
+What it does:
+- **Runtime masking:** The variable is treated as sensitive — `SHOW VARIABLES` displays `*******` instead of the raw `ENC:...` text.
+- **Auto-decryption:** When the variable is passed to a secure connector parameter (`PASSWORD`, `API_KEY`, `SSH_KEY_PAIR.PASSPHRASE`, etc.), the engine decrypts it automatically using the active script or master password. The connector always receives the plaintext credential, never the cipher string.
+- **Lint layer (SEC-4):** `CredentialLeakRule` warns if the variable is referenced in `PRINT`, `RAISERROR`, or `SEND EMAIL`.
+
+```sql
+USE SCRIPT PASSWORD 'my-master-key';
+DECLARE @pwd ENCRYPTED = 'ENC:abc123==';
+
+OPEN CONNECTION MyDb WITH (PASSWORD = @pwd);  -- decrypted automatically at connect time
+PRINT @pwd;                                   -- SEC-4 lint warning; prints ENC:******** in log
+```
+
+---
+
+#### `SENSITIVE`
+
+Sets the `IsSensitive` runtime flag on the variable. Three effects activate immediately:
+
+1. **`SHOW VARIABLES` masking** — the value is replaced with `*******` in all variable listing output (unless `SET SHOW_PASSWORD ON` is active).
+2. **`ENC:` auto-decryption** — if the value begins with `ENC:`, the engine automatically decrypts it when the variable is passed to a secure connector parameter (`PASSWORD`, `API_KEY`, `SSH_KEY_PAIR.PASSPHRASE`, etc.). This requires `USE SCRIPT PASSWORD` or a master password to be set.
+3. **Lint taint tracking** — if you assign a `SENSITIVE` variable into a new variable (`SET @other = @pwd`), the linter marks `@other` as sensitive too, propagating SEC-4 warnings forward.
+
+`SENSITIVE` does **not** prevent you from printing the value — `PRINT @sensitiveVar` will output the plaintext. The SEC-4 lint rule warns you when you do this, but the runtime does not block it.
+
+```sql
+DECLARE @dbPass SENSITIVE = 'ENC:abc123==';  -- masked in SHOW VARIABLES, decrypted at connect time
+USE SCRIPT PASSWORD 'my-master-key';
+OPEN CONNECTION MyDb WITH (PASSWORD = @dbPass);  -- @dbPass decrypted here automatically
+```
+
+---
+
+#### `SECRET`
+
+Identical to `SENSITIVE` in runtime behavior — both set `IsSensitive = true` and produce the same masking and auto-decryption effects. The difference is **naming convention**:
+
+- Use `SENSITIVE` for credentials that persist across multiple operations within a session (database passwords, stored API keys).
+- Use `SECRET` for short-lived credentials that must not outlive the current operation (OAuth bearer tokens, one-time SFTP session keys, temporary SAS tokens).
+
+Choosing the right keyword communicates lifetime intent to other developers and to AI agents constructing or auditing scripts.
+
+```sql
+DECLARE @dbPassword  SENSITIVE = 'ENC:abc123==';      -- reused throughout the script
+DECLARE @bearerToken SECRET   = GetBearerToken(...);  -- used once, then discarded
+```
 
 > [!NOTE]
-> Any variable marked as `SENSITIVE`, `SECRET`, or declared with the `PASSWORD` keyword is automatically masked (e.g., `********`) in the execution log and `PRINT` output.
-> Starting with version 0.7.0, variables marked as `SENSITIVE` that contain encrypted strings (starting with `ENC:`) are automatically decrypted when passed to secure parameters (e.g., connector `PASSWORD`, `API_KEY`, or `SSH_KEY_PAIR.PASSPHRASE`).
+> Log scrubbing is always active regardless of variable type. The engine automatically redacts patterns like `password=value`, `token=value`, and any `ENC:...` constant found in log messages or connection string text. Variables are scrubbed by pattern, not by metadata — so `SENSITIVE`/`SECRET` masking applies specifically to `SHOW VARIABLES` output and the auto-decrypt pathway.
 
 ### 1.3 `SET`
 Assigns a new value to an existing variable.
@@ -162,19 +323,6 @@ REQUIRE >= '0.5.0';   -- VERSION keyword is optional
 ```
 
 Supported operators: `=`, `>`, `>=`.
-
-### 1.10 Member Access (Dot Notation)
-Access columns of a row variable, fields of a JSON object, or properties of a system object.
-
-**Resolution order:** Row columns → JSON fields → C# reflection properties (case-insensitive).
-
-| Object | Member | Description |
-| :--- | :--- | :--- |
-| `FILE_LIST` | Returns `LIST(PATH)` (as a table). | Rows contains `.NAME`, `.PATH`, `.SIZE`, etc. |
-| `REMOTE_FILE_LIST` | Returns `LIST(PATH)` (as a table). | Rows contains `.NAME`, `.FULLPATH`, `.SIZE`, etc. |
-| `MINMAX` | `.MIN` `.MAX` | Range bounds |
-| Docker alias | `.CONNECTION_STRING` | Host-mapped connection string |
-| JSON variable | `.fieldName` | Dynamic field extraction |
 
 ---
 
@@ -859,6 +1007,19 @@ WHERE NOT EXISTS (SELECT 1 FROM #blocked  WHERE id = t.id)
 WHERE region IS NOT NULL
   AND notes  IS NULL
 ```
+
+### 8.1 Member Access (Dot Notation)
+Access columns of a row variable, fields of a JSON object, or properties of a system object.
+
+**Resolution order:** Row columns → JSON fields → C# reflection properties (case-insensitive).
+
+| Object | Member | Description |
+| :--- | :--- | :--- |
+| Row variable (`FOR @row IN`) | `.columnName` | Column value during row iteration — see §4.4 |
+| `FILE_LIST` / `REMOTE_FILE_LIST` rows | `.NAME`, `.PATH`, `.SIZE`, etc. | File metadata columns — see §15.6 |
+| `MINMAX` variable | `.MIN`, `.MAX` | Range bounds — see §1.2 |
+| Docker alias | `.CONNECTION_STRING` | Host-mapped connection string — see §17 |
+| JSON variable | `.fieldName` | Dynamic field extraction — see §1.2 |
 
 ---
 

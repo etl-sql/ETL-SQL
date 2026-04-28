@@ -11,7 +11,7 @@ namespace ETL_SQL.Engine.Services
     /// Manages variable scopes, procedure registries, and function registries for the ETL-SQL engine.
     /// Handles scope pushing/popping and identifier resolution.
     /// </summary>
-    public class VariableScopeManager
+    public class VariableScopeManager : IVariableContext
     {
         private readonly object _lock = new();
         private readonly Dictionary<string, object?> _variables = new(StringComparer.OrdinalIgnoreCase);
@@ -21,18 +21,20 @@ namespace ETL_SQL.Engine.Services
         
         private readonly Dictionary<string, CreateProcedureStatement> _procedures = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, CreateFunctionStatement> _functions = new(StringComparer.OrdinalIgnoreCase);
-
+ 
+        public IDictionary<string, object?> Variables { get { lock(_lock) { return _variables; } } }
+        public IDictionary<string, VariableMetadata> VariableMetadata { get { lock(_lock) { return _variableMetadata; } } }
+ 
         /// <summary>Gets the current set of variables in the active scope.</summary>
         public IDictionary<string, object?> CurrentVariables { get { lock(_lock) { return _scopeStack.Count > 0 ? _scopeStack.Peek() : _variables; } } }
-
+ 
         /// <summary>Gets the current set of variable metadata in the active scope.</summary>
         public IDictionary<string, VariableMetadata> CurrentMetadata { get { lock(_lock) { return _metadataStack.Count > 0 ? _metadataStack.Peek() : _variableMetadata; } } }
-
-        /// <summary>Gets the global (session-level) variable dictionary.</summary>
-        public IDictionary<string, object?> GlobalVariables { get { lock(_lock) { return _variables; } } }
-
-        /// <summary>Gets the global (session-level) variable metadata.</summary>
-        public IDictionary<string, VariableMetadata> GlobalMetadata { get { lock(_lock) { return _variableMetadata; } } }
+ 
+        [Obsolete("Use Variables")]
+        public IDictionary<string, object?> GlobalVariables => Variables;
+        [Obsolete("Use VariableMetadata")]
+        public IDictionary<string, VariableMetadata> GlobalMetadata => VariableMetadata;
 
         /// <summary>Pushes a new variable scope onto the stack.</summary>
         public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null)
@@ -124,25 +126,33 @@ namespace ETL_SQL.Engine.Services
         }
 
         /// <summary>Filters and returns variables from the current scope that match a predicate based on their metadata.</summary>
-        public Dictionary<string, object?> GetVariablesWithMetadata(Func<VariableMetadata, bool> predicate)
+        public IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null)
         {
             lock (_lock)
             {
-                var results = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                var results = new Dictionary<string, (object? Value, VariableMetadata Metadata)>(StringComparer.OrdinalIgnoreCase);
                 var currentVars = CurrentVariables;
                 var currentMeta = CurrentMetadata;
 
                 foreach (var kvp in currentMeta)
                 {
-                    if (predicate(kvp.Value))
+                    if (predicate == null || predicate(kvp.Value))
                     {
                         if (currentVars.TryGetValue(kvp.Key, out var val))
                         {
-                            results[kvp.Key] = val;
+                            results[kvp.Key] = (val, kvp.Value);
                         }
                     }
                 }
                 return results;
+            }
+        }
+
+        public bool ContainsVariableInCurrentScope(string name)
+        {
+            lock (_lock)
+            {
+                return CurrentVariables.ContainsKey(name);
             }
         }
 

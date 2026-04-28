@@ -1,24 +1,34 @@
 using ETL_SQL.Data;
+using ETL_SQL.Core.Common.Exceptions;
+using System;
 using System.Threading.Tasks;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.Engine.Handlers
 {
     /// <summary>
-    /// Handles the DROP FUNCTION statement, removing the function definition from the execution context.
+    /// Handles the DROP FUNCTION statement.
     /// </summary>
-    public class DropFunctionStatementHandler : IStatementHandler
+    public class DropFunctionStatementHandler(ILogger logger) : IStatementHandler
     {
+        private readonly ILogger _logger = logger;
         public Type SupportedStatementType => typeof(DropFunctionStatement);
-        /// <summary>Executes the DROP FUNCTION statement in the current context.</summary>
-        public async Task Execute(Statement statement, IExecutionContext context)
+
+        public Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (DropFunctionStatement)statement;
-            
-            context.EvaluateDropFunction(stmt);
-            await Task.CompletedTask;
+
+            if (context.IsWhatIf)
+            {
+                _logger.WriteLine($"WHAT IF: Would drop function {stmt.FunctionName}", ConsoleColor.Yellow);
+                return Task.CompletedTask;
+            }
+
+            if (!context.VarContext.RemoveFunction(stmt.FunctionName) && !stmt.IfExists)
+            {
+                throw new ExecutionException($"Function not found: {stmt.FunctionName}");
+            }
+            return Task.CompletedTask;
         }
     }
 }
-
-
-

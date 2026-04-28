@@ -31,8 +31,8 @@ namespace ETL_SQL.Engine.Services
                 return args.Count > 0 ? args[0] : null;
             }
 
-            var localVars = BuildParameterDictionary(funcStmt.Parameters, args);
-            _context.PushScope(localVars);
+            var localVars = BuildParameterDictionary(funcStmt.Parameters, args.Select(v => ((string?)null, v)).ToList());
+            _context.VarContext.PushScope(localVars);
             object? result = null;
             try
             {
@@ -44,7 +44,7 @@ namespace ETL_SQL.Engine.Services
             }
             finally
             {
-                _context.PopScope();
+                _context.VarContext.PopScope();
                 _context.CurrentRecursiveDepth--;
             }
             return result;
@@ -53,7 +53,7 @@ namespace ETL_SQL.Engine.Services
         /// <summary>
         /// Executes a stored procedure by binding arguments and running its body in an isolated scope.
         /// </summary>
-        public async Task EvaluateProcedure(string name, List<object?> args)
+        public async Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args)
         {
             _context.CurrentRecursiveDepth++;
             _context.IncrementOperationCount(OperationType.EngineInternal); // Trigger check against limits
@@ -65,7 +65,7 @@ namespace ETL_SQL.Engine.Services
             }
 
             var localVars = BuildParameterDictionary(procStmt.Parameters, args);
-            _context.PushScope(localVars);
+            _context.VarContext.PushScope(localVars);
             try
             {
                 await _context.EvaluateStatement(procStmt.Body);
@@ -76,21 +76,41 @@ namespace ETL_SQL.Engine.Services
             }
             finally
             {
-                _context.PopScope();
+                _context.VarContext.PopScope();
                 _context.CurrentRecursiveDepth--;
             }
         }
 
         /// <summary>
-        /// Builds a name-to-value dictionary from a parameter list and positional argument values.
+        /// Builds a name-to-value dictionary from a parameter list and argument values (positional or named).
         /// </summary>
         private static Dictionary<string, object?> BuildParameterDictionary(
-            IReadOnlyList<ParameterDefinition> parameters, IReadOnlyList<object?> args)
+            IReadOnlyList<ParameterDefinition> parameters, IReadOnlyList<(string? Name, object? Value)> args)
         {
             var vars = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < parameters.Count; i++)
-                vars[parameters[i].Name] = i < args.Count ? args[i] : null;
+            
+            // Initialize with nulls or default values
+            foreach (var p in parameters) vars[p.Name] = null;
+
+            // 1. First, apply positional arguments
+            int pos = 0;
+            foreach (var arg in args.Where(a => a.Name == null))
+            {
+                if (pos < parameters.Count)
+                {
+                    vars[parameters[pos].Name] = arg.Value;
+                    pos++;
+                }
+            }
+
+            // 2. Then, apply named arguments (overwriting any positional ones if they clash, though usually they won't in valid SQL)
+            foreach (var arg in args.Where(a => a.Name != null))
+            {
+                vars[arg.Name!] = arg.Value;
+            }
+
             return vars;
         }
     }
 }
+

@@ -217,6 +217,7 @@ namespace ETL_SQL.Core.Parser.Components
             Expression? source = null, dest = null, overwrite = null, password = null;
             bool isFunctionStyle = Match(TokenType.LPAREN);
 
+            bool ifExists = false;
             if (isFunctionStyle)
             {
                 source = ParseExpression();
@@ -234,6 +235,11 @@ namespace ETL_SQL.Core.Parser.Components
                         if (Match(TokenType.COMMA)) password = ParseExpression();
                     }
                 }
+                if (Match(TokenType.COMMA))
+                {
+                    var ifExistsExpr = ParseExpression();
+                    if (ifExistsExpr is LiteralExpression lit && lit.Value is bool b) ifExists = b;
+                }
                 Consume(TokenType.RPAREN, "Expected ')' after arguments");
             }
             else
@@ -249,7 +255,7 @@ namespace ETL_SQL.Core.Parser.Components
                     else if (Match(TokenType.WITH)) { overwrite = ParseWithOverwrite(); }
                     else if (source == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                         source = ParseExpression();
-                    else if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS after IF"); } // IF EXISTS suffix — handler already guards with File.Exists
+                    else if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS after IF"); ifExists = true; }
                     else if (Match(TokenType.LF) || Match(TokenType.CR) || Match(TokenType.CRLF)) { continue; }
                     else break;
                 }
@@ -257,7 +263,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new FileOperationStatement(type, source, dest, overwrite, password) { Line = startToken.Line, Column = startToken.Column };
+            return new FileOperationStatement(type, source, dest, overwrite, password, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
 
         public Statement ParseDirectoryOperation(Token startToken)
@@ -277,6 +283,7 @@ namespace ETL_SQL.Core.Parser.Components
             };
 
             Expression? path = null, extra = null, overwrite = null, recursive = null, password = null;
+            bool ifExists = false;
             bool isFunctionStyle = Match(TokenType.LPAREN);
 
             if (isFunctionStyle)
@@ -297,6 +304,11 @@ namespace ETL_SQL.Core.Parser.Components
                         if (Match(TokenType.COMMA)) recursive = ParseExpression();
                         if (Match(TokenType.COMMA)) password = ParseExpression();
                     }
+                }
+                if (Match(TokenType.COMMA))
+                {
+                    var ifExistsExpr = ParseExpression();
+                    if (ifExistsExpr is LiteralExpression lit && lit.Value is bool b) ifExists = b;
                 }
                 Consume(TokenType.RPAREN, "Expected ')' after arguments");
             }
@@ -330,6 +342,7 @@ namespace ETL_SQL.Core.Parser.Components
                     }
                     else if (path == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                         path = ParseExpression();
+                    else if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS after IF"); ifExists = true; }
                     else if (Match(TokenType.LF) || Match(TokenType.CR) || Match(TokenType.CRLF)) { continue; }
                     else break;
                 }
@@ -337,7 +350,8 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new DirectoryOperationStatement(type, path, extra, overwrite, recursive, password) { Line = startToken.Line, Column = startToken.Column };
+            return new DirectoryOperationStatement(type, path, extra, overwrite, recursive, password, ifExists) { Line = startToken.Line, Column = startToken.Column };
+
         }
 
         public Statement ParseDockerVerb(DockerAction action)
@@ -596,9 +610,17 @@ namespace ETL_SQL.Core.Parser.Components
         private ExecuteParameter ParseExecuteParameter()
         {
             var expr = ParseExpression();
+            string? name = null;
+
+            if (expr is BinaryExpression bin && bin.Operator == TokenType.EQUALS && bin.Left is VariableExpression varExpr)
+            {
+                name = varExpr.Name;
+                expr = bin.Right;
+            }
+
             bool isOutput = Match(TokenType.OUTPUT);
             bool isInput  = Match(TokenType.INPUT);
-            return new ExecuteParameter(expr, isOutput, isInput);
+            return new ExecuteParameter(expr, name, isOutput, isInput);
         }
     }
 }

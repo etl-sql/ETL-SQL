@@ -25,13 +25,13 @@ namespace ETL_SQL.Engine.Handlers
             switch (stmt.ObjectType)
             {
                 case ReportObjectType.Visual:
-                    context.VisualDefinitions.Remove(stmt.Name);
+                    context.ReportContext.VisualDefinitions.Remove(stmt.Name);
                     break;
                 case ReportObjectType.Page:
-                    removed = context.PageDefinitions.Remove(stmt.Name);
+                    removed = context.ReportContext.PageDefinitions.Remove(stmt.Name);
                     break;
                 case ReportObjectType.Dataset:
-                    removed = context.DatasetDefinitions.Remove(stmt.Name);
+                    removed = context.ReportContext.DatasetDefinitions.Remove(stmt.Name);
                     // Also attempt to drop the actual temp table if it exists
                     if (context.Connections.ContainsKey(stmt.Name))
                     {
@@ -39,24 +39,24 @@ namespace ETL_SQL.Engine.Handlers
                     }
                     break;
                 case ReportObjectType.Container:
-                    removed = context.ContainerDefinitions.Remove(stmt.Name);
+                    removed = context.ReportContext.ContainerDefinitions.Remove(stmt.Name);
                     break;
                 case ReportObjectType.Navigation:
-                    removed = context.NavigationDefinitions.Remove(stmt.Name);
+                    removed = context.ReportContext.NavigationDefinitions.Remove(stmt.Name);
                     break;
                 case ReportObjectType.Style:
-                    removed = context.StyleDefinitions.Remove(stmt.Name);
+                    removed = context.ReportContext.StyleDefinitions.Remove(stmt.Name);
                     break;
                 case ReportObjectType.Button:
-                    removed = context.ButtonDefinitions.Remove(stmt.Name);
+                    removed = context.ReportContext.ButtonDefinitions.Remove(stmt.Name);
                     break;
                 case ReportObjectType.Template:
-                    removed = context.TemplateDefinitions.Remove(stmt.Name);
+                    removed = context.ReportContext.TemplateDefinitions.Remove(stmt.Name);
                     if (removed)
                     {
                         try
                         {
-                            var templateDir = context.TemplatePath;
+                            var templateDir = context.ReportContext.TemplatePath;
                             string fileName = stmt.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? stmt.Name : stmt.Name + ".json";
                             string filePath = Path.Combine(templateDir, fileName);
                             string resolvedPath = context.ResolvePath(filePath);
@@ -78,12 +78,12 @@ namespace ETL_SQL.Engine.Handlers
                     }
                     break;
                 case ReportObjectType.Theme:
-                    removed = context.ThemeDefinitions.Remove(stmt.Name);
+                    removed = context.ReportContext.ThemeDefinitions.Remove(stmt.Name);
                     if (removed)
                     {
                         try
                         {
-                            var themeDir = Path.Combine(context.TemplatePath, "Themes");
+                            var themeDir = Path.Combine(context.ReportContext.TemplatePath, "Themes");
                             string fileName = stmt.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? stmt.Name : stmt.Name + ".json";
                             string filePath = context.ResolvePath(Path.Combine(themeDir, fileName));
                             if (File.Exists(filePath)) File.Delete(filePath);
@@ -117,3 +117,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

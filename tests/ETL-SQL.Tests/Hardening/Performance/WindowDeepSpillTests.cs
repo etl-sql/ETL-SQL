@@ -50,7 +50,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var result = eval.LastResult;
             Assert.NotNull(result);
             Assert.True(result.Rows.Count > 0);
-            Assert.True(eval.TotalSpilledBytes > 0);
+            Assert.True(eval.Telemetry.TotalSpilledBytes > 0);
 
             // 1. Check for duplicates first
             var duplicateSales = result.Rows.GroupBy(r => r["SaleID"]).Where(g => g.Count() > 1).ToList();

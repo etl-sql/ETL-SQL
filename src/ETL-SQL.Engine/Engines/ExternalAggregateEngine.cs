@@ -102,7 +102,7 @@ namespace ETL_SQL.Engine.Engines
                         var activeGroupBy = expandedSets != null ? expandedSets[bucket.SetIndex] : groupBy;
                         var partResults = await _inMemoryEngine.ApplyAggregation(bucket.Rows, activeGroupBy, finalColumns, colNames, havingClause);
                         
-                        _context.AggregateGroupsCount += partResults.Count;
+                        _context.Telemetry.AggregateGroupsCount += partResults.Count;
 
                         // Handle GROUPING() / NULL substitution for sub-sets
                         if (expandedSets != null && groupBy != null)
@@ -192,7 +192,7 @@ namespace ETL_SQL.Engine.Engines
                         await w.DisposeAsync();
                     }
                 }
-                _context.PartitionsCount += used;
+                _context.Telemetry.PartitionsCount += used;
             }
             return names;
         }
@@ -252,9 +252,9 @@ namespace ETL_SQL.Engine.Engines
                         await w.DisposeAsync();
                     }
                 }
-                _context.PartitionsCount += used;
-                if (totalInput > 0) _context.AggregateExpansionRatio = (double)totalExpanded / totalInput;
-                _logger.Debug("[HYPER-SCALE] Expanded {Input} rows into {Expanded} intermediate rows for GroupingSets (Ratio: {Ratio:F2}).", totalInput, totalExpanded, _context.AggregateExpansionRatio);
+                _context.Telemetry.PartitionsCount += used;
+                if (totalInput > 0) _context.Telemetry.AggregateExpansionRatio = (double)totalExpanded / totalInput;
+                _logger.Debug("[HYPER-SCALE] Expanded {Input} rows into {Expanded} intermediate rows for GroupingSets (Ratio: {Ratio:F2}).", totalInput, totalExpanded, _context.Telemetry.AggregateExpansionRatio);
             }
             return names;
         }
@@ -263,3 +263,4 @@ namespace ETL_SQL.Engine.Engines
 
     }
 }
+

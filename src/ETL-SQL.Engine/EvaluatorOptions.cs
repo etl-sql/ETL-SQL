@@ -47,6 +47,7 @@ namespace ETL_SQL.Engine
         public bool AutoRollbackOnFinish { get; set; } = true;
         public bool ReuseLoopNodes { get; set; } = true;
         public bool DisplayExecuteTree { get; set; } = true;
+        public bool IsProfiling { get; set; } = true;
 
         // --- UI / Verbosity ---
         public bool IsVerbose { get; set; }

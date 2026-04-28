@@ -56,6 +56,16 @@ namespace ETL_SQL.Engine.Handlers
 
             _logger.Debug("File Operation: {OperationType} on {Source}{Dest}", stmt.Type, source, dest != null ? $" -> {dest}" : "");
 
+            // Performance / Stability: If the file was JUST written by a preceding INSERT/SELECT INTO, 
+            // it might be locked for a few ms. We'll do a tiny retry if the file is missing but expected.
+            if (stmt.Type != FileOpType.Delete && !File.Exists(source))
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    await Task.Delay(100);
+                    if (File.Exists(source)) break;
+                }
+            }
 
             try
             {
@@ -66,6 +76,16 @@ namespace ETL_SQL.Engine.Handlers
                         {
                             File.Delete(source);
                             context.Log($"File deleted: {source}", ConsoleColor.Green);
+                        }
+                        else if (stmt.IfExists)
+                        {
+                            context.Log($"DELETE FILE IF EXISTS: {sourceVal} not found. Skipping.", ConsoleColor.Gray);
+                        }
+                        else
+                        {
+                            // If not if_exists, the engine usually continues but logs a warning or throws depending on strictness
+                            // Standards say: Check existence first to avoid silent no-ops or errors (Rule 9)
+                            _logger.Warning("File not found for deletion: {Source}", source);
                         }
                         break;
                     case FileOpType.Copy:

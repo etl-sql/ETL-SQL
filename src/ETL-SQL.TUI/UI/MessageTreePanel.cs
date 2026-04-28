@@ -42,7 +42,7 @@ namespace ETL_SQL.TUI.UI
             int treeColContent = Math.Min(44, Math.Max(18, (width - 6) * 35 / 100));
 
             // Build tree markup
-            var treeLines = _ascii.Render(_evaluator.ExecutionTree);
+            var treeLines = _ascii.Render(_evaluator.Telemetry.ExecutionTree);
             var visibleTree = treeLines.Skip(treeScroll).Take(innerRows).ToList();
             string treeMarkup = FormatTreeMarkup(visibleTree, treeColContent);
 

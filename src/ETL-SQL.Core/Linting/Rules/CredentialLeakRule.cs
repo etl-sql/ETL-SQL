@@ -48,7 +48,9 @@ namespace ETL_SQL.Core.Linting.Rules
             }
             else if (statement is PrintStatement print)
             {
-                CheckLeak(print.Message, print, scopes, results, "PRINT");
+                foreach (var expr in print.Arguments) CheckLeak(expr, print, scopes, results, "PRINT");
+                if (print.ShowTimestamp != null) CheckLeak(print.ShowTimestamp, print, scopes, results, "PRINT");
+                if (print.TimestampFormat != null) CheckLeak(print.TimestampFormat, print, scopes, results, "PRINT");
             }
             else if (statement is EmailStatement email)
             {

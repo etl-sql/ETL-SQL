@@ -1,4 +1,5 @@
 using ETL_SQL.Data;
+using System;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 
@@ -12,14 +13,15 @@ namespace ETL_SQL.Engine.Handlers
         private readonly ILogger _logger = logger;
         public Type SupportedStatementType => typeof(DropTableStatement);
 
-
-        /// <summary>Executes the DROP TABLE statement in the current context.</summary>
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (DropTableStatement)statement;
             
             _logger.Debug("Dropping table {TableName} on {ConnectionName}", stmt.TargetTable.TableName, stmt.TargetTable.ConnectionName ?? "local");
-            await context.EvaluateDropTable(stmt);
+            if (context.EngineContext is Evaluator eval)
+            {
+                await eval.SchemaManager.EvaluateDropTable(stmt, context.DataContext.Connections);
+            }
         }
     }
 }

@@ -12,11 +12,11 @@ namespace ETL_SQL.Engine.Handlers
         public Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (SetProfilingStatement)statement;
-            ((Evaluator)context).IsProfiling = stmt.Enabled;
+            if (context is Evaluator eval)
+            {
+                eval.Telemetry.IsProfiling = stmt.Enabled;
+            }
             return Task.CompletedTask;
         }
     }
 }
-
-
-

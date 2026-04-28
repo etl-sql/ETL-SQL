@@ -58,7 +58,7 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     await foreach (var batch in sqlConn.ExecuteRawSql(sql, allParams.Values)) 
                     {
-                        if (batch.RowsAffected >= 0) context.RowsProcessed += batch.RowsAffected;
+                        if (batch.RowsAffected >= 0) context.Telemetry.RowsProcessed += batch.RowsAffected;
                     }
                 }
             }
@@ -123,10 +123,11 @@ namespace ETL_SQL.Engine.Handlers
                 }
 
                 context.IncrementOperationCount(OperationType.EngineInternal, count: updatedCount);
-                context.RowsProcessed += updatedCount;
+                context.Telemetry.RowsProcessed += updatedCount;
                 
                 if (context.IsVerbose) _logger.WriteLine($"Finished updating {updatedCount} rows in {connName}");
             }
         }
     }
 }
+

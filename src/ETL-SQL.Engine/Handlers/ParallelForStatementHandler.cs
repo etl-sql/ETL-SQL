@@ -34,10 +34,10 @@ namespace ETL_SQL.Engine.Handlers
                 try
                 {
                     var fork = context.Fork();
-                    if (!fork.ContainsVariable(stmt.VariableName))
-                        fork.DeclareVariable(stmt.VariableName, (decimal)val);
+                    if (!fork.VarContext.ContainsVariable(stmt.VariableName))
+                        fork.VarContext.DeclareVariable(stmt.VariableName, (decimal)val);
                     else
-                        fork.SetVariable(stmt.VariableName, (decimal)val);
+                        fork.VarContext.SetVariable(stmt.VariableName, (decimal)val);
                     await fork.EvaluateStatement(stmt.Body);
                     return (idx, fork);
                 }

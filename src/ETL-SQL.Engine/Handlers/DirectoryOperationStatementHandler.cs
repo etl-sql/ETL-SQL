@@ -29,7 +29,7 @@ namespace ETL_SQL.Engine.Handlers
             string pathVal = (await context.EvaluateValue(stmt.Path, new Row()))?.ToString() ?? "";
             string path = context.ResolvePath(pathVal);
 
-            string? dest = stmt.NewNameOrDest != null ? context.ResolvePath((await context.EvaluateValue(stmt.NewNameOrDest, new Row()))?.ToString() ?? "") : null;
+            string? dest = stmt.Destination != null ? context.ResolvePath((await context.EvaluateValue(stmt.Destination, new Row()))?.ToString() ?? "") : null;
             
             bool overwrite = true; // Default to true for backward compatibility
             if (stmt.Overwrite != null)
@@ -83,6 +83,10 @@ namespace ETL_SQL.Engine.Handlers
                     {
                         Directory.Delete(path, true);
                         _logger.WriteLine($"Directory deleted: {path}", ConsoleColor.Green);
+                    }
+                    else if (stmt.IfExists)
+                    {
+                        _logger.WriteLine($"DELETE DIRECTORY IF EXISTS: {pathVal} not found. Skipping.", ConsoleColor.Gray);
                     }
                     break;
                 case DirectoryOpType.Rename:

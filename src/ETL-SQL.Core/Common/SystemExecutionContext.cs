@@ -18,8 +18,12 @@ namespace ETL_SQL.Core.Common
     /// where a full script session (Evaluator) is not available.
     /// Used primarily by the Language Server for metadata discovery.
     /// </summary>
-    public class SystemExecutionContext : IExecutionContext
+    public class SystemExecutionContext : IExecutionContext, IVariableContext, IReportContext, ITelemetryContext
     {
+        public IVariableContext VarContext => this;
+        public IReportContext ReportContext => this;
+        public ITelemetryContext Telemetry => this;
+
         private static readonly Lazy<SystemExecutionContext> _instance = new(() => new SystemExecutionContext());
         public static SystemExecutionContext Instance => _instance.Value;
 
@@ -102,6 +106,7 @@ namespace ETL_SQL.Core.Common
         public IServiceProvider ServiceProvider => null!;
         public List<ExecutionMetrics> ProfileMetrics { get; } = new();
         public ExecutionTree ExecutionTree => new ExecutionTree();
+        public void Clear() { }
         public Guid? CurrentNodeId { get; set; }
 
         public int TranCount => 0;
@@ -181,8 +186,14 @@ namespace ETL_SQL.Core.Common
         public void PopScope() => throw new NotSupportedException();
         public bool ContainsVariable(string name) => false;
         public bool ContainsVariableInCurrentScope(string name) => false;
-        public void DeclareVariable(string name, object? value, VariableMetadata? metadata = null) => throw new NotSupportedException();
-        public Dictionary<string, object?> GetVariablesWithMetadata(Func<VariableMetadata, bool> predicate) => new();
+         public void DeclareVariable(string name, object? value, VariableMetadata? metadata = null) => throw new NotSupportedException();
+         public bool RemoveProcedure(string name) => false;
+         public void SetProcedure(string name, CreateProcedureStatement stmt) => throw new NotSupportedException();
+         public bool TryGetProcedure(string name, out CreateProcedureStatement? stmt) { stmt = null; return false; }
+         public void SetFunction(string name, CreateFunctionStatement stmt) => throw new NotSupportedException();
+         public bool RemoveFunction(string name) => false;
+         public bool TryGetFunction(string name, out CreateFunctionStatement? stmt) { stmt = null; return false; }
+         public IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null) => new Dictionary<string, (object? Value, VariableMetadata Metadata)>();
 
         public IAsyncEnumerable<DataTable> ExecuteQuery(Statement query) => throw new NotSupportedException();
         public Task<IDataSource> ResolveDataSourceAsync(TableReference table) => throw new NotSupportedException();
@@ -216,7 +227,7 @@ namespace ETL_SQL.Core.Common
         public Task EvaluateStatement(Statement statement) => Task.CompletedTask;
         public Task Evaluate(Script script, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt) => throw new NotSupportedException();
-        public Task EvaluateProcedure(string name, List<object?> args) => Task.CompletedTask;
+        public Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args) => Task.CompletedTask;
         public string ResolvePath(string path) => path;
         public bool FunctionExists(string name) => false;
         public bool ProcedureExists(string name) => false;
@@ -225,17 +236,6 @@ namespace ETL_SQL.Core.Common
         public IDisposable EnterRecursiveScope() => new DummyDisposable();
         private class DummyDisposable : IDisposable { public void Dispose() { } }
         public List<string> GetIndexedColumns(Expression? cond, string alias) => new();
-
-        public Task EvaluateCreateTable(CreateTableStatement stmt) => Task.CompletedTask;
-        public Task EvaluateCreateIndex(CreateIndexStatement stmt) => Task.CompletedTask;
-        public void EvaluateCreateFunction(CreateFunctionStatement stmt) { }
-        public void EvaluateCreateProcedure(CreateProcedureStatement stmt) { }
-        public Task EvaluateDropConnection(DropConnectionStatement stmt) => Task.CompletedTask;
-        public void EvaluateDropFunction(DropFunctionStatement stmt) { }
-        public Task EvaluateDropIndex(DropIndexStatement stmt) => Task.CompletedTask;
-        public void EvaluateDropProcedure(DropProcedureStatement stmt) { }
-        public Task EvaluateDropTable(DropTableStatement stmt) => Task.CompletedTask;
-        public Task EvaluateClearSession(ClearSessionStatement stmt) => Task.CompletedTask;
 
         public IExecutionContext Fork() => this;
         public void Merge(IExecutionContext spawned) { }

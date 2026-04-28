@@ -18,7 +18,7 @@ namespace ETL_SQL.TUI.UI
         {
             if (height <= 0 || width <= 0) return;
 
-            var tree = _evaluator.ExecutionTree;
+            var tree = _evaluator.Telemetry.ExecutionTree;
             var visualizer = new ExecuteTreeVisualizer(tree);
             
             // Generate the Spectre.Console Table renderable with scrolling

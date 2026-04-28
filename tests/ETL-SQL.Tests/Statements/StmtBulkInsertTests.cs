@@ -172,7 +172,7 @@ namespace ETL_SQL.Tests.Statements
             // Looking at BulkInsertStatementHandler.cs, source.ReadBatches will yield break if file missing.
             await _evaluator.Evaluate(parser.Parse());
             
-            Assert.Equal(0, _evaluator.RowsProcessed);
+            Assert.Equal(0, _evaluator.Telemetry.RowsProcessed);
         }
     }
 }

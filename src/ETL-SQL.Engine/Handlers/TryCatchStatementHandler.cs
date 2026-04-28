@@ -54,13 +54,13 @@ namespace ETL_SQL.Engine.Handlers
                 var oldActive = context.ActiveException;
                 context.ActiveException = errorInfo;
 
-                if (!context.ContainsVariable("@ERROR_MESSAGE"))
+                if (!context.VarContext.ContainsVariable("@ERROR_MESSAGE"))
                 {
-                    context.DeclareVariable("@ERROR_MESSAGE", message);
+                    context.VarContext.DeclareVariable("@ERROR_MESSAGE", message);
                 }
                 else
                 {
-                    context.SetVariable("@ERROR_MESSAGE", message);
+                    context.VarContext.SetVariable("@ERROR_MESSAGE", message);
                 }
 
                 try
@@ -75,3 +75,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

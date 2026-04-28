@@ -84,7 +84,7 @@ namespace ETL_SQL.Engine.Handlers
                     context.MaxSessionSize = Convert.ToInt64(val);
                     break;
                 case ThresholdType.Telemetry:
-                    context.TelemetryEnabled = Convert.ToBoolean(val);
+                    context.Telemetry.TelemetryEnabled = Convert.ToBoolean(val);
                     break;
                 case ThresholdType.TempTableSpill:
                     context.TempTableSpillThresholdRows = Convert.ToInt64(val);
@@ -104,3 +104,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

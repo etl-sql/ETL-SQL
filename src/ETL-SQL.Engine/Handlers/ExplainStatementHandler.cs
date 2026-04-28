@@ -43,9 +43,9 @@ namespace ETL_SQL.Engine.Handlers
             long actualTime = 0;
             if (stmt.IsAnalyze)
             {
-                var oldProfiling = context.IsProfiling;
+                var oldProfiling = context.Telemetry.IsProfiling;
                 var oldRedirect = context.RedirectOutput;
-                context.IsProfiling = true;
+                context.Telemetry.IsProfiling = true;
                 context.RedirectOutput = true; // Don't print the actual rows to console
 
                 var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -60,7 +60,7 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     sw.Stop();
                     actualTime = sw.ElapsedMilliseconds;
-                    context.IsProfiling = oldProfiling;
+                    context.Telemetry.IsProfiling = oldProfiling;
                     context.RedirectOutput = oldRedirect;
                 }
             }
@@ -92,7 +92,7 @@ namespace ETL_SQL.Engine.Handlers
 
             // Populate the context's profile metrics so the UI Performance tab can see it
             metrics.DurationMs = plan.Rows.Sum(r => Convert.ToInt64(r["Cost"] ?? 0));
-            context.ProfileMetrics.Add(metrics);
+            context.Telemetry.ProfileMetrics.Add(metrics);
             
             context.LastResult = plan;
             context.LastResultSets.Add(plan);
@@ -321,5 +321,6 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+
 
 

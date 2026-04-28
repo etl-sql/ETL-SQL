@@ -24,9 +24,9 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (ForeachStatement)statement;
             var iterVarName = stmt.VariableName.StartsWith("@") ? stmt.VariableName : "@" + stmt.VariableName;
-            if (!context.ContainsVariable(iterVarName))
+            if (!context.VarContext.ContainsVariable(iterVarName))
             {
-                context.DeclareVariable(iterVarName, null);
+                context.VarContext.DeclareVariable(iterVarName, null);
             }
 
             // 1. Safety Check: If the loop body modifies the source table, we MUST use Paged Re-execution.
@@ -123,7 +123,7 @@ namespace ETL_SQL.Engine.Handlers
                                row.Schema.ColumnNames[0].Equals("Value", StringComparison.OrdinalIgnoreCase);
 
             object? val = shouldUnwrap ? row[0] : row;
-            context.SetVariable(iterVarName, val);
+            context.VarContext.SetVariable(iterVarName, val);
         }
 
         private async Task<bool> TryPagedPushdown(ForeachStatement stmt, IExecutionContext context, string iterVarName)
@@ -188,3 +188,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

@@ -35,13 +35,14 @@ namespace ETL_SQL.Engine.Handlers
             {
                 var value = await context.EvaluateValue(assignment.Value, new Row());
                 var varName = $"@{assignment.VariableName}";
-                if (!context.ContainsVariable(varName))
-                    context.DeclareVariable(varName, value);
+                if (!context.VarContext.ContainsVariable(varName))
+                    context.VarContext.DeclareVariable(varName, value);
                 else
-                    context.SetVariable(varName, value);
+                    context.VarContext.SetVariable(varName, value);
             }
 
             context.Log($"Applied set !{stmt.Name} — {set.Assignments.Count} variable(s) set.");
         }
     }
 }
+

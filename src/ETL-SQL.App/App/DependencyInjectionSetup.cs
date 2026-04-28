@@ -182,17 +182,17 @@ namespace ETL_SQL.App
 
 
             // Map all interfaces back to the same Evaluator instance
-            services.AddTransient<IExecutionContext>(sp => sp.GetRequiredService<Evaluator>());
-            services.AddTransient<IVariableContext>(sp => sp.GetRequiredService<Evaluator>());
-            services.AddTransient<IQueryContext>(sp => sp.GetRequiredService<Evaluator>());
-            services.AddTransient<ILineageContext>(sp => sp.GetRequiredService<Evaluator>());
-            services.AddTransient<ISqlCompilerContext>(sp => sp.GetRequiredService<Evaluator>());
-            services.AddTransient<ITransactionContext>(sp => sp.GetRequiredService<Evaluator>());
-            services.AddTransient<IDockerContext>(sp => sp.GetRequiredService<Evaluator>());
-            services.AddTransient<ILoggingContext>(sp => sp.GetRequiredService<Evaluator>());
-            services.AddTransient<IEvaluationContext>(sp => sp.GetRequiredService<Evaluator>());
-            services.AddTransient<IDataContext>(sp => sp.GetRequiredService<Evaluator>());
-            services.AddTransient<IEngineContext>(sp => sp.GetRequiredService<Evaluator>());
+            services.AddTransient<IExecutionContext>(sp => (IExecutionContext)sp.GetRequiredService<Evaluator>());
+            services.AddTransient<IVariableContext>(sp => (IVariableContext)sp.GetRequiredService<Evaluator>());
+            services.AddTransient<IQueryContext>(sp => (IQueryContext)sp.GetRequiredService<Evaluator>());
+            services.AddTransient<ILineageContext>(sp => (ILineageContext)sp.GetRequiredService<Evaluator>());
+            services.AddTransient<ISqlCompilerContext>(sp => (ISqlCompilerContext)sp.GetRequiredService<Evaluator>());
+            services.AddTransient<ITransactionContext>(sp => (ITransactionContext)sp.GetRequiredService<Evaluator>());
+            services.AddTransient<IDockerContext>(sp => (IDockerContext)sp.GetRequiredService<Evaluator>());
+            services.AddTransient<ILoggingContext>(sp => (ILoggingContext)sp.GetRequiredService<Evaluator>());
+            services.AddTransient<IEvaluationContext>(sp => (IEvaluationContext)sp.GetRequiredService<Evaluator>());
+            services.AddTransient<IDataContext>(sp => (IDataContext)sp.GetRequiredService<Evaluator>());
+            services.AddTransient<IEngineContext>(sp => (IEngineContext)sp.GetRequiredService<Evaluator>());
 
             // IScriptExecutor — thin adapter used by SchedulerService for job execution
             services.AddTransient<IScriptExecutor, ScriptExecutorAdapter>();

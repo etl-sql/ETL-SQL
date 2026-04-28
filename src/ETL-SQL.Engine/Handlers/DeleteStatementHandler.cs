@@ -49,7 +49,7 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     await foreach (var batch in sqlConn.ExecuteRawSql(sql, compiledWhere?.Parameters.Values)) 
                     {
-                        if (batch.RowsAffected >= 0) context.RowsProcessed += batch.RowsAffected;
+                        if (batch.RowsAffected >= 0) context.Telemetry.RowsProcessed += batch.RowsAffected;
                     }
                 }
             }
@@ -108,10 +108,11 @@ namespace ETL_SQL.Engine.Handlers
                 }
 
                 context.IncrementOperationCount(OperationType.EngineInternal, count: deletedCount);
-                context.RowsProcessed += deletedCount;
+                context.Telemetry.RowsProcessed += deletedCount;
 
                 if (context.IsVerbose) _logger.WriteLine($"Finished deleting {deletedCount} rows in {connName}");
             }
         }
     }
 }
+

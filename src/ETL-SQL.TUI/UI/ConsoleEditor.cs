@@ -57,7 +57,7 @@ namespace ETL_SQL.TUI.UI
             _evaluator = Program.ServiceProvider.GetRequiredService<Evaluator>();
             _evaluator.RedirectOutput = true;
             foreach (var conn in connections) _evaluator.Connections[conn.Key] = conn.Value;
-            _evaluator.IsProfiling = true;
+            _evaluator.Telemetry.IsProfiling = true;
             _renderer = new EditorRenderer(_buffer, _evaluator);
             _fileHandler = new EditorFileHandler(new PhysicalFileSystem(), _security);
             _metadata = new MetadataManager(_evaluator, _connections);
@@ -333,10 +333,10 @@ namespace ETL_SQL.TUI.UI
                 }
 
                 var execSw = System.Diagnostics.Stopwatch.StartNew();
-                _evaluator.IsProfiling = true; // Enable profiling by default in IDE mode for Performance Dashboard
+                _evaluator.Telemetry.IsProfiling = true; // Enable profiling by default in IDE mode for Performance Dashboard
                 await _evaluator.Evaluate(script);
                 execSw.Stop();
-                _evaluator.LastExecTimeMs = execSw.ElapsedMilliseconds;
+                _evaluator.Telemetry.LastExecutionTimeMs = execSw.ElapsedMilliseconds;
 
                 // After each run, show the last result set (most recently executed query)
                 if (_evaluator.LastResultSets.Count > 0)

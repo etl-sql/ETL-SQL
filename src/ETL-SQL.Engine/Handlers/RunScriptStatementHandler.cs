@@ -60,7 +60,7 @@ namespace ETL_SQL.Engine.Handlers
                 localMetadata[param.Key] = new VariableMetadata { IsSensitive = true, IsInput = true };
             }
 
-            context.PushScope(localVars, localMetadata);
+            context.VarContext.PushScope(localVars, localMetadata);
             try
             {
                 await context.Evaluate(script);
@@ -72,9 +72,9 @@ namespace ETL_SQL.Engine.Handlers
             finally
             {
                 // Capture all variables from the nested scope BEFORE popping
-                var allVars = context.GetVariablesWithMetadata(v => true);
-                var allMetadata = context.CurrentMetadata;
-                context.PopScope();
+                var allVars = context.VarContext.GetVariablesWithMetadata(v => true);
+                var allMetadata = context.VarContext.CurrentMetadata;
+                context.VarContext.PopScope();
                 
                 // 1. Map back variables passed as parameters (by identifier)
                 foreach (var param in stmt.Parameters)
@@ -93,10 +93,10 @@ namespace ETL_SQL.Engine.Handlers
 
                         if (targetVar != null)
                         {
-                            if (!context.ContainsVariable(targetVar))
-                                context.DeclareVariable(targetVar, result, new VariableMetadata { IsDeclared = true });
+                            if (!context.VarContext.ContainsVariable(targetVar))
+                                context.VarContext.DeclareVariable(targetVar, result.Value, new VariableMetadata { IsDeclared = true });
                             else
-                                context.SetVariable(targetVar, result);
+                                context.VarContext.SetVariable(targetVar, result.Value);
                         }
                     }
                 }
@@ -108,10 +108,10 @@ namespace ETL_SQL.Engine.Handlers
                     {
                         if (allVars.TryGetValue(kvp.Key, out var val))
                         {
-                            if (!context.ContainsVariable(kvp.Key))
-                                context.DeclareVariable(kvp.Key, val, new VariableMetadata { IsDeclared = true });
+                            if (!context.VarContext.ContainsVariable(kvp.Key))
+                                context.VarContext.DeclareVariable(kvp.Key, val.Value, new VariableMetadata { IsDeclared = true });
                             else
-                                context.SetVariable(kvp.Key, val);
+                                context.VarContext.SetVariable(kvp.Key, val.Value);
                         }
                     }
                 }
@@ -121,3 +121,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

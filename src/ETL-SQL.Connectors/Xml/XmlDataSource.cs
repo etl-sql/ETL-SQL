@@ -176,12 +176,19 @@ namespace ETL_SQL.Connectors.Xml
             
             var current = doc.Root;
             var parts = _rootPath.Split(new[] { '.', '/' }, StringSplitOptions.RemoveEmptyEntries);
-            foreach (var part in parts)
+            
+            for (int i = 0; i < parts.Length; i++)
             {
                 if (current == null) break;
-                if (current.Name.LocalName.Equals(part, StringComparison.OrdinalIgnoreCase) && part == parts[0]) continue;
+                var part = parts[i];
+
+                // If the first part matches the root element name, we skip it as the base reference
+                if (i == 0 && current.Name.LocalName.Equals(part, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 current = current.Element(part);
             }
+
             return current?.Elements() ?? Enumerable.Empty<XElement>();
         }
 
@@ -213,8 +220,27 @@ namespace ETL_SQL.Connectors.Xml
                 }
                 else
                 {
-                    var rootName = _rootPath ?? "root";
-                    var root = new XElement(rootName);
+                    XElement root;
+                    XElement deepRoot;
+
+                    if (string.IsNullOrEmpty(_rootPath))
+                    {
+                        root = new XElement("root");
+                        deepRoot = root;
+                    }
+                    else
+                    {
+                        var pathParts = _rootPath.Split(new[] { '.', '/' }, StringSplitOptions.RemoveEmptyEntries);
+                        root = new XElement(pathParts[0]);
+                        deepRoot = root;
+                        for (int k = 1; k < pathParts.Length; k++)
+                        {
+                            var sub = new XElement(pathParts[k]);
+                            deepRoot.Add(sub);
+                            deepRoot = sub;
+                        }
+                    }
+
                     await foreach (var b in batches)
                     {
                         var columnNames = b.ColumnNames;
@@ -241,7 +267,7 @@ namespace ETL_SQL.Connectors.Xml
                                 }
                                 current.Add(new XElement(parts.Last(), val));
                             }
-                            root.Add(rowElem);
+                            deepRoot.Add(rowElem);
                         }
                     }
                     await System.IO.File.WriteAllTextAsync(tempFile, root.ToString());

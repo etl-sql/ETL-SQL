@@ -29,14 +29,14 @@ namespace ETL_SQL.Engine.Handlers
             
             _logger.Debug("Starting FOR loop for {VariableName} from {Start} to {End} step {Step}", stmt.VariableName, start, end, step);
 
-            if (!context.ContainsVariable(stmt.VariableName))
+            if (!context.VarContext.ContainsVariable(stmt.VariableName))
             {
-                context.DeclareVariable(stmt.VariableName, (decimal)start);
+                context.VarContext.DeclareVariable(stmt.VariableName, (decimal)start);
             }
 
             for (int i = start; (step > 0 ? i <= end : i >= end); i += step)
             {
-                context.SetVariable(stmt.VariableName, (decimal)i);
+                context.VarContext.SetVariable(stmt.VariableName, (decimal)i);
                 try
                 {
                     await context.EvaluateStatement(stmt.Body);
@@ -53,3 +53,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

@@ -43,38 +43,38 @@ namespace ETL_SQL.ReportBuilder
             {
                 Source      = scriptSource,
                 BuiltAt     = DateTime.UtcNow,
-                Title           = _ctx.ReportTitle,
-                TitleIsMarkdown  = _ctx.ReportTitleIsMarkdown,
-                Description     = _ctx.ReportDescription,
-                Css             = _ctx.ReportCss,
-                Js              = _ctx.ReportJs,
-                HtmlHead        = _ctx.ReportHtmlHead,
-                HtmlBody        = _ctx.ReportHtmlBody,
-                HtmlFooter      = _ctx.ReportHtmlFooter,
-                Favicon         = _ctx.ReportFavicon,
-                Logo            = _ctx.ReportLogo,
-                Background      = _ctx.ReportBackground,
-                Theme           = _ctx.ReportTheme,
-                Navigation      = _ctx.ReportNavigation
+                Title           = _ctx.ReportContext.ReportTitle,
+                TitleIsMarkdown  = _ctx.ReportContext.ReportTitleIsMarkdown,
+                Description     = _ctx.ReportContext.ReportDescription,
+                Css             = _ctx.ReportContext.ReportCss,
+                Js              = _ctx.ReportContext.ReportJs,
+                HtmlHead        = _ctx.ReportContext.ReportHtmlHead,
+                HtmlBody        = _ctx.ReportContext.ReportHtmlBody,
+                HtmlFooter      = _ctx.ReportContext.ReportHtmlFooter,
+                Favicon         = _ctx.ReportContext.ReportFavicon,
+                Logo            = _ctx.ReportContext.ReportLogo,
+                Background      = _ctx.ReportContext.ReportBackground,
+                Theme           = _ctx.ReportContext.ReportTheme,
+                Navigation      = _ctx.ReportContext.ReportNavigation
             };
 
             // ── Visuals ──────────────────────────────────────────────────────
-            foreach (var (name, vStmt) in _ctx.VisualDefinitions)
+            foreach (var (name, vStmt) in _ctx.ReportContext.VisualDefinitions)
             {
                 manifest.Visuals.Add(await _visualBuilder.BuildAsync(name, vStmt));
             }
 
             // ── Pages ────────────────────────────────────────────────────────
-            foreach (var (name, pStmt) in _ctx.PageDefinitions)
+            foreach (var (name, pStmt) in _ctx.ReportContext.PageDefinitions)
             {
                 manifest.Pages.Add(_pageBuilder.Build(name, pStmt));
             }
 
             // ── Containers ───────────────────────────────────────────────────
-            if (_ctx.ContainerDefinitions.Count > 0)
+            if (_ctx.ReportContext.ContainerDefinitions.Count > 0)
             {
                 manifest.Containers = new();
-                foreach (var (name, cStmt) in _ctx.ContainerDefinitions)
+                foreach (var (name, cStmt) in _ctx.ReportContext.ContainerDefinitions)
                 {
                     var resolvedStyles = _styleBuilder.ResolveStyles(cStmt.StyleName, cStmt.Styles);
                     var (title, titleMd) = _styleBuilder.ResolveMarkdown(cStmt.Title, cStmt.TitleIsMarkdown);
@@ -97,15 +97,15 @@ namespace ETL_SQL.ReportBuilder
             }
 
             // ── Navigations ──────────────────────────────────────────────────
-            if (_ctx.NavigationDefinitions.Count > 0)
+            if (_ctx.ReportContext.NavigationDefinitions.Count > 0)
             {
                 manifest.Navigations = new();
-                foreach (var (name, nStmt) in _ctx.NavigationDefinitions)
+                foreach (var (name, nStmt) in _ctx.ReportContext.NavigationDefinitions)
                 {
                     // Hidden pages are not shown in the nav bar (they are still rendered
                     // as sections so DRILL_DOWN can navigate to them programmatically).
                     var visiblePages = nStmt.Pages
-                        .Where(p => !(_ctx.PageDefinitions.TryGetValue(p, out var pd) && pd.IsHidden))
+                        .Where(p => !(_ctx.ReportContext.PageDefinitions.TryGetValue(p, out var pd) && pd.IsHidden))
                         .ToList();
 
                     manifest.Navigations.Add(new NavigationManifest
@@ -120,10 +120,10 @@ namespace ETL_SQL.ReportBuilder
             }
 
             // ── Buttons ──────────────────────────────────────────────────────
-            if (_ctx.ButtonDefinitions.Count > 0)
+            if (_ctx.ReportContext.ButtonDefinitions.Count > 0)
             {
                 manifest.Buttons = new();
-                foreach (var (name, bStmt) in _ctx.ButtonDefinitions)
+                foreach (var (name, bStmt) in _ctx.ReportContext.ButtonDefinitions)
                 {
                     var resolvedStyles = _styleBuilder.ResolveStyles(bStmt.StyleName, bStmt.Styles);
                     var bm = new ButtonManifest
@@ -147,7 +147,7 @@ namespace ETL_SQL.ReportBuilder
             }
 
             // ── Datasets ─────────────────────────────────────────────────────
-            foreach (var (tableName, dStmt) in _ctx.DatasetDefinitions)
+            foreach (var (tableName, dStmt) in _ctx.ReportContext.DatasetDefinitions)
             {
                 var rowCount = 0L;
                 if (_ctx.Connections.TryGetValue(tableName, out var src))
@@ -176,10 +176,10 @@ namespace ETL_SQL.ReportBuilder
             }
 
             // ── Custom Themes ────────────────────────────────────────────────
-            if (_ctx.ThemeDefinitions.Count > 0)
+            if (_ctx.ReportContext.ThemeDefinitions.Count > 0)
             {
                 manifest.CustomThemes = new();
-                foreach (var (themeName, themeStmt) in _ctx.ThemeDefinitions)
+                foreach (var (themeName, themeStmt) in _ctx.ReportContext.ThemeDefinitions)
                 {
                     var themeJson = CreateThemeStatementHandler.BuildEChartsTheme(themeStmt.Properties);
                     using var doc = JsonDocument.Parse(themeJson.ToJsonString());

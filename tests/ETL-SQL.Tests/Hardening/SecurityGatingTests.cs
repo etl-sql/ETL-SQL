@@ -19,7 +19,7 @@ namespace ETL_SQL.Tests.Hardening
             var rule = new SpillSecurityRule();
             
             // Build a deeply nested structure exceeding depth 50
-            Statement currentBlock = new BlockStatement(new List<Statement> { new PrintStatement(new LiteralExpression("Deep", TokenType.STRING)) });
+            Statement currentBlock = new BlockStatement(new List<Statement> { new PrintStatement(new List<Expression> { new LiteralExpression("Deep", TokenType.STRING) }) });
             for (int i = 0; i <= 51; i++) // Create 52 levels of nesting
             {
                 currentBlock = new BlockStatement(new List<Statement> { currentBlock });

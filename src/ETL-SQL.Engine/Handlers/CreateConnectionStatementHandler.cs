@@ -97,7 +97,7 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             IDataSource ds;
-            if (target.Contains("Demo", StringComparison.OrdinalIgnoreCase) || target.Contains("Sample", StringComparison.OrdinalIgnoreCase))
+            if (!Path.IsPathRooted(target) && (target.Contains("Demo", StringComparison.OrdinalIgnoreCase) || target.Contains("Sample", StringComparison.OrdinalIgnoreCase) || target.StartsWith("mock:", StringComparison.OrdinalIgnoreCase)))
             {
                 var mock = _connectorRegistry.GetConnector("MOCKDB");
                 if (mock != null) connector = mock;

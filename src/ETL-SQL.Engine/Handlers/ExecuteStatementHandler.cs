@@ -38,10 +38,11 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             _logger.Debug("Executing procedure {ProcedureName}", stmt.ProcedureName);
-            var args = new List<object?>();
+            var args = new List<(string? Name, object? Value)>();
             foreach (var param in stmt.Parameters)
             {
-                args.Add(await context.EvaluateValue(param.Expression, new Row()));
+                var val = await context.EvaluateValue(param.Expression, new Row());
+                args.Add((param.Name, val));
             }
 
             await context.EvaluateProcedure(stmt.ProcedureName, args);
@@ -65,13 +66,19 @@ namespace ETL_SQL.Engine.Handlers
             foreach (var param in stmt.Parameters)
             {
                 var val = await context.EvaluateValue(param.Expression, new Row());
-                
-                if (param.Expression is VariableExpression varExpr)
+                string? varName = param.Name;
+
+                if (varName == null && param.Expression is VariableExpression varExpr)
                 {
-                    localVars[varExpr.Name] = val;
+                    varName = varExpr.Name;
+                }
+
+                if (varName != null)
+                {
+                    localVars[varName] = val;
                     if (param.IsOutput || param.IsInput)
                     {
-                        localMetadata[varExpr.Name] = new VariableMetadata 
+                        localMetadata[varName] = new VariableMetadata 
                         { 
                             IsOutput = param.IsOutput, 
                             IsInput = param.IsInput,
@@ -81,7 +88,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
 
-            context.PushScope(localVars, localMetadata);
+            context.VarContext.PushScope(localVars, localMetadata);
             try
             {
                 await context.Evaluate(script);
@@ -92,14 +99,15 @@ namespace ETL_SQL.Engine.Handlers
             }
             finally
             {
-                var outputs = context.GetVariablesWithMetadata(v => v.IsOutput);
-                context.PopScope();
+                var outputs = context.VarContext.GetVariablesWithMetadata(v => v.IsOutput);
+                context.VarContext.PopScope();
 
                 foreach (var kvp in outputs)
                 {
-                    context.SetVariable(kvp.Key, kvp.Value);
+                    context.VarContext.SetVariable(kvp.Key, kvp.Value.Value);
                 }
             }
         }
     }
 }
+

@@ -57,8 +57,8 @@ namespace ETL_SQL.Tests.Hardening.Performance
             Assert.True(result.Rows.Count > 0);
             
             // Verify metrics
-            Assert.True(eval.TotalSpilledBytes > 0, $"Expected spill to disk, but TotalSpilledBytes is {eval.TotalSpilledBytes}");
-            Assert.True(eval.PartitionsCount > 0, "Expected partition buckets to be used.");
+            Assert.True(eval.Telemetry.TotalSpilledBytes > 0, $"Expected spill to disk, but TotalSpilledBytes is {eval.Telemetry.TotalSpilledBytes}");
+            Assert.True(eval.Telemetry.PartitionsCount > 0, "Expected partition buckets to be used.");
 
             // Verify logic (Spot check User_1 in North America)
             // Note: Since MockDataSeeder uses Random(42), results are deterministic.
@@ -68,8 +68,8 @@ namespace ETL_SQL.Tests.Hardening.Performance
             Assert.True(firstRow.Columns.ContainsKey("region_count"));
             
             // Output spill stats for debugging
-            Console.WriteLine($"Total Spilled Bytes: {eval.TotalSpilledBytes}");
-            Console.WriteLine($"Partitions Count: {eval.PartitionsCount}");
+            Console.WriteLine($"Total Spilled Bytes: {eval.Telemetry.TotalSpilledBytes}");
+            Console.WriteLine($"Partitions Count: {eval.Telemetry.PartitionsCount}");
         }
     }
 }

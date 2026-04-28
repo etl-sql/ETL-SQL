@@ -16,18 +16,14 @@ namespace ETL_SQL.Engine.Handlers
         {
             var stmt = (CreateProcedureStatement)statement;
             
-            
-            bool exists = context.ProcedureExists(stmt.ProcedureName);
+            bool exists = context.VarContext.TryGetProcedure(stmt.ProcedureName, out _);
             if (stmt.Mode == ObjectCreationMode.Alter && !exists)
                 throw new ExecutionException($"Procedure {stmt.ProcedureName} does not exist.");
             if (stmt.Mode == ObjectCreationMode.Create && exists)
                 throw new ExecutionException($"Procedure {stmt.ProcedureName} already exists.");
 
-            context.EvaluateCreateProcedure(stmt);
+            context.VarContext.SetProcedure(stmt.ProcedureName, stmt);
             return Task.CompletedTask;
         }
     }
 }
-
-
-

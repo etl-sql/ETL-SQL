@@ -69,7 +69,7 @@ namespace ETL_SQL.Engine.Services
             sw.Stop();
             result.ExecutionTimeMs = sw.ElapsedMilliseconds;
             result.TotalRowsMatched = (int)Math.Min(totalRows, int.MaxValue);
-            context.RowsProcessed += totalRows;
+            context.Telemetry.RowsProcessed += totalRows;
             
             context.LastResult = result;
             context.LastResultSets.Add(result);
@@ -79,3 +79,4 @@ namespace ETL_SQL.Engine.Services
         }
     }
 }
+

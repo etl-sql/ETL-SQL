@@ -212,10 +212,10 @@ namespace ETL_SQL.Engine.Spill
             public async Task WriteRowAsync(Row row)
             {
                 var json = JsonSerializer.Serialize(row.Columns);
-                if (_context.TelemetryEnabled)
+                if (_context.Telemetry?.TelemetryEnabled ?? false)
                 {
                     // Fast approximation (+2 for newline)
-                    _context.TotalSpilledBytes += json.Length + 2;
+                    _context.Telemetry.TotalSpilledBytes += json.Length + 2;
                 }
                 await _writer.WriteLineAsync(json);
             }
@@ -376,11 +376,11 @@ namespace ETL_SQL.Engine.Spill
 
                 _buffer.Add(snapshot);
 
-                if (_context.TelemetryEnabled)
+                if (_context.Telemetry?.TelemetryEnabled ?? false)
                 {
                     long inc = row.Columns.Count * 16L;
-                    _context.TotalSpilledBytes += inc;
-                    if (_context.IsVerbose) _context.Logger.WriteLine($"DEBUG: Spilled {inc} bytes. Total: {_context.TotalSpilledBytes}");
+                    _context.Telemetry.TotalSpilledBytes += inc;
+                    if (_context.IsVerbose) _context.Logger.WriteLine($"DEBUG: Spilled {inc} bytes. Total: {_context.Telemetry.TotalSpilledBytes}");
                 }
 
                 if (_buffer.Count >= _flushBatchSize)
@@ -675,3 +675,5 @@ namespace ETL_SQL.Engine.Spill
         }
     }
 }
+
+

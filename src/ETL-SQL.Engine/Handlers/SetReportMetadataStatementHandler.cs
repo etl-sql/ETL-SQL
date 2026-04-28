@@ -13,20 +13,21 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (SetReportMetadataStatement)statement;
             switch (stmt.Key.ToUpperInvariant())
             {
-                case "TITLE":       context.ReportTitle = stmt.Value; break;
-                case "DESCRIPTION": context.ReportDescription = stmt.Value; break;
-                case "CSS":         context.ReportCss = stmt.Value; break;
-                case "JS":          context.ReportJs = stmt.Value; break;
-                case "HEAD":        context.ReportHtmlHead = stmt.Value; break;
-                case "BODY":        context.ReportHtmlBody = stmt.Value; break;
-                case "FOOTER":      context.ReportHtmlFooter = stmt.Value; break;
-                case "FAVICON":     context.ReportFavicon = stmt.Value; break;
-                case "LOGO":        context.ReportLogo = stmt.Value; break;
-                case "BACKGROUND":  context.ReportBackground = stmt.Value; break;
-                case "THEME":       context.ReportTheme = stmt.Value; break;
-                case "NAVIGATION":  context.ReportNavigation = stmt.Value; break;
+                case "TITLE":       context.ReportContext.ReportTitle = stmt.Value; break;
+                case "DESCRIPTION": context.ReportContext.ReportDescription = stmt.Value; break;
+                case "CSS":         context.ReportContext.ReportCss = stmt.Value; break;
+                case "JS":          context.ReportContext.ReportJs = stmt.Value; break;
+                case "HEAD":        context.ReportContext.ReportHtmlHead = stmt.Value; break;
+                case "BODY":        context.ReportContext.ReportHtmlBody = stmt.Value; break;
+                case "FOOTER":      context.ReportContext.ReportHtmlFooter = stmt.Value; break;
+                case "FAVICON":     context.ReportContext.ReportFavicon = stmt.Value; break;
+                case "LOGO":        context.ReportContext.ReportLogo = stmt.Value; break;
+                case "BACKGROUND":  context.ReportContext.ReportBackground = stmt.Value; break;
+                case "THEME":       context.ReportContext.ReportTheme = stmt.Value; break;
+                case "NAVIGATION":  context.ReportContext.ReportNavigation = stmt.Value; break;
             }
             return Task.CompletedTask;
         }
     }
 }
+

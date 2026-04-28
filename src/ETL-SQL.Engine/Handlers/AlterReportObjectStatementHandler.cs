@@ -49,7 +49,7 @@ namespace ETL_SQL.Engine.Handlers
 
         private void UpdateVisual(AlterReportObjectStatement stmt, IExecutionContext context)
         {
-            if (!context.VisualDefinitions.TryGetValue(stmt.Name, out var visual))
+            if (!context.ReportContext.VisualDefinitions.TryGetValue(stmt.Name, out var visual))
             {
                 throw new ExecutionException($"Visual '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
             }
@@ -69,12 +69,12 @@ namespace ETL_SQL.Engine.Handlers
                 Tooltip = stmt.Tooltip ?? visual.Tooltip
             };
 
-            context.VisualDefinitions[stmt.Name] = updated;
+            context.ReportContext.VisualDefinitions[stmt.Name] = updated;
         }
 
         private void UpdatePage(AlterReportObjectStatement stmt, IExecutionContext context)
         {
-            if (!context.PageDefinitions.TryGetValue(stmt.Name, out var page))
+            if (!context.ReportContext.PageDefinitions.TryGetValue(stmt.Name, out var page))
             {
                 throw new ExecutionException($"Page '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
             }
@@ -88,12 +88,12 @@ namespace ETL_SQL.Engine.Handlers
                 StyleName = stmt.StyleName ?? page.StyleName
             };
 
-            context.PageDefinitions[stmt.Name] = updated;
+            context.ReportContext.PageDefinitions[stmt.Name] = updated;
         }
 
         private void UpdateContainer(AlterReportObjectStatement stmt, IExecutionContext context)
         {
-            if (!context.ContainerDefinitions.TryGetValue(stmt.Name, out var container))
+            if (!context.ReportContext.ContainerDefinitions.TryGetValue(stmt.Name, out var container))
             {
                 throw new ExecutionException($"Container '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
             }
@@ -107,12 +107,12 @@ namespace ETL_SQL.Engine.Handlers
                 Tooltip = stmt.Tooltip ?? container.Tooltip
             };
 
-            context.ContainerDefinitions[stmt.Name] = updated;
+            context.ReportContext.ContainerDefinitions[stmt.Name] = updated;
         }
 
         private void UpdateTemplate(AlterReportObjectStatement stmt, IExecutionContext context)
         {
-            if (!context.TemplateDefinitions.TryGetValue(stmt.Name, out var template))
+            if (!context.ReportContext.TemplateDefinitions.TryGetValue(stmt.Name, out var template))
             {
                 throw new ExecutionException($"Template '{stmt.Name}' does not exist.", null, stmt.Line, stmt.Column);
             }
@@ -130,7 +130,7 @@ namespace ETL_SQL.Engine.Handlers
             // Persistence
             try
             {
-                var templateDir = context.TemplatePath;
+                var templateDir = context.ReportContext.TemplatePath;
                 string fileName = stmt.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? stmt.Name : stmt.Name + ".json";
                 string filePath = Path.Combine(templateDir, fileName);
                 string resolvedPath = context.ResolvePath(filePath);
@@ -150,3 +150,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

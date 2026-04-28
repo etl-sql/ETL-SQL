@@ -317,15 +317,19 @@ namespace ETL_SQL.Core.Parser.Components
         {
             if (Match(TokenType.FILE))
             {
+                bool ifExists = false;
+                if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS after IF"); ifExists = true; }
                 var source = ParseExpression();
                 Match(TokenType.SEMICOLON);
-                return new FileOperationStatement(FileOpType.Delete, source) { Line = startToken.Line, Column = startToken.Column };
+                return new FileOperationStatement(FileOpType.Delete, source, ifExists: ifExists) { Line = startToken.Line, Column = startToken.Column };
             }
             if (Match(TokenType.DIRECTORY))
             {
+                bool ifExists = false;
+                if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS after IF"); ifExists = true; }
                 var path = ParseExpression();
                 Match(TokenType.SEMICOLON);
-                return new DirectoryOperationStatement(DirectoryOpType.Delete, path) { Line = startToken.Line, Column = startToken.Column };
+                return new DirectoryOperationStatement(DirectoryOpType.Delete, path, ifExists: ifExists) { Line = startToken.Line, Column = startToken.Column };
             }
             if (Match(TokenType.DIRECTORY_CONTENTS))
             {
@@ -335,6 +339,7 @@ namespace ETL_SQL.Core.Parser.Components
                 Match(TokenType.SEMICOLON);
                 return new DirectoryOperationStatement(DirectoryOpType.DeleteContents, path, null, null, recursive) { Line = startToken.Line, Column = startToken.Column };
             }
+
 
             Match(TokenType.FROM);
             var targetTable = ParseTableReference(false);

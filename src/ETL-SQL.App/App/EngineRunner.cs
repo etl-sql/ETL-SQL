@@ -14,6 +14,7 @@ using Microsoft.Extensions.Configuration;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Linting;
 using ETL_SQL.Core.Linting.Rules;
+using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.App
 {
@@ -178,6 +179,7 @@ namespace ETL_SQL.App
                     await using var evaluator = Program.ServiceProvider.GetRequiredService<Evaluator>();
                     evaluator.BatchSize = ctx.BatchSize;
                     evaluator.IsVerbose = ctx.IsVerbose;
+                    logger.IsVerbose = ctx.IsVerbose;
                     evaluator.MasterPassword = ctx.Password;
                     evaluator.SessionId = ctx.SessionId;
 
@@ -236,7 +238,7 @@ namespace ETL_SQL.App
                     Task? treeRenderTask = null;
                     if (ctx.DisplayProgress && !ctx.IsJsonMode && !ctx.IsSilentMode)
                     {
-                        var tree = evaluator.ExecutionTree;
+                        var tree = evaluator.Telemetry.ExecutionTree;
                         var visualizer = new ExecuteTreeVisualizer(tree);
                         treeCts = new CancellationTokenSource();
                         treeRenderTask = visualizer.RenderLiveAsync(treeCts.Token);
@@ -247,10 +249,10 @@ namespace ETL_SQL.App
                     else if (ctx.IsJsonMode)
                     {
                         // In JSON mode, we emit "progress" packets for the VS Code extension
-                        var tree = evaluator.ExecutionTree;
+                        var tree = evaluator.Telemetry.ExecutionTree;
                         treeCts = new CancellationTokenSource();
                         
-                        evaluator.IsProfiling = true; 
+                        evaluator.Telemetry.IsProfiling = true; 
                         evaluator.DisplayExecuteTree = true;
 
                         // Initial clear signal for the VS Code extension
@@ -282,10 +284,10 @@ namespace ETL_SQL.App
                                 var vars = new {
                                     type = "variables",
                                     uri = ctx.ScriptFile.FullName,
-                                    data = evaluator.CurrentVariables.Select(kv => new {
+                                    data = evaluator.VarContext.GetVariablesWithMetadata().Select(kv => new {
                                         name = kv.Key,
-                                        value = kv.Value?.ToString() ?? "null",
-                                        type = kv.Value?.GetType().Name ?? "null"
+                                        value = kv.Value.Value?.ToString() ?? "null",
+                                        type = kv.Value.Value?.GetType().Name ?? "null"
                                     }).ToList()
                                 };
                                 Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(vars));
@@ -311,7 +313,7 @@ namespace ETL_SQL.App
                             var finalSnapshot = new {
                                 type = "progress",
                                 uri = ctx.ScriptFile.FullName,
-                                data = evaluator.ExecutionTree.ToSnapshot()
+                                data = evaluator.Telemetry.ExecutionTree.ToSnapshot()
                             };
                             Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(finalSnapshot));
 
@@ -319,23 +321,23 @@ namespace ETL_SQL.App
                             var finalVars = new {
                                 type = "variables",
                                 uri = ctx.ScriptFile.FullName,
-                                data = evaluator.CurrentVariables.Select(kv => new {
+                                data = evaluator.VarContext.GetVariablesWithMetadata().Select(kv => new {
                                     name = kv.Key,
-                                    value = kv.Value?.ToString() ?? "null",
-                                    type = kv.Value?.GetType().Name ?? "null"
+                                    value = kv.Value.Value?.ToString() ?? "null",
+                                    type = kv.Value.Value?.GetType().Name ?? "null"
                                 }).ToList()
                             };
                             Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(finalVars));
 
                             // Emit performance telemetry
-                            if (evaluator.IsProfiling)
+                            if (evaluator.Telemetry.IsProfiling)
                             {
                                 var perf = new {
                                     type = "performance",
                                     uri = ctx.ScriptFile.FullName,
                                     data = new {
                                         totalDurationMs = execTime.ElapsedMilliseconds,
-                                        statements = evaluator.ProfileMetrics.Select(m => new {
+                                        statements = evaluator.Telemetry.ProfileMetrics.Select(m => new {
                                             statementType = m.Sql.Split(' ')[0], // Simple type extraction
                                             durationMs = m.DurationMs,
                                             memoryUsageBytes = Math.Max(0, m.MemoryDeltaBytes),
@@ -354,12 +356,12 @@ namespace ETL_SQL.App
                         await sessionManager.SaveSession(ctx.SessionId, evaluator, source);
                     }
 
-                    if (ctx.IsPerfMode || evaluator.IsProfiling)
+                    if (ctx.IsPerfMode || evaluator.Telemetry.IsProfiling)
                     {
                         var memUsageBytes = GC.GetTotalMemory(false) - startMem;
                         double memUsageMb = Math.Round((double)memUsageBytes / (1024 * 1024), 2);
                         if (memUsageMb < 0) memUsageMb = 0;
-                        double rowsPerSec = execTime.Elapsed.TotalSeconds > 0 ? Math.Round(evaluator.RowsProcessed / execTime.Elapsed.TotalSeconds, 0) : evaluator.RowsProcessed;
+                        double rowsPerSec = execTime.Elapsed.TotalSeconds > 0 ? Math.Round(evaluator.Telemetry.RowsProcessed / execTime.Elapsed.TotalSeconds, 0) : evaluator.Telemetry.RowsProcessed;
 
                         if (ctx.IsJsonMode)
                         {
@@ -371,12 +373,12 @@ namespace ETL_SQL.App
                                     parserMs = parseTime.ElapsedMilliseconds,
                                     executionMs = execTime.ElapsedMilliseconds,
                                     memoryMb = memUsageMb,
-                                    spilledMb = Math.Round((double)evaluator.TotalSpilledBytes / (1024 * 1024), 2),
-                                    partitions = evaluator.PartitionsCount,
+                                    spilledMb = Math.Round((double)evaluator.Telemetry.TotalSpilledBytes / (1024 * 1024), 2),
+                                    partitions = evaluator.Telemetry.PartitionsCount,
                                     maxRecursion = evaluator.MaxRecursiveDepth,
-                                    rowsProcessed = evaluator.RowsProcessed,
+                                    rowsProcessed = evaluator.Telemetry.RowsProcessed,
                                     rowsPerSecond = rowsPerSec,
-                                    statements = evaluator.ProfileMetrics.Select(m => new {
+                                    statements = evaluator.Telemetry.ProfileMetrics.Select(m => new {
                                         sql = m.Sql,
                                         durationMs = m.DurationMs,
                                         rows = m.RowsProcessed
@@ -402,15 +404,15 @@ namespace ETL_SQL.App
                             var table = new Table().Border(TableBorder.Rounded);
                             table.AddColumn("Metric");
                             table.AddColumn("Value");
-                            table.AddRow("Total Rows Processed", evaluator.RowsProcessed.ToString("N0"));
+                            table.AddRow("Total Rows Processed", evaluator.Telemetry.RowsProcessed.ToString("N0"));
                             table.AddRow("Throughput (Rows/s)", rowsPerSec.ToString("N0"));
                             table.AddRow("Approx. RAM Peak", $"{memUsageMb} MB");
                             
-                            if (evaluator.TotalSpilledBytes > 0)
-                                table.AddRow("Disk Spilled", $"[yellow]{Math.Round((double)evaluator.TotalSpilledBytes / (1024 * 1024), 2)} MB[/]");
+                            if (evaluator.Telemetry.TotalSpilledBytes > 0)
+                                table.AddRow("Disk Spilled", $"[yellow]{Math.Round((double)evaluator.Telemetry.TotalSpilledBytes / (1024 * 1024), 2)} MB[/]");
                             
-                            if (evaluator.PartitionsCount > 0)
-                                table.AddRow("Partitions Used", evaluator.PartitionsCount.ToString());
+                            if (evaluator.Telemetry.PartitionsCount > 0)
+                                table.AddRow("Partitions Used", evaluator.Telemetry.PartitionsCount.ToString());
 
                             if (evaluator.MaxRecursiveDepth > 0)
                                 table.AddRow("Max Recursion Depth", evaluator.MaxRecursiveDepth.ToString());
@@ -422,7 +424,7 @@ namespace ETL_SQL.App
                     else if (!ctx.IsJsonMode)
                     {
                         logger.WriteLine($"Execution finished in {execTime.ElapsedMilliseconds}ms.", ConsoleColor.Green);
-                        logger.WriteLine($"Rows affected: {evaluator.RowsProcessed}");
+                        logger.WriteLine($"Rows affected: {evaluator.Telemetry.RowsProcessed}");
                     }
 
                     if (evaluator.DockerManager.HasActiveContainers)
@@ -444,9 +446,23 @@ namespace ETL_SQL.App
 
                     return 0;
                 }
+                catch (ExecutionException ex)
+                {
+                    if (ctx.IsJsonMode)
+                    {
+                        Console.Error.WriteLine($"Execution Error at line {ex.Line}, col {ex.Column}: {ex.Message} (Code: {ex.ErrorNumber})");
+                    }
+                    else
+                    {
+                        logger.WriteLine($"Execution Error: {ex.Message}", ConsoleColor.Red);
+                        logger.WriteLine($"  - Line: {ex.Line}, Column: {ex.Column}", ConsoleColor.Yellow);
+                        if (ex.ErrorNumber > 0) logger.WriteLine($"  - Error Number: {ex.ErrorNumber}", ConsoleColor.Yellow);
+                    }
+                    return 1;
+                }
                 catch (Exception ex)
                 {
-                    logger.WriteLine($"Error: {ex.Message}", ConsoleColor.Red);
+                    logger.WriteLine($"Fatal Error: {ex.Message}", ConsoleColor.Red);
                     if (ctx.IsVerbose) logger.WriteLine(ex.StackTrace ?? "", ConsoleColor.DarkGray);
                     return 1;
                 }

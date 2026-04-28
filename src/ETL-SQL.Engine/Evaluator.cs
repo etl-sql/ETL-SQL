@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using System.Collections.Concurrent;
+using System.Threading;
 
 using ETL_SQL.Common;
 using ETL_SQL.Data;
@@ -14,6 +15,7 @@ using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Services;
@@ -53,6 +55,10 @@ namespace ETL_SQL.Engine
         private readonly Core.Interfaces.ILanguageHelpRegistry _languageHelp;
         private readonly ConcurrentDictionary<string, IDataSource> _connections;
         private readonly Dictionary<string, IDataSource> _localSources = new(StringComparer.OrdinalIgnoreCase);
+
+        public IDictionary<string, IDataSource> Connections => _connections;
+        public IDictionary<string, IDataSource> LocalSources => _localSources;
+
         private readonly VariableScopeManager _variableScopeManager;
         private readonly EvaluatorComponentRegistry _registry;
         private readonly QueryCompiler _queryCompiler;
@@ -85,49 +91,40 @@ namespace ETL_SQL.Engine
         public EvaluatorOptions Options => _options;
 
         public bool AutoRollbackOnFinish { get => _options.AutoRollbackOnFinish; set => _options.AutoRollbackOnFinish = value; }
-
-        /// <summary>Total bytes spilled to disk for large joins/sorts.</summary>
-        private long _totalSpilledBytes = 0;
-        public long TotalSpilledBytes 
-        { 
-            get => System.Threading.Interlocked.Read(ref _totalSpilledBytes); 
-            set => System.Threading.Interlocked.Exchange(ref _totalSpilledBytes, value); 
-        }
-        public bool TelemetryEnabled { get => _options.TelemetryEnabled; set => _options.TelemetryEnabled = value; }
         
-        private long _aggregateGroupsCount = 0;
-        public long AggregateGroupsCount
-        {
-            get => System.Threading.Interlocked.Read(ref _aggregateGroupsCount);
-            set => System.Threading.Interlocked.Exchange(ref _aggregateGroupsCount, value);
-        }
-
-        public double AggregateExpansionRatio { get; set; } = 1.0;
+        [System.Obsolete("Use Telemetry.ExecutionTree")]
+        public ExecutionTree ExecutionTree => Telemetry.ExecutionTree;
         
-        public int PartitionsCount { get; set; } = 0;
+        [System.Obsolete("Use Telemetry.IsProfiling")]
+        public bool IsProfiling { get => Telemetry.IsProfiling; set => Telemetry.IsProfiling = value; }
+        
+        [System.Obsolete("Use Telemetry.RowsProcessed")]
+        public long RowsProcessed => Telemetry.RowsProcessed;
+        
+        [System.Obsolete("Use Telemetry.PartitionsCount")]
+        public int PartitionsCount => Telemetry.PartitionsCount;
+        
+        [System.Obsolete("Use Telemetry.TotalSpilledBytes")]
+        public long TotalSpilledBytes => Telemetry.TotalSpilledBytes;
 
-        public long LastExecutionTimeMs { get; set; }
+        [System.Obsolete("Use Telemetry.AggregateExpansionRatio")]
+        public double AggregateExpansionRatio => Telemetry.AggregateExpansionRatio;
 
-        private long _subqueryCacheHits = 0;
-        public long SubqueryCacheHits
-        {
-            get => System.Threading.Interlocked.Read(ref _subqueryCacheHits);
-            set => System.Threading.Interlocked.Exchange(ref _subqueryCacheHits, value);
-        }
+        [System.Obsolete("Use Telemetry.TelemetryEnabled")]
+        public bool TelemetryEnabled { get => Telemetry.TelemetryEnabled; set => Telemetry.TelemetryEnabled = value; }
 
-        private long _subqueryCacheMisses = 0;
-        public long SubqueryCacheMisses
-        {
-            get => System.Threading.Interlocked.Read(ref _subqueryCacheMisses);
-            set => System.Threading.Interlocked.Exchange(ref _subqueryCacheMisses, value);
-        }
-
-        private int _sortSpillCount = 0;
-        public int SortSpillCount
-        {
-            get => _sortSpillCount;
-            set => _sortSpillCount = value;
-        }
+        [System.Obsolete("Use Telemetry.AggregateGroupsCount")]
+        public long AggregateGroupsCount => Telemetry.AggregateGroupsCount;
+        
+        [System.Obsolete("Use Telemetry.ProfileMetrics")]
+        public List<ExecutionMetrics> ProfileMetrics => Telemetry.ProfileMetrics;
+        
+        public List<string> Messages { get; } = new();
+        public int MaxMessages { get; set; } = 1000;
+        
+        public IVariableContext VarContext => _variableScopeManager;
+        public IReportContext ReportContext => _registry.ReportContext;
+        public ITelemetryContext Telemetry => _registry.TelemetryManager;
 
         public long TempTableSpillThresholdRows { get => _options.TempTableSpillThresholdRows; set => _options.TempTableSpillThresholdRows = value; }
         public int MaxRecursiveDepth { get => _options.MaxRecursiveDepth; set => _options.MaxRecursiveDepth = value; }
@@ -219,125 +216,17 @@ namespace ETL_SQL.Engine
         /// <summary>Named environment sets created by CREATE SETS.</summary>
         public IDictionary<string, NamedSet> NamedSets { get; } = new Dictionary<string, NamedSet>(StringComparer.OrdinalIgnoreCase);
 
-        // ── IReportContext ──────────────────────────────────────────────────
-        /// <inheritdoc />
-        public IDictionary<string, CreateVisualStatement> VisualDefinitions => _registry.ReportContext.VisualDefinitions;
-        /// <inheritdoc />
-        public IDictionary<string, CreatePageStatement> PageDefinitions => _registry.ReportContext.PageDefinitions;
-        /// <inheritdoc />
-        public IDictionary<string, CreateDatasetStatement> DatasetDefinitions => _registry.ReportContext.DatasetDefinitions;
-        /// <inheritdoc />
-        public IDictionary<string, CreateContainerStatement> ContainerDefinitions => _registry.ReportContext.ContainerDefinitions;
-        /// <inheritdoc />
-        public IDictionary<string, CreateNavigationStatement> NavigationDefinitions => _registry.ReportContext.NavigationDefinitions;
-        /// <inheritdoc />
-        public IDictionary<string, CreateStyleStatement> StyleDefinitions => _registry.ReportContext.StyleDefinitions;
-        /// <inheritdoc />
-        public IDictionary<string, CreateButtonStatement> ButtonDefinitions => _registry.ReportContext.ButtonDefinitions;
-        /// <inheritdoc />
-        public IDictionary<string, CreateTemplateStatement> TemplateDefinitions => _registry.ReportContext.TemplateDefinitions;
-        /// <inheritdoc />
-        public IDictionary<string, CreateThemeStatement> ThemeDefinitions => _registry.ReportContext.ThemeDefinitions;
-        /// <inheritdoc />
-        public string TemplatePath
-        {
-            get => _registry.ReportContext.TemplatePath;
-            set => _registry.ReportContext.TemplatePath = value;
-        }
-        /// <inheritdoc />
-        public string? ReportTitle
-        {
-            get => _registry.ReportContext.ReportTitle;
-            set => _registry.ReportContext.ReportTitle = value;
-        }
-        /// <inheritdoc />
-        public string? ReportDescription
-        {
-            get => _registry.ReportContext.ReportDescription;
-            set => _registry.ReportContext.ReportDescription = value;
-        }
-        /// <inheritdoc />
-        public bool ReportTitleIsMarkdown
-        {
-            get => _registry.ReportContext.ReportTitleIsMarkdown;
-            set => _registry.ReportContext.ReportTitleIsMarkdown = value;
-        }
-        /// <inheritdoc />
-        public string? ReportCss
-        {
-            get => _registry.ReportContext.ReportCss;
-            set => _registry.ReportContext.ReportCss = value;
-        }
-        /// <inheritdoc />
-        public string? ReportJs
-        {
-            get => _registry.ReportContext.ReportJs;
-            set => _registry.ReportContext.ReportJs = value;
-        }
-        /// <inheritdoc />
-        public string? ReportHtmlHead
-        {
-            get => _registry.ReportContext.ReportHtmlHead;
-            set => _registry.ReportContext.ReportHtmlHead = value;
-        }
-        /// <inheritdoc />
-        public string? ReportHtmlBody
-        {
-            get => _registry.ReportContext.ReportHtmlBody;
-            set => _registry.ReportContext.ReportHtmlBody = value;
-        }
-        /// <inheritdoc />
-        public string? ReportHtmlFooter
-        {
-            get => _registry.ReportContext.ReportHtmlFooter;
-            set => _registry.ReportContext.ReportHtmlFooter = value;
-        }
-        /// <inheritdoc />
-        public string? ReportFavicon
-        {
-            get => _registry.ReportContext.ReportFavicon;
-            set => _registry.ReportContext.ReportFavicon = value;
-        }
-        /// <inheritdoc />
-        public string? ReportLogo
-        {
-            get => _registry.ReportContext.ReportLogo;
-            set => _registry.ReportContext.ReportLogo = value;
-        }
-        /// <inheritdoc />
-        public string? ReportBackground
-        {
-            get => _registry.ReportContext.ReportBackground;
-            set => _registry.ReportContext.ReportBackground = value;
-        }
-        /// <inheritdoc />
-        public string? ReportTheme
-        {
-            get => _registry.ReportContext.ReportTheme;
-            set => _registry.ReportContext.ReportTheme = value;
-        }
-        /// <inheritdoc />
-        public string? ReportNavigation
-        {
-            get => _registry.ReportContext.ReportNavigation;
-            set => _registry.ReportContext.ReportNavigation = value;
-        }
-
         /// <summary>Optional prompt callback for interactive USE SETS WITH_PROMPT. Null = non-interactive (auto-proceed).</summary>
         public Func<string, Task<bool>>? OnPrompt { get; set; }
 
         /// <summary>Whether to capture execution metrics for profiling.</summary>
         public bool IsJsonMode { get; set; }
-        public bool IsProfiling { get; set; }
         
         /// <summary>Whether to run in dry-run mode (no side effects).</summary>
         public bool IsWhatIf { get; set; }
 
         /// <summary>Whether to display a graphical execution tree during the script run.</summary>
         public bool DisplayExecuteTree { get; set; } = true;
-
-        /// <summary>The high-level execution tree for visual progress tracking.</summary>
-        public ExecutionTree ExecutionTree { get; } = new();
 
         /// <summary>Whether to reuse execution nodes for identical statements in loops to keep the pipeline view clean.</summary>
         public bool ReuseLoopNodes { get; set; } = true;
@@ -369,17 +258,8 @@ namespace ETL_SQL.Engine
         public Guid? CurrentNodeId
         {
             get => ExecutionNode.Current.Value?.Id;
-            set => ExecutionNode.Current.Value = value.HasValue ? ExecutionTree.GetNode(value.Value) : null;
+            set => ExecutionNode.Current.Value = value.HasValue ? Telemetry.ExecutionTree.GetNode(value.Value) : null;
         }
-        
-        /// <summary>Execution metrics for all statements run since profiling was enabled.</summary>
-        public List<ExecutionMetrics> ProfileMetrics { get; } = new();
-        
-        /// <summary>Captured log messages if RedirectOutput is true.</summary>
-        public List<string> Messages { get; } = new();
-        
-        /// <summary>Maximum number of messages to capture.</summary>
-        public int MaxMessages { get; set; } = 1000;
         
         /// <summary>Interface for managing Docker database containers.</summary>
         public IDockerManager DockerManager => _dockerManager;
@@ -439,32 +319,35 @@ namespace ETL_SQL.Engine
         public Core.Interfaces.ILanguageHelpRegistry LanguageHelp => _languageHelp;
 
         // ── Interface Implementations (IDataContext, IVariableContext, IEngineContext, etc.) ────────────────
-        public IDictionary<string, IDataSource> Connections => _connections;
-        public IDictionary<string, IDataSource> LocalSources => _localSources;
-        public IDictionary<string, object?> Variables => _variableScopeManager.GlobalVariables;
-        public IDictionary<string, object?> CurrentVariables => _variableScopeManager.CurrentVariables;
-        public IDictionary<string, VariableMetadata> VariableMetadata => _variableScopeManager.GlobalMetadata;
-        public IDictionary<string, VariableMetadata> CurrentMetadata => _variableScopeManager.CurrentMetadata;
+        public string SpillToken => $"Session_{SessionId}";
 
-        public void SetVariable(string name, object? value) => _variableScopeManager.SetVariable(name, value);
         public object? GetVariable(string name)
         {
             if (SystemVariableProvider.IsSystemVariable(name))
                 return SystemVariableProvider.Resolve(name, this);
             
-            return _variableScopeManager.GetVariable(name);
+            return VarContext.GetVariable(name);
         }
 
-
-        public bool ContainsVariable(string name) => _variableScopeManager.ContainsVariable(name);
-        public bool ContainsVariableInCurrentScope(string name) => _variableScopeManager.CurrentVariables.ContainsKey(name);
-        public void DeclareVariable(string name, object? value, VariableMetadata? metadata = null) => _variableScopeManager.DeclareVariable(name, value, metadata);
-        public Dictionary<string, object?> GetVariablesWithMetadata(Func<VariableMetadata, bool> predicate) => _variableScopeManager.GetVariablesWithMetadata(predicate);
-
-        public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null) => _variableScopeManager.PushScope(vars, metadata);
-        public void PopScope() => _variableScopeManager.PopScope();
-
-        public string SpillToken => $"Session_{SessionId}";
+        public void SetVariable(string name, object? value) => VarContext.SetVariable(name, value);
+        public void DeclareVariable(string name, object? value, VariableMetadata? metadata = null) => VarContext.DeclareVariable(name, value, metadata);
+        public bool ContainsVariable(string name) => VarContext.ContainsVariable(name);
+        public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null) => VarContext.PushScope(vars, metadata);
+        public void PopScope() => VarContext.PopScope();
+        
+        public void SetProcedure(string name, CreateProcedureStatement stmt) => VarContext.SetProcedure(name, stmt);
+        public bool TryGetProcedure(string name, out CreateProcedureStatement? stmt) => VarContext.TryGetProcedure(name, out stmt);
+        public void SetFunction(string name, CreateFunctionStatement stmt) => VarContext.SetFunction(name, stmt);
+        public bool RemoveFunction(string name) => VarContext.RemoveFunction(name);
+        public bool TryGetFunction(string name, out CreateFunctionStatement? stmt) => VarContext.TryGetFunction(name, out stmt);
+        public bool RemoveProcedure(string name) => VarContext.RemoveProcedure(name);
+        public IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null) => VarContext.GetVariablesWithMetadata(predicate);
+        public bool ContainsVariableInCurrentScope(string name) => VarContext.ContainsVariableInCurrentScope(name);
+        
+        public IDictionary<string, object?> Variables => VarContext.Variables;
+        public IDictionary<string, object?> CurrentVariables => VarContext.CurrentVariables;
+        public IDictionary<string, VariableMetadata> VariableMetadata => VarContext.VariableMetadata;
+        public IDictionary<string, VariableMetadata> CurrentMetadata => VarContext.CurrentMetadata;
         public long MemoryUsageBytes 
         {
             get
@@ -520,11 +403,15 @@ namespace ETL_SQL.Engine
             _options = options ?? new EvaluatorOptions();
             _registry = registry ?? new EvaluatorComponentRegistry();
 
-            ExecutionTree = executionTree ?? new ExecutionTree();
-            _connections = connections ?? new ConcurrentDictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
             _variableScopeManager = variableScopeManager ?? new VariableScopeManager();
-
             _registry.Initialize(this, _logger, _variableScopeManager, reportContext);
+
+            Telemetry.ExecutionTree.Clear();
+            if (executionTree != null)
+            {
+               foreach(var node in executionTree.GetAllNodes()) Telemetry.ExecutionTree.AddNode(node);
+            }
+            _connections = connections ?? new ConcurrentDictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase);
             
             _queryCompiler = _registry.QueryCompiler;
             _metricsReporter = _registry.MetricsReporter;
@@ -533,6 +420,9 @@ namespace ETL_SQL.Engine
             _dataSourceManager = _registry.DataSourceManager;
             _schemaManager = _registry.SchemaManager;
             _procedureExecutor = _registry.ProcedureExecutor;
+            
+            // Link Telemetry to registry components if needed, or initialized via registry.Initialize
+            Telemetry.IsProfiling = _options.IsProfiling;
 
             Functions.StandardFunctions.Register(functionRegistry);
             Functions.FileFunctions.Register(functionRegistry);
@@ -581,7 +471,7 @@ namespace ETL_SQL.Engine
         {
             if (config != null)
             {
-                TemplatePath = config.GetValue<string>("Reporting:TemplatePath") ?? "./Templates";
+                ReportContext.TemplatePath = config.GetValue<string>("Reporting:TemplatePath") ?? "./Templates";
             }
 
             MaxInMemoryBatches = DefaultThresholds.MaxInMemoryBatches(config);
@@ -609,8 +499,7 @@ namespace ETL_SQL.Engine
                 LastResult = null;
                 _nodeReuseMap.Clear();
                 _operationCount = 0;
-                ExecutionTree.Clear();
-                ProfileMetrics.Clear();
+                Telemetry.Clear();
                 lock(_messagesLock) { Messages.Clear(); }
             }
             try
@@ -628,7 +517,7 @@ namespace ETL_SQL.Engine
                     Status = ExecutionStatus.Running,
                     StartTicks = Stopwatch.GetTimestamp()
                 };
-                ExecutionTree.AddNode(scriptNode);
+                Telemetry.ExecutionTree.AddNode(scriptNode);
                 CurrentNodeId = scriptNode.Id;
 
                 // Inject script metadata into LineageTracker
@@ -735,19 +624,20 @@ namespace ETL_SQL.Engine
             else
             {
                 node = new ExecutionNode { 
-                    Name = nodeName,
+                    Name = statement.GetType().Name.Replace("Statement", ""),
                     Status = ExecutionStatus.Running,
                     StartTicks = Stopwatch.GetTimestamp()
                 };
-                ExecutionTree.AddNode(node, parentId);
+                Telemetry.ExecutionTree.AddNode(node, parentId);
+                parentId = node.Id;
                 if (ReuseLoopNodes) _nodeReuseMap[cacheKey] = node;
             }
 
             CurrentNodeId = node.Id;
 
             Stopwatch? sw = null;
-            long startRows = RowsProcessed;
-            if (IsVerbose || IsProfiling)
+            long startRows = Telemetry.RowsProcessed;
+            if (IsVerbose || Telemetry.IsProfiling)
             {
                 sw = Stopwatch.StartNew();
                 if (IsVerbose)
@@ -786,13 +676,13 @@ namespace ETL_SQL.Engine
                 throw new ExecutionException($"No handler registered for {statement.GetType().Name} at Line {statement.Line}");
             }
 
-            LastStatementRowsProcessed = RowsProcessed - startRows;
+            Telemetry.LastStatementRowsProcessed = Telemetry.RowsProcessed - startRows;
 
             if (sw != null)
             {
                 sw.Stop();
                 var elapsed = sw.ElapsedMilliseconds;
-                LastExecutionTimeMs = elapsed; // Track absolute last statement timing
+                Telemetry.LastExecutionTimeMs = elapsed; // Track absolute last statement timing
                 _metricsReporter.ReportPostExecutionMetrics(statement, elapsed);
                 if (IsVerbose) _metricsReporter.ProvideTips(statement);
                 LastIndexUsedName = null;
@@ -896,66 +786,8 @@ namespace ETL_SQL.Engine
         public object? MathOp(object? l, object? r, TokenType op) => _expressionEvaluator.MathOp(l, r, op);
         public bool EvaluateLike(object? left, object? right) => _expressionEvaluator.EvaluateLike(left, right);
 
-        public Task EvaluateCreateTable(CreateTableStatement stmt) => _schemaManager.EvaluateCreateTable(stmt, _connections);
-        public Task EvaluateDropTable(DropTableStatement stmt) => _schemaManager.EvaluateDropTable(stmt, _connections);
-        public Task EvaluateDropConnection(DropConnectionStatement stmt) => _schemaManager.EvaluateDropConnection(stmt, _connections);
-        public void EvaluateDropProcedure(DropProcedureStatement stmt) => _schemaManager.EvaluateDropProcedure(stmt);
-        public void EvaluateDropFunction(DropFunctionStatement stmt) => _schemaManager.EvaluateDropFunction(stmt);
-        public Task EvaluateDropIndex(DropIndexStatement stmt) => _schemaManager.EvaluateDropIndex(stmt, _connections);
-        public Task EvaluateCreateIndex(CreateIndexStatement stmt) => _schemaManager.EvaluateCreateIndex(stmt, _connections);
 
-        public async Task EvaluateClearSession(ClearSessionStatement stmt)
-        {
-            switch (stmt.Mode)
-            {
-                case ClearSessionMode.Current:
-                    if (SessionId != null)
-                    {
-                        // Note: Self-clearing is allowed even though it's "in-use" 
-                        // because we want scripts to be able to cleanup themselves.
-                        _sessionStateManager.UnregisterActiveSession(SessionId);
-                        _sessionStateManager.ClearSession(SessionId);
-                        _logger.Info("Cleared current session: {SessionId}", SessionId);
-                        SessionId = null; // Prevent future saves
-                    }
-                    break;
 
-                case ClearSessionMode.Single:
-                    if (stmt.SessionId != null)
-                    {
-                        var targetId = await EvaluateValue(stmt.SessionId, new Row());
-                        if (targetId != null)
-                        {
-                            _sessionStateManager.ClearSession(targetId.ToString()!);
-                            _logger.Info("Cleared specific session: {SessionId}", targetId);
-                        }
-                    }
-                    break;
-
-                case ClearSessionMode.All:
-                    var sessions = _sessionStateManager.GetSessions().ToList();
-                    int clearedCount = 0;
-                    foreach (var s in sessions)
-                    {
-                        if (s.SessionId != SessionId) // Don't self-destruct in "ALL" mode unless current
-                        {
-                            if (!_sessionStateManager.IsSessionInUse(s.SessionId))
-                            {
-                                _sessionStateManager.ClearSession(s.SessionId);
-                                clearedCount++;
-                            }
-                        }
-                    }
-                    _logger.Info("Cleared {Count} inactive sessions.", clearedCount);
-                    break;
-
-                case ClearSessionMode.Stale:
-                    var retentionDays = _serviceProvider.GetRequiredService<Microsoft.Extensions.Configuration.IConfiguration>().GetValue<int>("Session:StaleSessionRetentionDays", 7);
-                    _sessionStateManager.ReapStaleSessions(TimeSpan.FromDays(retentionDays));
-                    _logger.Info("Reaped stale sessions older than {Days} days.", retentionDays);
-                    break;
-            }
-        }
 
         public void EvaluateCreateProcedure(CreateProcedureStatement stmt) => _variableScopeManager.SetProcedure(stmt.ProcedureName, stmt);
         public void EvaluateCreateFunction(CreateFunctionStatement stmt) => _variableScopeManager.SetFunction(stmt.FunctionName, stmt);
@@ -965,7 +797,7 @@ namespace ETL_SQL.Engine
         public Task<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context)
             => _procedureExecutor.EvaluateUserDefinedFunction(f, args, context);
 
-        public Task EvaluateProcedure(string name, List<object?> args)
+        public Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args)
             => _procedureExecutor.EvaluateProcedure(name, args);
 
         public async Task EvaluateDelete(DeleteStatement stmt)
@@ -1167,12 +999,11 @@ namespace ETL_SQL.Engine
         public IExecutionContext Fork()
         {
             var freshHandlers = _serviceProvider.GetServices<IStatementHandler>();
-            var clonedReportContext = (_registry.ReportContext as ReportRegistry)?.Clone() ?? _registry.ReportContext;
-            var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _securityService, _logger, LanguageHelp, new EvaluatorComponentRegistry(), _connections, _variableScopeManager.Fork(), ExecutionTree, clonedReportContext)
+            var clonedReportContext = (ReportContext as ReportRegistry)?.Clone() ?? ReportContext;
+            var fork = new Evaluator(freshHandlers, _serviceProvider, _functionRegistry, _lineageTracker, _dockerManager, _connectorRegistry, _sessionStateManager, _securityService, _logger, LanguageHelp, new EvaluatorComponentRegistry(), _connections, _variableScopeManager.Fork(), Telemetry.ExecutionTree, clonedReportContext)
             {
                 IsVerbose = IsVerbose,
                 RedirectOutput = RedirectOutput,
-                IsProfiling = IsProfiling,
                 IsWhatIf = IsWhatIf,
                 ShowPassword = ShowPassword,
                 BatchSize = BatchSize,
@@ -1182,6 +1013,9 @@ namespace ETL_SQL.Engine
                 DisplayExecuteTree = DisplayExecuteTree,
                 MaxGroupingSets = MaxGroupingSets
             };
+            
+            fork.Telemetry.IsProfiling = Telemetry.IsProfiling;
+
             // Note: CurrentNodeId is AsyncLocal and will automatically flow to the new thread if Task.Run is used,
             // but for a manual Fork we set it explicitly.
             fork.CurrentNodeId = CurrentNodeId;
@@ -1197,17 +1031,10 @@ namespace ETL_SQL.Engine
                 if (spawned.LastResult != null) LastResult = spawned.LastResult;
             }
             lock (_messagesLock) foreach (var msg in spawned.Messages) Log(msg);
-            System.Threading.Interlocked.Add(ref _rowsProcessed, spawned.RowsProcessed);
-            System.Threading.Interlocked.Add(ref _totalSpilledBytes, spawned.TotalSpilledBytes);
+            
+            Telemetry.RowsProcessed += spawned.Telemetry.RowsProcessed;
+            Telemetry.TotalSpilledBytes += spawned.Telemetry.TotalSpilledBytes;
         }
-
-        private long _rowsProcessed = 0;
-        public long RowsProcessed 
-        { 
-            get => System.Threading.Interlocked.Read(ref _rowsProcessed); 
-            set => System.Threading.Interlocked.Exchange(ref _rowsProcessed, value); 
-        }
-        public long LastStatementRowsProcessed { get; set; }
 
         private int _operationCount = 0;
         public void IncrementOperationCount(OperationType type = OperationType.FileSystem, string? path = null, int count = 1)

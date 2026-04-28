@@ -342,7 +342,7 @@ namespace ETL_SQL.Engine
             for (int i = 0; i < f.Arguments.Count; i++)
             {
                 var arg = f.Arguments[i];
-                if (i == 0 && (fn == "DATEPART" || fn == "DATEDIFF" || fn == "DATENAME") && arg is IdentifierExpression idArg)
+                if (i == 0 && (fn == "DATEPART" || fn == "DATEDIFF" || fn == "DATENAME" || fn == "DATEADD") && arg is IdentifierExpression idArg)
                 {
                     args.Add(idArg.Name);
                 }
@@ -384,10 +384,10 @@ namespace ETL_SQL.Engine
             object? result = null;
             if (_context.SubqueryCache.TryGetValue(subq.Query, out var cached))
             {
-                _context.SubqueryCacheHits++;
+                _context.Telemetry.SubqueryCacheHits++;
                 return cached;
             }
-            _context.SubqueryCacheMisses++;
+            _context.Telemetry.SubqueryCacheMisses++;
             _context.OuterRowStack.Push(context);
             await foreach (var batch in _context.ExecuteQuery(subq.Query))
             {
@@ -424,27 +424,27 @@ namespace ETL_SQL.Engine
             if (v.Name.Equals("@@TRANCOUNT", StringComparison.OrdinalIgnoreCase)) return _context.TranCount;
             if (v.Name.Equals("@@RESULTSETS", StringComparison.OrdinalIgnoreCase)) return _context.LastResultSets;
             if (v.Name.Equals("@@VERSION", StringComparison.OrdinalIgnoreCase)) return LanguageMetadata.GetFullVersionString();
-            if (v.Name.Equals("@@ROWCOUNT", StringComparison.OrdinalIgnoreCase)) return _context.LastStatementRowsProcessed;
+            if (v.Name.Equals("@@ROWCOUNT", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.LastStatementRowsProcessed;
             if (v.Name.Equals("@@ERROR", StringComparison.OrdinalIgnoreCase)) return _context.PreviousErrorNumber;
-            if (v.Name.Equals("@@TOTAL_SPILLED_BYTES", StringComparison.OrdinalIgnoreCase)) return _context.TotalSpilledBytes;
-            if (v.Name.Equals("@@PARTITIONS_COUNT", StringComparison.OrdinalIgnoreCase)) return _context.PartitionsCount;
-            if (v.Name.Equals("@@AGGREGATE_GROUPS_COUNT", StringComparison.OrdinalIgnoreCase)) return _context.AggregateGroupsCount;
-            if (v.Name.Equals("@@AGGREGATE_EXPANSION_RATIO", StringComparison.OrdinalIgnoreCase)) return _context.AggregateExpansionRatio;
-            if (v.Name.Equals("@@LAST_EXEC_MS", StringComparison.OrdinalIgnoreCase)) return _context.LastExecutionTimeMs;
+            if (v.Name.Equals("@@TOTAL_SPILLED_BYTES", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.TotalSpilledBytes;
+            if (v.Name.Equals("@@PARTITIONS_COUNT", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.PartitionsCount;
+            if (v.Name.Equals("@@AGGREGATE_GROUPS_COUNT", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.AggregateGroupsCount;
+            if (v.Name.Equals("@@AGGREGATE_EXPANSION_RATIO", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.AggregateExpansionRatio;
+            if (v.Name.Equals("@@LAST_EXEC_MS", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.LastExecutionTimeMs;
             if (v.Name.Equals("@@PEAK_MEMORY_MB", StringComparison.OrdinalIgnoreCase)) return Process.GetCurrentProcess().PeakWorkingSet64 / (1024 * 1024);
-            if (v.Name.Equals("@@SUBQUERY_CACHE_HITS", StringComparison.OrdinalIgnoreCase)) return _context.SubqueryCacheHits;
-            if (v.Name.Equals("@@SORT_SPILLS", StringComparison.OrdinalIgnoreCase)) return (long)_context.SortSpillCount;
+            if (v.Name.Equals("@@SUBQUERY_CACHE_HITS", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.SubqueryCacheHits;
+            if (v.Name.Equals("@@SORT_SPILLS", StringComparison.OrdinalIgnoreCase)) return (long)_context.Telemetry.SortSpillCount;
 
 
             
-            if (!_context.ContainsVariable(v.Name))
+            if (!_context.VarContext.ContainsVariable(v.Name))
                 throw new ExecutionException($"Undeclared: {v.Name}");
             
-            var val = _context.GetVariable(v.Name);
+            var val = _context.VarContext.GetVariable(v.Name);
             
             if (decryptSensitive && val is string s && s.StartsWith("ENC:"))
             {
-                if (_context.VariableMetadata.TryGetValue(v.Name, out var meta) && meta.IsSensitive)
+                if (_context.VarContext.VariableMetadata.TryGetValue(v.Name, out var meta) && meta.IsSensitive)
                 {
                     return _context.DecryptValue(s);
                 }
@@ -629,7 +629,7 @@ namespace ETL_SQL.Engine
         private async Task<object?> EvaluateIsNull(IsNullExpression isNull, Row context, bool decryptSensitive = false)
         {
             var val = await EvaluateInternal(isNull.Expression, context, decryptSensitive);
-            bool res = val == null || val == DBNull.Value || (val is string s && string.IsNullOrEmpty(s) && _context.GetVariable("NULL_AS_EMPTY")?.ToString() == "TRUE");
+            bool res = val == null || val == DBNull.Value || (val is string s && string.IsNullOrEmpty(s) && _context.VarContext.GetVariable("NULL_AS_EMPTY")?.ToString() == "TRUE");
             return isNull.Not ? !res : res;
         }
 
@@ -765,3 +765,4 @@ namespace ETL_SQL.Engine
         }
     }
 }
+

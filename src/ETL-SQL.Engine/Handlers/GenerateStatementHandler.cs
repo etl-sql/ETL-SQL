@@ -114,10 +114,11 @@ namespace ETL_SQL.Engine.Handlers
                 await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable());
             }
 
-            context.RowsProcessed += totalWritten;
+            context.Telemetry.RowsProcessed += totalWritten;
             context.IncrementOperationCount(OperationType.MockData, count: totalWritten);
             
             _logger.Info("Generated {RowCount} rows into {Target}", totalWritten, stmt.Target.TableName);
         }
     }
 }
+

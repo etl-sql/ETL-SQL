@@ -106,7 +106,7 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     await foreach (var batch in targetSql.ExecuteRawSql(compiled.Sql, compiled.Parameters.Values)) 
                     {
-                        if (batch.RowsAffected >= 0) context.RowsProcessed += batch.RowsAffected;
+                        if (batch.RowsAffected >= 0) context.Telemetry.RowsProcessed += batch.RowsAffected;
                     }
                 }
                 return;
@@ -246,7 +246,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
 
-            context.RowsProcessed = processedCount;
+            context.Telemetry.RowsProcessed = processedCount;
 
             if (stmt.Output != null && outputRows.Count > 0)
             {
@@ -383,3 +383,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+

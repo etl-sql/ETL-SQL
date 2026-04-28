@@ -106,19 +106,19 @@ namespace ETL_SQL.Orchestrator.Execution
                 evaluator.BatchSize  = _ctx.BatchSize;
                 evaluator.IsVerbose  = _ctx.IsVerbose;
                 evaluator.SessionId  = _ctx.SessionId;
-                evaluator.IsProfiling = true;
+                evaluator.Telemetry.IsProfiling = true;
                 evaluator.RedirectOutput = true;
 
                 if (OnTreeNodeAdded != null)
-                    evaluator.ExecutionTree.OnNodeAdded = node => OnTreeNodeAdded.Invoke(node.Name);
+                    evaluator.Telemetry.ExecutionTree.OnNodeAdded = node => OnTreeNodeAdded.Invoke(node.Name);
 
                 // Raw DataTables — rendering is the TUI's responsibility (CQ-S2)
                 evaluator.OnResultSet = table => result.ResultsTables.Add(table);
 
                 await evaluator.Evaluate(script, cancellationToken);
 
-                result.ExecutionTree  = evaluator.ExecutionTree;
-                result.RowsProcessed  = evaluator.RowsProcessed;
+                result.ExecutionTree  = evaluator.Telemetry.ExecutionTree;
+                result.RowsProcessed  = evaluator.Telemetry.RowsProcessed;
                 result.Messages       = evaluator.Messages.ToList();
                 result.Success        = true;
                 _lastEvaluator        = evaluator;

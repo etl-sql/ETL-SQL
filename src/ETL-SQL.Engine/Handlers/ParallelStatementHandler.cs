@@ -27,7 +27,7 @@ namespace ETL_SQL.Engine.Handlers
             // Mark the current tree node so the renderer shows it as a collapsible parallel block.
             if (context.CurrentNodeId.HasValue)
             {
-                var parallelNode = context.ExecutionTree.GetNode(context.CurrentNodeId.Value);
+                var parallelNode = context.Telemetry.ExecutionTree.GetNode(context.CurrentNodeId.Value);
                 if (parallelNode != null) parallelNode.IsParallelBlock = true;
             }
 
@@ -57,3 +57,4 @@ namespace ETL_SQL.Engine.Handlers
         }
     }
 }
+
