@@ -1,4 +1,4 @@
-# ETL-SQL Development Roadmap
+﻿# ETL-SQL Development Roadmap
 ## Up Next
 - [ ] **Subscription Parameters** — Full strategy: [`Docs/Strategy/SubscriptionParameters_Strategy.md`](Strategy/SubscriptionParameters_Strategy.md). RELDATE/LIST types, `SET WEEK_START_DAY`, `CREATE/ALTER SUBSCRIPTION PARAMETERS(...)`, portal INPUT parameter UX. ~6.5 dev-days across 6 phases. Implementation tasks below.
     - **Phase 1 — Engine: New Types** *(most isolated, start here)*
@@ -99,7 +99,7 @@
     - [x] **Grammar.md section 1.2 cleanup**: After the bugs above are fixed, update the `MARKDOWN` description to make clear it carries no validation (all strings are valid markdown) and is a rendering hint only. Update `ENCRYPTED` to accurately reflect its now-fixed runtime masking and auto-decrypt behavior.
 - [ ] **Subquery Cache Optimization**: Implement a sophisticated subquery cache that supports correlated subqueries (currently disabled due to correctness issues). Subqueries should be cached based on both the AST node and the values of any captured outer references.  Can this not sure the same model as teh CTE?
 - [ ] **Report portal https** Add a way for the report portal to use HTTPS.
-- [x] **Sample Suite Stabilization** � Resolved functional regressions in the Kitchen Sink sample suite (fn_date_math_sink, fn_string_sink, fn_sys_logic_sink).
+- [x] **Sample Suite Stabilization** — Resolved functional regressions in the Kitchen Sink sample suite (fn_date_math_sink, fn_string_sink, fn_sys_logic_sink).
     - [x] Implemented missing standard functions: EXP, LOG, LOG10, RAND, CONCAT_WS, SPLIT_PART, SPACE, and a full suite of REGEXP functions.
     - [x] Resolved PRINT multi-argument rendering.
     - [x] Validated full suite (93 scripts) with 100% success rate (excluding environmental skips).
