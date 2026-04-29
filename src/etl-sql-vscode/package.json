@@ -84,12 +84,12 @@
         "etlsql.server.path": {
           "type": "string",
           "default": "",
-          "description": "Path to the ETL-SQL Language Server executable."
+          "description": "Path to the ETL-SQL Language Server executable (ETL-SQL-LSP.exe)."
         },
         "etlsql.report.executable.path": {
           "type": "string",
-          "default": "etl-sql-report.exe",
-          "description": "Path to the ETL-SQL Report CLI executable (etl-sql-report.exe) for building reports."
+          "default": "ETL-SQL-Report.exe",
+          "description": "Path to the ETL-SQL Report CLI executable (ETL-SQL-Report.exe) for building reports."
         },
         "etlsql.report.autoOpenPreview": {
           "type": "boolean",

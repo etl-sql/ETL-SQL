@@ -13,7 +13,7 @@ To run the background scheduler continuously on Windows, we recommend using [NSS
 
 ```powershell
 # 1. Install the service
-nssm install ETL-SQL-Scheduler "C:\Path\To\ETL-SQL.exe" "ui repl"
+nssm install ETL-SQL-TUI "C:\Path\To\ETL-SQL" "ui repl"
 
 # 2. Configure logging and directory
 nssm set ETL-SQL-Scheduler AppDirectory "C:\Path\To"
@@ -51,9 +51,9 @@ ETL-SQL uses a **unified configuration model**. In a standard installation, all 
 
 | Host | Purpose |
 | :--- | :--- |
-| **ETL-SQL.App / TUI** | Interactive REPL, batch script runner, and embedded scheduler |
-| **ETL-SQL.Orchestrator.Service** | Standalone REST-based job scheduler; used in production |
-| **ETL-SQL.ReportPlayer** | Report-SQL dashboard web server |
+| **ETL-SQL-TUI** | Interactive REPL, batch script runner, and embedded scheduler |
+| **ETL-SQL-Service** | Standalone REST-based job scheduler; used in production |
+| **ETL-SQL-Portal** | Report-SQL dashboard web server |
 
 All hosts support environment variable overrides (standard .NET `DOTNET_*` / section prefix pattern).
 
@@ -132,15 +132,15 @@ Applies to: **All Hosts**
 
 ### 3.4 Orchestrator Service (Standalone)
 
-Applies to: **ETL-SQL.Orchestrator.Service only**
+Applies to: **ETL-SQL-Service only**
 
 The standalone Orchestrator runs as an independent HTTP service. Its settings live under a `Jobs` section (not `Orchestration`).
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
 | `Urls` | `http://localhost:5100` | The address the Orchestrator REST API listens on. Change to bind to a specific interface or port in production. |
-| `Jobs:UseProcessSpawning` | `false` | `false` = run jobs in-process (simpler, dev/test). `true` = spawn `ETL-SQL.exe run` as isolated child processes (recommended for production — memory isolation, killable per-job). |
-| `Jobs:ExecutablePath` | `""` | Path to `ETL-SQL.exe`. Required when `UseProcessSpawning` is `true` and the executable is not on `PATH`. Auto-detected when empty. |
+| `Jobs:UseProcessSpawning` | `false` | `false` = run jobs in-process (simpler, dev/test). `true` = spawn `ETL-SQL run` as isolated child processes (recommended for production — memory isolation, killable per-job). |
+| `Jobs:ExecutablePath` | `""` | Path to `ETL-SQL`. Required when `UseProcessSpawning` is `true` and the executable is not on `PATH`. Auto-detected when empty. |
 | `Jobs:TimeoutSeconds` | `3600` | Wall-clock timeout for a single spawned job. The child process is killed if it exceeds this. No effect in in-process mode. |
 | `Jobs:MaxConcurrentJobs` | `0` | Maximum simultaneous jobs. `0` = auto (`ProcessorCount / 2`, minimum 1). |
 
@@ -163,7 +163,7 @@ The standalone Orchestrator runs as an independent HTTP service. Its settings li
 
 ### 3.5 Reporting Dashboard
 
-Applies to: **ETL-SQL.ReportPlayer only**
+Applies to: **ETL-SQL-Portal only**
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
@@ -391,6 +391,7 @@ Session metrics can be queried at any time using system variables. These are par
 | `@@LAST_EXEC_MS` | Milliseconds taken by the last executed statement. |
 | `@@PEAK_MEMORY_MB` | Peak memory (Working Set) of the engine process in MB. |
 | `@@SUBQUERY_CACHE_HITS` | Total scalar subquery hits in the result cache. |
+| `@@SUBQUERY_CACHE_MISSES` | Total scalar subquery misses in the result cache. |
 | `@@SORT_SPILLS` | Number of external sort runs that spilled to disk. |
 | `@@TRANCOUNT` | Active transaction nesting level (0 = auto-commit). |
 

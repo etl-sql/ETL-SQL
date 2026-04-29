@@ -55,7 +55,17 @@ namespace ETL_SQL.ReportBuilder
                 Logo            = _ctx.ReportContext.ReportLogo,
                 Background      = _ctx.ReportContext.ReportBackground,
                 Theme           = _ctx.ReportContext.ReportTheme,
-                Navigation      = _ctx.ReportContext.ReportNavigation
+                Navigation      = _ctx.ReportContext.ReportNavigation,
+                Telemetry       = new TelemetryManifest
+                {
+                    RowsProcessed       = _ctx.Telemetry.RowsProcessed,
+                    TotalSpilledBytes   = _ctx.Telemetry.TotalSpilledBytes,
+                    SubqueryCacheHits   = _ctx.Telemetry.SubqueryCacheHits,
+                    SubqueryCacheMisses = _ctx.Telemetry.SubqueryCacheMisses,
+                    SubquerySpillCount  = _ctx.Telemetry.SubquerySpillCount,
+                    SubquerySpilledBytes = _ctx.Telemetry.SubquerySpilledBytes,
+                    ExecutionTimeMs     = _ctx.Telemetry.LastExecutionTimeMs
+                }
             };
 
             // ── Visuals ──────────────────────────────────────────────────────

@@ -18,6 +18,7 @@ namespace ETL_SQL.Core.Common
         }
 
         public int Count => _map.Count;
+        public IEnumerable<TValue> Values => System.Linq.Enumerable.Select(_list, n => n.value);
 
         public bool TryGetValue(TKey key, out TValue? value)
         {

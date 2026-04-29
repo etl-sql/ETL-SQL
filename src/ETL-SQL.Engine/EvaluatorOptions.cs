@@ -18,6 +18,8 @@ namespace ETL_SQL.Engine
         public long MaxSessionSize { get; set; } = 200 * 1024 * 1024; // 200MB Default
         public int MaxLastResultRows { get; set; } = LanguageMetadata.DefaultMaxLastResultRows;
         public int MaxGenerateRows { get; set; } = SecurityService.DefaultMaxGenerateRows;
+        public int MaxInternalOperations { get; set; } = 100000;
+
         public int RegexMatchTimeoutMs { get; set; } = (int)SecurityService.DefaultRegexMatchTimeout.TotalMilliseconds;
         public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
 
@@ -36,6 +38,8 @@ namespace ETL_SQL.Engine
         public int ExternalHashPartitions { get; set; } = 32;
         public int ExternalSortChunkSize { get; set; } = 100000;
         public int WindowSpillThreshold { get; set; } = LanguageMetadata.DefaultWindowSpillThreshold;
+        public int SubqueryCacheSize { get; set; } = 5000;
+        public long SubquerySpillThresholdRows { get; set; } = LanguageMetadata.DefaultSubquerySpillThresholdRows;
         public long TempTableSpillThresholdRows { get; set; }
         public int MaxParallelDegree { get; set; } = LanguageMetadata.DefaultMaxParallelDegree;
 

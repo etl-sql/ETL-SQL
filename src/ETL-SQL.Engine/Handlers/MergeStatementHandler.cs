@@ -246,7 +246,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
 
-            context.Telemetry.RowsProcessed = processedCount;
+            context.Telemetry.RowsProcessed += processedCount;
 
             if (stmt.Output != null && outputRows.Count > 0)
             {

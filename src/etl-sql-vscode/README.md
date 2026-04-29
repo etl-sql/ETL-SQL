@@ -21,7 +21,7 @@ To use the extension in all your VS Code windows without needing F5:
 
 ## Configuration
 Go to VS Code Settings (`Ctrl+,`) and search for **ETL-SQL**:
-- **Server Path**: Path to `ETL-SQL.LanguageServer.exe` (if not detected in build folder).
+- **Server Path**: Path to `ETL-SQL-LSP.exe` (if not detected in build folder).
 - **Executable Path**: Path to `ETL-SQL.exe` (if not detected in build folder).
 
 ## Features

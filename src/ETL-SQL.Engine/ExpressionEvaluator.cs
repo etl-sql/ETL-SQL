@@ -11,6 +11,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
+using ETL_SQL.Engine.Services;
 using System.Collections.Concurrent;
 using System.Reflection;
 
@@ -25,11 +26,31 @@ namespace ETL_SQL.Engine
         private readonly IExecutionContext _context;
         private readonly ILogger _logger;
         private static readonly ConcurrentDictionary<(Type, string), MemberInfo?> _reflectionCache = new();
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<Statement, List<string>> _outerRefCache = new();
 
         public ExpressionEvaluator(IExecutionContext context)
         {
             _context = context;
             _logger = context.Logger;
+        }
+
+        private bool IsResolvableInOuterScope(string name, Row? context = null)
+        {
+            if (context != null)
+            {
+                if (context.HasColumn(name)) return true;
+                if (ResolveIdentifierFallback(name, context) != null) return true;
+            }
+
+            foreach (var outer in _context.OuterRowStack)
+            {
+                if (outer != null)
+                {
+                    if (outer.HasColumn(name)) return true;
+                    if (ResolveIdentifierFallback(name, outer) != null) return true;
+                }
+            }
+            return false;
         }
 
         private object? ResolveIdentifier(string name, Row? context)
@@ -249,19 +270,16 @@ namespace ETL_SQL.Engine
         {
             var l = await EvaluateInternal(inExp.Left, context, decryptSensitive);
             bool found = false;
-            var inSubq = inExp.Subquery ?? (inExp.Right as SubqueryExpression)?.Query;
-            if (inSubq != null || inExp.Right is SubqueryExpression)
+            
+            if (inExp.Right is SubqueryExpression subq)
             {
-                await foreach (var row in EvaluateStream(inExp.Right, context))
+                // Use cached stream evaluation for subqueries in IN clauses
+                await foreach (var rowVal in EvaluateStreamSubquery(subq, context))
                 {
-                if (row.Schema?.ColumnCount > 0)
-                {
-                    var rowVal = row[0];
                     if (!l.IsNull() && !rowVal.IsNull())
                     {
                         if (IsSoftEqual(l, rowVal)) { found = true; break; }
                     }
-                }
                 }
             }
             else if (inExp.Right is ListExpression list)
@@ -282,24 +300,12 @@ namespace ETL_SQL.Engine
         /// <summary>Evaluates an EXISTS clause.</summary>
         private async Task<object?> EvaluateExists(ExistsExpression ex, Row context)
         {
-            bool found = false;
-            _context.OuterRowStack.Push(context);
-            try
+            if (ex.Subquery is SelectStatement select)
             {
-                await foreach (var batch in _context.ExecuteQuery(ex.Subquery))
-                {
-                    if (batch.Rows.Count > 0)
-                    {
-                        found = true;
-                        break;
-                    }
-                }
+                bool found = await EvaluateExistsSubquery(select, context);
+                return ex.IsNot ? !found : found;
             }
-            finally
-            {
-                _context.OuterRowStack.Pop();
-            }
-            return ex.IsNot ? !found : found;
+            throw new ExecutionException("EXISTS subquery must be a SELECT statement.");
         }
 
         /// <summary>Evaluates a list of expressions.</summary>
@@ -382,25 +388,207 @@ namespace ETL_SQL.Engine
         private async Task<object?> EvaluateSubquery(SubqueryExpression subq, Row context)
         {
             object? result = null;
-            if (_context.SubqueryCache.TryGetValue(subq.Query, out var cached))
+            var query = (SelectStatement)subq.Query;
+            
+            if (!_outerRefCache.TryGetValue(query, out var outerRefs))
+            {
+                var analyzer = new SubqueryAnalyzer();
+                outerRefs = analyzer.GetOuterReferences(query);
+                _outerRefCache[query] = outerRefs;
+            }
+
+            var captureValues = new List<object?>();
+            foreach (var or in outerRefs)
+            {
+                // Only capture if it's actually an outer reference (resolvable in outer scope)
+                if (IsResolvableInOuterScope(or, context))
+                {
+                    captureValues.Add(ResolveIdentifier(or, context));
+                }
+            }
+            
+            var cacheKey = new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), SubqueryResultType.Scalar);
+
+            if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
             {
                 _context.Telemetry.SubqueryCacheHits++;
-                return cached;
+                return cachedResult.ScalarValue;
             }
             _context.Telemetry.SubqueryCacheMisses++;
+            
             _context.OuterRowStack.Push(context);
-            await foreach (var batch in _context.ExecuteQuery(subq.Query))
+            try
             {
-                if (batch.Rows.Count > 0 && batch.ColumnNames.Count > 0)
+                await foreach (var batch in _context.ExecuteQuery(subq.Query))
                 {
-                    result = batch.Rows[0][0];
+                    if (batch.Rows.Count > 0 && batch.ColumnNames.Count > 0)
+                    {
+                        result = batch.Rows[0][0];
+                    }
+                    break;
                 }
-                break;
             }
-            _context.OuterRowStack.Pop();
-            if (result != null)
-                _context.SubqueryCache.Set(subq.Query, result);
+            finally
+            {
+                _context.OuterRowStack.Pop();
+            }
+
+            _context.SubqueryCache.Set(cacheKey, new SubqueryResult(result));
             return result;
+        }
+
+        private async IAsyncEnumerable<object?> EvaluateStreamSubquery(SubqueryExpression subq, Row context)
+        {
+            var query = (SelectStatement)subq.Query;
+            if (!_outerRefCache.TryGetValue(query, out var outerRefs))
+            {
+                var analyzer = new SubqueryAnalyzer();
+                outerRefs = analyzer.GetOuterReferences(query);
+                _outerRefCache[query] = outerRefs;
+            }
+
+            var captureValues = new List<object?>();
+            foreach (var or in outerRefs)
+            {
+                if (IsResolvableInOuterScope(or, context))
+                {
+                    captureValues.Add(ResolveIdentifier(or, context));
+                }
+            }
+            
+            var cacheKey = new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), SubqueryResultType.Stream);
+
+            if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
+            {
+                _context.Telemetry.SubqueryCacheHits++;
+                if (cachedResult.InSet != null)
+                {
+                    foreach (var val in cachedResult.InSet) yield return val;
+                }
+                else if (cachedResult.StreamData != null)
+                {
+                    await foreach (var batch in cachedResult.StreamData.ReadBatches())
+                    {
+                        foreach (var row in batch.Rows) yield return row[0];
+                    }
+                }
+                yield break;
+            }
+            
+            _context.Telemetry.SubqueryCacheMisses++;
+            
+            // Materialize or Spill fully BEFORE yielding to ensure cache is populated
+            long rowCount = 0;
+            var inSet = new HashSet<object?>(CanonicalEqualityComparer.Instance);
+            InMemoryDataSource? spillStore = null;
+            
+            _context.OuterRowStack.Push(context);
+            try
+            {
+                await foreach (var batch in _context.ExecuteQuery(subq.Query))
+                {
+                    foreach (var row in batch.Rows)
+                    {
+                        rowCount++;
+                        var val = row.Schema?.ColumnCount > 0 ? row[0] : null;
+                        
+                        if (spillStore != null)
+                        {
+                            await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { batch })); 
+                        }
+                        else if (rowCount > _context.SubquerySpillThresholdRows)
+                        {
+                            spillStore = new InMemoryDataSource();
+                            spillStore.SetSchema(batch.Schema.ColumnNames.Select(c => new ColumnDefinition(c, "VARIANT", false)).ToList());
+                            
+                            var dt = new DataTable { Schema = new TableSchema(new[] { "Value" }) };
+                            foreach(var existing in inSet!) await dt.AddRowAsync(new Row(dt.Schema, new[] { existing }));
+                            await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { dt }));
+                            
+                            var currentBatch = new DataTable { Schema = batch.Schema };
+                            await currentBatch.AddRowAsync(row);
+                            await spillStore.WriteBatches(AsyncEnumerable.ToAsyncEnumerable(new[] { currentBatch }));
+                            inSet = null;
+                        }
+                        else
+                        {
+                            inSet!.Add(val);
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                _context.OuterRowStack.Pop();
+            }
+
+            // Cache is now guaranteed to be populated
+            SubqueryResult finalResult;
+            if (spillStore != null)
+            {
+                finalResult = new SubqueryResult(spillStore);
+                _context.SubqueryCache.Set(cacheKey, finalResult);
+                await foreach (var batch in spillStore.ReadBatches())
+                {
+                    foreach (var row in batch.Rows) yield return row[0];
+                }
+            }
+            else
+            {
+                finalResult = new SubqueryResult(inSet ?? new HashSet<object?>());
+                _context.SubqueryCache.Set(cacheKey, finalResult);
+                foreach (var val in finalResult.InSet!) yield return val;
+            }
+        }
+
+        private async Task<bool> EvaluateExistsSubquery(SelectStatement query, Row context)
+        {
+            if (!_outerRefCache.TryGetValue(query, out var outerRefs))
+            {
+                var analyzer = new SubqueryAnalyzer();
+                outerRefs = analyzer.GetOuterReferences(query);
+                _outerRefCache[query] = outerRefs;
+            }
+
+            var captureValues = new List<object?>();
+            foreach (var or in outerRefs)
+            {
+                if (IsResolvableInOuterScope(or, context))
+                {
+                    captureValues.Add(ResolveIdentifier(or, context));
+                }
+            }
+            
+            var cacheKey = new SubqueryCacheKey(query, new CompoundKey(captureValues.ToArray()), SubqueryResultType.Exists);
+
+            if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
+            {
+                _context.Telemetry.SubqueryCacheHits++;
+                return (bool)cachedResult.ScalarValue!;
+            }
+            
+            _context.Telemetry.SubqueryCacheMisses++;
+            bool found = false;
+            
+            _context.OuterRowStack.Push(context);
+            try
+            {
+                await foreach (var batch in _context.ExecuteQuery(query))
+                {
+                    if (batch.Rows.Count > 0)
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                _context.OuterRowStack.Pop();
+            }
+
+            _context.SubqueryCache.Set(cacheKey, new SubqueryResult(found));
+            return found;
         }
 
         /// <summary>Checks for soft equality between two objects.</summary>
@@ -433,6 +621,7 @@ namespace ETL_SQL.Engine
             if (v.Name.Equals("@@LAST_EXEC_MS", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.LastExecutionTimeMs;
             if (v.Name.Equals("@@PEAK_MEMORY_MB", StringComparison.OrdinalIgnoreCase)) return Process.GetCurrentProcess().PeakWorkingSet64 / (1024 * 1024);
             if (v.Name.Equals("@@SUBQUERY_CACHE_HITS", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.SubqueryCacheHits;
+            if (v.Name.Equals("@@SUBQUERY_CACHE_MISSES", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.SubqueryCacheMisses;
             if (v.Name.Equals("@@SORT_SPILLS", StringComparison.OrdinalIgnoreCase)) return (long)_context.Telemetry.SortSpillCount;
 
 

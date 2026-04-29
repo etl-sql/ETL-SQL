@@ -195,6 +195,10 @@ namespace ETL_SQL.Engine.Engines
                     {
                         resRow[i] = row[col.Expression.ToSql()];
                     }
+                    else if (row.HasColumn($"AGG_{col.Expression.ToSql().ToUpperInvariant()}"))
+                    {
+                        resRow[i] = row[$"AGG_{col.Expression.ToSql().ToUpperInvariant()}"];
+                    }
                     else if (col.Expression is FunctionCallExpression fce && fce.Window != null && row.HasColumn($"WINDOW_{fce.ToSql().ToUpperInvariant()}"))
                     {
                         resRow[i] = row[$"WINDOW_{fce.ToSql().ToUpperInvariant()}"];
@@ -203,6 +207,7 @@ namespace ETL_SQL.Engine.Engines
                     {
                         resRow[i] = await _context.EvaluateValue(col.Expression, row);
                     }
+
                 }
 
                 if (seenRows != null)

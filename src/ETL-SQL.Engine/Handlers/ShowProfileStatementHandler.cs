@@ -38,6 +38,9 @@ namespace ETL_SQL.Engine.Handlers
             dataTable.AddColumn("DurationMs");
             dataTable.AddColumn("MemoryKB");
             dataTable.AddColumn("SpilledBytes");
+            dataTable.AddColumn("SubqHits");
+            dataTable.AddColumn("SubqMisses");
+            dataTable.AddColumn("SubqSpilled");
             dataTable.AddColumn("Partitions");
 
             foreach (var m in context.Telemetry.ProfileMetrics)
@@ -50,6 +53,9 @@ namespace ETL_SQL.Engine.Handlers
                 row["DurationMs"] = m.DurationMs;
                 row["MemoryKB"] = m.MemoryDeltaBytes / 1024.0;
                 row["SpilledBytes"] = m.SpilledBytes;
+                row["SubqHits"] = m.SubqueryCacheHits;
+                row["SubqMisses"] = m.SubqueryCacheMisses;
+                row["SubqSpilled"] = m.SubquerySpilledBytes;
                 row["Partitions"] = m.PartitionsCount;
                 await dataTable.AddRowAsync(row);
             }

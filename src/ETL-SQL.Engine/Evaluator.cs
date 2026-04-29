@@ -71,7 +71,7 @@ namespace ETL_SQL.Engine
         private readonly Dictionary<Type, IStatementHandler> _statementHandlers = new();
 
         private readonly Stack<Row> _outerRowStack = new();
-        private readonly ETL_SQL.Core.Common.LruCache<Statement, object?> _subqueryCache = new(500, new StatementSqlEqualityComparer());
+        private readonly ETL_SQL.Core.Common.LruCache<SubqueryCacheKey, ETL_SQL.Core.Data.SubqueryResult> _subqueryCache;
         private readonly Dictionary<(Guid? ParentId, Statement Stmt), ExecutionNode> _nodeReuseMap = new();
         private readonly TransactionManager _transactionManager = new();
         private readonly ISpillStore _spillStore;
@@ -150,6 +150,12 @@ namespace ETL_SQL.Engine
         public long MaxSessionSize { get => _options.MaxSessionSize; set => _options.MaxSessionSize = value; }
         public int MaxLastResultRows { get => _options.MaxLastResultRows; set => _options.MaxLastResultRows = value; }
         public int MaxGenerateRows { get => _options.MaxGenerateRows; set => _options.MaxGenerateRows = value; }
+        public int MaxInternalOperations 
+        { 
+            get => _options.MaxInternalOperations; 
+            set { _options.MaxInternalOperations = value; _securityService.MaxInternalOperations = value; } 
+        }
+
         public bool IsPersistentSession { get; set; }
         public List<object?>? Parameters { get; set; }
         
@@ -233,13 +239,14 @@ namespace ETL_SQL.Engine
         
         public IServiceProvider ServiceProvider => _serviceProvider;
 
-        public int JoinSpillThreshold { get; set; } = 100000;
-        public int ExternalHashPartitions { get; set; } = 32;
-        public int ExternalSortChunkSize { get; set; } = 100000;
-        public int WindowSpillThreshold { get; set; } = LanguageMetadata.DefaultWindowSpillThreshold;
-        public bool SpillEncryptionEnabled { get; set; } = true;
-        public bool SpillCompressionEnabled { get; set; } = true;
-        public string SpillFormat { get; set; } = "Arrow";
+        public int JoinSpillThreshold { get => _options.JoinSpillThreshold; set => _options.JoinSpillThreshold = value; }
+        public int ExternalHashPartitions { get => _options.ExternalHashPartitions; set => _options.ExternalHashPartitions = value; }
+        public int ExternalSortChunkSize { get => _options.ExternalSortChunkSize; set => _options.ExternalSortChunkSize = value; }
+        public int WindowSpillThreshold { get => _options.WindowSpillThreshold; set => _options.WindowSpillThreshold = value; }
+        public long SubquerySpillThresholdRows { get => _options.SubquerySpillThresholdRows; set => _options.SubquerySpillThresholdRows = value; }
+        public bool SpillEncryptionEnabled { get => _options.SpillEncryptionEnabled; set => _options.SpillEncryptionEnabled = value; }
+        public bool SpillCompressionEnabled { get => _options.SpillCompressionEnabled; set => _options.SpillCompressionEnabled = value; }
+        public string SpillFormat { get => _options.SpillFormat; set => _options.SpillFormat = value; }
         
         public string? DecryptValue(string? val)
         {
@@ -304,7 +311,7 @@ namespace ETL_SQL.Engine
 
         
         /// <summary>Cache for scalar subquery results to avoid redundant execution.</summary>
-        public ETL_SQL.Core.Common.LruCache<Statement, object?> SubqueryCache => _subqueryCache;
+        public ETL_SQL.Core.Common.LruCache<SubqueryCacheKey, ETL_SQL.Core.Data.SubqueryResult> SubqueryCache => _subqueryCache;
         
         /// <summary>Token used to cancel long-running operations in this context.</summary>
         public System.Threading.CancellationToken CancellationToken { get; private set; } = System.Threading.CancellationToken.None;
@@ -354,7 +361,8 @@ namespace ETL_SQL.Engine
             {
                 // Estimate variable metadata and subquery cache overhead
                 long varBytes = Variables.Count * 256;
-                long subqueryBytes = _subqueryCache.Count * 1024;
+                long subqueryBytes = 0;
+                foreach(var result in _subqueryCache.Values) subqueryBytes += result.MemoryUsageBytes;
                 return varBytes + subqueryBytes;
             }
         }
@@ -402,6 +410,7 @@ namespace ETL_SQL.Engine
             
             _options = options ?? new EvaluatorOptions();
             _registry = registry ?? new EvaluatorComponentRegistry();
+            _subqueryCache = new ETL_SQL.Core.Common.LruCache<SubqueryCacheKey, ETL_SQL.Core.Data.SubqueryResult>(_options.SubqueryCacheSize);
 
             _variableScopeManager = variableScopeManager ?? new VariableScopeManager();
             _registry.Initialize(this, _logger, _variableScopeManager, reportContext);
@@ -483,6 +492,10 @@ namespace ETL_SQL.Engine
             ExternalSortChunkSize = DefaultThresholds.ExternalSortChunkSize(config);
             WindowSpillThreshold = DefaultThresholds.WindowSpillThreshold(config);
             TempTableSpillThresholdRows = DefaultThresholds.TempTableSpillThresholdRows(config);
+            
+            _options.BatchSize = BatchSize;
+            _options.SubqueryCacheSize = DefaultThresholds.SubqueryCacheSize(config);
+            _options.TempTableSpillThresholdRows = TempTableSpillThresholdRows;
             SpillEncryptionEnabled = DefaultThresholds.SpillEncryptionEnabled(config);
             SpillCompressionEnabled = DefaultThresholds.SpillCompressionEnabled(config);
             SpillFormat = DefaultThresholds.SpillFormat(config);
@@ -767,7 +780,13 @@ namespace ETL_SQL.Engine
         }
 
         public IAsyncEnumerable<DataTable> InterceptProgress(IAsyncEnumerable<DataTable> chunks)
-            => _batchPipelineHelper.InterceptProgress(chunks, OnBatchProcessed);
+        {
+            return _batchPipelineHelper.InterceptProgress(chunks, count =>
+            {
+                Telemetry.RowsProcessed += count;
+                OnBatchProcessed?.Invoke(count);
+            });
+        }
 
         public IAsyncEnumerable<DataTable> AlignColumns(IAsyncEnumerable<DataTable> batches, List<string> targetCols)
             => _batchPipelineHelper.AlignColumns(batches, targetCols);

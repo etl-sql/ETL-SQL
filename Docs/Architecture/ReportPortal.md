@@ -1,6 +1,6 @@
 # Architecture: ETL-SQL Report Portal
 
-The Report Portal (`ETL-SQL.ReportPortal`) is an ASP.NET Core 10 web application that exposes report execution, snapshot management, subscriptions, and user/group administration through a REST API and a static HTML/JS front-end. It sits at **Tier 5** of the dependency hierarchy, above `ETL-SQL.ReportPlayer` (the Report-SQL runtime it calls for execution).
+The Report Portal (`ETL-SQL-Portal`) is an ASP.NET Core 10 web application that exposes report execution, snapshot management, subscriptions, and user/group administration through a REST API and a static HTML/JS front-end. It sits at **Tier 5** of the dependency hierarchy, above `ETL-SQL-Report` (the Report-SQL runtime it calls for execution).
 
 ---
 
@@ -21,16 +21,16 @@ The Report Portal (`ETL-SQL.ReportPortal`) is an ASP.NET Core 10 web application
 ## 1. Tier Placement & Dependencies
 
 ```
-Tier 5 — ETL-SQL.ReportPortal
+Tier 5 — ETL-SQL-Portal
             │
-            ├── ETL-SQL.ReportPlayer   (Report-SQL runtime, snapshot builder)
+            ├── ETL-SQL-Report   (Report-SQL runtime, snapshot builder)
             │       └── ETL-SQL.ReportBuilder
             │               └── ETL-SQL.Engine
             │                       └── ETL-SQL.Core
             └── ETL-SQL.Orchestrator  (job scheduling, SQLite history)
 ```
 
-The portal does **not** reference `ETL-SQL.App` directly. The dependency on `ETL-SQL.ReportPlayer` is transitive through `ETL-SQL.ReportBuilder` — this creates the `Program`-class ambiguity discussed in §8 (resolved via `PortalMarker`).
+The portal does **not** reference `ETL-SQL.App` directly. The dependency on `ETL-SQL-Report` is transitive through `ETL-SQL.ReportBuilder` — this creates the `Program`-class ambiguity discussed in §8 (resolved via `PortalMarker`).
 
 ---
 
@@ -177,7 +177,7 @@ Tests live in `tests/ETL-SQL.ReportPortal.Tests` and use `Microsoft.AspNetCore.M
 
 ### PortalMarker
 
-`WebApplicationFactory<T>` needs a type from the entry-point assembly. Using `Program` directly is ambiguous because `ETL-SQL.ReportPlayer` transitively references `ETL-SQL.App`, which also has a `Program` class. `PortalMarker` is a stable, uniquely-named type in `ETL-SQL.ReportPortal` that resolves this:
+`WebApplicationFactory<T>` needs a type from the entry-point assembly. Using `Program` directly is ambiguous because `ETL-SQL-Report` transitively references `ETL-SQL.App`, which also has a `Program` class. `PortalMarker` is a stable, uniquely-named type in `ETL-SQL-Portal` that resolves this:
 
 ```csharp
 public class PortalWebFactory : WebApplicationFactory<PortalMarker> { ... }

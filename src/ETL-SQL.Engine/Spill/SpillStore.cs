@@ -179,6 +179,7 @@ namespace ETL_SQL.Engine.Spill
             private readonly string _chunkName;
 
             public string ChunkName => _chunkName;
+            public long BytesWritten { get; private set; }
 
             public SecureSpillWriter(string path, string chunkName, byte[] key, IExecutionContext context, bool encrypt, bool compress)
             {
@@ -215,7 +216,9 @@ namespace ETL_SQL.Engine.Spill
                 if (_context.Telemetry?.TelemetryEnabled ?? false)
                 {
                     // Fast approximation (+2 for newline)
-                    _context.Telemetry.TotalSpilledBytes += json.Length + 2;
+                    long inc = json.Length + 2;
+                    _context.Telemetry.TotalSpilledBytes += inc;
+                    BytesWritten += inc;
                 }
                 await _writer.WriteLineAsync(json);
             }
@@ -330,6 +333,7 @@ namespace ETL_SQL.Engine.Spill
             private readonly List<Row> _buffer = new();
 
             public string ChunkName => _chunkName;
+            public long BytesWritten { get; private set; }
 
             public ArrowSpillWriter(string path, string chunkName, byte[] key, IExecutionContext context, bool encrypt, bool compress)
             {
@@ -380,7 +384,7 @@ namespace ETL_SQL.Engine.Spill
                 {
                     long inc = row.Columns.Count * 16L;
                     _context.Telemetry.TotalSpilledBytes += inc;
-                    if (_context.IsVerbose) _context.Logger.WriteLine($"DEBUG: Spilled {inc} bytes. Total: {_context.Telemetry.TotalSpilledBytes}");
+                    BytesWritten += inc;
                 }
 
                 if (_buffer.Count >= _flushBatchSize)

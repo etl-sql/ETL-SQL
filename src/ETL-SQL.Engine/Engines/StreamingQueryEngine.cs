@@ -73,7 +73,9 @@ namespace ETL_SQL.Engine.Engines
 
                     var resRow = resultBatch.NewRow();
                     for (int i = 0; i < finalColumns.Count; i++)
+                    {
                         resRow[i] = await _context.EvaluateValue(finalColumns[i].Expression, evalRow);
+                    }
                     
                     await resultBatch.AddRowAsync(resRow);
                     rowsYielded++;

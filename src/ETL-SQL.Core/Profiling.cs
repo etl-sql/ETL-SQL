@@ -9,6 +9,9 @@ namespace ETL_SQL.Core
         public long MemoryDeltaBytes { get; set; }
         public long RowsProcessed { get; set; }
         public long SpilledBytes { get; set; }
+        public long SubqueryCacheHits { get; set; }
+        public long SubqueryCacheMisses { get; set; }
+        public long SubquerySpilledBytes { get; set; }
         public int PartitionsCount { get; set; }
         public int RecursiveDepth { get; set; }
         public string? IndexName { get; set; }

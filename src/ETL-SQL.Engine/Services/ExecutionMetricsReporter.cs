@@ -16,6 +16,9 @@ namespace ETL_SQL.Engine.Services
         
         private long _lastMemoryUsage;
         private long _lastSpilledBytes;
+        private long _lastSubqHits;
+        private long _lastSubqMisses;
+        private long _lastSubqSpilledBytes;
         private int _lastPartitionsCount;
         private long _startRows;
 
@@ -29,6 +32,9 @@ namespace ETL_SQL.Engine.Services
             if (!_context.Telemetry.IsProfiling) return;
             _lastMemoryUsage = GC.GetTotalMemory(false);
             _lastSpilledBytes = _context.Telemetry.TotalSpilledBytes;
+            _lastSubqHits = _context.Telemetry.SubqueryCacheHits;
+            _lastSubqMisses = _context.Telemetry.SubqueryCacheMisses;
+            _lastSubqSpilledBytes = _context.Telemetry.SubquerySpilledBytes;
             _lastPartitionsCount = _context.Telemetry.PartitionsCount;
             _startRows = _context.Telemetry.RowsProcessed;
         }
@@ -55,6 +61,9 @@ namespace ETL_SQL.Engine.Services
                 IndexName = _context.DataContext.LastIndexUsedName,
                 Timestamp = DateTime.Now,
                 SpilledBytes = _context.Telemetry.TotalSpilledBytes - _lastSpilledBytes,
+                SubqueryCacheHits = _context.Telemetry.SubqueryCacheHits - _lastSubqHits,
+                SubqueryCacheMisses = _context.Telemetry.SubqueryCacheMisses - _lastSubqMisses,
+                SubquerySpilledBytes = _context.Telemetry.SubquerySpilledBytes - _lastSubqSpilledBytes,
                 PartitionsCount = _context.Telemetry.PartitionsCount - _lastPartitionsCount,
                 RecursiveDepth = _context.EngineContext.CurrentRecursiveDepth
             });

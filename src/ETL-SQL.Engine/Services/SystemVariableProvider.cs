@@ -23,6 +23,8 @@ namespace ETL_SQL.Engine.Services
             if (name.Equals("@@PARTITIONS_COUNT", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.PartitionsCount;
             if (name.Equals("@@AGGREGATE_GROUPS_COUNT", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.AggregateGroupsCount;
             if (name.Equals("@@AGGREGATE_EXPANSION_RATIO", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.AggregateExpansionRatio;
+            if (name.Equals("@@SUBQUERY_CACHE_HITS", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.SubqueryCacheHits;
+            if (name.Equals("@@SUBQUERY_CACHE_MISSES", StringComparison.OrdinalIgnoreCase)) return context.Telemetry.SubqueryCacheMisses;
             
             return null;
         }

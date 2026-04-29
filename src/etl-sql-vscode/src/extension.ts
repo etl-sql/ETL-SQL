@@ -87,7 +87,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     if (!serverPath) {
         // Try bundled path first
-        const bundledServer = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL.LanguageServer.exe' : 'ETL-SQL.LanguageServer');
+        const bundledServer = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL-LSP.exe' : 'ETL-SQL-LSP');
         if (fs.existsSync(bundledServer)) {
             serverPath = bundledServer;
             outputChannel.appendLine(`Using bundled Language Server: ${serverPath}`);
@@ -98,7 +98,7 @@ export function activate(context: vscode.ExtensionContext) {
         outputChannel.appendLine("Server path not configured. Searching in build folder...");
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (workspaceFolder) {
-            const possibleServerPath = path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.LanguageServer', 'bin', 'Debug', 'net10.0', 'ETL-SQL.LanguageServer.exe');
+            const possibleServerPath = path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.LanguageServer', 'bin', 'Debug', 'net10.0', 'ETL-SQL-LSP.exe');
             if (fs.existsSync(possibleServerPath)) {
                 serverPath = possibleServerPath;
                 outputChannel.appendLine(`Found server at: ${serverPath}`);

@@ -681,7 +681,10 @@ namespace ETL_SQL.Core.Parser.Components
                     dataType = Advance().Value;
                     if (Match(TokenType.LPAREN))
                     {
-                        dataType += "(" + Consume(TokenType.NUMBER, "Expected length").Value + ")";
+                        dataType += "(";
+                        if (Match(TokenType.MAX)) dataType += "MAX";
+                        else dataType += Consume(TokenType.NUMBER, "Expected length").Value;
+                        dataType += ")";
                         Consume(TokenType.RPAREN, "Expected ')'");
                     }
                 }
@@ -838,7 +841,9 @@ namespace ETL_SQL.Core.Parser.Components
                         if (Match(TokenType.LPAREN))
                         {
                             dataType += "(";
-                            dataType += Consume(TokenType.NUMBER, "Expected length").Value;
+                            if (Match(TokenType.MAX)) dataType += "MAX";
+                            else dataType += Consume(TokenType.NUMBER, "Expected length").Value;
+                            
                             if (Match(TokenType.COMMA))
                             {
                                 dataType += ",";

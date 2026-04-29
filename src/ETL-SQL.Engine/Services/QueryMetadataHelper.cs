@@ -27,7 +27,12 @@ namespace ETL_SQL.Engine.Services
                 }
                 else final.Add(col);
             }
-            var names = final.Select(c => c.Alias ?? (c.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"Expr{final.IndexOf(c)}")).ToList();
+            var names = new List<string>();
+            for (int i = 0; i < final.Count; i++)
+            {
+                var col = final[i];
+                names.Add(col.Alias ?? (col.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"Expr{i}"));
+            }
             return (final, names);
         }
     }

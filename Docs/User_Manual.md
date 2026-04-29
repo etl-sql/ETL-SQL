@@ -540,9 +540,10 @@ BEGIN
 END;
 ```
 
-### 8.5 Dynamic SQL with EXEC
+### 8.5 Dynamic SQL & Pushdown (EXEC / EXECUTE)
 
-Build and execute SQL statements constructed at runtime. The engine supports five EXEC forms:
+`EXEC` and `EXECUTE` are functional synonyms. Build and execute SQL statements constructed at runtime or push native SQL blocks to remote connections. The engine supports five forms:
+
 
 ```sql
 -- Form 1: Dynamic expression — EXEC(@string_expr)
@@ -853,7 +854,7 @@ SELECT * FROM test_src.Users;
 Launch the terminal IDE with:
 
 ```bash
-dotnet run --project src/ETL-SQL.App -- --ui edit MyScript.etlsql
+ETL-SQL --ui edit MyScript.etlsql
 ```
 
 ### 15.1 Layout

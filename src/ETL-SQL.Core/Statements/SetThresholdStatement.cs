@@ -23,7 +23,9 @@ namespace ETL_SQL.Core
         Telemetry,
         TempTableSpill,
         MaxLastResultRows,
-        MaxGenerateRows
+        MaxGenerateRows,
+        MaxInternalOperations
+
     }
 
     public record SetThresholdStatement(ThresholdType Type, Expression Value) : Statement

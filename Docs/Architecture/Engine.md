@@ -27,19 +27,21 @@ Tier 4 — Application Shells
   ETL-SQL.App             → Core, Engine, Connectors, Orchestrator, TUI
 
 Tier 5 — Report Layer
-  ETL-SQL.ReportBuilder   → Core, Engine, Connectors
-  ETL-SQL.ReportBuilder.CLI → ReportBuilder, App
-  ETL-SQL.ReportPlayer    → ReportBuilder, App
+  ETL-SQL.Report          → Core, Engine, Connectors
+  ETL-SQL.Report.CLI      → Report, App
+  ETL-SQL.Portal          → Report, App
 
 Service Host
-  ETL-SQL.Orchestrator.Service → Core, Engine, Connectors, Orchestrator
+  ETL-SQL.Service         → Core, Engine, Connectors, Orchestrator
 ```
 
 Build output names:
-- `ETL-SQL.exe` — the primary CLI (App project)
-- `ETL-SQL-TUI.exe` — the terminal UI
-- `ETL-SQL-OrchestratorService.exe` — the Windows Service / systemd host
-- `etl-sql-report.exe` — the report compiler CLI
+- `ETL-SQL` — the primary CLI (App project)
+- `ETL-SQL-TUI` — the terminal IDE
+- `ETL-SQL-LSP` — the Language Server
+- `ETL-SQL-Report` — the report compiler CLI
+- `ETL-SQL-Portal` — the report portal player (web host)
+- `ETL-SQL-Service` — the Windows Service / systemd host (Orchestrator)
 
 ---
 
@@ -100,15 +102,15 @@ The primary CLI entry point.
 ### ETL-SQL.TUI
 Spectre.Console terminal IDE. Owns all keyboard navigation, tab management, editor rendering, and TUI-specific keybindings. Uses the same DI container as `App`.
 
-### ETL-SQL.ReportBuilder
+### ETL-SQL.Report
 Report-SQL compilation and dashboard runtime.
 
-- **Parser extensions** for Report-SQL keywords (`CREATE DATASET`, `CREATE PAGE`, `CREATE VISUAL`, etc.).
-- **`DashboardService`** — evaluates a manifest, runs dataset queries via `Evaluator`, manages parameter state. On `SetParameterAsync` a full script rebuild is performed (selective re-evaluation is a future optimization, see TODO Rpt-1).
+- Parser extensions for Report-SQL keywords (`CREATE DATASET`, `CREATE PAGE`, `CREATE VISUAL`, etc.).
+- **`DashboardService`** — evaluates a manifest, runs dataset queries via `Evaluator`, manages parameter state.
 - **`SnapshotStore`** — persists rendered dashboard state to disk.
 
-### ETL-SQL.ReportBuilder.CLI / ETL-SQL.ReportPlayer
-Thin entry points. CLI compiles a `.rpt.sql` file to a manifest; ReportPlayer serves it over HTTP (ASP.NET).
+### ETL-SQL.Report.CLI / ETL-SQL.Portal
+Thin entry points. CLI compiles a `.rpt.sql` file to a manifest; Portal serves it over HTTP (ASP.NET).
 
 ### ETL-SQL.LanguageServer
 Implements the Language Server Protocol using OmniSharp. Provides completions, diagnostics, and hover info for `.etlsql` files in VS Code and JetBrains IDEs.
@@ -184,6 +186,34 @@ A separate `Dictionary<string, IDataSource> _localSources` holds per-statement C
 ### Session state persistence
 
 `LoadSessionState(SessionState)` repopulates `_connections` from serialized connection and temp-table snapshots. Temp table data is re-hydrated via `_dataSourceManager.RestoreTempTable()`.
+
+---
+
+## Subquery Caching
+
+To optimize the performance of correlated and non-correlated subqueries, the `Evaluator` maintains a sophisticated `LruCache<SubqueryCacheKey, object?>`.
+
+### Cache Key Model
+
+The `SubqueryCacheKey` is a compound key consisting of:
+- **Statement SQL**: The normalized SQL representation of the subquery (via `ToSql()`).
+- **Captured Values**: A `CompoundKey` containing the specific values harvested from the outer row context for that evaluation.
+
+### SubqueryAnalyzer
+
+The `SubqueryAnalyzer` service identifies "Outer References" within a subquery's AST. It uses a stack-based `_localAliasStack` to correctly track scoping across nested subqueries, ensuring that only true outer references are captured.
+
+### Execution Flow
+
+1. **Analysis**: The `SubqueryAnalyzer` finds all identifiers that refer to tables or columns outside the current subquery.
+2. **Capture**: At runtime, `ExpressionEvaluator` resolves these references against the `OuterRowStack` to build the `CapturedValues` array.
+3. **Lookup**: The cache is queried using the `SubqueryCacheKey`.
+4. **Execution**: On a miss, the subquery is evaluated natively, and the result is stored in the cache.
+5. **Observability**: Metrics are tracked in `ExecutionTelemetryManager` and exposed via `@@SUBQUERY_CACHE_HITS` and `@@SUBQUERY_CACHE_MISSES`.
+
+### Static Subqueries
+
+Non-correlated subqueries (those with zero outer references) are detected by the analyzer. Since their `CapturedValues` array is always empty, they are effectively cached globally for the entire script execution, resulting in $O(1)$ execution overhead regardless of the outer row count.
 
 ---
 

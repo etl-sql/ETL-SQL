@@ -85,6 +85,8 @@ namespace ETL_SQL.Core.Common
         public long LastExecutionTimeMs { get; set; }
         public long SubqueryCacheHits { get; set; }
         public long SubqueryCacheMisses { get; set; }
+        public int SubquerySpillCount { get; set; }
+        public long SubquerySpilledBytes { get; set; }
         public int SortSpillCount { get; set; }
         public Action<DataTable>? OnResultSet { get; set; }
         
@@ -101,7 +103,7 @@ namespace ETL_SQL.Core.Common
         public List<object?>? Parameters { get; set; }
 
         public Stack<Row> OuterRowStack { get; } = new();
-        public LruCache<Statement, object?> SubqueryCache { get; } = new(500);
+        public LruCache<SubqueryCacheKey, Data.SubqueryResult> SubqueryCache { get; } = new(5000);
         public CancellationToken CancellationToken => CancellationToken.None;
         public IServiceProvider ServiceProvider => null!;
         public List<ExecutionMetrics> ProfileMetrics { get; } = new();
@@ -128,6 +130,7 @@ namespace ETL_SQL.Core.Common
         public int ExternalSortChunkSize { get; set; } = LanguageMetadata.DefaultExternalSortChunkSize;
         public int WindowSpillThreshold { get; set; } = LanguageMetadata.DefaultWindowSpillThreshold;
         public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
+        public long SubquerySpillThresholdRows { get; set; } = LanguageMetadata.DefaultSubquerySpillThresholdRows;
         public long TempTableSpillThresholdRows { get; set; } = LanguageMetadata.DefaultTempTableSpillThresholdRows;
         public int MaxParallelDegree { get; set; } = LanguageMetadata.DefaultMaxParallelDegree;
         public long MaxStringResultSize { get; set; } = LanguageMetadata.DefaultMaxStringResultSize;
@@ -148,8 +151,9 @@ namespace ETL_SQL.Core.Common
         public bool AllowDeepRecursion { get; set; }
         public bool AllowLargeStringResults { get; set; }
         public HashSet<string> AllowedFileTypeOverrides { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public int MaxGenerateRows { get; set; } = SecurityService.DefaultMaxGenerateRows;
-
+        public int MaxGenerateRows { get => SecurityService.DefaultMaxGenerateRows; set { } }
+        public int MaxInternalOperations { get => SecurityService.MaxInternalOperations; set => SecurityService.MaxInternalOperations = value; }
+        
         public IDictionary<string, CreateVisualStatement> VisualDefinitions { get; } = new Dictionary<string, CreateVisualStatement>();
         public IDictionary<string, CreatePageStatement> PageDefinitions { get; } = new Dictionary<string, CreatePageStatement>();
         public IDictionary<string, CreateDatasetStatement> DatasetDefinitions { get; } = new Dictionary<string, CreateDatasetStatement>();

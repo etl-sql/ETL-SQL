@@ -8,8 +8,8 @@ Report-SQL extends ETL-SQL with dedicated statement types for building interacti
 
 ```
 ┌─────────────────────┐    build / serve      ┌─────────────────────┐
-│  (report script)    │                       │  (ReportBuilder.CLI)│
-│ your_report.rptsql  │ ──────────────────▶   etl-sql-report CLI   │
+│  (report script)    │                       │  (ETL-SQL-Report)   │
+│ your_report.rptsql  │ ──────────────────▶   ETL-SQL-Report CLI   │
 └─────────────────────┘                       └──────────┬──────────┘
                                                          │ evaluates script
                                                          ▼
@@ -95,8 +95,8 @@ CREATE PAGE Main AS LAYOUT (
 Save as `report.rptsql`, then:
 
 ```sh
-etl-sql-report build report.rptsql        # → report.report.md + report.snapshot.json
-etl-sql-report serve report.rptsql        # → opens http://localhost:5200
+ETL-SQL-Report build report.rptsql        # → report.report.md + report.snapshot.json
+ETL-SQL-Report serve report.rptsql        # → opens http://localhost:5200
 ```
 
 ---
@@ -537,7 +537,6 @@ CREATE VISUAL BalancedGauge AS GAUGE (
   OPTIONS (MIN = @bounds.MIN, MAX = @bounds.MAX)
 );
 ```
-,StartLine:454,TargetContent:```
 
 `MIN` and `MAX` options override column-derived bounds. Both default to `0` / `100` when omitted.
 
@@ -1480,17 +1479,17 @@ DROP NAVIGATION MyNav;
 
 ---
 
-## CLI — etl-sql-report
+## CLI — ETL-SQL-Report
 
 ### build
 
 Evaluates the script, builds a `ReportManifest`, and writes output files:
 
 ```sh
-etl-sql-report build report.rptsql
-etl-sql-report build report.rptsql --output out/dashboard.md
-etl-sql-report build report.rptsql --format json
-etl-sql-report build report.rptsql --format pdf
+ETL-SQL-Report build report.rptsql
+ETL-SQL-Report build report.rptsql --output out/dashboard.md
+ETL-SQL-Report build report.rptsql --format json
+ETL-SQL-Report build report.rptsql --format pdf
 ```
 
 **Output files produced:**
@@ -1514,7 +1513,7 @@ etl-sql-report build report.rptsql --format pdf
 Re-evaluates the script and updates the snapshot without writing a new report document:
 
 ```sh
-etl-sql-report refresh report.rptsql
+ETL-SQL-Report refresh report.rptsql
 ```
 
 The snapshot is stored alongside the script as `<script>.snapshot.json`. The ReportPlayer considers the snapshot stale if the script file has been modified since the snapshot was built, or if the TTL (default 24 h) has elapsed.
@@ -1525,13 +1524,13 @@ Starts the web dashboard at `http://localhost:5200`:
 
 ```sh
 # Single report
-etl-sql-report serve report.rptsql
+ETL-SQL-Report serve report.rptsql
 
 # Multi-report catalog (see reports.json below)
-etl-sql-report serve --manifest reports.json
+ETL-SQL-Report serve --manifest reports.json
 ```
 
-Internally this launches `ETL-SQL.ReportPlayer` (the Kestrel ASP.NET server) and opens the browser after 2.5 s. Keep the process running; the dashboard is served for as long as the process is alive.
+Internally this launches `ETL-SQL-Portal` (the Kestrel ASP.NET server) and opens the browser after 2.5 s. Keep the process running; the dashboard is served for as long as the process is alive.
 
 ---
 
@@ -1551,7 +1550,7 @@ Multiple reports can be hosted together using a `reports.json` manifest file:
 Start the server:
 
 ```sh
-etl-sql-report serve --manifest reports.json
+ETL-SQL-Report serve --manifest reports.json
 ```
 
 The catalog page at `http://localhost:5200` lists all reports. Each report is accessible at `http://localhost:5200/reports/<name>`. API routes are prefixed per-report: `/reports/<name>/api/manifest`, `/reports/<name>/api/refresh`, etc.
@@ -1591,7 +1590,7 @@ When a parameter changes, `DashboardService` checks which visuals depend on that
 
 If the manifest was built before the script file was last written, or if more than 24 hours have passed, a yellow banner appears:
 
-> ⚠ Snapshot may be stale — run `etl-sql-report refresh` to update.
+> ⚠ Snapshot may be stale — run `ETL-SQL-Report refresh` to update.
 
 You can also hit `/api/refresh` to force a live rebuild without restarting the server.
 
@@ -1614,7 +1613,7 @@ With a `.rptsql` file open, run **ETL-SQL: Preview Report** from the command pal
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `etlsql.report.executable.path` | `etl-sql-report.exe` | Full path to `etl-sql-report.exe`. Leave empty to use `dotnet run` from the source tree in development. |
+| `etlsql.report.executable.path` | `ETL-SQL-Report` | Full path to `ETL-SQL-Report`. Leave empty to use `dotnet run` from the source tree in development. |
 | `etlsql.report.autoOpenPreview` | `false` | Automatically open the Report Preview panel when opening an `.rptsql` file. |
 
 ---

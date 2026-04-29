@@ -16,6 +16,7 @@ namespace ETL_SQL.Tests.Integration
     public class StubSpillWriter : ISpillWriter
     {
         public string ChunkName => "test";
+        public long BytesWritten => 0;
         public Task WriteRowAsync(Row row) => Task.CompletedTask;
         public Task WriteRowsAsync(IEnumerable<Row> rows) => Task.CompletedTask;
         public ValueTask DisposeAsync() => default;

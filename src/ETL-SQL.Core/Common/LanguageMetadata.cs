@@ -76,14 +76,15 @@ namespace ETL_SQL.Common
             "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE", "REQUIRE", "SAFE", "ZONES",
             "JOIN_SPILL_THRESHOLD", "TEMP_TABLE_SPILL_THRESHOLD", "EXTERNAL_HASH_PARTITIONS", "EXTERNAL_SORT_CHUNK_SIZE", "WINDOW_SPILL_THRESHOLD",
             "MAX_RECURSIVE_DEPTH", "MAX_IN_MEMORY_BATCHES", "FOREACH_PAGE_SIZE", "MAX_MESSAGES", "MAX_FILE_OPERATIONS",
-            "MAX_PARALLEL_DEGREE", "MAX_STRING_RESULT_SIZE", "REGEX_MATCH_TIMEOUT", "MAX_LAST_RESULT_ROWS",
+            "MAX_PARALLEL_DEGREE", "MAX_STRING_RESULT_SIZE", "REGEX_MATCH_TIMEOUT", "MAX_LAST_RESULT_ROWS", "MAX_GENERATE_ROWS", "MAX_INTERNAL_OPERATIONS",
             "SPILL_ENCRYPTION", "SPILL_COMPRESSION",
             "MAX_GROUPING_SETS", "SET_CUBE_LIMIT", "MAX_SESSION_SIZE", "TELEMETRY",
             "TOOLTIP", "BUTTON", "BACK", "REFRESH", "TEMPLATE_PATH", "MINMAX", "GENERATE", "ROWS",
             "FONT_SIZE", "CENTER", "INSIDE", "INSIDE_TOP", "INSIDE_BOTTOM", "INSIDE_LEFT", "INSIDE_RIGHT",
             "INSIDE_TOP_LEFT", "INSIDE_TOP_RIGHT", "INSIDE_BOTTOM_LEFT", "INSIDE_BOTTOM_RIGHT",
             "NONE", "HEADER", "FOOTER", "CSS", "JS", "FAVICON", "LOGO", "BACKGROUND",
-            "MAX_GENERATE_ROWS", "ALLOW_FILE_OPERATIONS", "ALLOW_RECURSIVE_LAYERS"
+            "MAX_GENERATE_ROWS", "MAX_INTERNAL_OPERATIONS", "ALLOW_FILE_OPERATIONS", "ALLOW_RECURSIVE_LAYERS"
+
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -139,6 +140,9 @@ namespace ETL_SQL.Common
         public const int DefaultExternalSortChunkSize = 50000;
         /// <summary>Default number of rows before window functions spill to disk.</summary>
         public const int DefaultWindowSpillThreshold = 100000;
+
+        /// <summary>Default number of rows before subquery results spill to disk.</summary>
+        public const long DefaultSubquerySpillThresholdRows = 100000;
         
         /// <summary>Default maximum concurrency for PARALLEL blocks.</summary>
         public const int DefaultMaxParallelDegree = 32;

@@ -1,6 +1,6 @@
 # ETL-SQL Reporting Architecture & Engineering Reference
 
-This document describes the internal mechanics of the ETL-SQL reporting subsystem — the layer responsible for parsing `.rptsql` files, evaluating their data sources, building serializable manifests, and serving interactive dashboards. It is the primary reference for engineers working on `ETL-SQL.ReportBuilder`, `ETL-SQL.ReportBuilder.CLI`, and `ETL-SQL.ReportPlayer`.
+This document describes the internal mechanics of the ETL-SQL reporting subsystem — the layer responsible for parsing `.rptsql` files, evaluating their data sources, building serializable manifests, and serving interactive dashboards. It is the primary reference for engineers working on `ETL-SQL.ReportBuilder`, `ETL-SQL-Report`, and the reporting runtime.
 
 For the user-facing syntax reference, see [Docs/Report_SQL_Guide.md](../Report_SQL_Guide.md).
 

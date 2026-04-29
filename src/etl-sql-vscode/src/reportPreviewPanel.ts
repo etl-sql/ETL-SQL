@@ -2,7 +2,7 @@
  * reportPreviewPanel.ts — Phase 9C
  *
  * Opens a VS Code WebviewPanel for .rptsql files.
- * Runs `etl-sql-report build --format json` on the active file,
+ * Runs `ETL-SQL-Report build --format json` on the active file,
  * injects the resulting ReportManifest as window.__MANIFEST__,
  * and loads the shared report-runtime.js + Chart.js for rendering.
  *
@@ -112,7 +112,7 @@ export class ReportPreviewPanel {
         });
     }
 
-    /** Spawns `etl-sql-report build --format json` and returns the parsed manifest. */
+    /** Spawns `ETL-SQL-Report build --format json` and returns the parsed manifest. */
     private _buildManifest(callback: (err: string | null, manifest: any | null) => void): void {
         const outputPath = path.join(os.tmpdir(), `etlsql-preview-${Date.now()}.json`);
         const { exe, baseArgs } = this._resolveCliCall();
@@ -130,7 +130,7 @@ export class ReportPreviewPanel {
         proc.stderr.on('data', d => { stderr += d.toString(); });
         proc.on('close', code => {
             if (code !== 0 || !fs.existsSync(outputPath)) {
-                callback(stderr || `etl-sql-report exited with code ${code}`, null);
+                callback(stderr || `ETL-SQL-Report exited with code ${code}`, null);
                 return;
             }
             try {
@@ -146,7 +146,7 @@ export class ReportPreviewPanel {
         });
     }
 
-    /** Resolves the command and base arguments for the etl-sql-report CLI. */
+    /** Resolves the command and base arguments for the ETL-SQL-Report CLI. */
     private _resolveCliCall(): { exe: string, baseArgs: string[] } {
         const config     = vscode.workspace.getConfiguration('etlsql');
         const configured = (config.get<string>('report.executable.path') || '').trim();
@@ -155,10 +155,10 @@ export class ReportPreviewPanel {
             return { exe: configured, baseArgs: [] };
         }
 
-        // 1. Try bundled path first (search for both etl-sql-report.exe and etl-sql-report)
+        // 1. Try bundled path first (search for both ETL-SQL-Report.exe and ETL-SQL-Report)
         const possibleExtensions = os.platform() === 'win32' ? ['.exe', ''] : ['', '.exe'];
         for (const ext of possibleExtensions) {
-            const bundledPath = path.join(this._extensionUri.fsPath, 'bin', `etl-sql-report${ext}`);
+            const bundledPath = path.join(this._extensionUri.fsPath, 'bin', `ETL-SQL-Report${ext}`);
             if (fs.existsSync(bundledPath)) {
                 return { exe: bundledPath, baseArgs: [] };
             }
@@ -176,7 +176,7 @@ export class ReportPreviewPanel {
             }
         }
 
-        return { exe: 'etl-sql-report', baseArgs: [] };
+        return { exe: 'ETL-SQL-Report', baseArgs: [] };
     }
 
     private _getReportHtml(manifest: any): string {

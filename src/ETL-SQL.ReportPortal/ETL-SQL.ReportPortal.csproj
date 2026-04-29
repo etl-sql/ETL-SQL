@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ETL_SQL.ReportPortal</RootNamespace>
+    <AssemblyName>ETL-SQL-Portal</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

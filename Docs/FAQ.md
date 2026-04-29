@@ -286,7 +286,7 @@ Common questions, gotchas, and their solutions. If you're stuck, start here.
 **Q: How do I preview a report without serving it over HTTP?**
 > Use the VS Code extension's **Preview Report** button (similar to Markdown preview) which triggers the `ETL-SQL.ReportPlayer` locally. From the CLI:
 > ```bash
-> etl-sql-report.exe --preview MyReport.rptsql
+> ETL-SQL-Report.exe --preview MyReport.rptsql
 > ```
 
 ---

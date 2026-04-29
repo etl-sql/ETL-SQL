@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <RootNamespace>ETL_SQL.Orchestrator.Service</RootNamespace>
-    <AssemblyName>ETL-SQL-OrchestratorService</AssemblyName>
+    <AssemblyName>ETL-SQL-Service</AssemblyName>
     <!-- Windows Service and systemd integration -->
     <WindowsRuntimePackageVersion Condition="$([MSBuild]::IsOSPlatform('windows'))">10.0.19041.0</WindowsRuntimePackageVersion>
   </PropertyGroup>

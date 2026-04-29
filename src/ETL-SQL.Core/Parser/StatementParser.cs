@@ -218,7 +218,9 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.MAX_SESSION_SIZE)) return SystemParser.ParseSetThreshold(ThresholdType.MaxSessionSize);
             if (_parser.Match(TokenType.MAX_LAST_RESULT_ROWS)) return SystemParser.ParseSetThreshold(ThresholdType.MaxLastResultRows);
             if (_parser.Match(TokenType.MAX_GENERATE_ROWS)) return SystemParser.ParseSetThreshold(ThresholdType.MaxGenerateRows);
+            if (_parser.Match(TokenType.MAX_INTERNAL_OPERATIONS)) return SystemParser.ParseSetThreshold(ThresholdType.MaxInternalOperations);
             if (_parser.Match(TokenType.TELEMETRY)) return SystemParser.ParseSetThreshold(ThresholdType.Telemetry);
+
 
             if (_parser.Match(TokenType.SPILL_ENCRYPTION)) return SystemParser.ParseSetSpillOption(SpillOptionType.Encryption);
             if (_parser.Match(TokenType.SPILL_COMPRESSION)) return SystemParser.ParseSetSpillOption(SpillOptionType.Compression);

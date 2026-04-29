@@ -566,7 +566,8 @@ SHOW PROFILE;
 
 ---
 
-## 9. Dynamic SQL & Remote Execution (EXEC)
+## 9. Dynamic SQL & Remote Execution (EXEC / EXECUTE)
+
 
 ETL-SQL supports dynamic construction and execution of scripts using the `EXEC` statement. This allows for parameterized table names, dynamic DDL, and direct execution of native SQL against remote databases.
 
@@ -621,17 +622,29 @@ END;
 
 ### 9.4 Parameterized Execution (`WITH`)
 
-For remote execution, use the `WITH` clause to pass parameters safely. The remote SQL should reference parameters as `@p0`, `@p1`, etc. (indexing matches the `WITH` list).
+For remote execution, use the `WITH` clause to pass parameters safely. Parameters can be referenced in the remote SQL using several forms:
+
+1. **Indexed Standard**: `@p0`, `@p1`, etc. (0-indexed)
+2. **Indexed ANSI/ODBC**: `?1`, `?2`, etc. (1-indexed)
+3. **Sequential**: `?` (positional)
 
 ```sql
 DECLARE @status = 'Active';
 DECLARE @min_amt = 5000;
 
+-- Using @p index
 EXEC('SELECT * FROM dbo.Orders WHERE Status = @p0 AND Amount > @p1') 
     AT mssql_conn 
     WITH(@status, @min_amt)
     INTO #filtered_orders;
+
+-- Using sequential ?
+EXECUTE pg_conn INTO #results WITH(@status, @min_amt)
+BEGIN
+    SELECT * FROM orders WHERE status = ? AND amount > ?;
+END;
 ```
+
 
 ### 9.5 Stored Procedure Execution
 

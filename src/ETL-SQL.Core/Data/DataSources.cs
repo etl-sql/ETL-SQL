@@ -134,6 +134,8 @@ namespace ETL_SQL.Data
         public int MaxInMemoryBatches { get; set; } = LanguageMetadata.DefaultMaxInMemoryBatches;
         
         private readonly List<string> _spillChunkNames = new();
+        public int SpillChunkCount => _spillChunkNames.Count;
+        public long SpillTotalBytes { get; private set; } = 0;
         private long _totalRowCount = 0;
         private IExecutionContext? _executionContext;
         public IExecutionContext? ExecutionContext 
@@ -184,6 +186,7 @@ namespace ETL_SQL.Data
                     await using (var writer = await ExecutionContext.SpillStore.CreateWriterAsync(chunkName))
                     {
                         await writer.WriteRowsAsync(batch.Rows);
+                        SpillTotalBytes += writer.BytesWritten;
                     }
                     _spillChunkNames.Add(chunkName);
                 }

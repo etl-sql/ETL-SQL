@@ -47,5 +47,8 @@ namespace ETL_SQL.Engine.Services
 
         public static string SpillFormat(IConfiguration? config)
             => config?.GetValue<string>("Security:SpillFormat") ?? "Arrow";
+
+        public static int SubqueryCacheSize(IConfiguration? config)
+            => config?.GetValue<int?>("Engine:SubqueryCacheSize") ?? 5000;
     }
 }

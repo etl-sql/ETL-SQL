@@ -111,9 +111,8 @@ namespace ETL_SQL.Engine.Handlers
                 if (options.TryGetValue("MAXERRORS", out var me) && int.TryParse(me, out var mev))
                     maxErrors = mev;
 
-                var batches = source.ReadBatches(batchSize);
+                var batches = context.InterceptProgress(source.ReadBatches(batchSize));
                 
-                batches = context.InterceptProgress(batches);
 
                 // Get destination columns for metadata validation
                 var destColumns = (await destination.GetColumnsAsync()).ToList();
@@ -196,7 +195,7 @@ namespace ETL_SQL.Engine.Handlers
                     }
                 }
                 
-                context.Telemetry.RowsProcessed += count;
+
                 _logger.WriteLine($"Bulk insert completed. {count} rows loaded. {errorCount} errors skipped.");
             }
             finally

@@ -175,6 +175,7 @@ namespace ETL_SQL.Engine.Handlers
                 var allInsertedRows = new List<Row>();
                 await foreach (var batch in boundBatches)
                 {
+                    // foreach (var r in batch.Rows) Console.Error.WriteLine($"INSERT DEBUG: Row={r.Columns.Values.FirstOrDefault() ?? "NULL"} | id={r["id"]} | cat={r["cat"]} | val={r["val"]}");
                     if (context.IsWhatIf)
                     {
                         // Dry run: don't write
@@ -197,7 +198,6 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     _logger.WriteLine($"WHAT IF: Would insert {count} rows into {connName} via batch transfer.", ConsoleColor.Yellow);
                 }
-                context.Telemetry.RowsProcessed += count;
 
                 if (stmt.Output != null && allInsertedRows.Count > 0)
                 {

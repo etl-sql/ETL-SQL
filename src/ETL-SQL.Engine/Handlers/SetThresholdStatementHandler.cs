@@ -95,7 +95,11 @@ namespace ETL_SQL.Engine.Handlers
                 case ThresholdType.MaxGenerateRows:
                     context.MaxGenerateRows = intVal;
                     break;
+                case ThresholdType.MaxInternalOperations:
+                    context.SecurityService.MaxInternalOperations = intVal;
+                    break;
             }
+
 
             if (context.IsVerbose)
             {

@@ -373,8 +373,14 @@ SELECT IIF(Score >= 90, 'Pass', 'Fail') AS Result FROM #tests;
 | `@@ERROR` | Error number of the last statement (0 = success); equivalent to `ERROR_NUMBER()` inside a `CATCH` |
 | `@@TOTAL_SPILLED_BYTES` | Bytes written to disk by the external window/join engine during the last spilling operation |
 | `@@PARTITIONS_COUNT` | Number of disk-partition files created during the last external spill |
-| `FILE_EXISTS(path)` | `TRUE` if the specified file exists on disk |
-| `DIRECTORY_EXISTS(path)` | `TRUE` if the directory exists on disk |
+| `@@SUBQUERY_CACHE_HITS` | Total scalar subquery hits in the result cache |
+| `@@SUBQUERY_CACHE_MISSES` | Total scalar subquery misses in the result cache |
+| `@@PEAK_MEMORY_MB` | Peak memory (Working Set) of the engine process in MB |
+| `@@SORT_SPILLS` | Number of external sort runs that spilled to disk |
+| `@@LAST_EXEC_MS` | Milliseconds taken by the last executed statement |
+| `@@ROWCOUNT` | Number of rows processed by the last statement |
+| `@@FILE_EXISTS(path)` | `TRUE` if the specified file exists on disk |
+| `@@DIRECTORY_EXISTS(path)` | `TRUE` if the directory exists on disk |
 
 > [!IMPORTANT]
 > **Security Guardrail (Zero-Trust):** To prevent unauthorized harvesting of host information, `ENV()` can only access environment variables explicitly authorized in the `SecurityService.AllowedEnvVars` allow-list. Accessing an unauthorized variable throws a `SecurityException`.

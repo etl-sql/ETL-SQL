@@ -518,7 +518,15 @@ namespace ETL_SQL.Core.Parser.Components
                 }
             }
 
-            var identifierExpr = ParseExpression();
+            Expression identifierExpr;
+            if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Peek.Type == TokenType.LPAREN)
+            {
+                identifierExpr = new IdentifierExpression(Advance().Value);
+            }
+            else
+            {
+                identifierExpr = ParseExpression();
+            }
 
             TableReference? remoteIntoTable = null;
             if (Match(TokenType.INTO)) remoteIntoTable = ParseTableReference(allowFunction: false, allowWithClause: false);
@@ -544,6 +552,15 @@ namespace ETL_SQL.Core.Parser.Components
                 catch (SyntaxException) { unbalanced = true; }
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new ExecutePushdownStatement(identifierExpr, sqlText, remoteIntoTable, remoteParameters) { Line = startToken.Line, Column = startToken.Column, HasUnbalancedBlocks = unbalanced };
+            }
+
+            if (_parser.Current.Type == TokenType.LPAREN)
+            {
+                _parser.Advance();
+                var sqlExpr = ParseExpression();
+                _parser.Consume(TokenType.RPAREN, "Expected ')' after EXEC expression");
+                if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+                return new ExecStatement(sqlExpr, identifierExpr, remoteIntoTable, remoteParameters);
             }
 
             if (_parent.IsStatementStart(_parser.Current.Type))

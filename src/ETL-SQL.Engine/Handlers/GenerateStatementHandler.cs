@@ -102,7 +102,7 @@ namespace ETL_SQL.Engine.Handlers
 
                 if (currentBatchCount >= context.BatchSize)
                 {
-                    await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable());
+                    await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true);
                     batch = new DataTable();
                     batch.SetColumns(colNames);
                     currentBatchCount = 0;
@@ -111,7 +111,7 @@ namespace ETL_SQL.Engine.Handlers
 
             if (batch.Rows.Count > 0)
             {
-                await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable());
+                await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true);
             }
 
             context.Telemetry.RowsProcessed += totalWritten;

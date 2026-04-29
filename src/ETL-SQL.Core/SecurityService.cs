@@ -509,6 +509,11 @@ namespace ETL_SQL.Services
                     isExceeding = Convert.ToInt32(newValue) > 1000000;
                     globalLimit = 1000000;
                     break;
+                case ThresholdType.MaxInternalOperations:
+                    isExceeding = Convert.ToInt32(newValue) > 10000000; // Allow up to 10M for internal ops if authorized
+                    globalLimit = 100000; // Default limit
+                    break;
+
                 default:
                     // Other thresholds (JoinSpill, etc.) are tuning knobs, not security ceilings, 
                     // and can be changed anywhere.

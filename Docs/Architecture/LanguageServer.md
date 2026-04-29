@@ -1,6 +1,6 @@
 # ETL-SQL Language Server Architecture
 
-This document describes the internal design of `ETL-SQL.LanguageServer` — the LSP server that powers IDE features (completions, diagnostics, hover, navigation, formatting) for `.etlsql` and `.rptsql` files.
+This document describes the internal design of `ETL-SQL-LSP` — the LSP server that powers IDE features (completions, diagnostics, hover, navigation, formatting) for `.etlsql` and `.rptsql` files.
 
 For the VS Code extension that hosts this server, see [VSCodeExtension.md](VSCodeExtension.md).
 

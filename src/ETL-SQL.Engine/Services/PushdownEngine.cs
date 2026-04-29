@@ -27,17 +27,39 @@ namespace ETL_SQL.Engine.Services
             if (!allSameConn) return false;
             if (!context.IsSqlPushdown(connectionName)) return false;
 
-            // Check for local engines (aggregation, window functions, distinct, join)
+            // Check for local engines (aggregation, window functions, distinct, join, subqueries)
             var aggregateEngine = new AggregateEngine(context, _logger);
             var windowEngine = new WindowEngine(context, aggregateEngine, _logger);
+            var subqueryAnalyzer = new SubqueryAnalyzer();
 
-            bool localEngineRequired = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || 
+            bool hasSubqueries = stmt.Columns.Any(c => HasSubqueries(c.Expression, subqueryAnalyzer)) ||
+                                 HasSubqueries(stmt.WhereClause, subqueryAnalyzer) ||
+                                 HasSubqueries(stmt.HavingClause, subqueryAnalyzer) ||
+                                 (stmt.Joins != null && stmt.Joins.Any(j => HasSubqueries(j.Condition, subqueryAnalyzer)));
+
+            bool localEngineRequired = hasSubqueries ||
+                                       stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || 
                                        stmt.GroupBy != null || 
                                        stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression)) ||
                                        stmt.IsDistinct ||
                                        (stmt.Joins != null && stmt.Joins.Count > 0);
 
             return !localEngineRequired;
+        }
+
+        private bool HasSubqueries(Expression? expr, SubqueryAnalyzer analyzer)
+        {
+            if (expr == null) return false;
+            if (expr is SubqueryExpression) return true;
+            if (expr is ExistsExpression) return true;
+            if (expr is InExpression inExp && inExp.Right is SubqueryExpression) return true;
+            
+            // Check nested expressions
+            if (expr is BinaryExpression bin) return HasSubqueries(bin.Left, analyzer) || HasSubqueries(bin.Right, analyzer);
+            if (expr is FunctionCallExpression f) return f.Arguments.Any(a => HasSubqueries(a, analyzer));
+            if (expr is CaseExpression c) return c.WhenClauses.Any(w => HasSubqueries(w.Condition, analyzer) || HasSubqueries(w.Result, analyzer)) || HasSubqueries(c.ElseResult, analyzer);
+            
+            return false;
         }
 
         public async Task<DataTable> ExecutePushdown(SelectStatement stmt, string connectionName, IExecutionContext context)

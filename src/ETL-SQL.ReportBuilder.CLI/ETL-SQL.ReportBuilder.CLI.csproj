@@ -3,7 +3,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <AssemblyName>etl-sql-report</AssemblyName>
+    <AssemblyName>ETL-SQL-Report</AssemblyName>
     <RootNamespace>ETL_SQL.ReportBuilder.CLI</RootNamespace>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>

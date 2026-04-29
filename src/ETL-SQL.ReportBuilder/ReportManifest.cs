@@ -104,10 +104,13 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("parameters")]
         public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>Custom ECharts theme definitions from CREATE THEME statements.</summary>
         [JsonPropertyName("customThemes")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<ThemeManifest>? CustomThemes { get; set; }
+        
+        [JsonPropertyName("telemetry")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public TelemetryManifest? Telemetry { get; set; }
     }
 
     /// <summary>A single visual with its data snapshot and ECharts config.</summary>
@@ -448,5 +451,16 @@ namespace ETL_SQL.ReportBuilder
         /// <summary>Raw ECharts theme JSON object (arbitrary structure).</summary>
         [JsonPropertyName("config")]
         public System.Text.Json.JsonElement Config { get; set; }
+    }
+
+    public class TelemetryManifest
+    {
+        [JsonPropertyName("rowsProcessed")] public long RowsProcessed { get; set; }
+        [JsonPropertyName("totalSpilledBytes")] public long TotalSpilledBytes { get; set; }
+        [JsonPropertyName("subqueryCacheHits")] public long SubqueryCacheHits { get; set; }
+        [JsonPropertyName("subqueryCacheMisses")] public long SubqueryCacheMisses { get; set; }
+        [JsonPropertyName("subquerySpillCount")] public int SubquerySpillCount { get; set; }
+        [JsonPropertyName("subquerySpilledBytes")] public long SubquerySpilledBytes { get; set; }
+        [JsonPropertyName("executionTimeMs")] public long ExecutionTimeMs { get; set; }
     }
 }

@@ -12,6 +12,7 @@ namespace ETL_SQL.Core.Spill
     public interface ISpillWriter : IAsyncDisposable
     {
         string ChunkName { get; }
+        long BytesWritten { get; }
         Task WriteRowAsync(Row row);
         Task WriteRowsAsync(IEnumerable<Row> rows);
     }

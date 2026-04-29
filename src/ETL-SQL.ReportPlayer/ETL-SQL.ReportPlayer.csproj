@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>ETL_SQL.ReportPlayer</RootNamespace>
+    <AssemblyName>ETL-SQL-Player</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>

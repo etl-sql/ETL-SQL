@@ -121,6 +121,8 @@ namespace ETL_SQL.Core
         long LastExecutionTimeMs { get; set; }
         long SubqueryCacheHits { get; set; }
         long SubqueryCacheMisses { get; set; }
+        int SubquerySpillCount { get; set; }
+        long SubquerySpilledBytes { get; set; }
         int SortSpillCount { get; set; }
         bool IsProfiling { get; set; }
         List<ExecutionMetrics> ProfileMetrics { get; }
@@ -152,6 +154,8 @@ namespace ETL_SQL.Core
         bool AllowLargeStringResults { get; set; }
         HashSet<string> AllowedFileTypeOverrides { get; }
         int MaxGenerateRows { get; set; }
+        int MaxInternalOperations { get; set; }
+
         
         /// <summary>Metadata about the last caught exception in this session.</summary>
         ErrorInfo? LastError { get; set; }
@@ -170,6 +174,8 @@ namespace ETL_SQL.Core
         int WindowSpillThreshold { get; set; }
         /// <summary>Maximum number of batches held in RAM for #temp tables before spilling.</summary>
         int MaxInMemoryBatches { get; set; }
+        /// <summary>Number of rows before subquery results spill to disk.</summary>
+        long SubquerySpillThresholdRows { get; set; }
         /// <summary>The maximum number of concurrent tasks allowed in a PARALLEL block.</summary>
         int MaxParallelDegree { get; set; }
         /// <summary>The maximum size in bytes allowed for a single string function result.</summary>
@@ -294,7 +300,7 @@ namespace ETL_SQL.Core
         string? DecryptValue(string? value);
 
         Stack<Row> OuterRowStack { get; }
-        Common.LruCache<Statement, object?> SubqueryCache { get; }
+        Common.LruCache<Data.SubqueryCacheKey, Data.SubqueryResult> SubqueryCache { get; }
         System.Threading.CancellationToken CancellationToken { get; }
         IServiceProvider ServiceProvider { get; }
         

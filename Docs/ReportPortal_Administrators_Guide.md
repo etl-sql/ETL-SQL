@@ -18,12 +18,30 @@ This guide covers everything an administrator needs to deploy, configure, and op
 9. [Health Monitoring](#9-health-monitoring)
 10. [Audit Log](#10-audit-log)
 11. [Security Model](#11-security-model)
+12. [Quick Start: Required Steps](#12-quick-start-required-steps)
+
+---
+
+## 12. Quick Start: Required Steps
+
+To get the Report Portal running in under 5 minutes:
+
+1. **Standardize Naming**: Ensure you are using the `ETL-SQL-Portal` executable.
+2. **Set JWT Secret**: Open `appsettings.json` or set an environment variable `Portal__Jwt__Secret` to a 32-character random string.
+3. **Configure Paths**: Verify `ScriptRootPath` points to your `.rptsql` files (defaults to `./Reports`).
+4. **Launch**: Run `./ETL-SQL-Portal`.
+5. **Admin Login**:
+   - URL: `http://localhost:5001`
+   - User: `admin`
+   - Temp Password: `Admin@12345!`
+6. **Secure Account**: Change the admin password immediately upon first login.
+7. **Publish**: Go to **Admin -> Folders**, click **Publish Report**, and point to a `.rptsql` file.
 
 ---
 
 ## 1. Deployment
 
-The Report Portal is an ASP.NET Core 10 web application (`ETL-SQL.ReportPortal`). It uses a local **SQLite** database and serves both the REST API and the static web UI from the same process.
+The Report Portal is an ASP.NET Core 10 web application (`ETL-SQL-Portal`). It uses a local **SQLite** database and serves both the REST API and the static web UI from the same process.
 
 ### 1.1 Prerequisites
 
@@ -35,7 +53,7 @@ The Report Portal is an ASP.NET Core 10 web application (`ETL-SQL.ReportPortal`)
 ### 1.2 Windows (NSSM)
 
 ```powershell
-nssm install ETL-SQL-Portal "dotnet" "ETL-SQL.ReportPortal.dll"
+nssm install ETL-SQL-Portal "dotnet" "ETL-SQL-Portal.dll"
 nssm set ETL-SQL-Portal AppDirectory "C:\ETL-SQL\Portal"
 nssm set ETL-SQL-Portal AppStdout    "C:\Logs\portal.log"
 nssm set ETL-SQL-Portal AppStderr    "C:\Logs\portal-error.log"
@@ -51,7 +69,7 @@ Description=ETL-SQL Report Portal
 After=network.target
 
 [Service]
-ExecStart=/opt/etlsql/portal/ETL-SQL.ReportPortal
+ExecStart=/opt/etlsql/portal/ETL-SQL-Portal
 WorkingDirectory=/opt/etlsql/portal
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Restart=always

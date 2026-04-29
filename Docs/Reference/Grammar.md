@@ -254,6 +254,7 @@ Read-only. Available in any expression.
 | `@@LAST_EXEC_MS` | Milliseconds taken by the last statement |
 | `@@PEAK_MEMORY_MB` | Peak working-set memory in MB for the current process |
 | `@@SUBQUERY_CACHE_HITS` | Scalar subquery results retrieved from session cache |
+| `@@SUBQUERY_CACHE_MISSES` | Scalar subquery evaluations that required execution |
 | `@@SORT_SPILLS` | External sort runs that spilled to disk this session |
 
 ### 1.5 `INPUT` and `OUTPUT` Variables
@@ -1143,12 +1144,15 @@ DROP INDEX IF EXISTS Customers.IX_Customers_Email;
 
 > [!NOTE]
 > `CREATE OR ALTER` is not supported for indexes.
-
 ---
 
 ## 11. Execution Blocks
 
-### 11.1 `EXECUTE` — Database Remote Pushdown
+### 11.1 EXEC / EXECUTE — Execution & Pushdown
+
+`EXEC` and `EXECUTE` are functional synonyms in ETL-SQL. They are used for executing dynamic SQL strings, stored procedures, or pushing native SQL blocks directly to a remote connection.
+
+#### Native SQL Pushdown
 Pushes a SQL block to a remote connection in its native dialect.
 
 ```sql
@@ -1165,32 +1169,41 @@ END
 
 Parameters: `?` = sequential, `?1`/`?2` = indexed.
 
-String literal form (dynamic SQL):
+#### Dynamic SQL
+Executes a string as SQL. If `AT` is specified, it executes on the remote connection; otherwise, it executes locally as an ETL-SQL script.
+
 ```sql
-EXECUTE ('SELECT id, name FROM dbo.Employee WHERE status = ''Active''') AT m_db INTO #results;
+-- Execute a string as an ETL-SQL script (local)
+DECLARE @sql = 'SELECT * FROM #staging';
+EXEC (@sql) INTO #results;
+
+-- Push a dynamic string to a remote connection
+EXECUTE ('SELECT TOP 10 * FROM Users ORDER BY LastLogin DESC') AT mssql_conn INTO #top_users;
 ```
 
-Stored procedure call:
+#### Stored Procedure Call
 ```sql
 DECLARE @Count INT;
 EXECUTE prod_db.dbo.sp_GetCustomerCount @Status = 'Active', @Count = @Count OUTPUT;
+
+-- Shorthand
+EXEC ArchiveSales '2025-01-01';
 ```
 
-### 11.2 `EXECUTE` — Service Admin Block `[PROPOSED]`
-Sends a block of admin statements to a REPORTPORTAL or ORCHESTRATOR connection. All statements in the block target that service. See **Appendix B** (portal) and **Appendix C** (orchestrator) for valid statement types.
+#### Service Admin Blocks
+Sends a block of admin statements to a `REPORTPORTAL` or `ORCHESTRATOR` connection.
 
 ```sql
+-- Using EXECUTE
 EXECUTE portal BEGIN
     CREATE USER 'john.doe' WITH (EMAIL = 'john@company.com', ROLE = Viewer);
-    CREATE GROUP 'Finance';
-    ADD USER 'john.doe' TO GROUP 'Finance';
     GRANT READ ON FOLDER '/Finance' TO GROUP 'Finance';
 END
 
-EXECUTE orch BEGIN
+-- Using EXEC (Shorthand)
+EXEC orch BEGIN
     CREATE JOB 'NightlyArchive' ON SCHEDULE EVERY 1 DAY AT '02:00' AS
         RUN SCRIPT '/scripts/nightly.etlsql';
-    ENABLE JOB 'NightlyArchive';
 END
 ```
 
@@ -1222,18 +1235,8 @@ END
 RUN SCRIPT 'sub_process.etlsql' WITH (@batchId = 1234, @env = 'PROD');
 ```
 
-### 11.5 `EXEC` — Dynamic Local Execution
-```sql
--- Execute a string as an ETL-SQL script
-DECLARE @sql = 'SELECT * FROM #staging';
-EXEC (@sql) INTO #results;
 
--- Execute a named block locally
-EXEC (PRINT 'Hello'; SET @x = 1;);
 
--- Push a dynamic string to a remote connection
-EXEC ('SELECT TOP 10 * FROM Users ORDER BY LastLogin DESC') AT mssql_conn INTO #top_users;
-```
 
 ---
 

@@ -56,6 +56,9 @@ namespace ETL_SQL.Engine.Services
             set => System.Threading.Interlocked.Exchange(ref _subqueryCacheMisses, value);
         }
 
+        public int SubquerySpillCount { get; set; } = 0;
+        public long SubquerySpilledBytes { get; set; } = 0;
+
         public int SortSpillCount { get; set; } = 0;
 
         public bool IsProfiling { get; set; } = true;
@@ -75,6 +78,8 @@ namespace ETL_SQL.Engine.Services
             LastExecutionTimeMs = 0;
             SubqueryCacheHits = 0;
             SubqueryCacheMisses = 0;
+            SubquerySpillCount = 0;
+            SubquerySpilledBytes = 0;
             SortSpillCount = 0;
             ProfileMetrics.Clear();
             ExecutionTree.Clear();

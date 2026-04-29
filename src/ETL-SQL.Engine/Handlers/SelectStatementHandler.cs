@@ -127,6 +127,7 @@ namespace ETL_SQL.Engine.Handlers
             var effectiveBatches = streamingEngine.ReplayBatches(firstBatch, enumerator);
             var (finalColumns, colNames) = await metadataHelper.ExpandColumns(stmt, firstBatch?.ColumnNames ?? new List<string>());
 
+
             // 4. Strategy Selection
             bool hasAgg = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || stmt.GroupBy != null;
             bool hasWindow = stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression));
