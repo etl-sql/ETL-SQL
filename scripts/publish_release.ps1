@@ -15,7 +15,9 @@ $Projects = @(
     "..\src\ETL-SQL.TUI\ETL-SQL.TUI.csproj",
     "..\src\ETL-SQL.LanguageServer\ETL-SQL.LanguageServer.csproj",
     "..\src\ETL-SQL.ReportBuilder.CLI\ETL-SQL.ReportBuilder.CLI.csproj",
-    "..\src\ETL-SQL.ReportPlayer\ETL-SQL.ReportPlayer.csproj"
+    "..\src\ETL-SQL.ReportPlayer\ETL-SQL.ReportPlayer.csproj",
+    "..\src\ETL-SQL.ReportPortal\ETL-SQL.ReportPortal.csproj",
+    "..\src\ETL-SQL.Orchestrator.Service\ETL-SQL.Orchestrator.Service.csproj"
 )
 
 # 1. Cleanup
@@ -53,6 +55,7 @@ foreach ($Platform in $Platforms) {
 
     # 4. Copy Docs
     Copy-Item (Join-Path $DocsSource "QUICKSTART.txt") $DocFolder
+    Copy-Item (Join-Path $DocsSource "ReportPortal_Administrators_Guide.md") (Join-Path $DocFolder "ReportPortal_Guide.txt")
     Copy-Item (Join-Path $PSScriptRoot "..\CHANGELOG.md") (Join-Path $DocFolder "CHANGELOG.txt") # Rename to txt for portability
     
     # 5. Copy Curated Samples (Top 15)

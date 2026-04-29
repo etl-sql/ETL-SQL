@@ -1,0 +1,41 @@
+-- Subquery Cache Stress Test
+-- Verifies performance and stability with high-volume data generation and recurring subquery results
+
+-- Security overrides for high-volume data generation
+SET MAX_GENERATE_ROWS = 1000000;
+SET MAX_INTERNAL_OPERATIONS = 2000000;
+
+-- Create some test data
+-- Large table with 100,000 rows with CategoryIDs between 1 and 100
+GENERATE 100000 ROWS INTO #LargeTable AS (
+    CategoryID = 'RANDOM_INT(1, 100)',
+    Description = 'RANDOM_INT(1000, 9999)'
+);
+
+-- Small table with 100 distinct CategoryIDs
+GENERATE 100 ROWS INTO #SmallTable AS (
+    CategoryID = 'SEQUENCE(1, 1)',
+    CategoryName = 'RANDOM_INT(100, 999)'
+);
+
+SET PROFILING ON;
+
+-- Stress test subquery cache
+-- Each CategoryID in #LargeTable (1-100 repeating) will be looked up in #SmallTable.
+-- The first 100 rows will be misses, the remaining 99,900 rows should be hits.
+SELECT 
+    CategoryID,
+    Description,
+    (SELECT CategoryName FROM #SmallTable inner WHERE inner.CategoryID = src.CategoryID) AS CategoryName
+INTO #Result
+FROM #LargeTable src;
+
+PRINT 'Processed Rows: ' + CAST(@@ROWCOUNT AS VARCHAR);
+
+PRINT 'Hits: ' + CAST(@@SUBQUERY_CACHE_HITS AS NVARCHAR);
+PRINT 'Misses: ' + CAST(@@SUBQUERY_CACHE_MISSES AS NVARCHAR);
+
+-- Validate hit rate (should be 99,900 hits)
+ASSERT @@SUBQUERY_CACHE_HITS >= 99900, 'Subquery cache hit rate too low! Expected 99,900 hits, got ' + CAST(@@SUBQUERY_CACHE_HITS AS NVARCHAR);
+
+PRINT 'Subquery Stress Test Complete.';

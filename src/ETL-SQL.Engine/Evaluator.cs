@@ -565,7 +565,10 @@ namespace ETL_SQL.Engine
             }
             finally
             {
-                _subqueryCache.Clear();
+                if (CurrentRecursiveDepth == 0)
+                {
+                    _subqueryCache.Clear();
+                }
                 _variableScopeManager.PurgeSecretVariables();
                 if (TranCount > 0 && AutoRollbackOnFinish)
                 {

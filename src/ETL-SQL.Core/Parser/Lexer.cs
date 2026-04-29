@@ -175,6 +175,7 @@ namespace ETL_SQL.Core.Parser
             dict["BODY"]          = TokenType.BODY;
             dict["THEME"]         = TokenType.THEME;
             dict["NAVIGATION"]    = TokenType.NAVIGATION;
+            
 
             return dict;
         }

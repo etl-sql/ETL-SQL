@@ -11,7 +11,7 @@ graph TD
 ## Detailed Audit Log
 | Timestamp | Operation | Sources | Metadata |
 | :--- | :--- | :--- | :--- |
-| 2026-04-28 13:11:55 | SELECT INTO | (Direct Values) | **d**: Display name<br/>**owner**: SecurityTeam<br/>**author**: Kitchen Sink Test<br/>**version**: 1.0.0<br/>**description**: Validates diagnostics and metadata features<br/>**engine_version**: 0.6.0 |
-| 2026-04-28 13:11:55 | SELECT INTO | (Direct Values) | **d**: Internal user ID<br/>**PII**: true<br/>**author**: Kitchen Sink Test<br/>**version**: 1.0.0<br/>**description**: Validates diagnostics and metadata features<br/>**engine_version**: 0.6.0 |
-| 2026-04-28 13:11:55 | SELECT | (Direct Values) | **d**: Display name<br/>**owner**: SecurityTeam<br/>**author**: Kitchen Sink Test<br/>**version**: 1.0.0<br/>**description**: Validates diagnostics and metadata features<br/>**engine_version**: 0.6.0 |
-| 2026-04-28 13:11:55 | SELECT | (Direct Values) | **d**: Internal user ID<br/>**PII**: true<br/>**author**: Kitchen Sink Test<br/>**version**: 1.0.0<br/>**description**: Validates diagnostics and metadata features<br/>**engine_version**: 0.6.0 |
+| 2026-04-29 16:23:21 | SELECT INTO | (Direct Values) | **d**: Display name<br/>**owner**: SecurityTeam<br/>**author**: Kitchen Sink Test<br/>**version**: 1.0.0<br/>**description**: Validates diagnostics and metadata features<br/>**engine_version**: 0.6.0 |
+| 2026-04-29 16:23:21 | SELECT INTO | (Direct Values) | **d**: Internal user ID<br/>**PII**: true<br/>**author**: Kitchen Sink Test<br/>**version**: 1.0.0<br/>**description**: Validates diagnostics and metadata features<br/>**engine_version**: 0.6.0 |
+| 2026-04-29 16:23:21 | SELECT | (Direct Values) | **d**: Display name<br/>**owner**: SecurityTeam<br/>**author**: Kitchen Sink Test<br/>**version**: 1.0.0<br/>**description**: Validates diagnostics and metadata features<br/>**engine_version**: 0.6.0 |
+| 2026-04-29 16:23:21 | SELECT | (Direct Values) | **d**: Internal user ID<br/>**PII**: true<br/>**author**: Kitchen Sink Test<br/>**version**: 1.0.0<br/>**description**: Validates diagnostics and metadata features<br/>**engine_version**: 0.6.0 |

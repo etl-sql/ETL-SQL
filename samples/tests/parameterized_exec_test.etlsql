@@ -1,0 +1,34 @@
+-- Parameterized EXECUTE / Pushdown Test
+-- Verifies fixes for positional parameters in native blocks
+
+CREATE CONNECTION ds ON MOCKDB();
+
+DECLARE @id int = 1;
+DECLARE @name varchar(50) = 'John';
+
+PRINT 'Testing positional parameters (?) with EXECUTE block...';
+EXECUTE ds INTO #temp WITH(@id, @name)
+BEGIN
+    -- MOCKDB should receive the ? placeholders and parameters
+    SELECT * FROM ds.Employees WHERE EmployeeID = ? AND Name = ?;
+END;
+
+SELECT * FROM #temp;
+
+PRINT 'Testing indexed parameters (?1, ?2) with EXECUTE block...';
+EXECUTE ds INTO #temp2 WITH(@id, @name)
+BEGIN
+    SELECT * FROM ds.Employees WHERE EmployeeID = ?1 AND Name = ?2;
+END;
+
+SELECT * FROM #temp2;
+
+PRINT 'Testing dynamic EXECUTE with connection...';
+DECLARE @query varchar(2000);
+SET @query = 'SELECT * FROM ds.Employees WHERE EmployeeID = ' + CAST(@id AS STRING) + ' AND Name = ''' + @name + ''';';
+EXEC (@query) AT ds INTO #temp3;
+
+SELECT * FROM #temp3;
+
+PRINT 'Parameterized EXEC tests complete.';
+DROP CONNECTION ds;

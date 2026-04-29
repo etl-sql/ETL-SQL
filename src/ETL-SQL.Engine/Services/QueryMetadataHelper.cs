@@ -27,6 +27,8 @@ namespace ETL_SQL.Engine.Services
                 }
                 else final.Add(col);
             }
+
+
             var names = new List<string>();
             for (int i = 0; i < final.Count; i++)
             {

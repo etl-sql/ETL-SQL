@@ -16,20 +16,21 @@ namespace ETL_SQL.Core.Data
     /// </summary>
     public record SubqueryCacheKey(Statement Query, CompoundKey CapturedValues, SubqueryResultType ResultType = SubqueryResultType.Scalar)
     {
-        private static readonly StatementSqlEqualityComparer _stmtComparer = new();
+        private string? _sql;
+        private string Sql => _sql ??= Query.ToSql();
 
         public virtual bool Equals(SubqueryCacheKey? other)
         {
             if (other is null) return false;
             if (ReferenceEquals(this, other)) return true;
-            return ResultType == other.ResultType && _stmtComparer.Equals(Query, other.Query) && CapturedValues.Equals(other.CapturedValues);
+            return ResultType == other.ResultType && Sql == other.Sql && CapturedValues.Equals(other.CapturedValues);
         }
 
         public override int GetHashCode()
         {
             var hash = new HashCode();
             hash.Add(ResultType);
-            hash.Add(Query, _stmtComparer);
+            hash.Add(Sql);
             hash.Add(CapturedValues);
             return hash.ToHashCode();
         }

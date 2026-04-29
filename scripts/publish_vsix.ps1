@@ -34,8 +34,8 @@ New-Item -ItemType Directory -Path $BundledBinDir | Out-Null
 $ExeSuffix = if ($Platform -eq "win-x64") { ".exe" } else { "" }
 $BinaryList = @(
     "ETL-SQL$ExeSuffix",
-    "ETL-SQL.LanguageServer$ExeSuffix",
-    "etl-sql-report$ExeSuffix"
+    "ETL-SQL-LSP$ExeSuffix",
+    "ETL-SQL-Report$ExeSuffix"
 )
 
 foreach ($Bin in $BinaryList) {

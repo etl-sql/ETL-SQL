@@ -414,6 +414,7 @@ namespace ETL_SQL.Engine
                 _context.Telemetry.SubqueryCacheHits++;
                 return cachedResult.ScalarValue;
             }
+            
             _context.Telemetry.SubqueryCacheMisses++;
             
             _context.OuterRowStack.Push(context);

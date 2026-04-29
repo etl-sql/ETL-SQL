@@ -137,6 +137,10 @@ namespace ETL_SQL.Core.Parser
             if (token.Type >= TokenType.VISUAL && token.Type <= TokenType.COLOR)
                 return true;
 
+            // Joins and other common keywords are allowed as identifiers/aliases
+            if (token.Type >= TokenType.JOIN && token.Type <= TokenType.INTERSECT)
+                return true;
+
             // Symbols and operators should never be identifiers.
             if (token.Type >= TokenType.STAR && token.Type < TokenType.VISUAL) return false;
 
@@ -320,8 +324,6 @@ namespace ETL_SQL.Core.Parser
             var columns = new List<SelectColumn>();
             TableReference? intoTable = null;
 
-            try 
-            {
                 if (Match(TokenType.STAR))
                 {
                     columns.Add(new SelectColumn(new IdentifierExpression("*"), null, null));
@@ -339,16 +341,8 @@ namespace ETL_SQL.Core.Parser
                 {
                     intoTable = ParseTableReference(allowAlias: false);
                 }
-            }
-            catch (SyntaxException)
-            {
-                // Skip tokens until we find FROM or end of statement
-                while (Current.Type != TokenType.EOF && Current.Type != TokenType.FROM && Current.Type != TokenType.SEMICOLON)
-                {
-                    Advance();
-                }
-            }
-            // Riverside: added column list resilience to ensure FROM clause is parsed.
+            
+            // Riverside: removed swallowed catch block to expose errors.
             TableReference? fromTable = null;
             if (Match(TokenType.FROM))
             {
