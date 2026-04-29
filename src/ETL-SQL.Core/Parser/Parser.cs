@@ -137,9 +137,6 @@ namespace ETL_SQL.Core.Parser
             if (token.Type >= TokenType.VISUAL && token.Type <= TokenType.COLOR)
                 return true;
 
-            // Joins and other common keywords are allowed as identifiers/aliases
-            if (token.Type >= TokenType.JOIN && token.Type <= TokenType.INTERSECT)
-                return true;
 
             // Symbols and operators should never be identifiers.
             if (token.Type >= TokenType.STAR && token.Type < TokenType.VISUAL) return false;
@@ -149,7 +146,29 @@ namespace ETL_SQL.Core.Parser
             if (val.Equals("VALUE", StringComparison.OrdinalIgnoreCase)) return true;
             if (val.Equals("EMAIL", StringComparison.OrdinalIgnoreCase)) return true;
             
-            return !IsKeyword(val);
+            if (!IsKeyword(val)) return true;
+
+            // Context-aware keyword handling for common join/set keywords used as identifiers/aliases.
+            // This allows patterns like "FROM #SmallTable inner" while preserving "INNER JOIN".
+            if (token.Type >= TokenType.JOIN && token.Type <= TokenType.INTERSECT)
+            {
+                // JOIN, UNION, EXCEPT, INTERSECT are strictly reserved as clause starters.
+                if (token.Type == TokenType.JOIN || token.Type == TokenType.UNION || 
+                    token.Type == TokenType.EXCEPT || token.Type == TokenType.INTERSECT)
+                    return false;
+
+                // Join modifiers (INNER, LEFT, etc.) can be aliases if they are not followed 
+                // by tokens that unambiguously start a JOIN clause.
+                var next = Peek;
+                if (next.Type == TokenType.JOIN || next.Type == TokenType.HASH || 
+                    next.Type == TokenType.LOOP || next.Type == TokenType.MERGE || 
+                    next.Type == TokenType.APPLY || next.Type == TokenType.OUTER)
+                    return false;
+                
+                return true; 
+            }
+
+            return false;
         }
 
         public bool IsDataType(TokenType type) => DataTypeTokens.Contains(type);
