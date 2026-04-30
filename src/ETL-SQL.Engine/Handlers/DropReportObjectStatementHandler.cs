@@ -25,7 +25,7 @@ namespace ETL_SQL.Engine.Handlers
             switch (stmt.ObjectType)
             {
                 case ReportObjectType.Visual:
-                    context.ReportContext.VisualDefinitions.Remove(stmt.Name);
+                    removed = context.ReportContext.VisualDefinitions.Remove(stmt.Name);
                     break;
                 case ReportObjectType.Page:
                     removed = context.ReportContext.PageDefinitions.Remove(stmt.Name);

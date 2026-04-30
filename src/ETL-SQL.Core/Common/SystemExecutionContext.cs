@@ -88,6 +88,7 @@ namespace ETL_SQL.Core.Common
         public int SubquerySpillCount { get; set; }
         public long SubquerySpilledBytes { get; set; }
         public int SortSpillCount { get; set; }
+        public int FetchStatus { get; set; }
         public Action<DataTable>? OnResultSet { get; set; }
         
         public bool IsProfiling { get; set; }

@@ -145,7 +145,10 @@ namespace ETL_SQL.App
             services.AddSingleton<IConnector>(new SftpConnector(sftpHost, sftpUser, sftpPass));
             services.AddSingleton<IConnector>(new AzureBlobConnector(azureConn, azureContainer));
 
-            services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
+            services.AddSingleton<IConnectorRegistry>(sp => {
+                var connectors = sp.GetServices<IConnector>();
+                return new ConnectorRegistry(connectors);
+            });
             services.AddSingleton<ISystemResources, DefaultSystemResources>();
             services.AddSingleton<IBufferManager, BufferManager>();
             services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));

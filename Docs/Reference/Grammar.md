@@ -255,7 +255,10 @@ Read-only. Available in any expression.
 | `@@PEAK_MEMORY_MB` | Peak working-set memory in MB for the current process |
 | `@@SUBQUERY_CACHE_HITS` | Scalar subquery results retrieved from session cache |
 | `@@SUBQUERY_CACHE_MISSES` | Scalar subquery evaluations that required execution |
+| `@@SUBQUERY_SPILL_COUNT` | Number of subqueries that spilled to disk due to size |
+| `@@SUBQUERY_SPILLED_BYTES` | Total bytes spilled for subquery results |
 | `@@SORT_SPILLS` | External sort runs that spilled to disk this session |
+| `@@FETCH_STATUS` | Cursor/Foreach fetch status (0 = success, -1 = end of stream) |
 
 ### 1.5 `INPUT` and `OUTPUT` Variables
 Control how variables are passed to and from sub-scripts.
@@ -400,6 +403,9 @@ Override `appsettings.json` defaults for the current session.
 | `SET MAX_SESSION_SIZE = n` | 524,288,000 | Max session state in bytes before eviction (~500 MB) |
 | `SET SPILL_ENCRYPTION = ON/OFF` | ON | AES-256 encryption on spill files |
 | `SET SPILL_COMPRESSION = ON/OFF` | ON | Brotli compression on spill files |
+| `SET SPILL_FORMAT = 'AUTO'|'JSON'|'PARQUET'` | AUTO | Storage format for spilled engine data |
+| `SET PARALLEL_MAX_DEGREE = n` | 8 | Max concurrent branches inside a `PARALLEL` block |
+| `SET REGEX_TIMEOUT = n` | 1,000 | Milliseconds before a regex match is aborted |
 | `SET TELEMETRY = ON/OFF` | ON | Collect high-cost execution metrics |
 
 ---
@@ -1664,7 +1670,7 @@ CREATE VISUAL <name> AS <type> (
 );
 ```
 
-**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `TABLE`, `CARD`, `TEXT`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
+**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `RADAR`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `CANDLESTICK`, `MAP`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
 
 **FORMATTING operators:** `<`, `>`, `<=`, `>=`, `=`, `<>`
 
@@ -1673,7 +1679,25 @@ CREATE VISUAL <name> AS <type> (
 ON_CLICK  = DRILL_DOWN(Target = <VisualName>, Key = <column>)
 ON_CLICK  = NAVIGATE(<PageName>)
 ON_CHANGE = SET_PARAMETER(@paramName, <columnRef>)
+ON_CHANGE = REFRESH
 ON_CLICK  = REFRESH
+ON_CLICK  = RESET_PARAMETERS
+```
+
+#### A.3.1 Filter Visuals (`SLICER`, `DATEPICKER`, etc.)
+Filter visuals differ from charts in that they typically bind to a parameter via `ON_CHANGE`.
+
+```sql
+CREATE VISUAL RegionFilter AS SLICER (
+  SOURCE  = (SELECT DISTINCT region FROM #summary),
+  MAPPINGS (VALUE = region),
+  ACTIONS  (ON_CHANGE = SET_PARAMETER(@region, region))
+);
+
+CREATE VISUAL DateFilter AS DATEPICKER (
+  OPTIONS (TYPE = 'RANGE', FORMAT = 'yyyy-MM-dd'),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@date_range, value))
+);
 ```
 
 ### A.4 `CREATE PAGE`

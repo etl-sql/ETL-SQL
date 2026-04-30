@@ -30,7 +30,8 @@ namespace ETL_SQL.Core.Parser
             TokenType.TELEMETRY, TokenType.POSITION, TokenType.FORMAT, TokenType.TARGET,
             TokenType.TYPE, TokenType.VERSION, TokenType.SOURCE, TokenType.MATCHED,
             TokenType.TABLE, TokenType.TAG, TokenType.VALUE, TokenType.BITS, 
-            TokenType.ALGORITHM, TokenType.PASSPHRASE, TokenType.COMMENT, TokenType.DATE
+            TokenType.ALGORITHM, TokenType.PASSPHRASE, TokenType.COMMENT, TokenType.DATE,
+            TokenType.GETDATE, TokenType.RETURNS
         };
 
         private static readonly HashSet<TokenType> DataTypeTokens = new()
@@ -162,7 +163,10 @@ namespace ETL_SQL.Core.Parser
                 var next = Peek;
                 if (next.Type == TokenType.JOIN || next.Type == TokenType.HASH || 
                     next.Type == TokenType.LOOP || next.Type == TokenType.MERGE || 
-                    next.Type == TokenType.APPLY || next.Type == TokenType.OUTER)
+                    next.Type == TokenType.APPLY || next.Type == TokenType.OUTER ||
+                    next.Type == TokenType.INNER || next.Type == TokenType.LEFT ||
+                    next.Type == TokenType.RIGHT || next.Type == TokenType.FULL ||
+                    next.Type == TokenType.CROSS)
                     return false;
                 
                 return true; 

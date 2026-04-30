@@ -124,6 +124,7 @@ namespace ETL_SQL.Core
         int SubquerySpillCount { get; set; }
         long SubquerySpilledBytes { get; set; }
         int SortSpillCount { get; set; }
+        int FetchStatus { get; set; }
         bool IsProfiling { get; set; }
         List<ExecutionMetrics> ProfileMetrics { get; }
         Common.ExecutionTree ExecutionTree { get; }

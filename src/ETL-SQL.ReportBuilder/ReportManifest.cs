@@ -161,7 +161,7 @@ namespace ETL_SQL.ReportBuilder
 
         /// <summary>Flat options (title, legend, etc.).</summary>
         [JsonPropertyName("options")]
-        public Dictionary<string, string> Options { get; set; } = new();
+        public Dictionary<string, string> Options { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Set when data fetch fails; causes the runtime to render an error card.</summary>
         [JsonPropertyName("error")]
@@ -279,7 +279,7 @@ namespace ETL_SQL.ReportBuilder
 
         /// <summary>Slot letter → visual name.</summary>
         [JsonPropertyName("slotMap")]
-        public Dictionary<string, string> SlotMap { get; set; } = new();
+        public Dictionary<string, string> SlotMap { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

@@ -315,7 +315,11 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.CURRENT_TIMESTAMP) || _parser.Match(TokenType.CURRENT_DATE) || _parser.Match(TokenType.CURRENT_TIME) || _parser.Match(TokenType.SYSDATE))
             {
                 var t = _parser.Previous;
-                return new FunctionCallExpression(t.Value, new List<Expression>()) { Line = t.Line, Column = t.Column, EndLine = t.EndLine, EndColumn = t.EndColumn };
+                if (_parser.Match(TokenType.LPAREN))
+                {
+                    _parser.Consume(TokenType.RPAREN, $"Expected ')' after {t.Value}");
+                }
+                return new FunctionCallExpression(t.Value, new List<Expression>()) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
             if (_parser.Match(TokenType.CAST) || _parser.Match(TokenType.TRY_CAST))
             {

@@ -38,6 +38,7 @@ namespace ETL_SQL.Engine.Spill
         private string? _cachedRootPath;
         private byte[]? _cachedSessionKey;
         private string? _cachedSessionId;
+        private readonly SemaphoreSlim _initLock = new(1, 1);
         private readonly IExecutionContext _context;
         private bool _disposed;
 
@@ -71,27 +72,42 @@ namespace ETL_SQL.Engine.Spill
                 return;
             }
 
-            IsPersistent = _context.IsPersistentSession;
-            _cachedSessionId = _context.SessionId;
-
-            if (IsPersistent)
+            _initLock.Wait();
+            try
             {
-                // Stable path in the session directory
-                _cachedRootPath = Path.Combine(_context.SessionRoot, "spill");
+                if (_cachedRootPath != null &&
+                    IsPersistent == _context.IsPersistentSession &&
+                    (!IsPersistent || _cachedSessionId == _context.SessionId))
+                {
+                    return;
+                }
 
-                // Deterministic Key based on MachineKey + SessionId (Centralized)
-                _cachedSessionKey = _context.SessionStateManager.GetSpillKey(_context.SessionId ?? "DEFAULT");
+                IsPersistent = _context.IsPersistentSession;
+                _cachedSessionId = _context.SessionId;
+
+                if (IsPersistent)
+                {
+                    // Stable path in the session directory
+                    _cachedRootPath = Path.Combine(_context.SessionRoot, "spill");
+
+                    // Deterministic Key based on MachineKey + SessionId (Centralized)
+                    _cachedSessionKey = _context.SessionStateManager.GetSpillKey(_context.SessionId ?? "DEFAULT");
+                }
+                else if (_cachedRootPath == null || IsPersistent != _context.IsPersistentSession)
+                {
+                    // Disposable temp path
+                    _cachedRootPath = Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill", Guid.NewGuid().ToString("N"));
+                    _cachedSessionKey = RandomNumberGenerator.GetBytes(32);
+                }
+
+                if (!Directory.Exists(_cachedRootPath))
+                {
+                    Directory.CreateDirectory(_cachedRootPath!);
+                }
             }
-            else if (_cachedRootPath == null || IsPersistent != _context.IsPersistentSession)
+            finally
             {
-                // Disposable temp path
-                _cachedRootPath = Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill", Guid.NewGuid().ToString("N"));
-                _cachedSessionKey = RandomNumberGenerator.GetBytes(32);
-            }
-
-            if (!Directory.Exists(_cachedRootPath))
-            {
-                Directory.CreateDirectory(_cachedRootPath);
+                _initLock.Release();
             }
         }
 
@@ -142,7 +158,7 @@ namespace ETL_SQL.Engine.Spill
             {
                 try
                 {
-                    Directory.Delete(_cachedRootPath, true);
+                    Directory.Delete(_cachedRootPath!, true);
                 }
                 catch (Exception ex)
                 {
@@ -162,6 +178,7 @@ namespace ETL_SQL.Engine.Spill
             }
 
             if (_cachedSessionKey != null) System.Array.Clear(_cachedSessionKey);
+            _initLock.Dispose();
 
             _disposed = true;
             GC.SuppressFinalize(this);
@@ -187,27 +204,35 @@ namespace ETL_SQL.Engine.Spill
                 _context = context;
                 _fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
 
-                Stream current = _fileStream;
-
-                if (encrypt)
+                try
                 {
-                    using var aes = Aes.Create();
-                    aes.Key = key;
-                    aes.GenerateIV();
-                    _fileStream.Write(aes.IV, 0, aes.IV.Length); // Write IV to start of file
+                    Stream current = _fileStream;
 
-                    var encryptor = aes.CreateEncryptor(key, aes.IV);
-                    _cryptoStream = new CryptoStream(_fileStream, encryptor, CryptoStreamMode.Write);
-                    current = _cryptoStream;
+                    if (encrypt)
+                    {
+                        using var aes = Aes.Create();
+                        aes.Key = key;
+                        aes.GenerateIV();
+                        _fileStream.Write(aes.IV, 0, aes.IV.Length); // Write IV to start of file
+
+                        var encryptor = aes.CreateEncryptor(key, aes.IV);
+                        _cryptoStream = new CryptoStream(_fileStream, encryptor, CryptoStreamMode.Write);
+                        current = _cryptoStream;
+                    }
+
+                    if (compress)
+                    {
+                        _gzipStream = new GZipStream(current, CompressionLevel.Optimal);
+                        current = _gzipStream;
+                    }
+
+                    _writer = new StreamWriter(current, Encoding.UTF8);
                 }
-
-                if (compress)
+                catch
                 {
-                    _gzipStream = new GZipStream(current, CompressionLevel.Optimal);
-                    current = _gzipStream;
+                    _fileStream.Dispose();
+                    throw;
                 }
-
-                _writer = new StreamWriter(current, Encoding.UTF8);
             }
 
             public async Task WriteRowAsync(Row row)
@@ -257,26 +282,34 @@ namespace ETL_SQL.Engine.Spill
                 }
 
                 _fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                Stream current = _fileStream;
-
-                if (encrypt)
+                try
                 {
-                    byte[] iv = new byte[16];
-                    _fileStream.ReadExactly(iv, 0, 16);
+                    Stream current = _fileStream;
 
-                    using var aes = Aes.Create();
-                    var decryptor = aes.CreateDecryptor(key, iv);
-                    _cryptoStream = new CryptoStream(_fileStream, decryptor, CryptoStreamMode.Read);
-                    current = _cryptoStream;
+                    if (encrypt)
+                    {
+                        byte[] iv = new byte[16];
+                        _fileStream.ReadExactly(iv, 0, 16);
+
+                        using var aes = Aes.Create();
+                        var decryptor = aes.CreateDecryptor(key, iv);
+                        _cryptoStream = new CryptoStream(_fileStream, decryptor, CryptoStreamMode.Read);
+                        current = _cryptoStream;
+                    }
+
+                    if (compress)
+                    {
+                        _gzipStream = new GZipStream(current, CompressionMode.Decompress);
+                        current = _gzipStream;
+                    }
+
+                    _reader = new StreamReader(current, Encoding.UTF8);
                 }
-
-                if (compress)
+                catch
                 {
-                    _gzipStream = new GZipStream(current, CompressionMode.Decompress);
-                    current = _gzipStream;
+                    _fileStream.Dispose();
+                    throw;
                 }
-
-                _reader = new StreamReader(current, Encoding.UTF8);
             }
 
             public async Task<Row?> ReadRowAsync()
@@ -343,26 +376,34 @@ namespace ETL_SQL.Engine.Spill
                 _flushBatchSize = Math.Max(1, context.BatchSize);
                 _fileStream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None);
 
-                Stream current = _fileStream;
-
-                if (encrypt)
+                try
                 {
-                    using var aes = Aes.Create();
-                    aes.Key = key;
-                    aes.GenerateIV();
-                    _fileStream.Write(aes.IV, 0, aes.IV.Length);
-                    var encryptor = aes.CreateEncryptor(key, aes.IV);
-                    _cryptoStream = new CryptoStream(_fileStream, encryptor, CryptoStreamMode.Write);
-                    current = _cryptoStream;
-                }
+                    Stream current = _fileStream;
 
-                if (compress)
+                    if (encrypt)
+                    {
+                        using var aes = Aes.Create();
+                        aes.Key = key;
+                        aes.GenerateIV();
+                        _fileStream.Write(aes.IV, 0, aes.IV.Length);
+                        var encryptor = aes.CreateEncryptor(key, aes.IV);
+                        _cryptoStream = new CryptoStream(_fileStream, encryptor, CryptoStreamMode.Write);
+                        current = _cryptoStream;
+                    }
+
+                    if (compress)
+                    {
+                        _gzipStream = new GZipStream(current, CompressionLevel.Optimal);
+                        current = _gzipStream;
+                    }
+
+                    _payloadStream = current;
+                }
+                catch
                 {
-                    _gzipStream = new GZipStream(current, CompressionLevel.Optimal);
-                    current = _gzipStream;
+                    _fileStream.Dispose();
+                    throw;
                 }
-
-                _payloadStream = current;
             }
 
             public async Task WriteRowAsync(Row row)
@@ -567,25 +608,33 @@ namespace ETL_SQL.Engine.Spill
                 }
 
                 _fileStream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-                Stream current = _fileStream;
-
-                if (encrypt)
+                try
                 {
-                    byte[] iv = new byte[16];
-                    _fileStream.ReadExactly(iv, 0, 16);
-                    using var aes = Aes.Create();
-                    var decryptor = aes.CreateDecryptor(key, iv);
-                    _cryptoStream = new CryptoStream(_fileStream, decryptor, CryptoStreamMode.Read);
-                    current = _cryptoStream;
-                }
+                    Stream current = _fileStream;
 
-                if (compress)
+                    if (encrypt)
+                    {
+                        byte[] iv = new byte[16];
+                        _fileStream.ReadExactly(iv, 0, 16);
+                        using var aes = Aes.Create();
+                        var decryptor = aes.CreateDecryptor(key, iv);
+                        _cryptoStream = new CryptoStream(_fileStream, decryptor, CryptoStreamMode.Read);
+                        current = _cryptoStream;
+                    }
+
+                    if (compress)
+                    {
+                        _gzipStream = new GZipStream(current, CompressionMode.Decompress);
+                        current = _gzipStream;
+                    }
+
+                    _arrowReader = new ArrowStreamReader(current);
+                }
+                catch
                 {
-                    _gzipStream = new GZipStream(current, CompressionMode.Decompress);
-                    current = _gzipStream;
+                    _fileStream.Dispose();
+                    throw;
                 }
-
-                _arrowReader = new ArrowStreamReader(current);
             }
 
             public async Task<Row?> ReadRowAsync()

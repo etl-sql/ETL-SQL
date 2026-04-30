@@ -125,9 +125,7 @@ namespace ETL_SQL.Data
         public string ConnectorType => "INMEMORY";
         private readonly List<string> _columnOrder = new();
         public Dictionary<string, ColumnDefinition> Schema { get; } = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, Dictionary<object, List<Row>>> _indexes = new(StringComparer.OrdinalIgnoreCase);
-        private readonly Dictionary<string, List<string>> _indexColumnMap = new(StringComparer.OrdinalIgnoreCase);
-        private readonly HashSet<string> _uniqueColumns = new(StringComparer.OrdinalIgnoreCase);
+        private readonly InMemoryTableIndex _index = new();
         public List<TableConstraint> TableConstraints { get; private set; } = new();
         public IDataValidator? Validator { get; set; }
 
@@ -162,7 +160,7 @@ namespace ETL_SQL.Data
                 // Simple estimation: 256 bytes per row (overhead + pointers)
                 // Plus index overhead
                 long batchBytes = _batches.Sum(b => (long)b.Rows.Count * 256);
-                long indexBytes = _indexes.Sum(idx => (long)idx.Value.Count * 128);
+                long indexBytes = _index.Count * 128L; // Simplified
                 // Spilled chunks are ON DISK, so they don't count towards CURRENT RAM USAGE.
                 // This is critical for BufferManager to know how much RAM is actually reclaimable.
                 return batchBytes + indexBytes;
@@ -176,7 +174,7 @@ namespace ETL_SQL.Data
             await _lock.WaitAsync();
             try
             {
-                if (_batches.Count == 0 && _indexes.Count == 0) return false;
+                if (_batches.Count == 0 && _index.Count == 0) return false;
                 if (ExecutionContext == null) return false;
 
                 // Move all batches to spill store
@@ -192,7 +190,7 @@ namespace ETL_SQL.Data
                 }
 
                 _batches.Clear();
-                foreach (var index in _indexes.Values) index.Clear();
+                _index.Clear();
                 
                 return true;
             }
@@ -236,7 +234,7 @@ namespace ETL_SQL.Data
                 // 4. Column-level Unique
                 if (col.IsUnique)
                 {
-                    if (IsDuplicate(new List<string> { col.ColumnName }, row))
+                    if (_index.IsDuplicate(new List<string> { col.ColumnName }, row, _batches))
                         throw new ExecutionException($"Unique constraint violation on column {col.ColumnName} (value: {val})");
                 }
             }
@@ -265,65 +263,22 @@ namespace ETL_SQL.Data
                         if (val == null || val == DBNull.Value)
                             throw new ExecutionException($"Primary key column {colName} cannot be null.");
                     }
-                    if (IsDuplicate(pk.Columns, row))
+                    if (_index.IsDuplicate(pk.Columns, row, _batches))
                         throw new ExecutionException($"Primary key violation: {tc.ConstraintName ?? "unnamed"}");
                 }
                 else if (tc is TableUniqueConstraint uk)
                 {
-                    if (IsDuplicate(uk.Columns, row))
+                    if (_index.IsDuplicate(uk.Columns, row, _batches))
                         throw new ExecutionException($"Unique constraint violation: {tc.ConstraintName ?? "unnamed"}");
                 }
             }
-        }
-
-        private bool IsDuplicate(List<string> columns, Row row)
-        {
-            var indexKey = GetIndexKey(columns);
-            if (_indexes.TryGetValue(indexKey, out var index))
-            {
-                var val = GetRowKey(columns, row);
-                if (val != null) return index.ContainsKey(val);
-            }
-
-            foreach (var batch in _batches)
-            {
-                foreach (var r in batch.Rows)
-                {
-                    if (r == row) continue;
-                    bool allMatch = true;
-                    foreach (var col in columns)
-                    {
-                        if (!object.Equals(r[col], row[col])) { allMatch = false; break; }
-                    }
-                    if (allMatch) return true;
-                }
-            }
-            return false;
-        }
-
-        private string GetIndexKey(IEnumerable<string> columns) => string.Join(",", columns.OrderBy(c => c, StringComparer.OrdinalIgnoreCase));
-
-        private object? GetRowKey(IEnumerable<string> columns, Row row)
-        {
-            var sortedCols = columns.OrderBy(c => c, StringComparer.OrdinalIgnoreCase).ToList();
-            if (sortedCols.Count == 1) return row[sortedCols[0]];
-            
-            var values = new object?[sortedCols.Count];
-            for (int i = 0; i < sortedCols.Count; i++)
-            {
-                values[i] = row[sortedCols[i]];
-                if (values[i] == null || values[i] == DBNull.Value) return null; // Composite unique keys usually ignore rows with any NULLs depending on dialect, but here we treat it as "cannot be indexed" for uniqueness if any part is null if we want to follow strict SQL. But for PK it's definitely null.
-            }
-            return new CompositeKey(values);
         }
 
         public void SetSchema(IEnumerable<ColumnDefinition> columns, IEnumerable<TableConstraint>? tableConstraints = null)
         {
             Schema.Clear();
             _columnOrder.Clear();
-            _indexes.Clear();
-            _indexColumnMap.Clear();
-            _uniqueColumns.Clear();
+            _index.Clear();
             TableConstraints.Clear();
 
             foreach (var col in columns)
@@ -333,12 +288,10 @@ namespace ETL_SQL.Data
                 if (col.IsPrimaryKey)
                 {
                     col.IsNullable = false;
-                    _uniqueColumns.Add(col.ColumnName);
                     CreateIndex(col.ColumnName, true);
                 }
                 else if (col.IsUnique)
                 {
-                    _uniqueColumns.Add(col.ColumnName);
                     CreateIndex(col.ColumnName, true);
                 }
             }
@@ -384,8 +337,7 @@ namespace ETL_SQL.Data
             if (!Schema.Remove(columnName))
                 throw new ExecutionException($"Column {columnName} not found.");
             _columnOrder.RemoveAll(c => c.Equals(columnName, StringComparison.OrdinalIgnoreCase));
-            _indexes.Remove(columnName);
-            _uniqueColumns.Remove(columnName);
+            _index.Remove(columnName);
 
             foreach (var batch in _batches)
             {
@@ -415,16 +367,7 @@ namespace ETL_SQL.Data
                 }
             }
 
-            if (_indexes.TryGetValue(oldName, out var index))
-            {
-                _indexes.Remove(oldName);
-                _indexes[newName] = index;
-            }
-            if (_uniqueColumns.Contains(oldName))
-            {
-                _uniqueColumns.Remove(oldName);
-                _uniqueColumns.Add(newName);
-            }
+            _index.RenameIndex(oldName, newName);
 
             foreach (var batch in _batches)
             {
@@ -441,7 +384,7 @@ namespace ETL_SQL.Data
                 _batches.Clear();
                 _totalRowCount = 0;
                 // Clear existing index data while preserving the index definitions
-                foreach (var index in _indexes.Values) index.Clear();
+                _index.Clear();
 
                 if (ExecutionContext != null)
                 {
@@ -466,69 +409,17 @@ namespace ETL_SQL.Data
         public void CreateIndex(IEnumerable<string> columns, bool isUnique = false)
         {
             var cols = columns.ToList();
-            var indexKey = GetIndexKey(cols);
-            _indexColumnMap[indexKey] = cols;
-            if (isUnique) _uniqueColumns.Add(indexKey);
-            RebuildIndex(cols);
-        }
-
-        private void RebuildIndex(string columnName) => RebuildIndex(new[] { columnName });
-
-        private void RebuildIndex(IEnumerable<string> columns)
-        {
-            var cols = columns.ToList();
-            var indexKey = GetIndexKey(cols);
-            var index = new Dictionary<object, List<Row>>();
-            _indexes[indexKey] = index;
-            _indexColumnMap[indexKey] = cols;
-            foreach (var batch in _batches)
-            {
-                UpdateIndexWithBatch(cols, batch);
-            }
-        }
-
-        private void UpdateIndexWithBatch(string indexKey, DataTable batch)
-        {
-            if (!_indexColumnMap.TryGetValue(indexKey, out var columns)) return;
-            UpdateIndexWithBatch(columns, batch);
-        }
-
-        private void UpdateIndexWithBatch(IEnumerable<string> columns, DataTable batch)
-        {
-            var cols = columns.ToList();
-            var indexKey = GetIndexKey(cols);
-            if (!_indexes.TryGetValue(indexKey, out var index)) return;
-            var isUnique = _uniqueColumns.Contains(indexKey);
-
-            foreach (var row in batch.Rows)
-            {
-                var val = GetRowKey(cols, row);
-                if (val == null) continue;
-
-                if (isUnique && index.ContainsKey(val))
-                    throw new ExecutionException($"Unique index violation on columns ({string.Join(",", cols)}) for value {val}");
-
-                if (!index.TryGetValue(val, out var rows))
-                {
-                    rows = new List<Row>();
-                    index[val] = rows;
-                }
-                rows.Add(row);
-            }
+            var indexKey = _index.GetIndexKey(cols);
+            _index.AddIndexDefinition(indexKey, cols, isUnique);
+            _index.RebuildIndex(cols, _batches);
         }
 
         public List<Row>? Lookup(string columnName, object? value)
         {
-            if (value == null) return new List<Row>(); 
-            if (_indexes.TryGetValue(columnName, out var index))
-            {
-                if (index.TryGetValue(value, out var rows)) return rows;
-                return new List<Row>(); 
-            }
-            return null; 
+            return _index.Lookup(columnName, value);
         }
 
-        public bool HasIndex(string columnName) => _indexes.ContainsKey(columnName);
+        public bool HasIndex(string columnName) => _index.HasIndex(columnName);
 
         public IDataSource WithTable(string tableName) => this;
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
@@ -621,11 +512,12 @@ namespace ETL_SQL.Data
                     _batches.Add(b);
                     _totalRowCount += b.Rows.Count;
                     
-                    if (_indexes.Count > 0)
+                    if (_index.Count > 0)
                     {
-                        foreach (var col in _indexes.Keys.ToList())
+                        foreach (var col in _index.Keys.ToList())
                         {
-                            UpdateIndexWithBatch(col, b);
+                            if (_index.TryGetColumns(col, out var cols))
+                                _index.UpdateIndexWithBatch(cols!, b);
                         }
                     }
                 }
@@ -644,9 +536,9 @@ namespace ETL_SQL.Data
             await _lock.WaitAsync();
             try
             {
-                if (_indexes.TryGetValue(indexName, out var index))
+                if (_index.TryGetIndex(indexName, out var index))
                 {
-                    return index.ContainsKey(key);
+                    return index!.ContainsKey(key);
                 }
 
                 // If no index, fallback to linear scan
@@ -693,10 +585,16 @@ namespace ETL_SQL.Data
                         }
                     }
                 }
-                if (deleted.Count > 0 && _indexes.Count > 0)
+                if (deleted.Count > 0 && _index.Count > 0)
                 {
                     // Simplest to rebuild indexes for now if rows were deleted
-                    foreach(var col in _indexes.Keys.ToList()) RebuildIndex(col);
+                    foreach(var col in _index.Keys.ToList()) 
+                    {
+                        if (_index.TryGetColumns(col, out var cols))
+                        {
+                            _index.RebuildIndex(cols!, _batches);
+                        }
+                    }
                 }
                 return deleted;
             }
@@ -714,19 +612,32 @@ namespace ETL_SQL.Data
                 var updated = new List<(Row Before, Row After)>();
                 foreach (var batch in _batches)
                 {
-                    foreach (var row in batch.Rows)
+                    for (int i = 0; i < batch.Rows.Count; i++)
                     {
+                        var row = batch.Rows[i];
                         if (await predicate(row))
                         {
                             var before = row.Clone();
-                            await updateAction(row);
-                            updated.Add((before, row));
+                            var after = row.Clone();
+                            
+                            // Perform update on the clone to ensure atomicity
+                            await updateAction(after);
+                            
+                            // Swap the row in the batch
+                            batch.Rows[i] = after;
+                            updated.Add((before, after));
                         }
                     }
                 }
-                if (updated.Count > 0 && _indexes.Count > 0)
+                if (updated.Count > 0 && _index.Count > 0)
                 {
-                    foreach(var col in _indexes.Keys.ToList()) RebuildIndex(col);
+                    foreach(var col in _index.Keys.ToList()) 
+                    {
+                        if (_index.TryGetColumns(col, out var cols))
+                        {
+                            _index.RebuildIndex(cols!, _batches);
+                        }
+                    }
                 }
                 return updated;
             }
@@ -749,9 +660,15 @@ namespace ETL_SQL.Data
             {
                 _batches.Clear();
                 _batches.AddRange(s);
-                if (_indexes.Count > 0)
+                if (_index.Count > 0)
                 {
-                    foreach (var col in _indexes.Keys.ToList()) RebuildIndex(col);
+                    foreach (var col in _index.Keys.ToList()) 
+                    {
+                        if (_index.TryGetColumns(col, out var cols))
+                        {
+                            _index.RebuildIndex(cols!, _batches);
+                        }
+                    }
                 }
             }
         }
@@ -759,8 +676,7 @@ namespace ETL_SQL.Data
         public async ValueTask DisposeAsync()
         {
             _batches.Clear();
-            _indexes.Clear();
-            _indexColumnMap.Clear();
+            _index.Clear();
 
             if (ExecutionContext != null && !ExecutionContext.IsPersistentSession)
             {
@@ -799,7 +715,7 @@ namespace ETL_SQL.Data
                     _spillChunkNames.Add(chunkName);
                 }
                 _batches.Clear();
-                _indexes.Clear();
+                _index.Clear();
             }
             finally { _lock.Release(); }
         }

@@ -624,6 +624,7 @@ namespace ETL_SQL.Engine
             if (v.Name.Equals("@@SUBQUERY_CACHE_HITS", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.SubqueryCacheHits;
             if (v.Name.Equals("@@SUBQUERY_CACHE_MISSES", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.SubqueryCacheMisses;
             if (v.Name.Equals("@@SORT_SPILLS", StringComparison.OrdinalIgnoreCase)) return (long)_context.Telemetry.SortSpillCount;
+            if (v.Name.Equals("@@FETCH_STATUS", StringComparison.OrdinalIgnoreCase)) return _context.Telemetry.FetchStatus;
 
 
             

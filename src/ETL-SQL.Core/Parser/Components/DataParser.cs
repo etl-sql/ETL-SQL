@@ -559,6 +559,8 @@ namespace ETL_SQL.Core.Parser.Components
         {
             if (!Match(TokenType.INSERT) && !Match(TokenType.LOAD))
                 throw new SyntaxException("Expected INSERT or LOAD after BULK", _parser.Current.Line, _parser.Current.Column);
+            
+            Match(TokenType.INTO);
             var targetTable = ParseTableReference(false);
             List<string>? columns = null;
             if (Match(TokenType.LPAREN))

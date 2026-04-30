@@ -33,7 +33,9 @@ namespace ETL_SQL.Connectors.Postgres
             "ISNULL",  // Postgres uses COALESCE or IS NULL
             "CONVERT", // Postgres uses CAST
             "ROWNUM",  // Oracle-specific
-            "PERCENT"  // T-SQL TOP PERCENT
+            "PERCENT", // T-SQL TOP PERCENT
+            "GETDATE", // T-SQL specific
+            "SYSDATE"  // Oracle specific
         };
 
         /// <summary>Returns PostgreSQL dialect keywords (additions only — baseline is in LanguageMetadata).</summary>

@@ -44,15 +44,17 @@ namespace ETL_SQL.Engine.Handlers
             // 3. Fallback: Full In-Memory Streaming Iteration (for non-pushdown sources or collections)
             await foreach (var row in context.EvaluateStream(stmt.ListExpression, new Row()))
             {
+                context.Telemetry.FetchStatus = 0;
                 ProcessRow(row, iterVarName, stmt, context);
                 
                 try
                 {
                     await context.EvaluateStatement(stmt.Body);
                 }
-                catch (BreakException) { break; }
+                catch (BreakException) { context.Telemetry.FetchStatus = -1; break; }
                 catch (ContinueException) { continue; }
             }
+            context.Telemetry.FetchStatus = -1;
         }
 
         private async Task<bool> ShouldUseSafePagedPath(ForeachStatement stmt, IExecutionContext context)
@@ -100,16 +102,18 @@ namespace ETL_SQL.Engine.Handlers
                 {
                     foreach (var row in batch.Rows)
                     {
+                        context.Telemetry.FetchStatus = 0;
                         ProcessRow(row, iterVarName, stmt, context);
                         
                         try
                         {
                             await context.EvaluateStatement(stmt.Body);
                         }
-                        catch (BreakException) { return true; }
+                        catch (BreakException) { context.Telemetry.FetchStatus = -1; return true; }
                         catch (ContinueException) { continue; }
                     }
                 }
+                context.Telemetry.FetchStatus = -1;
             }
 
             return true;
@@ -168,16 +172,18 @@ namespace ETL_SQL.Engine.Handlers
                     foreach (var row in batch.Rows)
                     {
                         rowsInPage++;
+                        context.Telemetry.FetchStatus = 0;
                         ProcessRow(row, iterVarName, stmt, context);
                         
                         try
                         {
                             await context.EvaluateStatement(stmt.Body);
                         }
-                        catch (BreakException) { hasMore = false; goto finish; }
+                        catch (BreakException) { context.Telemetry.FetchStatus = -1; hasMore = false; goto finish; }
                         catch (ContinueException) { continue; }
                     }
                 }
+                context.Telemetry.FetchStatus = rowsInPage < pageSize ? -1 : 0;
 
                 if (rowsInPage < pageSize) break;
                 offset += pageSize;

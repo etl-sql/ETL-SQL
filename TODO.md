@@ -155,9 +155,34 @@
    - [x] **Check documentation** - Standardized names and added metrics.
    - [x] **Check tests** - Resolved BulkInsertErrorTests regression.
    - [x] **Check samples** - Completed (verified with 95 scripts).
-- [x] **Check for performance issues** - Fixed ArrowSpillWriter bottleneck.
-- [x] **Check for stability issues** - 1132 unit tests passing.
-- [x] **Check for any regressions** - 1132 tests passing. Full suite validated.
-   - [ ] **Is this code maintainable and meets SRP?**  If it could use a refractor add it to the TODO.md as a new task.
-   - [ ] **Linter messages** - Are we missing a linter message to prevent the user from having an error at runtime?
-- [ ] **Code as whole** - Is the code well organized?  Does it meet SRP?  Are there any comments or documentation missing?  Are the variable and function names clear?  Can this code be refactored to be more efficient or readable?  Is there any duplicated code?  Any findings record them as TODO.md items.
+    - [x] **Check for performance issues** - Fixed ArrowSpillWriter bottleneck.
+    - [x] **Check for stability issues** - 1132 unit tests passing.
+    - [x] **Check for any regressions** - 1132 tests passing. Full suite validated.
+    - [ ] **Final Audit & Stability Refactor** — Comprehensive cleanup and stabilization phase. Focuses on SRP compliance, security linter guardrails, and refactoring "God Objects" to prevent maintenance fatigue and IDE instability.
+        - **Phase 1 — StandardFunctions Refactor (SRP)**
+            - [x] `ETL-SQL.Engine/Functions/`: Split `StandardFunctions.cs` into partial classes: `.String.cs`, `.Math.cs`, `.Date.cs`, `.Logic.cs`, `.System.cs`.
+            - [x] Verify `IFunctionRegistry` registrations match baseline exactly.
+            - [x] **Verification**: Run `dotnet test` (Core/Engine suite). Must be 100% pass.
+            - [x] **Verification**: Run `/scripts/Test-AllSamples.ps1`. Must be 100% pass (excluding environmental skips).
+        - **Phase 2 — EChartsRenderer Refactor (Strategy Pattern)**
+            - [x] `ETL-SQL.ReportBuilder/Renderers/`: Create specialized renderers (`Cartesian`, `Circular`, `Hierarchical`, `Statistical`, `Specialized`, `Overlay`).
+            - [x] `EChartsRenderer.cs`: Refactor to a dispatcher/factory pattern. Ensure zero change in output JSON structure.
+            - [x] **Verification**: Run `dotnet test`. Must be 100% pass.
+            - [x] **Verification**: Run `/scripts/Test-AllSamples.ps1`. Must be 100% pass (excluding pre-existing script errors).
+        - [x] **Phase 3 — Linter & Security Guardrails**
+            - [x] `ETL-SQL.Core/Linting/Rules/AbsolutePathRule.cs`: Implement warning for relative paths in I/O operations (FROM, INTO, EXECUTE, etc.).
+            - [x] `ETL-SQL.Core/Linting/Rules/FileSystemSecurityRule.cs`: Implement warning for system directory access (`C:\Windows`, `/etc`) and direct root access.
+            - [x] `ETL-SQL.Connectors/Postgres/PostgresSyntax.cs`: Add `GETDATE` and `SYSDATE` to `Exclusions`.
+            - [x] **Verification**: Run `dotnet test`. Must be 100% pass.
+            - [x] **Verification**: Run `/scripts/Test-AllSamples.ps1`. Must be 100% pass.
+        - **Phase 4 — Core Data & Stability Audit**
+            - [x] `ETL-SQL.Core/Data/DataSources.cs`: Extract `InMemoryTableIndex` from `InMemoryDataSource` to separate concern.
+            - [x] Audit `InMemoryDataSource.UpdateRows` and `DeleteRows` for atomicity/null safety (potential crash prevention).
+            - [x] Audit `SpillStore.cs` for file handle leaks or race conditions during rapid spill/read cycles.
+            - [x] **Verification**: Run `dotnet test`. Must be 100% pass.
+            - [x] **Verification**: Run `/scripts/Test-AllSamples.ps1`. Must be 100% pass.
+        - [x] **Phase 5 — Help System & Final Polish**
+            - [x] `ETL-SQL.Core/Metadata/LanguageHelpRegistry.cs`: Comprehensive audit. Ensure all new statements and functions have accurate help signatures.
+            - [x] Standardize Visual option naming (consistent case-sensitivity handling in `VisualBuilder` vs `EChartsRenderer`).
+            - [x] Update Grammar.md with any missing syntax including all help commands, charts, etc.
+            - [x] **Final Verification**: Run full regression suite. 100% pass required.

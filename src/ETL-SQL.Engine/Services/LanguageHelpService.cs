@@ -12,15 +12,18 @@ namespace ETL_SQL.Engine.Services
             
             registry.RegisterHelp("REPORT", 
                 "Syntax: CREATE VISUAL <name> AS <TYPE> ( ... body ... )\n" +
+                "Visual Types: BAR, LINE, PIE, DONUT, SCATTER, BUBBLE, RADAR, BOXPLOT, TREEMAP, HEATMAP, GAUGE, FUNNEL, CANDLESTICK, MAP, TABLE, CARD, TEXT, IMAGE, SLICER, DATEPICKER, SLIDER, SEARCH, MULTISELECT.\n" +
                 "Body Properties:\n" +
                 "  - SOURCE:   The data source (e.g., #temp, @var, or &dataset).\n" +
                 "  - TITLE:    Visual title (supports Markdown: 'MD:Title').\n" +
                 "  - MAPPINGS: Maps columns to visual slots (X, Y, COLOR, SIZE).\n" +
-                "  - OPTIONS:  Visual-specific settings (MIN, MAX, LEGEND, TOOLBOX).\n" +
+                "  - OPTIONS:  Visual-specific settings (MIN, MAX, LEGEND, TOOLBOX, STACKED, SMOOTH).\n" +
                 "  - STYLE:    Inline styles or reference to a CREATE STYLE object.\n" +
                 "  - ACTIONS:  Define interactivity (ON_CLICK, ON_CHANGE).\n" +
-                "  - OVERLAYS: Add trend lines or constant goals.\n" +
-                "  - SUMMARY:  Add summary statistics to tables.", "VISUAL");
+                "  - OVERLAYS: Add trend lines (LINEAR, EXP, LOG) or constant GOAL lines.\n" +
+                "  - SERIES:   Define column-specific visual types (e.g., BAR col1, LINE col2).\n" +
+                "  - FORMATTING: Conditional formatting (Condition THEN 'color').\n" +
+                "  - SUMMARY:  Add summary statistics to tables (GRAND_TOTAL, SUMMARIZE_COLUMN).", "VISUAL");
 
             registry.RegisterHelp("REPORT", 
                 "Syntax: CREATE DATASET #name [REFRESH EVERY 'time'] [TTL 'time'] [ENCRYPT = MACHINE|PASSWORD|KEYFILE] AS (SELECT ...)\n" +
@@ -59,7 +62,7 @@ namespace ETL_SQL.Engine.Services
             registry.RegisterHelp("TRY", "Syntax: BEGIN TRY ... END TRY BEGIN CATCH ... END CATCH;\nError handling block.");
             registry.RegisterHelp("TRANSACTION", "Syntax: BEGIN TRANSACTION; COMMIT; ROLLBACK;\nControls atomic data operations. Use @TranCount to check nesting.");
             registry.RegisterHelp("PARALLEL", "Syntax: PARALLEL BEGIN ... END;\nRuns enclosed statements concurrently using a thread pool.");
-            registry.RegisterHelp("BULK INSERT", "Syntax: BULK INSERT <TARGET> FROM <FILE_PATH> WITH ( ... );\nHigh-performance file loading.");
+            registry.RegisterHelp("BULK INSERT", "Syntax: BULK INSERT <TARGET> FROM <FILE_PATH> WITH ( BATCH_SIZE=n, MAX_ERRORS=n, ERROR_LOG_PATH='path', FIRST_ROW=n, LAST_ROW=n );\nHigh-performance file loading into remote or local tables.");
             
             // ── CORE STATEMENTS ──────────────────────────────────────────────
             registry.RegisterHelp("SELECT", "Syntax: SELECT [TOP n] <cols> [INTO <table>] FROM <src> [JOIN...] [WHERE...] [GROUP BY...] [ORDER BY...]\nQueries data from connections or #temp tables.");
@@ -144,7 +147,10 @@ namespace ETL_SQL.Engine.Services
 
             registry.RegisterHelp("VARIABLES",
                 "System Variables (@@):\n" +
-                "  @@VERSION, @@TRANCOUNT, @@ROWCOUNT, @@RESULTSETS, @@ERROR.\n" +
+                "  @@VERSION, @@TRANCOUNT, @@ROWCOUNT, @@ERROR, @@LAST_EXEC_MS, @@PEAK_MEMORY_MB.\n" +
+                "Telemetry Variables:\n" +
+                "  @@SUBQUERY_CACHE_HITS, @@SUBQUERY_CACHE_MISSES, @@TOTAL_SPILLED_BYTES,\n" +
+                "  @@SUBQUERY_SPILL_COUNT, @@SORT_SPILLS, @@AGGREGATE_GROUPS_COUNT.\n" +
                 "Session Variables (@):\n" +
                 "  Defined via DECLARE @varname. View all with SHOW VARIABLES.");
 
@@ -159,7 +165,9 @@ namespace ETL_SQL.Engine.Services
                 "  SET WHAT_IF ON|OFF - Dry run mode.\n" +
                 "  SET BATCHSIZE = n - Stream batch size.\n" +
                 "  SET SHOW_PASSWORD ON|OFF - Mask passwords.\n" +
-                "  SET TEMPLATE_PATH = 'path' - Dashboard templates.");
+                "  SET TEMPLATE_PATH = 'path' - Dashboard templates.\n" +
+                "  SET SPILL_COMPRESSION ON|OFF - Compress data spilled to disk.\n" +
+                "  SET PARALLEL_MAX_DEGREE = n - Thread pool limit.");
 
 
             // ── CONNECTORS ───────────────────────────────────────────────────

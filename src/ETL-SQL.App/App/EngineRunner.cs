@@ -24,6 +24,7 @@ namespace ETL_SQL.App
         {
             var logger = Program.ServiceProvider.GetRequiredService<ILogger>();
             var loggerService = Program.ServiceProvider.GetRequiredService<ILoggerService>();
+            var registry = Program.ServiceProvider.GetRequiredService<IConnectorRegistry>();
 
             // 1. Handle non-script commands first
             if (ctx.Command == "encrypt")
@@ -153,6 +154,15 @@ namespace ETL_SQL.App
 
                 var lintResults = await linter.AnalyzeAsync(script, new DefaultLintContext { DocumentUri = ctx.ScriptFile.FullName });
                 lintTime.Stop();
+
+                var lintWarnings = lintResults.Where(r => r.Severity == LintSeverity.Warning).ToList();
+                if (lintWarnings.Any() && !ctx.IsSilentMode)
+                {
+                    foreach (var w in lintWarnings)
+                    {
+                        logger.WriteLine($"  - Linter Warning: {w.Message} (Line {w.LineNumber}, Col {w.ColumnNumber})", ConsoleColor.Yellow);
+                    }
+                }
 
                 var lintErrors = lintResults.Where(r => r.Severity == LintSeverity.Error).ToList();
                 if (lintErrors.Any())

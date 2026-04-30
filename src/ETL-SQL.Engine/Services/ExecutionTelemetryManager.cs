@@ -60,6 +60,7 @@ namespace ETL_SQL.Engine.Services
         public long SubquerySpilledBytes { get; set; } = 0;
 
         public int SortSpillCount { get; set; } = 0;
+        public int FetchStatus { get; set; } = 0;
 
         public bool IsProfiling { get; set; } = true;
 
@@ -81,6 +82,7 @@ namespace ETL_SQL.Engine.Services
             SubquerySpillCount = 0;
             SubquerySpilledBytes = 0;
             SortSpillCount = 0;
+            FetchStatus = 0;
             ProfileMetrics.Clear();
             ExecutionTree.Clear();
         }
