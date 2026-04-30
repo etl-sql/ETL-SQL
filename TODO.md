@@ -81,108 +81,63 @@
         - [ ] `Docs/Reference/Data_Connectors.md`: **Data Warehouse via ODBC** section with connection string examples for Redshift, Databricks, Synapse, Trino, Dremio. Note which platforms need native connectors vs. ODBC.
         - [ ] `Docs/Architecture/Connectors.md`: Document `CommandTimeoutSeconds` and `ReadOnly` fields.
         - [ ] `Docs/Standards/Connectors_Standards.md`: Data warehouse connector checklist.
-- [x] **Fresh Eyes Deep Code Architecture & Refactor Audit**
-    - [x] **De-bloat `Evaluator.cs`**: Extract concerns (Reporting, Metrics, Variable Scoping) to specialized services; current class is a "God Object" (60KB). (Completed: migrated to composition-based sub-contexts: ITelemetryContext, IVariableContext, IReportContext).
-    - [x] **Refactor `SelectStatementHandler.cs` (SRP Violation)**: Move CTE registration, Lineage tracking, and Pushdown logic to dedicated engines/helpers.
-    - [x] **Harden `CreateConnectionStatementHandler`**: Replace hardcoded `fileConnectors` list with interface-based capability detection for `ResolvePath` enforcement.
-    - [x] **Centralize Security Guardrails**: Move manual recursion and `IncrementOperationCount` logic in `DirectoryOperationStatementHandler` to a centralized file system security policy.
-    - [x] **Simplify `ExpressionEvaluator`**: Move ANSI string/date functions (`SUBSTRING`, `OVERLAY`, etc.) to `FunctionRegistry` and investigated performance of `ResolveIdentifierFallback` on wide rows (fixed shadowing bug & optimized name retrieval).
-- [x] **Type System Bugs** — Specialty type behaviors are broken or incomplete (discovered during Grammar.md audit).
-    - [x] **JSON validation at assignment** (`ETL-SQL.Core/Data/TypeConverter.cs`): The `JSON` converter just calls `v.ToString()`. It must call `JsonDocument.Parse()` and re-throw as `ExecutionException` on failure so a malformed JSON string errors at the `DECLARE` line, not buried in a `JSON_VALUE` call later.
-    - [x] **XML validation at assignment** (`ETL-SQL.Core/Data/TypeConverter.cs`): Same issue — the `XML` converter just calls `v.ToString()`. Must call `XDocument.Parse()` and re-throw as `ExecutionException` on failure.
-    - [x] **ENCRYPTED doesn't protect at runtime** (`ETL-SQL.Core/Parser/Components/SystemParser.cs`): `ENCRYPTED` is the canonical type for `ENC:...` passwords and connection string credentials, but the parser does NOT set `IsSensitive = true` for it — only `SENSITIVE` and `SECRET` get that flag. Consequence: `SHOW VARIABLES` displays raw `ENC:...` strings for ENCRYPTED variables, and the auto-decrypt path in `ExpressionEvaluator` (which checks `meta.IsSensitive`) silently skips them, passing the raw cipher text to connectors. Fix: add `"ENCRYPTED"` to the `isSensitive` check in `ParseDeclare()` alongside `SENSITIVE` and `SECRET`. Verify connector auth actually works end-to-end after the fix.
-    - [x] **SECRET is a no-op alias for SENSITIVE** (`ETL-SQL.Core/Parser/Components/SystemParser.cs`, `ETL-SQL.Engine`): Both types set `IsSensitive = true` and nothing else — the documented "purged from memory on session end" behavior for `SECRET` does not exist. Need to implement session-end variable purge for `SECRET` (clear the variable from all scopes when the evaluator tears down) Grammar.md must be updated to show the differences.
-    - [x] **Grammar.md section 1.2 cleanup**: After the bugs above are fixed, update the `MARKDOWN` description to make clear it carries no validation (all strings are valid markdown) and is a rendering hint only. Update `ENCRYPTED` to accurately reflect its now-fixed runtime masking and auto-decrypt behavior.
-- [x] **Subquery Cache Optimization** — Implement a sophisticated subquery cache that supports correlated subqueries. Current naive caching is disabled or incorrect for correlated queries.
-    - [x] **Phase 1 — Foundation: Keyed Caching & Correlation Analysis**
-        - [x] `ETL-SQL.Core/Data`: Create `SubqueryCacheKey` record: `(Statement Query, object[] CapturedValues)`.
-        - [x] `ETL-SQL.Engine/Services`: Implement `SubqueryAnalyzer` to identify "Outer References" in a subquery AST.
-        - [x] `Evaluator.cs`: Update `SubqueryCache` to `LruCache<SubqueryCacheKey, object?>`.
-    - [x] **Phase 2 — ExpressionEvaluator Integration**
-        - [x] `ExpressionEvaluator.cs`: Update `EvaluateSubquery` to harvest captured values from `OuterRowStack`.
-        - [x] `ExpressionEvaluator.cs`: Implement keyed lookup/set using `SubqueryCacheKey`.
-        - [x] Optimization: Detect and globally cache "Static" (non-correlated) subqueries.
-        - [x] Telemetry: Track `@@SUBQUERY_CACHE_HITS/MISSES`.
-    - [x] **Phase 3 — Complex Subquery Support**
-        - [x] Support for correlated subqueries containing `GROUP BY`, `WINDOW` functions, and `ORDER BY`.
-        - [x] Context Isolation: Ensure clean execution of inner engines (Aggregate/Window) while preserving outer scope visibility.
-        - [x] Nested Subquery validation: Ensure cache keys work correctly at arbitrary recursion depths.
-    - [x] **Phase 4 — Scalability & Memory Management**
-        - [x] `Evaluator.SpillAsync()`: Implement selective clearing/spilling of cache based on cost/latency metrics.
-        - [x] Config: Add `Engine.SubqueryCacheSize` to `appsettings.json` (default 5000).
-    - [x] **Phase 5 — Automated Testing & Performance Validation**
-        - [x] `SubqueryCacheTests.cs`: Comprehensive suite covering Scalar, Correlated, Nested, Nulls, and Complex logic (Window/Agg).
-        - [x] Big Data Stress Test: Verify cache hit efficiency and memory stability on 1M+ row batches with recurring keys.
-    - [x] **Phase 6 — Final Stabilization**
-        - [x] Run full test suite (100% pass).
-        - [x] Run all `/samples/` scripts (100% pass).
-        - [x] Documentation: Update `Docs/Architecture/Engine.md` with keyed subquery model details.
-        - [x] Add @@SUBQUERY_CACHE_HITS/MISSES to `Docs/Reference/Grammar.md`.
-- [ ] **Report portal https** Add a way for the report portal to use HTTPS.
-- [x] **Sample Suite Stabilization** — Resolved functional regressions in the Kitchen Sink sample suite (fn_date_math_sink, fn_string_sink, fn_sys_logic_sink).
-    - [x] Implemented missing standard functions: EXP, LOG, LOG10, RAND, CONCAT_WS, SPLIT_PART, SPACE, and a full suite of REGEXP functions.
-    - [x] Resolved PRINT multi-argument rendering.
-    - [x] Validated full suite (93 scripts) with 100% success rate (excluding environmental skips).
-- [x] **Publish needs updating** — Added ReportPortal to publish scripts and updated documentation with correct naming conventions and basic setup instructions.
-- [x] **EXEC and EXECUTE unification** — Unified the grammar for both keywords in `ExtensionParser.cs`. `EXEC` is now a formal shorthand for `EXECUTE`.
-- [x] **Kitchen sink test for EXECUTE** — Implemented comprehensive validation for positional/indexed parameters, dynamic SQL strings, shorthand synonyms, and connection expressions.
-```sql
- CREATE CONNECTION ds ON MOCKDB();
- DECLARE @id int = 1
-         ,@name varchar(50) = 'John'
-;
- EXECUTE ds INTO #temp WITH(@id, @name)
- BEGIN
-    SELECT * FROM ds.Employees WHERE EmployeeID = ? AND Name = ?;
- END
-
- EXECUTE ds INTO #temp2 WITH(@id, @name)
- BEGIN
-    SELECT * FROM ds.Employees WHERE EmployeeID = ?1 AND Name = ?2;
- END
-
- DECLARE @query varchar(2000);
- SET @query = 'SELECT * FROM ds.Employees WHERE EmployeeID = ' + @id + ' AND Name = ' + QUOTENAME(@name) + ';';
- EXECUTE ds INTO #temp3 (@query);
-
- -- Shorthand and Expression support:
- EXEC ds (@query);
- EXECUTE (@ds) INTO #temp4 (@query);
-```
-- [x] **Check code for any hardcoded values** Any hardcoded values should be in appsettings.json and not in the code.  They should also have a SET ... statement that allows the user to change the value at runtime for that script.
-- [x] **Missing metrics** We have a lot of great metrics exposed by @@ variables.  Added @@SUBQUERY_CACHE_HITS/MISSES etc. to docs.
-- [x] **Code check** We have done a lot of code changes.  Any findings record them as TODO.md items.
-   - [x] **Check documentation** - Standardized names and added metrics.
-   - [x] **Check tests** - Resolved BulkInsertErrorTests regression.
-   - [x] **Check samples** - Completed (verified with 95 scripts).
-    - [x] **Check for performance issues** - Fixed ArrowSpillWriter bottleneck.
-    - [x] **Check for stability issues** - 1132 unit tests passing.
-    - [x] **Check for any regressions** - 1132 tests passing. Full suite validated.
-    - [ ] **Final Audit & Stability Refactor** — Comprehensive cleanup and stabilization phase. Focuses on SRP compliance, security linter guardrails, and refactoring "God Objects" to prevent maintenance fatigue and IDE instability.
-        - **Phase 1 — StandardFunctions Refactor (SRP)**
-            - [x] `ETL-SQL.Engine/Functions/`: Split `StandardFunctions.cs` into partial classes: `.String.cs`, `.Math.cs`, `.Date.cs`, `.Logic.cs`, `.System.cs`.
-            - [x] Verify `IFunctionRegistry` registrations match baseline exactly.
-            - [x] **Verification**: Run `dotnet test` (Core/Engine suite). Must be 100% pass.
-            - [x] **Verification**: Run `/scripts/Test-AllSamples.ps1`. Must be 100% pass (excluding environmental skips).
-        - **Phase 2 — EChartsRenderer Refactor (Strategy Pattern)**
-            - [x] `ETL-SQL.ReportBuilder/Renderers/`: Create specialized renderers (`Cartesian`, `Circular`, `Hierarchical`, `Statistical`, `Specialized`, `Overlay`).
-            - [x] `EChartsRenderer.cs`: Refactor to a dispatcher/factory pattern. Ensure zero change in output JSON structure.
-            - [x] **Verification**: Run `dotnet test`. Must be 100% pass.
-            - [x] **Verification**: Run `/scripts/Test-AllSamples.ps1`. Must be 100% pass (excluding pre-existing script errors).
-        - [x] **Phase 3 — Linter & Security Guardrails**
-            - [x] `ETL-SQL.Core/Linting/Rules/AbsolutePathRule.cs`: Implement warning for relative paths in I/O operations (FROM, INTO, EXECUTE, etc.).
-            - [x] `ETL-SQL.Core/Linting/Rules/FileSystemSecurityRule.cs`: Implement warning for system directory access (`C:\Windows`, `/etc`) and direct root access.
-            - [x] `ETL-SQL.Connectors/Postgres/PostgresSyntax.cs`: Add `GETDATE` and `SYSDATE` to `Exclusions`.
-            - [x] **Verification**: Run `dotnet test`. Must be 100% pass.
-            - [x] **Verification**: Run `/scripts/Test-AllSamples.ps1`. Must be 100% pass.
-        - **Phase 4 — Core Data & Stability Audit**
-            - [x] `ETL-SQL.Core/Data/DataSources.cs`: Extract `InMemoryTableIndex` from `InMemoryDataSource` to separate concern.
-            - [x] Audit `InMemoryDataSource.UpdateRows` and `DeleteRows` for atomicity/null safety (potential crash prevention).
-            - [x] Audit `SpillStore.cs` for file handle leaks or race conditions during rapid spill/read cycles.
-            - [x] **Verification**: Run `dotnet test`. Must be 100% pass.
-            - [x] **Verification**: Run `/scripts/Test-AllSamples.ps1`. Must be 100% pass.
-        - [x] **Phase 5 — Help System & Final Polish**
-            - [x] `ETL-SQL.Core/Metadata/LanguageHelpRegistry.cs`: Comprehensive audit. Ensure all new statements and functions have accurate help signatures.
-            - [x] Standardize Visual option naming (consistent case-sensitivity handling in `VisualBuilder` vs `EChartsRenderer`).
-            - [x] Update Grammar.md with any missing syntax including all help commands, charts, etc.
-            - [x] **Final Verification**: Run full regression suite. 100% pass required.
+- [ ] **Distributed Deployment & Distribution** — Transition ETL-SQL from a local tool to an enterprise platform with multi-machine simulation and native cross-platform installers.
+    - **Phase 1 — Dockerization & Orchestration (The Simulation)**
+        - [ ] Create Dockerfile for `ETL-SQL.Orchestrator` (ASP.NET Core 10 runtime).
+        - [ ] Create Dockerfile for `ETL-SQL.ReportPortal` (ASP.NET Core 10 runtime).
+        - [ ] Create `docker-compose.yml` defining a 3-tier virtual network: `orchestrator-srv`, `portal-srv`, and a `mock-db` (Postgres).
+        - [ ] Implement `Orchestrator:ApiUrl` config in Report Portal to support remote job triggering via `HttpJobChannelClient`.
+        - [ ] **Verification**: Launch full stack via `docker-compose up` and execute a report on the Portal that triggers a job on the isolated Orchestrator container.
+    - **Phase 2 — The Workstation SDK (Client Tools)**
+        - [ ] Define "Workstation SDK" bundle: `ETL-SQL.App` (CLI/TUI) + `ETL-SQL.LanguageServer`, Report builder.
+        - [ ] Implement "Self-Contained" build profiles in `.csproj` for `win-x64`, `linux-x64`, and `osx-arm64`.
+        - [ ] Create a "Bootstrap" script (PowerShell/Bash) that downloads the SDK and adds it to the System PATH.
+        - [ ] Update VSIX to use the PATH-based engine discovery for Zero-Configuration startup.
+    - **Phase 3 — Platform Installers (Enterprise Setup)**
+        - [ ] **Windows**: Create a unified `.msi` (Wix) with Feature Selection:
+            - [ ] `Feature: Workstation SDK` (CLI/TUI/LSP + PATH config).
+            - [ ] `Feature: Orchestrator Service` (Register as Windows Service + Port 5001).
+            - [ ] `Feature: Report Portal` (Register as Windows Service + Port 5002).
+        - [ ] **Linux**: Create `.deb` and `.rpm` packages with modular dependencies.
+        - [ ] **Mac**: Create a `.dmg` with a signed application bundle for the TUI/IDE.
+    - **Phase 4 — Production Hardening & Security**
+        - [ ] **HTTPS**: Implement Kestrel certificate loading in Report Portal and Orchestrator.
+        - [ ] **Secret Management**: Implement an encrypted `appsettings.Production.json` or Environment Variable provider for sensitive connection strings.
+        - [ ] **Admin Guides**: Create `Docs/Administrators_Guide.md` covering service management, backup/restore, and multi-server networking.
+        - [ ] **Final Verification**: Perform a "Clean Machine" install on a fresh Windows VM and verify full "Workstation-to-Server" connectivity.
+- [x] **Directory connection missing from documentation**  The directory CONNECTION seems to be missing from documentation.
+- [x] **Connection Configuration Observability** — Implement a new `SHOW` command to inspect connection options with automatic sensitive data masking.
+    - [x] **Phase 1 — Engine Core & IDataSource Updates**
+        - [x] `IDataSource.cs`: Add `GetConfig()` method to return the options dictionary with sensitive values masked.
+        - [x] Implement `GetConfig()` logic (likely in a shared helper or base class) to redact keys like `PASSWORD`, `CONNECTIONSTRING`, `SECRET`, `APIKEY`.
+    - [x] **Phase 2 — Parser Extensions**
+        - [x] `SystemParser.cs`: Update `ParseShow` to support `SHOW CONNECTION <name> CONFIG [INTO #temp]`.
+    - [x] **Phase 3 — SHOW CONNECTION CONFIG Statement**
+        - [x] `ShowConnectionConfigStatement.cs` (new): Create AST node for the specific connection config view.
+        - [x] `ShowConnectionConfigStatementHandler.cs` (new): Renders the `Options` dictionary as a two-column `DataTable` (Key, Value). Support `INTO #temp` for downstream consumption.
+    - [x] **Phase 4 — Verification**
+        - [x] Verify sensitive values are masked for `MSSQL`, `POSTGRES`, and `SFTP` connectors.
+        - [x] Tests: `ShowConnectionConfigTests.cs`.
+        - [x] Add to Documentation, Grammar.md
+        - [x] Add to kitchen sink script.
+        - [x] Run a full automation test and get to 100%. 
+        - [x] Run a full samples suite and get to 100%.
+- [x] **What's the difference between SET PROFILE ON and Telemetry?**
+    - **Telemetry**: Always-on, low-overhead aggregate metrics (total rows, throughput, memory peak). Accessible via `@@` variables.
+    - **Profiling**: Opt-in (`SET PROFILE ON`), high-detail instrumentation of every statement execution node. Used for performance tuning.
+- [x] **How do you use some of the @@variables?**
+    - `@@ROWCOUNT`: Rows affected by the last DML or SELECT operation.
+    - `@@ERROR`: Error code of the last statement (0 = success).
+    - `@@LAST_EXEC_MS`: Duration of the last statement in milliseconds.
+    - `@@FETCH_STATUS`: Result of the last `FOREACH` or fetch (0 = success, -1 = end).
+- [x] **FOREACH loop on a #temp table**
+    - Supported. `FOREACH @row IN #temp` streams rows from the local in-memory table. This is the standard pattern for row-by-row staging processing.
+- [x] **Can we catch an ASSERT in a script?**
+    - Yes. `ASSERT` failures throw exceptions that are catchable via `BEGIN TRY ... END TRY BEGIN CATCH ... END CATCH` blocks.
+- [x] **Grammar.md is missing the JOIN algorithm types**
+    - Added to Section 10.4. Supports `LOOP` (nested iterations), `HASH` (fast matching for large sets), and `MERGE` (optimal for pre-sorted sets).
+- [x] **SHOW TAGS FOR SCRIPTS**
+    - Implemented. Allows querying script header metadata (author, version, etc.) defined in block comments via `SHOW TAGS FOR SCRIPT`.
+- [x] **Create a better looking gauge chart visual**  Implemented `SEMI_CIRCLE` (half-donut) and `RING` styles for the `GAUGE` visual.
+- [x] **Resolve Linter Regression (AvoidSelectStarRule)** — Fixed a regression where tables named 'Config' caused syntax errors and improved linter recursion for nested queries.
+- [x] **Verify System Integrity** — Successfully executed the full `Test-AllSamples.ps1` regression suite to ensure 100% stability.

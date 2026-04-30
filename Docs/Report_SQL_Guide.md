@@ -536,13 +536,20 @@ CREATE VISUAL BalancedGauge AS GAUGE (
   MAPPINGS (VALUE = val),
   OPTIONS (MIN = @bounds.MIN, MAX = @bounds.MAX)
 );
+
+-- Semi-circle gauge (Power BI style)
+CREATE VISUAL EfficiencyGauge AS GAUGE (
+  SOURCE = (SELECT 85 AS value),
+  MAPPINGS (VALUE = value),
+  OPTIONS (GAUGE_STYLE = 'SEMI_CIRCLE', TITLE = 'Operating Efficiency')
+);
 ```
 
 `MIN` and `MAX` options override column-derived bounds. Both default to `0` / `100` when omitted.
 
 | Option | Values | Description |
 |--------|--------|-------------|
-| `GAUGE_STYLE` | `'PROGRESS'` | Renders a modern circular progress bar instead of a needle gauge. |
+| `GAUGE_STYLE` | `'PROGRESS'`, `'SEMI_CIRCLE'`, `'RING'` | Renders the gauge in different styles. `PROGRESS` is a circular bar, `SEMI_CIRCLE` is a half-donut (Power BI style), and `RING` is a simple donut. |
 | `MIN` | Numeric | Set the start of the gauge arc. |
 | `MAX` | Numeric | Set the end of the gauge arc. |
 

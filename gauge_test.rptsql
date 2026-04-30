@@ -1,0 +1,27 @@
+-- Test script for new gauge styles
+SELECT 75 AS value, 100 AS target, 'Efficiency' AS label INTO #data;
+
+CREATE VISUAL DefaultGauge AS GAUGE (
+  SOURCE = #data,
+  MAPPINGS (VALUE = value, MAX = target, LABEL = label),
+  TITLE = 'Default Gauge'
+);
+
+CREATE VISUAL SemiCircleGauge AS GAUGE (
+  SOURCE = #data,
+  MAPPINGS (VALUE = value, MAX = target, LABEL = label),
+  OPTIONS (GAUGE_STYLE = 'SEMI_CIRCLE'),
+  TITLE = 'Semi-Circle Gauge'
+);
+
+CREATE VISUAL RingGauge AS GAUGE (
+  SOURCE = #data,
+  MAPPINGS (VALUE = value, MAX = target, LABEL = label),
+  OPTIONS (GAUGE_STYLE = 'RING'),
+  TITLE = 'Ring Gauge'
+);
+
+CREATE PAGE GaugeTest AS LAYOUT (
+  STRUCTURE = 'A B / C',
+  MAP ('A' = DefaultGauge, 'B' = SemiCircleGauge, 'C' = RingGauge)
+);

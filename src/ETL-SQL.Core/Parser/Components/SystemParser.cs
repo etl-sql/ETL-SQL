@@ -357,6 +357,12 @@ namespace ETL_SQL.Core.Parser.Components
             }
             else if (Match(TokenType.JOBS))       stmt = new ShowJobsStatement();
             else if (Match(TokenType.CONNECTIONS)) stmt = new ShowConnectionsStatement();
+            else if (Match(TokenType.CONNECTION))
+            {
+                var connName = ConsumeIdentifier("Expected connection name after SHOW CONNECTION").Value;
+                Consume(TokenType.CONFIG, "Expected CONFIG after connection name");
+                stmt = new ShowConnectionConfigStatement(connName);
+            }
             else if (Match(TokenType.TABLES))
             {
                 string? connName = null;
@@ -377,11 +383,18 @@ namespace ETL_SQL.Core.Parser.Components
             else if (Match(TokenType.TAGS))
             {
                 Consume(TokenType.FOR, "Expected FOR after SHOW TAGS");
-                Consume(TokenType.TABLE, "Expected TABLE after FOR");
-                var tableName = ConsumeIdentifier("Expected table name").Value;
-                string? columnName = null;
-                if (Match(TokenType.COLUMN)) columnName = ConsumeIdentifier("Expected column name").Value;
-                stmt = new ShowTagsStatement(tableName, columnName);
+                if (Match(TokenType.SCRIPT))
+                {
+                    stmt = new ShowScriptTagsStatement();
+                }
+                else
+                {
+                    Consume(TokenType.TABLE, "Expected TABLE after FOR");
+                    var tableName = ConsumeIdentifier("Expected table name").Value;
+                    string? columnName = null;
+                    if (Match(TokenType.COLUMN)) columnName = ConsumeIdentifier("Expected column name").Value;
+                    stmt = new ShowTagsStatement(tableName, columnName);
+                }
             }
             else if (Match(TokenType.TAG))
             {
@@ -444,16 +457,18 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     ShowProfileStatement sps     => sps with { IntoTable = tempTable },
                     ShowJobHistoryStatement sjh   => sjh with { IntoTable = tempTable },
-                    ShowJobsStatement sjs         => sjs with { IntoTable = tempTable },
-                    ShowConnectionsStatement scs  => scs with { IntoTable = tempTable },
-                    ShowVersionStatement svs      => svs with { IntoTable = tempTable },
-                    ShowTablesStatement sts       => sts with { IntoTable = tempTable },
-                    ShowColumnsStatement scols    => scols with { IntoTable = tempTable },
-                    ShowTagsStatement stag        => stag with { IntoTable = tempTable },
-                    ShowTagValueStatement stv     => stv with { IntoTable = tempTable },
-                    ShowVariablesStatement svars  => svars with { IntoTable = tempTable },
-                    ShowSafeZonesStatement ssz    => ssz with { IntoTable = tempTable },
-                    ShowSessionsStatement sess    => sess with { IntoTable = tempTable },
+                    ShowVariablesStatement v     => v with { IntoTable = tempTable },
+                    ShowConnectionsStatement c   => c with { IntoTable = tempTable },
+                    ShowConnectionConfigStatement cc => cc with { IntoTable = tempTable },
+                    ShowScriptTagsStatement st   => st with { IntoTable = tempTable },
+                    ShowJobsStatement j          => j with { IntoTable = tempTable },
+                    ShowTablesStatement sts      => sts with { IntoTable = tempTable },
+                    ShowColumnsStatement scols   => scols with { IntoTable = tempTable },
+                    ShowTagsStatement stag       => stag with { IntoTable = tempTable },
+                    ShowTagValueStatement stv    => stv with { IntoTable = tempTable },
+                    ShowVersionStatement svs     => svs with { IntoTable = tempTable },
+                    ShowSafeZonesStatement ssz   => ssz with { IntoTable = tempTable },
+                    ShowSessionsStatement sess   => sess with { IntoTable = tempTable },
                     _                            => stmt
                 };
             }

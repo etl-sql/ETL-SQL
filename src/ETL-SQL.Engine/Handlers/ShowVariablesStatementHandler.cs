@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
 using ETL_SQL.Data;
+using ETL_SQL.Engine;
 
 namespace ETL_SQL.Engine.Handlers
 {
@@ -61,8 +62,21 @@ namespace ETL_SQL.Engine.Handlers
             }
             else
             {
+                if (table.Rows.Count == 0)
+                {
+                    context.Log("0 rows returned.", ConsoleColor.Cyan);
+                }
+                else
+                {
+                    if (!context.RedirectOutput)
+                    {
+                        ResultFormatter.PrintTable(table);
+                    }
+                }
+
                 context.LastResult = table;
                 context.LastResultSets.Add(table);
+                context.OnResultSet?.Invoke(table);
             }
         }
 

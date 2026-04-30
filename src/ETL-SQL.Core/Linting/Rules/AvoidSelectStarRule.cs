@@ -21,9 +21,11 @@ namespace ETL_SQL.Core.Linting.Rules
 
         private void AnalyzeStatement(Statement statement, List<LintResult> results)
         {
+            if (statement == null) return;
+
             if (statement is SelectStatement select)
             {
-                if (select.Columns.Any(c => c.Expression is IdentifierExpression id && id.Name == "*"))
+                if (select.Columns != null && select.Columns.Any(c => c.Expression?.ToSql() == "*"))
                 {
                     results.Add(new LintResult
                     {
@@ -37,16 +39,27 @@ namespace ETL_SQL.Core.Linting.Rules
                 
                 // Check subqueries
                 if (select.FromTable?.Subquery != null) AnalyzeStatement(select.FromTable.Subquery, results);
-                foreach (var join in select.Joins)
+                if (select.Joins != null)
                 {
-                    if (join.Table.Subquery != null) AnalyzeStatement(join.Table.Subquery, results);
+                    foreach (var join in select.Joins)
+                    {
+                        if (join.Table?.Subquery != null) AnalyzeStatement(join.Table.Subquery, results);
+                    }
                 }
+            }
+            else if (statement is SetOperationStatement setOp)
+            {
+                AnalyzeStatement(setOp.Left, results);
+                AnalyzeStatement(setOp.Right, results);
             }
             
             // Recurse into blocks/conditionals/containers
             if (statement is BlockStatement block)
             {
-                foreach (var s in block.Statements) AnalyzeStatement(s, results);
+                if (block.Statements != null)
+                {
+                    foreach (var s in block.Statements) AnalyzeStatement(s, results);
+                }
             }
             else if (statement is IfStatement ifStmt)
             {
@@ -74,16 +87,31 @@ namespace ETL_SQL.Core.Linting.Rules
                 AnalyzeStatement(tryCatch.TryBody, results);
                 AnalyzeStatement(tryCatch.CatchBody, results);
             }
-            else if (statement is InsertStatement insert && insert.SelectQuery != null)
+            
+            // Check other statements that might contain subqueries or nested queries
+            if (statement is InsertStatement insert && insert.SelectQuery != null)
             {
                 AnalyzeStatement(insert.SelectQuery, results);
             }
             else if (statement is MergeStatement merge)
             {
-                // Merge target/source are TableReferences, but source could be a subquery? 
-                // TableReference.Subquery is already checked inside SelectStatement but MERGE uses TableReference directly.
-                if (merge.TargetTable.Subquery != null) AnalyzeStatement(merge.TargetTable.Subquery, results);
-                if (merge.SourceTable.Subquery != null) AnalyzeStatement(merge.SourceTable.Subquery, results);
+                if (merge.TargetTable?.Subquery != null) AnalyzeStatement(merge.TargetTable.Subquery, results);
+                if (merge.SourceTable?.Subquery != null) AnalyzeStatement(merge.SourceTable.Subquery, results);
+            }
+            else if (statement is UpdateStatement update)
+            {
+                if (update.FromTable?.Subquery != null) AnalyzeStatement(update.FromTable.Subquery, results);
+                if (update.Joins != null)
+                {
+                    foreach (var join in update.Joins)
+                    {
+                        if (join.Table?.Subquery != null) AnalyzeStatement(join.Table.Subquery, results);
+                    }
+                }
+            }
+            else if (statement is DeleteStatement delete)
+            {
+                if (delete.TargetTable?.Subquery != null) AnalyzeStatement(delete.TargetTable.Subquery, results);
             }
         }
     }

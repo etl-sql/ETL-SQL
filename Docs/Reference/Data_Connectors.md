@@ -392,6 +392,32 @@ CREATE CONNECTION avro_src ON AVRO('C:\Data\events.avro')
     WITH(SCHEMA_FILE='C:\Schemas\events.avsc');
 ```
 
+### 3.7 Local Directory (`DIRECTORY`)
+Treats a local filesystem folder as a data source for file management operations (`COPY FILE`, `DELETE FILE`, etc.) and directory listing via `SELECT`.
+
+| Option | Description | Mandatory |
+| :--- | :--- | :---: |
+| `PATH` | Absolute directory path | Yes (structured) |
+| `CREATE` | `ON`/`OFF` — create the directory if it doesn't exist (Default: `ON`) | No |
+
+*Examples:*
+```sql
+CREATE CONNECTION data_dir ON DIRECTORY('C:\Data\Incoming') WITH(CREATE=ON);
+
+-- List all files in the directory as a result set
+SELECT FileName, Size, LastModified FROM data_dir;
+```
+
+#### Result Set Schema
+When querying a `DIRECTORY` connection via `SELECT` the following columns are returned:
+- `FileName` (STRING): Filename with extension.
+- `Path` (STRING): Absolute path to the file.
+- `Extension` (STRING): File extension (including dot).
+- `Size` (DECIMAL): File size in bytes.
+- `LastModified` (DATETIME): Last write time.
+- `IsReadOnly` (BIT): `TRUE` if the file is read-only.
+- `CreationTime` (DATETIME): Time the file was created.
+
 ---
 
 ## 4. Remote & Cloud Protocol Connectors
@@ -565,32 +591,6 @@ SEND EMAIL
 ```
 
 ---
-
-### 4.6 Local Directory (`DIRECTORY`)
-Treats a local filesystem folder as a data source for file management operations (`COPY FILE`, `DELETE FILE`, etc.) and directory listing via `SELECT`.
-
-| Option | Description | Mandatory |
-| :--- | :--- | :---: |
-| `PATH` | Absolute directory path | Yes (structured) |
-| `CREATE` | `ON`/`OFF` — create the directory if it doesn't exist (Default: `ON`) | No |
-
-*Examples:*
-```sql
-CREATE CONNECTION data_dir ON DIRECTORY('C:\Data\Incoming') WITH(CREATE=ON);
-
--- List all files in the directory as a result set
-SELECT * FROM data_dir;
-```
-
-#### Result Set Schema
-When querying a `DIRECTORY` connection via `SELECT` the table name is `FILE` and the following columns are returned:
-- `FileName` (STRING): Filename with extension.
-- `Path` (STRING): Absolute path to the file.
-- `Extension` (STRING): File extension (including dot).
-- `Size` (DECIMAL): File size in bytes.
-- `LastModified` (DATETIME): Last write time.
-- `IsReadOnly` (BIT): `TRUE` if the file is read-only.
-- `CreationTime` (DATETIME): Time the file was created.
 
 ---
 

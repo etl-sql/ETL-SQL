@@ -55,6 +55,7 @@ namespace ETL_SQL.Core.Parser
         ROLLUP, CUBE, GROUPING,   // GROUP BY extensions
         RANGE, BETWEEN, PRECEDING, FOLLOWING, UNBOUNDED, CURRENT,
         UNTIL,
+        CONFIG,
         LF, CR, CRLF, TAB,
         
         // Joins

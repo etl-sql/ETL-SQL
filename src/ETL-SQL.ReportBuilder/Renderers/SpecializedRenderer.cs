@@ -88,19 +88,56 @@ namespace ETL_SQL.ReportBuilder.Renderers
             else if (firstRow != null && mi >= 0 && mi < firstRow.Count) gaugeMax = ToDouble(firstRow[mi]) ?? 100.0;
 
             v.Options.TryGetValue("GAUGE_STYLE", out var style);
-            bool isProgress = style?.ToUpperInvariant() == "PROGRESS";
+            var styleUpper = style?.ToUpperInvariant();
+            bool isProgress = styleUpper == "PROGRESS";
+            bool isSemiCircle = styleUpper == "SEMI_CIRCLE";
+            bool isRing = styleUpper == "RING";
+
+            var series = new Dictionary<string, object>
+            {
+                ["type"] = "gauge",
+                ["min"] = gaugeMin,
+                ["max"] = gaugeMax,
+                ["data"] = new[] { new { value, name } },
+                ["detail"] = new { valueAnimation = true, formatter = "{value:.1f}" }
+            };
+
+            if (isProgress)
+            {
+                series["progress"] = new { show = true };
+            }
+            else if (isSemiCircle)
+            {
+                series["startAngle"] = 180;
+                series["endAngle"] = 0;
+                series["center"] = new[] { "50%", "75%" };
+                series["radius"] = "100%";
+                series["progress"] = new { show = true, width = 18 };
+                series["axisLine"] = new { lineStyle = new { width = 18 } };
+                series["pointer"] = new { show = true, length = "80%", width = 3 };
+                series["axisTick"] = new { show = false };
+                series["splitLine"] = new { show = false };
+                series["axisLabel"] = new { show = false };
+                series["detail"] = new { offsetCenter = new[] { "0", "-10%" }, valueAnimation = true, formatter = "{value:.1f}" };
+            }
+            else if (isRing)
+            {
+                series["startAngle"] = 90;
+                series["endAngle"] = -270;
+                series["pointer"] = new { show = false };
+                series["progress"] = new { show = true, overlap = false, roundCap = true, clip = false };
+                series["axisLine"] = new { lineStyle = new { width = 15 } };
+                series["splitLine"] = new { show = false };
+                series["axisTick"] = new { show = false };
+                series["axisLabel"] = new { show = false };
+                series["detail"] = new { show = true, formatter = "{value}%", offsetCenter = new[] { 0, 0 } };
+            }
 
             return Serialize(new
             {
                 title = TitleOpt(v),
                 tooltip = new { formatter = "{b}: {c}" },
-                series = new[]
-                {
-                    new { type = "gauge", min = gaugeMin, max = gaugeMax,
-                          progress = new { show = isProgress },
-                          detail = new { valueAnimation = true, formatter = "{value:.1f}" },
-                          data = new[] { new { value, name } } }
-                }
+                series = new[] { series }
             });
         }
 

@@ -1,0 +1,47 @@
+/*
+   @author: Antigravity
+   @description: Observability and Documentation verification script
+   @version: 1.2.3
+*/
+
+-- 1. Verify script tags introspection
+PRINT '--- Script Tags ---';
+SHOW TAGS FOR SCRIPT INTO #tags;
+SELECT * FROM #tags;
+
+ASSERT (SELECT COUNT(*) FROM #tags) >= 3, 'Should have at least 3 script tags';
+
+-- 2. Verify ASSERT in TRY...CATCH
+PRINT '--- Assert Catch Test ---';
+DECLARE @caught BIT = 0;
+BEGIN TRY
+    ASSERT 1 = 0, 'This should fail';
+END TRY
+BEGIN CATCH
+    PRINT 'Successfully caught assertion failure: ' + ERROR_MESSAGE();
+    SET @caught = 1;
+END CATCH
+
+ASSERT @caught = 1, 'Assertion failure was not caught!';
+
+-- 3. Verify FOREACH on #temp table
+PRINT '--- Foreach #temp Test ---';
+CREATE TABLE #data (id INT, val VARCHAR);
+INSERT INTO #data VALUES (1, 'Alpha'), (2, 'Beta'), (3, 'Gamma');
+
+DECLARE @count INT = 0;
+FOREACH @row IN #data
+BEGIN
+    PRINT 'Processing row ' + @row.id + ': ' + @row.val;
+    SET @count = @count + 1;
+END
+
+ASSERT @count = 3, 'Foreach did not iterate all rows';
+
+-- 4. Verify System Variables
+PRINT '--- System Variables ---';
+PRINT 'Version: ' + @@VERSION;
+PRINT 'Last Exec MS: ' + @@LAST_EXEC_MS;
+PRINT 'Rowcount: ' + @@ROWCOUNT;
+
+PRINT 'Test Complete.';

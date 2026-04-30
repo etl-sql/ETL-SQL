@@ -92,6 +92,29 @@ namespace ETL_SQL.Data
         string ConnectorType { get; }
         /// <summary>Returns the list of tables in the data source (for multi-table sources).</summary>
         Task<IEnumerable<string>> GetTablesAsync() => Task.FromResult(Enumerable.Empty<string>());
+        /// <summary>Returns the options used to create this data source, with sensitive values masked.</summary>
+        IReadOnlyDictionary<string, string> GetConfig()
+        {
+            var config = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (Options != null)
+            {
+                foreach (var kv in Options)
+                {
+                    bool isSensitive = kv.Key.Contains("PASSWORD", StringComparison.OrdinalIgnoreCase) ||
+                                      kv.Key.Contains("CONNECTIONSTRING", StringComparison.OrdinalIgnoreCase) ||
+                                      kv.Key.Contains("SECRET", StringComparison.OrdinalIgnoreCase) ||
+                                      kv.Key.Contains("APIKEY", StringComparison.OrdinalIgnoreCase) ||
+                                      kv.Key.Contains("TOKEN", StringComparison.OrdinalIgnoreCase) ||
+                                      kv.Key.Contains("CREDENTIAL", StringComparison.OrdinalIgnoreCase) ||
+                                      kv.Key.Contains("PRIVATEKEY", StringComparison.OrdinalIgnoreCase) ||
+                                      kv.Value.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase);
+
+                    config[kv.Key] = isSensitive ? "********" : kv.Value;
+                }
+            }
+            return config;
+        }
+
         /// <summary>Checks if a row with matching column values exists in the data source.</summary>
         Task<bool> ExistsAsync(List<string> columns, List<object?> values) => Task.FromResult(false);
     }

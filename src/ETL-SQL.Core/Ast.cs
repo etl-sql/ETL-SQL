@@ -1531,6 +1531,16 @@ namespace ETL_SQL.Core
         }
     }
 
+    public record ShowScriptTagsStatement : Statement
+    {
+        public string? IntoTable { get; init; }
+
+        public ShowScriptTagsStatement(string? intoTable = null)
+        {
+            IntoTable = intoTable;
+        }
+    }
+
     public record ShowSafeZonesStatement : Statement
     {
         public string? IntoTable { get; init; }
@@ -1841,6 +1851,13 @@ namespace ETL_SQL.Core
     public record ShowConnectionsStatement : Statement
     {
         public string? IntoTable { get; set; }
+    }
+
+    public record ShowConnectionConfigStatement : Statement
+    {
+        public string ConnectionName { get; }
+        public string? IntoTable { get; set; }
+        public ShowConnectionConfigStatement(string connectionName) { ConnectionName = connectionName; }
     }
 
     public record ShowTablesStatement : Statement

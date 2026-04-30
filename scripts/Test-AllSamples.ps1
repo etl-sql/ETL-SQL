@@ -19,7 +19,7 @@ $solutionRoot = Split-Path -Path $PSScriptRoot -Parent
 Set-Location $solutionRoot
 
 $samplesDir = Join-Path $solutionRoot "samples"
-$etlScripts = Get-ChildItem -Path $samplesDir -Filter "*.etlsql" -Recurse
+$etlScripts = Get-ChildItem -Path $samplesDir -Include "*.etlsql", "*.rptsql" -Recurse
 $total = $etlScripts.Count
 
 Write-Host "=======================================================" -ForegroundColor Cyan

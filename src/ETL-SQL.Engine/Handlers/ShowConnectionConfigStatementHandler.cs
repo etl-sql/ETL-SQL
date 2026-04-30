@@ -4,33 +4,38 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 
 namespace ETL_SQL.Engine.Handlers
 {
     /// <summary>
-    /// Handles the SHOW CONNECTIONS statement, listing all active data sources.
+    /// Handles the SHOW CONNECTION config statement, listing all redacted options for a connection.
     /// </summary>
-    public class ShowConnectionsStatementHandler : IStatementHandler
+    public class ShowConnectionConfigStatementHandler : IStatementHandler
     {
-        public Type SupportedStatementType => typeof(ShowConnectionsStatement);
+        public Type SupportedStatementType => typeof(ShowConnectionConfigStatement);
 
         public async Task Execute(Statement statement, IExecutionContext context)
         {
-            var stmt = (ShowConnectionsStatement)statement;
+            var stmt = (ShowConnectionConfigStatement)statement;
             
-            var table = new DataTable();
-            table.AddColumn("Name");
-            table.AddColumn("Type");
-            table.AddColumn("Details");
+            if (!context.Connections.TryGetValue(stmt.ConnectionName, out var dataSource))
+            {
+                throw new ExecutionException($"Connection '{stmt.ConnectionName}' not found.", null, stmt.Line, stmt.Column);
+            }
 
-            foreach (var conn in context.Connections)
+            var table = new DataTable();
+            table.AddColumn("Option");
+            table.AddColumn("Value");
+
+            var config = dataSource.GetConfig();
+            foreach (var kvp in config.OrderBy(k => k.Key))
             {
                 var row = new Row();
-                row["Name"] = conn.Key;
-                row["Type"] = conn.Value.GetType().Name;
-                row["Details"] = conn.Value.ToString();
+                row["Option"] = kvp.Key;
+                row["Value"] = kvp.Value;
                 await table.AddRowAsync(row);
             }
 

@@ -236,6 +236,18 @@ ALTER TABLE #staging DROP COLUMN LegacyField;
 
 -- Drop when done (auto-dropped at session end anyway)
 DROP TABLE IF EXISTS #staging;
+
+### 4.2 Querying Directories
+While `FILE_LIST()` is a function that returns a table, you can also mount a directory as a permanent connection. This is useful when you need to join file metadata against other databases:
+
+```sql
+CREATE CONNECTION raw_files ON DIRECTORY('C:\Incoming\') WITH(RECURSIVE=TRUE);
+
+-- Query it like a table
+SELECT FileName, Size, LastModified
+FROM raw_files
+WHERE Extension = '.csv' AND Size > 1024;
+```
 ```
 
 ---

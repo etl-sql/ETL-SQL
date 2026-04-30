@@ -238,27 +238,30 @@ SET @range.MAX = 50;
 ```
 
 ### 1.4 System Variables
-Read-only. Available in any expression.
+Read-only variables that track session state and performance. These are automatically updated by the engine.
 
-| Variable | Description |
-| :--- | :--- |
-| `@@VERSION` | Full engine version and build metadata string |
-| `@@TRANCOUNT` | Current transaction nesting level (0 = no active transaction) |
-| `@@RESULTSETS` | Number of result sets produced by the last multi-statement block |
-| `@@ROWCOUNT` | Rows processed or affected by the last executed statement |
-| `@@ERROR` | Integer error code of the preceding statement (0 = success) |
-| `@@TOTAL_SPILLED_BYTES` | Total bytes written to disk for spill operations this session |
-| `@@PARTITIONS_COUNT` | Disk partitions created during the last spilled operation |
-| `@@AGGREGATE_GROUPS_COUNT` | Unique grouping keys from the last aggregation |
-| `@@AGGREGATE_EXPANSION_RATIO` | Intermediate row multiplier for the last CUBE/GROUPING SETS |
-| `@@LAST_EXEC_MS` | Milliseconds taken by the last statement |
-| `@@PEAK_MEMORY_MB` | Peak working-set memory in MB for the current process |
-| `@@SUBQUERY_CACHE_HITS` | Scalar subquery results retrieved from session cache |
-| `@@SUBQUERY_CACHE_MISSES` | Scalar subquery evaluations that required execution |
-| `@@SUBQUERY_SPILL_COUNT` | Number of subqueries that spilled to disk due to size |
-| `@@SUBQUERY_SPILLED_BYTES` | Total bytes spilled for subquery results |
-| `@@SORT_SPILLS` | External sort runs that spilled to disk this session |
-| `@@FETCH_STATUS` | Cursor/Foreach fetch status (0 = success, -1 = end of stream) |
+| Variable | Description | Example Usage |
+| :--- | :--- | :--- |
+| `@@ROWCOUNT` | Rows affected by the last DML or returned by the last `SELECT`. | `IF @@ROWCOUNT = 0 PRINT 'No data found';` |
+| `@@ERROR` | Integer error code of the preceding statement (0 = success). | `IF @@ERROR <> 0 RETURN;` |
+| `@@VERSION` | Full engine version and build metadata string. | `PRINT @@VERSION;` |
+| `@@TRANCOUNT` | Current transaction nesting level (0 = no active transaction). | `IF @@TRANCOUNT > 0 COMMIT;` |
+| `@@FETCH_STATUS` | Cursor/Foreach fetch status. `0` = Success, `-1` = End of list. | `WHILE @@FETCH_STATUS = 0 BEGIN ... END` |
+| `@@TOTAL_SPILLED_BYTES` | Cumulative bytes written to disk for all spill operations this session. | `IF @@TOTAL_SPILLED_BYTES > 1073741824 PRINT 'High disk pressure';` |
+| `@@LAST_EXEC_MS` | Milliseconds taken by the last statement. | `IF @@LAST_EXEC_MS > 5000 PRINT 'Warning: slow query';` |
+| `@@PEAK_MEMORY_MB` | Peak working-set memory in MB for the current process. | `PRINT 'Peak RAM: ' + @@PEAK_MEMORY_MB + ' MB';` |
+| `@@SUBQUERY_CACHE_HITS` | Scalar subquery results retrieved from session cache. | `PRINT 'Cache Hits: ' + @@SUBQUERY_CACHE_HITS;` |
+| `@@SUBQUERY_CACHE_MISSES` | Scalar subquery evaluations that required execution. | `PRINT 'Cache Misses: ' + @@SUBQUERY_CACHE_MISSES;` |
+| `@@SORT_SPILLS` | External sort runs that spilled to disk this session. | `PRINT 'Sort Spills: ' + @@SORT_SPILLS;` |
+
+**Example: Flow control based on row count**
+```sql
+UPDATE target.Sales SET Status = 'Processed' WHERE Status = 'Pending';
+IF @@ROWCOUNT > 0
+BEGIN
+    PRINT 'Updated ' + @@ROWCOUNT + ' records.';
+END
+```
 
 ### 1.5 `INPUT` and `OUTPUT` Variables
 Control how variables are passed to and from sub-scripts.
@@ -325,11 +328,27 @@ DROP SETS IF EXISTS !STAGING;
 Halts the script if the engine version does not meet the minimum.
 
 ```sql
-REQUIRE VERSION >= '0.5.0';
 REQUIRE >= '0.5.0';   -- VERSION keyword is optional
 ```
 
 Supported operators: `=`, `>`, `>=`.
+
+### 1.10 Variable Introspection
+
+Use these statements to inspect variables in the current session or scope.
+
+| Statement | Purpose |
+| :--- | :--- |
+| `SHOW VARIABLES` | Lists all variables (Global + Local) available in the current context. |
+| `SHOW LOCAL VARIABLES` | Lists only the variables declared in the current block/script scope. |
+
+All `SHOW` commands support the `INTO #temp` clause.
+
+```sql
+SHOW VARIABLES;
+SHOW LOCAL VARIABLES INTO #vars;
+SELECT * FROM #vars WHERE DataType = 'JSON';
+```
 
 ---
 
@@ -348,7 +367,7 @@ SET WHAT_IF OFF;
 **Allowed:** `SELECT`, `DECLARE`, `SET`, `IF`/`WHILE`, `PRINT`, `CREATE CONNECTION`.
 
 ### 2.2 `SET PROFILING`
-Enables per-statement millisecond metrics.
+Enables high-resolution statement-level monitoring. See [Section 2.6](#26-observability--telemetry) for details.
 
 ```sql
 SET PROFILING ON;
@@ -397,6 +416,33 @@ Override `appsettings.json` defaults for the current session.
 | `SET MAX_FILE_OPERATIONS = n` | 100 | Filesystem operations allowed per script |
 | `SET MAX_GENERATE_ROWS = n` | 10,000 | Rows per `GENERATE` statement (prevents resource exhaustion) |
 | `SET MAX_PARALLEL_DEGREE = n` | 8 | Max concurrent branches inside a `PARALLEL` block |
+
+### 2.6 Observability & Telemetry
+
+ETL-SQL provides two layers of performance monitoring: **Telemetry** and **Profiling**.
+
+#### Telemetry (`SET TELEMETRY ON/OFF`)
+Telemetry is the "always-on" (by default) lightweight monitoring layer. It tracks cumulative session-wide counters and provides the data for system variables like `@@ROWCOUNT` and `@@TOTAL_SPILLED_BYTES`.
+
+- **Primary Use**: Monitoring overall job progress and resource pressure.
+- **Scope**: Session-wide totals and the "last statement" summary.
+- **Impact**: Negligible overhead (uses atomic counters).
+
+#### Profiling (`SET PROFILING ON/OFF`)
+Profiling is a high-resolution, opt-in monitoring layer that captures detailed timing and resource usage for **every individual statement** executed.
+
+- **Primary Use**: Debugging performance bottlenecks and identifying slow queries.
+- **Scope**: Statement-level granularity.
+- **Impact**: Low, but creates telemetry objects for every statement; should be disabled in ultra-high-throughput production loops if not needed.
+- **Commands**: Enables `SHOW PROFILE` and visual execution tree rendering in the IDE.
+
+| Feature | Telemetry | Profiling |
+| :--- | :---: | :---: |
+| Default | ON | OFF |
+| Granularity | Session / Last Stmt | Per Statement |
+| `@@variables` | ✓ | ✓ |
+| `SHOW PROFILE` | ✗ | ✓ |
+| Execution Tree | ✗ | ✓ |
 | `SET MAX_STRING_RESULT_SIZE = n` | 5,242,880 | Max byte length of a string expression result (5 MB) |
 | `SET REGEX_MATCH_TIMEOUT = n` | 1,000 | Milliseconds before a regex match is aborted |
 | `SET MAX_GROUPING_SETS = n` | 100 | Max `CUBE`/`GROUPING SETS` combinations before abort |
@@ -530,6 +576,9 @@ CREATE CONNECTION mailer ON SMTP(
 ```sql
 -- In-memory mock database — useful for testing without a real database
 CREATE CONNECTION testdb ON MOCKDB();
+
+-- Local directory connector — treats a folder as a queryable table
+CREATE CONNECTION logs_dir ON DIRECTORY('C:\Logs\') WITH(RECURSIVE=TRUE);
 ```
 
 **Service Connectors** `[PROPOSED]`
@@ -569,6 +618,29 @@ ALTER CONNECTION stage ON POSTGRES('prod-server-v2');
 ```sql
 DROP CONNECTION prod;
 DROP CONNECTION prod IF EXISTS;
+
+### 3.4 Connection Introspection
+
+Use these statements to inspect the current state of connections in the session.
+
+| Statement | Purpose |
+| :--- | :--- |
+| `SHOW CONNECTIONS` | Lists all active connections with their type and summary details. |
+| `SHOW CONNECTION <name> CONFIG` | Lists all configuration options for a specific connection (passwords redacted). |
+
+All `SHOW` commands support the `INTO #temp` clause to redirect results for further processing.
+
+```sql
+-- List all connections
+SHOW CONNECTIONS;
+
+-- Inspect configuration for a specific source
+SHOW CONNECTION my_db CONFIG;
+
+-- Programmatically inspect and filter config
+SHOW CONNECTION my_db CONFIG INTO #cfg;
+SELECT * FROM #cfg WHERE Option = 'SERVER';
+```
 ```
 
 ### 3.3 Credential Helpers
@@ -640,15 +712,25 @@ END
 
 > For large result sets, consider using `SET FOREACH_PAGE_SIZE` to control how many rows are loaded at once.
 
-### 4.5 `FOREACH` — List Iteration
-Iterates through each item in a `LIST` variable.
+### 4.5 `FOREACH` — Collection Iteration
+Iterates through each item in a `LIST` variable, JSON array, or the rows of a `#temp` table.
+
+- **Streaming Support**: When used with a subquery or a connection name, `FOREACH` uses a streaming cursor to minimize memory usage.
+- **Auto-Unwrapping**: If the source is a table with a single column named `Value`, the iterator variable will contain the scalar value directly. Otherwise, it contains a `ROW` object.
 
 ```sql
+-- Iterating a list
 DECLARE @months LIST = ('Jan', 'Feb', 'Mar', 'Apr');
-
 FOREACH @month IN @months
 BEGIN
     PRINT 'Processing: ' + @month;
+END
+
+-- Iterating a #temp table (Dot notation for columns)
+SELECT id, name INTO #users FROM src.users;
+FOREACH @user IN #users
+BEGIN
+    PRINT 'User: ' + @user.id + ' - ' + @user.name;
 END
 
 -- Commonly used with FILE_LIST
@@ -746,9 +828,21 @@ WAIT UNTIL (SELECT COUNT(*) FROM #batch_done) = 1;
 ### 4.11 `ASSERT`
 Throws an `ExecutionException` if the condition is `FALSE` or `NULL`.
 
+- **Statement Only**: `ASSERT` is a statement, not an expression. It cannot be used inside an `IF` condition or assigned to a variable.
+- **Error Handling**: Failed assertions trigger the `CATCH` block of a `TRY...CATCH` statement, allowing for graceful cleanup or custom logging.
+
 ```sql
 ASSERT (SELECT COUNT(*) FROM #staging) > 0, 'Staging table must not be empty';
 ASSERT @total_amount >= 0, 'Negative balances are not allowed';
+
+-- Catching a failed assertion
+BEGIN TRY
+    ASSERT (SELECT COUNT(*) FROM #errors) = 0, 'Validation errors detected';
+END TRY
+BEGIN CATCH
+    PRINT 'Validation Failed: ' + ERROR_MESSAGE();
+    RETURN;
+END CATCH
 ```
 
 ### 4.12 `EXPECT SCHEMA`
@@ -848,9 +942,18 @@ FETCH NEXT 10 ROWS ONLY;
 | `LEFT SEMI JOIN` | Left rows where a match exists on the right |
 | `LEFT ANTI JOIN` | Left rows where no match exists on the right |
 
+#### 5.4.1 Join Algorithms
+ETL-SQL supports three join algorithms. While the engine automatically chooses the best one based on table size and statistics, you can provide a hint to override it.
+
+| Algorithm | Hint | Description |
+| :--- | :--- | :--- |
+| **Nested Loop** | `LOOP` | Standard algorithm; iterates the outer table and probes the inner. Best for small datasets or when the inner side is indexed. |
+| **Hash Join** | `HASH` | Builds an in-memory hash table of the inner source. Best for large, unsorted datasets. Higher memory usage. |
+| **Merge Join** | `MERGE` | Simultaneously scans two sorted sources. Fastest algorithm for large datasets that are already ordered by the join keys. |
+
 ```sql
 SELECT * FROM #large AS a
-HASH JOIN #lookup AS b ON a.id = b.id;   -- force hash join
+HASH JOIN #lookup AS b ON a.id = b.id;   -- force hash join for performance
 ```
 
 ### 5.5 `CROSS APPLY` / `OUTER APPLY`
@@ -1135,6 +1238,9 @@ ALTER TABLE #staging ADD BatchId INT;
 ALTER TABLE #staging DROP COLUMN TempFlag;
 ALTER TABLE #staging RENAME COLUMN Name TO FullName;
 ```
+
+-- Drop when done (auto-dropped at session end anyway)
+DROP TABLE IF EXISTS #staging;
 
 ### 10.3 `DROP TABLE`
 ```sql

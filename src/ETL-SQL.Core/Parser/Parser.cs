@@ -31,7 +31,7 @@ namespace ETL_SQL.Core.Parser
             TokenType.TYPE, TokenType.VERSION, TokenType.SOURCE, TokenType.MATCHED,
             TokenType.TABLE, TokenType.TAG, TokenType.VALUE, TokenType.BITS, 
             TokenType.ALGORITHM, TokenType.PASSPHRASE, TokenType.COMMENT, TokenType.DATE,
-            TokenType.GETDATE, TokenType.RETURNS
+            TokenType.GETDATE, TokenType.RETURNS, TokenType.CONFIG
         };
 
         private static readonly HashSet<TokenType> DataTypeTokens = new()
