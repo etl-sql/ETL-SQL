@@ -4,6 +4,7 @@ using MediatR;
 using OmniSharp.Extensions.JsonRpc;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol;
+using ETL_SQL.Core;
 
 namespace ETL_SQL.LSP
 {
@@ -17,7 +18,7 @@ namespace ETL_SQL.LSP
     [Method("etlsql/refreshMetadata", Direction.ClientToServer)]
     public interface IRefreshMetadataHandler : IJsonRpcNotificationHandler<RefreshMetadataParams> { }
 
-    public class RefreshMetadataHandler(ILogger<RefreshMetadataHandler> logger, DocumentStateStore store, TextDocumentHandler textDocumentHandler, MetadataManager metadata) : IRefreshMetadataHandler
+    public class RefreshMetadataHandler(ILogger<RefreshMetadataHandler> logger, DocumentStateStore store, TextDocumentHandler textDocumentHandler, IMetadataManager metadata) : IRefreshMetadataHandler
     {
         public async Task<Unit> Handle(RefreshMetadataParams request, CancellationToken cancellationToken)
         {

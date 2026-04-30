@@ -33,8 +33,7 @@ namespace ETL_SQL.TUI.UI
             // Clear area first
             for (int i = 0; i < height; i++)
             {
-                console.SetCursorPosition(x, y + i);
-                console.Write(new string(' ', width));
+                console.ClearLine(x, y + i, width);
             }
 
             // Tree column gets ~35% of inner width, capped to keep it readable

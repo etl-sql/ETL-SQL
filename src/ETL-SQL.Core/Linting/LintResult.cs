@@ -10,6 +10,7 @@ namespace ETL_SQL.Core.Linting
     public class LintResult
     {
         public string RuleName { get; set; } = string.Empty;
+        public string? Code { get; set; }
         public LintSeverity Severity { get; set; }
         public string Message { get; set; } = string.Empty;
         public int LineNumber { get; set; }

@@ -39,6 +39,12 @@ namespace ETL_SQL.LSP
     public interface IGetTempTablesHandler : IJsonRpcRequestHandler<GetTempTablesParams, GetTempTablesResponse> { }
 
     /// <summary>
+    /// LSP Request Handler for encrypting a script.
+    /// </summary>
+    [Method("etlsql/encryptScript", Direction.ClientToServer)]
+    public interface IEncryptScriptHandler : IJsonRpcRequestHandler<EncryptScriptParams, EncryptScriptResponse> { }
+
+    /// <summary>
     /// LSP Notification Handler for toggling debug mode.
     /// </summary>
     [Method("etlsql/setDebugMode", Direction.ClientToServer)]
@@ -49,7 +55,7 @@ namespace ETL_SQL.LSP
     /// </summary>
     /// <param name="metadata">The metadata manager for connection and schema info.</param>
     /// <param name="logger">The logger instance.</param>
-    public class CustomMethodsHandler(IMetadataManager metadata, ILogger<CustomMethodsHandler> logger) : ISetConnectionsHandler, IGetTablesHandler, IGetColumnsHandler, ISetDebugModeHandler, IGetViewsHandler, IGetTempTablesHandler
+    public class CustomMethodsHandler(IMetadataManager metadata, ILogger<CustomMethodsHandler> logger) : ISetConnectionsHandler, IGetTablesHandler, IGetColumnsHandler, ISetDebugModeHandler, IGetViewsHandler, IGetTempTablesHandler, IEncryptScriptHandler
     {
         /// <summary>Handles toggle debug mode notification.</summary>
         public Task<Unit> Handle(SetDebugModeParams request, CancellationToken cancellationToken)
@@ -57,6 +63,16 @@ namespace ETL_SQL.LSP
             metadata.DebugMode = request.debugMode;
             logger.LogInformation("LSP: DebugMode set to {Value}", request.debugMode);
             return Task.FromResult(Unit.Value);
+        }
+
+        /// <summary>Handles script encryption requests.</summary>
+        public Task<EncryptScriptResponse> Handle(EncryptScriptParams request, CancellationToken cancellationToken)
+        {
+            logger.LogInformation("LSP: etlsql/encryptScript requested.");
+            // We use the security service to perform the transformation
+            var security = new ETL_SQL.Services.SecurityService(ETL_SQL.Common.NullLogger.Instance);
+            var encrypted = security.EncryptScript(request.text, request.password);
+            return Task.FromResult(new EncryptScriptResponse { encryptedText = encrypted });
         }
 
         /// <summary>Handles bulk registration of connections from the client.</summary>

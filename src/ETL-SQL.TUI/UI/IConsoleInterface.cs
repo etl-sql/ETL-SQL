@@ -18,6 +18,7 @@ namespace ETL_SQL.TUI.UI
         // Spectre.Console integration
         void Markup(string markup);
         void WriteWidget(IRenderable widget);
+        void ClearLine(int left, int top, int width);
     }
 
     public class PhysicalConsole : IConsoleInterface
@@ -31,7 +32,15 @@ namespace ETL_SQL.TUI.UI
         public void Write(string value) => Console.Write(value);
         public void Clear() => Console.Clear();
 
-        public void Markup(string markup) => AnsiConsole.Markup(markup);
-        public void WriteWidget(IRenderable widget) => AnsiConsole.Write(widget);
+        public void Markup(string markup) => AnsiConsole.Console.Write(new Markup(markup));
+        public void WriteWidget(IRenderable widget) => AnsiConsole.Console.Write(widget);
+
+        public void ClearLine(int left, int top, int width)
+        {
+            Console.SetCursorPosition(left, top);
+            // Use ANSI escape sequence to clear line from cursor to end
+            // This is more efficient and safer than writing spaces
+            Console.Write("\x1b[2K"); 
+        }
     }
 }

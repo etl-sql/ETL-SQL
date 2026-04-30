@@ -20,8 +20,7 @@ namespace ETL_SQL.TUI.UI
         {
             for (int i = 0; i < height; i++)
             {
-                console.SetCursorPosition(x, y + i);
-                console.Write(new string(' ', width));
+                console.ClearLine(x, y + i, width);
             }
 
             if (height < 12)
@@ -31,7 +30,7 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            var lastMetrics = _evaluator.ProfileMetrics.Count > 0 ? _evaluator.ProfileMetrics.Last() : null;
+            var lastMetrics = _evaluator.Telemetry.ProfileMetrics.Count > 0 ? _evaluator.Telemetry.ProfileMetrics.Last() : null;
 
             var layoutTable = new Table().NoBorder().Expand();
             layoutTable.AddColumn("Chart");
@@ -54,7 +53,7 @@ namespace ETL_SQL.TUI.UI
             statsTable.AddRow("Core Exec", $"{_evaluator.LastExecTimeMs} ms");
 
             // Overall script-level Rows/s calculation
-            long totalRows = _evaluator.ProfileMetrics.Sum(m => m.RowsProcessed);
+            long totalRows = _evaluator.Telemetry.ProfileMetrics.Sum(m => m.RowsProcessed);
             long scriptRps = 0;
             if (_evaluator.LastExecTimeMs > 0)
                 scriptRps = totalRows * 1000 / _evaluator.LastExecTimeMs;
@@ -84,14 +83,14 @@ namespace ETL_SQL.TUI.UI
             profileTable.AddColumn(new TableColumn("Dur").RightAligned());
             profileTable.AddColumn(new TableColumn("Mem").RightAligned());
 
-            if (_evaluator.ProfileMetrics.Count == 0)
+            if (_evaluator.Telemetry.ProfileMetrics.Count == 0)
             {
                 profileTable.AddRow(new Markup("[grey]No statement-level metrics recorded yet (Wait for query completion).[/]"), new Text(""), new Text(""), new Text(""), new Text(""));
             }
             else
             {
                 int tableHeight = Math.Max(1, height - 10);
-                var visibleMetrics = _evaluator.ProfileMetrics
+                var visibleMetrics = _evaluator.Telemetry.ProfileMetrics
                     .Skip(_renderer.ResultScrollRow)
                     .Take(tableHeight)
                     .ToList();
@@ -116,7 +115,7 @@ namespace ETL_SQL.TUI.UI
 
             var panel = new Panel(rootTable)
             {
-                Header = new PanelHeader("[yellow]Performance Dashboard[/]"),
+                Header = new PanelHeader("[yellow] Performance Dashboard [/]", Justify.Left),
                 Height = height,
                 Width = width,
                 Border = BoxBorder.Rounded

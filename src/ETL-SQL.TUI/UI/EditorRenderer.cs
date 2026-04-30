@@ -77,7 +77,12 @@ namespace ETL_SQL.TUI.UI
         /// <param name="totalHeight">The height of the console window.</param>
         public void Render(EditorBuffer buffer, Evaluator evaluator, string filePath, bool isDirty, int totalWidth, int totalHeight)
         {
-            if (!Headless) _console.CursorVisible = false;
+            if (!Headless) 
+            {
+                _console.CursorVisible = false;
+                // Hard reset: Force cursor to (0,0) and ensure we are relative to the viewport top
+                _console.Write("\x1b[H"); 
+            }
 
             if (_forceFullRepaintPending)
             {
@@ -140,11 +145,16 @@ namespace ETL_SQL.TUI.UI
             // 1. Header
             if (!Headless)
             {
-                _console.SetCursorPosition(0, 0);
+                _console.ClearLine(0, 0, totalWidth);
                 string fileLabel = string.IsNullOrEmpty(filePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(filePath);
-                string focusInfo = !ResultsFocus ? " [bold yellow] (FOCUSED) [/]" : " (F3 to focus)";
-                string header = $" ETL-SQL IDE | {fileLabel}{(isDirty ? "*" : "")}{focusInfo} ".PadRight(totalWidth - 1);
-                _console.Markup($"[white on grey15]{Markup.Escape(header)}[/]");
+                string headerBase = $" ETL-SQL IDE | {fileLabel}{(isDirty ? "*" : "")}";
+                string focusInfo = !ResultsFocus ? " [bold yellow](FOCUSED)[/]" : " [grey](F3 to focus)[/]";
+                
+                _console.Markup($"[white on grey15]{Markup.Escape(headerBase)} [/]{focusInfo}");
+                
+                int plainLen = headerBase.Length + 1 + (!ResultsFocus ? 9 : 13);
+                if (totalWidth > plainLen)
+                    _console.Markup($"[white on grey15]{new string(' ', totalWidth - plainLen)}[/]");
             }
 
             // 2. Main Panels
@@ -213,7 +223,7 @@ namespace ETL_SQL.TUI.UI
                 int rightLen  = cursor3.Length;
                 // Center plain text: dirtyDot + fileLabel + " " (pill width is approximate — pills are short)
                 int pillPlain = PerformanceVisible ? 6 : ResultsVisible ? 9 : hasError ? 7 : ResultsFocus ? 16 : 9;
-                int centerAvail = Math.Max(0, totalWidth - leftLen - rightLen - 3); // 3 for two "│" separators + space
+                int centerAvail = Math.Max(0, totalWidth - leftLen - rightLen - 4); // Subtract 4 (instead of 3) to leave 1 char buffer at end of row
 
                 string centerFile = dirtyDot + fileLabel2;
                 if (centerFile.Length > centerAvail - pillPlain - 2)
@@ -229,9 +239,7 @@ namespace ETL_SQL.TUI.UI
                     sep +
                     $"[white on grey15]{Markup.Escape(cursor3)}[/]";
 
-                _console.SetCursorPosition(0, statusRow);
-                // Fill background first so trailing space after right zone is covered
-                _console.Markup($"[white on grey15]{new string(' ', totalWidth)}[/]");
+                _console.ClearLine(0, statusRow, totalWidth);
                 _console.SetCursorPosition(0, statusRow);
                 _console.Markup(statusMarkup);
             }
@@ -275,7 +283,7 @@ namespace ETL_SQL.TUI.UI
                 _console.Markup($"[white on black]{renderedPrompt}[/]");
                 
                 // Set cursor for prompt
-                int cursorX = (PromptTitle?.Length ?? 0) + 4 + PromptCursor;
+                int cursorX = (PromptTitle?.Length ?? 0) + 3 + PromptCursor;
                 _console.SetCursorPosition(Math.Min(cursorX, totalWidth - 1), promptRow);
                 _console.CursorVisible = true;
             }
@@ -324,7 +332,7 @@ namespace ETL_SQL.TUI.UI
             if (HelpVisible) RenderHelpOverlay(totalWidth, totalHeight);
 
             // 8. Restore absolute cursor
-            if (!ResultsFocus && !Headless && !HelpVisible)
+            if (!ResultsFocus && !Headless && !HelpVisible && !PromptVisible)
             {
                 _console.SetCursorPosition((buffer.CursorColumn - ScrollCol) + gutterWidth, (buffer.CursorLine - ScrollLine) + editorAreaTop);
                 _console.CursorVisible = true;
@@ -417,7 +425,7 @@ namespace ETL_SQL.TUI.UI
 
             var panel = new Panel(inner)
             {
-                Header = new PanelHeader("[bold yellow] ETL-SQL Keyboard Reference [/]"),
+                Header = new PanelHeader("[bold yellow] ETL-SQL Keyboard Reference [/]", Justify.Left),
                 Height = panelHeight,
                 Width  = panelWidth,
                 Border = BoxBorder.Double

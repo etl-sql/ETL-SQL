@@ -58,4 +58,15 @@ namespace ETL_SQL.LSP
     {
         public List<string> tables { get; set; } = new();
     }
+
+    public class EncryptScriptParams : IRequest<EncryptScriptResponse>
+    {
+        public string text { get; set; } = "";
+        public string password { get; set; } = "";
+    }
+
+    public class EncryptScriptResponse
+    {
+        public string encryptedText { get; set; } = "";
+    }
 }

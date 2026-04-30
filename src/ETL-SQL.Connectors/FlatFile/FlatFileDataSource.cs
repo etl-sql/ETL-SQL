@@ -539,6 +539,9 @@ namespace ETL_SQL.Connectors.FlatFile
 
         public async Task WriteBatches(IAsyncEnumerable<DataTable> batches, bool append = false)
         {
+            // Security Hardening: Block writing to script files
+            _context?.SecurityService.ValidateWriteAccess(_filePath);
+
             string tempFile = System.IO.Path.GetTempFileName();
             try
             {
@@ -706,6 +709,9 @@ namespace ETL_SQL.Connectors.FlatFile
 
         public async Task TruncateAsync()
         {
+            // Security Hardening: Block truncating script files
+            _context?.SecurityService.ValidateWriteAccess(_filePath);
+
             if (System.IO.File.Exists(_filePath))
             {
                 System.IO.File.WriteAllText(_filePath, string.Empty);

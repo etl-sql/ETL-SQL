@@ -28,7 +28,8 @@ namespace ETL_SQL.Services
         }
 
         private readonly ILogger _logger;
-        private static readonly Regex ConnRegex = new Regex(@"(CREATE\s+CONNECTION\s+\w+\s+ON\s+\w+\s*\(\s*(['""]))([^'""\(\)]+)(\2\s*\))(?:\s+WITH\s*\((.*?)\))?", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        private static readonly Regex ConnRegex = new Regex(@"(CREATE\s+CONNECTION\s+\w+\s+ON\s+\w+\s*\()(.*?)(\))(?:\s+WITH\s*\((.*?)\))?", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+        private static readonly Regex PasswordOptionRegex = new Regex(@"(PASSWORD\s*=\s*)(['""])(.*?)\2", RegexOptions.IgnoreCase);
         private static readonly Regex EncRegex = new Regex(@"(['""])ENC:[A-Za-z0-9+/=]*\1", RegexOptions.Compiled);
         // On case-sensitive filesystems (Linux), path prefix checks must be case-sensitive.
         private static readonly StringComparison PathComparison = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
@@ -595,15 +596,47 @@ namespace ETL_SQL.Services
 
             return ConnRegex.Replace(text, m =>
             {
-                var target = m.Groups[3].Value;
-                var options = m.Groups[5].Value;
+                var targetWithQuotes = m.Groups[2].Value.Trim();
+                var options = m.Groups[4].Value;
                 
-                if (target.StartsWith("ENC:") || options.Contains("ENCRYPT=OFF", StringComparison.OrdinalIgnoreCase))
+                if (options.Contains("ENCRYPT=OFF", StringComparison.OrdinalIgnoreCase))
                     return m.Value;
 
-                var encrypted = CryptoUtils.Encrypt(target, password);
-                var result = m.Groups[1].Value + encrypted + m.Groups[4].Value;
-                if (m.Groups[5].Success) result += " WITH (" + m.Groups[5].Value + ")";
+                var result = m.Value;
+
+                // 1. Encrypt Target (Connection String) if it's a quoted string and contains '='
+                if (targetWithQuotes.Length >= 2 && (targetWithQuotes.StartsWith("'") || targetWithQuotes.StartsWith("\"")))
+                {
+                    var quote = targetWithQuotes[0];
+                    var target = targetWithQuotes.Trim(quote);
+                    
+                    if (!target.StartsWith("ENC:") && (target.Contains("=") || !Path.HasExtension(target)))
+                    {
+                        var encrypted = CryptoUtils.Encrypt(target, password);
+                        result = result.Replace(targetWithQuotes, quote + encrypted + quote);
+                    }
+                }
+
+                // 2. Encrypt PASSWORD option in WITH clause
+                if (m.Groups[4].Success)
+                {
+                    var updatedOptions = PasswordOptionRegex.Replace(options, pm =>
+                    {
+                        var pwd = pm.Groups[3].Value;
+                        if (!string.IsNullOrEmpty(pwd) && !pwd.StartsWith("ENC:"))
+                        {
+                            var encryptedPwd = CryptoUtils.Encrypt(pwd, password);
+                            return pm.Groups[1].Value + pm.Groups[2].Value + encryptedPwd + pm.Groups[2].Value;
+                        }
+                        return pm.Value;
+                    });
+
+                    if (updatedOptions != options)
+                    {
+                        result = result.Replace(options, updatedOptions);
+                    }
+                }
+
                 return result;
             });
         }
@@ -615,11 +648,28 @@ namespace ETL_SQL.Services
         {
             foreach (Match m in ConnRegex.Matches(text))
             {
-                var target = m.Groups[3].Value;
-                var options = m.Groups[5].Value;
-                if (!target.StartsWith("ENC:") && !options.Contains("ENCRYPT=OFF", StringComparison.OrdinalIgnoreCase))
+                var targetWithQuotes = m.Groups[2].Value.Trim();
+                var options = m.Groups[4].Value;
+                
+                if (options.Contains("ENCRYPT=OFF", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                // Check target string
+                if (targetWithQuotes.Length >= 2 && (targetWithQuotes.StartsWith("'") || targetWithQuotes.StartsWith("\"")))
                 {
-                    return true;
+                    var quote = targetWithQuotes[0];
+                    var target = targetWithQuotes.Trim(quote);
+                    if (!target.StartsWith("ENC:") && target.Contains("="))
+                        return true;
+                }
+
+                // Check PASSWORD option in WITH clause
+                if (m.Groups[4].Success && PasswordOptionRegex.IsMatch(options))
+                {
+                    var pm = PasswordOptionRegex.Match(options);
+                    var pwd = pm.Groups[3].Value;
+                    if (!string.IsNullOrEmpty(pwd) && !pwd.StartsWith("ENC:"))
+                        return true;
                 }
             }
             return false;

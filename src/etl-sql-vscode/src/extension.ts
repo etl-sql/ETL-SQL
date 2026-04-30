@@ -108,7 +108,15 @@ export function activate(context: vscode.ExtensionContext) {
 
     if (!serverPath) {
         outputChannel.appendLine("Language Server disabled (not found or not configured).");
+        vscode.window.showWarningMessage("ETL-SQL Language Server not found. Features like IntelliSense and Linting will be limited.");
     } else {
+        if (!fs.existsSync(serverPath)) {
+            const msg = `Language Server executable not found at: ${serverPath}`;
+            outputChannel.appendLine(`ERROR: ${msg}`);
+            vscode.window.showErrorMessage(msg);
+            return;
+        }
+
         const serverOptions: ServerOptions = {
             run: { command: serverPath, transport: TransportKind.stdio },
             debug: { command: serverPath, transport: TransportKind.stdio }
@@ -264,6 +272,47 @@ export function activate(context: vscode.ExtensionContext) {
         }
         ReportPreviewPanel.open(context, scriptPath);
     }));
+
+    // Security: Secure Connections command (Quick Fix target)
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.secureConnection', async (uri: string) => {
+        const password = await vscode.window.showInputBox({
+            password: true,
+            prompt: "Enter Master Password to encrypt connections in this script",
+            placeHolder: "Password"
+        });
+
+        if (!password) return;
+
+        const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri) 
+                    || vscode.window.activeTextEditor;
+        
+        if (!editor || editor.document.uri.toString() !== uri) {
+            vscode.window.showErrorMessage("ETL-SQL: Target script is no longer active.");
+            return;
+        }
+
+        try {
+            const response = await client.sendRequest('etlsql/encryptScript', {
+                text: editor.document.getText(),
+                password: password
+            }) as { encryptedText: string };
+
+            if (response && response.encryptedText) {
+                const fullRange = new vscode.Range(
+                    editor.document.positionAt(0),
+                    editor.document.positionAt(editor.document.getText().length)
+                );
+                
+                await editor.edit(editBuilder => {
+                    editBuilder.replace(fullRange, response.encryptedText);
+                });
+                
+                vscode.window.showInformationMessage("Connections secured successfully.");
+            }
+        } catch (err: any) {
+            vscode.window.showErrorMessage(`Failed to secure connections: ${err.message}`);
+        }
+    }));
 }
 
 function syncConnectionsToLsp() {
@@ -306,9 +355,25 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
     const verbose = true;
     const enableLogging = false;
     const logPath = '.etlsql_logs';
+    
+    if (exePath !== 'ETL-SQL.exe' && !fs.existsSync(exePath)) {
+        const msg = `ETL-SQL Engine executable not found at: ${exePath}. Please check your etlsql.executable.path setting.`;
+        outputChannel.appendLine(`ERROR: ${msg}`);
+        vscode.window.showErrorMessage(msg);
+        return;
+    }
 
     const scriptText = selectionOnly ? editor.document.getText(editor.selection) : editor.document.getText();
     const fileName = path.basename(document.fileName);
+
+    let masterPassword = "";
+    if (scriptText.includes('ENC:')) {
+        masterPassword = await vscode.window.showInputBox({
+            password: true,
+            prompt: "Master Password required for encrypted credentials in this script",
+            placeHolder: "Enter password or leave blank to use machine key"
+        }) || "";
+    }
 
     if (runMethod === 'Webview (Grid)') {
         ResultsPanel.postMessage({ type: 'clear' });
@@ -322,7 +387,10 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
         if (verbose) replArgs.push('--verbose');
         if (enableLogging) { replArgs.push('--log'); replArgs.push(logPath); }
         replArgs.push('--perf', '--json', '--session', sessionId);
-
+        if (masterPassword) {
+            replArgs.push('--pass', masterPassword);
+        }
+ 
         try {
             const scriptPath = document.isUntitled ? undefined : document.fileName;
             const workspaceRoot = vscode.workspace.getWorkspaceFolder(document.uri)?.uri.fsPath
@@ -349,7 +417,11 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
             scriptPath = path.join(tempDir, `temp_${Date.now()}.etlsql`);
             fs.writeFileSync(scriptPath, scriptText);
         }
-        terminal.sendText(`& "${exePath}" run "${scriptPath}"`);
+        let command = `& "${exePath}" run "${scriptPath}"`;
+        if (masterPassword) {
+            command += ` --pass "${masterPassword}"`;
+        }
+        terminal.sendText(command);
     }
 }
 
@@ -380,7 +452,9 @@ function getExecutablePath(context: vscode.ExtensionContext, config: vscode.Work
         for (const p of searchPaths) if (fs.existsSync(p)) return p;
     }
 
-    return 'ETL-SQL.exe'; // Fallback to PATH
+    const finalPath = 'ETL-SQL.exe'; // Fallback to PATH
+    outputChannel.appendLine(`Engine executable not found in bundled or build folders. Falling back to: ${finalPath}`);
+    return finalPath;
 }
 
 function getSessionId(document: vscode.TextDocument): string {

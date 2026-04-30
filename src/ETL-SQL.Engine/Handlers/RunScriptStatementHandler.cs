@@ -36,6 +36,7 @@ namespace ETL_SQL.Engine.Handlers
                 throw new ExecutionException("Script path expression evaluated to null.");
             
             string scriptPath = pathObj.ToString()!;
+            scriptPath = context.ResolvePath(scriptPath);
 
             _logger.Debug("Running sub-script: {ScriptPath}", scriptPath);
 
@@ -56,8 +57,8 @@ namespace ETL_SQL.Engine.Handlers
             foreach (var param in stmt.Parameters)
             {
                 var val = await context.EvaluateValue(param.Value, new Row());
-                localVars[param.Key] = val;
-                localMetadata[param.Key] = new VariableMetadata { IsSensitive = true, IsInput = true };
+                localVars[param.Name] = val;
+                localMetadata[param.Name] = new VariableMetadata { IsSensitive = true, IsInput = true, IsOutput = param.IsOutput };
             }
 
             context.VarContext.PushScope(localVars, localMetadata);
@@ -79,7 +80,7 @@ namespace ETL_SQL.Engine.Handlers
                 // 1. Map back variables passed as parameters (by identifier)
                 foreach (var param in stmt.Parameters)
                 {
-                    if (allVars.TryGetValue(param.Key, out var result))
+                    if (allVars.TryGetValue(param.Name, out var result))
                     {
                         string? targetVar = null;
                         if (param.Value is IdentifierExpression id)

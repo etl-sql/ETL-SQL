@@ -75,6 +75,10 @@ namespace ETL_SQL.LSP
                         services.AddSingleton<IFunctionRegistry>(functionRegistry);
                         services.AddSingleton<IMetadataManager, MetadataManager>();
                         services.AddSingleton<DocumentStateStore>();
+                        services.AddSingleton<TextDocumentHandler>();
+                        services.AddSingleton<CodeActionProvider>();
+                        services.AddSingleton<CustomMethodsHandler>();
+                        services.AddSingleton<RefreshMetadataHandler>();
                     })
                     .OnStarted((server, ct) => {
                         server.Configuration.AddConfigurationItem(new ConfigurationItem { Section = "etlsql" });
@@ -86,6 +90,7 @@ namespace ETL_SQL.LSP
                     .WithHandler<CompletionProvider>()
                     .WithHandler<SignatureHelpProvider>()
                     .WithHandler<FormattingProvider>()
+                    .WithHandler<CodeActionProvider>()
                     .WithHandler<CustomMethodsHandler>()
                     .WithHandler<RefreshMetadataHandler>()
             );

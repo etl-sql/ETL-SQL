@@ -73,6 +73,12 @@ namespace ETL_SQL.Core.Linting.Rules
 
         private void CheckConnection(CreateConnectionStatement conn, List<LintResult> results)
         {
+            CheckFileEncryption(conn, results);
+            CheckPlaintextCredentials(conn, results);
+        }
+
+        private void CheckFileEncryption(CreateConnectionStatement conn, List<LintResult> results)
+        {
             if (!FileConnectors.Contains(conn.ConnectionType ?? "")) return;
             if (conn.Options == null) return;
 
@@ -112,6 +118,44 @@ namespace ETL_SQL.Core.Linting.Rules
                             ColumnNumber = conn.Column
                         });
                     }
+                }
+            }
+        }
+
+        private void CheckPlaintextCredentials(CreateConnectionStatement conn, List<LintResult> results)
+        {
+            // 1. Check Target (Connection String)
+            if (conn.TargetExpression is LiteralExpression targetLit && targetLit.Value is string targetStr)
+            {
+                if (targetStr.Contains("Password=", StringComparison.OrdinalIgnoreCase) && !targetStr.Contains("ENC:", StringComparison.OrdinalIgnoreCase))
+                {
+                    results.Add(new LintResult
+                    {
+                        RuleName = Name,
+                        Code = "SEC-PLAIN-CONN",
+                        Severity = LintSeverity.Warning,
+                        Message = $"Connection '{conn.ConnectionName}' contains a plaintext connection string. Use a Master Password to encrypt this for better security.",
+                        LineNumber = conn.Line,
+                        ColumnNumber = conn.Column
+                    });
+                    return;
+                }
+            }
+
+            // 2. Check Options (PASSWORD)
+            if (conn.Options != null && conn.Options.TryGetValue("PASSWORD", out var pwdExpr) && pwdExpr is LiteralExpression pwdLit && pwdLit.Value is string pwdStr)
+            {
+                if (!string.IsNullOrEmpty(pwdStr) && !pwdStr.StartsWith("ENC:", StringComparison.OrdinalIgnoreCase))
+                {
+                    results.Add(new LintResult
+                    {
+                        RuleName = Name,
+                        Code = "SEC-PLAIN-CONN",
+                        Severity = LintSeverity.Warning,
+                        Message = $"Connection '{conn.ConnectionName}' uses a plaintext password. Use a Master Password to encrypt this for better security.",
+                        LineNumber = conn.Line,
+                        ColumnNumber = conn.Column
+                    });
                 }
             }
         }

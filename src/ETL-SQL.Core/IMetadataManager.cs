@@ -31,5 +31,6 @@ namespace ETL_SQL.Core
         IConnector? GetConnector(string name);
         string? GetConnectionType(string connectionName, string? uri = null);
         void ClearCache();
+        void ClearCacheForUri(string uri);
     }
 }

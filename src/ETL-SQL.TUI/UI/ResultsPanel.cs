@@ -21,8 +21,7 @@ namespace ETL_SQL.TUI.UI
         {
             for (int i = 0; i < height; i++)
             {
-                console.SetCursorPosition(x, y + i);
-                console.Write(new string(' ', width));
+                console.ClearLine(x, y + i, width);
             }
 
             if (_evaluator.LastResultSets.Count == 0)
@@ -74,8 +73,7 @@ namespace ETL_SQL.TUI.UI
             // Clear area
             for (int i = 0; i < height; i++)
             {
-                console.SetCursorPosition(x, y + i);
-                console.Write(new string(' ', width));
+                console.ClearLine(x, y + i, width);
             }
 
             int count = evaluator.LastResultSets.Count;

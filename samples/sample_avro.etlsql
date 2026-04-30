@@ -2,7 +2,7 @@
 -- Demonstrates reading and writing Avro files
 
 -- Define a connection to an Avro file
-CREATE CONNECTION MyAvro TYPE AVRO TARGET 'data_sample.avro';
+CREATE CONNECTION MyAvro TYPE AVRO TARGET 'samples/output/data_sample.avro';
 
 -- Create some dummy data in memory
 CREATE TABLE #SourceData (ID INT, Name VARCHAR(50), Active BOOLEAN);

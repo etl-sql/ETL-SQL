@@ -2,7 +2,7 @@
 -- Demonstrates reading and writing Parquet files
 
 -- Define a connection to a Parquet file
-CREATE CONNECTION MyParquet TYPE PARQUET TARGET 'data_sample.parquet' WITH (COMPRESSION = 'SNAPPY');
+CREATE CONNECTION MyParquet TYPE PARQUET TARGET 'samples/output/data_sample.parquet' WITH (COMPRESSION = 'SNAPPY');
 
 -- Create some dummy data in memory
 CREATE TABLE #SourceData (ID INT, Name VARCHAR(50), Score DOUBLE);

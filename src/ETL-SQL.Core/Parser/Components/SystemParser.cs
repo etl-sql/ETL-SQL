@@ -248,7 +248,7 @@ namespace ETL_SQL.Core.Parser.Components
         {
             Consume(TokenType.SCRIPT, "Expected 'SCRIPT' after 'RUN'");
             var pathExpr = ParseExpression();
-            var parameters = new Dictionary<string, Expression>(StringComparer.OrdinalIgnoreCase);
+            var parameters = new List<RunScriptParameter>();
             if (Match(TokenType.WITH))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after WITH");
@@ -257,7 +257,8 @@ namespace ETL_SQL.Core.Parser.Components
                     var nameToken = Consume(TokenType.VARIABLE, "Expected parameter name starting with '@'");
                     Consume(TokenType.EQUALS, "Expected '='");
                     var value = ParseExpression();
-                    parameters[nameToken.Value] = value;
+                    bool isOutput = Match(TokenType.OUTPUT);
+                    parameters.Add(new RunScriptParameter(nameToken.Value, value, isOutput));
                     if (!Match(TokenType.COMMA)) break;
                 }
                 Consume(TokenType.RPAREN, "Expected ')' after parameters");

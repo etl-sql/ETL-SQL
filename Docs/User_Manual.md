@@ -808,6 +808,45 @@ Use `SET WHAT_IF ON` before any destructive operation. See [SECURITY.md](file://
 
 ---
 
+## 13.1 Securing Credentials
+
+Never store plaintext passwords in your scripts. ETL-SQL provides automated tools to transform vulnerable scripts into secure ones using `ENC:` (Encrypted) strings.
+
+### 13.1.1 The VS Code Quick Fix
+When the ETL-SQL linter detects a plaintext password in a `CREATE CONNECTION` statement, it will highlight it with a security warning. 
+1. Hover over the warning.
+2. Select **Quick Fix...**
+3. Choose **Secure connection credentials...**
+4. Enter your **Master Password** when prompted.
+5. The extension will automatically encrypt the password and update your script to use the `ENC:` format.
+
+### 13.1.2 TUI Auto-Encryption
+The Terminal IDE (TUI) includes a proactive "One-Way Valve" guardrail. If you attempt to save a script containing plaintext credentials:
+- The TUI will interrupt the save.
+- It will prompt you for a Master Password.
+- It will automatically transform the script before it hits the disk.
+
+### 13.1.3 Manual Encryption via CLI
+If you are working outside the IDE, you can manually generate encrypted strings using the engine utility:
+```bash
+etl-sql encrypt "myPlainPassword" --pass "myMasterSecret"
+```
+Copy the output (starting with `ENC:`) and paste it into your `CREATE CONNECTION` statement.
+
+### 13.1.4 Authorizing the Session
+Once your script uses `ENC:` strings, the engine needs the Master Password at runtime to decrypt them. Use the `USE PASSWORD` statement at the top of your script:
+```sql
+-- Secure: Prompts the user for the password at runtime (never stored)
+USE PASSWORD PROMPT;
+
+-- Convenient: Sets the password for the current session (variable masking applies)
+USE PASSWORD = 'myMasterSecret';
+
+CREATE CONNECTION db ON MSSQL() WITH(USER='me', PASSWORD='ENC:abc123...');
+```
+
+---
+
 ## 14. Mocking & Testing
 
 Great pipelines require great tests. ETL-SQL provides tools to simulate complex data scenarios without touching production systems.

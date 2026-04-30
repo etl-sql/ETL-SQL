@@ -29,7 +29,18 @@ namespace ETL_SQL.Engine.Handlers
             foreach (var arg in stmt.Arguments)
             {
                 var val = await context.EvaluateValue(arg, new Row());
-                values.Add(val?.ToString() ?? "NULL");
+                string strVal = val?.ToString() ?? "NULL";
+
+                // Security: Mask sensitive variables if SHOW_PASSWORD is OFF
+                if (!context.ShowPassword && arg is VariableExpression varExpr)
+                {
+                    if (context.VarContext.VariableMetadata.TryGetValue(varExpr.Name, out var meta) && (meta.IsSensitive || meta.IsSecret))
+                    {
+                        strVal = "*******";
+                    }
+                }
+
+                values.Add(strVal);
             }
 
             var message = string.Join(" ", values);

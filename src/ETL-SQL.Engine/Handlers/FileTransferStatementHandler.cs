@@ -61,6 +61,9 @@ namespace ETL_SQL.Engine.Handlers
             {
                 _logger.WriteLine($"RECEIVING: {stmt.ConnectionName}:{remotePath} -> {localPath} (OVERWRITE={(overwrite ? "ON" : "OFF")})", ConsoleColor.Cyan);
                 
+                // Security Hardening: Block writing to script files
+                context.SecurityService.ValidateWriteAccess(localPath);
+
                 if (context.IsWhatIf)
                 {
                     _logger.WriteLine($"WHAT IF: Would receive {stmt.ConnectionName}:{remotePath} to local file {localPath}", ConsoleColor.Yellow);

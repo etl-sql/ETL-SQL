@@ -131,3 +131,6 @@ etlsql.db
 test_lineage.md
 test_out.txt
 tests_list.txt
+
+# Sample Output
+samples/output/

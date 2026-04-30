@@ -961,7 +961,9 @@ namespace ETL_SQL.Engine
             if (_securityService != null)
             {
                 _securityService.ValidatePath(fullPath);
-                _securityService.ValidateFileType(fullPath, AllowUnknownFileTypes, AllowedFileTypeOverrides);
+                // Security Hardening: We removed ValidateFileType from ResolvePath because it was causing 
+                // false positives for non-data-source operations like RUN SCRIPT. 
+                // Data connectors now perform their own explicit file type validation.
             }
             else
             {

@@ -212,6 +212,7 @@ namespace ETL_SQL.LSP
                         Range    = new LSPRange(lineIdx, colStart, lineIdx, colEnd),
                         Severity = res.Severity == LintSeverity.Error ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
                         Message  = res.Message,
+                        Code     = res.Code ?? res.RuleName,
                         Source   = "ETL-SQL Linter"
                     });
                 }

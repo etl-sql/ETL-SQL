@@ -52,7 +52,7 @@ Specialty types carry semantic meaning beyond a plain string or number. They inf
 | `JSON` | String | At assignment — validates well-formedness immediately; enables `JSON_VALUE`, `JSON_QUERY`, etc. |
 | `XML` | String | At assignment — validates well-formedness immediately; enables `XMLVALUE`, `XMLQUERY`, etc. |
 | `MARKDOWN` | String | At render time — Report Portal renders as rich text; CLI treats as plain string |
-| `LIST` | Collection | At iteration or index access — can be strictly typed, e.g. `LIST(INT)` |
+| `LIST` | Collection | At iteration — can be strictly typed, e.g. `LIST(INT)` |
 | `MINMAX` | Struct | At declaration — gives a `.MIN` and `.MAX` member; inner type annotation is documentary |
 | `ENCRYPTED` | String | At runtime — masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values when assigned to non-SENSITIVE targets or passed to secure parameters |
 | `SENSITIVE` | Any | At runtime — masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values when assigned to non-SENSITIVE targets or passed to secure parameters |
@@ -199,11 +199,11 @@ Sets the `IsSensitive` runtime flag on the variable. Three effects activate imme
 2. **`ENC:` auto-decryption** — if the value begins with `ENC:`, the engine automatically decrypts it when the variable is passed to a secure connector parameter (`PASSWORD`, `API_KEY`, `SSH_KEY_PAIR.PASSPHRASE`, etc.). This requires `USE SCRIPT PASSWORD` or a master password to be set.
 3. **Lint taint tracking** — if you assign a `SENSITIVE` variable into a new variable (`SET @other = @pwd`), the linter marks `@other` as sensitive too, propagating SEC-4 warnings forward.
 
-`SENSITIVE` does **not** prevent you from printing the value — `PRINT @sensitiveVar` will output the plaintext. The SEC-4 lint rule warns you when you do this, but the runtime does not block it.
+`SENSITIVE` ensures that the value is protected in output — `PRINT @sensitiveVar` will output `*******` unless `SET SHOW_PASSWORD ON` is active. The SEC-4 lint rule also warns you if you attempt to use these variables in insecure sinks.
 
 ```sql
 DECLARE @dbPass SENSITIVE = 'ENC:abc123==';  -- masked in SHOW VARIABLES, decrypted at connect time
-USE SCRIPT PASSWORD 'my-master-key';
+USE PASSWORD = 'my-master-key';
 OPEN CONNECTION MyDb WITH (PASSWORD = @dbPass);  -- @dbPass decrypted here automatically
 ```
 
@@ -297,10 +297,13 @@ CREATE CONNECTION db ON MSSQL('ENC:U2FsdGVkX1+...');
 ```
 
 ### 1.7 `CLEAR SESSION`
-Deletes all temporary files, recovery manifests, and encrypted session state.
+Deletes temporary files, recovery manifests, and encrypted session state.
 
 ```sql
-CLEAR SESSION;
+CLEAR SESSION;                  -- clear current session
+CLEAR SESSIONS ALL;             -- clear all sessions for the current user
+CLEAR SESSIONS STALE;           -- clear sessions older than 24 hours
+CLEAR SESSION 'session-id';     -- clear a specific session
 ```
 
 ### 1.8 Environment Sets (`CREATE SETS` / `USE SETS` / `DROP SETS`)
@@ -377,11 +380,13 @@ SHOW PROFILE INTO #perf;
 ```
 
 ### 2.3 `SET SHOW_PASSWORD`
-Controls whether `USE PASSWORD` echoes the value in output. Default: `OFF`.
+Controls whether variables marked as `SENSITIVE` (see §4.1) are revealed in plain text during `SHOW VARIABLES` or `PRINT` output. Default: `OFF`.
+
+> [!IMPORTANT]
+> For security, the "System Password" set via `USE PASSWORD` is **never** revealed or echoed in any output, even when this setting is `ON`. If you lose this password, any `ENC:` strings or files encrypted with it cannot be recovered.
 
 ```sql
 SET SHOW_PASSWORD ON;
-USE PASSWORD = 'visible_for_debugging';
 SET SHOW_PASSWORD OFF;
 ```
 
@@ -394,8 +399,6 @@ Only honored when the path is within an approved Safe Zone. All overrides produc
 | `SET ALLOW_FILE_TYPE_ACCESS = '.ext'` | Add a specific extension (e.g. '.bak') to the authorized session whitelist |
 | `SET ALLOW_FILE_OPERATIONS = n` | Overrides the default runaway protection limit (100) for file operations |
 | `SET ALLOW_RECURSIVE_LAYERS = n` | Overrides the default recursion limit (5) for directory operations |
-| `SET ALLOW_GREATER_THAN_n_FILE ON/OFF` | [Legacy] Alias for enabling large file counts |
-| `SET ALLOW_RECURSIVE_GREATER_THAN_n_LAYERS ON/OFF` | [Legacy] Alias for enabling deep recursion |
 
 ### 2.5 Performance & Spilling Thresholds
 Override `appsettings.json` defaults for the current session.
@@ -416,6 +419,16 @@ Override `appsettings.json` defaults for the current session.
 | `SET MAX_FILE_OPERATIONS = n` | 100 | Filesystem operations allowed per script |
 | `SET MAX_GENERATE_ROWS = n` | 10,000 | Rows per `GENERATE` statement (prevents resource exhaustion) |
 | `SET MAX_PARALLEL_DEGREE = n` | 8 | Max concurrent branches inside a `PARALLEL` block |
+| `SET MAX_STRING_RESULT_SIZE = n` | 5,242,880 | Max byte length of a string expression result (5 MB) |
+| `SET REGEX_MATCH_TIMEOUT = n` | 1,000 | Milliseconds before a regex match is aborted |
+| `SET MAX_GROUPING_SETS = n` | 100 | Max `CUBE`/`GROUPING SETS` combinations before abort |
+| `SET MAX_SESSION_SIZE = n` | 524,288,000 | Max session state in bytes before eviction (~500 MB) |
+| `SET SPILL_ENCRYPTION = ON/OFF` | ON | AES-256 encryption on spill files |
+| `SET SPILL_COMPRESSION = ON/OFF` | ON | Brotli compression on spill files |
+| `SET SPILL_FORMAT = 'AUTO'|'JSON'|'PARQUET'` | AUTO | Storage format for spilled engine data |
+| `SET PARALLEL_MAX_DEGREE = n` | 8 | Max concurrent branches inside a `PARALLEL` block |
+| `SET REGEX_TIMEOUT = n` | 1,000 | Milliseconds before a regex match is aborted |
+
 
 ### 2.6 Observability & Telemetry
 
@@ -443,15 +456,7 @@ Profiling is a high-resolution, opt-in monitoring layer that captures detailed t
 | `@@variables` | ✓ | ✓ |
 | `SHOW PROFILE` | ✗ | ✓ |
 | Execution Tree | ✗ | ✓ |
-| `SET MAX_STRING_RESULT_SIZE = n` | 5,242,880 | Max byte length of a string expression result (5 MB) |
-| `SET REGEX_MATCH_TIMEOUT = n` | 1,000 | Milliseconds before a regex match is aborted |
-| `SET MAX_GROUPING_SETS = n` | 100 | Max `CUBE`/`GROUPING SETS` combinations before abort |
-| `SET MAX_SESSION_SIZE = n` | 524,288,000 | Max session state in bytes before eviction (~500 MB) |
-| `SET SPILL_ENCRYPTION = ON/OFF` | ON | AES-256 encryption on spill files |
-| `SET SPILL_COMPRESSION = ON/OFF` | ON | Brotli compression on spill files |
-| `SET SPILL_FORMAT = 'AUTO'|'JSON'|'PARQUET'` | AUTO | Storage format for spilled engine data |
-| `SET PARALLEL_MAX_DEGREE = n` | 8 | Max concurrent branches inside a `PARALLEL` block |
-| `SET REGEX_TIMEOUT = n` | 1,000 | Milliseconds before a regex match is aborted |
+orted |
 | `SET TELEMETRY = ON/OFF` | ON | Collect high-cost execution metrics |
 
 ---
@@ -581,8 +586,7 @@ CREATE CONNECTION testdb ON MOCKDB();
 CREATE CONNECTION logs_dir ON DIRECTORY('C:\Logs\') WITH(RECURSIVE=TRUE);
 ```
 
-**Service Connectors** `[PROPOSED]`
-
+**Service Connectors**
 ```sql
 -- Report Portal
 CREATE CONNECTION portal ON REPORTPORTAL(
@@ -1129,9 +1133,9 @@ Access columns of a row variable, fields of a JSON object, or properties of a sy
 | Object | Member | Description |
 | :--- | :--- | :--- |
 | Row variable (`FOR @row IN`) | `.columnName` | Column value during row iteration — see §4.4 |
-| `FILE_LIST` / `REMOTE_FILE_LIST` rows | `.NAME`, `.PATH`, `.SIZE`, etc. | File metadata columns — see §15.6 |
+| `FILE_LIST` / `REMOTE_FILE_LIST` rows | `.NAME`, `.PATH`, `.SIZE`, etc. | File metadata columns — see §16.6 |
 | `MINMAX` variable | `.MIN`, `.MAX` | Range bounds — see §1.2 |
-| Docker alias | `.CONNECTION_STRING` | Host-mapped connection string — see §17 |
+| Docker alias | `.CONNECTION_STRING` | Host-mapped connection string — see §18 |
 | JSON variable | `.fieldName` | Dynamic field extraction — see §1.2 |
 
 ---
@@ -1344,7 +1348,20 @@ END
 
 ### 11.4 `RUN SCRIPT`
 ```sql
-RUN SCRIPT 'sub_process.etlsql' WITH (@batchId = 1234, @env = 'PROD');
+RUN SCRIPT 'sub_process.etlsql' WITH (@batchId = 1234, @env = 'PROD', @result = @out_var OUTPUT);
+```
+
+Executes an external `.etlsql` or `.rptsql` file.
+
+**Parameters**:
+- **`WITH`**: Optional block to pass variables into the script's scope.
+- **`OUTPUT`**: Optional keyword marking a parameter for return-mapping. If a variable passed with `OUTPUT` is modified inside the script, the new value is mapped back to the calling scope's variable.
+
+**Example**:
+```sql
+DECLARE @count INT = 0;
+RUN SCRIPT 'calculate_totals.etlsql' WITH(@category = 'Finance', @total = @count OUTPUT);
+PRINT 'Total: ' + CAST(@count AS STRING);
 ```
 
 
@@ -1395,6 +1412,9 @@ BEGIN TRANSACTION;   -- or BEGIN TRAN
 
 -- ... operations ...
 
+COMMIT TRANSACTION;  -- or COMMIT TRAN / COMMIT
+ROLLBACK TRANSACTION; -- or ROLLBACK TRAN / ROLLBACK
+
 IF @@TRANCOUNT > 0
     COMMIT;          -- or COMMIT TRAN
 
@@ -1404,9 +1424,52 @@ ROLLBACK;            -- or ROLLBACK TRAN
 
 ---
 
-## 14. Job Scheduling
+## 14. Expressions & Operators
 
-### 14.1 `CREATE JOB` — Local Orchestrator
+### 14.1 Arithmetic Operators
+`+` (Add), `-` (Subtract), `*` (Multiply), `/` (Divide), `%` (Modulo)
+
+### 14.2 Logical Operators
+`AND`, `OR`, `NOT`
+
+### 14.3 Comparison Operators
+`=`, `<>`, `!=`, `<`, `<=`, `>`, `>=`
+
+### 14.4 Temporal Expressions
+
+#### `AT TIME ZONE`
+Converts a `DATETIME` or `DATETIMEOFFSET` expression to the target timezone. If the input has no offset, it is assumed to be **UTC**.
+
+```sql
+SELECT OrderDate AT TIME ZONE 'Pacific Standard Time' AS local_time FROM #orders;
+
+-- Using a variable for the timezone
+DECLARE @tz = 'Eastern Standard Time';
+SELECT SYSDATE AT TIME ZONE @tz;
+```
+
+**Common Timezone IDs (Windows):**
+- `UTC`
+- `Eastern Standard Time`
+- `Central Standard Time`
+- `Mountain Standard Time`
+- `Pacific Standard Time`
+- `Alaskan Standard Time`
+- `Hawaiian Standard Time`
+- `GMT Standard Time`
+- `W. Europe Standard Time`
+- `E. Europe Standard Time`
+- `Tokyo Standard Time`
+- `AUS Eastern Standard Time`
+
+> [!NOTE]
+> Timezone IDs are OS-dependent. On Windows, they follow the *Registry Time Zone* names. On Linux/macOS, the engine automatically attempts to map these to *IANA* names (e.g., `America/New_York`), but using the native OS names is recommended for maximum reliability.
+
+---
+
+## 15. Job Scheduling
+
+### 15.1 `CREATE JOB` — Local Orchestrator
 Registers a job with the local Orchestrator service.
 
 ```sql
@@ -1428,7 +1491,7 @@ CREATE JOB WeeklyReport WITH (SCHEDULE = '0 8 * * MON') AS
 **Schedule intervals (EVERY form):** `SECONDS`, `MINUTES`, `HOURS`, `DAYS`  
 **Cron syntax:** standard 5-field cron expression in the `WITH (SCHEDULE = '...')` form.
 
-### 14.2 `CREATE JOB` — Remote Orchestrator `[PROPOSED]`
+### 15.2 `CREATE JOB` — Remote Orchestrator
 Targets a specific remote Orchestrator using `AT <alias>`. The alias must be a connection created with `ON ORCHESTRATOR(...)`.
 
 ```sql
@@ -1442,7 +1505,7 @@ CREATE JOB 'WeeklyReport' AT orch WITH (SCHEDULE = '0 8 * * MON') AS
 > [!NOTE]
 > `CREATE OR ALTER` is not supported for jobs. Use `DROP JOB` and then `CREATE JOB` or use `ALTER JOB` to modify schedule/properties.
 
-### 14.3 Job Management
+### 15.3 Job Management
 
 ```sql
 -- Local
@@ -1465,11 +1528,11 @@ SHOW JOB HISTORY INTO #history;
 
 ---
 
-## 15. File Operations
+## 16. File Operations
 
 All paths are validated against the active Safe Zones before any I/O occurs. See `SET ALLOW_FILE_TYPE_ACCESS` and related overrides in §2.4.
 
-### 15.1 File Statements
+### 16.1 File Statements
 ```sql
 COPY FILE    '<source>' TO '<destination>' [WITH (OVERWRITE = ON|OFF)];
 MOVE FILE    '<source>' TO '<destination>' [WITH (OVERWRITE = ON|OFF)];
@@ -1481,14 +1544,14 @@ DELETE FILE  '<path>' IF EXISTS;
 COPY FILE 'C:\Incoming\*.csv' TO 'C:\Archive\';
 ```
 
-### 15.2 File Encryption / Compression
+### 16.2 File Encryption / Compression
 ```sql
 COMPRESS FILE '<source>' TO '<destination>' [WITH (OVERWRITE = ON|OFF)];
 ENCRYPT FILE  '<source>' TO '<destination>' PASSWORD '<pwd>' [WITH (OVERWRITE = ON|OFF)];
 DECRYPT FILE  '<source>' TO '<destination>' PASSWORD '<pwd>' [WITH (OVERWRITE = ON|OFF)];
 ```
 
-### 15.3 Directory Statements
+### 16.3 Directory Statements
 ```sql
 CREATE DIRECTORY '<path>' [IF NOT EXISTS];
 
@@ -1504,7 +1567,7 @@ ENCRYPT DIRECTORY  '<src>' TO '<dest>' PASSWORD '<pwd>' [WITH (OVERWRITE = ON|OF
 DECRYPT DIRECTORY  '<src>' TO '<dest>' PASSWORD '<pwd>' [WITH (OVERWRITE = ON|OFF, RECURSIVE = ON|OFF)];
 ```
 
-### 15.4 File Function Aliases
+### 16.4 File Function Aliases
 Underscore-style function aliases are available for backward compatibility:
 
 ```sql
@@ -1520,7 +1583,7 @@ DELETE_DIRECTORY('path')
 DELETE_DIRECTORY_CONTENTS('path' [, RECURSIVE = ON|OFF])
 ```
 
-### 15.5 Remote File Transfer
+### 16.5 Remote File Transfer
 ```sql
 -- Upload to remote
 SEND FILE '<local_path>' TO '<remote_path>' AT <connection> [WITH (OVERWRITE = ON|OFF)];
@@ -1529,7 +1592,7 @@ SEND FILE '<local_path>' TO '<remote_path>' AT <connection> [WITH (OVERWRITE = O
 RECEIVE FILE FROM '<remote_path>' TO '<local_path>' AT <connection> [WITH (OVERWRITE = ON|OFF)];
 ```
 
-### 15.6 Filesystem Query Functions
+### 16.6 Filesystem Query Functions
 
 | Function | Returns |
 | :--- | :--- |
@@ -1558,11 +1621,11 @@ WHERE LastModified >= DATEADD(HOUR, -24, GETDATE());
 
 ---
 
-## 16. Email
+## 17. Email
 
 > **Syntax note:** `SEND EMAIL` is the canonical form. `EMAIL SEND` is a supported alias. `AT <connection>` is the standard keyword for specifying the SMTP connection, consistent with `SEND FILE ... AT conn`, `RECEIVE FILE ... AT conn`, and `CREATE JOB ... AT orch`.
 
-### 16.1 `SEND EMAIL`
+### 17.1 `SEND EMAIL`
 ```sql
 SEND EMAIL
     TO      'recipient@company.com'
@@ -1619,9 +1682,9 @@ END CATCH
 
 ---
 
-## 17. Containerized Test Databases (`USE DOCKER`)
+## 18. Containerized Test Databases (`USE DOCKER`)
 
-### 17.1 Spawning a Container
+### 18.1 Spawning a Container
 ```sql
 USE DOCKER('<image>') [AS <alias>];
 
@@ -1674,27 +1737,33 @@ CLOSE_DOCKER;
 
 ---
 
-## 18. Introspection & Diagnostics
+## 19. Introspection & Diagnostics
 
-### 18.1 Metadata
+### 19.1 Metadata
 ```sql
-SHOW CONNECTIONS  [INTO #temp];
-SHOW TABLES [ON conn]  [INTO #temp];
-SHOW COLUMNS FOR conn.TableName [INTO #temp];
-SHOW VERSION  [INTO #temp];
-SHOW SAFE ZONES  [INTO #temp];
+SHOW CONNECTIONS             [INTO #temp];
+SHOW CONNECTION <name> CONFIG [INTO #temp];
+SHOW TABLES [ON <conn>]      [INTO #temp];
+SHOW COLUMNS FOR <table_ref> [INTO #temp];
+SHOW VERSION                 [INTO #temp];
+SHOW SAFE ZONES              [INTO #temp];
 ```
 
-### 18.2 Session
+### 19.2 Session
 ```sql
-SHOW VARIABLES       [INTO #temp];
-SHOW LOCAL VARIABLES [INTO #temp];
-SHOW PROFILE         [INTO #temp];
-SHOW LINEAGE [FOR table]  [INTO #temp];
-SHOW TAGS FOR TABLE t [COLUMN c]  [INTO #temp];
+SHOW VARIABLES                 [INTO #temp];
+SHOW LOCAL VARIABLES           [INTO #temp];
+SHOW SESSIONS                  [INTO #temp];
+SHOW PROFILE                   [INTO #temp];
+SHOW LINEAGE [FOR <table_ref>] [INTO #temp];
+
+-- Metadata Tags
+SHOW TAGS FOR SCRIPT                         [INTO #temp];
+SHOW TAGS FOR TABLE <table> [COLUMN <col>]    [INTO #temp];
+SHOW TAG VALUE FOR TABLE <table> [COLUMN <col>] WITH TAG <name> [INTO #temp];
 ```
 
-### 18.3 Jobs
+### 19.3 Jobs
 ```sql
 SHOW JOBS          [INTO #temp];
 SHOW ACTIVE JOBS   [INTO #temp];
@@ -1702,13 +1771,13 @@ SHOW JOB HISTORY [<jobName>]  [INTO #temp];
 KILL JOB <HistoryId>;
 ```
 
-### 18.4 Analysis
+### 19.4 Analysis
 ```sql
 EXPLAIN SELECT * FROM conn.Orders WHERE status = 'Open';
 LINT 'scripts/nightly_load.etlsql';
 ```
 
-### 18.5 Help
+### 19.5 Help
 ```sql
 HELP CONNECTION MSSQL;       -- connector-specific options
 HELP CONNECTION POSTGRES;
@@ -1718,7 +1787,7 @@ HELP TARGET <name>;          -- documentation for a specific statement or keywor
 HELP TYPE <name>;            -- documentation for a data type (e.g. HELP TYPE MINMAX)
 ```
 
-### 18.6 Script Metadata Header
+### 19.6 Script Metadata Header
 ```sql
 /*
    @author:      Chuck
@@ -1896,7 +1965,7 @@ CREATE OR ALTER NAVIGATION <name> AS TAB|BUTTON|LINK ( ... ) WITH PAGES ( ... );
 
 ---
 
-## Appendix B: Report Portal Admin Language `[PROPOSED]`
+## Appendix B: Report Portal Admin Language
 
 Portal admin statements execute inside an `EXECUTE portal BEGIN...END` block. The `portal` alias must be a connection created with `ON REPORTPORTAL(...)`.
 
@@ -2082,11 +2151,11 @@ END
 
 ---
 
-## Appendix C: Orchestrator Remote Management `[PROPOSED]`
+## Appendix C: Orchestrator Remote Management
 
 Orchestrator admin statements execute inside an `EXECUTE orch BEGIN...END` block. The `orch` alias must be a connection created with `ON ORCHESTRATOR(...)`.
 
-For targeting a remote Orchestrator from a standalone `CREATE JOB` statement (outside a block), use the `AT <alias>` form documented in §14.2.
+For targeting a remote Orchestrator from a standalone `CREATE JOB` statement (outside a block), use the `AT <alias>` form documented in §15.2.
 
 ```sql
 CREATE CONNECTION orch ON ORCHESTRATOR(

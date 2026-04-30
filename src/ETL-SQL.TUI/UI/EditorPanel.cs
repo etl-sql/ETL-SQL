@@ -27,8 +27,7 @@ namespace ETL_SQL.TUI.UI
                 int row = y + i;
                 int lineIdx = i + _renderer.ScrollLine;
                 
-                console.SetCursorPosition(x, row);
-                console.Write(new string(' ', width));
+                console.ClearLine(x, row, width);
 
                 if (lineIdx < _buffer.Lines.Count)
                 {

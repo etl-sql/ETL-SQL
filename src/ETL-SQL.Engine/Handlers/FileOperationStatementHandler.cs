@@ -72,6 +72,10 @@ namespace ETL_SQL.Engine.Handlers
                 switch (stmt.Type)
                 {
                     case FileOpType.Delete:
+                        // Security Hardening: Block deleting script files and dangerous file types
+                        context.SecurityService.ValidateWriteAccess(source);
+                        context.SecurityService.ValidateFileType(source);
+
                         if (File.Exists(source)) 
                         {
                             File.Delete(source);
@@ -91,26 +95,31 @@ namespace ETL_SQL.Engine.Handlers
                     case FileOpType.Copy:
                         if (dest != null)
                         {
-                            // Security Hardening: Block writing to script files
+                            // Security Hardening: Block writing to script files and dangerous types
                             context.SecurityService.ValidateWriteAccess(dest);
+                            context.SecurityService.ValidateFileType(dest);
 
-                            if (File.Exists(dest) && !overwrite)
-                                 throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                            if (File.Exists(dest))
+                            {
+                                if (overwrite) File.Delete(dest);
+                                else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                            }
                             File.Copy(source, dest, overwrite);
                         }
                         break;
                     case FileOpType.Move:
                         if (dest != null)
                         {
-                             // Security Hardening: Block writing to script files
-                             context.SecurityService.ValidateWriteAccess(dest);
+                            // Security Hardening: Block writing to script files and dangerous types
+                            context.SecurityService.ValidateWriteAccess(dest);
+                            context.SecurityService.ValidateFileType(dest);
 
-                             if (File.Exists(dest))
-                             {
-                                 if (overwrite) File.Delete(dest);
-                                 else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
-                             }
-                             File.Move(source, dest);
+                            if (File.Exists(dest))
+                            {
+                                if (overwrite) File.Delete(dest);
+                                else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                            }
+                            File.Move(source, dest);
                         }
                         break;
                     case FileOpType.Rename:
@@ -139,11 +148,16 @@ namespace ETL_SQL.Engine.Handlers
                     case FileOpType.Compress:
                         if (dest != null)
                         {
+                            // Security Hardening: Block writing to script files and dangerous types
+                            context.SecurityService.ValidateWriteAccess(dest);
+                            context.SecurityService.ValidateFileType(dest);
+
                             if (File.Exists(dest))
                             {
                                 if (overwrite) File.Delete(dest);
                                 else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
                             }
+
                             if (Directory.Exists(source))
                             {
                                 System.IO.Compression.ZipFile.CreateFromDirectory(source, dest);
@@ -162,9 +176,13 @@ namespace ETL_SQL.Engine.Handlers
                     case FileOpType.Encrypt:
                         if (dest != null)
                         {
+                            // Security Hardening: Block writing to script files and dangerous types
+                            context.SecurityService.ValidateWriteAccess(dest);
+                            context.SecurityService.ValidateFileType(dest);
+
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
                             pwd ??= context.SecurityService.MasterPassword;
-                            if (pwd == null)
+                            if (string.IsNullOrEmpty(pwd))
                                 throw new ExecutionException("ENCRYPT_FILE requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
                             CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
                         }
@@ -172,9 +190,13 @@ namespace ETL_SQL.Engine.Handlers
                     case FileOpType.Decrypt:
                         if (dest != null)
                         {
+                            // Security Hardening: Block writing to script files and dangerous types
+                            context.SecurityService.ValidateWriteAccess(dest);
+                            context.SecurityService.ValidateFileType(dest);
+
                             var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
                             pwd ??= context.SecurityService.MasterPassword;
-                            if (pwd == null)
+                            if (string.IsNullOrEmpty(pwd))
                                 throw new ExecutionException("DECRYPT_FILE requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
                             CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
                         }
@@ -182,6 +204,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
             catch (ExecutionException) { throw; }
+            catch (ETL_SQL.Services.SecurityException) { throw; }
             catch (Exception ex)
             {
                 throw new ExecutionException($"File operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);

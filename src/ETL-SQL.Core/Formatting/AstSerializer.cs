@@ -506,7 +506,7 @@ namespace ETL_SQL.Core.Formatting
         private static string FormatRunScript(RunScriptStatement s)
         {
             var paramsStr = s.Parameters.Count > 0
-                ? " WITH (" + string.Join(", ", s.Parameters.Select(p => $"{p.Key} = {p.Value.ToSql()}")) + ")"
+                ? " WITH (" + string.Join(", ", s.Parameters.Select(p => $"{p.Name} = {p.Value.ToSql()}{(p.IsOutput ? " OUTPUT" : "")}")) + ")"
                 : "";
             return $"RUN SCRIPT {s.PathExpression.ToSql()}{paramsStr};";
         }

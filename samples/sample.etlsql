@@ -1,6 +1,6 @@
 -- Sample ETL-SQL script showing advanced functions
 CREATE CONNECTION source_data ON FLATFILE('source.csv');
-CREATE CONNECTION report_data ON FLATFILE('report.csv');
+CREATE CONNECTION report_data ON FLATFILE('samples/output/report.csv');
 
 INSERT INTO report_data
 SELECT 

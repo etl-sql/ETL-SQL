@@ -82,6 +82,9 @@ namespace ETL_SQL.Engine.Handlers
                     _logger.WriteLine($"Directory created: {path}", ConsoleColor.Green);
                     break;
                 case DirectoryOpType.Delete:
+                    // Security Hardening: Block deleting directories containing scripts (or with script extensions)
+                    context.SecurityService.ValidateWriteAccess(path);
+
                     if (Directory.Exists(path))
                     {
                         Directory.Delete(path, true);
@@ -118,21 +121,29 @@ namespace ETL_SQL.Engine.Handlers
                 case DirectoryOpType.Copy:
                     if (dest != null)
                     {
+                        // Security Hardening: Block copying into sensitive script locations
+                        context.SecurityService.ValidateWriteAccess(dest);
+
                         await fsService.CopyDirectory(path, dest, overwrite, context);
                         _logger.WriteLine($"Directory copied: {path} -> {dest}", ConsoleColor.Green);
                     }
                     break;
                 case DirectoryOpType.DeleteContents:
+                    // Security Hardening: Block deleting contents of directories containing scripts
+                    context.SecurityService.ValidateWriteAccess(path);
+
                     fsService.DeleteDirectoryContents(path, recursive, context);
                     _logger.WriteLine($"Directory contents deleted: {path}", ConsoleColor.Green);
                     break;
                 case DirectoryOpType.Compress:
                     if (dest != null)
                     {
-                        if (File.Exists(dest))
+                        // Security Hardening: Block writing to script files
+                        context.SecurityService.ValidateWriteAccess(dest);
+
+                        if (File.Exists(dest) && !overwrite)
                         {
-                            if (overwrite) File.Delete(dest);
-                            else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                             throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
                         }
                         System.IO.Compression.ZipFile.CreateFromDirectory(path, dest);
                         _logger.WriteLine($"Directory compressed: {path} -> {dest}", ConsoleColor.Green);
@@ -141,6 +152,9 @@ namespace ETL_SQL.Engine.Handlers
                 case DirectoryOpType.Encrypt:
                     if (dest != null)
                     {
+                        // Security Hardening: Block writing to script files
+                        context.SecurityService.ValidateWriteAccess(dest);
+
                         var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
                         pwd ??= context.SecurityService.MasterPassword;
                         if (pwd == null)
@@ -152,6 +166,9 @@ namespace ETL_SQL.Engine.Handlers
                 case DirectoryOpType.Decrypt:
                     if (dest != null)
                     {
+                        // Security Hardening: Block writing to script files
+                        context.SecurityService.ValidateWriteAccess(dest);
+
                         var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
                         pwd ??= context.SecurityService.MasterPassword;
                         if (pwd == null)
@@ -163,6 +180,7 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
             catch (ExecutionException) { throw; }
+            catch (ETL_SQL.Services.SecurityException) { throw; }
             catch (Exception ex)
             {
                 throw new ExecutionException($"Directory operation '{stmt.Type}' failed: {ex.Message}", ex, null, stmt.Line, stmt.Column);

@@ -938,12 +938,14 @@ namespace ETL_SQL.Core
         }
     }
 
+    public record RunScriptParameter(string Name, Expression Value, bool IsOutput);
+
     public record RunScriptStatement : Statement
     {
         public Expression PathExpression { get; }
-        public Dictionary<string, Expression> Parameters { get; }
+        public List<RunScriptParameter> Parameters { get; }
 
-        public RunScriptStatement(Expression path, Dictionary<string, Expression> parameters)
+        public RunScriptStatement(Expression path, List<RunScriptParameter> parameters)
         {
             PathExpression = path;
             Parameters = parameters;
