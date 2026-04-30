@@ -6,14 +6,14 @@ SELECT 'A' as Category, 10 as Val INTO #data;
 -- 2. CREATE VISUAL
 CREATE VISUAL V1 AS BAR (
     SOURCE = (SELECT * FROM #data),
-    MAPPINGS (X = Category, VALUE = Val),
+    MAPPINGS (X = Category, Y = Val),
     TOOLTIP = 'Initial Tooltip'
 );
 
 -- 3. CREATE OR ALTER VISUAL (should overwrite)
 CREATE OR ALTER VISUAL V1 AS LINE (
     SOURCE = (SELECT * FROM #data),
-    MAPPINGS (X = Category, VALUE = Val),
+    MAPPINGS (X = Category, Y = Val),
     TOOLTIP = 'Updated Tooltip via OR ALTER'
 );
 
@@ -39,8 +39,8 @@ CREATE VISUAL V2 AS CARD (
 DROP VISUAL V2;
 
 -- 7. Verification Page
-CREATE PAGE Main AS (
-    STRUCTURE = 'A B / C D',
+CREATE PAGE Main AS LAYOUT (
+    STRUCTURE = 'A B',
     MAP (
         'A' = V1,
         'B' = RefreshBtn

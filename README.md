@@ -2,7 +2,7 @@
 
 ![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.6.0-blue?style=for-the-badge&logo=dotnet)
 ![Language](https://img.shields.io/badge/Language-C%23-green?style=for-the-badge)
-![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux-lightgrey?style=for-the-badge)
+![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-lightgrey?style=for-the-badge)
 
 A high-performance ETL engine and scripting language that blends **Standard SQL** with **procedural automation**. Write data pipelines, interactive reports, and scheduled jobs in a single SQL-first language — and run them headless, in a terminal IDE, or as live web dashboards.
 
@@ -12,34 +12,130 @@ A high-performance ETL engine and scripting language that blends **Standard SQL*
 
 ### Terminal IDE (`--ui edit`)
 
-<!-- Record with ScreenToGif or VHS → save to docs/assets/tui-demo.gif -->
 ![TUI demo](Docs/assets/tui-demo.gif)
 
 *Syntax highlighting · autocomplete · live results grid · compare mode · profiling dashboard*
 
 ### VS Code Extension
 
-<!-- Record with ScreenToGif → save to docs/assets/vscode-demo.gif -->
 ![VS Code demo](Docs/assets/vscode-demo.gif)
 
 *Inline diagnostics · schema autocomplete · REPL results panel · report preview*
 
 ### Report-SQL Dashboards
 
-<!-- Record with ScreenToGif → save to docs/assets/report-demo.gif -->
+<!-- Record with ScreenToGif or VHS → save to docs/assets/report-demo.gif -->
 ![Report demo](Docs/assets/report-demo.gif)
 
 *Interactive charts · live parameter slicers · multi-page navigation · PDF export*
 
 ---
 
+## Getting Started
+
+### Prerequisites
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download)
+
+### Install
+
+```bash
+git clone https://github.com/AmericanSuperstar/ETL-SQL.git
+cd ETL-SQL
+dotnet build
+```
+
+### Run the Terminal IDE
+
+```bash
+dotnet run --project src/ETL-SQL.App -- --ui edit MyScript.etlsql
+```
+
+### Run a Script Headlessly
+
+```bash
+dotnet run --project src/ETL-SQL.App -- --run MyScript.etlsql
+```
+
+### Serve a Report Dashboard
+
+```bash
+# Single report
+etl-sql-report serve my_report.rptsql
+
+# Multi-report catalog
+etl-sql-report serve --manifest reports.json
+```
+
+### Build Static Report Outputs
+
+```bash
+etl-sql-report build my_report.rptsql --format pdf
+etl-sql-report build my_report.rptsql --format md
+```
+
+### Full Release Build (Maintainers)
+
+```powershell
+.\scripts\Master-Release.ps1 -Version "0.6.0"
+```
+
+This validates the engine, builds the VS Code extension, publishes binaries for Windows/Linux/macOS, and packages everything into ZIP archives.
+
+---
+
+## ETL Pipeline Example
+
+```sql
+-- Define connections
+CREATE CONNECTION prod_db ON MSSQL(HOST = 'prod', DATABASE = 'Sales', TRUSTED_CONNECTION = TRUE);
+CREATE CONNECTION archive  ON FLATFILE(PATH = 'C:\Exports\sales_2026.csv', FORMAT = 'CSV', DELIMITER = ',', HEADER = ON);
+CREATE CONNECTION my_smtp  ON SMTP(HOST = 'smtp.company.com', PORT = 587, USER = 'admin', PASSWORD = 'secret', USE_SSL = TRUE);
+
+BEGIN TRY
+    -- Extract from SQL Server into engine memory
+    SELECT OrderId, Customer, Amount 
+    INTO #latest
+    FROM prod_db.dbo.Orders
+    WHERE OrderDate >= '2026-01-01';
+
+    -- Write to CSV archive
+    INSERT INTO archive SELECT * FROM #latest;
+
+    -- Notify on success
+    SEND EMAIL
+        TO      'admin@company.com'
+        FROM    'etl@company.com'
+        SUBJECT 'ETL Success'
+        BODY    ('Archived ' + CAST((SELECT COUNT(*) FROM #latest) AS STRING) + ' orders.')
+        AT      my_smtp;
+END TRY
+BEGIN CATCH
+    PRINT 'Load failed: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH;
+```
+
+---
+
 ## Core Pillars
 
 ### High-Stream Performance
-- **Zero-Copy Streaming**: Process billion-row datasets with a fixed memory footprint.
+- **Fixed-Footprint Streaming**: Process billion-row datasets with a constant memory footprint — the engine never loads a full dataset into memory.
 - **Native Pushdown**: Automatically pushes joins and filters to MSSQL or Postgres when possible.
 - **Disk-Spilling Engines**: Four configurable engines (`ExternalSortEngine`, `ExternalJoinEngine`, `ExternalAggregateEngine`, `ExternalWindowEngine`) kick in automatically above row-count thresholds.
 - **Parallel Execution**: Concurrent data transfers and transformations with the `PARALLEL` keyword.
+- **Scalar Subquery Cache**: Repeated identical subqueries within a statement are evaluated once and cached session-wide, tracked by `@@SUBQUERY_CACHE_HITS`.
+
+### Multi-Database Connectivity
+Fourteen connector types spanning every tier of the modern data stack.
+
+| Category | Connectors |
+| :--- | :--- |
+| **SQL Databases** | MSSQL, Postgres, Oracle, ODBC |
+| **File Formats** | CSV / Flat File, Parquet, JSON, XML, Avro |
+| **Cloud & Transfer** | Azure Blob, SFTP, FTP |
+| **APIs & Messaging** | REST, SMTP |
+| **Testing** | MOCKDB (in-memory) |
 
 ### Standardized Automation Syntax
 A strict `VERB NOUN` / `VERB_NOUN` convention for all automation commands.
@@ -57,17 +153,33 @@ A strict `VERB NOUN` / `VERB_NOUN` convention for all automation commands.
 - **Script Immutability**: The engine cannot write or modify `.etlsql`, `.sql`, or `.py` files — logic is always human-authored.
 - **Credential Encryption**: All connection strings can be encrypted with `ENC:` prefix + AES-256 master password.
 - **Resource Caps**: Maximum 100 file operations and 5 recursive directory levels per script execution.
+- **Dry-Run Mode**: `SET WHAT_IF ON` suppresses all side-effecting operations (`INSERT`, `UPDATE`, `DELETE`, file writes, emails) and logs what *would* have run — zero risk when validating a new script against production.
 
 ### Deep Observability
 - **Data Lineage**: Trace column origins with `LINEAGE()`. Export Mermaid.js diagrams via `LINEAGE(#result) TO 'report.md'`.
 - **Static Analysis**: Catch logic errors and dialect mismatches before production with `LINT 'script.etlsql'`.
 - **Execution Profiling**: `SET PROFILING ON` reveals statement-by-statement timing and memory deltas.
 
+### Containerized Test Databases
+`USE DOCKER` spins up a throwaway SQL Server, Postgres, or Oracle container on demand — no external tooling required.
+
+```sql
+USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS stage;
+CREATE CONNECTION stagedb ON MSSQL(stage.CONNECTION_STRING);
+
+SELECT * INTO #tmp FROM prod_db.dbo.Customers;
+INSERT INTO stagedb.dbo.Customers SELECT * FROM #tmp;
+
+CLOSE DOCKER stage;
+```
+
+The alias exposes `.CONNECTION_STRING` immediately after startup. Always `CLOSE DOCKER` explicitly or wrap in `TRY...CATCH` — containers are not auto-closed when a script ends.
+
 ---
 
-## Premium Developer Experience
+## Developer Tools
 
-### Terminal IDE (`ui edit`)
+### Terminal IDE (`--ui edit`)
 A full-featured, terminal-based development environment.
 
 - **Vibrant Syntax Highlighting**: Context-aware coloring for DML, DDL, Control Flow, and ETL-specific keywords.
@@ -139,7 +251,7 @@ your_report.rptsql
 
 | Category | Types |
 | :--- | :--- |
-| **Charts** | `BAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `HORIZONTAL_BAR`, `COMBO`, `BOX_PLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL` |
+| **Charts** | `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL` |
 | **Data** | `TABLE` (with conditional formatting), `CARD` (scalar KPI) |
 | **Text** | `TEXT` (free HTML/markdown block) |
 | **Filters** | `SLICER`, `MULTISELECT`, `DATEPICKER`, `SLIDER`, `SEARCH` |
@@ -149,10 +261,10 @@ your_report.rptsql
 ```sql
 -- sales_dashboard.rptsql
 
-SET REPORT TITLE   = 'Sales Dashboard';
+SET REPORT TITLE       = 'Sales Dashboard';
 SET REPORT DESCRIPTION = 'Regional revenue by quarter';
 
-CREATE CONNECTION prod ON MSSQL() WITH(SERVER='prod', DATABASE='Sales', TRUSTED_CONNECTION=TRUE);
+CREATE CONNECTION prod ON MSSQL(HOST = 'prod', DATABASE = 'Sales', TRUSTED_CONNECTION = TRUE);
 
 -- Populate datasets
 SELECT Region, Quarter, SUM(Revenue) AS Revenue
@@ -165,20 +277,23 @@ SELECT DISTINCT Region AS Value INTO #regions FROM #revenue ORDER BY Value;
 -- Filter control
 CREATE VISUAL RegionSlicer AS SLICER (
     SOURCE   = #regions,
-    MAPPINGS ( VALUE = Value )
-) WITH ACTIONS ( ON_CHANGE = SET_PARAMETER(@region) );
+    MAPPINGS ( VALUE = Value ),
+    ACTIONS  ( ON_CHANGE = SET_PARAMETER(@region, Value) )
+);
 
 -- Main chart
 CREATE VISUAL RevChart AS BAR (
     SOURCE   = #revenue WHERE Region = @region OR @region = 'All',
-    MAPPINGS ( X = Quarter, Y = Revenue, SERIES = Region )
-) WITH STYLES ( HEIGHT = '380px', THEME = 'dark' );
+    MAPPINGS ( X = Quarter, Y = Revenue, SERIES = Region ),
+    STYLE    ( HEIGHT = '380px', THEME = dark )
+);
 
 -- KPI card
 CREATE VISUAL TotalKpi AS CARD (
     SOURCE   = (SELECT SUM(Revenue) AS Value, 'Total Revenue' AS Label FROM #revenue),
-    MAPPINGS ( VALUE = Value, LABEL = Label )
-) WITH OPTIONS ( FORMAT = 'C0' );
+    MAPPINGS ( VALUE = Value, LABEL = Label ),
+    OPTIONS  ( FORMAT = 'C0' )
+);
 
 -- Page layout
 CREATE PAGE Sales AS LAYOUT (
@@ -202,42 +317,7 @@ etl-sql-report build sales_dashboard.rptsql --format pdf   # PDF via QuestPDF
 etl-sql-report build sales_dashboard.rptsql --format json  # Raw manifest JSON
 ```
 
-### Multi-Report Hosting
-
-Host a catalog of reports from a single server with a `reports.json` manifest:
-
-```json
-{
-  "reports": [
-    { "name": "sales",     "script": "reports/sales_dashboard.rptsql" },
-    { "name": "inventory", "script": "reports/inventory.rptsql" }
-  ]
-}
-```
-
-```bash
-etl-sql-report serve --manifest reports.json
-# Catalog at http://localhost:5200
-# Reports at  http://localhost:5200/reports/sales
-#             http://localhost:5200/reports/inventory
-```
-
-### Live Parameter Binding
-
-Filter controls automatically post parameter changes to the server. Only affected visuals re-query — unaffected visuals serve from cache.
-
-```
-Browser filter interaction
-        │
-        ▼  POST /api/parameters
-DashboardService
-        │ dependency analysis
-        ├─ affected visuals → ManifestBuilder.RefreshVisualAsync()
-        └─ unaffected visuals → serve from cache
-        │
-        ▼  updated ReportManifest JSON
-Browser re-renders changed panels only
-```
+For multi-report hosting, live parameter binding, and the full visual reference see the [Report-SQL Guide](Docs/Report_SQL_Guide.md).
 
 ---
 
@@ -288,91 +368,7 @@ graph TD
 | `ETL-SQL.exe` | Headless script executor for pipelines, CI/CD, cron, and server deployments. |
 | `ETL-SQL --ui edit` | Interactive terminal IDE — syntax highlighting, autocomplete, live results. |
 | `etl-sql-report` | Report-SQL CLI — `build`, `refresh`, `serve` sub-commands. |
-
----
-
-## Getting Started
-
-### Prerequisites
-- [.NET 10.0 SDK](https://dotnet.microsoft.com/download)
-
-### Install
-
-```bash
-git clone https://github.com/AmericanSuperstar/ETL-SQL.git
-cd ETL-SQL
-dotnet build
-```
-
-### Run the Terminal IDE
-
-```bash
-dotnet run --project src/ETL-SQL.App -- --ui edit MyScript.etlsql
-```
-
-### Run a Script Headlessly
-
-```bash
-dotnet run --project src/ETL-SQL.App -- --run MyScript.etlsql
-```
-
-### Serve a Report Dashboard
-
-```bash
-# Single report
-etl-sql-report serve my_report.rptsql
-
-# Multi-report catalog
-etl-sql-report serve --manifest reports.json
-```
-
-### Build Static Report Outputs
-
-```bash
-etl-sql-report build my_report.rptsql --format pdf
-etl-sql-report build my_report.rptsql --format md
-```
-
-### Full Release Build (Maintainers)
-
-```powershell
-.\scripts\Master-Release.ps1 -Version "0.6.0"
-```
-
-This validates the engine, builds the VS Code extension, publishes binaries for Windows/Linux/macOS, and packages everything into ZIP archives.
-
----
-
-## ETL Pipeline Example
-
-```sql
--- Define connections
-CREATE CONNECTION prod_db ON MSSQL() WITH(SERVER='prod', DATABASE='Sales', TRUSTED_CONNECTION=TRUE);
-CREATE CONNECTION archive  ON FLATFILE('C:\Exports\sales_2026.csv') WITH(DELIMITER=COMMA, HEADER=ON);
-CREATE CONNECTION my_smtp  ON SMTP('smtp.company.com') WITH(PORT=587, USERNAME='admin', PASSWORD='secret', USE_SSL=TRUE);
-
-BEGIN TRY
-    -- Extract from SQL Server into engine memory
-    SELECT OrderId, Customer, Amount INTO #latest
-    FROM prod_db.dbo.Orders
-    WHERE OrderDate >= '2026-01-01';
-
-    -- Write to CSV archive
-    INSERT INTO archive SELECT * FROM #latest;
-
-    -- Notify on success
-    SEND EMAIL
-        TO      'admin@company.com'
-        FROM    'etl@company.com'
-        SUBJECT 'ETL Success'
-        BODY    ('Archived ' + CAST((SELECT COUNT(*) FROM #latest) AS STRING) + ' orders.')
-        AT      my_smtp;
-END TRY
-BEGIN CATCH
-    PRINT 'Load failed: ' + ERROR_MESSAGE();
-    THROW;
-END CATCH;
-```
+| `ETL-SQL.Orchestrator.Service` | Windows Service / systemd daemon — hosts the job scheduler for always-on cron and event-driven pipelines. |
 
 ---
 
