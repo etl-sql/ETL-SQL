@@ -9,6 +9,7 @@ namespace ETL_SQL.TUI.UI
         int WindowWidth { get; }
         int WindowHeight { get; }
         bool CursorVisible { get; set; }
+        IReadOnlyCapabilities Capabilities { get; }
         
         void SetCursorPosition(int left, int top);
         ConsoleKeyInfo ReadKey(bool intercept);
@@ -29,6 +30,7 @@ namespace ETL_SQL.TUI.UI
             get => true; 
             set { if (value) AnsiConsole.Console.Cursor.Show(); else AnsiConsole.Console.Cursor.Hide(); } 
         }
+        public IReadOnlyCapabilities Capabilities => AnsiConsole.Console.Profile.Capabilities;
 
         public void SetCursorPosition(int left, int top) => AnsiConsole.Console.Cursor.SetPosition(left + 1, top + 1);
         public ConsoleKeyInfo ReadKey(bool intercept) => Console.ReadKey(intercept);

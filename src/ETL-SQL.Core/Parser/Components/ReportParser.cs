@@ -97,9 +97,9 @@ namespace ETL_SQL.Core.Parser.Components
                     overlays.AddRange(ParseOverlays());
                     Consume(TokenType.RPAREN, "Expected ')' to close OVERLAYS");
                 }
-                else if (Match(TokenType.DEFAULT))
+                else if (Match(TokenType.DEFAULT) || Match(TokenType.VALUE))
                 {
-                    defaultValue = ParseVisualProperty("DEFAULT");
+                    defaultValue = ParseVisualProperty("VALUE");
                 }
                 else if (Match(TokenType.SUMMARY))
                 {
@@ -167,8 +167,8 @@ namespace ETL_SQL.Core.Parser.Components
         {
             var name = ConsumeIdentifier("Expected page name after CREATE PAGE").Value;
             Consume(TokenType.AS,     "Expected AS after page name");
-            Consume(TokenType.LAYOUT, "Expected LAYOUT after AS");
-            Consume(TokenType.LPAREN, "Expected '(' after LAYOUT");
+            Match(TokenType.LAYOUT); // Optional LAYOUT keyword
+            Consume(TokenType.LPAREN, "Expected '(' after AS");
 
             string? structure = null;
             string? pageStyleName = null;
@@ -336,7 +336,7 @@ namespace ETL_SQL.Core.Parser.Components
 
             Consume(TokenType.AS,     "Expected AS before source query");
             Consume(TokenType.LPAREN, "Expected '(' before source SELECT");
-            var sourceSelect = (SelectStatement)_parser.ParseStatement();
+            var sourceSelect = _parser.ParseStatement();
             Consume(TokenType.RPAREN, "Expected ')' after source SELECT");
             Match(TokenType.SEMICOLON);
 
@@ -1001,7 +1001,11 @@ namespace ETL_SQL.Core.Parser.Components
             var result = new List<VisualMapping>();
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
-                var role   = ConsumeIdentifier("Expected mapping role name").Value.ToUpperInvariant();
+                var roleToken = _parser.Current;
+                if (roleToken.Type == TokenType.RPAREN) break;
+                Advance();
+                var role = roleToken.Value.ToUpperInvariant();
+
                 Consume(TokenType.EQUALS, $"Expected '=' after mapping role '{role}'");
                 var column = ConsumeIdentifier("Expected column name after '='").Value;
                 result.Add(new VisualMapping { Role = role, Column = column });

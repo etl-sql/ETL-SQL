@@ -37,6 +37,7 @@ namespace ETL_SQL.TUI.UI
             if (key.Key == ConsoleKey.Spacebar && key.Modifiers == 0)
             {
                 _editor.MarkDirty();
+                if (_buffer.SelectionStartLine.HasValue) _buffer.DeleteSelection();
                 _buffer.InsertChar(' ');
                 _renderer.AutocompleteVisible = false;
                 return;
@@ -47,10 +48,14 @@ namespace ETL_SQL.TUI.UI
                 if (_autocomplete.HandleKey(key)) return;
             }
 
-            if (key.Key == ConsoleKey.Escape && _buffer.IsMultiLineMode)
+            if (key.Key == ConsoleKey.Escape)
             {
-                _buffer.ClearMultiCursors();
-                _renderer.ShowStatus("Multi-line mode disabled.");
+                _renderer.IsBottomMaximized = false;
+                if (_buffer.IsMultiLineMode)
+                {
+                    _buffer.ClearMultiCursors();
+                    _renderer.ShowStatus("Multi-line mode disabled.");
+                }
                 return;
             }
 
@@ -177,6 +182,7 @@ namespace ETL_SQL.TUI.UI
                 if (_renderer.CompareMode)
                 {
                     _renderer.CompareMode = false;
+                    _renderer.IsBottomMaximized = false;
                     _renderer.ForceFullRepaint();
                     _renderer.ShowStatus("Compare mode off.");
                 }
@@ -219,11 +225,46 @@ namespace ETL_SQL.TUI.UI
                     { _renderer.ResultsVisible = false; _renderer.PerformanceVisible = true; _renderer.ShowStatus("View: Performance Metrics"); }
                 else
                     { _renderer.PerformanceVisible = false; _renderer.ShowStatus("View: Pipeline & Messages"); }
-                _renderer.ForceFullRepaint();
-                return;
-            }
+            _renderer.ForceFullRepaint();
+            return;
+        }
 
-            if (_renderer.CompareMode)
+        // Alt+R - Toggle Report Preview (Phase 5)
+        if (key.Key == ConsoleKey.R && key.Modifiers.HasFlag(ConsoleModifiers.Alt))
+        {
+            _renderer.ReportVisible = !_renderer.ReportVisible;
+            if (_renderer.ReportVisible)
+            {
+                _renderer.ResultsFocus = false;
+                _renderer.AutocompleteVisible = false;
+
+                // If no report has been built yet, try running the script automatically
+                if (_renderer.CurrentReportManifest == null)
+                {
+                    _renderer.ShowStatus("Initializing report preview...");
+                    await _editor.RunScript();
+                }
+
+                if (_renderer.CurrentReportManifest != null)
+                    _renderer.ShowStatus("View: Report Preview (PgUp/PgDn: Scroll | Shift+PgUp/PgDn: Pages)");
+                else
+                    _renderer.ShowStatus("View: Report Preview (No report definitions found)");
+            }
+            else
+            {
+                _renderer.ShowStatus("View: Editor");
+            }
+            _renderer.ForceFullRepaint();
+            return;
+        }
+
+        if (_renderer.ReportVisible)
+        {
+            HandleReportKey(key);
+            return;
+        }
+
+        if (_renderer.CompareMode)
             {
                 HandleCompareKey(key);
                 return;
@@ -298,6 +339,7 @@ namespace ETL_SQL.TUI.UI
             switch (key.Key)
             {
                 case ConsoleKey.Escape:
+                    _renderer.IsBottomMaximized = false;
                     if (!string.IsNullOrEmpty(_renderer.CompareFilters[idx]))
                     {
                         _renderer.CompareFilters[idx] = "";
@@ -329,6 +371,7 @@ namespace ETL_SQL.TUI.UI
             switch (key.Key)
             {
                 case ConsoleKey.Escape:
+                    _renderer.IsBottomMaximized = false;
                     if (!string.IsNullOrEmpty(_renderer.FilterText))
                     {
                         _renderer.FilterText = "";
@@ -486,6 +529,53 @@ namespace ETL_SQL.TUI.UI
                 _renderer.PromptCursor++;
                 // Clear suggestions on type
                 _renderer.PromptSuggestions.Clear();
+            }
+        }
+        private void HandleReportKey(ConsoleKeyInfo key)
+        {
+            if (key.Key == ConsoleKey.Escape)
+            {
+                _renderer.ReportVisible = false;
+                _renderer.ShowStatus("View: Editor");
+                _renderer.ForceFullRepaint();
+                return;
+            }
+
+            var manifest = _renderer.CurrentReportManifest;
+            if (manifest == null || manifest.Pages.Count == 0) return;
+
+            // Page Navigation (Shift+PgUp/PgDn or Number keys)
+            if (key.Key == ConsoleKey.PageUp && key.Modifiers.HasFlag(ConsoleModifiers.Shift))
+            {
+                _renderer.ActiveReportPageIndex = Math.Max(0, _renderer.ActiveReportPageIndex - 1);
+                _renderer.ReportScrollRow = 0;
+                _renderer.ForceFullRepaint();
+                return;
+            }
+            if (key.Key == ConsoleKey.PageDown && key.Modifiers.HasFlag(ConsoleModifiers.Shift))
+            {
+                _renderer.ActiveReportPageIndex = Math.Min(manifest.Pages.Count - 1, _renderer.ActiveReportPageIndex + 1);
+                _renderer.ReportScrollRow = 0;
+                _renderer.ForceFullRepaint();
+                return;
+            }
+
+            // Scrolling (Arrows / PgUp / PgDn)
+            if (key.Key == ConsoleKey.UpArrow) { _renderer.ReportScrollRow = Math.Max(0, _renderer.ReportScrollRow - 1); }
+            else if (key.Key == ConsoleKey.DownArrow) { _renderer.ReportScrollRow++; }
+            else if (key.Key == ConsoleKey.PageUp) { _renderer.ReportScrollRow = Math.Max(0, _renderer.ReportScrollRow - 10); }
+            else if (key.Key == ConsoleKey.PageDown) { _renderer.ReportScrollRow += 10; }
+            else if (key.Key == ConsoleKey.Home) { _renderer.ReportScrollRow = 0; }
+            
+            else if (key.Key >= ConsoleKey.D1 && key.Key <= ConsoleKey.D9)
+            {
+                int index = (int)key.Key - (int)ConsoleKey.D1;
+                if (index < manifest.Pages.Count)
+                {
+                    _renderer.ActiveReportPageIndex = index;
+                    _renderer.ReportScrollRow = 0;
+                    _renderer.ForceFullRepaint();
+                }
             }
         }
     }

@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <PackageReference Include="QuestPDF" Version="2024.10.4" />
+    <PackageReference Include="Spectre.Console" Version="0.54.0" />
   </ItemGroup>
 
 </Project>

@@ -20,7 +20,7 @@ namespace ETL_SQL.Common
             "CREATE", "TABLE", "CONNECTION", "DROP", "DECLARE", "ADD", "COLUMN", "INDEX", "UNIQUE",
             "PRIMARY", "KEY", "FOREIGN", "CHECK", "REFERENCES", "CONSTRAINT", "PROCEDURE", "FUNCTION", "RETURNS",
             "DATABASE", "DIRECTORY", "ALTER", "VIEW", "SCHEMA", "TRANSACTION", "TRAN", "COMMIT", "ROLLBACK", "CLEAR", "SSH_KEY_PAIR", "PGP_KEY_PAIR",
-            "RENAME", "ENCRYPT", "DECRYPT", "DIRECTORY_CONTENTS", "TEMPLATE"
+            "RENAME", "ENCRYPT", "DECRYPT", "DIRECTORY_CONTENTS", "TEMPLATE", "VISUAL", "PAGE", "DATASET", "CONTAINER", "NAVIGATION", "STYLE"
         };
 
         public static readonly HashSet<string> ControlFlowKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -83,8 +83,9 @@ namespace ETL_SQL.Common
             "FONT_SIZE", "CENTER", "INSIDE", "INSIDE_TOP", "INSIDE_BOTTOM", "INSIDE_LEFT", "INSIDE_RIGHT",
             "INSIDE_TOP_LEFT", "INSIDE_TOP_RIGHT", "INSIDE_BOTTOM_LEFT", "INSIDE_BOTTOM_RIGHT",
             "NONE", "HEADER", "FOOTER", "CSS", "JS", "FAVICON", "LOGO", "BACKGROUND",
-            "MAX_GENERATE_ROWS", "MAX_INTERNAL_OPERATIONS", "ALLOW_FILE_OPERATIONS", "ALLOW_RECURSIVE_LAYERS"
-
+            "MAX_GENERATE_ROWS", "MAX_INTERNAL_OPERATIONS", "ALLOW_FILE_OPERATIONS", "ALLOW_RECURSIVE_LAYERS",
+            "BAR", "HBAR", "LINE", "SCATTER", "PIE", "DONUT", "TABLE", "CARD", "TEXT", "SLICER", "DATEPICKER", "SLIDER", "SEARCH", 
+            "GAUGE", "FUNNEL", "WATERFALL", "BOXPLOT", "TREEMAP", "HEATMAP", "COMBO", "MAP", "STRUCTURE", "MAPPINGS", "ACTIONS"
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)

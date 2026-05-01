@@ -287,7 +287,7 @@ namespace ETL_SQL.Core
         public DatasetEncryptionMode EncryptionMode   { get; init; }
         public string? EncryptionPassword             { get; init; }
         public string? KeyFile                        { get; init; }
-        public required SelectStatement SourceQuery   { get; init; }
+        public required Statement SourceQuery         { get; init; }
         public ObjectCreationMode Mode                { get; init; } = ObjectCreationMode.Create;
     }
 

@@ -1,0 +1,62 @@
+-- TUI Report Preview Test Script
+-- Use Alt+R in the TUI IDE to view this graphical report, 
+-- or run 'etl-sql-report print samples/tui_test_report.rptsql' from the CLI.
+
+CREATE CONNECTION db ON MOCKDB();
+
+-- 1. Prepare data for the Bar Chart
+CREATE DATASET &SalesSummary AS (
+    SELECT 'Electronics' as Category, 45000.0 as Amount
+    UNION ALL SELECT 'Furniture', 32000.0
+    UNION ALL SELECT 'Apparel', 28000.0
+    UNION ALL SELECT 'Groceries', 51000.0
+    UNION ALL SELECT 'Books', 12000.0
+);
+
+-- 2. Prepare data for the Table
+CREATE DATASET &RecentOrders AS (
+    SELECT 101 as ID, '2026-05-01' as Date, 'West' as Region, 1200 as Total
+    UNION ALL SELECT 102, '2026-05-01', 'East', 850
+    UNION ALL SELECT 103, '2026-05-01', 'North', 2100
+    UNION ALL SELECT 104, '2026-05-01', 'South', 540
+);
+
+-- 3. Define Visuals
+CREATE VISUAL IntroText AS TEXT (
+    VALUE = '# ETL-SQL TUI Report Preview
+This is the **Research Paper View** rendering directly in your terminal.
+- Use `Alt+R` to toggle between Code and Report.
+- Use `PgUp` / `PgDn` to switch pages.
+- Use `1`-`9` to jump to specific pages.'
+);
+
+CREATE VISUAL TotalSalesCard AS CARD (
+    SOURCE = (SELECT SUM(Amount) FROM &SalesSummary),
+    STYLE (TITLE = 'Total Revenue ($)')
+);
+
+CREATE VISUAL SalesChart AS HBAR (
+    SOURCE = &SalesSummary,
+    MAPPINGS (LABEL = Category, VALUE = Amount),
+    STYLE (TITLE = 'Revenue by Category')
+);
+
+CREATE VISUAL OrdersTable AS TABLE (
+    SOURCE = &RecentOrders,
+    STYLE (TITLE = 'Recent Orders Summary')
+);
+
+-- 4. Assemble the Page
+CREATE PAGE Dashboard AS (
+    STRUCTURE = 'A / B / C / D',
+    MAP (
+        'A' = IntroText, 
+        'B' = TotalSalesCard, 
+        'C' = SalesChart, 
+        'D' = OrdersTable
+    )
+);
+
+-- 5. Set Report Metadata
+SET REPORT TITLE = 'TUI Feature Showcase';
+SET REPORT DESCRIPTION = 'Demonstrates terminal-based graphical rendering of ETL-SQL reports.';

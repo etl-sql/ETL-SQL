@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -36,21 +37,23 @@ namespace ETL_SQL.Engine.Handlers
 
             // Materialise the source query into the named temp table via SELECT INTO
             var src = stmt.SourceQuery;
-            var selectInto = new SelectStatement(
-                src.Columns, new TableReference(stmt.TempTableName), src.FromTable,
-                src.Joins, src.WhereClause, src.GroupBy, src.HavingClause, src.OrderBy)
+            Statement selectInto;
+
+            if (src is SelectStatement sel)
             {
-                IsDistinct   = src.IsDistinct,
-                TopCount     = src.TopCount,
-                IsTopPercent = src.IsTopPercent,
-                WithTies     = src.WithTies,
-                LimitCount   = src.LimitCount,
-                Offset       = src.Offset,
-                ForClause    = src.ForClause,
-                Ctes         = src.Ctes,
-                IsRecursive  = src.IsRecursive,
-                GroupingSet  = src.GroupingSet
-            };
+                // Optimization: direct SELECT INTO if it's a plain SELECT
+                selectInto = sel with { IntoTable = new TableReference(stmt.TempTableName) };
+            }
+            else
+            {
+                // Wrap in SELECT * INTO #table FROM ( <query> ) AS src
+                selectInto = new SelectStatement(
+                    new List<SelectColumn> { new SelectColumn(new IdentifierExpression("*"), null, null) },
+                    new TableReference(stmt.TempTableName),
+                    new TableReference("SUBQUERY", null, null, null, "src", src),
+                    new List<JoinClause>(),
+                    null);
+            }
 
             _logger.Debug("Materialising dataset '{TempTableName}'...", stmt.TempTableName);
             await context.EvaluateStatement(selectInto);

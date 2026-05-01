@@ -105,5 +105,23 @@
         - [ ] **Secret Management**: Implement an encrypted `appsettings.Production.json` or Environment Variable provider for sensitive connection strings.
         - [ ] **Admin Guides**: Create `Docs/Administrators_Guide.md` covering service management, backup/restore, and multi-server networking.
         - [ ] **Final Verification**: Perform a "Clean Machine" install on a fresh Windows VM and verify full "Workstation-to-Server" connectivity.
-- [ ] **Brainstorm adding TUI chart previews** Are we able to show TUI chart previews, they would obviously not use echarts but could we create terminal based charts using the same logic that creates the echarts json?  Claude terminal can do a lot of these charts already so at least some of them are possible.
-- [x] **TUI better copy**  Copying from the query window brings with it the row numbers, can we get a clean copy?  Second is it possible to do a clean copy of the messages section.  The execution tree and the borders get caught with it.  This one may just be a keyboard command to copy it and not a select copy.
+- [ ] **Phase 5 — TUI Graphical Previews (Research Paper View)**
+    - [x] **Phase 5.1: Foundational Visuals**. Implement terminal renderers for `BAR`, `TABLE`, `CARD`, and `TEXT` using `Spectre.Console`.
+    - [x] **Phase 5.2: Simple Layout Engine**. Implement a basic vertical stack renderer for `.rptsql` pages (renders visuals one after another).
+    - [x] **Phase 5.3: Fallback & Placeholders**. Implement "Visual Type [X] not supported in TUI" placeholders for complex types (e.g. `WATERFALL`, `GAUGE`).
+    - [ ] **Phase 5.4: Advanced Canvas Rendering**. Explore high-density Braille-based `LINE` and `SCATTER` charts using `Spectre.Console.Canvas`.
+    - [ ] **Phase 5.5: CLI Integration**. Add `ETL-SQL-Report print report.rptsql` to output a full terminal-rendered report to the console.
+- [ ] **Report preview for unsaved scripts** Specifically talking about VS Code here but TUI may have a role.  The user has an unsaved script that contains a report build.  How can we enable report preview for an unsaved script?
+- [x] **CAST AS date**  Cast as date should be just date and not time.  When I ran this it gave mea datetime.
+- [x] **Need to color chart syntax keywords** The chart keywords are not colored at all.  We should review what else is missing.
+- [ ] **Smarter suggestions** Right now the suggestion list is just whatever matches.  I would like to try and make this smarter by showing only the words that are valid.  Likewise options should be shown rather than having the user guess.
+- [ ] **Chart help** We need to be able to do HELP VISUAL <type>.  We'll need it for the others too.  HELP CONTAINER, HELP BUTTON, HELP PAGE, ...
+- [ ] **Aggregates without group by** Lets put a linter message that states that aggregates that don't have a GROUP BY statement will return a single row.
+- [x] **Selected text in TUI**  If text is selected in TUI and you start typing the selected text should be replaced.  Currently it just keeps appending to the selected text wherever the cursor is.  Likewise if you do delete or backspace the selected text should be deleted.
+- [x] **Formating** When do a format command the INTO should be on its own line.  Also multiple statements like 
+```sql
+CREATE CONNECTION m ON MOCKDB(); 
+SELECT * FROM m.USERS;
+```
+The second statement should have an empty line before it.
+- [x] **Add a CAST kitchen sink sample** We need a CAST kitchen sink sample that checks what is should be to make sure that they work correctly.  Maybe do TRY_CASTs and anything that's NULL should return an error.

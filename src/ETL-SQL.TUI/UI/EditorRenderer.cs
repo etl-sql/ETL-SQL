@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Spectre.Console;
 using ETL_SQL.Core;
+using ETL_SQL.ReportBuilder;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -51,11 +52,18 @@ namespace ETL_SQL.TUI.UI
         public List<string> CompareFilters { get; set; } = new();
         public bool PromptVisible => !string.IsNullOrEmpty(PromptTitle);
 
+        // Report-SQL Preview State (Phase 5)
+        public bool ReportVisible { get; set; } = false;
+        public int ActiveReportPageIndex { get; set; } = 0;
+        public int ReportScrollRow { get; set; } = 0;
+        public ReportManifest? CurrentReportManifest { get; set; }
+
         private readonly IConsoleInterface _console;
         private readonly EditorPanel _editorPanel;
         private readonly MessageTreePanel _messageTreePanel;
         private readonly ResultsPanel _resultsPanel;
         private readonly PerformancePanel _performancePanel;
+        private readonly ReportPreviewPanel _reportPreviewPanel;
 
         /// <summary>Initializes a new instance of the <see cref="EditorRenderer"/> class.</summary>
         /// <param name="buffer">The editor text buffer.</param>
@@ -68,6 +76,7 @@ namespace ETL_SQL.TUI.UI
             _messageTreePanel = new MessageTreePanel(evaluator);
             _resultsPanel = new ResultsPanel(evaluator, this);
             _performancePanel = new PerformancePanel(evaluator, this);
+            _reportPreviewPanel = new ReportPreviewPanel(this);
         }
 
         /// <summary>Renders the entire editor UI to the console.</summary>
@@ -104,14 +113,22 @@ namespace ETL_SQL.TUI.UI
             int statusHeight  = 2; // Two lines for status/help bar
 
             int lowerAreaHeight = (int)(totalHeight * 0.4);
-            if (IsBottomMaximized || CompareMode) lowerAreaHeight = Math.Max(5, totalHeight - editorAreaTop - statusHeight - 2);
+            if (IsBottomMaximized || CompareMode) lowerAreaHeight = Math.Max(5, totalHeight - editorAreaTop - statusHeight - 5);
             if (lowerAreaHeight < 5) lowerAreaHeight = 5;
 
-            int editorAreaHeight = Math.Max(1, totalHeight - lowerAreaHeight - statusHeight - editorAreaTop);
+            int editorAreaHeight = Math.Max(3, totalHeight - lowerAreaHeight - statusHeight - editorAreaTop);
+            int gutterWidth = (buffer.Lines.Count).ToString().Length + 2;
 
-            // Viewport clamping
-            if (buffer.CursorLine < ScrollLine) ScrollLine = buffer.CursorLine;
-            if (buffer.CursorLine >= ScrollLine + editorAreaHeight) ScrollLine = buffer.CursorLine - editorAreaHeight + 1;
+            // Report Preview takes over the entire central area if enabled
+            if (ReportVisible)
+            {
+                _reportPreviewPanel.Render(_console, 0, editorAreaTop, totalWidth, totalHeight - statusHeight - editorAreaTop);
+            }
+            else
+            {
+                // Viewport clamping
+                if (buffer.CursorLine < ScrollLine) ScrollLine = buffer.CursorLine;
+                if (buffer.CursorLine >= ScrollLine + editorAreaHeight) ScrollLine = buffer.CursorLine - editorAreaHeight + 1;
 
             // Scroll limits
             if (PerformanceVisible)
@@ -146,7 +163,6 @@ namespace ETL_SQL.TUI.UI
                     CompareFocusIndex = Math.Max(0, evaluator.LastResultSets.Count - 1);
             }
 
-            int gutterWidth = (buffer.Lines.Count).ToString().Length + 2;
             int editorWidth = totalWidth - gutterWidth - 1;
             if (buffer.CursorColumn < ScrollCol) ScrollCol = buffer.CursorColumn;
             if (buffer.CursorColumn >= ScrollCol + editorWidth) ScrollCol = buffer.CursorColumn - editorWidth + 1;
@@ -184,15 +200,16 @@ namespace ETL_SQL.TUI.UI
                 else
                     _messageTreePanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight, TreeScrollRow, MessageScrollRow);
             }
+        }
 
-            // 4. Two-Line Status/Help Bar
+        // 4. Two-Line Status/Help Bar
             if (!Headless)
             {
                 int helpRow = totalHeight - 2;
                 int statusRow = totalHeight - 1;
 
                 // ── Row 1: Help Bar (Static Shortcuts) ───────────────────────
-                string helpText = " F1:Help  F5:Run  F6:Focus  F4:Panel  F2:Save  F12:Format  ^Q:Exit ";
+                string helpText = " F1:Help  F5:Run  F6:Focus  F4:Panel  Alt+R:Report  F2:Save  F12:Format  ^Q:Exit ";
                 _console.ClearLine(0, helpRow, totalWidth);
                 _console.SetCursorPosition(0, helpRow);
                 _console.Markup($"[white on grey23]{Markup.Escape(helpText.PadRight(totalWidth - 1))}[/]");
@@ -211,6 +228,8 @@ namespace ETL_SQL.TUI.UI
                     panelPill = "[bold red] ✗ ERROR [/]";
                 else if (PerformanceVisible)
                     panelPill = "[bold cyan] PERF [/]";
+                else if (ReportVisible)
+                    panelPill = "[bold blue] REPORT [/]";
                 else if (ResultsVisible)
                     panelPill = "[bold yellow] RESULTS [/]";
                 else

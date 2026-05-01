@@ -53,7 +53,7 @@ namespace ETL_SQL.TUI.UI
             {
                 foreach (var c in SecondaryCursors)
                 {
-                    if (c.Line < 0 || c.Line >= Lines.Count) continue;
+                    if (c.Line < 0 || c.Line >= Lines.Count || c.Line == CursorLine) continue;
                     int col = Math.Max(0, Math.Min(c.Col, Lines[c.Line].Length));
                     Lines[c.Line] = Lines[c.Line].Insert(col, toInsert);
                 }

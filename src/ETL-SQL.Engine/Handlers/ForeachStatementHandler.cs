@@ -153,17 +153,12 @@ namespace ETL_SQL.Engine.Handlers
 
             while (hasMore)
             {
-                // We manually deep-clone the parts we need to avoid 'with' expression polymorphism issues
-                var pagedQuery = new SelectStatement(sel.Columns, sel.IntoTable, sel.FromTable, sel.Joins, sel.WhereClause, sel.GroupBy, sel.HavingClause, sel.OrderBy);
-                pagedQuery.Offset = new LiteralExpression((decimal)offset, TokenType.NUMBER);
-                pagedQuery.LimitCount = new LiteralExpression((decimal)pageSize, TokenType.NUMBER);
-                pagedQuery.IsDistinct = sel.IsDistinct;
-                pagedQuery.TopCount = sel.TopCount;
-                pagedQuery.IsTopPercent = sel.IsTopPercent;
-                pagedQuery.WithTies = sel.WithTies;
-                pagedQuery.ForClause = sel.ForClause;
-                pagedQuery.Ctes = sel.Ctes;
-                pagedQuery.IsRecursive = sel.IsRecursive;
+                // We manually deep-clone the parts we need via 'with' expression
+                var pagedQuery = sel with 
+                { 
+                    Offset = new LiteralExpression((decimal)offset, TokenType.NUMBER),
+                    LimitCount = new LiteralExpression((decimal)pageSize, TokenType.NUMBER)
+                };
                 
                 int rowsInPage = 0;
                 var compiled = context.CompileQuery(pagedQuery, db.Dialect);

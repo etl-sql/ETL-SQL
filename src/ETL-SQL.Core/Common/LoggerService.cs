@@ -125,7 +125,7 @@ namespace ETL_SQL.Common
 
             // 3. Console — format template and prefix SessionId when set
             var consoleMessage = ILogger.FormatArgs(template, args);
-            if (_sessionId != null) consoleMessage = $"[{_sessionId}] {consoleMessage}";
+            if (_sessionId.Value != null) consoleMessage = $"[{_sessionId.Value}] {consoleMessage}";
             if (ex != null) consoleMessage += $"{Environment.NewLine}Exception: {ex.Message}";
 
             if ((!IsSilent || level == LogLevel.Error) && !SuppressConsole)

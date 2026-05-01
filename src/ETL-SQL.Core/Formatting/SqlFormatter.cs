@@ -23,7 +23,7 @@ namespace ETL_SQL.Core.Formatting
     public static class SqlFormatter
     {
         private static readonly string[] ClauseKeywords = {
-            "SELECT", "FROM", "WHERE", "GROUP BY", "HAVING", "ORDER BY", 
+            "SELECT", "INTO", "FROM", "WHERE", "GROUP BY", "HAVING", "ORDER BY", 
             "INSERT", "UPDATE", "DELETE", "CREATE", "JOIN", "LEFT JOIN", 
             "RIGHT JOIN", "INNER JOIN", "OUTER JOIN", "EXEC", "EXECUTE", "WITH",
             "DECLARE", "SET", "PRINT", "RUN", "IF", "WHILE", "FOR", "FOREACH", 
@@ -52,6 +52,7 @@ namespace ETL_SQL.Core.Formatting
             var clauses = ParseClauses(input);
             
             var sb = new StringBuilder();
+            bool firstStatement = true;
             foreach (var clause in clauses)
             {
                 if (string.IsNullOrEmpty(clause.Content) && clause.Name == "START") continue;
@@ -64,6 +65,15 @@ namespace ETL_SQL.Core.Formatting
                     if (!string.IsNullOrWhiteSpace(content)) sb.AppendLine(content.Trim());
                     continue;
                 }
+
+                // Add empty line before major statement starts (SELECT, INSERT, etc.)
+                // if it's not the very first statement in the script.
+                string[] statementStarters = { "SELECT", "INSERT", "UPDATE", "DELETE", "CREATE", "MERGE", "DECLARE", "SET", "EXEC", "EXECUTE", "IF", "WHILE", "FOR", "FOREACH" };
+                if (statementStarters.Contains(name) && !firstStatement && sb.Length > 0 && !sb.ToString().EndsWith("\n\n"))
+                {
+                    sb.AppendLine();
+                }
+                if (statementStarters.Contains(name)) firstStatement = false;
 
                 FormatClause(sb, name, content, options);
             }

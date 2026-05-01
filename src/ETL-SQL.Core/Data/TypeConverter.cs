@@ -27,7 +27,7 @@ namespace ETL_SQL.Core.Data
             ["BIGINT"] = v => Convert.ToDecimal(v),
             ["REAL"] = v => Convert.ToSingle(v),
             ["DATETIME"] = v => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt) ? dt : DateTime.Parse(v.ToString() ?? ""),
-            ["DATE"] = v => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt) ? dt : DateTime.Parse(v.ToString() ?? ""),
+            ["DATE"] = v => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt) ? dt.Date : DateTime.Parse(v.ToString() ?? "").Date,
             ["TIMESTAMP"] = v => EvaluationUtils.SafeTryParseDate(v.ToString() ?? "", out var dt) ? dt : DateTime.Parse(v.ToString() ?? ""),
 
             ["TIME"] = v => TimeSpan.Parse(v.ToString() ?? "00:00:00"),

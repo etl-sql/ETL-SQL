@@ -9,6 +9,8 @@ using ETL_SQL.App;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
 using ETL_SQL.ReportBuilder;
+using ETL_SQL.ReportBuilder.Renderers;
+using Spectre.Console;
 
 namespace ETL_SQL.ReportBuilder.CLI
 {
@@ -27,6 +29,7 @@ namespace ETL_SQL.ReportBuilder.CLI
                 "build"   => await BuildCommand(args),
                 "refresh" => await RefreshCommand(args),
                 "serve"   => await ServeCommand(args),
+                "print"   => await PrintCommand(args),
                 _         => UnknownCommand(args[0])
             };
         }
@@ -120,6 +123,58 @@ namespace ETL_SQL.ReportBuilder.CLI
 
             Console.WriteLine($"Snapshot refreshed: {snapshotPath}");
             Console.WriteLine($"Datasets: {manifest.Datasets.Count}");
+            return 0;
+        }
+
+        // ── print ─────────────────────────────────────────────────────────────
+
+        private static async Task<int> PrintCommand(string[] args)
+        {
+            string? scriptPath = null;
+            var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (args[i] == "--parameter" || args[i] == "-p")
+                {
+                    if (i + 1 < args.Length)
+                    {
+                        var pair = args[++i].Split('=', 2);
+                        parameters[pair[0]] = pair.Length > 1 ? pair[1] : string.Empty;
+                    }
+                }
+                else if (!args[i].StartsWith("-")) scriptPath = args[i];
+            }
+
+            if (scriptPath == null) { Console.Error.WriteLine("error: no script path specified."); return 1; }
+            if (!File.Exists(scriptPath)) { Console.Error.WriteLine($"error: script file not found: {scriptPath}"); return 1; }
+
+            AnsiConsole.MarkupLine($"[bold blue]ETL-SQL Report Printer[/]");
+            AnsiConsole.MarkupLine($"[grey]Executing {Path.GetFileName(scriptPath)}...[/]");
+
+            var (evaluator, err) = await EvaluateScriptFile(scriptPath, parameters);
+            if (evaluator == null) { AnsiConsole.MarkupLine($"[red]error: {err}[/]"); return 2; }
+
+            var manifest = await new ManifestBuilder(evaluator).BuildAsync(scriptPath);
+            
+            if (manifest.Pages.Count == 0)
+            {
+                AnsiConsole.MarkupLine("[yellow]No pages defined. Printing all visuals in sequence...[/]");
+                foreach (var visual in manifest.Visuals)
+                {
+                    AnsiConsole.Write(TerminalRenderer.RenderVisual(visual));
+                    AnsiConsole.WriteLine();
+                }
+            }
+            else
+            {
+                foreach (var page in manifest.Pages)
+                {
+                    AnsiConsole.Write(TerminalRenderer.RenderPage(page, manifest));
+                    AnsiConsole.WriteLine();
+                }
+            }
+
             return 0;
         }
 
@@ -289,6 +344,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             Console.WriteLine("  etl-sql-report build   <script.rptsql> [--output <file>] [--format md|json|pdf] [--parameter @p=v]");
             Console.WriteLine("  etl-sql-report refresh <script.rptsql>");
             Console.WriteLine("  etl-sql-report serve   <script.rptsql>");
+            Console.WriteLine("  etl-sql-report print   <script.rptsql> [--parameter @p=v]");
             Console.WriteLine("  etl-sql-report serve   --manifest reports.json");
             Console.WriteLine();
             Console.WriteLine("Options:");

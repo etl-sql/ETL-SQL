@@ -231,27 +231,27 @@ namespace ETL_SQL.Core
 
     public record SelectStatement : Statement
     {
-        public List<SelectColumn> Columns { get; }
-        public TableReference? IntoTable { get; }
-        public TableReference FromTable { get; }
-        public List<JoinClause> Joins { get; }
-        public Expression? WhereClause { get; }
-        public List<Expression>? GroupBy { get; }
+        public List<SelectColumn> Columns { get; init; }
+        public TableReference? IntoTable { get; init; }
+        public TableReference FromTable { get; init; }
+        public List<JoinClause> Joins { get; init; }
+        public Expression? WhereClause { get; init; }
+        public List<Expression>? GroupBy { get; init; }
         /// <summary>Non-null when GROUP BY uses GROUPING SETS / ROLLUP / CUBE. Null for plain GROUP BY.</summary>
-        public GroupingSetClause? GroupingSet { get; set; }
-        public Expression? HavingClause { get; set; }
-        public List<OrderByClause>? OrderBy { get; set; }
-        public bool IsDistinct { get; set; }
-        public Expression? TopCount { get; set; }
-        public bool IsTopPercent { get; set; }
-        public bool WithTies { get; set; }
-        public Expression? LimitCount { get; set; }
-        public Expression? Offset { get; set; }
-        public ForClause? ForClause { get; set; }
-        public Expression? QualifyClause { get; set; }
+        public GroupingSetClause? GroupingSet { get; init; }
+        public Expression? HavingClause { get; init; }
+        public List<OrderByClause>? OrderBy { get; init; }
+        public bool IsDistinct { get; init; }
+        public Expression? TopCount { get; init; }
+        public bool IsTopPercent { get; init; }
+        public bool WithTies { get; init; }
+        public Expression? LimitCount { get; init; }
+        public Expression? Offset { get; init; }
+        public ForClause? ForClause { get; init; }
+        public Expression? QualifyClause { get; init; }
         /// <summary>Common Table Expressions (WITH clause) applied to this SELECT statement.</summary>
-        public new List<CteDefinition>? Ctes { get; set; }
-        public bool IsRecursive { get; set; }
+        public new List<CteDefinition>? Ctes { get; init; }
+        public bool IsRecursive { get; init; }
 
         public SelectStatement(List<SelectColumn> columns, TableReference? intoTable, TableReference fromTable, List<JoinClause> joins, Expression? whereClause, List<Expression>? groupBy = null, Expression? havingClause = null, List<OrderByClause>? orderBy = null)
         {

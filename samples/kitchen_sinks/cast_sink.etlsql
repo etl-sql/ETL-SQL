@@ -1,0 +1,58 @@
+-- ==============================================================================
+-- ETL-SQL Kitchen Sink: CAST and TRY_CAST Operations
+-- Demonstrates type conversion and error handling for data transformation.
+-- ==============================================================================
+
+CREATE CONNECTION m ON MOCKDB();
+
+PRINT '--- 1. Basic Casting ---';
+DECLARE @str_val = '123.45';
+DECLARE @num_val = CAST(@str_val AS DECIMAL);
+PRINT 'String "' + @str_val + '" cast to DECIMAL: ' + CAST(@num_val AS STRING);
+
+DECLARE @date_str = '2024-05-01 15:30:00';
+DECLARE @date_only = CAST(@date_str AS DATE);
+PRINT 'Datetime string cast to DATE: ' + CAST(@date_only AS STRING);
+
+PRINT '';
+PRINT '--- 2. TRY_CAST (Safe Conversion) ---';
+DECLARE @invalid_num = 'abc';
+DECLARE @safe_num = TRY_CAST(@invalid_num AS DECIMAL);
+IF (@safe_num IS NULL)
+    PRINT 'TRY_CAST of "abc" to DECIMAL returned NULL as expected.';
+ELSE
+    PRINT 'ERROR: TRY_CAST should have returned NULL.';
+
+PRINT '';
+PRINT '--- 3. Multiple Conversions in SELECT ---';
+CREATE DATASET &CastTest AS 
+SELECT 
+    'John Doe' AS Name,
+    '45' AS AgeStr,
+    '2024-01-15' AS JoinDateStr,
+    'true' AS IsActiveStr;
+
+SELECT 
+    Name,
+    CAST(AgeStr AS INT) AS Age,
+    CAST(JoinDateStr AS DATE) AS JoinDate,
+    CAST(IsActiveStr AS BOOL) AS IsActive
+INTO #CastedResults
+FROM &CastTest;
+
+SELECT * FROM #CastedResults;
+
+PRINT '';
+PRINT '--- 4. Data Type Validation Loop ---';
+DECLARE @inputs = ['1', '2', 'three', '4'];
+FOREACH @val IN @inputs
+BEGIN
+    DECLARE @c = TRY_CAST(@val AS INT);
+    IF (@c IS NULL)
+        PRINT 'Value "' + CAST(@val AS STRING) + '" is NOT a valid integer.';
+    ELSE
+        PRINT 'Value "' + CAST(@val AS STRING) + '" converted to integer: ' + CAST(@c AS STRING);
+END
+
+PRINT '';
+PRINT '--- CAST Sink Complete ---';

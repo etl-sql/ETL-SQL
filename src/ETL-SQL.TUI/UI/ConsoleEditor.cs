@@ -304,6 +304,7 @@ namespace ETL_SQL.TUI.UI
         {
             try
             {
+                _renderer.IsBottomMaximized = false;
                 var totalSw = System.Diagnostics.Stopwatch.StartNew();
 
                 var lexSw = System.Diagnostics.Stopwatch.StartNew();
@@ -370,6 +371,26 @@ namespace ETL_SQL.TUI.UI
 
                 totalSw.Stop();
                 _renderer.ShowStatus($"Query finished in {totalSw.ElapsedMilliseconds}ms.");
+
+                // Phase 5: Build report manifest if any visuals/pages were defined
+                if (_evaluator.ReportContext.PageDefinitions.Count > 0 || _evaluator.ReportContext.VisualDefinitions.Count > 0)
+                {
+                    try
+                    {
+                        var manifestBuilder = new ETL_SQL.ReportBuilder.ManifestBuilder(_evaluator);
+                        _renderer.CurrentReportManifest = await manifestBuilder.BuildAsync(_filePath);
+                        _renderer.ActiveReportPageIndex = 0;
+                        _renderer.ShowStatus($"Query finished. Report built with {_renderer.CurrentReportManifest.Visuals.Count} visuals.");
+                    }
+                    catch (Exception ex)
+                    {
+                        _evaluator.Log($"[REPORT ERROR] {ex.Message}");
+                    }
+                }
+                else
+                {
+                    _renderer.CurrentReportManifest = null;
+                }
             }
             catch (Exception ex)
             {
