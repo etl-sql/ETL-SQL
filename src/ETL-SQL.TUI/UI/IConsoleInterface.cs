@@ -37,10 +37,15 @@ namespace ETL_SQL.TUI.UI
 
         public void ClearLine(int left, int top, int width)
         {
-            Console.SetCursorPosition(left, top);
-            // Use ANSI escape sequence to clear line from cursor to end
-            // This is more efficient and safer than writing spaces
-            Console.Write("\x1b[2K"); 
+            try
+            {
+                Console.SetCursorPosition(left, top);
+                // Standard approach: Write spaces to physically overwrite characters.
+                // This is more robust than ANSI sequences in some terminal environments.
+                Console.Write(new string(' ', width));
+                Console.SetCursorPosition(left, top);
+            }
+            catch { /* Ignore terminal out-of-bounds */ }
         }
     }
 }

@@ -101,7 +101,18 @@ namespace ETL_SQL.TUI.UI
         /// <summary>Starts the main editor loop, handling rendering and input.</summary>
         public async Task Run()
         {
-            try { Console.Clear(); } catch (Exception ex) { _logger.Debug("[ConsoleEditor] Console.Clear() failed: {Message}", ex.Message); }
+            // Perform a robust full-screen clear to purge artifacts from previous CLI statements
+            try 
+            { 
+                Console.ResetColor();
+                // Deep clear: Clear screen buffer, clear scrollback, and home cursor
+                Console.Write("\x1b[H\x1b[2J\x1b[3J");
+                Console.Clear(); 
+                Console.CursorVisible = true;
+                Console.SetCursorPosition(0, 0);
+            } 
+            catch (Exception ex) { _logger.Debug("[ConsoleEditor] Initial deep clear failed: {Message}", ex.Message); }
+
             _metadata.RefreshConnections(_buffer.GetText(), force: true);
 
             while (!_isExiting)

@@ -156,7 +156,7 @@ namespace ETL_SQL.TUI.UI
                 _renderer.ResultsFocus = !_renderer.ResultsFocus;
                 _renderer.AutocompleteVisible = false;
                 _renderer.ForceFullRepaint();
-                _renderer.ShowStatus(_renderer.ResultsFocus ? "Focused: Results (Use arrows/PgUp/PgDn to scroll)" : "Focused: Editor");
+                _renderer.ShowStatus(_renderer.ResultsFocus ? "Focused: Results (↑↓ ⇞ ⇟ to ↕)" : "Focused: Editor");
                 return;
             }
 
