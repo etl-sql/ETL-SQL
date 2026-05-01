@@ -1083,5 +1083,43 @@ namespace ETL_SQL.Engine
         }
 
         ETL_SQL.Services.SecurityService IExecutionContext.SecurityService => _securityService;
+        /// <summary>Resets the entire session (variables, temp tables, results, transactions, lineage, report definitions) to a clean state.</summary>
+        public async Task ResetSessionAsync()
+        {
+            _logger.Debug("[Evaluator] Resetting session state...");
+
+            // 1. Rollback any active transactions
+            if (_transactionManager.TranCount > 0)
+            {
+                _logger.Warning("[Evaluator] Rolling back {TranCount} dangling transactions during session reset.", _transactionManager.TranCount);
+                await _transactionManager.RollbackAll(_variableScopeManager.Variables, _connections);
+            }
+
+            // 2. Reset Variables, Procedures, and Functions
+            _variableScopeManager.Reset();
+
+            // 3. Clear Temp Tables (LocalSources)
+            _localSources.Clear();
+
+            // 4. Clear Report/UI Definitions
+            ReportContext.Clear();
+
+            // 5. Clear Results and Telemetry
+            ClearResults();
+            LastResultSets.Clear();
+            Telemetry.Clear();
+            _subqueryCache.Clear();
+
+            // 6. Clear Lineage
+            _lineageTracker.Clear();
+
+            // 7. Reset state indicators
+            LastError = null;
+            ActiveException = null;
+            PreviousErrorNumber = 0;
+            Telemetry.FetchStatus = 0;
+
+            _logger.Debug("[Evaluator] Session reset complete.");
+        }
     }
 }

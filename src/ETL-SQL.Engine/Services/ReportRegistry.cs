@@ -78,5 +78,30 @@ namespace ETL_SQL.Engine.Services
                 ReportNavigation = this.ReportNavigation
             };
         }
+        /// <summary>Clears all visual, page, dataset, and report-level definitions.</summary>
+        public void Clear()
+        {
+            VisualDefinitions.Clear();
+            PageDefinitions.Clear();
+            DatasetDefinitions.Clear();
+            ContainerDefinitions.Clear();
+            NavigationDefinitions.Clear();
+            StyleDefinitions.Clear();
+            ButtonDefinitions.Clear();
+            TemplateDefinitions.Clear();
+            ThemeDefinitions.Clear();
+            ReportTitle = null;
+            ReportDescription = null;
+            ReportCss = null;
+            ReportJs = null;
+            ReportHtmlHead = null;
+            ReportHtmlBody = null;
+            ReportHtmlFooter = null;
+            ReportFavicon = null;
+            ReportLogo = null;
+            ReportBackground = null;
+            ReportTheme = null;
+            ReportNavigation = null;
+        }
     }
 }

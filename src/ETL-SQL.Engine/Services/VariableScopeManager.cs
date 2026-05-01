@@ -274,5 +274,18 @@ namespace ETL_SQL.Engine.Services
                 foreach (var kvp in spawned.Variables) _variables[kvp.Key] = kvp.Value;
             }
         }
+        /// <summary>Purges all variables, procedures, functions, and scopes from the context.</summary>
+        public void Reset()
+        {
+            lock (_lock)
+            {
+                _variables.Clear();
+                _variableMetadata.Clear();
+                _scopeStack.Clear();
+                _metadataStack.Clear();
+                _procedures.Clear();
+                _functions.Clear();
+            }
+        }
     }
 }

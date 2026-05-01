@@ -40,6 +40,8 @@ namespace ETL_SQL.Core
         bool RemoveFunction(string name);
         bool TryGetFunction(string name, out CreateFunctionStatement? stmt);
         IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null);
+        /// <summary>Purges all variables, procedures, and functions from the context.</summary>
+        void Reset();
     }
 
     public interface IQueryContext
@@ -269,6 +271,8 @@ namespace ETL_SQL.Core
         string? ReportBackground { get; set; }
         string? ReportTheme { get; set; }
         string? ReportNavigation { get; set; }
+        /// <summary>Clears all visual and report definitions.</summary>
+        void Clear();
     }
 
     /// <summary>
@@ -328,6 +332,8 @@ namespace ETL_SQL.Core
         IExecutionContext Fork();
         /// <summary>Merges results and metrics from a spawned context back into the parent.</summary>
         void Merge(IExecutionContext spawned);
+        /// <summary>Resets the entire session (variables, temp tables, results, transactions, lineage, report definitions) to a clean state.</summary>
+        Task ResetSessionAsync();
     }
 
     public interface ILineageTracker

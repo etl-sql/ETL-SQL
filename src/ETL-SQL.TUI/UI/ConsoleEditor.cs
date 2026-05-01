@@ -81,6 +81,7 @@ namespace ETL_SQL.TUI.UI
         /// <param name="filePath">The path to the file to load.</param>
         public async Task LoadFile(string filePath)
         {
+            await _evaluator.ResetSessionAsync();
             var (lines, path) = await _fileHandler.LoadAsync(filePath, ShowPrompt);
             _buffer.Load(lines);
             _filePath = path;
@@ -90,9 +91,10 @@ namespace ETL_SQL.TUI.UI
         }
 
         /// <summary>Clears the buffer and starts a new file.</summary>
-        public void NewFile()
+        public async Task NewFile()
         {
             if (_isDirty && !AnsiConsole.Confirm("Discard changes and start new file?")) return;
+            await _evaluator.ResetSessionAsync();
             _buffer.Load(new[] { "" });
             _filePath = "untitled.etlsql";
             _isDirty = false;

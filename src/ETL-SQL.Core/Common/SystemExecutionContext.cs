@@ -110,6 +110,8 @@ namespace ETL_SQL.Core.Common
         public List<ExecutionMetrics> ProfileMetrics { get; } = new();
         public ExecutionTree ExecutionTree => new ExecutionTree();
         public void Clear() { }
+        /// <summary>No-op for stateless context.</summary>
+        void IReportContext.Clear() { }
         public Guid? CurrentNodeId { get; set; }
 
         public int TranCount => 0;
@@ -199,6 +201,7 @@ namespace ETL_SQL.Core.Common
          public bool RemoveFunction(string name) => false;
          public bool TryGetFunction(string name, out CreateFunctionStatement? stmt) { stmt = null; return false; }
          public IDictionary<string, (object? Value, VariableMetadata Metadata)> GetVariablesWithMetadata(Func<VariableMetadata, bool>? predicate = null) => new Dictionary<string, (object? Value, VariableMetadata Metadata)>();
+         public void Reset() { }
 
         public IAsyncEnumerable<DataTable> ExecuteQuery(Statement query) => throw new NotSupportedException();
         public Task<IDataSource> ResolveDataSourceAsync(TableReference table) => throw new NotSupportedException();
@@ -244,6 +247,7 @@ namespace ETL_SQL.Core.Common
 
         public IExecutionContext Fork() => this;
         public void Merge(IExecutionContext spawned) { }
+        public Task ResetSessionAsync() => Task.CompletedTask;
 
         // IQueryContext.AlignColumns fix:
         IAsyncEnumerable<DataTable> IQueryContext.AlignColumns(IAsyncEnumerable<DataTable> batches, List<string> targetCols) => batches;
