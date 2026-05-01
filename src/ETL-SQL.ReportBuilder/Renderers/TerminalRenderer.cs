@@ -65,6 +65,9 @@ namespace ETL_SQL.ReportBuilder.Renderers
                     "CARD" => RenderCard(visual),
                     "TABLE" => RenderTable(visual),
                     "TEXT" => RenderText(visual),
+                    "GAUGE" => RenderGauge(visual),
+                    "BOXPLOT" => RenderBoxPlot(visual),
+                    "WATERFALL" => RenderWaterfall(visual),
                     _ => RenderPlaceholder(visual)
                 };
             }
@@ -74,6 +77,150 @@ namespace ETL_SQL.ReportBuilder.Renderers
                     .Header(visual.Name)
                     .Border(BoxBorder.Rounded);
             }
+        }
+
+        private static IRenderable RenderGauge(VisualManifest visual)
+        {
+            var title = visual.Options.GetValueOrDefault("TITLE", visual.Name);
+            var valueStr = visual.Rows.FirstOrDefault()?.FirstOrDefault() ?? "0";
+            if (!double.TryParse(valueStr, out double value)) value = 0;
+
+            double min = double.TryParse(visual.Options.GetValueOrDefault("MIN"), out var minVal) ? minVal : 0;
+            double max = double.TryParse(visual.Options.GetValueOrDefault("MAX"), out var maxVal) ? maxVal : 100;
+
+            double pct = (value - min) / (max - min);
+            pct = Math.Clamp(pct, 0, 1);
+
+            int width = 30;
+            int filled = (int)(width * pct);
+            string bar = new string('█', filled) + new string('░', width - filled);
+            
+            Color color = Color.Green;
+            if (pct > 0.7) color = Color.Yellow;
+            if (pct > 0.9) color = Color.Red;
+
+            var content = new Rows(
+                new Text($"{value} / {max}", new Style(foreground: color, decoration: Decoration.Bold)).Centered(),
+                new Text(bar, new Style(color))
+            );
+
+            return new Panel(content)
+            {
+                Header = new PanelHeader(title),
+                Border = BoxBorder.Rounded,
+                Expand = false,
+                Padding = new Padding(1, 0, 1, 0)
+            };
+        }
+
+        private static IRenderable RenderBoxPlot(VisualManifest visual)
+        {
+            var title = visual.Options.GetValueOrDefault("TITLE", visual.Name);
+            var rows = visual.Rows;
+            if (rows.Count == 0) return RenderPlaceholder(visual);
+
+            var content = new List<IRenderable>();
+            foreach (var row in rows)
+            {
+                if (row.Count < 5) continue;
+                string label = row.Count > 5 ? row[0] : "Data";
+                int offset = row.Count > 5 ? 1 : 0;
+
+                if (double.TryParse(row[offset], out double min) &&
+                    double.TryParse(row[offset + 1], out double q1) &&
+                    double.TryParse(row[offset + 2], out double med) &&
+                    double.TryParse(row[offset + 3], out double q3) &&
+                    double.TryParse(row[offset + 4], out double max))
+                {
+                    // Simple ASCII BoxPlot:  |---[  |  ]---|
+                    // We scale this to ~40 chars
+                    double range = max - min;
+                    if (range == 0) range = 1;
+                    int width = 40;
+
+                    int pMin = 0;
+                    int pQ1 = (int)((q1 - min) / range * width);
+                    int pMed = (int)((med - min) / range * width);
+                    int pQ3 = (int)((q3 - min) / range * width);
+                    int pMax = width;
+
+                    char[] line = new string(' ', width + 1).ToCharArray();
+                    for (int i = 0; i <= width; i++)
+                    {
+                        if (i == pMin || i == pMax) line[i] = '|';
+                        else if (i > pMin && i < pQ1) line[i] = '-';
+                        else if (i > pQ3 && i < pMax) line[i] = '-';
+                        else if (i == pQ1 || i == pQ3) line[i] = '['; // Simplified
+                        else if (i == pMed) line[i] = '┃';
+                        else if (i > pQ1 && i < pQ3) line[i] = '█';
+                    }
+                    // Adjust brackets
+                    line[pQ3] = ']';
+
+                    content.Add(new Text($"{label.PadRight(15)} {new string(line)} ({min:N0} - {max:N0})"));
+                }
+            }
+
+            return new Panel(new Rows(content))
+                .Header(title)
+                .Border(BoxBorder.Rounded);
+        }
+
+        private static IRenderable RenderWaterfall(VisualManifest visual)
+        {
+            var title = visual.Options.GetValueOrDefault("TITLE", visual.Name);
+            var rows = visual.Rows;
+            if (rows.Count == 0) return RenderPlaceholder(visual);
+
+            var content = new List<IRenderable>();
+            double currentSum = 0;
+            double maxVal = rows.Max(r => {
+                double.TryParse(r.Count > 1 ? r[1] : "0", out double v);
+                return Math.Abs(currentSum + v);
+            }); // Rough max for scaling
+            
+            // Recalculate max properly
+            double rolling = 0;
+            double absoluteMax = 0;
+            foreach(var r in rows)
+            {
+                double.TryParse(r.Count > 1 ? r[1] : "0", out double v);
+                rolling += v;
+                absoluteMax = Math.Max(absoluteMax, Math.Abs(rolling));
+                absoluteMax = Math.Max(absoluteMax, Math.Abs(rolling - v));
+            }
+            if (absoluteMax == 0) absoluteMax = 1;
+
+            int fullWidth = 50;
+            currentSum = 0;
+
+            foreach (var row in rows)
+            {
+                string label = row[0] ?? "Item";
+                if (!double.TryParse(row.Count > 1 ? row[1] : "0", out double val)) val = 0;
+
+                double start = currentSum;
+                double end = currentSum + val;
+                currentSum = end;
+
+                int pStart = (int)(Math.Min(start, end) / absoluteMax * fullWidth);
+                int pEnd = (int)(Math.Max(start, end) / absoluteMax * fullWidth);
+                int pLen = Math.Max(1, pEnd - pStart);
+
+                string indent = new string(' ', pStart);
+                string bar = new string('█', pLen);
+                Color color = val >= 0 ? Color.Green : Color.Red;
+                if (label.ToUpperInvariant().Contains("TOTAL")) color = Color.Blue;
+
+                content.Add(new Text($"{label.PadRight(15)} {indent}", Style.Plain));
+                content.Add(new Text(bar, new Style(color)));
+                content.Add(new Text($" ({val:+N0;-N0;0})", new Style(Color.Grey)));
+                content.Add(new Text("\n"));
+            }
+
+            return new Panel(new Rows(content))
+                .Header(title)
+                .Border(BoxBorder.Rounded);
         }
 
         private static IRenderable RenderVerticalBarChart(VisualManifest visual)

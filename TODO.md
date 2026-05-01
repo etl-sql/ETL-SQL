@@ -111,6 +111,8 @@
     - [x] **Phase 5.3: Fallback & Placeholders**. Implement "Visual Type [X] not supported in TUI" placeholders for complex types (e.g. `WATERFALL`, `GAUGE`).
     - [ ] **Phase 5.4: Advanced Canvas Rendering**. Explore high-density Braille-based `LINE` and `SCATTER` charts using `Spectre.Console.Canvas`.
     - [ ] **Phase 5.5: CLI Integration**. Add `ETL-SQL-Report print report.rptsql` to output a full terminal-rendered report to the console.
+    - [ ] **Phase 5.6: Specialized Diagnostics**. Implement `BOXPLOT`, `GAUGE`, and `HEATMAP` using ASCII and block patterns.
+    - [ ] **Phase 5.7: Waterfall Logic**. Implement a stair-step bar renderer specifically for `WATERFALL` types.
 - [ ] **Report preview for unsaved scripts** Specifically talking about VS Code here but TUI may have a role.  The user has an unsaved script that contains a report build.  How can we enable report preview for an unsaved script?
 - [x] **CAST AS date**  Cast as date should be just date and not time.  When I ran this it gave mea datetime.
 - [x] **Need to color chart syntax keywords** The chart keywords are not colored at all.  We should review what else is missing.

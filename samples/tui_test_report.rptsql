@@ -21,13 +21,33 @@ CREATE DATASET &RecentOrders AS (
     UNION ALL SELECT 104, '2026-05-01', 'South', 540
 );
 
+-- 2.5 Prepare data for specialized visuals
+CREATE DATASET &BoxPlotData AS (
+    SELECT 'Web Server' as App, 10 as Min, 45 as Q1, 60 as Med, 120 as Q3, 250 as Max
+    UNION ALL SELECT 'DB Server', 5, 20, 35, 50, 90
+);
+
+CREATE DATASET &WaterfallData AS (
+    SELECT 'Start' as Item, 1000 as Val
+    UNION ALL SELECT 'Revenue', 500
+    UNION ALL SELECT 'Tax', -150
+    UNION ALL SELECT 'Fees', -50
+    UNION ALL SELECT 'Total', 1300
+);
+
 -- 3. Define Visuals
 CREATE VISUAL IntroText AS TEXT (
     VALUE = '# ETL-SQL TUI Report Preview
 This is the **Research Paper View** rendering directly in your terminal.
 - Use `Alt+R` to toggle between Code and Report.
-- Use `PgUp` / `PgDn` to switch pages.
-- Use `1`-`9` to jump to specific pages.'
+- Use `Arrows / PgUp / PgDn` to scroll within a page.
+- Use `Shift+PgUp / Shift+PgDn` to switch pages.'
+);
+
+CREATE VISUAL HealthGauge AS GAUGE (
+    SOURCE = (SELECT 78),
+    OPTIONS (MIN = 0, MAX = 100),
+    STYLE (TITLE = 'System Health (%)')
 );
 
 CREATE VISUAL TotalSalesCard AS CARD (
@@ -41,6 +61,16 @@ CREATE VISUAL SalesChart AS HBAR (
     STYLE (TITLE = 'Revenue by Category')
 );
 
+CREATE VISUAL LatencyBox AS BOXPLOT (
+    SOURCE = &BoxPlotData,
+    STYLE (TITLE = 'Response Time Distribution (ms)')
+);
+
+CREATE VISUAL ProfitWaterfall AS WATERFALL (
+    SOURCE = &WaterfallData,
+    STYLE (TITLE = 'Monthly Profit Bridge')
+);
+
 CREATE VISUAL OrdersTable AS TABLE (
     SOURCE = &RecentOrders,
     STYLE (TITLE = 'Recent Orders Summary')
@@ -48,12 +78,15 @@ CREATE VISUAL OrdersTable AS TABLE (
 
 -- 4. Assemble the Page
 CREATE PAGE Dashboard AS (
-    STRUCTURE = 'A / B / C / D',
+    STRUCTURE = 'A / B / C / D / E / F / G',
     MAP (
         'A' = IntroText, 
-        'B' = TotalSalesCard, 
-        'C' = SalesChart, 
-        'D' = OrdersTable
+        'B' = HealthGauge,
+        'C' = TotalSalesCard, 
+        'D' = SalesChart, 
+        'E' = LatencyBox,
+        'F' = ProfitWaterfall,
+        'G' = OrdersTable
     )
 );
 
