@@ -33,14 +33,12 @@ namespace ETL_SQL.Engine.Engines
         }
     
         /// <summary>Performs an external hash join by partitioning both left and right streams to disk before join processing.</summary>
-        public async Task<List<Row>> ApplyHashJoinExternal(IAsyncEnumerable<Row> leftStream, IAsyncEnumerable<Row> rightStream, JoinClause join, List<string> leftKeys, List<string> rightKeys)
+        public async IAsyncEnumerable<Row> ApplyHashJoinExternal(IAsyncEnumerable<Row> leftStream, IAsyncEnumerable<Row> rightStream, JoinClause join, List<string> leftKeys, List<string> rightKeys)
         {
             using var cursor = _bufferManager != null ? await _bufferManager.AcquireCursorAsync(_context.SessionId ?? "DEFAULT", owner: this) : null;
             // 1. Partition Phase
             var leftPartitions = await PartitionStream(leftStream, leftKeys, "left");
             var rightPartitions = await PartitionStream(rightStream, rightKeys, "right");
-    
-            var results = new List<Row>();
     
             // 2. Join Phase (one partition at a time)
             for (int i = 0; i < PartitionCount; i++)
@@ -75,18 +73,16 @@ namespace ETL_SQL.Engine.Engines
                             var combined = CombineRows(left, right);
                             if (await _context.EvaluateCondition(join.Condition, combined))
                             {
-                                results.Add(combined);
+                                yield return combined;
                                 producedMatch = true;
                             }
                         }
                     }
 
                     if (!producedMatch && isLeftJoin)
-                        results.Add(left.Clone());
+                        yield return left.Clone();
                 }
             }
-    
-            return results;
         }
 
         private async Task<string[]> PartitionStream(IAsyncEnumerable<Row> stream, List<string> keys, string prefix)

@@ -1098,7 +1098,19 @@ namespace ETL_SQL.Engine
             // 2. Reset Variables, Procedures, and Functions
             _variableScopeManager.Reset();
 
-            // 3. Clear Temp Tables (LocalSources)
+            // 3. Dispose and Clear Temp Tables (LocalSources) and Global Connections
+            foreach (var conn in _connections.Values) 
+            {
+                try { await conn.DisposeAsync(); } 
+                catch (Exception ex) { _logger.Debug("Error disposing connection: {Msg}", ex.Message); }
+            }
+            _connections.Clear();
+
+            foreach (var src in _localSources.Values) 
+            {
+                try { await src.DisposeAsync(); } 
+                catch (Exception ex) { _logger.Debug("Error disposing local source: {Msg}", ex.Message); }
+            }
             _localSources.Clear();
 
             // 4. Clear Report/UI Definitions
@@ -1113,7 +1125,8 @@ namespace ETL_SQL.Engine
             // 6. Clear Lineage
             _lineageTracker.Clear();
 
-            // 7. Reset state indicators
+            // 7. Reset state indicators and generate fresh Session ID
+            SessionId = Guid.NewGuid().ToString("N");
             LastError = null;
             ActiveException = null;
             PreviousErrorNumber = 0;

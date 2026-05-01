@@ -90,7 +90,7 @@ namespace ETL_SQL.Engine.Engines
                         allRows = await externalJoin.ApplyHashJoinExternal(
                             PrependRows(allRows, ContinueStream(inputEnumerator)), 
                             _joinEngine.GetJoinRowsAsyncEnumerable(join), 
-                            join, hashKeysLeft, hashKeysRight);
+                            join, hashKeysLeft, hashKeysRight).ToListAsync();
                     }
                     else
                     {

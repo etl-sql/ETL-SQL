@@ -170,7 +170,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var engine = new ExternalJoinEngine(e, NullLogger.Instance);
             var result = await engine.ApplyHashJoinExternal(
                 LeftStream(), RightStream(), InnerJoinOnId(),
-                new List<string> { "Id" }, new List<string> { "Id" });
+                new List<string> { "Id" }, new List<string> { "Id" }).ToListAsync();
 
             Assert.Equal(SIDE_COUNT, result.Count);
             _output.WriteLine($"ExternalJoinEngine produced {result.Count:N0} rows.");
@@ -211,7 +211,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var engine = new ExternalJoinEngine(e, NullLogger.Instance);
             var result = await engine.ApplyHashJoinExternal(
                 LeftStream(), RightStream(), InnerJoinOnId(),
-                new List<string> { "Id" }, new List<string> { "Id" });
+                new List<string> { "Id" }, new List<string> { "Id" }).ToListAsync();
 
             Assert.Empty(result);
         }
@@ -244,7 +244,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             var engine  = new ExternalJoinEngine(e, NullLogger.Instance);
             await engine.ApplyHashJoinExternal(
                 LeftStream(), RightStream(), InnerJoinOnId(),
-                new List<string> { "Id" }, new List<string> { "Id" });
+                new List<string> { "Id" }, new List<string> { "Id" }).ToListAsync();
 
             Assert.True(e.Telemetry.TotalSpilledBytes > before,
                 $"Expected TotalSpilledBytes to increase. Before: {before}, After: {e.Telemetry.TotalSpilledBytes}");

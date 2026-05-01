@@ -92,7 +92,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
                 rightRows.ToAsyncEnumerable(), 
                 join, 
                 new List<string> { "id" }, 
-                new List<string> { "id" });
+                new List<string> { "id" }).ToListAsync();
 
             Assert.Single(results);
             Assert.Equal("a", results[0]["l"]);
@@ -114,7 +114,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
                 rightRows.ToAsyncEnumerable(), 
                 join, 
                 new List<string> { "id" }, 
-                new List<string> { "id" });
+                new List<string> { "id" }).ToListAsync();
 
             // In SQL, NULL != NULL, so there should be 0 matches
             Assert.Empty(results);
@@ -140,7 +140,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
                     rightRows.ToAsyncEnumerable(), 
                     join, 
                     new List<string> { "id" }, 
-                    new List<string> { "id" });
+                    new List<string> { "id" }).ToListAsync();
 
                 Assert.Single(results);
             }

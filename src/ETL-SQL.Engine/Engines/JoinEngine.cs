@@ -87,7 +87,7 @@ namespace ETL_SQL.Engine.Engines
                         _logger.WriteLine($"[yellow]HYPER-SCALE: Memory threshold exceeded ({Math.Max(allBufferedRows.Count, joinRows.Count)} rows). Triggering External Disk-Spilling Join.[/]");
 
                         var externalEngine = new ExternalJoinEngine(_context, _logger);
-                        allBufferedRows = await externalEngine.ApplyHashJoinExternal(allBufferedRows.ToAsyncEnumerable(), joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight);
+                        allBufferedRows = await externalEngine.ApplyHashJoinExternal(allBufferedRows.ToAsyncEnumerable(), joinRows.ToAsyncEnumerable(), join, hashKeysLeft, hashKeysRight).ToListAsync();
                     }
                     else
                     {

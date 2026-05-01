@@ -119,7 +119,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             // Partitioning will force numbers into JSON; Reading will unwrap them.
             var result = await engine.ApplyHashJoinExternal(
                 Stream(10.5m, "left"), Stream(10.5m, "right"), join, 
-                new List<string> { "left.Id" }, new List<string> { "right.Id" });
+                new List<string> { "left.Id" }, new List<string> { "right.Id" }).ToListAsync();
 
             Assert.Equal(COUNT, result.Count);
             _output.WriteLine($"Joined {result.Count} rows with decimal keys successfully.");

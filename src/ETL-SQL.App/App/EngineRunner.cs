@@ -89,6 +89,13 @@ namespace ETL_SQL.App
                     return 1;
                 }
 
+                var engineLogger = logger as LoggerService;
+                if (engineLogger != null)
+                {
+                    engineLogger.IsSilent = ctx.IsSilentMode;
+                    engineLogger.IsVerbose = ctx.IsVerbose;
+                }
+
                 if (ctx.IsLogMode)
                 {
                     // Read script-log config from the DI container's IConfiguration (graceful defaults)
@@ -101,7 +108,7 @@ namespace ETL_SQL.App
                     if (!string.IsNullOrWhiteSpace(ctx.LogPath))
                         scriptLogDir = ctx.LogPath;
 
-                    loggerService.InitializeScriptLogger(ctx.ScriptFile.Name, scriptLogDir, scriptRetention, scriptSizeLimitMb);
+                    loggerService?.InitializeScriptLogger(ctx.ScriptFile.Name, scriptLogDir, scriptRetention, scriptSizeLimitMb);
                     logger.WriteLine($"Logs are being saved to: {Path.GetFullPath(scriptLogDir)}", ConsoleColor.Gray);
                 }
 
@@ -399,7 +406,7 @@ namespace ETL_SQL.App
                             Console.WriteLine(json);
                             if (evaluator.IsVerbose) evaluator.Log($"[TELEMETRY] {json}", ConsoleColor.DarkGray);
                         }
-                        else
+                        else if (!ctx.IsSilentMode)
                         {
                             AnsiConsole.Write(new Rule("[yellow]Performance Metrics[/]").RuleStyle("grey"));
                             

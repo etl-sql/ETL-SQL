@@ -415,7 +415,7 @@ namespace ETL_SQL.TUI.UI
                 if (!_renderer.PromptSuggestions.Any())
                 {
                     // Only do file suggestions if the prompt looks like a path request
-                    if (_renderer.PromptTitle.Contains("Open") || _renderer.PromptTitle.Contains("Save") || _renderer.PromptTitle.Contains("Export") || _renderer.PromptTitle.Contains("path"))
+                    if (_renderer.PromptTitle != null && (_renderer.PromptTitle.Contains("Open") || _renderer.PromptTitle.Contains("Save") || _renderer.PromptTitle.Contains("Export") || _renderer.PromptTitle.Contains("path")))
                     {
                         _renderer.PromptSuggestions = ETLSuggestEngine.GetFileSuggestions(_renderer.PromptValue);
                         _renderer.PromptSuggestionIndex = 0;

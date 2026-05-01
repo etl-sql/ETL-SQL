@@ -70,8 +70,7 @@ namespace ETL_SQL.Tests.Integration
             var connections = new Dictionary<string, IDataSource>();
             var metadata = new MetadataManager(SystemExecutionContext.Instance, connections);
             var controller = new AutocompleteController(buffer, renderer, metadata, connections, NullLogger.Instance);
-            var sp = DependencyInjectionSetup.BuildServiceProvider();
-            ETL_SQL.Program.ServiceProvider = sp;
+            var sp = ETL_SQL.TUI.TuiDependencyInjectionSetup.BuildServiceProvider();
             ETL_SQL.TUI.Program.ServiceProvider = sp;
             var editor = new ConsoleEditor("test.etlsql", connections);
             var handler = new InputHandler(editor, buffer, renderer, controller);

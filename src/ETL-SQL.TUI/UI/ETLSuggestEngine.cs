@@ -210,6 +210,7 @@ namespace ETL_SQL.TUI.UI
             var suggestions = new List<string>();
             try
             {
+                // Normalize slashes for processing
                 prefix = prefix?.Replace("\\", "/") ?? "";
                 string dir = ".";
                 string searchPattern = prefix;
@@ -218,17 +219,31 @@ namespace ETL_SQL.TUI.UI
                 {
                     int lastSlash = prefix.LastIndexOf('/');
                     dir = prefix.Substring(0, lastSlash);
-                    if (string.IsNullOrEmpty(dir)) dir = "/"; // Root
                     
-                    // On Windows, if it's like "C:", Directory.Exists(dir) might fail without a slash
-                    if (dir.Length == 2 && dir[1] == ':' && char.IsLetter(dir[0])) dir += "/";
+                    // Root resolution
+                    if (string.IsNullOrEmpty(dir)) 
+                    {
+                        dir = "/"; 
+                    }
+                    else if (dir.Length == 2 && dir[1] == ':' && char.IsLetter(dir[0]))
+                    {
+                        // "C:" -> "C:/"
+                        dir += "/";
+                    }
 
                     searchPattern = prefix.Substring(lastSlash + 1);
                 }
+                else if (prefix.Length == 2 && prefix[1] == ':' && char.IsLetter(prefix[0]))
+                {
+                    // User typed "C:", treat as root of C
+                    dir = prefix + "/";
+                    searchPattern = "";
+                }
 
+                // Security/OS Hardening: On Windows, "/" alone refers to current drive root.
+                // We ensure Directory.Exists works consistently.
                 if (Directory.Exists(dir))
                 {
-                    // Special case: if search pattern is empty, we want all files in the dir
                     var entries = string.IsNullOrEmpty(searchPattern) 
                         ? Directory.GetFileSystemEntries(dir) 
                         : Directory.GetFileSystemEntries(dir, searchPattern + "*");
@@ -236,13 +251,30 @@ namespace ETL_SQL.TUI.UI
                     foreach (var entry in entries)
                     {
                         var name = Path.GetFileName(entry);
+                        if (string.IsNullOrEmpty(name)) continue;
+
+                        // Filter out noise
                         if (name.StartsWith("$") || 
                             name.Equals("System Volume Information", StringComparison.OrdinalIgnoreCase) ||
                             name.Equals("Documents and Settings", StringComparison.OrdinalIgnoreCase) ||
-                            name.Equals("Config.Msi", StringComparison.OrdinalIgnoreCase)) continue;
+                            name.Equals("Config.Msi", StringComparison.OrdinalIgnoreCase) ||
+                            name.Equals("pagefile.sys", StringComparison.OrdinalIgnoreCase) ||
+                            name.Equals("hiberfil.sys", StringComparison.OrdinalIgnoreCase)) continue;
 
                         bool isDir = Directory.Exists(entry);
-                        var result = (dir == "." ? "" : dir + (dir.EndsWith("/") ? "" : "/")) + name;
+                        
+                        // Construct the suggested path relative to what the user typed
+                        string result;
+                        if (dir == "." || dir == "./")
+                        {
+                            result = name;
+                        }
+                        else
+                        {
+                            var separator = dir.EndsWith("/") ? "" : "/";
+                            result = dir + separator + name;
+                        }
+
                         if (isDir) result += "/";
 
                         // Strip leading ./ for aesthetics
@@ -252,7 +284,10 @@ namespace ETL_SQL.TUI.UI
                     }
                 }
             }
-            catch (Exception ex) { logger?.Debug($"[ETLSuggestEngine.GetFileSuggestions] File system error for prefix '{prefix}': {ex.Message}"); }
+            catch (Exception ex) 
+            { 
+                logger?.Debug($"[ETLSuggestEngine.GetFileSuggestions] File system error for prefix '{prefix}': {ex.Message}"); 
+            }
             return suggestions.OrderBy(s => s.EndsWith("/") ? 0 : 1).ThenBy(s => s).ToList();
         }
 

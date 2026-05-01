@@ -14,6 +14,13 @@ namespace ETL_SQL.Tests.Integration
 {
     public class ConsoleEditorTests
     {
+        static ConsoleEditorTests()
+        {
+            // Initialize TUI ServiceProvider for integration tests to satisfy dependencies like IClipboardService
+            var sp = ETL_SQL.TUI.TuiDependencyInjectionSetup.BuildServiceProvider();
+            ETL_SQL.TUI.Program.ServiceProvider = sp;
+        }
+
         [Fact]
         public async Task TestTyping()
         {

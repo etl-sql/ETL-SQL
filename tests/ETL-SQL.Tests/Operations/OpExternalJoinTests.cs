@@ -49,7 +49,7 @@ namespace ETL_SQL.Tests.Operations.Operations
                 rightRows.ToAsyncEnumerable(), 
                 join, 
                 new List<string> { "id" }, 
-                new List<string> { "id" });
+                new List<string> { "id" }).ToListAsync();
 
             Assert.Equal(10, results.Count);
             Assert.All(results, r => Assert.Equal(r["lval"]?.ToString().Replace("l-", ""), r["rval"]?.ToString().Replace("r-", "")));
@@ -78,7 +78,7 @@ namespace ETL_SQL.Tests.Operations.Operations
                 rightRows.ToAsyncEnumerable(), 
                 join, 
                 new List<string> { "id" }, 
-                new List<string> { "id" });
+                new List<string> { "id" }).ToListAsync();
 
             Assert.Equal(2, results.Count);
             Assert.Contains(results, r => Convert.ToInt32(r["id"]) == 2);

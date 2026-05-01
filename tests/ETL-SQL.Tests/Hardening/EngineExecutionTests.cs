@@ -58,7 +58,7 @@ namespace ETL_SQL.Tests.Hardening
                 Stream(schema, 50, 100), // overlap 50..99
                 CreateJoin("INNER"),
                 new List<string> { "Id" }, 
-                new List<string> { "Id" });
+                new List<string> { "Id" }).ToListAsync();
 
             Assert.Equal(50, result.Count);
         }
@@ -77,7 +77,7 @@ namespace ETL_SQL.Tests.Hardening
                 Stream(schemaRight, 50, 100, false, "ValRight"), // Right has 50..149
                 CreateJoin("LEFT"),
                 new List<string> { "Id" }, 
-                new List<string> { "Id" });
+                new List<string> { "Id" }).ToListAsync();
 
             // 50 matched + 50 unmatched from left = 100 total
             Assert.Equal(100, result.Count);
@@ -142,7 +142,7 @@ namespace ETL_SQL.Tests.Hardening
                 Stream(schema, 0, 100, addNulls: true), 
                 CreateJoin("INNER"),
                 new List<string> { "Id" }, 
-                new List<string> { "Id" });
+                new List<string> { "Id" }).ToListAsync();
 
             // 100 total rows... 20 are null. So 80 matching.
             Assert.Equal(80, result.Count);
