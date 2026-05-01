@@ -122,7 +122,7 @@ namespace ETL_SQL.Engine
                             // If the row contains a strongly qualified version of this unqualified column for a DIFFERENT qualifier,
                             // then this unqualified column actually belongs to that other block.
                             var targetSuffix = "." + k;
-                            bool belongsToAnother = qualifiedSuffixes.Any(other => other.EndsWith(targetSuffix, StringComparison.OrdinalIgnoreCase) && !other.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase));
+                            bool belongsToAnother = qualifiedSuffixes!.Any(other => other.EndsWith(targetSuffix, StringComparison.OrdinalIgnoreCase) && !other.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase));
                             if (!belongsToAnother)
                             {
                                 weakMatches.Add(k);
@@ -412,7 +412,7 @@ namespace ETL_SQL.Engine
             if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
             {
                 _context.Telemetry.SubqueryCacheHits++;
-                return cachedResult.ScalarValue;
+                return cachedResult!.ScalarValue;
             }
             
             _context.Telemetry.SubqueryCacheMisses++;
@@ -462,7 +462,7 @@ namespace ETL_SQL.Engine
             if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
             {
                 _context.Telemetry.SubqueryCacheHits++;
-                if (cachedResult.InSet != null)
+                if (cachedResult!.InSet != null)
                 {
                     foreach (var val in cachedResult.InSet) yield return val;
                 }
@@ -565,7 +565,7 @@ namespace ETL_SQL.Engine
             if (_context.SubqueryCache.TryGetValue(cacheKey, out var cachedResult))
             {
                 _context.Telemetry.SubqueryCacheHits++;
-                return (bool)cachedResult.ScalarValue!;
+                return (cachedResult!.ScalarValue is bool b && b);
             }
             
             _context.Telemetry.SubqueryCacheMisses++;

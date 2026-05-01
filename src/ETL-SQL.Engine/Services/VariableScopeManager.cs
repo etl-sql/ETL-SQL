@@ -248,7 +248,6 @@ namespace ETL_SQL.Engine.Services
                 }
 
                 // Purge all stacked scopes
-                int stackIdx = 0;
                 var scopeList = _scopeStack.ToList();
                 var metaList = _metadataStack.ToList();
                 
@@ -272,7 +271,7 @@ namespace ETL_SQL.Engine.Services
             {
                 // Sync ONLY the outermost scope or globals that changed?
                 // For now, let's just sync globals as it's common for parallel results
-                foreach (var kvp in spawned.GlobalVariables) _variables[kvp.Key] = kvp.Value;
+                foreach (var kvp in spawned.Variables) _variables[kvp.Key] = kvp.Value;
             }
         }
     }

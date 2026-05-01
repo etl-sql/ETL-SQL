@@ -886,10 +886,10 @@ namespace ETL_SQL.Engine
             return null;
         }
 
-        public async Task BeginTransaction() => await _transactionManager.BeginTransaction(_variableScopeManager.GlobalVariables, _connections);
+        public async Task BeginTransaction() => await _transactionManager.BeginTransaction(_variableScopeManager.Variables, _connections);
         public async Task CommitTransaction() => await _transactionManager.CommitTransaction();
-        public async Task RollbackTransaction(string? name = null) => await _transactionManager.RollbackTransaction(_variableScopeManager.GlobalVariables, _connections);
-        public async Task RollbackAll() => await _transactionManager.RollbackAll(_variableScopeManager.GlobalVariables, _connections);
+        public async Task RollbackTransaction(string? name = null) => await _transactionManager.RollbackTransaction(_variableScopeManager.Variables, _connections);
+        public async Task RollbackAll() => await _transactionManager.RollbackAll(_variableScopeManager.Variables, _connections);
 
         public void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true)
         {
