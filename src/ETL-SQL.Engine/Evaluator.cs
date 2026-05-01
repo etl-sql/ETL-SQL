@@ -75,6 +75,7 @@ namespace ETL_SQL.Engine
         private readonly Dictionary<(Guid? ParentId, Statement Stmt), ExecutionNode> _nodeReuseMap = new();
         private readonly TransactionManager _transactionManager = new();
         private readonly ISpillStore _spillStore;
+        private readonly Action<string, string?, ConsoleColor> _onMessageHandler;
 
         public ISpillStore SpillStore => _spillStore;
         public QueryCompiler QueryCompiler => _registry.QueryCompiler;
@@ -458,9 +459,10 @@ namespace ETL_SQL.Engine
             _logger.Info("Evaluator initialized.");
 
             // Standard OnMessage hook for capturing output into the Messages list
-            _logger.OnMessage += (msg, col) =>
+            // Filter by SessionId to avoid cross-pollination from background tasks
+            _onMessageHandler = (msg, sid, col) =>
             {
-                if (RedirectOutput)
+                if (RedirectOutput && sid == SessionId)
                 {
                     var scrubbed = Scrub(msg);
                     lock (_messagesLock)
@@ -471,6 +473,7 @@ namespace ETL_SQL.Engine
                     }
                 }
             };
+            _logger.OnMessage += _onMessageHandler;
 
             // Register for spill orchestration
             _serviceProvider?.GetService<IBufferManager>()?.RegisterSpillable(this);
@@ -513,7 +516,7 @@ namespace ETL_SQL.Engine
                 _nodeReuseMap.Clear();
                 _operationCount = 0;
                 Telemetry.Clear();
-                lock(_messagesLock) { Messages.Clear(); }
+                // lock(_messagesLock) { Messages.Clear(); } // Don't clear messages on every evaluate, allows TUI history
             }
             try
             {
@@ -1001,6 +1004,7 @@ namespace ETL_SQL.Engine
             }
 
             _spillStore?.Dispose();
+            _logger.OnMessage -= _onMessageHandler;
             foreach (var conn in _connections.Values) await conn.DisposeAsync();
             await DockerManager.DisposeAsync();
             _connections.Clear();
@@ -1125,12 +1129,14 @@ namespace ETL_SQL.Engine
             // 6. Clear Lineage
             _lineageTracker.Clear();
 
-            // 7. Reset state indicators and generate fresh Session ID
-            SessionId = Guid.NewGuid().ToString("N");
+            // 7. Reset state indicators
+            // SessionId = Guid.NewGuid().ToString("N"); // Preserve session ID identity during reset
             LastError = null;
             ActiveException = null;
             PreviousErrorNumber = 0;
             Telemetry.FetchStatus = 0;
+            lock (_messagesLock) Messages.Clear();
+            Parameters?.Clear();
 
             _logger.Debug("[Evaluator] Session reset complete.");
         }

@@ -20,15 +20,15 @@ namespace ETL_SQL.Common
         private Serilog.Core.Logger? _testLogger;
         private ILoggerFactory? _msLoggerFactory;
         private Microsoft.Extensions.Logging.ILogger? _msLogger;
-        private string? _sessionId;
-        private IDisposable? _sessionContext;
+        private readonly AsyncLocal<string?> _sessionId = new();
+        private readonly AsyncLocal<IDisposable?> _sessionContext = new();
 
         public bool IsSilent { get; set; }
         public bool IsVerbose { get; set; }
         public bool IsFileLogging { get; set; }
         public bool SuppressConsole { get; set; }
         public bool IsJsonMode { get; set; }
-        public event Action<string, ConsoleColor>? OnMessage;
+        public event Action<string, string?, ConsoleColor>? OnMessage;
 
         public bool IsDebugEnabled => IsVerbose;
         public bool IsVerboseEnabled => IsVerbose;
@@ -39,12 +39,12 @@ namespace ETL_SQL.Common
         /// </summary>
         public string? SessionId
         {
-            get => _sessionId;
+            get => _sessionId.Value;
             set
             {
-                _sessionId = value;
-                _sessionContext?.Dispose();
-                _sessionContext = value != null
+                _sessionId.Value = value;
+                _sessionContext.Value?.Dispose();
+                _sessionContext.Value = value != null
                     ? LogContext.PushProperty("SessionId", value)
                     : null;
             }
@@ -135,8 +135,8 @@ namespace ETL_SQL.Common
                 if (color != ConsoleColor.White) Console.ResetColor();
             }
 
-            // 4. UI Callback
-            OnMessage?.Invoke(consoleMessage, color);
+            // 4. UI Callback - pass current SessionId for filtering
+            OnMessage?.Invoke(consoleMessage, _sessionId.Value, color);
 
         }
 
@@ -231,7 +231,7 @@ namespace ETL_SQL.Common
 
         public void Dispose()
         {
-            _sessionContext?.Dispose();
+            _sessionContext.Value?.Dispose();
             _testLogger?.Dispose();
             _scriptLogger?.Dispose();
             _appLogger?.Dispose();

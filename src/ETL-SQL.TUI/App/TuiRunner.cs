@@ -16,10 +16,24 @@ namespace ETL_SQL.TUI
         {
             if (!string.Equals(ctx.UiMode, "repl", StringComparison.OrdinalIgnoreCase))
             {
+                // Enforce UTF-8 for consistent symbol rendering
+                Console.OutputEncoding = System.Text.Encoding.UTF8;
+
                 // Disable Ctrl+C interrupt so we can use it for Copy
                 if (OperatingSystem.IsWindows())
                 {
-                    try { Console.TreatControlCAsInput = true; } catch { /* Ignore on non-interactive */ }
+                    try { Console.TreatControlCAsInput = true; } catch { }
+                    
+                    // Stabilize buffer: if buffer > window, TUI will drift/scroll on last line writes
+                    if (!Console.IsOutputRedirected)
+                    {
+                        try 
+                        { 
+                            if (Console.BufferHeight > Console.WindowHeight)
+                                Console.BufferHeight = Console.WindowHeight; 
+                        } 
+                        catch { }
+                    }
                 }
                 Console.Clear();
             }

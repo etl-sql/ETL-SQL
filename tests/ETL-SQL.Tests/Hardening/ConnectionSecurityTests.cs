@@ -49,7 +49,7 @@ namespace ETL_SQL.Tests.Hardening
             var rule = new ConnectionEncryptionRule();
             var results = await rule.AnalyzeAsync(script, new TestLintContext());
 
-            Assert.Empty(results.Where(r => r.Code == "SEC-PLAIN-CONN"));
+            Assert.DoesNotContain(results, r => r.Code == "SEC-PLAIN-CONN");
         }
 
         [Fact]

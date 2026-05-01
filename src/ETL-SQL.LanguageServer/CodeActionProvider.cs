@@ -50,7 +50,7 @@ namespace ETL_SQL.LSP
                 }
             }
 
-            return Task.FromResult(new CommandOrCodeActionContainer(results));
+            return Task.FromResult<CommandOrCodeActionContainer?>(new CommandOrCodeActionContainer(results));
         }
 
         public CodeActionRegistrationOptions GetRegistrationOptions(CodeActionCapability capability, ClientCapabilities clientCapabilities)

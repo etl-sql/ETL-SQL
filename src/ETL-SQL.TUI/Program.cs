@@ -15,6 +15,7 @@ namespace ETL_SQL.TUI
 
         static async Task<int> Main(string[] args)
         {
+            // Trigger build to test first-run visual glitch
             try
             {
                 ServiceProvider = TuiDependencyInjectionSetup.BuildServiceProvider();

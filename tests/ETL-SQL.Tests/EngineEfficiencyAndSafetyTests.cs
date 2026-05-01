@@ -172,12 +172,12 @@ SELECT * FROM #collision ORDER BY id;"));
             public bool IsVerboseEnabled => IsVerbose;
             public bool SuppressConsole { get; set; }
             public bool IsJsonMode { get; set; }
-            public event Action<string, ConsoleColor>? OnMessage;
+            public event Action<string, string?, ConsoleColor>? OnMessage;
 
             public void Log(LogLevel level, string message, Exception? ex = null)
             {
                 Lines.Add(message);
-                OnMessage?.Invoke(message, ConsoleColor.White);
+                OnMessage?.Invoke(message, SessionId, ConsoleColor.White);
             }
 
             public void Debug(string message) => Log(LogLevel.Debug, message);

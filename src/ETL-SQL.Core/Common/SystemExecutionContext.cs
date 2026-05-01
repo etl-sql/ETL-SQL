@@ -35,11 +35,11 @@ namespace ETL_SQL.Core.Common
             public bool SuppressConsole { get; set; }
             public bool IsJsonMode { get; set; }
             public string? SessionId { get; set; }
-            public event Action<string, ConsoleColor>? OnMessage;
+            public event Action<string, string?, ConsoleColor>? OnMessage;
 
             public void Log(LogLevel level, string message, Exception? ex = null) 
             {
-                OnMessage?.Invoke(message, ConsoleColor.Gray);
+                OnMessage?.Invoke(message, SessionId, ConsoleColor.Gray);
             }
             public void Debug(string message) { }
             public void Info(string message) { }

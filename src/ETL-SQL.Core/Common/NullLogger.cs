@@ -17,6 +17,6 @@ namespace ETL_SQL.Common
         public bool IsVerbose { get; set; } = false;
         public bool SuppressConsole { get; set; } = false;
         public bool IsJsonMode { get; set; } = false;
-        public event Action<string, ConsoleColor>? OnMessage { add { } remove { } }
+        public event Action<string, string?, ConsoleColor>? OnMessage { add { } remove { } }
     }
 }

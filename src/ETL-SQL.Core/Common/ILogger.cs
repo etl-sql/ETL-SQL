@@ -49,7 +49,7 @@ namespace ETL_SQL.Common
         bool IsVerbose { get; set; }
         bool SuppressConsole { get; set; }
         bool IsJsonMode { get; set; }
-        event Action<string, ConsoleColor>? OnMessage;
+        event Action<string, string?, ConsoleColor>? OnMessage;
 
         // ── Formatting helper for non-Serilog loggers ─────────────────────────
         // Converts Serilog-style {Name} tokens to positional {0}, {1}… for string.Format.

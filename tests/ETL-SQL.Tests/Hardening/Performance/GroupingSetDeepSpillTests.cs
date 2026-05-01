@@ -52,8 +52,8 @@ namespace ETL_SQL.Tests.Hardening.Performance
             // 250 input rows expanded into 4 sets each = 1000 intermediate rows spilled.
             // After aggregation, unique groups will vary based on data.
             Assert.True(eval.Telemetry.TotalSpilledBytes > 0);
-            Assert.True(eval.AggregateGroupsCount > 0);
-            Assert.Equal(4.0, eval.AggregateExpansionRatio); // 4 sets for CUBE(A, B)
+            Assert.True(eval.Telemetry.AggregateGroupsCount > 0);
+            Assert.Equal(4.0, eval.Telemetry.AggregateExpansionRatio); // 4 sets for CUBE(A, B)
 
             // Verify the presence of sub-totals (where Region is null or ProductID is null)
             var allResults = result.Rows;
@@ -85,7 +85,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
 
             await Execute(eval, sql);
 
-            Assert.Equal(4.0, eval.AggregateExpansionRatio);
+            Assert.Equal(4.0, eval.Telemetry.AggregateExpansionRatio);
             Assert.True(eval.Telemetry.TotalSpilledBytes > 0);
         }
     }

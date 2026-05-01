@@ -108,12 +108,18 @@ namespace ETL_SQL.TUI.UI
             // Perform a robust full-screen clear to purge artifacts from previous CLI statements
             try 
             { 
+                if (OperatingSystem.IsWindows() && !Console.IsOutputRedirected)
+                {
+                    Console.BufferHeight = Console.WindowHeight;
+                }
                 AnsiConsole.Console.Cursor.Hide();
+                AnsiConsole.Console.Write("\x1b[?1049h"); // Switch to alternative buffer if supported
                 AnsiConsole.Console.Write("\x1b[H\x1b[2J\x1b[3J");
                 AnsiConsole.Console.Clear(); 
                 AnsiConsole.Console.Cursor.SetPosition(1, 1);
+                _renderer.ForceFullRepaint();
             } 
-            catch (Exception ex) { _logger.Debug("[ConsoleEditor] Initial deep clear failed: {Message}", ex.Message); }
+            catch { }
 
             _metadata.RefreshConnections(_buffer.GetText(), force: true);
 
@@ -127,6 +133,8 @@ namespace ETL_SQL.TUI.UI
                     await _input.HandleKey(key);
                 }
             }
+            AnsiConsole.Console.Write("\x1b[?1049l"); // Exit alternative buffer
+            AnsiConsole.Console.Cursor.Show();
             Console.Clear();
             Console.SetCursorPosition(0, 0);
             Console.CursorVisible = true;

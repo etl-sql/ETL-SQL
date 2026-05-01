@@ -35,28 +35,28 @@ namespace ETL_SQL.Tests.Statements.Statements
         public async Task SetProfiling_On_SetsEvaluatorFlag()
         {
             var eval = NewEval();
-            eval.IsProfiling = false;
+            eval.Telemetry.IsProfiling = false;
             
             var stmt = (SetProfilingStatement)TestHelpers.Parse("SET PROFILING ON;").Statements[0];
             var handler = new SetProfilingStatementHandler();
             
             await handler.Execute(stmt, eval);
             
-            Assert.True(eval.IsProfiling);
+            Assert.True(eval.Telemetry.IsProfiling);
         }
 
         [Fact]
         public async Task SetProfiling_Off_SetsEvaluatorFlag()
         {
             var eval = NewEval();
-            eval.IsProfiling = true;
+            eval.Telemetry.IsProfiling = true;
             
             var stmt = (SetProfilingStatement)TestHelpers.Parse("SET PROFILE OFF;").Statements[0];
             var handler = new SetProfilingStatementHandler();
             
             await handler.Execute(stmt, eval);
             
-            Assert.False(eval.IsProfiling);
+            Assert.False(eval.Telemetry.IsProfiling);
         }
 
         [Fact]
@@ -86,7 +86,7 @@ namespace ETL_SQL.Tests.Statements.Statements
         public async Task ShowProfile_AfterMockDbSelect_AddsToLastResultSets()
         {
             var eval = NewEval();
-            eval.IsProfiling = true;
+            eval.Telemetry.IsProfiling = true;
             eval.RedirectOutput = true; // mirrors TUI ConsoleEditor
 
             var script = TestHelpers.Parse(@"

@@ -55,6 +55,7 @@ namespace ETL_SQL.Orchestrator.Execution
             var timer = Stopwatch.StartNew();
             Evaluator? evaluator = null;
 
+            _logger.SessionId = _ctx.SessionId;
             _logger.Info("Starting execution session {SessionId}", _ctx.SessionId);
             
             try

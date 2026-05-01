@@ -102,7 +102,7 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.Equal(6m, Convert.ToDecimal(subtotalA["total"])); // 6 rows for A
 
             // Verify Expansion Ratio
-            Assert.Equal(3.0, eval.AggregateExpansionRatio, 1);
+            Assert.Equal(3.0, eval.Telemetry.AggregateExpansionRatio, 1);
         }
 
         [Fact]
@@ -141,7 +141,7 @@ namespace ETL_SQL.Tests.Operations.Operations
             Assert.Contains(result, r => r["cat"] == null && r["sub"] == null);
 
             // Expansion Ratio for CUBE(2) is 2^2 = 4.0
-            Assert.Equal(4.0, eval.AggregateExpansionRatio, 1);
+            Assert.Equal(4.0, eval.Telemetry.AggregateExpansionRatio, 1);
         }
 
         [Fact]
@@ -204,7 +204,7 @@ namespace ETL_SQL.Tests.Operations.Operations
 
             // Should have spilled 100 * 8 = 800 intermediate rows to dynamic partitions
             Assert.True(eval.Telemetry.TotalSpilledBytes > spillBefore);
-            Assert.Equal(8.0, eval.AggregateExpansionRatio, 1);
+            Assert.Equal(8.0, eval.Telemetry.AggregateExpansionRatio, 1);
         }
     }
 }

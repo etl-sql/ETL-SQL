@@ -29,6 +29,8 @@ namespace ETL_SQL.TUI.UI
         public int TreeScrollRow { get; set; } = 0;
         public int ActiveResultSetIndex { get; set; } = 0;
         public bool IsBottomMaximized { get; set; } = false;
+        private int _lastWidth = 0;
+        private int _lastHeight = 0;
         private bool _forceFullRepaintPending = false;
 
         public void ForceFullRepaint() => _forceFullRepaintPending = true;
@@ -77,6 +79,13 @@ namespace ETL_SQL.TUI.UI
         /// <param name="totalHeight">The height of the console window.</param>
         public void Render(EditorBuffer buffer, Evaluator evaluator, string filePath, bool isDirty, int totalWidth, int totalHeight)
         {
+            if (totalWidth != _lastWidth || totalHeight != _lastHeight)
+            {
+                _forceFullRepaintPending = true;
+                _lastWidth = totalWidth;
+                _lastHeight = totalHeight;
+            }
+
             if (!Headless) 
             {
                 _console.CursorVisible = false;

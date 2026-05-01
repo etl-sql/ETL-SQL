@@ -40,6 +40,7 @@ namespace ETL_SQL.TUI
                 .AddEnvironmentVariables()
                 .Build();
 
+
             var services = new ServiceCollection();
 
             services.AddSingleton<IConfiguration>(configuration);
@@ -74,7 +75,7 @@ namespace ETL_SQL.TUI
             var helpRegistry = new Core.Metadata.LanguageHelpRegistry();
             services.AddSingleton<Core.Interfaces.ILanguageHelpRegistry>(helpRegistry);
 
-            services.AddSingleton<ILineageTracker, LineageTracker>();
+            services.AddTransient<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();
             services.AddSingleton<ETL_SQL.Core.Execution.ISessionStateManager, ETL_SQL.Engine.Services.SessionStateManager>();
             services.AddSingleton<ETL_SQL.Engine.Services.SessionStateManager>(sp => (ETL_SQL.Engine.Services.SessionStateManager)sp.GetRequiredService<ETL_SQL.Core.Execution.ISessionStateManager>());
@@ -85,7 +86,7 @@ namespace ETL_SQL.TUI
             services.AddSingleton<ISystemResources, DefaultSystemResources>();
             services.AddSingleton<ETL_SQL.Core.Execution.IBufferManager, BufferManager>();
             services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));
-            services.AddSingleton<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
+            services.AddTransient<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
 
             // ── Connectors ─────────────────────────────────────────────────────
             services.AddSingleton<IConnector, MockDbConnector>();

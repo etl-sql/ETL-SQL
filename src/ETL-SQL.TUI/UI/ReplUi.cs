@@ -57,8 +57,10 @@ namespace ETL_SQL.TUI.UI
                 // Route engine log messages to the IDE as JSON on stdout.
                 // We subscribe to the DI-injected ILogger which handles all modernized handlers.
                 var logger = _serviceProvider.GetRequiredService<ETL_SQL.Common.ILogger>();
-                logger.OnMessage += (msg, color) =>
+                logger.OnMessage += (msg, sid, color) =>
                 {
+                    if (sid != null && sid != _ctx.SessionId) return;
+
                     var level = color == ConsoleColor.Red ? "error"
                               : color == ConsoleColor.Yellow ? "warning"
                               : "info";

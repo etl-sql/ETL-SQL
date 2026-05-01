@@ -21,7 +21,7 @@ namespace ETL_SQL.Common
         public bool IsVerbose { get; set; }
         public bool SuppressConsole { get; set; }
         public bool IsJsonMode { get; set; }
-        public event Action<string, ConsoleColor>? OnMessage;
+        public event Action<string, string?, ConsoleColor>? OnMessage;
 
         public void Log(LogLevel level, string message, Exception? ex = null)
         {
@@ -53,7 +53,7 @@ namespace ETL_SQL.Common
                     var msg = new { type = "message", level = level.ToLower(), text = message };
                     Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(msg));
                 }
-                OnMessage?.Invoke(formattedMessage, color);
+                OnMessage?.Invoke(formattedMessage, SessionId, color);
                 return;
             }
 
@@ -61,7 +61,7 @@ namespace ETL_SQL.Common
             Console.WriteLine(formattedMessage);
             if (color != ConsoleColor.White) Console.ResetColor();
 
-            OnMessage?.Invoke(formattedMessage, color);
+            OnMessage?.Invoke(formattedMessage, SessionId, color);
         }
     }
 }

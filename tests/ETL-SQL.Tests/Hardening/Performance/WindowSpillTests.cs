@@ -31,7 +31,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
             // Set threshold very low to force spilling
             eval.WindowSpillThreshold = 20;
             eval.IsVerbose = true;
-            eval.TelemetryEnabled = true;
+            eval.Telemetry.TelemetryEnabled = true;
 
             // 1. Setup Mock Connection
             await Execute(eval, "CREATE CONNECTION src ON MOCKDB('local');");
