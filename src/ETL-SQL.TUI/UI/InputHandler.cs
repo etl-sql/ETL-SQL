@@ -392,6 +392,13 @@ namespace ETL_SQL.TUI.UI
         {
             if (key.Key == ConsoleKey.Enter)
             {
+                // If empty or whitespace, treat as Cancel (null) to avoid logic errors or visual drift
+                if (string.IsNullOrWhiteSpace(_renderer.PromptValue))
+                {
+                    _editor.ResolvePrompt(null);
+                    return;
+                }
+
                 _editor.ResolvePrompt(_renderer.PromptValue);
                 return;
             }
@@ -407,8 +414,12 @@ namespace ETL_SQL.TUI.UI
                 // Trigger or cycle suggestions
                 if (!_renderer.PromptSuggestions.Any())
                 {
-                    _renderer.PromptSuggestions = ETLSuggestEngine.GetFileSuggestions(_renderer.PromptValue);
-                    _renderer.PromptSuggestionIndex = 0;
+                    // Only do file suggestions if the prompt looks like a path request
+                    if (_renderer.PromptTitle.Contains("Open") || _renderer.PromptTitle.Contains("Save") || _renderer.PromptTitle.Contains("Export") || _renderer.PromptTitle.Contains("path"))
+                    {
+                        _renderer.PromptSuggestions = ETLSuggestEngine.GetFileSuggestions(_renderer.PromptValue);
+                        _renderer.PromptSuggestionIndex = 0;
+                    }
                 }
                 else
                 {
@@ -417,8 +428,9 @@ namespace ETL_SQL.TUI.UI
 
                 if (_renderer.PromptSuggestions.Any())
                 {
-                    _renderer.PromptValue = _renderer.PromptSuggestions[_renderer.PromptSuggestionIndex];
-                    _renderer.PromptCursor = _renderer.PromptValue.Length;
+                    var suggestion = _renderer.PromptSuggestions[_renderer.PromptSuggestionIndex];
+                    _renderer.PromptValue = suggestion;
+                    _renderer.PromptCursor = suggestion.Length;
                 }
                 return;
             }
