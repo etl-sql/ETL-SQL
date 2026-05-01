@@ -92,7 +92,7 @@ namespace ETL_SQL.TUI.UI
 
             // ── Layout Definitions ──────────────────────────────────────────
             int editorAreaTop = 1;
-            int statusHeight  = 1;
+            int statusHeight  = 2; // Two lines for status/help bar
 
             int lowerAreaHeight = (int)(totalHeight * 0.4);
             if (IsBottomMaximized || CompareMode) lowerAreaHeight = Math.Max(5, totalHeight - editorAreaTop - statusHeight - 2);
@@ -142,6 +142,9 @@ namespace ETL_SQL.TUI.UI
             if (buffer.CursorColumn < ScrollCol) ScrollCol = buffer.CursorColumn;
             if (buffer.CursorColumn >= ScrollCol + editorWidth) ScrollCol = buffer.CursorColumn - editorWidth + 1;
 
+            // Ensure we always start at the top-left to prevent line-drift/repeat
+            if (!Headless) _console.SetCursorPosition(0, 0);
+
             // 1. Header
             if (!Headless)
             {
@@ -173,24 +176,26 @@ namespace ETL_SQL.TUI.UI
                     _messageTreePanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight, TreeScrollRow, MessageScrollRow);
             }
 
-            // 4. Status Bar  ── three zones: LEFT shortcuts │ CENTER file/mode │ RIGHT cursor
+            // 4. Two-Line Status/Help Bar
             if (!Headless)
             {
+                int helpRow = totalHeight - 2;
                 int statusRow = totalHeight - 1;
 
-                // ── LEFT zone: always-on shortcuts (plain text, no markup)
-                string left = " F1:Help  F5:Run  F6:Focus  F4:Panel ";
+                // ── Row 1: Help Bar (Static Shortcuts) ───────────────────────
+                string helpText = " F1:Help  F5:Run  F6:Focus  F4:Panel  F2:Save  F12:Format  ^Q:Exit ";
+                _console.ClearLine(0, helpRow, totalWidth);
+                _console.SetCursorPosition(0, helpRow);
+                _console.Markup($"[white on grey23]{Markup.Escape(helpText.PadRight(totalWidth - 1))}[/]");
 
-                // ── CENTER zone: filename + dirty indicator + active-panel pill
-                string fileLabel2 = string.IsNullOrEmpty(filePath)
-                    ? "Untitled.etlsql"
-                    : System.IO.Path.GetFileName(filePath);
+                // ── Row 2: Status Bar (Dynamic Info) ─────────────────────────
+                string fileLabel2 = string.IsNullOrEmpty(filePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(filePath);
                 string dirtyDot = isDirty ? "● " : "○ ";
 
                 string panelPill;
                 bool hasError = evaluator.LastError != null;
                 if (CompareMode)
-                    panelPill = $"[bold magenta] COMPARE  pane {CompareFocusIndex + 1}/{Math.Max(1, evaluator.LastResultSets.Count)} [/]";
+                    panelPill = $"[bold magenta] COMPARE {CompareFocusIndex + 1}/{Math.Max(1, evaluator.LastResultSets.Count)} [/]";
                 else if (ResultsFocus)
                     panelPill = "[bold yellow] ▶ RESULTS FOCUS [/]";
                 else if (hasError)
@@ -202,7 +207,6 @@ namespace ETL_SQL.TUI.UI
                 else
                     panelPill = "[grey] PIPELINE [/]";
 
-                // ── RIGHT zone: cursor position + elapsed time
                 string cursor3 = $" Ln {buffer.CursorLine + 1}, Col {buffer.CursorColumn + 1}";
                 if (evaluator.LastExecTimeMs > 0)
                 {
@@ -213,31 +217,29 @@ namespace ETL_SQL.TUI.UI
                             : $"{evaluator.LastExecTimeMs}ms";
                     cursor3 += $"  ⏱ {elapsed}";
                 }
-                // Append transient status message (e.g. "Saved") to right zone
-                if (DateTime.Now < StatusMessageExpiry)
-                    cursor3 += $"  {StatusMessage ?? ""}";
-                cursor3 += " ";
 
-                // Plain-text lengths for layout math (markup tags don't count toward width)
-                int leftLen   = left.Length;
-                int rightLen  = cursor3.Length;
-                // Center plain text: dirtyDot + fileLabel + " " (pill width is approximate — pills are short)
-                int pillPlain = PerformanceVisible ? 6 : ResultsVisible ? 9 : hasError ? 7 : ResultsFocus ? 16 : 9;
-                int centerAvail = Math.Max(0, totalWidth - leftLen - rightLen - 4); // Subtract 4 (instead of 3) to leave 1 char buffer at end of row
+                // Status message now has much more space
+                string statusMsg = (DateTime.Now < StatusMessageExpiry) ? StatusMessage ?? "" : "";
+                
+                // Layout: [Dirty Filename] [Pill] [Cursor/Time] | [StatusMessage]
+                string leftZone = $" {dirtyDot}{fileLabel2} ";
+                string midZone = panelPill;
+                string rightZone = $" {cursor3} ";
+                
+                int leftWidth = leftZone.Length;
+                int midWidth = PerformanceVisible ? 8 : ResultsVisible ? 11 : hasError ? 9 : ResultsFocus ? 18 : 11;
+                int rightWidth = rightZone.Length;
+                
+                int availForStatus = totalWidth - leftWidth - midWidth - rightWidth - 6; // separators
+                if (statusMsg.Length > availForStatus && availForStatus > 5)
+                    statusMsg = statusMsg[..Math.Max(0, availForStatus - 3)] + "...";
 
-                string centerFile = dirtyDot + fileLabel2;
-                if (centerFile.Length > centerAvail - pillPlain - 2)
-                    centerFile = centerFile[..Math.Max(0, centerAvail - pillPlain - 5)] + "…";
-
-                // ── Assemble final markup line
-                string sep = "[grey] │ [/]";
-                string statusMarkup =
-                    $"[white on grey15]{Markup.Escape(left)}[/]" +
-                    sep +
-                    $"[white on grey15] {Markup.Escape(centerFile)} [/]" +
-                    panelPill +
-                    sep +
-                    $"[white on grey15]{Markup.Escape(cursor3)}[/]";
+                string sep = "[grey]│[/]";
+                string statusMarkup = 
+                    $"[white on grey15]{Markup.Escape(leftZone)}[/]" + sep +
+                    midZone + sep +
+                    $"[white on grey15]{Markup.Escape(rightZone)}[/]" + sep +
+                    $"[white on grey15] {Markup.Escape(statusMsg).PadRight(Math.Max(0, availForStatus))} [/]";
 
                 _console.ClearLine(0, statusRow, totalWidth);
                 _console.SetCursorPosition(0, statusRow);

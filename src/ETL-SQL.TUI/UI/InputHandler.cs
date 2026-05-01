@@ -83,6 +83,7 @@ namespace ETL_SQL.TUI.UI
             if (key.Key == ConsoleKey.Z && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.Undo(); return; }
             if (key.Key == ConsoleKey.Y && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.Redo(); return; }
             if (key.Key == ConsoleKey.S && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.SaveScript(key.Modifiers.HasFlag(ConsoleModifiers.Shift)); return; }
+            if (key.Key == ConsoleKey.F2) { await _editor.SaveScript(false); return; }
             if (key.Key == ConsoleKey.O && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await ShowOpenPrompt(); return; }
             if (key.Key == ConsoleKey.N && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.NewFile(); return; }
             if (key.Key == ConsoleKey.R && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor._evaluator.ClearResults(); _renderer.ShowStatus("Results cleared."); return; }
@@ -95,6 +96,7 @@ namespace ETL_SQL.TUI.UI
             }
             if (key.Key == ConsoleKey.F && key.Modifiers.HasFlag(ConsoleModifiers.Alt)) { _editor.FormatScript(); return; }
             if (key.Key == ConsoleKey.I && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.FormatScript(); return; }
+            if (key.Key == ConsoleKey.F12) { _editor.FormatScript(); return; }
             if (key.Key == ConsoleKey.H && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.Replace(); return; }
             if (key.Key == ConsoleKey.G && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.GoToLine(); return; }
             if (key.Key == ConsoleKey.P && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.ExportResults(); return; }
@@ -150,13 +152,13 @@ namespace ETL_SQL.TUI.UI
             }
 
 
-            // F6 - Focus Toggle
-            if (key.Key == ConsoleKey.F6)
+            // F6/F3 - Focus Toggle
+            if (key.Key == ConsoleKey.F6 || key.Key == ConsoleKey.F3)
             {
                 _renderer.ResultsFocus = !_renderer.ResultsFocus;
                 _renderer.AutocompleteVisible = false;
                 _renderer.ForceFullRepaint();
-                _renderer.ShowStatus(_renderer.ResultsFocus ? "Focused: Results (↑↓ ⇞ ⇟ to ↕)" : "Focused: Editor");
+                _renderer.ShowStatus(_renderer.ResultsFocus ? "Focus: Results (↑↓ ⇞ ⇟)" : "Focus: Editor");
                 return;
             }
 
