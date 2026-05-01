@@ -16,6 +16,11 @@ namespace ETL_SQL.TUI
         {
             if (!string.Equals(ctx.UiMode, "repl", StringComparison.OrdinalIgnoreCase))
             {
+                // Disable Ctrl+C interrupt so we can use it for Copy
+                if (OperatingSystem.IsWindows())
+                {
+                    try { Console.TreatControlCAsInput = true; } catch { /* Ignore on non-interactive */ }
+                }
                 Console.Clear();
             }
 

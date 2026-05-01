@@ -81,6 +81,7 @@ namespace ETL_SQL.TUI
             var securityService = new ETL_SQL.Services.SecurityService(loggerService);
             securityService.UpdateFromConfiguration(configuration);
             services.AddSingleton<ETL_SQL.Services.SecurityService>(securityService);
+            services.AddSingleton<ETL_SQL.TUI.Services.IClipboardService, ETL_SQL.TUI.Services.ClipboardService>();
             services.AddSingleton<ISystemResources, DefaultSystemResources>();
             services.AddSingleton<ETL_SQL.Core.Execution.IBufferManager, BufferManager>();
             services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));

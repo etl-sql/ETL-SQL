@@ -34,6 +34,7 @@ namespace ETL_SQL.TUI.UI
         internal readonly InputHandler _input;
         private readonly Dictionary<string, IDataSource> _connections;
 
+        private readonly Services.IClipboardService _clipboard;
         private readonly SecurityService _security;
         private readonly EditorFileHandler _fileHandler;
         private string? _promptResult;
@@ -53,6 +54,7 @@ namespace ETL_SQL.TUI.UI
             _filePath = filePath;
             _connections = connections;
             _logger = Program.ServiceProvider.GetRequiredService<ILogger>();
+            _clipboard = Program.ServiceProvider.GetRequiredService<Services.IClipboardService>();
             _security = new SecurityService(_logger);
             _evaluator = Program.ServiceProvider.GetRequiredService<Evaluator>();
             _evaluator.RedirectOutput = true;
@@ -104,12 +106,10 @@ namespace ETL_SQL.TUI.UI
             // Perform a robust full-screen clear to purge artifacts from previous CLI statements
             try 
             { 
-                Console.ResetColor();
-                // Deep clear: Clear screen buffer, clear scrollback, and home cursor
-                Console.Write("\x1b[H\x1b[2J\x1b[3J");
-                Console.Clear(); 
-                Console.CursorVisible = true;
-                Console.SetCursorPosition(0, 0);
+                AnsiConsole.Console.Cursor.Hide();
+                AnsiConsole.Console.Write("\x1b[H\x1b[2J\x1b[3J");
+                AnsiConsole.Console.Clear(); 
+                AnsiConsole.Console.Cursor.SetPosition(1, 1);
             } 
             catch (Exception ex) { _logger.Debug("[ConsoleEditor] Initial deep clear failed: {Message}", ex.Message); }
 
@@ -475,38 +475,78 @@ namespace ETL_SQL.TUI.UI
             return value;
         }
 
-        private static string? _clipboard;
-
-        /// <summary>Copies the current selection to the internal clipboard.</summary>
-        public void Copy()
+        /// <summary>Copies the current selection (or results) to the clipboard.</summary>
+        public async Task Copy()
         {
-            var text = _buffer.GetSelectedText();
-            if (!string.IsNullOrEmpty(text)) _clipboard = text;
-            else _renderer.ShowStatus("No text selected to copy.");
+            if (_renderer.ResultsFocus)
+            {
+                if (_renderer.ResultsVisible && _evaluator.LastResultSets.Count > _renderer.ActiveResultSetIndex)
+                {
+                    var rs = _evaluator.LastResultSets[_renderer.ActiveResultSetIndex];
+                    var sb = new StringBuilder();
+                    sb.AppendLine(string.Join("\t", rs.ColumnNames));
+                    foreach (var row in rs.Rows) sb.AppendLine(string.Join("\t", row.Columns.Values));
+                    await _clipboard.SetTextAsync(sb.ToString());
+                    _renderer.ShowStatus("Results copied as TSV.");
+                }
+                else if (_renderer.PerformanceVisible)
+                {
+                    var text = string.Join(Environment.NewLine, _evaluator.Telemetry.ProfileMetrics.Select(m => $"{m.Sql}: {m.DurationMs}ms"));
+                    await _clipboard.SetTextAsync(text);
+                    _renderer.ShowStatus("Performance metrics copied.");
+                }
+                else
+                {
+                    // Copy messages — clean text only, no tree borders
+                    var text = string.Join(Environment.NewLine, _evaluator.Messages);
+                    await _clipboard.SetTextAsync(text);
+                    _renderer.ShowStatus("Messages copied.");
+                }
+            }
+            else
+            {
+                var text = _buffer.GetSelectedText();
+                if (string.IsNullOrEmpty(text)) text = _buffer.Lines[_buffer.CursorLine];
+                
+                if (!string.IsNullOrEmpty(text))
+                {
+                    await _clipboard.SetTextAsync(text);
+                    _renderer.ShowStatus("Text copied to clipboard.");
+                }
+            }
         }
 
-        /// <summary>Cuts the current selection to the internal clipboard.</summary>
-        public void Cut()
+        /// <summary>Cuts the current selection to the clipboard.</summary>
+        public async Task Cut()
         {
+            if (_renderer.ResultsFocus) return; // Cannot cut from results
+            
             var text = _buffer.GetSelectedText();
             if (!string.IsNullOrEmpty(text))
             {
-                _clipboard = text;
+                await _clipboard.SetTextAsync(text);
                 SaveUndoState();
                 _buffer.DeleteSelection();
                 MarkDirty();
+                _renderer.ShowStatus("Text cut to clipboard.");
             }
-            else _renderer.ShowStatus("No text selected to cut.");
         }
 
-        /// <summary>Pastes text from the internal clipboard at the cursor position.</summary>
-        public void Paste()
+        /// <summary>Pastes the clipboard content at the current cursor position.</summary>
+        public async Task Paste()
         {
-            if (string.IsNullOrEmpty(_clipboard)) { _renderer.ShowStatus("Clipboard is empty."); return; }
-            SaveUndoState();
-            _buffer.Paste(_clipboard);
-            MarkDirty();
+            if (_renderer.ResultsFocus) return; // Cannot paste into results
+            
+            var text = await _clipboard.GetTextAsync();
+            if (!string.IsNullOrEmpty(text))
+            {
+                MarkDirty();
+                SaveUndoState();
+                _buffer.Paste(text);
+                _renderer.ShowStatus("Text pasted.");
+            }
         }
+
 
         /// <summary>Deletes the entire line at the current cursor position.</summary>
         public void DeleteLine() { SaveUndoState(); _buffer.DeleteLine(); MarkDirty(); }

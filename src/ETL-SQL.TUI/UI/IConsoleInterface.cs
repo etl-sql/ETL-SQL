@@ -25,12 +25,15 @@ namespace ETL_SQL.TUI.UI
     {
         public int WindowWidth => AnsiConsole.Console.Profile.Width;
         public int WindowHeight => AnsiConsole.Console.Profile.Height;
-        public bool CursorVisible { get => OperatingSystem.IsWindows() && Console.CursorVisible; set { if (OperatingSystem.IsWindows()) Console.CursorVisible = value; } }
+        public bool CursorVisible { 
+            get => true; 
+            set { if (value) AnsiConsole.Console.Cursor.Show(); else AnsiConsole.Console.Cursor.Hide(); } 
+        }
 
-        public void SetCursorPosition(int left, int top) => Console.SetCursorPosition(left, top);
+        public void SetCursorPosition(int left, int top) => AnsiConsole.Console.Cursor.SetPosition(left + 1, top + 1);
         public ConsoleKeyInfo ReadKey(bool intercept) => Console.ReadKey(intercept);
-        public void Write(string value) => Console.Write(value);
-        public void Clear() => Console.Clear();
+        public void Write(string value) => AnsiConsole.Console.Write(value);
+        public void Clear() => AnsiConsole.Console.Clear();
 
         public void Markup(string markup) => AnsiConsole.Console.Write(new Markup(markup));
         public void WriteWidget(IRenderable widget) => AnsiConsole.Console.Write(widget);
@@ -39,11 +42,9 @@ namespace ETL_SQL.TUI.UI
         {
             try
             {
-                Console.SetCursorPosition(left, top);
-                // Standard approach: Write spaces to physically overwrite characters.
-                // This is more robust than ANSI sequences in some terminal environments.
-                Console.Write(new string(' ', width));
-                Console.SetCursorPosition(left, top);
+                SetCursorPosition(left, top);
+                AnsiConsole.Console.Write(new string(' ', width));
+                SetCursorPosition(left, top);
             }
             catch { /* Ignore terminal out-of-bounds */ }
         }
