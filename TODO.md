@@ -1,4 +1,4 @@
-﻿# ETL-SQL Development Roadmap
+# ETL-SQL Development Roadmap
 ## Up Next
 - [ ] **Subscription Parameters** — Full strategy: [`Docs/Strategy/SubscriptionParameters_Strategy.md`](Strategy/SubscriptionParameters_Strategy.md). RELDATE/LIST types, `SET WEEK_START_DAY`, `CREATE/ALTER SUBSCRIPTION PARAMETERS(...)`, portal INPUT parameter UX. ~6.5 dev-days across 6 phases. Implementation tasks below.
     - **Phase 1 — Engine: New Types** *(most isolated, start here)*
@@ -105,3 +105,9 @@
         - [ ] **Secret Management**: Implement an encrypted `appsettings.Production.json` or Environment Variable provider for sensitive connection strings.
         - [ ] **Admin Guides**: Create `Docs/Administrators_Guide.md` covering service management, backup/restore, and multi-server networking.
         - [ ] **Final Verification**: Perform a "Clean Machine" install on a fresh Windows VM and verify full "Workstation-to-Server" connectivity.
+- [x] **Window function Filter clause** - Add FILTER clause to window functions, see postgres docs for details.
+- [x] **QUALIFY clause** - Add QUALIFY clause to window functions, see duckdb docs for details.
+- [x] **CREATE SSH_KEY_PAIR missing from Grammar.md**
+- [x] **CREATE PGP_KEY_PAIR function needed** Similar to CREATE SSH_KEY_PAIR it allows the user to create PGP public and private key pairs.  This will also need to be added to the documentation.
+- [ ] **Brainstorm adding TUI chart previews** Are we able to show TUI chart previews, they would obviously not use echarts but could we create terminal based charts using the same logic that creates the echarts json?  Claude terminal can do a lot of these charts already so at least some of them are possible.
+- [ ] **TUI better copy**  Copying from the query window brings with it the row numbers, can we get a clean copy?  Second is it possible to do a clean copy of the messages section.  The execution tree and the borders get caught with it.  This one may just be a keyboard command to copy it and not a select copy.

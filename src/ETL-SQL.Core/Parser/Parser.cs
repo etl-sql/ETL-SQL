@@ -448,6 +448,12 @@ namespace ETL_SQL.Core.Parser
                 havingClause = ParseExpression();
             }
 
+            Expression? qualifyClause = null;
+            if (Match(TokenType.QUALIFY))
+            {
+                qualifyClause = ParseExpression();
+            }
+
             List<OrderByClause>? orderBy = null;
             if (Current.Type == TokenType.ORDER)
             {
@@ -507,7 +513,8 @@ namespace ETL_SQL.Core.Parser
                 WithTies = withTies,
                 LimitCount = limitCount,
                 Offset = offset,
-                GroupingSet = groupingSet
+                GroupingSet = groupingSet,
+                QualifyClause = qualifyClause
             };
 
             if (Match(TokenType.FOR))

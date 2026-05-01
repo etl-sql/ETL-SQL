@@ -1,0 +1,30 @@
+-- Test QUALIFY clause
+CREATE CONNECTION src ON MOCKDB();
+
+SELECT * INTO #employees FROM (
+    SELECT 'Alice' as Name, 'Engineering' as Dept, 120000 as Salary
+    UNION ALL SELECT 'Bob', 'Engineering', 130000
+    UNION ALL SELECT 'Charlie', 'Engineering', 110000
+    UNION ALL SELECT 'David', 'Sales', 90000
+    UNION ALL SELECT 'Eve', 'Sales', 100000
+    UNION ALL SELECT 'Frank', 'Sales', 80000
+) AS d;
+
+PRINT 'Full list:';
+SELECT * FROM #employees;
+
+PRINT 'Top 2 salaries per department using QUALIFY:';
+SELECT Name, Dept, Salary,
+       RANK() OVER (PARTITION BY Dept ORDER BY Salary DESC) as rnk
+FROM #employees
+QUALIFY rnk <= 2
+ORDER BY Dept, rnk;
+
+ASSERT (SELECT COUNT(*) FROM (
+    SELECT Name, Dept, Salary,
+           RANK() OVER (PARTITION BY Dept ORDER BY Salary DESC) as rnk
+    FROM #employees
+    QUALIFY rnk <= 2
+) AS t) = 4, 'Should return exactly 4 rows (2 per dept)';
+
+PRINT 'QUALIFY test passed.';

@@ -157,7 +157,37 @@ namespace ETL_SQL.Engine.Engines
                 }
             }
 
-            // 4. ORDER BY
+            // 4. QUALIFY
+            if (stmt.QualifyClause != null)
+            {
+                // Temporarily add aliases to rows so QUALIFY can reference them by alias (e.g., QUALIFY rnk <= 1)
+                foreach (var row in allRows)
+                {
+                    foreach (var col in stmt.Columns)
+                    {
+                        if (col.Alias != null && WindowEngine.ContainsWindowFunction(col.Expression))
+                        {
+                            // If the column expression is a window function, find its computed value in the row
+                            // and attach it to the alias for the duration of the QUALIFY evaluation.
+                            var winCalls = WindowEngine.CollectWindowCalls(col.Expression);
+                            if (winCalls.Count == 1)
+                            {
+                                var winKey = $"WINDOW_{winCalls[0].ToSql().ToUpperInvariant()}";
+                                if (row.HasColumn(winKey))
+                                {
+                                    row[col.Alias] = row[winKey];
+                                }
+                            }
+                        }
+                    }
+                }
+
+                var filtered = new List<Row>();
+                foreach (var r in allRows) if (await _context.EvaluateCondition(stmt.QualifyClause, r)) filtered.Add(r);
+                allRows = filtered;
+            }
+
+            // 5. ORDER BY
             if (stmt.OrderBy != null && stmt.OrderBy.Count > 0)
             {
                 if (allRows.Count > _context.JoinSpillThreshold)
@@ -171,7 +201,7 @@ namespace ETL_SQL.Engine.Engines
                 }
             }
 
-            // 5. OFFSET / LIMIT
+            // 6. OFFSET / LIMIT
             allRows = await ApplyLimits(allRows, stmt);
 
             // Final Projection & Batching

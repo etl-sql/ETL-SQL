@@ -63,6 +63,14 @@ namespace ETL_SQL.Core
         public Expression? Comment { get; } = comment;
     }
 
+    public record CreatePgpKeyPairStatement(Expression path, Expression? bits = null, Expression? identity = null, Expression? passphrase = null) : Statement
+    {
+        public Expression Path { get; } = path;
+        public Expression? Bits { get; } = bits;
+        public Expression? Identity { get; } = identity;
+        public Expression? Passphrase { get; } = passphrase;
+    }
+
 
     public record SelectColumn(Expression expression, string? alias = null, Dictionary<string, string>? metadata = null) : AstNode
     {
@@ -240,6 +248,7 @@ namespace ETL_SQL.Core
         public Expression? LimitCount { get; set; }
         public Expression? Offset { get; set; }
         public ForClause? ForClause { get; set; }
+        public Expression? QualifyClause { get; set; }
         /// <summary>Common Table Expressions (WITH clause) applied to this SELECT statement.</summary>
         public new List<CteDefinition>? Ctes { get; set; }
         public bool IsRecursive { get; set; }
@@ -1054,15 +1063,19 @@ namespace ETL_SQL.Core
         public Expression? Destination { get; }
         public Expression? Overwrite { get; }
         public Expression? Password { get; }
+        public Expression? KeyFile { get; }
+        public Expression? PgpKey { get; }
         public bool IfExists { get; set; }
 
-        public FileOperationStatement(FileOpType type, Expression source, Expression? destination = null, Expression? overwrite = null, Expression? password = null, bool ifExists = false)
+        public FileOperationStatement(FileOpType type, Expression source, Expression? destination = null, Expression? overwrite = null, Expression? password = null, Expression? keyFile = null, Expression? pgpKey = null, bool ifExists = false)
         {
             Type = type;
             Source = source;
             Destination = destination;
             Overwrite = overwrite;
             Password = password;
+            KeyFile = keyFile;
+            PgpKey = pgpKey;
             IfExists = ifExists;
         }
     }
@@ -1075,9 +1088,11 @@ namespace ETL_SQL.Core
         public Expression? Overwrite { get; }
         public Expression? Recursive { get; }
         public Expression? Password { get; }
+        public Expression? KeyFile { get; }
+        public Expression? PgpKey { get; }
         public bool IfExists { get; set; }
 
-        public DirectoryOperationStatement(DirectoryOpType type, Expression path, Expression? destination = null, Expression? overwrite = null, Expression? recursive = null, Expression? password = null, bool ifExists = false)
+        public DirectoryOperationStatement(DirectoryOpType type, Expression path, Expression? destination = null, Expression? overwrite = null, Expression? recursive = null, Expression? password = null, Expression? keyFile = null, Expression? pgpKey = null, bool ifExists = false)
         {
             Type = type;
             Path = path;
@@ -1085,6 +1100,8 @@ namespace ETL_SQL.Core
             Overwrite = overwrite;
             Recursive = recursive;
             Password = password;
+            KeyFile = keyFile;
+            PgpKey = pgpKey;
             IfExists = ifExists;
         }
     }
@@ -1423,6 +1440,7 @@ namespace ETL_SQL.Core
         public bool IsDistinct { get; set; }
         public WindowClause? Window { get; set; }
         public List<OrderByClause>? WithinGroupOrderBy { get; set; }
+        public Expression? Filter { get; set; }
 
         public FunctionCallExpression(string functionName, List<Expression> arguments)
         {

@@ -41,6 +41,7 @@ namespace ETL_SQL.Core.Formatting
             CreateConnectionStatement      s => FormatCreateConnection(s),
             AlterConnectionStatement       s => FormatAlterConnection(s),
             CreateSshKeyPairStatement      s => FormatCreateSshKeyPair(s),
+            CreatePgpKeyPairStatement      s => FormatCreatePgpKeyPair(s),
             CreateTableStatement           s => FormatCreateTable(s),
             AlterTableStatement            s => FormatAlterTable(s),
             DropTableStatement             s => $"DROP TABLE {(s.IfExists ? "IF EXISTS " : "")}{s.TargetTable.ToSql()};",
@@ -327,11 +328,20 @@ namespace ETL_SQL.Core.Formatting
         private static string FormatCreateSshKeyPair(CreateSshKeyPairStatement s)
         {
             var args = new List<string> { s.Path.ToSql() };
-            if (s.Bits       != null) args.Add(s.Bits.ToSql());
-            if (s.Algorithm  != null) args.Add(s.Algorithm.ToSql());
-            if (s.Passphrase != null) args.Add(s.Passphrase.ToSql());
-            if (s.Comment    != null) args.Add(s.Comment.ToSql());
+            if (s.Bits       != null) args.Add($"BITS={s.Bits.ToSql()}");
+            if (s.Algorithm  != null) args.Add($"ALGORITHM={s.Algorithm.ToSql()}");
+            if (s.Passphrase != null) args.Add($"PASSPHRASE={s.Passphrase.ToSql()}");
+            if (s.Comment    != null) args.Add($"COMMENT={s.Comment.ToSql()}");
             return $"CREATE SSH_KEY_PAIR({string.Join(", ", args)});";
+        }
+
+        private static string FormatCreatePgpKeyPair(CreatePgpKeyPairStatement s)
+        {
+            var args = new List<string> { s.Path.ToSql() };
+            if (s.Bits       != null) args.Add($"BITS={s.Bits.ToSql()}");
+            if (s.Identity   != null) args.Add($"IDENTITY={s.Identity.ToSql()}");
+            if (s.Passphrase != null) args.Add($"PASSPHRASE={s.Passphrase.ToSql()}");
+            return $"CREATE PGP_KEY_PAIR({string.Join(", ", args)});";
         }
 
         private static string FormatCreateTable(CreateTableStatement s)
@@ -458,7 +468,12 @@ namespace ETL_SQL.Core.Formatting
         {
             var op      = s.Type.ToString().ToUpper() + " FILE";
             var dest    = s.Destination != null ? " TO " + s.Destination.ToSql() : "";
-            var options = s.Overwrite   != null ? $" WITH(OVERWRITE={s.Overwrite.ToSql()})" : "";
+            var opts    = new List<string>();
+            if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
+            if (s.Password != null)  opts.Add($"PASSWORD={s.Password.ToSql()}");
+            if (s.KeyFile != null)   opts.Add($"KEYFILE={s.KeyFile.ToSql()}");
+            if (s.PgpKey != null)    opts.Add($"PGP_KEY={s.PgpKey.ToSql()}");
+            var options = opts.Count > 0 ? " WITH(" + string.Join(", ", opts) + ")" : "";
             return $"{op} {s.Source.ToSql()}{dest}{options};";
         }
 
@@ -469,6 +484,9 @@ namespace ETL_SQL.Core.Formatting
             var opts  = new List<string>();
             if (s.Overwrite != null) opts.Add($"OVERWRITE={s.Overwrite.ToSql()}");
             if (s.Recursive != null) opts.Add($"RECURSIVE={s.Recursive.ToSql()}");
+            if (s.Password != null)  opts.Add($"PASSWORD={s.Password.ToSql()}");
+            if (s.KeyFile != null)   opts.Add($"KEYFILE={s.KeyFile.ToSql()}");
+            if (s.PgpKey != null)    opts.Add($"PGP_KEY={s.PgpKey.ToSql()}");
             var with  = opts.Count > 0 ? " WITH(" + string.Join(", ", opts) + ")" : "";
             return $"{op} {s.Path.ToSql()}{extra}{with};";
         }

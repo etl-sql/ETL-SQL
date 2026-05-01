@@ -17,8 +17,8 @@ RENAME FILE  '<source>' TO '<new_name>'   [WITH(OVERWRITE=ON|OFF)];
 DELETE FILE  '<path>';
 
 COMPRESS FILE '<source>' TO '<destination>' [WITH(OVERWRITE=ON|OFF)];
-ENCRYPT FILE  '<source>' TO '<destination>' PASSWORD 'pwd' [WITH(OVERWRITE=ON|OFF)];
-DECRYPT FILE  '<source>' TO '<destination>' PASSWORD 'pwd' [WITH(OVERWRITE=ON|OFF)];
+ENCRYPT FILE  '<source>' TO '<destination>' [PASSWORD 'pwd' | KEYFILE 'path' | PGP_KEY 'path'] [WITH(OVERWRITE=ON|OFF)];
+DECRYPT FILE  '<source>' TO '<destination>' [PASSWORD 'pwd' | KEYFILE 'path' | PGP_KEY 'path'] [WITH(OVERWRITE=ON|OFF)];
 ```
 
 ### 1.2 File Functions (Underscore Style — Backward Compatible)
@@ -31,8 +31,8 @@ MOVE_FILE('src', 'dest' [, ON|OFF])
 RENAME_FILE('src', 'new_name' [, ON|OFF])
 DELETE_FILE('path')
 COMPRESS_FILE('src', 'dest' [, ON|OFF])
-ENCRYPT_FILE('src', 'dest', 'pwd' [, ON|OFF])
-DECRYPT_FILE('src', 'dest', 'pwd' [, ON|OFF])
+ENCRYPT_FILE('src', 'dest', 'pwd' | 'keyfile_path' | 'pgp_key_path' [, ON|OFF])
+DECRYPT_FILE('src', 'dest', 'pwd' | 'keyfile_path' | 'pgp_key_path' [, ON|OFF])
 ```
 
 ### 1.3 Directory Statements (SQL Style)
@@ -48,8 +48,8 @@ DELETE DIRECTORY          '<path>';
 DELETE DIRECTORY_CONTENTS '<path>' [WITH(RECURSIVE=ON|OFF)];
 
 COMPRESS DIRECTORY '<src>' TO '<dest.zip>'  [WITH(OVERWRITE=ON|OFF)];
-ENCRYPT DIRECTORY  '<src>' TO '<dest>' PASSWORD 'pwd' [WITH(OVERWRITE=ON|OFF, RECURSIVE=ON|OFF)];
-DECRYPT DIRECTORY  '<src>' TO '<dest>' PASSWORD 'pwd' [WITH(OVERWRITE=ON|OFF, RECURSIVE=ON|OFF)];
+ENCRYPT DIRECTORY  '<src>' TO '<dest>' [PASSWORD 'pwd' | KEYFILE 'path' | PGP_KEY 'path'] [WITH(OVERWRITE=ON|OFF, RECURSIVE=ON|OFF)];
+DECRYPT DIRECTORY  '<src>' TO '<dest>' [PASSWORD 'pwd' | KEYFILE 'path' | PGP_KEY 'path'] [WITH(OVERWRITE=ON|OFF, RECURSIVE=ON|OFF)];
 ```
 
 ### 1.4 Directory Functions (Underscore Style)
@@ -62,8 +62,8 @@ RENAME_DIRECTORY('src', 'new_name' [, ON|OFF])
 DELETE_DIRECTORY('path')
 DELETE_DIRECTORY_CONTENTS('path' [, RECURSIVE=ON|OFF])
 COMPRESS_DIRECTORY('src', 'dest' [, ON|OFF])
-ENCRYPT_DIRECTORY('src', 'dest', 'pwd' [, ON|OFF [, ON|OFF]])
-DECRYPT_DIRECTORY('src', 'dest', 'pwd' [, ON|OFF [, ON|OFF]])
+ENCRYPT_DIRECTORY('src', 'dest', 'pwd' | 'keyfile' | 'pgp_key' [, ON|OFF [, ON|OFF]])
+DECRYPT_DIRECTORY('src', 'dest', 'pwd' | 'keyfile' | 'pgp_key' [, ON|OFF [, ON|OFF]])
 ```
 
 ### 1.5 Examples
@@ -76,9 +76,13 @@ COPY FILE 'C:\Dropzone\data.csv' TO 'D:\Archive\data_backup.csv' WITH(OVERWRITE=
 RENAME FILE 'C:\Incoming\latest.csv' TO 'processing.csv';
 DELETE FILE 'C:\Incoming\processing.csv';
 
--- Compress and encrypt a finished payload
+-- Compress and encrypt a finished payload using PGP
 COMPRESS FILE 'C:\Outbound\payload.xml' TO 'C:\Outbound\payload.zip';
-ENCRYPT FILE  'C:\Outbound\payload.zip' TO 'C:\Outbound\payload.enc' PASSWORD('vault_key');
+ENCRYPT FILE  'C:\Outbound\payload.zip' TO 'C:\Outbound\payload.pgp' PGP_KEY 'C:\Keys\partner_public.asc';
+
+-- Decrypt using SSH (RSA) private key
+DECRYPT FILE 'C:\Incoming\secrets.enc' TO 'C:\Staging\secrets.csv' 
+    KEYFILE 'C:\Keys\id_rsa' PASSWORD 'key-passphrase';
 
 -- Create staging directory and wipe stale contents after processing
 CREATE DIRECTORY 'C:\AppTemp\PipelineA';
@@ -373,6 +377,27 @@ CREATE SSH_KEY_PAIR 'C:\Keys\id_rsa';
 -- Production-grade RSA with passphrase
 CREATE SSH_KEY_PAIR 'C:\Keys\prod_rsa'
     WITH(BITS=4096, PASSPHRASE='StrongPassword123!', COMMENT='Production ETL Service');
+
+### 5.2 PGP Key Pair Generation
+Generates OpenPGP compatible key pairs (RSA) for secure file sharing.
+
+*SQL Style:*
+```sql
+CREATE PGP_KEY_PAIR '<directory_path>'
+    [WITH(BITS=2048, IDENTITY='user@company.com', PASSPHRASE='pwd')];
+```
+
+| Option | Values | Default | Notes |
+| :--- | :--- | :--- | :--- |
+| `BITS` | 2048, 3072, 4096 | `2048` | Key length |
+| `IDENTITY` | Any string | `user@etl-sql.local` | PGP User ID identity |
+| `PASSPHRASE` | Any string | *(none)* | Protects the private key |
+
+*Example:*
+```sql
+CREATE PGP_KEY_PAIR 'C:\Keys\pgp_storage'
+    WITH(BITS=4096, IDENTITY='ETL-SQL Backup <backup@company.com>', PASSPHRASE='Secret123');
+```
 
 ```
 

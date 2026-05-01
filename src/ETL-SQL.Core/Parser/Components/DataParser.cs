@@ -104,6 +104,12 @@ namespace ETL_SQL.Core.Parser.Components
                 return ParseCreateSshKeyPair(startToken);
             }
 
+            if (Match(TokenType.PGP_KEY_PAIR))
+            {
+                if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for PGP_KEY_PAIR.", _parser.Current.Line, _parser.Current.Column);
+                return ParseCreatePgpKeyPair(startToken);
+            }
+
             if (Match(TokenType.SETS))
             {
                 if (orAlter) throw new SyntaxException("CREATE OR ALTER is not supported for SETS.", _parser.Current.Line, _parser.Current.Column);
@@ -1116,6 +1122,47 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.END, "Expected END");
             Match(TokenType.SEMICOLON);
             return new CreateSetsStatement(name, assignments, withPrompt) { Line = startToken.Line, Column = startToken.Column };
+        }
+        private Statement ParseCreatePgpKeyPair(Token startToken)
+        {
+            var startPos = _parser.Current;
+            Expression? path = null, bits = null, identity = null, passphrase = null;
+
+            bool isFunctionStyle = Match(TokenType.LPAREN);
+            if (isFunctionStyle)
+            {
+                path = ParseExpression();
+                if (Match(TokenType.COMMA)) bits = ParseExpression();
+                if (Match(TokenType.COMMA)) identity = ParseExpression();
+                if (Match(TokenType.COMMA)) passphrase = ParseExpression();
+                Consume(TokenType.RPAREN, "Expected ')' after arguments");
+            }
+            else
+            {
+                path = ParseExpression();
+                if (Match(TokenType.WITH))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after WITH");
+                    while (!Match(TokenType.RPAREN))
+                    {
+                        var keyToken = Advance();
+                        string key = keyToken.Value.ToUpperInvariant();
+                        Consume(TokenType.EQUALS, "Expected '='");
+                        var val = ParseExpression();
+                        switch (key)
+                        {
+                            case "BITS":       bits = val;       break;
+                            case "IDENTITY":   identity = val;   break;
+                            case "PASSPHRASE": passphrase = val; break;
+                            default: throw new SyntaxException($"Unknown PGP_KEY_PAIR option: {key}", keyToken.Line, keyToken.Column);
+                        }
+                        if (!Match(TokenType.COMMA)) { Consume(TokenType.RPAREN, "Expected ')' or ','"); break; }
+                    }
+                }
+            }
+
+            Match(TokenType.SEMICOLON);
+            return new CreatePgpKeyPairStatement(path!, bits, identity, passphrase) { Line = startToken.Line, Column = startToken.Column };
         }
     }
 }

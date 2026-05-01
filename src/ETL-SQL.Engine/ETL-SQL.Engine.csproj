@@ -6,6 +6,7 @@
  
    <ItemGroup>
      <PackageReference Include="Apache.Arrow" Version="16.0.0" />
+     <PackageReference Include="PgpCore" Version="6.6.0" />
      <PackageReference Include="Spectre.Console" Version="0.54.0" />
    </ItemGroup>
  

@@ -30,6 +30,7 @@ namespace ETL_SQL.Engine.Engines
             var windowFunctionCalls = stmt.Columns
                 .Where(c => ContainsWindowFunction(c.Expression))
                 .SelectMany(c => CollectWindowCalls(c.Expression))
+                .Concat(CollectWindowCalls(stmt.QualifyClause))
                 .GroupBy(f => f.ToSql().ToUpperInvariant())
                 .Select(g => g.First())
                 .ToList();
@@ -219,6 +220,17 @@ namespace ETL_SQL.Engine.Engines
                                     var range = await ResolveFrameRange(i, partitionRows, window);
                                     frameRows = partitionRows.GetRange(range.Start, range.End - range.Start + 1);
                                 }
+                                
+                                if (f.Filter != null)
+                                {
+                                    var filtered = new List<Row>();
+                                    foreach (var r in frameRows)
+                                    {
+                                        if (await _context.EvaluateCondition(f.Filter, r)) filtered.Add(r);
+                                    }
+                                    frameRows = filtered;
+                                }
+
                                 winVal = await _aggregateEngine.EvaluateAggregate(f, frameRows);
                                 break;
                         }
@@ -243,7 +255,7 @@ namespace ETL_SQL.Engine.Engines
             if (expr is FunctionCallExpression fc)
             {
                 if (fc.Window != null) return true;
-                return fc.Arguments.Any(ContainsWindowFunction);
+                return fc.Arguments.Any(ContainsWindowFunction) || ContainsWindowFunction(fc.Filter);
             }
             if (expr is BinaryExpression b) return ContainsWindowFunction(b.Left) || ContainsWindowFunction(b.Right);
             if (expr is UnaryExpression u) return ContainsWindowFunction(u.Expression);
@@ -270,6 +282,7 @@ namespace ETL_SQL.Engine.Engines
             {
                 if (fc.Window != null) { result.Add(fc); return; }
                 foreach (var arg in fc.Arguments) CollectWindowCallsInner(arg, result);
+                CollectWindowCallsInner(fc.Filter, result);
                 return;
             }
             if (expr is BinaryExpression b) { CollectWindowCallsInner(b.Left, result); CollectWindowCallsInner(b.Right, result); return; }

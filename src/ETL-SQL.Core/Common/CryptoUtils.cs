@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 using ETL_SQL.Core.Common.Exceptions;
+using PgpCore;
 
 namespace ETL_SQL.Common
 {
@@ -358,6 +359,31 @@ namespace ETL_SQL.Common
 
             // Mix entropy into the key to make it user-bound if entropy is provided
             return Rfc2898DeriveBytes.Pbkdf2(baseKey, Encoding.UTF8.GetBytes(entropy), 1000, HashAlgorithmName.SHA256, 32);
+        }
+        /// <summary>
+        /// Encrypts a file using a PGP public key.
+        /// </summary>
+        public static async Task EncryptFileWithPgp(string inputFile, string outputFile, string keyFile, bool overwrite)
+        {
+            if (File.Exists(outputFile) && !overwrite)
+                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
+
+            var keys = new EncryptionKeys(new FileInfo(keyFile));
+            using var pgp = new PGP(keys);
+            await pgp.EncryptFileAsync(new FileInfo(inputFile), new FileInfo(outputFile));
+        }
+
+        /// <summary>
+        /// Decrypts a file using a PGP private key.
+        /// </summary>
+        public static async Task DecryptFileWithPgp(string inputFile, string outputFile, string keyFile, string? passphrase, bool overwrite)
+        {
+            if (File.Exists(outputFile) && !overwrite)
+                throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {outputFile}");
+
+            EncryptionKeys keys = new EncryptionKeys(new FileInfo(keyFile), passphrase ?? string.Empty);
+            using var pgp = new PGP(keys);
+            await pgp.DecryptFileAsync(new FileInfo(inputFile), new FileInfo(outputFile));
         }
     }
 }

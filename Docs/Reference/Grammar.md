@@ -905,6 +905,7 @@ FROM <source> [AS alias]
 [WHERE <condition>]
 [GROUP BY <columns> | ROLLUP(<cols>) | CUBE(<cols>) | GROUPING SETS(<sets>)]
 [HAVING <condition>]
+[QUALIFY <condition>]
 [PIVOT  (<agg> FOR <col> IN (<vals>)) AS <alias>]
 [UNPIVOT (<val_col> FOR <name_col> IN (<cols>)) AS <alias>]
 [ORDER BY <col> [ASC|DESC] [, ...]]
@@ -1039,6 +1040,15 @@ SELECT
 FROM #sales;
 ```
 
+### 5.9.1 `FILTER` — Conditional Aggregation
+The `FILTER` clause restricts the rows that an aggregate window function considers. It is evaluated within the window frame but only includes rows that satisfy the condition.
+
+```sql
+SELECT date, category, amount,
+       SUM(amount) FILTER (WHERE amount > 100) OVER (PARTITION BY category ORDER BY date) as big_sum
+FROM sales_data;
+```
+
 **Frame syntax:**
 
 | Clause | Meaning |
@@ -1046,6 +1056,16 @@ FROM #sales;
 | `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW` | All rows from the partition start to the current row |
 | `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` | Current row and one row on either side |
 | `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` | All rows in the partition |
+
+### 5.10 `QUALIFY` — Filter Window Results
+The `QUALIFY` clause filters results based on window function values. It is evaluated after window functions are calculated, avoiding the need for a subquery to filter by a ranked or aggregated window value.
+
+```sql
+SELECT name, department, salary,
+       RANK() OVER (PARTITION BY department ORDER BY salary DESC) as rnk
+FROM employee_data
+QUALIFY rnk <= 2; -- returns top 2 salaries per department
+```
 
 ---
 
@@ -2209,4 +2229,42 @@ EXECUTE orch BEGIN
     ORDER BY FailCount DESC;
 
 END
+```
+
+---
+
+## 20. Security & Cryptography
+
+### 20.1 CREATE SSH_KEY_PAIR
+Generates a cryptographic SSH key pair (RSA or ECDSA) for use with SFTP connectors or ENCRYPT FILE ... KEYFILE.
+
+```sql
+CREATE SSH_KEY_PAIR 'C:\Keys\id_rsa'
+    WITH (BITS = 4096, ALGORITHM = 'RSA', PASSPHRASE = 'strong-pwd');
+```
+
+### 20.2 CREATE PGP_KEY_PAIR
+Generates an OpenPGP key pair (RSA) for use with ENCRYPT FILE ... PGP_KEY.
+
+```sql
+CREATE PGP_KEY_PAIR 'C:\Keys\pgp'
+    WITH (BITS = 4096, IDENTITY = 'ETL-SQL Service <etl@company.com>', PASSPHRASE = 'strong-pwd');
+```
+
+| Option | Default | Description |
+| :--- | :--- | :--- |
+| BITS | 2048 | Key length (RSA: 2048, 3072, 4096) |
+| IDENTITY | user@etl-sql.local | PGP User ID identity string |
+| PASSPHRASE | NULL | Password to protect the private key |
+
+### 20.3 Key-Based File Encryption
+The ENCRYPT FILE and DECRYPT FILE statements support PGP and SSH keys as alternatives to plaintext passwords.
+
+```sql
+-- PGP Encryption
+ENCRYPT FILE 'data.csv' TO 'data.pgp' PGP_KEY 'C:\Keys\partner_pub.asc';
+
+-- SSH (RSA) Decryption
+DECRYPT FILE 'secrets.enc' TO 'secrets.csv' 
+    KEYFILE 'C:\Keys\id_rsa' PASSWORD 'key-passphrase';
 ```

@@ -1,0 +1,42 @@
+-- Test FILTER clause in window functions
+CREATE CONNECTION src ON MOCKDB();
+
+SELECT * INTO #sales FROM (
+    SELECT '2026-01-01' as Date, 'Electronics' as Category, 50 as Amount
+    UNION ALL SELECT '2026-01-02', 'Electronics', 150
+    UNION ALL SELECT '2026-01-03', 'Electronics', 80
+    UNION ALL SELECT '2026-01-04', 'Electronics', 200
+    UNION ALL SELECT '2026-01-01', 'Clothing', 30
+    UNION ALL SELECT '2026-01-02', 'Clothing', 120
+) AS d;
+
+PRINT 'Sales data:';
+SELECT * FROM #sales;
+
+PRINT 'Running total of "big" sales (> 100) per category:';
+SELECT Date, Category, Amount,
+       SUM(Amount) FILTER (WHERE Amount > 100) OVER (PARTITION BY Category ORDER BY Date) as big_running_sum
+FROM #sales
+ORDER BY Category, Date;
+
+-- Verification
+-- Electronics:
+--   50  (skipped) -> 0
+--   150 (included) -> 150
+--   80  (skipped) -> 150
+--   200 (included) -> 350
+-- Clothing:
+--   30  (skipped) -> 0
+--   120 (included) -> 120
+
+ASSERT (SELECT MAX(big_running_sum) FROM (
+    SELECT SUM(Amount) FILTER (WHERE Amount > 100) OVER (PARTITION BY Category ORDER BY Date) as big_running_sum
+    FROM #sales WHERE Category = 'Electronics'
+) AS t) = 350, 'Electronics big_running_sum should be 350';
+
+ASSERT (SELECT MAX(big_running_sum) FROM (
+    SELECT SUM(Amount) FILTER (WHERE Amount > 100) OVER (PARTITION BY Category ORDER BY Date) as big_running_sum
+    FROM #sales WHERE Category = 'Clothing'
+) AS t) = 120, 'Clothing big_running_sum should be 120';
+
+PRINT 'FILTER test passed.';

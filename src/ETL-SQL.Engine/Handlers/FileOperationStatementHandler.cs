@@ -71,7 +71,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 switch (stmt.Type)
                 {
-                    case FileOpType.Delete:
+                        case FileOpType.Delete:
                         // Security Hardening: Block deleting script files and dangerous file types
                         context.SecurityService.ValidateWriteAccess(source);
                         context.SecurityService.ValidateFileType(source);
@@ -92,7 +92,7 @@ namespace ETL_SQL.Engine.Handlers
                             _logger.Warning("File not found for deletion: {Source}", source);
                         }
                         break;
-                    case FileOpType.Copy:
+                        case FileOpType.Copy:
                         if (dest != null)
                         {
                             // Security Hardening: Block writing to script files and dangerous types
@@ -107,7 +107,7 @@ namespace ETL_SQL.Engine.Handlers
                             File.Copy(source, dest, overwrite);
                         }
                         break;
-                    case FileOpType.Move:
+                        case FileOpType.Move:
                         if (dest != null)
                         {
                             // Security Hardening: Block writing to script files and dangerous types
@@ -122,7 +122,7 @@ namespace ETL_SQL.Engine.Handlers
                             File.Move(source, dest);
                         }
                         break;
-                    case FileOpType.Rename:
+                        case FileOpType.Rename:
                         if (dest != null)
                         {
                             var fileName = Path.GetFileName(source);
@@ -145,7 +145,7 @@ namespace ETL_SQL.Engine.Handlers
                             throw new ExecutionException("RENAME FILE requires a destination name.");
                         }
                         break;
-                    case FileOpType.Compress:
+                        case FileOpType.Compress:
                         if (dest != null)
                         {
                             // Security Hardening: Block writing to script files and dangerous types
@@ -173,32 +173,60 @@ namespace ETL_SQL.Engine.Handlers
                             }
                         }
                         break;
-                    case FileOpType.Encrypt:
+                                            case FileOpType.Encrypt:
                         if (dest != null)
                         {
                             // Security Hardening: Block writing to script files and dangerous types
                             context.SecurityService.ValidateWriteAccess(dest);
                             context.SecurityService.ValidateFileType(dest);
 
-                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                            pwd ??= context.SecurityService.MasterPassword;
-                            if (string.IsNullOrEmpty(pwd))
-                                throw new ExecutionException("ENCRYPT_FILE requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
-                            CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
+                            if (stmt.PgpKey != null)
+                            {
+                                string pgpKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
+                                await CryptoUtils.EncryptFileWithPgp(source, dest, pgpKeyPath, overwrite);
+                            }
+                            else if (stmt.KeyFile != null)
+                            {
+                                string keyFilePath = context.ResolvePath((await context.EvaluateValue(stmt.KeyFile, new Row()))?.ToString() ?? "");
+                                CryptoUtils.EncryptFileWithSsh(source, dest, keyFilePath, overwrite);
+                            }
+                            else
+                            {
+                                var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
+                                pwd ??= context.SecurityService.MasterPassword;
+                                if (string.IsNullOrEmpty(pwd))
+                                    throw new ExecutionException("ENCRYPT_FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
+                                CryptoUtils.EncryptFile(source, dest, pwd, overwrite);
+                            }
                         }
                         break;
-                    case FileOpType.Decrypt:
+                                            case FileOpType.Decrypt:
                         if (dest != null)
                         {
                             // Security Hardening: Block writing to script files and dangerous types
                             context.SecurityService.ValidateWriteAccess(dest);
                             context.SecurityService.ValidateFileType(dest);
 
-                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                            pwd ??= context.SecurityService.MasterPassword;
-                            if (string.IsNullOrEmpty(pwd))
-                                throw new ExecutionException("DECRYPT_FILE requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
-                            CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
+                            if (stmt.PgpKey != null)
+                            {
+                                string pgpKeyPath = context.ResolvePath((await context.EvaluateValue(stmt.PgpKey, new Row()))?.ToString() ?? "");
+                                var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
+                                await CryptoUtils.DecryptFileWithPgp(source, dest, pgpKeyPath, pwd, overwrite);
+                            }
+                            else if (stmt.KeyFile != null)
+                            {
+                                string keyFilePath = context.ResolvePath((await context.EvaluateValue(stmt.KeyFile, new Row()))?.ToString() ?? "");
+                                var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
+                                CryptoUtils.DecryptFileWithSsh(source, dest, keyFilePath, overwrite, pwd);
+                            }
+                            else
+                            {
+                                var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
+                                pwd ??= context.SecurityService.MasterPassword;
+                                if (string.IsNullOrEmpty(pwd))
+                                    throw new ExecutionException("DECRYPT_FILE requires a PASSWORD, KEYFILE, or PGP_KEY clause, or a configured master password.", null, stmt.Line, stmt.Column);
+                                CryptoUtils.DecryptFile(source, dest, pwd, overwrite);
+                            }
                         }
                         break;
                 }

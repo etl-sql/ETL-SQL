@@ -214,7 +214,7 @@ namespace ETL_SQL.Core.Parser.Components
                 _ => throw new SyntaxException($"Unexpected file operation: {startToken.Type}", startToken.Line, startToken.Column)
             };
 
-            Expression? source = null, dest = null, overwrite = null, password = null;
+            Expression? source = null, dest = null, overwrite = null, password = null, keyFile = null, pgpKey = null;
             bool isFunctionStyle = Match(TokenType.LPAREN);
 
             bool ifExists = false;
@@ -228,11 +228,15 @@ namespace ETL_SQL.Core.Parser.Components
                     {
                         password = ParseExpression();
                         if (Match(TokenType.COMMA)) overwrite = ParseExpression();
+                        if (Match(TokenType.COMMA)) keyFile = ParseExpression();
+                        if (Match(TokenType.COMMA)) pgpKey = ParseExpression();
                     }
                     else
                     {
                         overwrite = ParseExpression();
                         if (Match(TokenType.COMMA)) password = ParseExpression();
+                        if (Match(TokenType.COMMA)) keyFile = ParseExpression();
+                        if (Match(TokenType.COMMA)) pgpKey = ParseExpression();
                     }
                 }
                 if (Match(TokenType.COMMA))
@@ -252,6 +256,8 @@ namespace ETL_SQL.Core.Parser.Components
                         if (_parser.Current.Type == TokenType.LPAREN) { Advance(); password = ParseExpression(); Consume(TokenType.RPAREN, "Expected ')' after PASSWORD value"); }
                         else password = ParseExpression();
                     }
+                    else if (Match(TokenType.KEYFILE)) { keyFile = ParseExpression(); }
+                    else if (Match(TokenType.PGP_KEY)) { pgpKey = ParseExpression(); }
                     else if (Match(TokenType.WITH)) { overwrite = ParseWithOverwrite(); }
                     else if (source == null && (!LanguageMetadata.IsKeyword(_parser.Current.Value) || _parser.Current.Type == TokenType.STRING_LITERAL))
                         source = ParseExpression();
@@ -263,7 +269,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new FileOperationStatement(type, source, dest, overwrite, password, ifExists) { Line = startToken.Line, Column = startToken.Column };
+            return new FileOperationStatement(type, source, dest, overwrite, password, keyFile, pgpKey, ifExists) { Line = startToken.Line, Column = startToken.Column };
         }
 
         public Statement ParseDirectoryOperation(Token startToken)
@@ -282,7 +288,7 @@ namespace ETL_SQL.Core.Parser.Components
                 _ => throw new SyntaxException($"Unexpected directory operation: {startToken.Type}", startToken.Line, startToken.Column)
             };
 
-            Expression? path = null, extra = null, overwrite = null, recursive = null, password = null;
+            Expression? path = null, extra = null, overwrite = null, recursive = null, password = null, keyFile = null, pgpKey = null;
             bool ifExists = false;
             bool isFunctionStyle = Match(TokenType.LPAREN);
 
@@ -297,12 +303,16 @@ namespace ETL_SQL.Core.Parser.Components
                         password = ParseExpression();
                         if (Match(TokenType.COMMA)) overwrite = ParseExpression();
                         if (Match(TokenType.COMMA)) recursive = ParseExpression();
+                        if (Match(TokenType.COMMA)) keyFile = ParseExpression();
+                        if (Match(TokenType.COMMA)) pgpKey = ParseExpression();
                     }
                     else
                     {
                         overwrite = ParseExpression();
                         if (Match(TokenType.COMMA)) recursive = ParseExpression();
                         if (Match(TokenType.COMMA)) password = ParseExpression();
+                        if (Match(TokenType.COMMA)) keyFile = ParseExpression();
+                        if (Match(TokenType.COMMA)) pgpKey = ParseExpression();
                     }
                 }
                 if (Match(TokenType.COMMA))
@@ -322,6 +332,8 @@ namespace ETL_SQL.Core.Parser.Components
                         if (_parser.Current.Type == TokenType.LPAREN) { Advance(); password = ParseExpression(); Consume(TokenType.RPAREN, "Expected ')' after PASSWORD value"); }
                         else password = ParseExpression();
                     }
+                    else if (Match(TokenType.KEYFILE)) { keyFile = ParseExpression(); }
+                    else if (Match(TokenType.PGP_KEY)) { pgpKey = ParseExpression(); }
                     else if (MatchIdentifier("RECURSIVE")) { recursive = ParseExpression(); }
                     else if (Match(TokenType.WITH))
                     {
@@ -334,6 +346,10 @@ namespace ETL_SQL.Core.Parser.Components
                                 overwrite = ParseExpression();
                             else if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "RECURSIVE"))
                                 recursive = ParseExpression();
+                            else if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "KEYFILE"))
+                                keyFile = ParseExpression();
+                            else if (System.StringComparer.OrdinalIgnoreCase.Equals(key, "PGP_KEY"))
+                                pgpKey = ParseExpression();
                             else
                                 ParseExpression();
                             if (!Match(TokenType.COMMA)) break;
@@ -350,7 +366,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new DirectoryOperationStatement(type, path, extra, overwrite, recursive, password, ifExists) { Line = startToken.Line, Column = startToken.Column };
+            return new DirectoryOperationStatement(type, path, extra, overwrite, recursive, password, keyFile, pgpKey, ifExists) { Line = startToken.Line, Column = startToken.Column };
 
         }
 

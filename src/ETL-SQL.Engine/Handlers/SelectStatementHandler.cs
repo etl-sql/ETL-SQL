@@ -131,7 +131,7 @@ namespace ETL_SQL.Engine.Handlers
             // 4. Strategy Selection
             bool hasAgg = stmt.Columns.Any(c => aggregateEngine.IsAggregate(c.Expression)) || stmt.GroupBy != null;
             bool hasWindow = stmt.Columns.Any(c => windowEngine.IsWindowFunction(c.Expression));
-            bool isComplex = hasAgg || hasWindow || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null || stmt.Offset != null || stmt.LimitCount != null || stmt.IsDistinct;
+            bool isComplex = hasAgg || hasWindow || (stmt.Joins != null && stmt.Joins.Count > 0) || stmt.OrderBy != null || stmt.Offset != null || stmt.LimitCount != null || stmt.IsDistinct || stmt.QualifyClause != null;
 
             if (!isComplex)
             {

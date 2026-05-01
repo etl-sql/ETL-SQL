@@ -1,0 +1,55 @@
+-- ETL-SQL Kitchen Sink: PGP Security & Cryptography
+-- This script demonstrates PGP key pair generation, file encryption, and decryption.
+
+BEGIN TRY
+    -- 1. Setup paths
+    DECLARE @outputDir NVARCHAR(MAX) = 'C:\Users\chuck\scratch\ETL-SQL\samples\output';
+    DECLARE @keyDir NVARCHAR(MAX) = @outputDir + '\pgp_keys';
+    DECLARE @dataFile NVARCHAR(MAX) = @outputDir + '\pgp_test_data.csv';
+    DECLARE @encryptedFile NVARCHAR(MAX) = @outputDir + '\pgp_test_data.csv.pgp';
+    DECLARE @decryptedFile NVARCHAR(MAX) = @outputDir + '\pgp_test_data_decrypted.csv';
+
+    PRINT 'Starting PGP Security Sink...';
+
+    -- 2. Generate PGP Key Pair
+    -- This creates public.asc and private.asc in the target directory
+    IF NOT FILE_EXISTS(@keyDir + '\private.asc')
+    BEGIN
+        PRINT 'Generating PGP Key Pair...';
+        CREATE PGP_KEY_PAIR(@keyDir, 2048, 'ETL-SQL Test User <test@etl-sql.local>', 'StrongPassphrase123!');
+    END
+
+    -- 3. Create dummy data
+    SELECT 1 as id, 'Secret Data' as message INTO #data FROM DUAL;
+    INSERT INTO #data SELECT 2, 'Top Secret Info';
+    
+    CREATE CONNECTION src_data ON FLATFILE(@dataFile);
+    INSERT INTO src_data.FILE SELECT * FROM #data;
+    PRINT 'Data file created: ' + @dataFile;
+
+    -- 4. Encrypt file using the public key
+    PRINT 'Encrypting file with PGP public key...';
+    ENCRYPT FILE @dataFile 
+    TO @encryptedFile 
+    PGP_KEY @keyDir + '\public.asc'
+    WITH(OVERWRITE=ON);
+
+    -- 5. Decrypt file using the private key and passphrase
+    PRINT 'Decrypting file with PGP private key...';
+    DECRYPT FILE @encryptedFile 
+    TO @decryptedFile 
+    PGP_KEY @keyDir + '\private.asc'
+    PASSWORD 'StrongPassphrase123!'
+    WITH(OVERWRITE=ON);
+
+    -- 6. Verify result
+    CREATE CONNECTION decrypted_data ON FLATFILE(@decryptedFile);
+    SELECT * FROM decrypted_data.FILE;
+    
+    PRINT 'PGP Security Sink completed successfully.';
+
+END TRY
+BEGIN CATCH
+    PRINT 'ERROR: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

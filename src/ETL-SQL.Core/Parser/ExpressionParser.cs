@@ -415,6 +415,14 @@ namespace ETL_SQL.Core.Parser
                     _parser.Consume(TokenType.RPAREN, "Expected ')' after function arguments");
                     var funcCall = new FunctionCallExpression(name, args) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn, IsDistinct = isFuncDistinct };
                     
+                    if (_parser.Match(TokenType.FILTER))
+                    {
+                        _parser.Consume(TokenType.LPAREN, "Expected '(' after FILTER");
+                        _parser.Consume(TokenType.WHERE, "Expected 'WHERE' inside FILTER");
+                        funcCall.Filter = _parser.ParseExpression();
+                        _parser.Consume(TokenType.RPAREN, "Expected ')' to close FILTER clause");
+                    }
+
                     if (_parser.Match(TokenType.OVER))
                     {
                         _parser.Consume(TokenType.LPAREN, "Expected '(' after OVER");
@@ -460,6 +468,11 @@ namespace ETL_SQL.Core.Parser
                                 var bound = ParseFrameBound();
                                 frame = new WindowFrame(frameType, bound.Type, bound.Value);
                             }
+                        }
+                        else if (orderBy.Count > 0)
+                        {
+                            // Standard SQL behavior: default frame for ORDER BY is RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+                            frame = new WindowFrame(WindowFrameType.RANGE, WindowFrameBoundType.UNBOUNDED_PRECEDING, null, WindowFrameBoundType.CURRENT_ROW, null);
                         }
 
                         _parser.Consume(TokenType.RPAREN, "Expected ')' to close OVER clause");

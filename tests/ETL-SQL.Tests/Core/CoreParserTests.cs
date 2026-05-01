@@ -109,5 +109,35 @@ namespace ETL_SQL.Tests.Core
             Assert.Equal("Dest", insert.TargetTable.TableName);
             Assert.NotNull(insert.SelectQuery);
         }
+
+        [Fact]
+        public void TestParseQualify()
+        {
+            var source = "SELECT * FROM T QUALIFY ROW_NUMBER() OVER(ORDER BY ID) = 1;";
+            var lexer = new Lexer(source);
+            var tokens = lexer.Tokenize();
+            var parser = new Parser(tokens);
+            var script = parser.Parse();
+
+            var select = (SelectStatement)script.Statements[0];
+            Assert.NotNull(select.QualifyClause);
+            Assert.IsType<BinaryExpression>(select.QualifyClause);
+        }
+
+        [Fact]
+        public void TestParseFilterInWindow()
+        {
+            var source = "SELECT SUM(Val) FILTER (WHERE Val > 10) OVER(ORDER BY ID) FROM T;";
+            var lexer = new Lexer(source);
+            var tokens = lexer.Tokenize();
+            var parser = new Parser(tokens);
+            var script = parser.Parse();
+
+            var select = (SelectStatement)script.Statements[0];
+            var col = select.Columns[0];
+            var fce = (FunctionCallExpression)col.Expression;
+            Assert.NotNull(fce.Filter);
+            Assert.IsType<BinaryExpression>(fce.Filter);
+        }
     }
 }

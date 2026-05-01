@@ -9,7 +9,7 @@ namespace ETL_SQL.Common
     {
         public static readonly HashSet<string> DmlKeywords = new(StringComparer.OrdinalIgnoreCase)
         {
-            "SELECT", "FROM", "WHERE", "GROUP", "BY", "HAVING", "ORDER", "ASC", "DESC",
+            "SELECT", "FROM", "WHERE", "GROUP", "BY", "HAVING", "QUALIFY", "ORDER", "ASC", "DESC",
             "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE", "TRUNCATE", "PIVOT", "UNPIVOT", "MERGE", "USING", "MATCHED", "SOURCE", "TARGET",
             "DISTINCT", "TOP", "PERCENT", "TIES", "LIMIT", "OFFSET", "ROWS", "ROW", "FETCH", "NEXT", "ONLY", "AS",
             "ROLLUP", "CUBE", "GROUPING"
@@ -19,7 +19,7 @@ namespace ETL_SQL.Common
         {
             "CREATE", "TABLE", "CONNECTION", "DROP", "DECLARE", "ADD", "COLUMN", "INDEX", "UNIQUE",
             "PRIMARY", "KEY", "FOREIGN", "CHECK", "REFERENCES", "CONSTRAINT", "PROCEDURE", "FUNCTION", "RETURNS",
-            "DATABASE", "DIRECTORY", "ALTER", "VIEW", "SCHEMA", "TRANSACTION", "TRAN", "COMMIT", "ROLLBACK", "CLEAR", "SSH_KEY_PAIR",
+            "DATABASE", "DIRECTORY", "ALTER", "VIEW", "SCHEMA", "TRANSACTION", "TRAN", "COMMIT", "ROLLBACK", "CLEAR", "SSH_KEY_PAIR", "PGP_KEY_PAIR",
             "RENAME", "ENCRYPT", "DECRYPT", "DIRECTORY_CONTENTS", "TEMPLATE"
         };
 
@@ -53,7 +53,7 @@ namespace ETL_SQL.Common
 
         public static readonly HashSet<string> Keywords = new(StringComparer.OrdinalIgnoreCase)
         {
-            "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON", "WHAT_IF", "SYSDATE", "PERCENT", "TIES",
+            "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON", "WHAT_IF", "SYSDATE", "PERCENT", "TIES", "FILTER",
             "CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME",
             "WAIT", "WAITFOR", "DELAY", "UNTIL",
             "WITH", "RECURSIVE", "HASH", "LOOP",
@@ -71,7 +71,7 @@ namespace ETL_SQL.Common
             "BULK", "LOAD", "BATCHSIZE", "MAXERRORS", "FIELDTERMINATOR", "ROWTERMINATOR", "FIRSTROW", "DATA_SOURCE",
             "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND", "INCLUDE_NULL_VALUES", "WITHOUT_ARRAY_WRAPPER",
             "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT", "VERSION",
-            "SETS", "SESSION", "SESSIONS", "CONNECTIONS", "VARIABLES", "LOCAL", "ANALYZE", "TABLES", "COLUMNS", "TAGS", "TAG", "VALUE", "BITS", "ALGORITHM", "PASSPHRASE", "COMMENT", "CONFIG",
+            "SETS", "SESSION", "SESSIONS", "CONNECTIONS", "VARIABLES", "LOCAL", "ANALYZE", "TABLES", "COLUMNS", "TAGS", "TAG", "VALUE", "BITS", "ALGORITHM", "PASSPHRASE", "COMMENT", "CONFIG", "PGP_KEY",
             "SUBSTRING", "POSITION", "OVERLAY", "EXTRACT", "TRIM", "PLACING", "LEADING", "TRAILING", "BOTH",
             "CHARACTER_LENGTH", "CHAR_LENGTH", "OCTET_LENGTH", "TITLE", "SUBTITLE", "REQUIRE", "SAFE", "ZONES",
             "JOIN_SPILL_THRESHOLD", "TEMP_TABLE_SPILL_THRESHOLD", "EXTERNAL_HASH_PARTITIONS", "EXTERNAL_SORT_CHUNK_SIZE", "WINDOW_SPILL_THRESHOLD",

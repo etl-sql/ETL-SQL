@@ -1,5 +1,5 @@
 CREATE CONNECTION m ON MOCKDB();
-CREATE CONNECTION pq ON PARQUET() WITH(PATH='test_data/products_snapshot.parquet');
+CREATE CONNECTION pq ON PARQUET() WITH(PATH='samples/output/products_snapshot.parquet');
 
 -- Stage data and write to Parquet
 SELECT * INTO pq.Products FROM m.Products;

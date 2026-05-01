@@ -198,7 +198,7 @@ namespace ETL_SQL.Tests.Statements
             await ev.Evaluate(Parse("CREATE TABLE #NV (ID INT, Val INT); INSERT INTO #NV VALUES (1, 100), (2, 200), (3, 300);"));
 
             var res = await ev.EvaluateSelect((SelectStatement)Parse(
-                "SELECT Val, NTH_VALUE(Val, 2) OVER(ORDER BY ID) AS NV FROM #NV;")
+                "SELECT Val, NTH_VALUE(Val, 2) OVER(ORDER BY ID ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS NV FROM #NV;")
                 .Statements[0]).FirstAsync();
 
             // All rows see partition of all 3 rows; 2nd value = 200
@@ -287,12 +287,47 @@ namespace ETL_SQL.Tests.Statements
             Assert.Equal(50m, res.Rows[2]["Delta"]);
         }
 
+        [Fact]
+        public async Task TestQualifyClause()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("CREATE TABLE #Q (Dept VARCHAR, Name VARCHAR, Salary INT); " +
+                                  "INSERT INTO #Q VALUES ('Eng', 'Alice', 100), ('Eng', 'Bob', 200), ('Sales', 'Charlie', 150);"));
+            
+            // Should return only the highest salary per department
+            var res = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT Dept, Name, Salary, RANK() OVER(PARTITION BY Dept ORDER BY Salary DESC) as rnk FROM #Q QUALIFY rnk = 1;")
+                .Statements[0]).FirstAsync();
+            
+            Assert.Equal(2, res.Rows.Count);
+            Assert.Contains(res.Rows, r => r["Name"].ToString() == "Bob");
+            Assert.Contains(res.Rows, r => r["Name"].ToString() == "Charlie");
+        }
+
+        [Fact]
+        public async Task TestWindowFilterClause()
+        {
+            var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            await ev.Evaluate(Parse("CREATE TABLE #F (Val INT); INSERT INTO #F VALUES (10), (100), (20), (200);"));
+            
+            // SUM(Val) FILTER (WHERE Val > 50)
+            // Rows: 10 (skipped), 100 (included), 20 (skipped), 200 (included)
+            // Cumulative Sums: 0, 100, 100, 300
+            var res = await ev.EvaluateSelect((SelectStatement)Parse(
+                "SELECT Val, SUM(Val) FILTER (WHERE Val > 50) OVER(ORDER BY Val) AS FilteredSum FROM #F;")
+                .Statements[0]).FirstAsync();
+            
+            Assert.Equal(4, res.Rows.Count);
+            Assert.Equal(0m, res.Rows[0]["FilteredSum"]);   // 10
+            Assert.Equal(0m, res.Rows[1]["FilteredSum"]);   // 20
+            Assert.Equal(100m, res.Rows[2]["FilteredSum"]); // 100
+            Assert.Equal(300m, res.Rows[3]["FilteredSum"]); // 200
+        }
+
         private static Script Parse(string source)
         {
             var lexer = new Lexer(source);
             return new Parser(lexer.Tokenize()).Parse();
         }
-
-
     }
 }
