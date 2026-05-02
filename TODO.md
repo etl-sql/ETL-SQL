@@ -38,6 +38,7 @@
         - [ ] `Docs/ReportPortal_Administrators_Guide.md`: Section 8 with `CREATE SUBSCRIPTION` / `ALTER SUBSCRIPTION` full syntax.
         - [ ] `Docs/User_Manual.md`: `SET WEEK_START_DAY` in SET reference; `Engine.StartOfWeek` in config reference.
         - [ ] `Docs/Reference/Grammar.md`: New productions for all added statements and types.
+        - [ ] `Add to help, ETL-SQL.Common/Resources/Help`: Add in the help for RELDATE, and SUBSCRIPTION
 - [x] **Security Manifest**: Strategy document complete. See [`Docs/Strategy/ScriptSecurity_Strategy.md`](Strategy/ScriptSecurity_Strategy.md). Full PKI signing not recommended — disproportionate key management overhead. **Hash pinning** instead: store SHA-256 of script at schedule/publish time, compare at run time, warn or block on mismatch. ~2 dev-days across 3 phases.
     - **Phase 1 — Orchestrator hash pinning**
         - [ ] `OrchestratorJob` entity: Add `ScriptHash` (TEXT) + `HashPolicy` (`Warn`/`Block`, default `Warn`).
@@ -81,6 +82,33 @@
         - [ ] `Docs/Reference/Data_Connectors.md`: **Data Warehouse via ODBC** section with connection string examples for Redshift, Databricks, Synapse, Trino, Dremio. Note which platforms need native connectors vs. ODBC.
         - [ ] `Docs/Architecture/Connectors.md`: Document `CommandTimeoutSeconds` and `ReadOnly` fields.
         - [ ] `Docs/Standards/Connectors_Standards.md`: Data warehouse connector checklist.
+- [ ] **Native State Persistence (High-Water Marks)** — Implement a unified mechanism for scripts to store and retrieve execution state across runs.
+    - **Phase 1 — Engine: State Statements**
+        - [ ] Add `SET_STATE(@key, @value)` and `GET_STATE(@key, @default)` statements/functions.
+        - [ ] Implement `IStateProvider` interface in `ETL-SQL.Core`.
+        - [ ] Add `SQLiteStateProvider` in `ETL-SQL.Orchestrator` using the existing SQLite infrastructure.
+    - **Phase 2 — Orchestrator Integration**
+        - [ ] Scoping: State should be scoped by `(JobName, Key)` or `(ScriptPath, Key)`.
+        - [ ] Dashboard: Add a "State Viewer" to the Orchestrator/Portal to allow admins to inspect or reset high-water marks manually.
+- [ ] **Enterprise Observability: OpenLineage** — Export internal lineage maps to industry-standard platforms.
+    - **Phase 1 — OpenLineage Payload Generator**
+        - [ ] Implement `OpenLineageMapper` in `ETL-SQL.Engine` to convert `LineageTracker` data into OpenLineage JSON facets.
+        - [ ] Capture job start/complete events with input/output dataset URIs.
+    - **Phase 2 — Emitters**
+        - [ ] Add `HTTP` emitter to send payloads to Marquez/DataHub/Collibra.
+        - [ ] Add `FILE` emitter for offline debugging of lineage facets.
+- [ ] **AI-Ready ETL: Vector Connector & Embeddings** — Enable RAG workflows natively.
+    - **Phase 1 — Vector Type & Handler**
+        - [ ] Ensure `VECTOR` data type is fully supported in `InMemoryDataSource`.
+        - [ ] Add `EMBED(@text, @model_conn)` function to `ExpressionEvaluator`.
+    - **Phase 2 — AI Connectors**
+        - [ ] Add `AI_MODEL` connector for OpenAI/Azure/Ollama providers.
+        - [ ] Add `PINECONE` or `PGVECTOR` native connectors for vector storage.
+- [ ] **Architectural Refactor: Statement Handler Registry** — De-monolith `Evaluator.cs`.
+    - **Phase 1 — IStatementHandler Decoupling**
+        - [ ] Move the massive `switch` block in `Evaluator.ExecuteInternal` to a `Dictionary<Type, IStatementHandler>`.
+        - [ ] Extract remaining inline logic from `Evaluator.cs` into standalone handler classes.
+        - [ ] Prerequisites: Phase 5 of the Engine Upgrade Strategy (Separation of Concerns).
 - [ ] **Distributed Deployment & Distribution** — Transition ETL-SQL from a local tool to an enterprise platform with multi-machine simulation and native cross-platform installers.
     - **Phase 1 — Dockerization & Orchestration (The Simulation)**
         - [ ] Create Dockerfile for `ETL-SQL.Orchestrator` (ASP.NET Core 10 runtime).

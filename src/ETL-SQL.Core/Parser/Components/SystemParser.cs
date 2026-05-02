@@ -235,6 +235,15 @@ namespace ETL_SQL.Core.Parser.Components
             return new SetReportMetadataStatement { Key = key, Value = valueToken.Value };
         }
 
+        public Statement ParseSetWeekStartDay()
+        {
+            var startToken = _parser.Previous;
+            Consume(TokenType.EQUALS, "Expected '=' after SET WEEK_START_DAY");
+            var dayToken = Consume(TokenType.STRING_LITERAL, "Expected day name string after SET WEEK_START_DAY =");
+            Match(TokenType.SEMICOLON);
+            return new SetWeekStartDayStatement(dayToken.Value) { Line = startToken.Line, Column = startToken.Column };
+        }
+
         public Statement ParseSetTemplatePath()
         {
             var startToken = _parser.Previous;

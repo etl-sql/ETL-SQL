@@ -1977,6 +1977,11 @@ namespace ETL_SQL.Core
     {
     }
 
+    /// <summary>SET WEEK_START_DAY = 'Monday' — configures the start-of-week day for RELDATE W/WS/WE anchors.</summary>
+    public record SetWeekStartDayStatement(string DayName) : Statement
+    {
+    }
+
     public enum SecurityOverride
     {
         FileTypeAccess,

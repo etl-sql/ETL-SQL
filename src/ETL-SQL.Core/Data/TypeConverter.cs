@@ -80,7 +80,8 @@ namespace ETL_SQL.Core.Data
             ["DATETIMEOFFSET"] = v => DateTime.Parse(v.ToString() ?? ""),
             ["VECTOR"] = v => v.ToString(),
             ["SENSITIVE"] = v => v,
-            ["SECRET"] = v => v
+            ["SECRET"] = v => v,
+            ["RELDATE"] = v => v?.ToString()
         };
 
         /// <summary>Casts a value to the specified SQL type name.</summary>

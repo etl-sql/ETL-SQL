@@ -197,6 +197,8 @@ namespace ETL_SQL.Core
         long MaxSessionSize { get; set; }
         /// <summary>Whether this session is marked for persistence across process runs.</summary>
         bool IsPersistentSession { get; set; }
+        /// <summary>The start-of-week day used by RELDATE W/WS/WE anchors. Defaults to Monday (ISO 8601).</summary>
+        DayOfWeek WeekStartDay { get; set; }
         
         /// <summary>Positional parameters provided for the current execution (for ? and ?n placeholders).</summary>
         List<object?>? Parameters { get; set; }

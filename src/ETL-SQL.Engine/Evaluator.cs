@@ -159,6 +159,8 @@ namespace ETL_SQL.Engine
 
         public bool IsPersistentSession { get; set; }
         public List<object?>? Parameters { get; set; }
+        /// <summary>Start-of-week day for RELDATE W/WS/WE anchors. Settable at runtime via SET WEEK_START_DAY.</summary>
+        public DayOfWeek WeekStartDay { get => _options.WeekStartDay; set => _options.WeekStartDay = value; }
         
         /// <summary>Last script lexing duration in milliseconds.</summary>
         public long LastLexTimeMs { get; set; }
@@ -504,6 +506,7 @@ namespace ETL_SQL.Engine
             SpillFormat = DefaultThresholds.SpillFormat(config);
             MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);
             MaxMessages = config?.GetValue<int>("Engine:MaxMessages", 1000) ?? 1000;
+            WeekStartDay = DefaultThresholds.StartOfWeek(config);
         }
 
 

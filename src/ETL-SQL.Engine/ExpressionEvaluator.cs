@@ -632,7 +632,14 @@ namespace ETL_SQL.Engine
                 throw new ExecutionException($"Undeclared: {v.Name}");
             
             var val = _context.VarContext.GetVariable(v.Name);
-            
+
+            if (val is string reldateExpr &&
+                _context.VarContext.VariableMetadata.TryGetValue(v.Name, out var relMeta) &&
+                "RELDATE".Equals(relMeta.DataType, StringComparison.OrdinalIgnoreCase))
+            {
+                return RelDateResolver.Resolve(reldateExpr, _context.WeekStartDay);
+            }
+
             if (decryptSensitive && val is string s && s.StartsWith("ENC:"))
             {
                 if (_context.VarContext.VariableMetadata.TryGetValue(v.Name, out var meta) && meta.IsSensitive)

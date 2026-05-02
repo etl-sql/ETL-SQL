@@ -225,26 +225,39 @@ namespace ETL_SQL.TUI.UI
                     var connName = kvp.Key;
                     var dataSource = kvp.Value;
                     
-                    try 
+                    try
                     {
-                        var tables = (await dataSource.GetTablesAsync()).ToList();
-                        results.AddRange(tables.Select(t => new Suggestion($"{connName}.{t}", SuggestionType.Table)));
-                        
+                        // 1. Suggest connection name ONLY if we haven't typed the dot yet
+                        if (!context.Prefix.Contains("."))
+                        {
+                            results.Add(new Suggestion(connName, SuggestionType.Connection, Priority: 5));
+                        }
+
+                        // 2. Suggest tables/columns if prefix matches "conn."
                         if (context.Prefix.StartsWith($"{connName}.", StringComparison.OrdinalIgnoreCase))
                         {
+                            var tables = (await dataSource.GetTablesAsync()).ToList();
                             var tablePref = context.Prefix.Substring(connName.Length + 1);
+                            
                             if (tablePref.Contains(".") && dataSource is IDatabaseSource dbSource)
                             {
                                 var partsPref = tablePref.Split('.');
                                 if (tables.Any(t => t.Equals(partsPref[0], StringComparison.OrdinalIgnoreCase)))
                                 {
-                                    results.AddRange((await dbSource.GetColumnsAsync(partsPref[0])).Select(c => new Suggestion($"{connName}.{partsPref[0]}.{c}", SuggestionType.Column)));
+                                    results.AddRange((await dbSource.GetColumnsAsync(partsPref[0])).Select(c => new Suggestion($"{connName}.{partsPref[0]}.{c}", SuggestionType.Column, Priority: 10)));
                                 }
                             }
                             else 
                             {
-                                results.AddRange(tables.Where(t => t.StartsWith(tablePref, StringComparison.OrdinalIgnoreCase)).Select(t => new Suggestion($"{connName}.{t}", SuggestionType.Table)));
+                                results.AddRange(tables.Where(t => t.StartsWith(tablePref, StringComparison.OrdinalIgnoreCase))
+                                                       .Select(t => new Suggestion($"{connName}.{t}", SuggestionType.Table, Priority: 8)));
                             }
+                        }
+                        // 3. Fallback: Suggest all tables from this connection if prefix is empty or matches conn name
+                        else if (string.IsNullOrEmpty(context.Prefix) || connName.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase))
+                        {
+                             var tables = (await dataSource.GetTablesAsync()).ToList();
+                             results.AddRange(tables.Select(t => new Suggestion($"{connName}.{t}", SuggestionType.Table, Priority: 20)));
                         }
                     }
                     catch (Exception ex) { context.Logger?.Debug($"[DatabaseSchemaProvider] Connection error for '{connName}': {ex.Message}"); }
@@ -395,7 +408,24 @@ namespace ETL_SQL.TUI.UI
                 {
                     results.AddRange(new[] { "ON", "OFF" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
                 }
-                // 6. Generic "After Keyword" fallback (similar to old ContextAwareProvider)
+                // 6. Typing a partial table name immediately after FROM/JOIN/INTO/UPDATE
+                else if (prev1?.Text.Equals("FROM",   StringComparison.OrdinalIgnoreCase) == true ||
+                         prev1?.Text.Equals("JOIN",   StringComparison.OrdinalIgnoreCase) == true ||
+                         prev1?.Text.Equals("INTO",   StringComparison.OrdinalIgnoreCase) == true ||
+                         prev1?.Text.Equals("UPDATE", StringComparison.OrdinalIgnoreCase) == true)
+                {
+                    results.AddRange(context.Connections.Keys.Select(c => new Suggestion(c, SuggestionType.Connection, Priority: 0)));
+                    results.AddRange(context.VirtualSchemas.Keys.Select(v => new Suggestion(v, SuggestionType.Table, Priority: 1)));
+                    foreach (var conn in context.Connections.Values)
+                    {
+                        if (conn is IDatabaseSource db)
+                        {
+                            try { results.AddRange((await db.GetTablesAsync()).Select(t => new Suggestion(t, SuggestionType.Table, Priority: 2))); } catch { }
+                            try { results.AddRange((await db.GetViewsAsync()).Select(v => new Suggestion(v, SuggestionType.Table, Priority: 3))); } catch { }
+                        }
+                    }
+                }
+                // 7. Generic "After Keyword" fallback (similar to old ContextAwareProvider)
                 else if (last.IsKeyword)
                 {
                     // Fallback to basic connector/table/alias suggestions if no specific pattern matched

@@ -53,6 +53,9 @@ namespace ETL_SQL.Engine
         public bool DisplayExecuteTree { get; set; } = true;
         public bool IsProfiling { get; set; } = true;
 
+        // --- Date/Time ---
+        public DayOfWeek WeekStartDay { get; set; } = DayOfWeek.Monday;
+
         // --- UI / Verbosity ---
         public bool IsVerbose { get; set; }
         public bool RedirectOutput { get; set; }

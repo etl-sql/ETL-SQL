@@ -46,7 +46,7 @@ namespace ETL_SQL.Core.Parser
             TokenType.UNIQUEIDENTIFIER, TokenType.UUID, TokenType.GUID, TokenType.GEOMETRY, 
             TokenType.GEOGRAPHY, TokenType.HIERARCHYID, TokenType.VARIANT, TokenType.SQL_VARIANT, 
             TokenType.ANY, TokenType.TABLE, TokenType.STRING, TokenType.SENSITIVE, TokenType.SECRET,
-            TokenType.VARCHAR2, TokenType.MINMAX, TokenType.MARKDOWN, TokenType.PATH
+            TokenType.VARCHAR2, TokenType.MINMAX, TokenType.MARKDOWN, TokenType.PATH, TokenType.RELDATE
         };
 
         /// <summary>
@@ -646,7 +646,17 @@ namespace ETL_SQL.Core.Parser
                 }
                 else if (IsIdentifier(Current) || Current.Type == TokenType.MAX)
                 {
-                    typeName += "(" + Advance().Value + ")";
+                    if (Current.Type == TokenType.MAX)
+                    {
+                        typeName += "(MAX)";
+                        Advance();
+                    }
+                    else
+                    {
+                        // Recurse to handle nested parameterized types: LIST(VARCHAR(200)), LIST(DECIMAL(10,2))
+                        string innerType = ParseType();
+                        typeName += "(" + innerType + ")";
+                    }
                     Consume(TokenType.RPAREN, "Expected ')' after type parameter");
                 }
                 else

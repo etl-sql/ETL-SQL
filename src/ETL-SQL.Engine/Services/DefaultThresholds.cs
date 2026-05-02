@@ -50,5 +50,11 @@ namespace ETL_SQL.Engine.Services
 
         public static int SubqueryCacheSize(IConfiguration? config)
             => config?.GetValue<int?>("Engine:SubqueryCacheSize") ?? 5000;
+
+        public static DayOfWeek StartOfWeek(IConfiguration? config)
+        {
+            var s = config?.GetValue<string>("Engine:StartOfWeek") ?? "Monday";
+            return Enum.TryParse<DayOfWeek>(s, ignoreCase: true, out var day) ? day : DayOfWeek.Monday;
+        }
     }
 }

@@ -63,6 +63,7 @@ namespace ETL_SQL.Core.Metadata
                         break;
                     case "OPERATIONS":
                         mappedTopic = topic;
+                        mappedSubTopic = subTopic;
                         break;
                     case "REPORT":
                         mappedTopic = "REPORT";
