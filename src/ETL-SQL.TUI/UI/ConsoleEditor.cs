@@ -105,6 +105,7 @@ namespace ETL_SQL.TUI.UI
         /// <summary>Starts the main editor loop, handling rendering and input.</summary>
         public async Task Run()
         {
+            Console.OutputEncoding = Encoding.UTF8;
             // Perform a robust full-screen clear to purge artifacts from previous CLI statements
             try 
             { 

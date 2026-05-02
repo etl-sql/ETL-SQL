@@ -35,6 +35,34 @@ CREATE DATASET &WaterfallData AS (
     UNION ALL SELECT 'Total', 1300
 );
 
+-- 2.6 Prepare data for high-res visuals
+CREATE DATASET &LineTrendData AS (
+    SELECT 1 as Day, 120 as Val
+    UNION ALL SELECT 2, 150
+    UNION ALL SELECT 3, 110
+    UNION ALL SELECT 4, 190
+    UNION ALL SELECT 5, 250
+    UNION ALL SELECT 6, 210
+    UNION ALL SELECT 7, 300
+);
+
+CREATE DATASET &ScatterData AS (
+    SELECT 10 as X, 20 as Y
+    UNION ALL SELECT 15, 25
+    UNION ALL SELECT 12, 18
+    UNION ALL SELECT 22, 35
+    UNION ALL SELECT 25, 30
+    UNION ALL SELECT 18, 22
+);
+
+CREATE DATASET &ActivityHeatMap AS (
+    SELECT 'Mon' as Day, 10 as H1, 20 as H2, 50 as H3, 10 as H4
+    UNION ALL SELECT 'Tue', 20, 30, 40, 20
+    UNION ALL SELECT 'Wed', 50, 60, 20, 10
+    UNION ALL SELECT 'Thu', 10, 20, 30, 40
+    UNION ALL SELECT 'Fri', 30, 40, 50, 60
+);
+
 -- 3. Define Visuals
 CREATE VISUAL IntroText AS TEXT (
     VALUE = '# ETL-SQL TUI Report Preview
@@ -44,30 +72,77 @@ This is the **Research Paper View** rendering directly in your terminal.
 - Use `Shift+PgUp / Shift+PgDn` to switch pages.'
 );
 
+DECLARE @day varchar(200) = 'Tue';
+
+CREATE VISUAL SelectActivityDay AS SLICER(
+    SOURCE = (SELECT DISTINCT Day FROM &ActivityHeatMap),
+    MAPPINGS(VALUE = Day),
+    ACTIONS(ON_CHANGE = SET_PARAMETER(@day, Day))
+);
+
 CREATE VISUAL HealthGauge AS GAUGE (
-    SOURCE = (SELECT 78),
+    SOURCE = (SELECT 78 as val),
+    MAPPINGS(VALUE = val),
     OPTIONS (MIN = 0, MAX = 100),
     STYLE (TITLE = 'System Health (%)')
 );
 
 CREATE VISUAL TotalSalesCard AS CARD (
-    SOURCE = (SELECT SUM(Amount) FROM &SalesSummary),
+    SOURCE = (SELECT SUM(Amount) as total FROM &SalesSummary),
+    MAPPINGS(VALUE = total),
     STYLE (TITLE = 'Total Revenue ($)')
 );
 
 CREATE VISUAL SalesChart AS HBAR (
     SOURCE = &SalesSummary,
-    MAPPINGS (LABEL = Category, VALUE = Amount),
+    MAPPINGS (X = Category, Y = Amount),
     STYLE (TITLE = 'Revenue by Category')
+);
+
+CREATE VISUAL SalesTrend AS LINE (
+    SOURCE = &LineTrendData,
+    MAPPINGS (X = Day, Y = Val),
+    STYLE (TITLE = 'Sales Trend (High-Res Braille Line Chart)')
+);
+
+CREATE VISUAL PerfScatter AS SCATTER (
+    SOURCE = &ScatterData,
+    MAPPINGS (X = X, Y = Y),
+    STYLE (TITLE = 'Performance Correlation (Scatter)')
+);
+
+CREATE VISUAL ActivityDensity AS HEATMAP (
+    SOURCE = &ActivityHeatMap,
+    MAPPINGS (X = Day, Y = Day, VALUE = H1), -- Placeholders for linter, renderer uses data structure
+    STYLE (TITLE = 'Activity Density (HeatMap)')
+);
+
+CREATE VISUAL CategoryPie AS PIE (
+    SOURCE = &SalesSummary,
+    MAPPINGS (LABEL = Category, VALUE = Amount),
+    STYLE (TITLE = 'Revenue Mix (Pie/Breakdown)')
+);
+
+CREATE VISUAL MonthlyBar AS BAR (
+    SOURCE = (
+        SELECT 'Jan' as Mo, 100 as V UNION ALL 
+        SELECT 'Feb', 150 UNION ALL 
+        SELECT 'Mar', 120 UNION ALL 
+        SELECT 'Apr', 200
+    ),
+    MAPPINGS(X = Mo, Y = V),
+    STYLE (TITLE = 'Monthly Trend (Vertical Bar)')
 );
 
 CREATE VISUAL LatencyBox AS BOXPLOT (
     SOURCE = &BoxPlotData,
+    MAPPINGS (X = App, LOW = Min, Q1 = Q1, MEDIAN = Med, Q3 = Q3, HIGH = Max),
     STYLE (TITLE = 'Response Time Distribution (ms)')
 );
 
 CREATE VISUAL ProfitWaterfall AS WATERFALL (
     SOURCE = &WaterfallData,
+    MAPPINGS (X = Item, Y = Val),
     STYLE (TITLE = 'Monthly Profit Bridge')
 );
 
@@ -76,17 +151,30 @@ CREATE VISUAL OrdersTable AS TABLE (
     STYLE (TITLE = 'Recent Orders Summary')
 );
 
+CREATE VISUAL RegionTreeMap AS TREEMAP (
+    SOURCE = &SalesSummary,
+    MAPPINGS (LABEL = Category, VALUE = Amount),
+    STYLE (TITLE = 'Sales by Region (TreeMap Placeholder)')
+);
+
 -- 4. Assemble the Page
 CREATE PAGE Dashboard AS (
-    STRUCTURE = 'A / B / C / D / E / F / G',
+    STRUCTURE = 'A / B / C / D / E / F / G / H / I / J / K / L / M / N',
     MAP (
         'A' = IntroText, 
-        'B' = HealthGauge,
-        'C' = TotalSalesCard, 
-        'D' = SalesChart, 
-        'E' = LatencyBox,
-        'F' = ProfitWaterfall,
-        'G' = OrdersTable
+        'B' = SelectActivityDay,
+        'C' = HealthGauge,
+        'D' = TotalSalesCard, 
+        'E' = SalesChart, 
+        'F' = SalesTrend,
+        'G' = PerfScatter,
+        'H' = ActivityDensity,
+        'I' = CategoryPie,
+        'J' = MonthlyBar,
+        'K' = LatencyBox,
+        'L' = ProfitWaterfall,
+        'M' = RegionTreeMap,
+        'N' = OrdersTable
     )
 );
 

@@ -14,8 +14,8 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh }) => 
         manifest.pages?.[0]?.name || null
     );
 
-    // Local parameter state initialized from active page defaults
-    const [parameters, setParameters] = useState<Record<string, string | null>>({});
+    // Local parameter state initialized from manifest defaults
+    const [parameters, setParameters] = useState<Record<string, string | null>>(manifest.parameters || {});
     const [isRefreshing, setIsRefreshing] = useState(false);
     const debounceTimer = useRef<any>(null);
 
@@ -28,10 +28,11 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh }) => 
         setIsRefreshing(false);
     }, [manifest]);
 
-    // Initialize parameters when manifest changes (if new variables are detected)
+    // Initialize parameters when manifest changes
     useEffect(() => {
-        // Variables are now managed primarily by the host environment, 
-        // but we can initialize local state if needed.
+        if (manifest.parameters) {
+            setParameters(manifest.parameters);
+        }
     }, [manifest]);
 
     // Handle parameter changes from slicers/inputs
@@ -564,7 +565,18 @@ const ReportSlicer: React.FC<{
     const boundParam = setParamAction?.parameterName;
     
     // Controlled value from parameter state, falling back to defaultValue
-    const currentValue = (boundParam && parameters[boundParam]) || visual.defaultValue || '';
+    const currentValue = useMemo(() => {
+        if (!boundParam) return visual.defaultValue || '';
+        if (parameters[boundParam] !== undefined) return parameters[boundParam] || '';
+        
+        // Fallback matching for @ prefix mismatches
+        if (boundParam.startsWith('@') && parameters[boundParam.substring(1)] !== undefined) 
+            return parameters[boundParam.substring(1)] || '';
+        if (!boundParam.startsWith('@') && parameters['@' + boundParam] !== undefined) 
+            return parameters['@' + boundParam] || '';
+            
+        return visual.defaultValue || '';
+    }, [boundParam, parameters, visual.defaultValue]);
 
     const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const val = e.target.value;

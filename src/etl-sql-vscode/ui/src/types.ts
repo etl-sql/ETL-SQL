@@ -211,4 +211,5 @@ export interface ReportManifest {
     pages: PageManifest[];
     containers?: ContainerManifest[];
     navigations?: NavigationManifest[];
+    parameters?: Record<string, string>;
 }

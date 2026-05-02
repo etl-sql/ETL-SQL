@@ -176,12 +176,21 @@ namespace ETL_SQL.ReportBuilder
             }
 
             // ── Parameters ──────────────────────────────────────────────────
-            if (_ctx is IVariableContext vctx)
+            var vctx = _ctx.VarContext;
+            if (vctx != null)
             {
-                foreach (var (name, varMeta) in vctx.VariableMetadata)
+                // Capture all accessible variables with metadata (scope-aware)
+                var variablesWithMetadata = vctx.GetVariablesWithMetadata();
+                foreach (var kvp in variablesWithMetadata)
                 {
-                    if (varMeta.IsInput)
-                        manifest.Parameters[name] = vctx.Variables.TryGetValue(name, out var val) ? val?.ToString() ?? "" : "";
+                    manifest.Parameters[kvp.Key] = kvp.Value.Value?.ToString() ?? "";
+                }
+
+                // Fallback for variables without metadata or if scope-aware fetching missed something
+                foreach (var kvp in vctx.Variables)
+                {
+                    if (!manifest.Parameters.ContainsKey(kvp.Key))
+                        manifest.Parameters[kvp.Key] = kvp.Value?.ToString() ?? "";
                 }
             }
 
