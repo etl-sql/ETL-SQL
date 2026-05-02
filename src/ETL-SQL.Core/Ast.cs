@@ -2053,6 +2053,9 @@ namespace ETL_SQL.Core
 
     public enum PortalSubscriptionFormat { Pdf, Csv, Both }
 
+    /// <summary>A named parameter binding passed to a subscription's report script.</summary>
+    public record SubscriptionParameter(string Name, string Value);
+
     public record CreatePortalSubscriptionStatement(
         string ReportPath,
         string Recipient,        // username or group name
@@ -2060,12 +2063,21 @@ namespace ETL_SQL.Core
         string? Schedule,
         bool   OnRefresh,
         PortalSubscriptionFormat Format,
-        string SmtpAlias) : Statement;
+        string SmtpAlias,
+        string? Name,
+        IReadOnlyList<SubscriptionParameter> Parameters) : Statement;
 
+    /// <summary>
+    /// ALTER SUBSCRIPTION &lt;id&gt; SET ...
+    /// Parameters: null = leave unchanged; empty list = clear all parameters.
+    /// </summary>
     public record AlterPortalSubscriptionStatement(
         int SubscriptionId,
         string? NewSchedule,
-        bool? SetActive) : Statement;
+        bool? SetActive,
+        PortalSubscriptionFormat? NewFormat,
+        string? NewSmtpAlias,
+        IReadOnlyList<SubscriptionParameter>? Parameters) : Statement;
 
     public record DropPortalSubscriptionStatement(int SubscriptionId) : Statement;
 

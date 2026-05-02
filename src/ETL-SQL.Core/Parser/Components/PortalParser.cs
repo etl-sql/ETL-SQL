@@ -310,11 +310,16 @@ namespace ETL_SQL.Core.Parser.Components
 
         // ── Subscriptions ─────────────────────────────────────────────────────
 
-        // CREATE SUBSCRIPTION FOR REPORT '/path' DELIVER TO 'user'|GROUP 'group'
+        // CREATE SUBSCRIPTION ['name'] FOR REPORT '/path' DELIVER TO 'user'|GROUP 'group'
         //   SCHEDULE '0 8 * * MON'|ON REFRESH FORMAT PDF|CSV|BOTH AT smtp-alias
+        //   [PARAMETERS (@var = 'value', ...)]
         public Statement ParseCreateSubscription(Token start)
         {
-            Consume(TokenType.SUBSCRIPTION, "Expected SUBSCRIPTION");
+            // Optional subscription name (string literal before FOR)
+            string? name = null;
+            if (_parser.Current.Type == TokenType.STRING_LITERAL)
+                name = Advance().Value;
+
             Consume(TokenType.FOR, "Expected FOR");
             Consume(TokenType.REPORT, "Expected REPORT");
             string reportPath = ConsumeString("Expected report path");
@@ -339,40 +344,55 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.AT, "Expected AT");
             string smtpAlias = Advance().Value;
 
+            var parameters = ParseSubscriptionParameters();
+
+            Match(TokenType.SEMICOLON);
             return new CreatePortalSubscriptionStatement(
-                reportPath, recipient, isGroup, schedule, onRefresh, format, smtpAlias)
+                reportPath, recipient, isGroup, schedule, onRefresh, format, smtpAlias, name, parameters)
             { Line = start.Line, Column = start.Column };
         }
 
-        // ALTER SUBSCRIPTION <id> SET SCHEDULE='...'|ENABLE|DISABLE
+        // ALTER SUBSCRIPTION <id> SET SCHEDULE='...'|ENABLE|DISABLE|FORMAT=...|SMTP='...'|PARAMETERS(...)
         public Statement ParseAlterSubscription(Token start)
         {
-            Consume(TokenType.SUBSCRIPTION, "Expected SUBSCRIPTION");
             int id = ParseIntLiteral("Expected subscription id");
             Consume(TokenType.SET, "Expected SET");
 
             string? newSchedule = null;
             bool? setActive = null;
+            PortalSubscriptionFormat? newFormat = null;
+            string? newSmtpAlias = null;
+            IReadOnlyList<SubscriptionParameter>? parameters = null;
+
             do
             {
                 if (Match(TokenType.ENABLE))  { setActive = true;  continue; }
                 if (Match(TokenType.DISABLE)) { setActive = false; continue; }
+                if (MatchIdentifier("PARAMETERS"))
+                {
+                    parameters = ParseSubscriptionParameterList();
+                    continue;
+                }
                 string key = Advance().Value;
                 Consume(TokenType.EQUALS, "Expected '='");
                 if (key.Equals("SCHEDULE", StringComparison.OrdinalIgnoreCase))
                     newSchedule = ConsumeString("Expected cron expression");
+                else if (key.Equals("FORMAT", StringComparison.OrdinalIgnoreCase))
+                    newFormat = ParseSubscriptionFormat();
+                else if (key.Equals("SMTP", StringComparison.OrdinalIgnoreCase))
+                    newSmtpAlias = ConsumeString("Expected SMTP alias");
                 else
                     ParseExpression();
             } while (Match(TokenType.COMMA));
 
-            return new AlterPortalSubscriptionStatement(id, newSchedule, setActive)
+            Match(TokenType.SEMICOLON);
+            return new AlterPortalSubscriptionStatement(id, newSchedule, setActive, newFormat, newSmtpAlias, parameters)
             { Line = start.Line, Column = start.Column };
         }
 
         // DROP SUBSCRIPTION <id>
         public Statement ParseDropSubscription(Token start)
         {
-            Consume(TokenType.SUBSCRIPTION, "Expected SUBSCRIPTION");
             int id = ParseIntLiteral("Expected subscription id");
             return new DropPortalSubscriptionStatement(id)
             { Line = start.Line, Column = start.Column };
@@ -516,6 +536,35 @@ namespace ETL_SQL.Core.Parser.Components
                 return id;
             }
             throw new SyntaxException(message, tok.Line, tok.Column);
+        }
+
+        // Parses PARAMETERS (...) if present; returns empty list otherwise.
+        private IReadOnlyList<SubscriptionParameter> ParseSubscriptionParameters()
+        {
+            if (!MatchIdentifier("PARAMETERS"))
+                return Array.Empty<SubscriptionParameter>();
+            return ParseSubscriptionParameterList();
+        }
+
+        // Parses the ( @var = 'val', ... ) body. Returns empty list for PARAMETERS ().
+        private IReadOnlyList<SubscriptionParameter> ParseSubscriptionParameterList()
+        {
+            Consume(TokenType.LPAREN, "Expected '(' after PARAMETERS");
+            var result = new List<SubscriptionParameter>();
+            while (_parser.Current.Type != TokenType.RPAREN && _parser.Current.Type != TokenType.EOF)
+            {
+                if (_parser.Current.Type != TokenType.VARIABLE)
+                    throw new SyntaxException(
+                        $"Expected @parameter name, got '{_parser.Current.Value}'",
+                        _parser.Current.Line, _parser.Current.Column);
+                string paramName = Advance().Value;
+                Consume(TokenType.EQUALS, $"Expected '=' after {paramName}");
+                string paramValue = ConsumeString($"Expected value for {paramName}");
+                result.Add(new SubscriptionParameter(paramName, paramValue));
+                if (!Match(TokenType.COMMA)) break;
+            }
+            Consume(TokenType.RPAREN, "Expected ')' to close PARAMETERS");
+            return result;
         }
     }
 }
