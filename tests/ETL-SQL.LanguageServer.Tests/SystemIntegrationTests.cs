@@ -12,6 +12,8 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using DocumentUri = OmniSharp.Extensions.LanguageServer.Protocol.DocumentUri;
 using Xunit.Abstractions;
+using ETL_SQL.Core.Services;
+using ETL_SQL.Core.Interfaces;
 
 namespace ETL_SQL.LanguageServer.Tests
 {
@@ -37,12 +39,12 @@ namespace ETL_SQL.LanguageServer.Tests
             connectorRegistry.Register(new MockDbConnector());
             var functionRegistry = new Engine.Functions.FunctionRegistry();
 
-            var metadataManager = new MetadataManager(loggerFactory.CreateLogger<MetadataManager>(), connectorRegistry);
-            var store = new DocumentStateStore();
+            var metadataManager = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, connectorRegistry);
             var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
-            ETL_SQL.Engine.Services.LanguageHelpService.Initialize(helpRegistry);
+            var languageService = new LanguageService(metadataManager, helpRegistry);
+            var store = new DocumentStateStore();
             var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
-            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, metadataManager, helpRegistry);
+            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, languageService);
             var hoverHandler = new HoverProvider(loggerFactory.CreateLogger<HoverProvider>(), store, functionRegistry, helpRegistry);
             
             var uri = DocumentUri.From("untitled:Untitled-1");
@@ -124,12 +126,12 @@ namespace ETL_SQL.LanguageServer.Tests
             var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
             
             var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
-            var metadataManager = new MetadataManager(loggerFactory.CreateLogger<MetadataManager>(), connectorRegistry);
-            var store = new DocumentStateStore();
+            var metadataManager = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, connectorRegistry);
             var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
-            ETL_SQL.Engine.Services.LanguageHelpService.Initialize(helpRegistry);
+            var languageService = new LanguageService(metadataManager, helpRegistry);
+            var store = new DocumentStateStore();
             var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
-            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, metadataManager, helpRegistry);
+            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, languageService);
             
             var uri = DocumentUri.From("untitled:Untitled-2");
             
@@ -180,7 +182,7 @@ namespace ETL_SQL.LanguageServer.Tests
             
             var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
             var functionRegistry = new Engine.Functions.FunctionRegistry();
-            var metadataManager = new MetadataManager(loggerFactory.CreateLogger<MetadataManager>(), connectorRegistry);
+            var metadataManager = new MetadataManager(ETL_SQL.Common.NullLogger.Instance, connectorRegistry);
             var store = new DocumentStateStore();
             var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
             ETL_SQL.Engine.Services.LanguageHelpService.Initialize(helpRegistry);

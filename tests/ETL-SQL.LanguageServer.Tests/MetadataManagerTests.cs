@@ -5,21 +5,23 @@ using System.Threading.Tasks;
 using Xunit;
 using Moq;
 using Microsoft.Extensions.Logging;
-using ETL_SQL.LSP;
 using ETL_SQL.Data;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Services;
+using ETL_SQL.Core.Interfaces;
+using ETL_SQL.Common;
 
 namespace ETL_SQL.LanguageServer.Tests
 {
     public class MetadataManagerTests
     {
-        private readonly Mock<ILogger<MetadataManager>> _loggerMock;
+        private readonly Mock<ETL_SQL.Common.ILogger> _loggerMock;
         private readonly Mock<IConnectorRegistry> _registryMock;
         private readonly MetadataManager _manager;
 
         public MetadataManagerTests()
         {
-            _loggerMock = new Mock<ILogger<MetadataManager>>();
+            _loggerMock = new Mock<ETL_SQL.Common.ILogger>();
             _registryMock = new Mock<IConnectorRegistry>();
             _manager = new MetadataManager(_loggerMock.Object, _registryMock.Object);
         }

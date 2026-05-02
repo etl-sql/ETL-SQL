@@ -8,6 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using ETL_SQL.LSP;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Services;
+using ETL_SQL.Core.Interfaces;
 
 namespace ETL_SQL.LanguageServer.Tests
 {
@@ -34,6 +36,7 @@ namespace ETL_SQL.LanguageServer.Tests
                         .WithServices(services => {
                             services.AddSingleton<ETL_SQL.Data.IConnectorRegistry>(new ETL_SQL.Data.ConnectorRegistry());
                             services.AddSingleton<IMetadataManager, MetadataManager>();
+                            services.AddSingleton<ILanguageService, LanguageService>();
                             services.AddSingleton<DocumentStateStore>();
                         })
                         .WithHandler<TextDocumentHandler>()
@@ -49,7 +52,7 @@ namespace ETL_SQL.LanguageServer.Tests
                     Assert.NotNull(server);
                     
                     // Verify MetadataManager is resolved and assigned
-                    var metadata = server.Services.GetService<MetadataManager>();
+                    var metadata = server.Services.GetService<IMetadataManager>();
                     Assert.NotNull(metadata);
                 }
                 else

@@ -104,11 +104,27 @@
     - **Phase 2 — AI Connectors**
         - [ ] Add `AI_MODEL` connector for OpenAI/Azure/Ollama providers.
         - [ ] Add `PINECONE` or `PGVECTOR` native connectors for vector storage.
+- [ ] **Advanced Lineage & Infinite Documentation (Tags)** — Leverage the "Cumulative Metadata" model for enterprise-grade governance.
+    - **Phase 1 — Tag Inheritance & Flow (The "Sticky" Tag)**
+        - [ ] Implement automatic tag propagation: if `#temp` table is created from a tagged source, copy tags forward.
+        - [ ] Support the **Cumulative History Model**: During transformations (like `CONCAT`), concatenate descriptions and source metadata so context is never lost (e.g., `full_name` inherits history from both `first_name` and `last_name`).
+        - [ ] VS Code: Update Hover to show "Lineage History" — a breadcrumb of where each tag/description originated.
+    - **Phase 2 — Impact Analysis (Forward Lineage)**
+        - [ ] Implement `GetDescendants(table, column)` to walk the graph forward.
+        - [ ] Add `EXPLAIN IMPACT <table/column>` command to show what downstream scripts/reports will break if a source changes.
+    - **Phase 3 — Tag-Based Governance (Enforcement)**
+        - [ ] Add `SET GOVERNANCE_MODE = STRICT`.
+        - [ ] Implement "Data Firewalls": Prevent `SELECT` or `EXPORT` of columns tagged as `PII` or `SENSITIVE` to insecure connectors (e.g., `FLATFILE`, `EMAIL`) without an explicit override.
+- [ ] **Enterprise Observability: OpenLineage** — Export internal lineage maps and "Cumulative Tags" to industry-standard platforms.
+    - **Phase 1 — OpenLineage Payload Generator**
+        - [ ] Implement `OpenLineageMapper` in `ETL-SQL.Engine` to convert `LineageTracker` data into OpenLineage JSON facets.
+        - [ ] Map "Cumulative Tags" to OpenLineage **Custom Facets**.
+        - [ ] Capture job start/complete events with input/output dataset URIs.
+    - **Phase 2 — Emitters**
+        - [ ] Add `HTTP` emitter to send payloads to Marquez/DataHub/Collibra.
+        - [ ] Add `FILE` emitter for offline debugging of lineage facets.
 - [ ] **Architectural Refactor: Statement Handler Registry** — De-monolith `Evaluator.cs`.
     - **Phase 1 — IStatementHandler Decoupling**
-        - [ ] Move the massive `switch` block in `Evaluator.ExecuteInternal` to a `Dictionary<Type, IStatementHandler>`.
-        - [ ] Extract remaining inline logic from `Evaluator.cs` into standalone handler classes.
-        - [ ] Prerequisites: Phase 5 of the Engine Upgrade Strategy (Separation of Concerns).
 - [ ] **Distributed Deployment & Distribution** — Transition ETL-SQL from a local tool to an enterprise platform with multi-machine simulation and native cross-platform installers.
     - **Phase 1 — Dockerization & Orchestration (The Simulation)**
         - [ ] Create Dockerfile for `ETL-SQL.Orchestrator` (ASP.NET Core 10 runtime).
