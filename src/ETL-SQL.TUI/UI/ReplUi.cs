@@ -53,6 +53,12 @@ namespace ETL_SQL.TUI.UI
                 _evaluator.SessionId = _ctx.SessionId;
                 _evaluator.DisplayExecuteTree = true;
                 _evaluator.Telemetry.IsProfiling = true;
+                
+                // Inject CLI variables as input parameters
+                foreach (var v in _ctx.Variables)
+                {
+                    _evaluator.DeclareVariable(v.Key, v.Value, new VariableMetadata { IsInput = true, IsDeclared = false });
+                }
 
                 // Route engine log messages to the IDE as JSON on stdout.
                 // We subscribe to the DI-injected ILogger which handles all modernized handlers.

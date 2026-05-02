@@ -22,7 +22,19 @@ namespace ETL_SQL.TUI.UI
             }
 
             var messages = _evaluator.Messages.Skip(scrollRow).Take(height - 2).ToList();
-            var content = string.Join("\n", messages.Select(m => Markup.Escape(m)));
+            var content = string.Join("\n", messages.Select(m => 
+            {
+                var colorMarkup = m.Color switch
+                {
+                    ConsoleColor.Red or ConsoleColor.DarkRed => "[red]",
+                    ConsoleColor.Yellow or ConsoleColor.DarkYellow => "[yellow]",
+                    ConsoleColor.Green or ConsoleColor.DarkGreen => "[green]",
+                    ConsoleColor.Cyan or ConsoleColor.DarkCyan => "[cyan]",
+                    _ => ""
+                };
+                var escaped = Markup.Escape(m.Message);
+                return string.IsNullOrEmpty(colorMarkup) ? escaped : $"{colorMarkup}{escaped}[/]";
+            }));
             if (string.IsNullOrEmpty(content)) content = "[grey]No system messages.[/]";
 
             string headerTitle = "[yellow]Messages[/]";

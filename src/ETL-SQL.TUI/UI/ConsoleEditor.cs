@@ -385,7 +385,7 @@ namespace ETL_SQL.TUI.UI
                     }
                     catch (Exception ex)
                     {
-                        _evaluator.Log($"[REPORT ERROR] {ex.Message}");
+                        _evaluator.Log($"[REPORT ERROR] {ex.Message}", ConsoleColor.Red);
                     }
                 }
                 else
@@ -395,7 +395,7 @@ namespace ETL_SQL.TUI.UI
             }
             catch (Exception ex)
             {
-                _evaluator.Log($"[ERROR] {ex.Message}");
+                _evaluator.Log($"[ERROR] {ex.Message}", ConsoleColor.Red);
                 _renderer.ShowStatus($"Error: {ex.Message}");
             }
             finally
@@ -508,43 +508,63 @@ namespace ETL_SQL.TUI.UI
         }
 
         /// <summary>Copies the current selection (or results) to the clipboard.</summary>
+        /// <summary>Copies the current selection (or results) to the clipboard.</summary>
         public async Task Copy()
         {
-            if (_renderer.ResultsFocus)
+            switch (_renderer.Focus)
             {
-                if (_renderer.ResultsVisible && _evaluator.LastResultSets.Count > _renderer.ActiveResultSetIndex)
-                {
-                    var rs = _evaluator.LastResultSets[_renderer.ActiveResultSetIndex];
-                    var sb = new StringBuilder();
-                    sb.AppendLine(string.Join("\t", rs.ColumnNames));
-                    foreach (var row in rs.Rows) sb.AppendLine(string.Join("\t", row.Columns.Values));
-                    await _clipboard.SetTextAsync(sb.ToString());
-                    _renderer.ShowStatus("Results copied as TSV.");
-                }
-                else if (_renderer.PerformanceVisible)
-                {
-                    var text = string.Join(Environment.NewLine, _evaluator.Telemetry.ProfileMetrics.Select(m => $"{m.Sql}: {m.DurationMs}ms"));
-                    await _clipboard.SetTextAsync(text);
-                    _renderer.ShowStatus("Performance metrics copied.");
-                }
-                else
-                {
-                    // Copy messages — clean text only, no tree borders
-                    var text = string.Join(Environment.NewLine, _evaluator.Messages);
-                    await _clipboard.SetTextAsync(text);
-                    _renderer.ShowStatus("Messages copied.");
-                }
-            }
-            else
-            {
-                var text = _buffer.GetSelectedText();
-                if (string.IsNullOrEmpty(text)) text = _buffer.Lines[_buffer.CursorLine];
-                
-                if (!string.IsNullOrEmpty(text))
-                {
-                    await _clipboard.SetTextAsync(text);
-                    _renderer.ShowStatus("Text copied to clipboard.");
-                }
+                case EditorFocus.Results:
+                    if (_renderer.ResultsVisible && _evaluator.LastResultSets.Count > _renderer.ActiveResultSetIndex)
+                    {
+                        var rs = _evaluator.LastResultSets[_renderer.ActiveResultSetIndex];
+                        var sb = new StringBuilder();
+                        sb.AppendLine(string.Join("\t", rs.ColumnNames));
+                        foreach (var row in rs.Rows) sb.AppendLine(string.Join("\t", row.Columns.Values));
+                        await _clipboard.SetTextAsync(sb.ToString());
+                        _renderer.ShowStatus("Results copied as TSV.");
+                    }
+                    break;
+
+                case EditorFocus.Performance:
+                    if (_renderer.PerformanceVisible)
+                    {
+                        var text = string.Join(Environment.NewLine, _evaluator.Telemetry.ProfileMetrics.Select(m => $"{m.Sql}: {m.DurationMs}ms"));
+                        await _clipboard.SetTextAsync(text);
+                        _renderer.ShowStatus("Performance metrics copied.");
+                    }
+                    break;
+
+                case EditorFocus.Messages:
+                    {
+                        // Copy messages — clean text only, no tree borders
+                        var text = string.Join(Environment.NewLine, _evaluator.Messages.Select(m => m.Message));
+                        await _clipboard.SetTextAsync(text);
+                        _renderer.ShowStatus("Messages copied.");
+                    }
+                    break;
+
+                case EditorFocus.ExecutionTree:
+                    {
+                        var treeRenderer = new ExecutionTreeAsciiRenderer();
+                        var treeLines = treeRenderer.Render(_evaluator.Telemetry.ExecutionTree);
+                        var treeText = string.Join(Environment.NewLine, treeLines.Select(l => l.Indent + l.Connector + l.Label + (string.IsNullOrEmpty(l.Stats) ? "" : " " + l.Stats)));
+                        await _clipboard.SetTextAsync(treeText);
+                        _renderer.ShowStatus("Pipeline tree copied.");
+                    }
+                    break;
+
+                default:
+                    {
+                        var text = _buffer.GetSelectedText();
+                        if (string.IsNullOrEmpty(text)) text = _buffer.Lines[_buffer.CursorLine];
+                        
+                        if (!string.IsNullOrEmpty(text))
+                        {
+                            await _clipboard.SetTextAsync(text);
+                            _renderer.ShowStatus("Text copied to clipboard.");
+                        }
+                    }
+                    break;
             }
         }
 

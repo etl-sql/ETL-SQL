@@ -30,7 +30,7 @@ namespace ETL_SQL.Tests.Hardening
             // Intentional leak in PRINT
             await TestHelpers.Execute(eval, "PRINT 'Connecting with password=Secret123; and token=ABC';");
             
-            var msg = eval.Messages[0];
+            var msg = eval.Messages[0].Message;
             Assert.Contains("password=********", msg);
             Assert.Contains("token=********", msg);
             Assert.DoesNotContain("Secret123", msg);
@@ -44,7 +44,7 @@ namespace ETL_SQL.Tests.Hardening
             
             await TestHelpers.Execute(eval, "PRINT 'The value is ENC:aGVsbG8=';");
             
-            var msg = eval.Messages[0];
+            var msg = eval.Messages[0].Message;
             Assert.Contains("ENC:********", msg);
             Assert.DoesNotContain("aGVsbG8=", msg);
         }

@@ -136,7 +136,7 @@ namespace ETL_SQL.Tests.Hardening
              Assert.Null(result);
              
              // Check for warning message in evaluator
-             Assert.Contains(eval.Messages, m => m.Contains("Regex timeout exceeded"));
+             Assert.Contains(eval.Messages, m => m.Message.Contains("Regex timeout exceeded"));
         }
     }
 }

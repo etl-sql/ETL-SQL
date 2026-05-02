@@ -55,7 +55,7 @@ END";
             await evaluator.Evaluate(script);
 
             // Assert
-            var prints = evaluator.Messages.Where(l => l.StartsWith("Task ")).ToList();
+            var prints = evaluator.Messages.Where(l => l.Message.StartsWith("Task ")).Select(l => l.Message).ToList();
             Assert.Equal(5, prints.Count);
             Assert.Equal("Task 1", prints[0]);
             Assert.Equal("Task 2", prints[1]);

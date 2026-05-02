@@ -24,9 +24,9 @@ namespace ETL_SQL.TUI.UI
 
         // IUIComponent: scrollRow drives messages; tree always starts at 0.
         public void Render(IConsoleInterface console, int x, int y, int width, int height, int scrollRow = 0)
-            => Render(console, x, y, width, height, treeScroll: 0, msgScroll: scrollRow);
+            => Render(console, x, y, width, height, treeScroll: 0, msgScroll: scrollRow, focus: EditorFocus.Messages);
 
-        public void Render(IConsoleInterface console, int x, int y, int width, int height, int treeScroll, int msgScroll)
+        public void Render(IConsoleInterface console, int x, int y, int width, int height, int treeScroll, int msgScroll, EditorFocus focus)
         {
             if (height < 4 || width < 14) return;
 
@@ -37,7 +37,7 @@ namespace ETL_SQL.TUI.UI
             }
 
             // Tree column gets ~35% of inner width, capped to keep it readable
-            int innerRows = height - 3;   // table header row + top border + bottom border
+            int innerRows = height - 2;   // Panel Top(1) + Bottom(1). Header is on the border.
             int treeColContent = Math.Min(44, Math.Max(18, (width - 6) * 35 / 100));
 
             // Build tree markup
@@ -46,26 +46,44 @@ namespace ETL_SQL.TUI.UI
             string treeMarkup = FormatTreeMarkup(visibleTree, treeColContent);
 
             // Build message markup
+            int msgColWidth = width - treeColContent - 6; 
             var visibleMsgs = _evaluator.Messages.Skip(msgScroll).Take(innerRows).ToList();
-            string msgMarkup = FormatMsgMarkup(visibleMsgs);
+            string msgMarkup = FormatMsgMarkup(visibleMsgs, msgColWidth);
 
-            // Column headers with scroll indicators
-            string treeHeader = treeScroll > 0 ? $"[bold cyan]Pipeline[/] [grey]↑{treeScroll}[/]" : "[bold cyan]Pipeline[/]";
-            string msgHeader  = msgScroll  > 0 ? $"[yellow]Messages[/] [grey]↑{msgScroll}[/]"    : "[yellow]Messages[/]";
+            // Column headers with scroll indicators and focus highlights
+            bool treeFocused = focus == EditorFocus.ExecutionTree;
+            bool msgFocused  = focus == EditorFocus.Messages;
+
+            string treeHeader = treeFocused ? "[bold cyan]▶ Pipeline[/]" : "[cyan]Pipeline[/]";
+            if (treeScroll > 0) treeHeader += $" [grey]↑{treeScroll}[/]";
+
+            string msgHeader = msgFocused ? "[bold yellow]▶ Messages[/]" : "[yellow]Messages[/]";
+            if (msgScroll > 0) msgHeader += $" [grey]↑{msgScroll}[/]";
 
             var table = new Table()
-                .Border(TableBorder.Rounded)
-                .BorderColor(Color.Grey23)
-                .Width(width)
-                .AddColumn(new TableColumn(treeHeader).Width(treeColContent))
-                .AddColumn(new TableColumn(msgHeader));
+                .Border(TableBorder.None)
+                .HideHeaders()
+                .NoSafeBorder()
+                .Width(width - 2) // Accounting for panel borders
+                .Expand()
+                .AddColumn(new TableColumn("").Width(treeColContent))
+                .AddColumn(new TableColumn(""));
 
             table.AddRow(
                 new Markup(string.IsNullOrEmpty(treeMarkup) ? "[grey]No pipeline data.[/]" : treeMarkup),
                 new Markup(string.IsNullOrEmpty(msgMarkup)  ? "[grey]No messages.[/]"      : msgMarkup));
 
+            var panel = new Panel(table)
+            {
+                Header = new PanelHeader($"{treeHeader} [grey]│[/] {msgHeader}"),
+                Height = height,
+                Border = BoxBorder.Rounded,
+                BorderStyle = new Style(treeFocused || msgFocused ? Color.Grey37 : Color.Grey23),
+                Padding = new Padding(0, 0, 0, 0)
+            };
+
             console.SetCursorPosition(x, y);
-            console.WriteWidget(table);
+            console.WriteWidget(panel);
         }
 
         private static string FormatTreeMarkup(List<TreeLine> lines, int colWidth)
@@ -115,10 +133,26 @@ namespace ETL_SQL.TUI.UI
             return sb.ToString();
         }
 
-        private static string FormatMsgMarkup(List<string> messages)
+        private static string FormatMsgMarkup(List<LogEntry> messages, int maxWidth)
         {
             if (messages.Count == 0) return "";
-            return string.Join("\n", messages.Select(m => Markup.Escape(m)));
+            return string.Join("\n", messages.Select(m => 
+            {
+                var colorMarkup = m.Color switch
+                {
+                    ConsoleColor.Red or ConsoleColor.DarkRed => "[red]",
+                    ConsoleColor.Yellow or ConsoleColor.DarkYellow => "[yellow]",
+                    ConsoleColor.Green or ConsoleColor.DarkGreen => "[green]",
+                    ConsoleColor.Cyan or ConsoleColor.DarkCyan => "[cyan]",
+                    ConsoleColor.Blue or ConsoleColor.DarkBlue => "[blue]",
+                    ConsoleColor.Gray or ConsoleColor.DarkGray => "[grey]",
+                    _ => ""
+                };
+
+                string msg = Truncate(m.Message, maxWidth).Replace("\n", " ").Replace("\r", "");
+                string escaped = Markup.Escape(msg);
+                return string.IsNullOrEmpty(colorMarkup) ? escaped : $"{colorMarkup}{escaped}[/]";
+            }));
         }
 
         private static string Truncate(string s, int max)

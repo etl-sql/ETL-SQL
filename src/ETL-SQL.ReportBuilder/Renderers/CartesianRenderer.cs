@@ -34,8 +34,8 @@ namespace ETL_SQL.ReportBuilder.Renderers
                 title = TitleOpt(v),
                 tooltip = new { trigger = "axis" },
                 legend = LegendOpt(v),
-                xAxis = BuildAxisOpts(v, "x", "value"),
-                yAxis = BuildAxisOpts(v, "y", "category", labels),
+                xAxis = BuildAxisOpts(v, "y", "value"),
+                yAxis = BuildAxisOpts(v, "x", "category", labels),
                 series = ApplyCommonSeriesOptions(v, series, stacked: IsOn(v.Options.GetValueOrDefault("STACKED")), smooth: false)
             });
         }

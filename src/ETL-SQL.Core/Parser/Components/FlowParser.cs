@@ -100,16 +100,31 @@ namespace ETL_SQL.Core.Parser.Components
                 };
             }
 
-            // FOR @i = start TO end [STEP n] — numeric range iteration
-            Consume(TokenType.EQUALS, "Expected '=' or 'IN' in FOR loop");
-            var startExpr = ParseExpression();
-            Consume(TokenType.TO, "Expected TO in FOR loop limits");
+            // FOR @i [= start] TO end [STEP n] — numeric range iteration
+            Expression startExpr;
+            bool isImplicit = false;
+            if (Match(TokenType.EQUALS))
+            {
+                startExpr = ParseExpression();
+                Consume(TokenType.TO, "Expected TO in FOR loop limits");
+            }
+            else if (Match(TokenType.TO))
+            {
+                // Implicit start at 1
+                startExpr = new LiteralExpression(1m, TokenType.NUMBER) { Line = varToken.Line, Column = varToken.Column };
+                isImplicit = true;
+            }
+            else
+            {
+                throw new SyntaxException("Expected '=' or 'IN' in FOR loop", _parser.Current.Line, _parser.Current.Column);
+            }
             var endExpr = ParseExpression();
             Expression? stepExpr = null;
             if (Match(TokenType.STEP)) stepExpr = ParseExpression();
             var rangeBody = _parser.ParseStatement();
             return new ForStatement(varToken.Value, startExpr, endExpr, stepExpr, rangeBody)
             {
+                IsStartImplicit = isImplicit,
                 Line = startToken.Line,
                 Column = startToken.Column,
                 EndLine = _parser.LastTokenEndLine,
@@ -146,9 +161,22 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.FOR))
             {
                 var varToken = Consume(TokenType.VARIABLE, "Expected loop variable after PARALLEL FOR");
-                Consume(TokenType.EQUALS, "Expected '=' in PARALLEL FOR range");
-                var startExpr = ParseExpression();
-                Consume(TokenType.TO, "Expected TO in PARALLEL FOR range");
+                Expression startExpr;
+                bool isImplicit = false;
+                if (Match(TokenType.EQUALS))
+                {
+                    startExpr = ParseExpression();
+                    Consume(TokenType.TO, "Expected TO in PARALLEL FOR range");
+                }
+                else if (Match(TokenType.TO))
+                {
+                    startExpr = new LiteralExpression(1m, TokenType.NUMBER) { Line = varToken.Line, Column = varToken.Column };
+                    isImplicit = true;
+                }
+                else
+                {
+                    throw new SyntaxException("Expected '=' or 'TO' in PARALLEL FOR range", _parser.Current.Line, _parser.Current.Column);
+                }
                 var endExpr = ParseExpression();
                 Expression? stepExpr = null;
                 if (Match(TokenType.STEP)) stepExpr = ParseExpression();
@@ -156,6 +184,7 @@ namespace ETL_SQL.Core.Parser.Components
                 var forBody = ParseBlock();
                 return new ParallelForStatement(varToken.Value, startExpr, endExpr, stepExpr, forBody, concurrencyLimit)
                 {
+                    IsStartImplicit = isImplicit,
                     Line = startToken.Line, Column = startToken.Column
                 };
             }

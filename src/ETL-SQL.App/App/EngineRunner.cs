@@ -162,6 +162,15 @@ namespace ETL_SQL.App
                 var lintResults = await linter.AnalyzeAsync(script, new DefaultLintContext { DocumentUri = ctx.ScriptFile.FullName });
                 lintTime.Stop();
 
+                var lintInfos = lintResults.Where(r => r.Severity == LintSeverity.Info).ToList();
+                if (lintInfos.Any() && !ctx.IsSilentMode)
+                {
+                    foreach (var i in lintInfos)
+                    {
+                        logger.WriteLine($"  - Linter Info: {i.Message} (Line {i.LineNumber}, Col {i.ColumnNumber})", ConsoleColor.Cyan);
+                    }
+                }
+
                 var lintWarnings = lintResults.Where(r => r.Severity == LintSeverity.Warning).ToList();
                 if (lintWarnings.Any() && !ctx.IsSilentMode)
                 {

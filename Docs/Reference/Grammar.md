@@ -1905,7 +1905,6 @@ CREATE PAGE <name> AS LAYOUT (
   )
   [, STYLE ( key = value [, ...] )]
 )
-[WITH PARAMETERS ( @param [AS type] [DEFAULT default | = default] [, ...] )]
 ;
 ```
 

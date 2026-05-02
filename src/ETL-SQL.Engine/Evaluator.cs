@@ -120,7 +120,7 @@ namespace ETL_SQL.Engine
         [System.Obsolete("Use Telemetry.ProfileMetrics")]
         public List<ExecutionMetrics> ProfileMetrics => Telemetry.ProfileMetrics;
         
-        public List<string> Messages { get; } = new();
+        public List<LogEntry> Messages { get; } = new();
         public int MaxMessages { get; set; } = 1000;
         
         public IVariableContext VarContext => _variableScopeManager;
@@ -467,7 +467,7 @@ namespace ETL_SQL.Engine
                     var scrubbed = Scrub(msg);
                     lock (_messagesLock)
                     {
-                        Messages.Add(scrubbed);
+                        Messages.Add(new LogEntry(scrubbed, col, DateTime.UtcNow));
                         if (Messages.Count > MaxMessages)
                             Messages.RemoveAt(0);
                     }
@@ -909,12 +909,15 @@ namespace ETL_SQL.Engine
 
             lock (_messagesLock)
             {
-                Messages.Add(scrubbed);
+                Messages.Add(new LogEntry(scrubbed, color, DateTime.Now));
                 if (Messages.Count > MaxMessages)
                 {
                     Messages.RemoveAt(0);
-                    if (Messages.Count > 0 && !Messages[0].StartsWith("[TRUNCATED]"))
-                        Messages[0] = "[TRUNCATED] " + Messages[0];
+                    if (Messages.Count > 0 && !Messages[0].Message.StartsWith("[TRUNCATED]"))
+                    {
+                        var first = Messages[0];
+                        Messages[0] = first with { Message = "[TRUNCATED] " + first.Message };
+                    }
                 }
             }
         }
@@ -1059,7 +1062,7 @@ namespace ETL_SQL.Engine
                 LastResultSets.AddRange(spawned.LastResultSets);
                 if (spawned.LastResult != null) LastResult = spawned.LastResult;
             }
-            lock (_messagesLock) foreach (var msg in spawned.Messages) Log(msg);
+            lock (_messagesLock) foreach (var entry in spawned.Messages) Log(entry.Message, entry.Color);
             
             Telemetry.RowsProcessed += spawned.Telemetry.RowsProcessed;
             Telemetry.TotalSpilledBytes += spawned.Telemetry.TotalSpilledBytes;

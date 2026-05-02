@@ -97,7 +97,7 @@ namespace ETL_SQL.Core.Common
         public bool IsVerbose { get; set; }
         public bool ShowPassword { get; set; }
         public bool RedirectOutput { get; set; }
-        public List<string> Messages { get; } = new();
+        public List<LogEntry> Messages { get; } = new();
         public int MaxMessages { get; set; } = 1000;
         public Func<string, Task<bool>>? OnPrompt { get; set; }
         public bool IsPersistentSession { get; set; }
@@ -219,7 +219,13 @@ namespace ETL_SQL.Core.Common
         public Task CommitTransaction() => Task.CompletedTask;
         public Task RollbackTransaction(string? name = null) => Task.CompletedTask;
 
-        public void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true) { }
+        public void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true) 
+        {
+            if (Messages.Count >= MaxMessages && MaxMessages > 0)
+                Messages.RemoveAt(0);
+
+            Messages.Add(new LogEntry(message, color, DateTime.UtcNow));
+        }
 
         public Task<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false) => Task.FromResult<object?>(null);
         public IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context) => AsyncEnumerable.Empty<Row>();

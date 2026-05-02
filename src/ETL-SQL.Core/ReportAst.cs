@@ -209,11 +209,7 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
-    /// <summary>
-    /// CREATE PAGE &lt;name&gt; AS LAYOUT (
-    ///     STRUCTURE = '...',
-    ///     MAP ( 'A' = VisualName, ... )
-    /// ) WITH PARAMETERS ( @name = default, ... );
+    /// ) ;
     /// </summary>
     public record CreatePageStatement : Statement
     {

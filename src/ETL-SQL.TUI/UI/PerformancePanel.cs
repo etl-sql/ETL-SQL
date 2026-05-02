@@ -43,7 +43,7 @@ namespace ETL_SQL.TUI.UI
                 .AddItem("Mem Delta", Math.Abs(lastMetrics?.MemoryDeltaBytes ?? 0) / 1024, Color.Blue);
 
             // 2. Telemetry Table
-            var statsTable = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey);
+            var statsTable = new Table().Border(TableBorder.Rounded).BorderColor(_renderer.Focus == EditorFocus.Performance ? Color.Grey37 : Color.Grey);
             statsTable.AddColumn("Metric");
             statsTable.AddColumn("Value");
             

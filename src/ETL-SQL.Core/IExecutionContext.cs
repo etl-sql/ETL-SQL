@@ -83,13 +83,15 @@ namespace ETL_SQL.Core
         IDockerManager DockerManager { get; }
     }
 
+    public record LogEntry(string Message, ConsoleColor Color, DateTime Timestamp);
+
     public interface ILoggingContext
     {
         ETL_SQL.Common.ILogger Logger { get; }
         bool IsVerbose { get; set; }
         bool ShowPassword { get; set; }
         bool RedirectOutput { get; set; }
-        List<string> Messages { get; }
+        List<LogEntry> Messages { get; }
         int MaxMessages { get; set; }
         void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true);
         /// <summary>

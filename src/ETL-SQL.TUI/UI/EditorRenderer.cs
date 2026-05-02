@@ -7,6 +7,15 @@ using ETL_SQL.ReportBuilder;
 
 namespace ETL_SQL.TUI.UI
 {
+    public enum EditorFocus
+    {
+        Editor,
+        ExecutionTree,
+        Messages,
+        Results,
+        Performance
+    }
+
     /// <summary>
     /// Orchestrates the visual representation of the editor, including panels, status bars, and overlays.
     /// </summary>
@@ -23,7 +32,8 @@ namespace ETL_SQL.TUI.UI
         public List<Suggestion> AutocompleteOptions { get; set; } = new();
         public int AutocompleteIndex { get; set; } = 0;
 
-        public bool ResultsFocus { get; set; } = false;
+        public EditorFocus Focus { get; set; } = EditorFocus.Editor;
+        public bool ResultsFocus => Focus == EditorFocus.Results;
         public int ResultScrollRow { get; set; } = 0;
         public int ResultScrollCol { get; set; } = 0;
         public int MessageScrollRow { get; set; } = 0;
@@ -111,12 +121,15 @@ namespace ETL_SQL.TUI.UI
             // ── Layout Definitions ──────────────────────────────────────────
             int editorAreaTop = 1;
             int statusHeight  = 2; // Two lines for status/help bar
+            int reservedBottom = statusHeight + 4; // status bar + 4 lines buffer for high-density safety
 
-            int lowerAreaHeight = (int)(totalHeight * 0.4);
-            if (IsBottomMaximized || CompareMode) lowerAreaHeight = Math.Max(5, totalHeight - editorAreaTop - statusHeight - 5);
-            if (lowerAreaHeight < 5) lowerAreaHeight = 5;
+            // Prioritize 14 lines for the lower area to show 10 messages + rounded borders correctly
+            int lowerAreaHeight = 14; 
+            int available = totalHeight - editorAreaTop - reservedBottom;
+            if (IsBottomMaximized || CompareMode) lowerAreaHeight = Math.Max(5, available - 5);
+            else if (lowerAreaHeight > available - 8) lowerAreaHeight = Math.Max(5, available - 8);
 
-            int editorAreaHeight = Math.Max(3, totalHeight - lowerAreaHeight - statusHeight - editorAreaTop);
+            int editorAreaHeight = Math.Max(3, totalHeight - lowerAreaHeight - reservedBottom - editorAreaTop);
             int gutterWidth = (buffer.Lines.Count).ToString().Length + 2;
 
             // Report Preview takes over the entire central area if enabled
@@ -176,11 +189,11 @@ namespace ETL_SQL.TUI.UI
                 _console.ClearLine(0, 0, totalWidth);
                 string fileLabel = string.IsNullOrEmpty(filePath) ? "Untitled.etlsql" : System.IO.Path.GetFileName(filePath);
                 string headerBase = $" ETL-SQL IDE | {fileLabel}{(isDirty ? "*" : "")}";
-                string focusInfo = !ResultsFocus ? " [bold yellow](FOCUSED)[/]" : " [grey](F3 to focus)[/]";
+                string focusInfo = Focus == EditorFocus.Editor ? " [bold yellow](FOCUSED)[/]" : " [grey](F3 to focus)[/]";
                 
                 _console.Markup($"[white on grey15]{Markup.Escape(headerBase)} [/]{focusInfo}");
                 
-                int plainLen = headerBase.Length + 1 + (!ResultsFocus ? 9 : 13);
+                int plainLen = headerBase.Length + 1 + (Focus == EditorFocus.Editor ? 9 : 13);
                 if (totalWidth > plainLen)
                     _console.Markup($"[white on grey15]{new string(' ', totalWidth - plainLen)}[/]");
             }
@@ -198,7 +211,7 @@ namespace ETL_SQL.TUI.UI
                 else if (ResultsVisible)
                     _resultsPanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight, ResultScrollRow);
                 else
-                    _messageTreePanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight, TreeScrollRow, MessageScrollRow);
+                    _messageTreePanel.Render(_console, 0, lowerY, totalWidth, lowerAreaHeight, TreeScrollRow, MessageScrollRow, Focus);
             }
         }
 
@@ -222,8 +235,14 @@ namespace ETL_SQL.TUI.UI
                 bool hasError = evaluator.LastError != null;
                 if (CompareMode)
                     panelPill = $"[bold magenta] COMPARE {CompareFocusIndex + 1}/{Math.Max(1, evaluator.LastResultSets.Count)} [/]";
-                else if (ResultsFocus)
+                else if (Focus == EditorFocus.Results)
                     panelPill = "[bold yellow] ▶ RESULTS FOCUS [/]";
+                else if (Focus == EditorFocus.ExecutionTree)
+                    panelPill = "[bold cyan] ▶ PIPELINE FOCUS [/]";
+                else if (Focus == EditorFocus.Messages)
+                    panelPill = "[bold yellow] ▶ MESSAGES FOCUS [/]";
+                else if (Focus == EditorFocus.Performance)
+                    panelPill = "[bold magenta] ▶ PERF FOCUS [/]";
                 else if (hasError)
                     panelPill = "[bold red] ✗ ERROR [/]";
                 else if (PerformanceVisible)

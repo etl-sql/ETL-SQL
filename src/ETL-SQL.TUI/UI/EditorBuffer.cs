@@ -177,6 +177,14 @@ namespace ETL_SQL.TUI.UI
             CursorColumn = Math.Min(CursorColumn, Lines[CursorLine].Length);
         }
 
+        public void ClearSelection()
+        {
+            SelectionStartLine = null;
+            SelectionStartCol = null;
+            SecondaryCursors.Clear();
+            IsMultiLineMode = false;
+        }
+
         public void ClearMultiCursors()
         {
             SecondaryCursors.Clear();

@@ -140,13 +140,13 @@ namespace ETL_SQL.Tests.Hardening.Hardening
                 bool hasSecurityError = result.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error && (d.Message.Contains("Safety limit of 100", StringComparison.OrdinalIgnoreCase) || d.Message.Contains("Runaway", StringComparison.OrdinalIgnoreCase)));
                 if (hasSecurityError || result.Messages.Count == 0)
                 {
-                    var msgs = string.Join("\n", result.Messages);
+                    var msgs = string.Join("\n", result.Messages.Select(m => m.Message));
                     var diags = string.Join("\n", result.Diagnostics.Select(d => d.Message));
                     Assert.Fail($"Security override failed or no messages captured.\nDIAGNOSTICS:\n{diags}\nMESSAGES:\n{msgs}");
                 }
                 
                 // PROACTIVE CHECK: verify exactly 101 operations were 'performed' in WHAT_IF mode
-                int attemptCount = result.Messages.Count(m => m.Contains("Would perform Delete_FILE", StringComparison.OrdinalIgnoreCase));
+                int attemptCount = result.Messages.Count(m => m.Message.Contains("Would perform Delete_FILE", StringComparison.OrdinalIgnoreCase));
                 Assert.Equal(101, attemptCount);
             }
             finally

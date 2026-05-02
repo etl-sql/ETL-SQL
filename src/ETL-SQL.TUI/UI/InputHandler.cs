@@ -51,10 +51,12 @@ namespace ETL_SQL.TUI.UI
             if (key.Key == ConsoleKey.Escape)
             {
                 _renderer.IsBottomMaximized = false;
-                if (_buffer.IsMultiLineMode)
+                if (_buffer.SelectionStartLine.HasValue || _buffer.IsMultiLineMode)
                 {
-                    _buffer.ClearMultiCursors();
-                    _renderer.ShowStatus("Multi-line mode disabled.");
+                    _buffer.ClearSelection();
+                    _renderer.ForceFullRepaint();
+                    _renderer.ShowStatus("Selection cleared.");
+                    return;
                 }
                 return;
             }
@@ -157,13 +159,36 @@ namespace ETL_SQL.TUI.UI
             }
 
 
-            // F6/F3 - Focus Toggle
+            // F6/F3 - Focus Toggle (Cycles: Editor -> Execution Tree -> Messages -> Results -> Performance)
             if (key.Key == ConsoleKey.F6 || key.Key == ConsoleKey.F3)
             {
-                _renderer.ResultsFocus = !_renderer.ResultsFocus;
+                _renderer.Focus = _renderer.Focus switch
+                {
+                    EditorFocus.Editor => EditorFocus.ExecutionTree,
+                    EditorFocus.ExecutionTree => EditorFocus.Messages,
+                    EditorFocus.Messages => EditorFocus.Results,
+                    EditorFocus.Results => EditorFocus.Performance,
+                    EditorFocus.Performance => EditorFocus.Editor,
+                    _ => EditorFocus.Editor
+                };
+
+                // Auto-show panels when focused
+                if (_renderer.Focus == EditorFocus.Results) { _renderer.ResultsVisible = true; _renderer.PerformanceVisible = false; }
+                else if (_renderer.Focus == EditorFocus.Performance) { _renderer.PerformanceVisible = true; _renderer.ResultsVisible = false; }
+                else if (_renderer.Focus == EditorFocus.ExecutionTree || _renderer.Focus == EditorFocus.Messages) { _renderer.ResultsVisible = false; _renderer.PerformanceVisible = false; }
+
                 _renderer.AutocompleteVisible = false;
                 _renderer.ForceFullRepaint();
-                _renderer.ShowStatus(_renderer.ResultsFocus ? "Focus: Results (↑↓ ⇞ ⇟)" : "Focus: Editor");
+                
+                string focusName = _renderer.Focus switch {
+                    EditorFocus.Editor => "Editor",
+                    EditorFocus.ExecutionTree => "Pipeline Tree",
+                    EditorFocus.Messages => "Messages",
+                    EditorFocus.Results => "Query Results",
+                    EditorFocus.Performance => "Performance Metrics",
+                    _ => "Editor"
+                };
+                _renderer.ShowStatus($"Focus: {focusName}");
                 return;
             }
 
@@ -225,8 +250,9 @@ namespace ETL_SQL.TUI.UI
                     { _renderer.ResultsVisible = false; _renderer.PerformanceVisible = true; _renderer.ShowStatus("View: Performance Metrics"); }
                 else
                     { _renderer.PerformanceVisible = false; _renderer.ShowStatus("View: Pipeline & Messages"); }
-            _renderer.ForceFullRepaint();
-            return;
+                _renderer.Focus = EditorFocus.Editor;
+                _renderer.ForceFullRepaint();
+                return;
         }
 
         // Alt+R - Toggle Report Preview (Phase 5)
@@ -235,7 +261,7 @@ namespace ETL_SQL.TUI.UI
             _renderer.ReportVisible = !_renderer.ReportVisible;
             if (_renderer.ReportVisible)
             {
-                _renderer.ResultsFocus = false;
+                _renderer.Focus = EditorFocus.Editor;
                 _renderer.AutocompleteVisible = false;
 
                 // If no report has been built yet, try running the script automatically
@@ -270,9 +296,9 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            if (_renderer.ResultsFocus)
+            if (_renderer.ResultsFocus || _renderer.Focus == EditorFocus.ExecutionTree || _renderer.Focus == EditorFocus.Messages || _renderer.Focus == EditorFocus.Performance)
             {
-                HandleResultsKey(key);
+                HandleFocusedPanelKey(key);
                 return;
             }
 
@@ -366,24 +392,46 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
+        private void HandleFocusedPanelKey(ConsoleKeyInfo key)
+        {
+            if (key.Key == ConsoleKey.Escape)
+            {
+                _renderer.IsBottomMaximized = false;
+                if (!string.IsNullOrEmpty(_renderer.FilterText))
+                {
+                    _renderer.FilterText = "";
+                    _renderer.ResultScrollRow = 0;
+                    _renderer.ShowStatus("Filter cleared.");
+                }
+                else
+                {
+                    _renderer.Focus = EditorFocus.Editor;
+                    _renderer.ShowStatus("Focused: Editor");
+                }
+                return;
+            }
+
+            switch (_renderer.Focus)
+            {
+                case EditorFocus.Results:
+                    HandleResultsKey(key);
+                    break;
+                case EditorFocus.Performance:
+                    HandlePerformanceKey(key);
+                    break;
+                case EditorFocus.ExecutionTree:
+                    HandleTreeKey(key);
+                    break;
+                case EditorFocus.Messages:
+                    HandleMessagesKey(key);
+                    break;
+            }
+        }
+
         private void HandleResultsKey(ConsoleKeyInfo key)
         {
             switch (key.Key)
             {
-                case ConsoleKey.Escape:
-                    _renderer.IsBottomMaximized = false;
-                    if (!string.IsNullOrEmpty(_renderer.FilterText))
-                    {
-                        _renderer.FilterText = "";
-                        _renderer.ResultScrollRow = 0;
-                        _renderer.ShowStatus("Filter cleared.");
-                    }
-                    else
-                    {
-                        _renderer.ResultsFocus = false;
-                        _renderer.ShowStatus("Focused: Editor");
-                    }
-                    break;
                 case ConsoleKey.UpArrow: 
                     _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 1); 
                     break;
@@ -412,6 +460,42 @@ namespace ETL_SQL.TUI.UI
                         _renderer.ShowStatus($"View: Result Set {_renderer.ActiveResultSetIndex + 1}/{_editor._evaluator.LastResultSets.Count}");
                     }
                     break;
+            }
+        }
+
+        private void HandlePerformanceKey(ConsoleKeyInfo key)
+        {
+            switch (key.Key)
+            {
+                case ConsoleKey.UpArrow: _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 1); break;
+                case ConsoleKey.DownArrow: _renderer.ResultScrollRow++; break;
+                case ConsoleKey.PageUp: _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 10); break;
+                case ConsoleKey.PageDown: _renderer.ResultScrollRow += 10; break;
+                case ConsoleKey.Home: _renderer.ResultScrollRow = 0; break;
+            }
+        }
+
+        private void HandleTreeKey(ConsoleKeyInfo key)
+        {
+            switch (key.Key)
+            {
+                case ConsoleKey.UpArrow: _renderer.TreeScrollRow = Math.Max(0, _renderer.TreeScrollRow - 1); break;
+                case ConsoleKey.DownArrow: _renderer.TreeScrollRow++; break;
+                case ConsoleKey.PageUp: _renderer.TreeScrollRow = Math.Max(0, _renderer.TreeScrollRow - 10); break;
+                case ConsoleKey.PageDown: _renderer.TreeScrollRow += 10; break;
+                case ConsoleKey.Home: _renderer.TreeScrollRow = 0; break;
+            }
+        }
+
+        private void HandleMessagesKey(ConsoleKeyInfo key)
+        {
+            switch (key.Key)
+            {
+                case ConsoleKey.UpArrow: _renderer.MessageScrollRow = Math.Max(0, _renderer.MessageScrollRow - 1); break;
+                case ConsoleKey.DownArrow: _renderer.MessageScrollRow++; break;
+                case ConsoleKey.PageUp: _renderer.MessageScrollRow = Math.Max(0, _renderer.MessageScrollRow - 10); break;
+                case ConsoleKey.PageDown: _renderer.MessageScrollRow += 10; break;
+                case ConsoleKey.Home: _renderer.MessageScrollRow = 0; break;
             }
         }
 

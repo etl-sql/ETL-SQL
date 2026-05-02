@@ -46,7 +46,7 @@ namespace ETL_SQL.TUI.UI
                 : "";
             string stats = $"[cyan]Set {_renderer.ActiveResultSetIndex + 1}/{_evaluator.LastResultSets.Count} | {res.ExecutionTimeMs}ms | {res.TotalRowsMatched}{(res.TotalRowsMatched >= 1000 ? "+" : "")} rows[/]{filterInfo}";
 
-            var table = new Table().Border(TableBorder.Rounded).BorderColor(Color.Grey).Expand();
+            var table = new Table().Border(TableBorder.Rounded).BorderColor(_renderer.ResultsFocus ? Color.Grey37 : Color.Grey).Expand();
             var visibleColumns = res.ColumnNames.Skip(_renderer.ResultScrollCol).Take(10).ToList();
             foreach (var col in visibleColumns) table.AddColumn($"[bold cyan]{Markup.Escape(col)}[/]");
 

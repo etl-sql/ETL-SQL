@@ -320,7 +320,7 @@ const VisualCard: React.FC<{
 
             <div className={clsx(
                 "p-6 flex-1 relative overflow-hidden",
-                isFilter ? "min-h-[auto]" : "min-h-[250px]"
+                isFilter ? "min-h-[auto]" : "min-h-[150px]"
             )}>
                 {visual.error ? (
                     <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3 opacity-60">
@@ -331,6 +331,7 @@ const VisualCard: React.FC<{
                     <div className="h-full w-full">
                          {type === 'TABLE' && <ReportTable visual={visual} />}
                          {type === 'CARD' && <ReportCard visual={visual} />}
+                         {type === 'TEXT' && <ReportText visual={visual} />}
                          {type === 'SLICER' && (
                              <ReportSlicer 
                                  visual={visual} 
@@ -339,7 +340,7 @@ const VisualCard: React.FC<{
                              />
                          )}
                          {type === 'IMAGE' && <ReportImage visual={visual} />}
-                         {['BAR', 'LINE', 'PIE', 'DONUT', 'SCATTER', 'HBAR', 'BOXPLOT', 'TREEMAP', 'HEATMAP', 'COMBO', 'GAUGE', 'FUNNEL', 'WATERFALL'].includes(type) && (
+                         {['BAR', 'LINE', 'PIE', 'DONUT', 'SCATTER', 'HBAR', 'HORIZONTALBAR', 'BOXPLOT', 'TREEMAP', 'HEATMAP', 'COMBO', 'GAUGE', 'FUNNEL', 'WATERFALL'].includes(type) && (
                              <ReportChart visual={visual} />
                          )}
                     </div>
@@ -370,6 +371,11 @@ const ReportChart: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
                 ? JSON.parse(visual.chartConfig) 
                 : visual.chartConfig;
             
+            // DEBUG: Log HBAR options if blank
+            if (visual.visualType.toUpperCase() === 'HBAR') {
+                console.log('[DEBUG] HBAR config:', option);
+            }
+
             // Inject transparent background for glassmorphism integration
             option.backgroundColor = 'transparent';
             
@@ -388,7 +394,7 @@ const ReportChart: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
         };
     }, [visual.chartConfig, isDark]);
 
-    return <div ref={chartRef} className="w-full h-full min-h-[300px]" />;
+    return <div ref={chartRef} className="w-full h-full min-h-[150px]" />;
 };
 
 const ReportTable: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
@@ -627,6 +633,17 @@ const ReportImage: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
                 className="max-w-full max-h-full transition-transform duration-500 group-hover:scale-105"
                 style={{ objectFit: fit as any }}
             />
+        </div>
+    );
+};
+
+const ReportText: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
+    // TEXT visuals usually store their content in defaultValue (parsed from VALUE property)
+    const text = visual.defaultValue || visual.options['VALUE'] || visual.options['value'] || '';
+    
+    return (
+        <div className="w-full h-full min-h-[100px] overflow-y-auto whitespace-pre-wrap text-[var(--text)] text-sm opacity-90 leading-relaxed font-mono bg-transparent">
+            {text}
         </div>
     );
 };

@@ -1001,6 +1001,7 @@ namespace ETL_SQL.Core
         public Expression EndValue { get; }
         public Expression? StepValue { get; }
         public Statement Body { get; }
+        public bool IsStartImplicit { get; init; }
 
         public ForStatement(string variableName, Expression startValue, Expression endValue, Expression? stepValue, Statement body)
         {
@@ -1190,6 +1191,7 @@ namespace ETL_SQL.Core
         public Expression? StepValue { get; }
         public Statement Body { get; }
         public int ConcurrencyLimit { get; }
+        public bool IsStartImplicit { get; init; }
 
         public ParallelForStatement(string variableName, Expression startValue, Expression endValue, Expression? stepValue, Statement body, int concurrencyLimit = 0)
         {

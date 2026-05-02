@@ -10,6 +10,7 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
 using ETL_SQL.ReportBuilder;
 using ETL_SQL.ReportBuilder.Renderers;
+using ETL_SQL.Data;
 using Spectre.Console;
 
 namespace ETL_SQL.ReportBuilder.CLI
@@ -206,7 +207,7 @@ namespace ETL_SQL.ReportBuilder.CLI
                 foreach (var kv in parameters)
                 {
                     string name = kv.Key.StartsWith("@") ? kv.Key : "@" + kv.Key;
-                    evaluator.DeclareVariable(name, kv.Value);
+                    evaluator.DeclareVariable(name, kv.Value, new VariableMetadata { IsDeclared = false, IsInput = true });
                 }
             }
 

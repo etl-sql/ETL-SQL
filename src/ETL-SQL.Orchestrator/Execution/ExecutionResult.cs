@@ -23,7 +23,7 @@ namespace ETL_SQL.Orchestrator.Execution
         public long RowsProcessed { get; set; }
         public bool Success { get; set; }
         /// <summary>Captured log messages for display in the TUI.</summary>
-        public List<string> Messages { get; set; } = new();
+        public List<LogEntry> Messages { get; set; } = new();
         /// <summary>Active connections captured from the engine after execution, used for TUI autocomplete.</summary>
         public Dictionary<string, IDataSource> ActiveConnections { get; set; } = new();
     }

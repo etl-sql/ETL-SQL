@@ -1,6 +1,6 @@
 {
   "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\tui_test_report.rptsql",
-  "builtAt": "2026-05-02T01:01:53.6020801Z",
+  "builtAt": "2026-05-02T02:03:01.4966308Z",
   "title": "TUI Feature Showcase",
   "description": "Demonstrates terminal-based graphical rendering of ETL-SQL reports.",
   "visuals": [
@@ -557,7 +557,7 @@
   ],
   "datasets": [],
   "parameters": {
-    "@day": "Tue"
+    "@day": "Wed"
   },
   "telemetry": {
     "rowsProcessed": 34,
