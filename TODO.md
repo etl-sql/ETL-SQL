@@ -118,12 +118,12 @@
         - [x] Implement `TokenWindow` logic: extract the last 3-5 tokens leading up to the cursor.
         - [x] Define "Anchor Patterns" for: `CREATE`, `CREATE CONNECTION`, `FROM/JOIN`, `WITH`, `SET`.
         - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Pattern discovery works), Git Commit.
-    - [/] **Phase 2 — Connector & Option Intelligence**
-        - [ ] Dynamic Option Discovery: When inside `WITH(...)`, reverse-scan for the `ON <Type>` anchor and fetch valid `OptionNames` from `ConnectorRegistry`.
-        - [ ] Option Value Suggestions: After `<OptionName> =`, suggest known values (e.g., `COMMA`, `PIPE`, `FORMAT` types).
-        - [ ] Connection/Table Member Access: After `<Alias>.`, suggest columns; after `<Connection>.`, suggest tables.
-        - [ ] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Option/Value suggestions work), Git Commit.
-    - **Phase 3 — Priority & Fallback Tuning**
+    - [x] **Phase 2 — Connector & Option Intelligence**
+        - [x] Dynamic Option Discovery: When inside `WITH(...)`, reverse-scan for the `ON <Type>` anchor and fetch valid `OptionNames` from `ConnectorRegistry`.
+        - [x] Option Value Suggestions: After `<OptionName> =`, suggest known values (e.g., `COMMA`, `PIPE`, `FORMAT` types).
+        - [x] Connection/Table Member Access: After `<Alias>.`, suggest columns; after `<Connection>.`, suggest tables.
+        - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Option/Value suggestions work), Git Commit.
+    - [/] **Phase 3 — Priority & Fallback Tuning**
         - [ ] Weighting: Ensure `PatternProvider` results have the highest priority (`Priority 0`) in `SuggestionEngine`.
         - [ ] Fallback: Maintain `KeywordProvider` as the safety net for "small wins" (e.g., `SE` -> `SELECT`).
         - [ ] TUI Rendering: Verify that "Smart" suggestions appear at the top of the dropdown.

@@ -99,17 +99,33 @@ namespace ETL_SQL.Tests.Integration
         }
 
         [Fact]
-        public async Task WithClauseProvider_SuggestsOptions()
+        public async Task WithClauseProvider_SuggestsOptionValueDefaults()
         {
             var provider = new WithClauseProvider();
             var context = new SuggestionContext
             {
-                ScriptBefore = "CREATE CONNECTION C ON CSV('test.csv') WITH ("
+                ScriptBefore = "CREATE CONNECTION C ON CSV('test.csv') WITH (DELIMITER ="
             };
             
             var results = await provider.GetSuggestionsAsync(context);
-            Assert.Contains(results, s => s.Text == "DELIMITER");
-            Assert.Contains(results, s => s.Text == "HEADER");
+            Assert.Contains(results, s => s.Text == "COMMA");
+            Assert.Contains(results, s => s.Text == "PIPE");
+        }
+
+        [Fact]
+        public async Task DatabaseSchemaProvider_SuggestsTablesOnDot()
+        {
+            var mockDs = new MockSqlDataSource(SystemExecutionContext.Instance, "mock", "MOCKDB");
+            var provider = new DatabaseSchemaProvider();
+            var context = new SuggestionContext
+            {
+                Prefix       = "m.",
+                ScriptBefore = "SELECT * FROM m.",
+                Connections  = new Dictionary<string, IDataSource> { ["m"] = mockDs }
+            };
+
+            var results = await provider.GetSuggestionsAsync(context);
+            Assert.Contains(results, s => s.Text == "m.Users");
         }
 
         [Fact]

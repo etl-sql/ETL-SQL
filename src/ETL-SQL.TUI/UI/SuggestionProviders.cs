@@ -273,42 +273,65 @@ namespace ETL_SQL.TUI.UI
             var results = new List<Suggestion>();
             try
             {
-                var upperScriptBefore = context.ScriptBefore.ToUpperInvariant();
-                int withIndex = upperScriptBefore.LastIndexOf("WITH", StringComparison.OrdinalIgnoreCase);
-                
-                if (withIndex >= 0)
+                // Check if we are inside a WITH (...) block
+                var scriptBefore = context.ScriptBefore;
+                int lastWith = scriptBefore.LastIndexOf("WITH", StringComparison.OrdinalIgnoreCase);
+                if (lastWith < 0) return Task.FromResult<IEnumerable<Suggestion>>(results);
+
+                string afterWith = scriptBefore.Substring(lastWith);
+                int openParen = afterWith.IndexOf('(');
+                int closeParen = afterWith.IndexOf(')');
+
+                // We must be between ( and ) or after ( if no ) exists yet
+                if (openParen >= 0 && (closeParen < 0 || openParen > closeParen))
                 {
-                    string afterWith = upperScriptBefore.Substring(withIndex);
-                    int openParen = afterWith.IndexOf('(');
+                    // 1. Dynamic Option Discovery: Find the connector type
+                    // Reverse scan for "ON <Type>" before the WITH
+                    string beforeWith = scriptBefore.Substring(0, lastWith);
+                    var onMatch = Regex.Match(beforeWith, @"\bON\s+(\w+)\b", RegexOptions.IgnoreCase | RegexOptions.RightToLeft);
                     
-                    if (openParen >= 0)
+                    if (onMatch.Success)
                     {
-                        var lastCreateConnPart = upperScriptBefore.Substring(0, withIndex);
-                        var matches = Regex.Matches(lastCreateConnPart, @"ON\s+(\w+)", RegexOptions.IgnoreCase);
-                        if (matches.Cast<Match>().Any())
+                        string connectorType = onMatch.Groups[1].Value.ToUpperInvariant();
+                        var connector = ConnectorRegistry.Instance!.GetConnector(connectorType);
+                        if (connector != null)
                         {
-                            string type = matches.Cast<Match>().Last().Groups[1].Value.ToUpperInvariant();
-                            var connector = ConnectorRegistry.Instance!.GetConnector(type);
-                            if (connector != null)
-                            {
-                                var options = connector.GetSupportedOptions();
-                                var usedOptions = Regex.Matches(afterWith, @"(\w+)\s*=", RegexOptions.IgnoreCase)
-                                    .Cast<Match>().Select(m => m.Groups[1].Value.ToUpperInvariant()).ToHashSet();
-                                
-                                results.AddRange(options.Keys.Where(o => !usedOptions.Contains(o.ToUpperInvariant())).Select(o => new Suggestion(o, SuggestionType.OptionName)));
-                            }
+                            var supportedOptions = connector.GetSupportedOptions();
+                            var usedOptions = Regex.Matches(afterWith, @"\b(\w+)\s*=", RegexOptions.IgnoreCase)
+                                .Cast<Match>().Select(m => m.Groups[1].Value.ToUpperInvariant()).ToHashSet();
+
+                            results.AddRange(supportedOptions.Keys
+                                .Where(o => !usedOptions.Contains(o.ToUpperInvariant()))
+                                .Select(o => new Suggestion(o, SuggestionType.OptionName)));
+                        }
+                    }
+
+                    // 2. Option Value Suggestions: After <OptionName> =
+                    var lineBefore = context.ScriptBefore.TrimEnd();
+                    var optionValueMatch = Regex.Match(lineBefore, @"\b(\w+)\s*=\s*['""]?(\w*)$", RegexOptions.IgnoreCase);
+                    if (optionValueMatch.Success)
+                    {
+                        string optionName = optionValueMatch.Groups[1].Value.ToUpperInvariant();
+                        
+                        // Check plugin values first
+                        var pluginValues = ConnectorRegistry.Instance!.GetAllConnectorOptionValues();
+                        if (pluginValues.TryGetValue(optionName, out var values))
+                        {
+                            results.AddRange(values.Select(v => new Suggestion(v, SuggestionType.OptionValue)));
                         }
 
-                        var lineBefore = context.ScriptBefore.TrimEnd();
-                        var optionMatch = Regex.Match(lineBefore, @"(\w+)\s*=\s*\w*$", RegexOptions.IgnoreCase);
-                        if (optionMatch.Success)
+                        // Add common defaults for standard options
+                        if (optionName == "FORMAT" || optionName == "TYPE")
                         {
-                            string optionName = optionMatch.Groups[1].Value.ToUpperInvariant();
-                            var pluginValues = ConnectorRegistry.Instance!.GetAllConnectorOptionValues();
-                            if (pluginValues.TryGetValue(optionName, out var values))
-                            {
-                                results.AddRange(values.Select(v => new Suggestion(v, SuggestionType.OptionValue)));
-                            }
+                            results.AddRange(new[] { "CSV", "JSON", "XML", "PARQUET", "AVRO", "EXCEL", "FLATFILE" }.Select(v => new Suggestion(v, SuggestionType.OptionValue)));
+                        }
+                        else if (optionName == "DELIMITER" || optionName == "FIELDTERMINATOR")
+                        {
+                            results.AddRange(new[] { "COMMA", "PIPE", "TAB", "SEMICOLON" }.Select(v => new Suggestion(v, SuggestionType.OptionValue)));
+                        }
+                        else if (optionName == "HEADER" || optionName == "FIRSTROW" || optionName == "STRICT_SCHEMA" || optionName == "TRUSTED_CONNECTION")
+                        {
+                            results.AddRange(new[] { "TRUE", "FALSE" }.Select(v => new Suggestion(v, SuggestionType.OptionValue)));
                         }
                     }
                 }
