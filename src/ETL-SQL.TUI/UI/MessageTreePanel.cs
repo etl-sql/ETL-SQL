@@ -47,8 +47,28 @@ namespace ETL_SQL.TUI.UI
 
             // Build message markup
             int msgColWidth = width - treeColContent - 6; 
-            var visibleMsgs = _evaluator.Messages.Skip(msgScroll).Take(innerRows).ToList();
-            string msgMarkup = FormatMsgMarkup(visibleMsgs, msgColWidth);
+            
+            // Expand messages into wrapped lines
+            var allLines = new List<DisplayLine>();
+            foreach (var m in _evaluator.Messages)
+            {
+                var wrapped = WrapText(m.Message, msgColWidth);
+                foreach (var lineText in wrapped)
+                {
+                    allLines.Add(new DisplayLine(lineText, m.Color));
+                }
+            }
+
+            var visibleLines = allLines.Skip(msgScroll).Take(innerRows).ToList();
+
+            // Safety: if scroll is out of bounds, show the last page
+            if (allLines.Count > 0 && !visibleLines.Any() && msgScroll > 0)
+            {
+                msgScroll = Math.Max(0, allLines.Count - innerRows);
+                visibleLines = allLines.Skip(msgScroll).Take(innerRows).ToList();
+            }
+
+            string msgMarkup = FormatLinesMarkup(visibleLines);
 
             // Column headers with scroll indicators and focus highlights
             bool treeFocused = focus == EditorFocus.ExecutionTree;
@@ -59,6 +79,7 @@ namespace ETL_SQL.TUI.UI
 
             string msgHeader = msgFocused ? "[bold yellow]▶ Messages[/]" : "[yellow]Messages[/]";
             if (msgScroll > 0) msgHeader += $" [grey]↑{msgScroll}[/]";
+            else if (allLines.Count > innerRows) msgHeader += " [grey]↓[/]";
 
             var table = new Table()
                 .Border(TableBorder.None)
@@ -133,12 +154,12 @@ namespace ETL_SQL.TUI.UI
             return sb.ToString();
         }
 
-        private static string FormatMsgMarkup(List<LogEntry> messages, int maxWidth)
+        private static string FormatLinesMarkup(List<DisplayLine> lines)
         {
-            if (messages.Count == 0) return "";
-            return string.Join("\n", messages.Select(m => 
+            if (lines.Count == 0) return "";
+            return string.Join("\n", lines.Select(l => 
             {
-                var colorMarkup = m.Color switch
+                var colorMarkup = l.Color switch
                 {
                     ConsoleColor.Red or ConsoleColor.DarkRed => "[red]",
                     ConsoleColor.Yellow or ConsoleColor.DarkYellow => "[yellow]",
@@ -148,12 +169,38 @@ namespace ETL_SQL.TUI.UI
                     ConsoleColor.Gray or ConsoleColor.DarkGray => "[grey]",
                     _ => ""
                 };
-
-                string msg = Truncate(m.Message, maxWidth).Replace("\n", " ").Replace("\r", "");
-                string escaped = Markup.Escape(msg);
+                
+                string escaped = Markup.Escape(l.Text);
                 return string.IsNullOrEmpty(colorMarkup) ? escaped : $"{colorMarkup}{escaped}[/]";
             }));
         }
+
+        private static List<string> WrapText(string text, int width)
+        {
+            if (width < 1) return new List<string> { text };
+            var result = new List<string>();
+            var lines = text.Split(new[] { "\n", "\r\n" }, StringSplitOptions.None);
+            
+            foreach (var line in lines)
+            {
+                if (string.IsNullOrEmpty(line))
+                {
+                    result.Add("");
+                    continue;
+                }
+
+                int start = 0;
+                while (start < line.Length)
+                {
+                    int length = Math.Min(width, line.Length - start);
+                    result.Add(line.Substring(start, length));
+                    start += length;
+                }
+            }
+            return result;
+        }
+
+        private record DisplayLine(string Text, ConsoleColor Color);
 
         private static string Truncate(string s, int max)
         {

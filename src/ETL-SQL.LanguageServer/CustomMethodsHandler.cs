@@ -2,9 +2,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 using MediatR;
 using OmniSharp.Extensions.JsonRpc;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
+using ETL_SQL.Core.Common;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.LSP
 {
@@ -33,10 +37,19 @@ namespace ETL_SQL.LSP
     public interface IGetViewsHandler : IJsonRpcRequestHandler<GetViewsParams, GetViewsResponse> { }
 
     /// <summary>
-    /// LSP Request Handler for getting temporary tables from a document.
+    /// LSP Request Handler for getting document-local temporary tables.
     /// </summary>
     [Method("etlsql/getTempTables", Direction.ClientToServer)]
     public interface IGetTempTablesHandler : IJsonRpcRequestHandler<GetTempTablesParams, GetTempTablesResponse> { }
+
+    /// <summary>
+    /// LSP Request Handler for building a report manifest from a script.
+    /// </summary>
+    [Method("etlsql/getReportManifest", Direction.ClientToServer)]
+    public interface IGetReportManifestHandler : IJsonRpcRequestHandler<GetReportManifestParams, GetReportManifestResponse> { }
+
+    /// <summary>
+    /// LSP Request Handler for encrypting a script.
 
     /// <summary>
     /// LSP Request Handler for encrypting a script.
@@ -53,9 +66,7 @@ namespace ETL_SQL.LSP
     /// <summary>
     /// Implementation of specialized ETL-SQL Language Server methods for metadata discovery and configuration.
     /// </summary>
-    /// <param name="metadata">The metadata manager for connection and schema info.</param>
-    /// <param name="logger">The logger instance.</param>
-    public class CustomMethodsHandler(IMetadataManager metadata, ILogger<CustomMethodsHandler> logger) : ISetConnectionsHandler, IGetTablesHandler, IGetColumnsHandler, ISetDebugModeHandler, IGetViewsHandler, IGetTempTablesHandler, IEncryptScriptHandler
+    public class CustomMethodsHandler(IMetadataManager metadata, ILogger<CustomMethodsHandler> logger, IServiceScopeFactory scopeFactory) : ISetConnectionsHandler, IGetTablesHandler, IGetColumnsHandler, ISetDebugModeHandler, IGetViewsHandler, IGetTempTablesHandler, IEncryptScriptHandler, IGetReportManifestHandler
     {
         /// <summary>Handles toggle debug mode notification.</summary>
         public Task<Unit> Handle(SetDebugModeParams request, CancellationToken cancellationToken)
@@ -119,6 +130,56 @@ namespace ETL_SQL.LSP
             logger.LogInformation("LSP: etlsql/getTempTables requested for (URI: {Uri})", request.uri);
             var tables = (await metadata.GetTempTablesAsync(request.uri)).ToList();
             return new GetTempTablesResponse { tables = tables };
+        }
+
+        /// <summary>Handles requests to build a report manifest from a script.</summary>
+        public async Task<GetReportManifestResponse> Handle(GetReportManifestParams request, CancellationToken cancellationToken)
+        {
+            logger.LogInformation("LSP: etlsql/getReportManifest requested (URI: {Uri})", request.uri);
+            var response = new GetReportManifestResponse();
+
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var evaluator = scope.ServiceProvider.GetRequiredService<Engine.Evaluator>();
+
+                // Inject parameters from request
+                foreach (var p in request.parameters)
+                {
+                    evaluator.DeclareVariable(p.Key, p.Value, new VariableMetadata { IsInput = true });
+                }
+
+                // Parse and Evaluate the script
+                var lexer = new ETL_SQL.Core.Parser.Lexer(request.text);
+                var tokens = lexer.Tokenize();
+                var parser = new ETL_SQL.Core.Parser.Parser(tokens, request.text);
+                var script = parser.Parse();
+
+                if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error))
+                {
+                    response.errors.AddRange(script.Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => d.Message));
+                    return response;
+                }
+
+                await evaluator.Evaluate(script, cancellationToken);
+
+                // Build the manifest
+                var manifestBuilder = new ReportBuilder.ManifestBuilder(evaluator);
+                var manifest = await manifestBuilder.BuildAsync(request.text);
+
+                response.manifestJson = System.Text.Json.JsonSerializer.Serialize(manifest, new System.Text.Json.JsonSerializerOptions 
+                { 
+                    WriteIndented = true,
+                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+                });
+            }
+            catch (System.Exception ex)
+            {
+                logger.LogError(ex, "LSP: Error building report manifest.");
+                response.errors.Add(ex.Message);
+            }
+
+            return response;
         }
     }
 }

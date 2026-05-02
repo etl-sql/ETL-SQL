@@ -69,4 +69,17 @@ namespace ETL_SQL.LSP
     {
         public string encryptedText { get; set; } = "";
     }
+
+    public class GetReportManifestParams : IRequest<GetReportManifestResponse>
+    {
+        public string text { get; set; } = "";
+        public string? uri { get; set; }
+        public Dictionary<string, string> parameters { get; set; } = new();
+    }
+
+    public class GetReportManifestResponse
+    {
+        public string? manifestJson { get; set; }
+        public List<string> errors { get; set; } = new();
+    }
 }

@@ -181,7 +181,7 @@
         {
           "command": "etlsql.previewReport",
           "group": "etlsql",
-          "when": "resourceLangId == etlsql && resourceExtname == .rptsql"
+          "when": "resourceLangId == etlsql"
         }
       ],
       "editor/title": [
@@ -203,7 +203,7 @@
         {
           "command": "etlsql.previewReport",
           "group": "navigation",
-          "when": "resourceLangId == etlsql && resourceExtname == .rptsql"
+          "when": "resourceLangId == etlsql"
         }
       ],
       "view/title": [

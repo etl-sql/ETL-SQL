@@ -105,14 +105,5 @@
         - [ ] **Secret Management**: Implement an encrypted `appsettings.Production.json` or Environment Variable provider for sensitive connection strings.
         - [ ] **Admin Guides**: Create `Docs/Administrators_Guide.md` covering service management, backup/restore, and multi-server networking.
         - [ ] **Final Verification**: Perform a "Clean Machine" install on a fresh Windows VM and verify full "Workstation-to-Server" connectivity.
-- [ ] **Report preview for unsaved scripts** Specifically talking about VS Code here but TUI may have a role.  The user has an unsaved script that contains a report build.  How can we enable report preview for an unsaved script?
 - [ ] **Smarter suggestions** Right now the suggestion list is just whatever matches.  I would like to try and make this smarter by showing only the words that are valid.  Likewise options should be shown rather than having the user guess.
-- [ ] **Chart help** We need to be able to do HELP VISUAL <type>.  We'll need it for the others too.  HELP CONTAINER, HELP BUTTON, HELP PAGE, ...
-- [ ] **Aggregates without group by** Lets put a linter message that states that aggregates that don't have a GROUP BY statement will return a single row.
-- [x] **VS Code missing visuals** Using C:\Users\chuck\scratch\ETL-SQL\samples\tui_test_report.rptsql 
-   - [x] - HBAR is blank nothing shows, up.  
-   - [x] - Text block is blank.  
-- [x] **PAGE WITH PARAMETERS** Check to ensure this does not exist anymore.  This was a mistake made during development and is incorrect.  All parameters should be defined with DECLARE that's it.  This can be completely removed it does not hold any legacy value.
-- [x] **TUI execution tree/messages should be fixed height** Currently if it a long error message comes through it increases in size.  It should always show the most recent messages but not increase the size of the frame.  The user can then come in with an F6 and scroll up to see the previous messages.  Also error messages should be marked in Red, right now everything is the same color.
-- [X] **VS Code Report Preview Slicers** Can we make these function in VS Code or are they just showing what it would look like in the portal/web view?  This is not working.  If I use our tui_test_report.rptsql and preview it, Tue is showing up which is great but if I switch it to say Monday I would like to see Monday's data.  Instead it refreshes and puts it back to Tue.
-- [ ] **VS Code BAR, HBAR, LINE** Have no height and are super thin.  They basically look like one bar or line all mashed together.
+- [ ] **VS Code get ctrl+hover help working**  I think some of the framework is in place but its not working currently.  Example  ctrl+hover over 'CONNECTION' in the editor does not bring up help.  Same for other commands.

@@ -26,120 +26,135 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (HelpStatement)statement;
-            if (string.IsNullOrEmpty(stmt.Topic))
+            string topic = stmt.Topic?.Trim() ?? "";
+            string subTopic = stmt.SubTopic?.Trim() ?? "";
+
+            // 1. Root Help
+            if (string.IsNullOrEmpty(topic))
             {
-                _logger.WriteLine("ETL-SQL Help", ConsoleColor.Cyan);
-                _logger.WriteLine("Available commands: CREATE CONNECTION, CREATE TABLE, SELECT, INSERT, UPDATE, DELETE, CREATE TEMPLATE, etc.");
-                _logger.WriteLine("Use HELP DIRECTORY or HELP FILE for details on file/directory operations.");
-                _logger.WriteLine("Use HELP CONNECTION <type> for details on a specific connection type (e.g. HELP CONNECTION MSSQL).");
-                _logger.WriteLine("Use HELP REPORT for details on dashboard and visual commands (Report-SQL).");
-                _logger.WriteLine("Use HELP DOCKER for details on container operations.");
-                _logger.WriteLine("Use HELP SHOW for details on introspection commands.");
-                _logger.WriteLine("Use HELP SET for details on system configuration (e.g. SET TEMPLATE_PATH).");
-                _logger.WriteLine("Use HELP <topic> (e.g. HELP DECLARE) for core statement syntax.");
+                _logger.WriteLine("ETL-SQL Help System", ConsoleColor.Cyan);
+                _logger.WriteLine("Categories: CONNECTION, VISUAL, REPORT, LOOP, FUNCTION, SHOW, SET, VARIABLES");
+                _logger.WriteLine("Examples:");
+                _logger.WriteLine("  HELP SELECT           -- Direct command help");
+                _logger.WriteLine("  HELP CONNECTION       -- List all data source types");
+                _logger.WriteLine("  HELP VISUAL           -- List all chart/widget types");
+                _logger.WriteLine("  HELP CONNECTION MSSQL -- Detailed connector options");
+                _logger.WriteLine("  HELP @@ROWCOUNT       -- System variable documentation");
                 return;
             }
 
-            if (stmt.Topic.Equals("CONNECTION", StringComparison.OrdinalIgnoreCase))
+            // 2. Specialized Redirects & Categories
+            if (topic.Equals("STATEMENT", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(subTopic))
             {
-                if (string.IsNullOrEmpty(stmt.SubTopic))
-                {
-                    _logger.WriteLine("Connection Types:", ConsoleColor.Cyan);
-                    foreach (var name in _connectorRegistry.GetRegisteredNames())
-                    {
-                        _logger.WriteLine($"- {name}");
-                    }
-                    _logger.WriteLine("Use HELP CONNECTION <type> for details.");
-                }
-                else
-                {
-                    var connector = _connectorRegistry.GetConnector(stmt.SubTopic);
-                    if (connector != null)
-                    {
-                        _logger.WriteLine($"HELP: CONNECTON {connector.Name}", ConsoleColor.Cyan);
-                        _logger.WriteLine(connector.GetHelp());
-                        
-                        var options = connector.GetSupportedOptions();
-                        if (options.Any())
-                        {
-                            _logger.WriteLine("\nOptions:", ConsoleColor.Yellow);
-                            foreach (var opt in options)
-                            {
-                                string values = opt.Value.Any() ? " (" + string.Join("|", opt.Value) + ")" : "";
-                                _logger.WriteLine($"  {opt.Key}{values}");
-                            }
-                        }
-
-                        var functions = connector.GetSupportedFunctions();
-                        if (functions.Any())
-                        {
-                            _logger.WriteLine("\nSupported Functions:", ConsoleColor.Yellow);
-                            _logger.WriteLine("  " + string.Join(", ", functions.OrderBy(f => f)));
-                        }
-                    }
-                    else
-                    {
-                        _logger.WriteLine($"Connection type '{stmt.SubTopic}' not found.", ConsoleColor.Red);
-                    }
-                }
-                return;
+                topic = subTopic; subTopic = "";
             }
 
-            if (stmt.Topic.Equals("FUNCTION", StringComparison.OrdinalIgnoreCase))
+            // 3. Category: CONNECTION (Grouped)
+            if (topic.Equals("CONNECTION", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrEmpty(subTopic))
+                {
+                    var helpText = context.LanguageHelp.GetHelp("CONNECTION", "INDEX");
+                    _logger.WriteLine("HELP: CONNECTION", ConsoleColor.Cyan);
+                    _logger.WriteLine(helpText ?? "List of connection types not found.");
+                    return;
+                }
+                
+                var connector = _connectorRegistry.GetConnector(subTopic);
+                if (connector != null)
+                {
+                    _logger.WriteLine($"HELP: CONNECTION {connector.Name}", ConsoleColor.Cyan);
+                    _logger.WriteLine(connector.GetHelp());
+                    
+                    var options = connector.GetSupportedOptions();
+                    if (options.Any())
+                    {
+                        _logger.WriteLine("\nOptions:", ConsoleColor.Yellow);
+                        foreach (var opt in options)
+                        {
+                            string values = opt.Value.Any() ? " (" + string.Join("|", opt.Value) + ")" : "";
+                            _logger.WriteLine($"  {opt.Key}{values}");
+                        }
+                    }
+                    return;
+                }
+            }
+
+            // 4. Category: FUNCTION
+            if (topic.Equals("FUNCTION", StringComparison.OrdinalIgnoreCase))
             {
                 var functionRegistry = context.FunctionRegistry;
-                if (string.IsNullOrEmpty(stmt.SubTopic))
+                if (string.IsNullOrEmpty(subTopic))
                 {
                     _logger.WriteLine("Available Functions:", ConsoleColor.Cyan);
                     var names = functionRegistry.GetRegisteredNames().OrderBy(n => n).ToList();
                     for (int i = 0; i < names.Count; i += 3)
-                    {
                         _logger.WriteLine(string.Join("\t", names.Skip(i).Take(3).Select(n => n.PadRight(20))));
-                    }
                     _logger.WriteLine("\nUse HELP FUNCTION <name> for details.");
                 }
                 else
                 {
-                    var helpDoc = functionRegistry.GetHelp(stmt.SubTopic);
+                    var helpDoc = functionRegistry.GetHelp(subTopic);
                     if (helpDoc != null)
                     {
-                        _logger.WriteLine($"HELP: FUNCTION {stmt.SubTopic.ToUpperInvariant()}", ConsoleColor.Cyan);
+                        _logger.WriteLine($"HELP: FUNCTION {subTopic.ToUpperInvariant()}", ConsoleColor.Cyan);
                         _logger.WriteLine(helpDoc);
-                    }
-                    else if (functionRegistry.IsRegistered(stmt.SubTopic))
-                    {
-                        _logger.WriteLine($"Function '{stmt.SubTopic}' is registered but has no help documentation.", ConsoleColor.Yellow);
                     }
                     else
                     {
-                        _logger.WriteLine($"Function '{stmt.SubTopic}' not found.", ConsoleColor.Red);
+                        _logger.WriteLine($"Function '{subTopic}' not found.", ConsoleColor.Red);
                     }
                 }
                 return;
             }
 
-            // ── Registry-based lookup (shared with LSP) ─────────────────────
-            var topic = stmt.Topic;
-            var subTopic = stmt.SubTopic;
-
-            // Handle HELP STATEMENT <CMD> redirect
-            if (topic.Equals("STATEMENT", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrEmpty(subTopic))
+            // 5. Category: REPORT / VISUAL (Redirect to Index if no subtopic)
+            if (topic.Equals("REPORT", StringComparison.OrdinalIgnoreCase) && string.IsNullOrEmpty(subTopic))
             {
-                topic = subTopic;
-                subTopic = null;
+                subTopic = "INDEX";
+            }
+            if (topic.Equals("VISUAL", StringComparison.OrdinalIgnoreCase) && string.IsNullOrEmpty(subTopic))
+            {
+                subTopic = "VISUAL";
+                topic = "REPORT";
             }
 
+            // 6. Registry-based lookup (Direct or Scoped)
             var help = context.LanguageHelp.GetHelp(topic, subTopic);
             if (help != null)
             {
                 _logger.WriteLine($"HELP: {topic.ToUpperInvariant()} {(string.IsNullOrEmpty(subTopic) ? "" : subTopic.ToUpperInvariant())}", ConsoleColor.Cyan);
                 _logger.WriteLine(help);
+                return;
             }
-            else
+            
+            // 7. Shorthand Fallback (e.g. HELP BAR or HELP MSSQL)
+            if (string.IsNullOrEmpty(subTopic))
             {
-                _logger.WriteLine($"Help for topic '{stmt.Topic}' is not yet implemented.", ConsoleColor.Yellow);
-                _logger.WriteLine("Available topics: CONNECTION, FUNCTION, DIRECTORY, FILE, TRANSFER, EMAIL, SSH_KEY_PAIR, DOCKER, SHOW, VARIABLES, SECURITY, STATEMENT, REPORT, SET");
+                // Try searching all subtopics in the registry
+                foreach (var topTopic in context.LanguageHelp.GetTopics())
+                {
+                    var subHelp = context.LanguageHelp.GetHelp(topTopic, topic);
+                    if (subHelp != null)
+                    {
+                        _logger.WriteLine($"HELP: {topTopic.ToUpperInvariant()} {topic.ToUpperInvariant()}", ConsoleColor.Cyan);
+                        _logger.WriteLine(subHelp);
+                        return;
+                    }
+                }
+                
+                // Try direct topic search in registry (for things like DECLARE, SET, etc.)
+                var directHelp = context.LanguageHelp.GetHelp(topic);
+                if (directHelp != null)
+                {
+                    _logger.WriteLine($"HELP: {topic.ToUpperInvariant()}", ConsoleColor.Cyan);
+                    _logger.WriteLine(directHelp);
+                    return;
+                }
             }
+
+            _logger.WriteLine($"Help for topic '{topic}' {(string.IsNullOrEmpty(subTopic) ? "" : subTopic)} not found.", ConsoleColor.Yellow);
+            _logger.WriteLine("Available categories: CONNECTION, FUNCTION, VISUAL, REPORT, LOOP, SHOW, VARIABLES, SET, SECURITY");
             await Task.CompletedTask;
         }
     }

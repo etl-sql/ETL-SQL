@@ -14,7 +14,7 @@ namespace ETL_SQL.Core.Linting.Rules
             "COUNT", "SUM", "AVG", "MIN", "MAX", "STRING_AGG", "LIST_AGG",
             "PERCENTILE_CONT", "PERCENTILE_DISC", "VAR", "VARP", "VAR_SAMP", "VAR_POP",
             "STDEV", "STDEVP", "STDDEV", "STDDEV_SAMP", "STDDEV_POP",
-            "CORR", "COVAR_SAMP", "COVAR_POP"
+            "CORR", "COVAR_SAMP", "COVAR_POP", "APPROX_COUNT_DISTINCT", "MEDIAN"
         });
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
@@ -42,7 +42,7 @@ namespace ETL_SQL.Core.Linting.Rules
                     {
                         RuleName = Name,
                         Severity = LintSeverity.Info,
-                        Message = "This query uses aggregate functions without a GROUP BY clause. It will return a single summary row for the entire dataset.",
+                        Message = "This query uses aggregate functions without a GROUP BY clause. It will return a single row representing the entire data set.",
                         LineNumber = select.Line,
                         ColumnNumber = select.Column
                     });

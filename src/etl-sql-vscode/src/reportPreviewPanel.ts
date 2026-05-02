@@ -113,10 +113,32 @@ export class ReportPreviewPanel {
     }
 
     /** Spawns `ETL-SQL-Report build --format json` and returns the parsed manifest. */
-    private _buildManifest(callback: (err: string | null, manifest: any | null) => void): void {
+    private async _buildManifest(callback: (err: string | null, manifest: any | null) => void): Promise<void> {
         const outputPath = path.join(os.tmpdir(), `etlsql-preview-${Date.now()}.json`);
         const { exe, baseArgs } = this._resolveCliCall();
-        const args       = [...baseArgs, 'build', this._scriptPath, '--output', outputPath, '--format', 'json'];
+        
+        let targetPath = this._scriptPath;
+        let isTempScript = false;
+
+        // Handle Untitled or Dirty buffers by writing to a temporary file first
+        const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.fsPath === this._scriptPath);
+        if (editor && (editor.document.isUntitled || editor.document.isDirty)) {
+            const tempScriptPath = path.join(os.tmpdir(), `etlsql-script-${Date.now()}.rptsql`);
+            fs.writeFileSync(tempScriptPath, editor.document.getText());
+            targetPath = tempScriptPath;
+            isTempScript = true;
+        } else if (!fs.existsSync(this._scriptPath)) {
+            // Fallback: try to find the document by URI if fsPath doesn't exist on disk
+            const doc = vscode.workspace.textDocuments.find(d => d.uri.fsPath === this._scriptPath);
+            if (doc) {
+                const tempScriptPath = path.join(os.tmpdir(), `etlsql-script-${Date.now()}.rptsql`);
+                fs.writeFileSync(tempScriptPath, doc.getText());
+                targetPath = tempScriptPath;
+                isTempScript = true;
+            }
+        }
+
+        const args = [...baseArgs, 'build', targetPath, '--output', outputPath, '--format', 'json'];
 
         // Add parameters
         for (const [key, val] of Object.entries(this._parameters)) {
@@ -129,6 +151,10 @@ export class ReportPreviewPanel {
         let stderr = '';
         proc.stderr.on('data', d => { stderr += d.toString(); });
         proc.on('close', code => {
+            if (isTempScript && fs.existsSync(targetPath)) {
+                try { fs.unlinkSync(targetPath); } catch { /* ignore */ }
+            }
+
             if (code !== 0 || !fs.existsSync(outputPath)) {
                 callback(stderr || `ETL-SQL-Report exited with code ${code}`, null);
                 return;

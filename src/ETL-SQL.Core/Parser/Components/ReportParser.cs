@@ -99,7 +99,7 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 else if (Match(TokenType.DEFAULT) || Match(TokenType.VALUE))
                 {
-                    defaultValue = ParseVisualProperty("VALUE");
+                    defaultValue = ParseVisualProperty("DEFAULT");
                 }
                 else if (Match(TokenType.SUMMARY))
                 {
@@ -334,10 +334,23 @@ namespace ETL_SQL.Core.Parser.Components
                 }
             }
 
-            Consume(TokenType.AS,     "Expected AS before source query");
-            Consume(TokenType.LPAREN, "Expected '(' before source SELECT");
-            var sourceSelect = _parser.ParseStatement();
-            Consume(TokenType.RPAREN, "Expected ')' after source SELECT");
+            Consume(TokenType.AS, "Expected AS before source query");
+            
+            Statement sourceSelect;
+            if (Match(TokenType.LPAREN))
+            {
+                sourceSelect = _parser.ParseStatement();
+                Consume(TokenType.RPAREN, "Expected ')' after source SELECT");
+            }
+            else if (_parser.Current.Type == TokenType.SELECT)
+            {
+                sourceSelect = _parser.ParseStatement();
+            }
+            else
+            {
+                throw new SyntaxException("Expected '(' or SELECT after AS in CREATE DATASET", _parser.Current.Line, _parser.Current.Column);
+            }
+
             Match(TokenType.SEMICOLON);
 
             return new CreateDatasetStatement
@@ -936,7 +949,18 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 else
                 {
-                    value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : Consume(TokenType.STRING_LITERAL, $"Expected string literal or variable for {propertyName}").Value;
+                    if (propertyName == "DEFAULT")
+                    {
+                        value = ConsumeReportOptionValue();
+                    }
+                    else if (Match(TokenType.NUMBER))
+                    {
+                        value = _parser.Previous.Value;
+                    }
+                    else
+                    {
+                        value = Consume(TokenType.STRING_LITERAL, $"Expected string literal or variable for {propertyName}").Value;
+                    }
                 }
                 Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
             }
@@ -948,7 +972,18 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 else
                 {
-                    value = (propertyName == "DEFAULT") ? ConsumeReportOptionValue() : Consume(TokenType.STRING_LITERAL, $"Expected string literal or variable for {propertyName}").Value;
+                    if (propertyName == "DEFAULT")
+                    {
+                        value = ConsumeReportOptionValue();
+                    }
+                    else if (Match(TokenType.NUMBER))
+                    {
+                        value = _parser.Previous.Value;
+                    }
+                    else
+                    {
+                        value = Consume(TokenType.STRING_LITERAL, $"Expected string literal or variable for {propertyName}").Value;
+                    }
                 }
             }
             return (value, isMarkdown);

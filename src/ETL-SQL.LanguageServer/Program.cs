@@ -24,6 +24,10 @@ using TextDocumentSelector = OmniSharp.Extensions.LanguageServer.Protocol.Models
 using TextDocumentSyncKind = OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities.TextDocumentSyncKind;
 using SaveOptions = OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities.SaveOptions;
 using ETL_SQL.Data;
+using ETL_SQL.Common;
+using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Data;
+using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Connectors.FlatFile;
 using ETL_SQL.Connectors.SqlServer;
@@ -40,7 +44,7 @@ namespace ETL_SQL.LSP
                 options
                     .WithInput(Console.OpenStandardInput())
                     .WithOutput(Console.OpenStandardOutput())
-                    .ConfigureLogging(lb => lb.AddDebug().AddLanguageProtocolLogging().SetMinimumLevel(LogLevel.Trace))
+                    .ConfigureLogging(lb => lb.AddDebug().AddLanguageProtocolLogging().SetMinimumLevel(Microsoft.Extensions.Logging.LogLevel.Trace))
                     .WithServices(services => {
                         var registry = new Data.ConnectorRegistry();
                         registry.Register(new MockDbConnector());
@@ -71,12 +75,46 @@ namespace ETL_SQL.LSP
 
                         services.AddSingleton<IConnectorRegistry>(registry);
                         var helpRegistry = new Core.Metadata.LanguageHelpRegistry();
+                        Engine.Services.LanguageHelpService.Initialize(helpRegistry);
                         services.AddSingleton<Core.Interfaces.ILanguageHelpRegistry>(helpRegistry);
                         services.AddSingleton<IFunctionRegistry>(functionRegistry);
                         services.AddSingleton<IMetadataManager, MetadataManager>();
                         services.AddSingleton<DocumentStateStore>();
                         services.AddSingleton<TextDocumentHandler>();
                         services.AddSingleton<CodeActionProvider>();
+                        
+                        // Engine Services
+                        services.AddSingleton<Common.ILogger>(Common.NullLogger.Instance);
+                        services.AddSingleton<ILineageTracker, LineageTracker>();
+                        services.AddSingleton<IDockerManager, DockerContainerManager>();
+                        services.AddSingleton<ISessionStateManager, Engine.Services.SessionStateManager>();
+                        services.AddSingleton<Engine.Services.SessionStateManager>(sp => (Engine.Services.SessionStateManager)sp.GetRequiredService<ISessionStateManager>());
+                        services.AddSingleton<Services.SecurityService>();
+                        services.AddSingleton<ISystemResources, DefaultSystemResources>();
+                        services.AddSingleton<IBufferManager, ETL_SQL.Orchestrator.Execution.BufferManager>();
+                        services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));
+                        
+                        services.AddTransient<IReportContext, Engine.Services.ReportRegistry>();
+                        services.AddTransient<Engine.Services.EvaluatorComponentRegistry>();
+                        services.AddTransient<Engine.Evaluator>();
+
+                        // Handlers
+                        var handlerAssemblies = new[]
+                        {
+                            typeof(Engine.Handlers.DeclareStatementHandler).Assembly,
+                            typeof(ReportBuilder.ExportReportStatementHandler).Assembly
+                        };
+
+                        foreach (var asm in handlerAssemblies)
+                        {
+                            foreach (var type in asm.GetTypes()
+                                .Where(t => typeof(IStatementHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract))
+                            {
+                                services.AddTransient(typeof(IStatementHandler), type);
+                                services.AddTransient(type);
+                            }
+                        }
+
                         services.AddSingleton<CustomMethodsHandler>();
                         services.AddSingleton<RefreshMetadataHandler>();
                     })

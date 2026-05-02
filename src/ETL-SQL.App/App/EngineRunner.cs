@@ -137,6 +137,7 @@ namespace ETL_SQL.App
                         foreach (var err in errors) {
                             Console.Error.WriteLine($"Syntax Error at line {err.Line}, col {err.Column}: {err.Message}");
                         }
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName }));
                     } 
                     else 
                     {
@@ -188,6 +189,7 @@ namespace ETL_SQL.App
                         foreach (var err in lintErrors) {
                             Console.Error.WriteLine($"Linter Error at line {err.LineNumber}, col {err.ColumnNumber}: {err.Message}");
                         }
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName }));
                     } 
                     else 
                     {
@@ -331,7 +333,10 @@ namespace ETL_SQL.App
                     if (treeCts != null)
                     {
                         treeCts.Cancel();
-                        if (treeRenderTask != null) await treeRenderTask;
+                        if (treeRenderTask != null) 
+                        {
+                            try { await treeRenderTask; } catch (TaskCanceledException) { /* Expected */ }
+                        }
 
                         // Final flush for fast scripts in JSON mode
                         if (ctx.IsJsonMode && !ctx.IsSilentMode)
@@ -470,6 +475,11 @@ namespace ETL_SQL.App
                         }
                     }
 
+                    if (ctx.IsJsonMode)
+                    {
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 0, uri = ctx.ScriptFile.FullName }));
+                    }
+
                     return 0;
                 }
                 catch (ExecutionException ex)
@@ -477,6 +487,7 @@ namespace ETL_SQL.App
                     if (ctx.IsJsonMode)
                     {
                         Console.Error.WriteLine($"Execution Error at line {ex.Line}, col {ex.Column}: {ex.Message} (Code: {ex.ErrorNumber})");
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName }));
                     }
                     else
                     {
@@ -488,8 +499,16 @@ namespace ETL_SQL.App
                 }
                 catch (Exception ex)
                 {
-                    logger.WriteLine($"Fatal Error: {ex.Message}", ConsoleColor.Red);
-                    if (ctx.IsVerbose) logger.WriteLine(ex.StackTrace ?? "", ConsoleColor.DarkGray);
+                    if (ctx.IsJsonMode)
+                    {
+                        Console.Error.WriteLine($"Fatal Error: {ex.Message}");
+                        Console.WriteLine(System.Text.Json.JsonSerializer.Serialize(new { type = "done", exitCode = 1, uri = ctx.ScriptFile.FullName }));
+                    }
+                    else
+                    {
+                        logger.WriteLine($"Fatal Error: {ex.Message}", ConsoleColor.Red);
+                        if (ctx.IsVerbose) logger.WriteLine(ex.StackTrace ?? "", ConsoleColor.DarkGray);
+                    }
                     return 1;
                 }
             }

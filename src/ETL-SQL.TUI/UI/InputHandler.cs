@@ -496,6 +496,7 @@ namespace ETL_SQL.TUI.UI
                 case ConsoleKey.PageUp: _renderer.MessageScrollRow = Math.Max(0, _renderer.MessageScrollRow - 10); break;
                 case ConsoleKey.PageDown: _renderer.MessageScrollRow += 10; break;
                 case ConsoleKey.Home: _renderer.MessageScrollRow = 0; break;
+                case ConsoleKey.End: _renderer.MessageScrollRow = 50000; break; // Clamp will handle it
             }
         }
 

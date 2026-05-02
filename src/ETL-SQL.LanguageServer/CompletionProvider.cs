@@ -26,6 +26,7 @@ namespace ETL_SQL.LSP
         private readonly ILogger<CompletionProvider> _logger;
         private readonly DocumentStateStore _store;
         private readonly IMetadataManager _metadata;
+        private readonly Core.Interfaces.ILanguageHelpRegistry _languageHelp;
 
         private static readonly string[] _keywords = new[]
         {
@@ -53,11 +54,12 @@ namespace ETL_SQL.LSP
             "CUME_DIST", "PERCENT_RANK", "NTH_VALUE", "PERCENTILE_CONT", "PERCENTILE_DISC"
         };
 
-        public CompletionProvider(ILogger<CompletionProvider> logger, DocumentStateStore store, IMetadataManager metadata)
+        public CompletionProvider(ILogger<CompletionProvider> logger, DocumentStateStore store, IMetadataManager metadata, Core.Interfaces.ILanguageHelpRegistry languageHelp)
         {
             _logger = logger;
             _store = store;
             _metadata = metadata;
+            _languageHelp = languageHelp;
         }
 
         public async Task<CompletionList> Handle(CompletionParams request, CancellationToken cancellationToken)
@@ -184,8 +186,19 @@ namespace ETL_SQL.LSP
             // 3. Keywords, functions, and variables
             if (!prefix.Contains('.'))
             {
-                items.AddRange(_keywords.Select(kw => new CompletionItem { Label = kw, Kind = CompletionItemKind.Keyword, Detail = "Keyword" }));
-                items.AddRange(_functions.Select(f  => new CompletionItem { Label = f,  Kind = CompletionItemKind.Function, Detail = "Function" }));
+                items.AddRange(_keywords.Select(kw => new CompletionItem { 
+                    Label = kw, 
+                    Kind = CompletionItemKind.Keyword, 
+                    Detail = "Keyword",
+                    Documentation = _languageHelp.GetHelp(kw) != null ? new MarkupContent { Kind = MarkupKind.Markdown, Value = _languageHelp.GetHelp(kw)! } : null
+                }));
+                
+                items.AddRange(_functions.Select(f => new CompletionItem { 
+                    Label = f, 
+                    Kind = CompletionItemKind.Function, 
+                    Detail = "Function",
+                    Documentation = _languageHelp.GetHelp("FUNCTION", f) != null ? new MarkupContent { Kind = MarkupKind.Markdown, Value = _languageHelp.GetHelp("FUNCTION", f)! } : null
+                }));
 
                 var vars = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var stmt in state.Script.Statements)

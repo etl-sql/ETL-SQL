@@ -35,11 +35,15 @@ namespace ETL_SQL.LanguageServer.Tests
             var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
             // IMPORTANT: Register the connector manually as Program.cs does
             connectorRegistry.Register(new MockDbConnector());
+            var functionRegistry = new Engine.Functions.FunctionRegistry();
 
             var metadataManager = new MetadataManager(loggerFactory.CreateLogger<MetadataManager>(), connectorRegistry);
             var store = new DocumentStateStore();
+            var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
+            ETL_SQL.Engine.Services.LanguageHelpService.Initialize(helpRegistry);
             var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
-            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, metadataManager);
+            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, metadataManager, helpRegistry);
+            var hoverHandler = new HoverProvider(loggerFactory.CreateLogger<HoverProvider>(), store, functionRegistry, helpRegistry);
             
             var uri = DocumentUri.From("untitled:Untitled-1");
             var normalizedUri = uri.ToString(); 
@@ -122,8 +126,10 @@ namespace ETL_SQL.LanguageServer.Tests
             var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
             var metadataManager = new MetadataManager(loggerFactory.CreateLogger<MetadataManager>(), connectorRegistry);
             var store = new DocumentStateStore();
+            var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
+            ETL_SQL.Engine.Services.LanguageHelpService.Initialize(helpRegistry);
             var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
-            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, metadataManager);
+            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, metadataManager, helpRegistry);
             
             var uri = DocumentUri.From("untitled:Untitled-2");
             
@@ -161,6 +167,59 @@ namespace ETL_SQL.LanguageServer.Tests
             Assert.Contains(list, i => i.Label == "@global_var");
             Assert.Contains(list, i => i.Label == "@i");
             Assert.Contains(list, i => i.Label == "@item");
+        }
+        
+        [Fact]
+        public async Task Hover_Should_Return_Keyword_Help()
+        {
+            // Arrange
+            var services = new ServiceCollection();
+            services.AddLogging(builder => builder.AddConsole().AddDebug());
+            var serviceProvider = services.BuildServiceProvider();
+            var loggerFactory = serviceProvider.GetRequiredService<ILoggerFactory>();
+            
+            var connectorRegistry = new ETL_SQL.Data.ConnectorRegistry();
+            var functionRegistry = new Engine.Functions.FunctionRegistry();
+            var metadataManager = new MetadataManager(loggerFactory.CreateLogger<MetadataManager>(), connectorRegistry);
+            var store = new DocumentStateStore();
+            var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();
+            ETL_SQL.Engine.Services.LanguageHelpService.Initialize(helpRegistry);
+            
+            var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
+            var hoverProvider = new HoverProvider(loggerFactory.CreateLogger<HoverProvider>(), store, functionRegistry, helpRegistry);
+            
+            var uri = DocumentUri.From("untitled:Untitled-3");
+            var script = "SELECT * FROM CONNECTION MSSQL;";
+            await handler.AnalyzeAsync(uri, script);
+
+            // 1. Hover over CONNECTION (line 0, col 14)
+            var hoverParams = new HoverParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Position = new Position(0, 14)
+            };
+
+            // Act
+            var hover = await hoverProvider.Handle(hoverParams, CancellationToken.None);
+
+            // Assert
+            Assert.NotNull(hover);
+            var md = hover.Contents.MarkupContent;
+            Assert.Contains("Connections link ETL-SQL", md.Value);
+            
+            // 2. Hover over MSSQL (line 0, col 25)
+            hoverParams = new HoverParams
+            {
+                TextDocument = new TextDocumentIdentifier(uri),
+                Position = new Position(0, 25)
+            };
+            
+            hover = await hoverProvider.Handle(hoverParams, CancellationToken.None);
+            
+            // Assert
+            Assert.NotNull(hover);
+            md = hover.Contents.MarkupContent;
+            Assert.Contains("Relational: MSSQL", md.Value);
         }
     }
 }

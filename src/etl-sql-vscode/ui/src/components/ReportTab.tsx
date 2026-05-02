@@ -394,7 +394,7 @@ const ReportChart: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
         };
     }, [visual.chartConfig, isDark]);
 
-    return <div ref={chartRef} className="w-full h-full min-h-[150px]" />;
+    return <div ref={chartRef} className="w-full h-full min-h-[350px]" />;
 };
 
 const ReportTable: React.FC<{ visual: VisualManifest }> = ({ visual }) => {

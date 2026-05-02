@@ -58,6 +58,7 @@ namespace ETL_SQL.TUI.UI
         public bool ResultsVisible { get; set; } = false;
         public bool CompareMode { get; set; } = false;
         public int CompareFocusIndex { get; set; } = 0;
+        private int _lastMessageCount = 0;
         public List<int> CompareScrollRows { get; set; } = new();
         public List<string> CompareFilters { get; set; } = new();
         public bool PromptVisible => !string.IsNullOrEmpty(PromptTitle);
@@ -121,7 +122,7 @@ namespace ETL_SQL.TUI.UI
             // ── Layout Definitions ──────────────────────────────────────────
             int editorAreaTop = 1;
             int statusHeight  = 2; // Two lines for status/help bar
-            int reservedBottom = statusHeight + 4; // status bar + 4 lines buffer for high-density safety
+            int reservedBottom = statusHeight; // reduced from statusHeight + 1 for tighter layout
 
             // Prioritize 14 lines for the lower area to show 10 messages + rounded borders correctly
             int lowerAreaHeight = 14; 
@@ -158,8 +159,22 @@ namespace ETL_SQL.TUI.UI
             {
                 // MessageTree panel — independent scroll for each column
                 int innerRows = lowerAreaHeight - 3;
-                int maxMsg  = Math.Max(0, evaluator.Messages.Count - innerRows);
+                // Since messages can now wrap into multiple lines, maxMsg is an estimate based on message count.
+                // We use an 8x multiplier to account for long lines; MessageTreePanel handles exact clipping.
+                int maxMsg  = Math.Max(0, (evaluator.Messages.Count * 8) - innerRows); 
                 int maxTree = Math.Max(0, evaluator.Telemetry.ExecutionTree.GetAllNodes().Count() - innerRows);
+
+                // Auto-scroll for messages: if new messages arrived and we were at the bottom, stay at the bottom.
+                if (evaluator.Messages.Count > _lastMessageCount)
+                {
+                    bool wasAtBottom = MessageScrollRow >= Math.Max(0, (_lastMessageCount * 8) - innerRows - 2);
+                    if (wasAtBottom || _lastMessageCount == 0) 
+                    {
+                        MessageScrollRow = maxMsg;
+                    }
+                    _lastMessageCount = evaluator.Messages.Count;
+                }
+
                 MessageScrollRow = Math.Clamp(MessageScrollRow, 0, maxMsg);
                 TreeScrollRow    = Math.Clamp(TreeScrollRow, 0, maxTree);
             }

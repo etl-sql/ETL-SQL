@@ -59,9 +59,9 @@ namespace ETL_SQL.LSP
                 int start = (int)request.Position.Character;
                 if (start < currentLine.Length)
                 {
-                    while (start > 0 && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '_')) start--;
+                    while (start > 0 && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '_' || currentLine[start - 1] == '@' || currentLine[start - 1] == '#')) start--;
                     int end = (int)request.Position.Character;
-                    while (end < currentLine.Length && (char.IsLetterOrDigit(currentLine[end]) || currentLine[end] == '_')) end++;
+                    while (end < currentLine.Length && (char.IsLetterOrDigit(currentLine[end]) || currentLine[end] == '_' || currentLine[end] == '@' || currentLine[end] == '#')) end++;
                     if (start < end) word = currentLine.Substring(start, end - start);
                 }
             }

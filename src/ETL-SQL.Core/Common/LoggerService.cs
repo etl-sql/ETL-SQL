@@ -128,7 +128,7 @@ namespace ETL_SQL.Common
             if (_sessionId.Value != null) consoleMessage = $"[{_sessionId.Value}] {consoleMessage}";
             if (ex != null) consoleMessage += $"{Environment.NewLine}Exception: {ex.Message}";
 
-            if ((!IsSilent || level == LogLevel.Error) && !SuppressConsole)
+            if (((!IsSilent || level == LogLevel.Error) && !SuppressConsole) || (level == LogLevel.Error && !IsJsonMode))
             {
                 if (color != ConsoleColor.White) Console.ForegroundColor = color;
                 Console.WriteLine(consoleMessage);

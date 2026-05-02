@@ -159,16 +159,27 @@ namespace ETL_SQL.Tests.Integration
             editor._buffer.CursorLine = 0;
             editor._renderer.Headless = true;
             
-            // Toggle focus to results (F6)
-            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false));
+            // Toggle focus (F6 cycles: Editor -> Execution Tree -> Messages -> Results -> Performance -> Editor)
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // To Execution Tree
+            Assert.Equal(EditorFocus.ExecutionTree, editor._renderer.Focus);
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // To Messages
+            Assert.Equal(EditorFocus.Messages, editor._renderer.Focus);
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // To Results
+            Assert.Equal(EditorFocus.Results, editor._renderer.Focus);
             Assert.True(editor._renderer.ResultsFocus);
 
             // UP should scroll results, not move editor cursor
             await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.UpArrow, false, false, false));
             Assert.Equal(0, editor._buffer.CursorLine);
 
-            // F6 back to editor
-            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false));
+            // Cycle back to editor (Results -> Performance -> Editor)
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // To Performance
+            Assert.Equal(EditorFocus.Performance, editor._renderer.Focus);
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // To Editor
+            Assert.Equal(EditorFocus.Editor, editor._renderer.Focus);
             Assert.False(editor._renderer.ResultsFocus);
         }
 
