@@ -20,6 +20,7 @@ namespace ETL_SQL.TUI.UI
         private readonly EditorRenderer _renderer;
         private readonly MetadataManager _metadata;
         private readonly Dictionary<string, IDataSource> _connections;
+        private readonly ETL_SQL.Core.Interfaces.ILanguageHelpRegistry? _helpRegistry;
         private readonly ILogger _logger;
 
         /// <summary>Initializes a new instance of the <see cref="AutocompleteController"/> class.</summary>
@@ -27,13 +28,14 @@ namespace ETL_SQL.TUI.UI
         /// <param name="renderer">The console renderer.</param>
         /// <param name="metadata">The metadata manager for connection caching.</param>
         /// <param name="connections">The active data source connections.</param>
-        public AutocompleteController(EditorBuffer buffer, EditorRenderer renderer, MetadataManager metadata, Dictionary<string, IDataSource> connections, ILogger logger)
+        public AutocompleteController(EditorBuffer buffer, EditorRenderer renderer, MetadataManager metadata, Dictionary<string, IDataSource> connections, ILogger logger, Core.Interfaces.ILanguageHelpRegistry? helpRegistry = null)
         {
             _buffer = buffer;
             _renderer = renderer;
             _metadata = metadata;
             _connections = connections;
             _logger = logger;
+            _helpRegistry = helpRegistry;
         }
 
         /// <summary>Updates the suggestion list based on the current cursor position and prefix.</summary>
@@ -51,7 +53,7 @@ namespace ETL_SQL.TUI.UI
                 return;
             }
 
-            _renderer.AutocompleteOptions = await ETLSuggestEngine.GetSuggestionsAsync(lastWord, _buffer.GetText(), _connections, _logger);
+            _renderer.AutocompleteOptions = await ETLSuggestEngine.GetSuggestionsAsync(lastWord, _buffer.GetText(), _connections, _logger, _helpRegistry);
             sw.Stop();
 
             if (_renderer.AutocompleteOptions.Any())

@@ -63,7 +63,8 @@ namespace ETL_SQL.TUI.UI
             _renderer = new EditorRenderer(_buffer, _evaluator);
             _fileHandler = new EditorFileHandler(new PhysicalFileSystem(), _security);
             _metadata = new MetadataManager(_evaluator, _connections);
-            _autocomplete = new AutocompleteController(_buffer, _renderer, _metadata, _connections, _logger);
+            var helpRegistry = Program.ServiceProvider.GetService<Core.Interfaces.ILanguageHelpRegistry>();
+            _autocomplete = new AutocompleteController(_buffer, _renderer, _metadata, _connections, _logger, helpRegistry);
             _input = new InputHandler(this, _buffer, _renderer, _autocomplete);
             if (_logger is LoggerService ls)
             {

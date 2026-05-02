@@ -19,6 +19,7 @@ using ETL_SQL.Core.Linting.Rules;
 using ETL_SQL.Core.Formatting;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Functions;
+using ETL_SQL.Core.Services;
 using LSPRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using TextDocumentSelector = OmniSharp.Extensions.LanguageServer.Protocol.Models.TextDocumentSelector;
 using TextDocumentSyncKind = OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities.TextDocumentSyncKind;
@@ -79,6 +80,7 @@ namespace ETL_SQL.LSP
                         services.AddSingleton<Core.Interfaces.ILanguageHelpRegistry>(helpRegistry);
                         services.AddSingleton<IFunctionRegistry>(functionRegistry);
                         services.AddSingleton<IMetadataManager, MetadataManager>();
+                        services.AddSingleton<ILanguageService, LanguageService>();
                         services.AddSingleton<DocumentStateStore>();
                         services.AddSingleton<TextDocumentHandler>();
                         services.AddSingleton<CodeActionProvider>();

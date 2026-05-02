@@ -390,6 +390,13 @@ namespace ETL_SQL.TUI.UI
                     if (optionIndex == AutocompleteIndex) _console.Markup($"[black on white]{text.PadRight(20)}[/]");
                     else _console.Markup($"[{color} on blue]{text.PadRight(20)}[/]");
                 }
+
+                // Documentation sidecar
+                var currentSugg = AutocompleteOptions[AutocompleteIndex];
+                if (!string.IsNullOrEmpty(currentSugg.Documentation))
+                {
+                    RenderAutocompleteDocumentation(currentSugg.Documentation, popupRow, (buffer.CursorColumn - ScrollCol) + gutterWidth + 21, totalWidth, totalHeight);
+                }
             }
 
             // 7. Help Overlay
@@ -400,6 +407,45 @@ namespace ETL_SQL.TUI.UI
             {
                 _console.SetCursorPosition((buffer.CursorColumn - ScrollCol) + gutterWidth, (buffer.CursorLine - ScrollLine) + editorAreaTop);
                 _console.CursorVisible = true;
+            }
+        }
+
+        private void RenderAutocompleteDocumentation(string doc, int row, int col, int totalWidth, int totalHeight)
+        {
+            if (col >= totalWidth - 10) return; // Not enough space
+
+            int maxWidth = Math.Min(60, totalWidth - col - 2);
+            var lines = doc.Split('\n');
+            var wrappedLines = new List<string>();
+
+            foreach (var line in lines)
+            {
+                var words = line.Split(' ');
+                var currentLine = "";
+                foreach (var word in words)
+                {
+                    if (currentLine.Length + word.Length + 1 > maxWidth)
+                    {
+                        wrappedLines.Add(currentLine);
+                        currentLine = word;
+                    }
+                    else
+                    {
+                        currentLine = string.IsNullOrEmpty(currentLine) ? word : currentLine + " " + word;
+                    }
+                }
+                wrappedLines.Add(currentLine);
+            }
+
+            int height = Math.Min(10, wrappedLines.Count);
+            if (row + height > totalHeight - 1) row = totalHeight - height - 1;
+
+            for (int i = 0; i < height; i++)
+            {
+                _console.SetCursorPosition(col, row + i);
+                string content = wrappedLines[i].PadRight(maxWidth);
+                if (content.Length > maxWidth) content = content.Substring(0, maxWidth);
+                _console.Markup($"[white on grey15] {Markup.Escape(content)} [/]");
             }
         }
 

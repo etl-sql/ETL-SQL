@@ -185,20 +185,26 @@ namespace ETL_SQL.TUI.UI
         /// <param name="fullScript">The full content of the editor buffer.</param>
         /// <param name="connections">The active set of data sources.</param>
         /// <returns>A list of prioritized suggestions.</returns>
-        public static async Task<List<Suggestion>> GetSuggestionsAsync(string prefix, string fullScript, IDictionary<string, IDataSource> connections, ILogger? logger = null)
+        public static async Task<List<Suggestion>> GetSuggestionsAsync(string prefix, string fullScript, IDictionary<string, IDataSource> connections, ILogger? logger = null, Core.Interfaces.ILanguageHelpRegistry? helpRegistry = null)
         {
+            var scriptBefore = fullScript;
+            if (!string.IsNullOrEmpty(prefix) && fullScript.EndsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                scriptBefore = fullScript.Substring(0, fullScript.Length - prefix.Length);
+            }
+
             var context = new SuggestionContext
             {
                 Prefix = prefix ?? "",
                 FullScript = fullScript,
-                ScriptBefore = fullScript, // In a real editor, this would be text up to cursor
+                ScriptBefore = scriptBefore,
                 Connections = connections,
                 Aliases = ParseAliases(fullScript),
                 VirtualSchemas = ParseVirtualSchemas(fullScript),
                 Logger = logger
             };
 
-            var engine = new SuggestionEngine();
+            var engine = new SuggestionEngine(helpRegistry);
             return await engine.GetSuggestionsAsync(context);
         }
 

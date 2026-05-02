@@ -2,21 +2,21 @@
 ## Up Next
 - [ ] **Subscription Parameters** — Full strategy: [`Docs/Strategy/SubscriptionParameters_Strategy.md`](Strategy/SubscriptionParameters_Strategy.md). RELDATE/LIST types, `SET WEEK_START_DAY`, `CREATE/ALTER SUBSCRIPTION PARAMETERS(...)`, portal INPUT parameter UX. ~6.5 dev-days across 6 phases. Implementation tasks below.
     - **Phase 1 — Engine: New Types** *(most isolated, start here)*
-        - [ ] `ETL-SQL.Core/Ast.cs`: Add `RelDateType`, `ListType` to type system; `SetWeekStartDayStatement` record; `INPUT` modifier on `DeclareStatement`.
+        - [x] `ETL-SQL.Core/Ast.cs`: Add `RelDateType`, `ListType` to type system; `SetWeekStartDayStatement` record; `INPUT` modifier on `DeclareStatement`.
         ListType, INPUT modifier already exist.
-        - [ ] `ETL-SQL.Core/TokenType.cs` + `Lexer.cs`: Add `RELDATE`, `LIST`, `INPUT`, `WEEK_START_DAY` tokens/keywords.
-        - [ ] `ETL-SQL.Core/Parser`: Parse `DECLARE @var RELDATE = <expr> [INPUT]`, `DECLARE @var LIST(type) [= default] [INPUT]`, `SET WEEK_START_DAY = '<day>'`.
-        - [ ] `ETL-SQL.Engine/RelDateResolver.cs` *(new)*: Stateless resolver — anchor parse, period-shift arithmetic, N/NU inline units, fixed-date passthrough, `ExecutionException` on bad input. See spec in strategy doc.
-        - [ ] `ETL-SQL.Engine/SetWeekStartDayHandler.cs` *(new)*: Validate day name, store on `IExecutionContext`.
-        - [ ] `ETL-SQL.Engine/Evaluator.cs`: Surface `WeekStartDay` from `appsettings.json → Engine.StartOfWeek` (default Monday). Wire handler.
-        - [ ] `appsettings.json`: Add `Engine.StartOfWeek` string setting.
-        - [ ] `ExpressionEvaluator.cs`: Resolve `RELDATE` variable reads via `RelDateResolver` at runtime.
-        - [ ] Tests: `RelDateResolverTests.cs` (exhaustive), `SetWeekStartDayTests.cs`, `WeekStartArithmeticTests.cs`.
+        - [x] `ETL-SQL.Core/TokenType.cs` + `Lexer.cs`: Add `RELDATE`, `LIST`, `INPUT`, `WEEK_START_DAY` tokens/keywords.
+        - [x] `ETL-SQL.Core/Parser`: Parse `DECLARE @var RELDATE = <expr> [INPUT]`, `DECLARE @var LIST(type) [= default] [INPUT]`, `SET WEEK_START_DAY = '<day>'`.
+        - [x] `ETL-SQL.Engine/RelDateResolver.cs` *(new)*: Stateless resolver — anchor parse, period-shift arithmetic, N/NU inline units, fixed-date passthrough, `ExecutionException` on bad input. See spec in strategy doc.
+        - [x] `ETL-SQL.Engine/SetWeekStartDayHandler.cs` *(new)*: Validate day name, store on `IExecutionContext`.
+        - [x] `ETL-SQL.Engine/Evaluator.cs`: Surface `WeekStartDay` from `appsettings.json → Engine.StartOfWeek` (default Monday). Wire handler.
+        - [x] `appsettings.json`: Add `Engine.StartOfWeek` string setting.
+        - [x] `ExpressionEvaluator.cs`: Resolve `RELDATE` variable reads via `RelDateResolver` at runtime.
+        - [x] Tests: `RelDateResolverTests.cs` (exhaustive), `SetWeekStartDayTests.cs`, `WeekStartArithmeticTests.cs`.
     - **Phase 2 — Subscription SQL Syntax**
-        - [ ] `ETL-SQL.Core`: Add `Name?` + `Parameters: IReadOnlyList<SubscriptionParameter>` to `CreatePortalSubscriptionStatement`; new `SubscriptionParameter(Name, Value)` record; `AlterPortalSubscriptionStatement` record.
-        - [ ] `ETL-SQL.Core/Parser`: Parse optional `<name>` on `CREATE SUBSCRIPTION`; parse `PARAMETERS(...)` clause; parse `ALTER SUBSCRIPTION` statement.
-        - [ ] `ETL-SQL.Engine/CreatePortalSubscriptionHandler.cs`: Persist `Name` + `ParametersJson`.
-        - [ ] `ETL-SQL.Engine/AlterPortalSubscriptionHandler.cs` *(new)*: Update schedule/format/active/params; replace full param set when clause present; leave unchanged when absent; clear when clause is empty list.
+        - [x] `ETL-SQL.Core`: Add `Name?` + `Parameters: IReadOnlyList<SubscriptionParameter>` to `CreatePortalSubscriptionStatement`; new `SubscriptionParameter(Name, Value)` record; `AlterPortalSubscriptionStatement` record.
+        - [x] `ETL-SQL.Core/Parser`: Parse optional `<name>` on `CREATE SUBSCRIPTION`; parse `PARAMETERS(...)` clause; parse `ALTER SUBSCRIPTION` statement.
+        - [x] `ETL-SQL.Engine/CreatePortalSubscriptionHandler.cs`: Persist `Name` + `ParametersJson`.
+        - [x] `ETL-SQL.Engine/AlterPortalSubscriptionHandler.cs` *(new)*: Update schedule/format/active/params; replace full param set when clause present; leave unchanged when absent; clear when clause is empty list.
     - **Phase 3 — Portal Data Layer**
         - [ ] `Subscription.cs` entity: Add `Name` (nullable `TEXT`) + `ParametersJson` (nullable `TEXT`).
         - [ ] New EF Core migration: `AddSubscriptionNameAndParameters`.
@@ -156,22 +156,22 @@
         - [x] Fallback: Maintain `KeywordProvider` as the safety net for "small wins" (e.g., `SE` -> `SELECT`).
         - [x] TUI Rendering: Verify that "Smart" suggestions appear at the top of the dropdown.
         - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Ranking/Priorities work), Git Commit.
-    - [/] **Phase 4 — Unified Language Service (TUI + LSP Integration)**
-        - [ ] **Architectural Refactor**: Create `ETL-SQL.Core/Services/LanguageService.cs` to house all pattern-matching and suggestion logic.
-        - [ ] **Consolidate Providers**: Move `PatternProvider`, `KeywordProvider`, and `FilePathProvider` into this shared core service to eliminate logic duplication.
-        - [ ] **TUI Update**: Refactor `SuggestionEngine` to delegate all context discovery to the shared `LanguageService`.
-        - [ ] **LSP Update**: Refactor `ETL-SQL.LanguageServer/CompletionProvider.cs` to use the shared service, ensuring 100% feature parity between terminal and IDE.
-        - [ ] **Verification**: Confirm that adding a new keyword or connector automatically populates both environments from the single source of truth.
-        - [ ] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (TUI + LSP parity), Git Commit.
-    - **Phase 5 — Knowledge Cross-Pollination (Help + IntelliSense Integration)**
-        - [ ] **Shared Documentation Mapping**: Ensure the `LanguageService` automatically links each suggestion to its corresponding entry in the `ILanguageHelpRegistry`.
-        - [ ] **TUI: Help Sidebar**: Implement a reactive side-panel in the TUI autocomplete dropdown that displays the markdown documentation for the currently highlighted suggestion.
-        - [ ] **LSP: Hover & Signature Help**:
-            - [ ] Implement `IHoverHandler` in the Language Server to show full HELP content on `Ctrl+Hover`.
-            - [ ] Implement `ISignatureHelpHandler` to provide parameter tooltips when typing functions (e.g., `JSON_VALUE(expr, path)`).
-        - [ ] **Contextual Documentation**: Pass statement context (e.g., `ConnectorType`) to the help fetcher so users see connector-specific documentation for generic options like `FORMAT` or `DELIMITER`.
-        - [ ] **Snippet Templates**: Integrate "Cookbook" snippets into the suggestion list, allowing users to "tab-complete" full statement patterns.
-        - [ ] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Help Sidebar + Hover work), Git Commit.
+    - [x] **Phase 4 — Unified Language Service (TUI + LSP Integration)**
+        - [x] **Architectural Refactor**: Create `ETL-SQL.Core/Services/LanguageService.cs` to house all pattern-matching and suggestion logic.
+        - [x] **Consolidate Providers**: Move `PatternProvider`, `KeywordProvider`, and `FilePathProvider` into this shared core service to eliminate logic duplication.
+        - [x] **TUI Update**: Refactor `SuggestionEngine` to delegate all context discovery to the shared `LanguageService`.
+        - [x] **LSP Update**: Refactor `ETL-SQL.LanguageServer/CompletionProvider.cs` to use the shared service, ensuring 100% feature parity between terminal and IDE.
+        - [x] **Verification**: Confirm that adding a new keyword or connector automatically populates both environments from the single source of truth.
+        - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (TUI + LSP parity), Git Commit.
+    - [x] **Phase 5 — Knowledge Cross-Pollination (Help + IntelliSense Integration)**
+        - [x] **Shared Documentation Mapping**: Ensure the `LanguageService` automatically links each suggestion to its corresponding entry in the `ILanguageHelpRegistry`.
+        - [x] **TUI: Help Sidebar**: Implement a reactive side-panel in the TUI autocomplete dropdown that displays the markdown documentation for the currently highlighted suggestion.
+        - [x] **LSP: Hover & Signature Help**:
+            - [x] Implement `IHoverHandler` in the Language Server to show full HELP content on `Ctrl+Hover`.
+            - [/] Implement `ISignatureHelpHandler` to provide parameter tooltips when typing functions (e.g., `JSON_VALUE(expr, path)`).
+        - [x] **Contextual Documentation**: Pass statement context (e.g., `ConnectorType`) to the help fetcher so users see connector-specific documentation for generic options like `FORMAT` or `DELIMITER`.
+        - [/] **Snippet Templates**: Integrate "Cookbook" snippets into the suggestion list, allowing users to "tab-complete" full statement patterns.
+        - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Help Sidebar + Hover work), Git Commit.
     - **Phase 6 — Visual Intelligence (Inlay Hints & Semantic Highlighting)**
         - [ ] **Inlay Hints**: Implement "Ghost Text" parameter hints for functions (e.g., showing `[interval]`, `[number]` inside `DATEADD`).
         - [ ] **TUI Rendering**: Support dim-color inline rendering for hints without affecting cursor positioning.

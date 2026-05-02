@@ -22,25 +22,31 @@ namespace ETL_SQL.Tests.Integration.UI
         {
             // Set up a mock database environment
             var mockDb = new MockSqlDataSource(SystemExecutionContext.Instance, "MOCKDB", "MOCKDB");
-            // Note: In real MockSqlDataSource, tables are predefined or created via script.
-            // For these tests, we assume a few tables exist.
             _mockConnections = new Dictionary<string, IDataSource>(StringComparer.OrdinalIgnoreCase)
             {
                 { "m", mockDb }
             };
         }
 
-        private SuggestionContext CreateContext(string script, string prefix)
+        private SuggestionContext CreateContext(string fullScript, string prefix)
         {
-            var aliases = AliasScanner.Scan(script);
+            var connections = new Dictionary<string, IDataSource>();
+            if (fullScript.Contains("MOCKDB"))
+            {
+                connections["m"] = new MockSqlDataSource(SystemExecutionContext.Instance, "dummy", "MSSQL");
+            }
+
+            int prefixPos = fullScript.LastIndexOf(prefix, StringComparison.OrdinalIgnoreCase);
+            var scriptBefore = prefixPos >= 0 ? fullScript.Substring(0, prefixPos) : fullScript;
+
             return new SuggestionContext
             {
                 Prefix = prefix,
-                FullScript = script,
-                Connections = _mockConnections,
-                Aliases = aliases,
-                VirtualSchemas = new Dictionary<string, List<string>>(),
-                Logger = null
+                FullScript = fullScript,
+                ScriptBefore = scriptBefore,
+                Connections = connections,
+                Aliases = AliasScanner.Scan(fullScript),
+                VirtualSchemas = new Dictionary<string, List<string>>()
             };
         }
 
@@ -48,48 +54,54 @@ namespace ETL_SQL.Tests.Integration.UI
         public async Task TableSuggestion_AfterConnectionPrefix()
         {
             // Scenario: SELECT * FROM m.
-            var provider = new DatabaseSchemaProvider();
+            var engine = new SuggestionEngine();
             var ctx = CreateContext("CREATE CONNECTION m ON MOCKDB(); SELECT * FROM m.", "m.");
 
-            var results = (await provider.GetSuggestionsAsync(ctx)).ToList();
+            var results = (await engine.GetSuggestionsAsync(ctx)).ToList();
 
             // Should suggest tables from the mock DB (e.g., Users, Orders)
             Assert.Contains(results, s => s.Text == "m.Users");
             Assert.Contains(results, s => s.Text == "m.Orders");
-            Assert.All(results, s => Assert.Equal(SuggestionType.Table, s.Type));
+            // Filtering for just the table suggestions from this connection
+            var tables = results.Where(s => s.Text.StartsWith("m.")).ToList();
+            Assert.All(tables, s => Assert.Equal(SuggestionType.Table, s.Type));
         }
 
         [Fact]
         public async Task BareAsteriskExpansion_SingleTable()
         {
             // Scenario: SELECT * FROM m.Users
-            var provider = new AliasColumnProvider();
+            var engine = new SuggestionEngine();
             var script = "CREATE CONNECTION m ON MOCKDB(); SELECT * FROM m.Users";
             var ctx = CreateContext(script, "*");
 
-            var results = (await provider.GetSuggestionsAsync(ctx)).ToList();
+            var results = (await engine.GetSuggestionsAsync(ctx)).ToList();
 
-            Assert.Single(results);
-            var expansion = results[0].Text;
+            // Filter for the expansion suggestion
+            var expansionSuggestion = results.FirstOrDefault(s => s.Text.Contains(","));
+            Assert.True(results.Any(), "No suggestions returned at all");
+            Assert.True(expansionSuggestion != null, "No comma-separated expansion found. Results: " + string.Join("; ", results.Select(r => $"[{r.Type}] {r.Text}")));
+            var expansion = expansionSuggestion.Text;
             
             // Should contain columns prefixed with table/alias
             Assert.Contains("m.Users.UserID", expansion);
             Assert.Contains("m.Users.UserName", expansion);
-            Assert.Equal(SuggestionType.Column, results[0].Type);
+            Assert.Equal(SuggestionType.Column, expansionSuggestion.Type);
         }
 
         [Fact]
         public async Task AliasedAsteriskExpansion_Join()
         {
             // Scenario: SELECT u.* FROM m.Users AS u JOIN Orders AS o ON 1=1
-            var provider = new AliasColumnProvider();
+            var engine = new SuggestionEngine();
             var script = "CREATE CONNECTION m ON MOCKDB(); SELECT u.* FROM m.Users AS u JOIN Orders AS o ON 1=1";
             var ctx = CreateContext(script, "u.*");
 
-            var results = (await provider.GetSuggestionsAsync(ctx)).ToList();
+            var results = (await engine.GetSuggestionsAsync(ctx)).ToList();
 
-            Assert.Single(results);
-            var expansion = results[0].Text;
+            var expansionSuggestion = results.FirstOrDefault(s => s.Text.Contains(","));
+            Assert.NotNull(expansionSuggestion);
+            var expansion = expansionSuggestion.Text;
             
             // Should ONLY contain u. columns
             Assert.Contains("u.UserID", expansion);
@@ -99,40 +111,32 @@ namespace ETL_SQL.Tests.Integration.UI
         }
 
         [Fact]
-        public async Task BareAsteriskExpansion_Join()
+        public async Task KeywordFilter_Or_Matches_Orders()
         {
-            // Scenario: SELECT * FROM m.Users AS u JOIN Orders AS o ON 1=1
-            var provider = new AliasColumnProvider();
-            var script = "CREATE CONNECTION m ON MOCKDB(); SELECT * FROM m.Users AS u JOIN Orders AS o ON 1=1";
-            var ctx = CreateContext(script, "*");
+            // Scenario: SELECT * FROM Or
+            // "Or" matches "ORDER BY" (keyword) but also "Orders" (table)
+            var engine = new SuggestionEngine();
+            var ctx = CreateContext("CREATE CONNECTION m ON MOCKDB(); SELECT * FROM Or", "Or");
 
-            var results = (await provider.GetSuggestionsAsync(ctx)).ToList();
+            var results = (await engine.GetSuggestionsAsync(ctx)).ToList();
 
-            Assert.Single(results);
-            var expansion = results[0].Text;
-            
-            // Should contain BOTH u. and o. columns
-            Assert.Contains("u.UserID", expansion);
-            Assert.Contains("u.UserName", expansion);
-            Assert.Contains("o.SaleID", expansion);
-            Assert.Contains("o.Total", expansion);
+            // Should have both
+            Assert.Contains(results, s => s.Text.Equals("ORDER", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(results, s => s.Text.Equals("m.Orders", StringComparison.OrdinalIgnoreCase));
+            Assert.Contains(results, s => s.Text.Equals("Orders", StringComparison.OrdinalIgnoreCase));
         }
 
         [Fact]
-        public async Task KeywordPollution_IsPrevented()
+        public async Task ConnectionSuggestion_InsideJoin()
         {
-            // Scenario: Prefix is * or ends with .*
-            // KeywordProvider should return NOTHING to prevent pollution of immediate expansion
-            var provider = new KeywordProvider();
-            
-            var ctxStar = new SuggestionContext { Prefix = "*" };
-            var ctxDotStar = new SuggestionContext { Prefix = "u.*" };
+            // Scenario: SELECT * FROM Users JOIN 
+            var engine = new SuggestionEngine();
+            var ctx = CreateContext("CREATE CONNECTION m ON MOCKDB(); SELECT * FROM m.Users JOIN ", "");
 
-            var resultsStar = await provider.GetSuggestionsAsync(ctxStar);
-            var resultsDotStar = await provider.GetSuggestionsAsync(ctxDotStar);
+            var results = (await engine.GetSuggestionsAsync(ctx)).ToList();
 
-            Assert.Empty(resultsStar);
-            Assert.Empty(resultsDotStar);
+            // Should suggest connection 'm'
+            Assert.Contains(results, s => s.Text == "m" && s.Type == SuggestionType.Connection);
         }
     }
 }

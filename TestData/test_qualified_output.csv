@@ -275,3 +275,7 @@ Tabs	User,Dallas,Value with tab inside
 O'Brien,Boston,"Has a quote: ""quoted word"""
 Jane Doe,Chicago,Normal value
 Tabs	User,Dallas,Value with tab inside
+"Smith, John",New York,"Has a comma, in name"
+O'Brien,Boston,"Has a quote: ""quoted word"""
+Jane Doe,Chicago,Normal value
+Tabs	User,Dallas,Value with tab inside
