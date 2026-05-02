@@ -113,9 +113,9 @@ namespace ETL_SQL.Tests.Integration
         }
 
         [Fact]
-        public async Task ContextAwareProvider_SuggestsConnectorsAfterOn()
+        public async Task PatternProvider_SuggestsConnectorsAfterOn()
         {
-            var provider = new ContextAwareProvider();
+            var provider = new PatternProvider();
             var context = new SuggestionContext
             {
                 ScriptBefore = "CREATE CONNECTION C ON "
@@ -124,6 +124,20 @@ namespace ETL_SQL.Tests.Integration
             var results = await provider.GetSuggestionsAsync(context);
             Assert.Contains(results, s => s.Text == "CSV");
             Assert.True(results.Any(s => s.Text == "MSSQL") || results.Any(s => s.Text == "SQLSERVER"));
+        }
+
+        [Fact]
+        public async Task PatternProvider_SuggestsOnOffAfterProfiling()
+        {
+            var provider = new PatternProvider();
+            var context = new SuggestionContext
+            {
+                ScriptBefore = "SET PROFILING "
+            };
+            
+            var results = await provider.GetSuggestionsAsync(context);
+            Assert.Contains(results, s => s.Text == "ON");
+            Assert.Contains(results, s => s.Text == "OFF");
         }
 
         [Fact]

@@ -113,12 +113,12 @@
         - [x] Update `ILanguageHelpRegistry` to use Automatic Resource Discovery (mapping `Filename.md` directly to `KEYWORD` via reflection).
         - [x] Add a unit test to verify that every keyword and function in the engine has a matching resource file.
         - [x] Checkpoint: 100% Tests Pass, 100% Samples Pass, Manual Audit of Help Content, Git Commit.
-    - [/] **Phase 1 — Pattern Engine & Anchors**
-        - [ ] `ETL-SQL.TUI/UI/SuggestionProviders.cs`: Implement `PatternProvider` (upgrades/replaces `ContextAwareProvider`).
-        - [ ] Implement `TokenWindow` logic: extract the last 3-5 tokens leading up to the cursor.
-        - [ ] Define "Anchor Patterns" for: `CREATE`, `CREATE CONNECTION`, `FROM/JOIN`, `WITH`, `SET`.
-        - [ ] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Pattern discovery works), Git Commit.
-    - **Phase 2 — Connector & Option Intelligence**
+    - [x] **Phase 1 — Pattern Engine & Anchors**
+        - [x] `ETL-SQL.TUI/UI/SuggestionProviders.cs`: Implement `PatternProvider` (upgrades/replaces `ContextAwareProvider`).
+        - [x] Implement `TokenWindow` logic: extract the last 3-5 tokens leading up to the cursor.
+        - [x] Define "Anchor Patterns" for: `CREATE`, `CREATE CONNECTION`, `FROM/JOIN`, `WITH`, `SET`.
+        - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Pattern discovery works), Git Commit.
+    - [/] **Phase 2 — Connector & Option Intelligence**
         - [ ] Dynamic Option Discovery: When inside `WITH(...)`, reverse-scan for the `ON <Type>` anchor and fetch valid `OptionNames` from `ConnectorRegistry`.
         - [ ] Option Value Suggestions: After `<OptionName> =`, suggest known values (e.g., `COMMA`, `PIPE`, `FORMAT` types).
         - [ ] Connection/Table Member Access: After `<Alias>.`, suggest columns; after `<Connection>.`, suggest tables.

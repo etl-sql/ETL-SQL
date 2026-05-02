@@ -318,25 +318,37 @@ namespace ETL_SQL.TUI.UI
         }
     }
 
-    public class ContextAwareProvider : ISuggestionProvider
+    public class PatternProvider : ISuggestionProvider
     {
         public async Task<IEnumerable<Suggestion>> GetSuggestionsAsync(SuggestionContext context)
         {
             var results = new List<Suggestion>();
             try
             {
-                var lastTokens = Regex.Matches(context.ScriptBefore, @"\b\w+\b").Cast<Match>().Select(m => m.Value.ToUpperInvariant()).ToList();
-                string? prevWord = lastTokens.Count > 0 ? lastTokens.Last() : null;
+                // TokenWindow logic: Get last 5 tokens before cursor
+                var tokens = GetLastTokens(context.ScriptBefore, 5);
+                if (!tokens.Any()) return results;
 
-                if (prevWord == "CREATE" || prevWord == "DROP" || prevWord == "ALTER")
+                var last = tokens.Last();
+                var prev1 = tokens.Count > 1 ? tokens[tokens.Count - 2] : null;
+                var prev2 = tokens.Count > 2 ? tokens[tokens.Count - 3] : null;
+
+                // 1. CREATE [TOPIC]
+                if (last.Text.Equals("CREATE", StringComparison.OrdinalIgnoreCase))
                 {
-                    results.AddRange(new[] { "TABLE", "CONNECTION", "PROCEDURE", "FUNCTION", "INDEX", "DIRECTORY" }.Select(k => new Suggestion(k, SuggestionType.Keyword)));
+                    results.AddRange(new[] { "CONNECTION", "TABLE", "VISUAL", "PAGE", "DATASET", "STYLE", "CONTAINER", "NAVIGATION", "JOB", "DIRECTORY", "PROCEDURE", "FUNCTION", "INDEX" }
+                        .Select(k => new Suggestion(k, SuggestionType.Keyword)));
                 }
-                else if (prevWord == "ON")
+                // 2. CREATE CONNECTION [name] ON
+                else if (last.Text.Equals("ON", StringComparison.OrdinalIgnoreCase) && prev2?.Text.Equals("CONNECTION", StringComparison.OrdinalIgnoreCase) == true)
                 {
                     results.AddRange(ConnectorRegistry.Instance!.GetRegisteredNames().Select(c => new Suggestion(c, SuggestionType.Connection)));
                 }
-                else if (prevWord == "FROM" || prevWord == "JOIN" || prevWord == "INTO" || prevWord == "UPDATE")
+                // 3. FROM / JOIN / INTO / UPDATE
+                else if (last.Text.Equals("FROM", StringComparison.OrdinalIgnoreCase) || 
+                         last.Text.Equals("JOIN", StringComparison.OrdinalIgnoreCase) || 
+                         last.Text.Equals("INTO", StringComparison.OrdinalIgnoreCase) || 
+                         last.Text.Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
                 {
                     results.AddRange(context.Connections.Keys.Select(c => new Suggestion(c, SuggestionType.Connection)));
                     results.AddRange(context.VirtualSchemas.Keys.Select(v => new Suggestion(v, SuggestionType.Table)));
@@ -344,29 +356,49 @@ namespace ETL_SQL.TUI.UI
                     {
                         if (conn is IDatabaseSource db)
                         {
-                            try { results.AddRange((await db.GetTablesAsync()).Select(t => new Suggestion(t, SuggestionType.Table))); } catch (Exception ex) { context.Logger?.Debug($"[ContextAwareProvider] GetTablesAsync error: {ex.Message}"); }
-                            try { results.AddRange((await db.GetViewsAsync()).Select(v => new Suggestion(v, SuggestionType.Table))); } catch (Exception ex) { context.Logger?.Debug($"[ContextAwareProvider] GetViewsAsync error: {ex.Message}"); }
+                            try { results.AddRange((await db.GetTablesAsync()).Select(t => new Suggestion(t, SuggestionType.Table))); } catch { }
+                            try { results.AddRange((await db.GetViewsAsync()).Select(v => new Suggestion(v, SuggestionType.Table))); } catch { }
                         }
                     }
-                    results.AddRange(context.Aliases.Keys.Select(a => new Suggestion(a, SuggestionType.Alias)));
                 }
-                else
+                // 4. SET [TOPIC]
+                else if (last.Text.Equals("SET", StringComparison.OrdinalIgnoreCase))
                 {
+                    results.AddRange(new[] { "WHAT_IF", "PROFILING", "REPORT", "BATCH_SIZE", "STRICT_SCHEMA", "MAX_ERRORS" }
+                        .Select(k => new Suggestion(k, SuggestionType.Keyword)));
+                }
+                // 5. SET WHAT_IF / PROFILING
+                else if (last.Text.Equals("WHAT_IF", StringComparison.OrdinalIgnoreCase) || last.Text.Equals("PROFILING", StringComparison.OrdinalIgnoreCase))
+                {
+                    results.AddRange(new[] { "ON", "OFF" }.Select(k => new Suggestion(k, SuggestionType.Keyword)));
+                }
+                // 6. Generic "After Keyword" fallback (similar to old ContextAwareProvider)
+                else if (last.IsKeyword)
+                {
+                    // Fallback to basic connector/table/alias suggestions if no specific pattern matched
                     results.AddRange(context.Connections.Keys.Select(c => new Suggestion(c, SuggestionType.Connection)));
                     results.AddRange(context.VirtualSchemas.Keys.Select(v => new Suggestion(v, SuggestionType.Table)));
-                    foreach (var conn in context.Connections.Values)
-                    {
-                        if (conn is IDatabaseSource db)
-                        {
-                            try { results.AddRange((await db.GetTablesAsync()).Select(t => new Suggestion(t, SuggestionType.Table))); } catch (Exception ex) { context.Logger?.Debug($"[ContextAwareProvider] GetTablesAsync error: {ex.Message}"); }
-                            try { results.AddRange((await db.GetViewsAsync()).Select(v => new Suggestion(v, SuggestionType.Table))); } catch (Exception ex) { context.Logger?.Debug($"[ContextAwareProvider] GetViewsAsync error: {ex.Message}"); }
-                        }
-                    }
                     results.AddRange(context.Aliases.Keys.Select(a => new Suggestion(a, SuggestionType.Alias)));
                 }
             }
-            catch (Exception ex) { context.Logger?.Debug($"[ContextAwareProvider] Context awareness error: {ex.Message}"); }
+            catch (Exception ex) { context.Logger?.Debug($"[PatternProvider] Error: {ex.Message}"); }
             return results;
+        }
+
+        private List<TokenInfo> GetLastTokens(string text, int count)
+        {
+            // Simple tokenization for suggestions (not a full Lexer run)
+            var matches = Regex.Matches(text, @"(@?\w+|==|!=|<=|>=|[=<>+\-*/().,;])")
+                .Cast<Match>()
+                .Select(m => new TokenInfo(m.Value))
+                .ToList();
+
+            return matches.Skip(Math.Max(0, matches.Count - count)).ToList();
+        }
+
+        private record TokenInfo(string Text)
+        {
+            public bool IsKeyword => LanguageMetadata.IsKeyword(Text);
         }
     }
 
@@ -394,7 +426,7 @@ namespace ETL_SQL.TUI.UI
             new AliasColumnProvider(),
             new WithClauseProvider(),
             new DatabaseSchemaProvider(),
-            new ContextAwareProvider(),
+            new PatternProvider(),
             new KeywordProvider(),
             new VariableProvider()
         };
