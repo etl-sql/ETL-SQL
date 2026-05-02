@@ -1,0 +1,1 @@
+﻿Protocol: SMTP Email\nOptions: PORT, USERNAME, PASSWORD, USE_SSL, DEFAULT_FROM.

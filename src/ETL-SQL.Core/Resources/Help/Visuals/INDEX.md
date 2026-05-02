@@ -1,0 +1,1 @@
+﻿Visuals are the building blocks of reports. Syntax:\nCREATE VISUAL <name> AS <TYPE> ( SOURCE = ..., MAPPINGS (...), OPTIONS (...) )\nAvailable Types: BAR, LINE, PIE, TABLE, CARD, SLICER, etc.\nUse HELP VISUAL <TYPE> (e.g. HELP VISUAL BAR) for type-specific details.

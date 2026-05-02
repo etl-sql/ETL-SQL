@@ -32,9 +32,9 @@ graph TD
 ## Detailed Audit Log
 | Timestamp | Operation | Sources | Metadata |
 | :--- | :--- | :--- | :--- |
-| 2026-05-02 13:09:50 | SELECT INTO | #SalesAudit | **author**: chuck<br/>**engine_version**: 0.6.0 |
-| 2026-05-02 13:09:50 | SELECT INTO | #SalesAudit (OrderDate) | **owner**: SalesDept<br/>**d**: Timestamp of sale<br/>**author**: chuck<br/>**engine_version**: 0.6.0<br/>*Derived From*: OrderDate: Timestamp of sale |
-| 2026-05-02 13:09:50 | SELECT INTO | #SalesAudit (UserId) | **owner**: SalesDept<br/>**sensitive**: true<br/>**d**: Customer UID<br/>**author**: chuck<br/>**engine_version**: 0.6.0<br/>*Derived From*: UserId: Customer UID |
-| 2026-05-02 13:09:50 | SELECT | #SalesAudit | **author**: chuck<br/>**engine_version**: 0.6.0 |
-| 2026-05-02 13:09:50 | SELECT | #SalesAudit (OrderDate) | **owner**: SalesDept<br/>**d**: Timestamp of sale<br/>**author**: chuck<br/>**engine_version**: 0.6.0<br/>*Derived From*: OrderDate: Timestamp of sale |
-| 2026-05-02 13:09:50 | SELECT | #SalesAudit (UserId) | **owner**: SalesDept<br/>**sensitive**: true<br/>**d**: Customer UID<br/>**author**: chuck<br/>**engine_version**: 0.6.0<br/>*Derived From*: UserId: Customer UID |
+| 2026-05-02 14:28:30 | SELECT INTO | #SalesAudit | **author**: chuck<br/>**engine_version**: 0.6.0 |
+| 2026-05-02 14:28:30 | SELECT INTO | #SalesAudit (OrderDate) | **owner**: SalesDept<br/>**d**: Timestamp of sale<br/>**author**: chuck<br/>**engine_version**: 0.6.0<br/>*Derived From*: OrderDate: Timestamp of sale |
+| 2026-05-02 14:28:30 | SELECT INTO | #SalesAudit (UserId) | **owner**: SalesDept<br/>**sensitive**: true<br/>**d**: Customer UID<br/>**author**: chuck<br/>**engine_version**: 0.6.0<br/>*Derived From*: UserId: Customer UID |
+| 2026-05-02 14:28:30 | SELECT | #SalesAudit | **author**: chuck<br/>**engine_version**: 0.6.0 |
+| 2026-05-02 14:28:30 | SELECT | #SalesAudit (OrderDate) | **owner**: SalesDept<br/>**d**: Timestamp of sale<br/>**author**: chuck<br/>**engine_version**: 0.6.0<br/>*Derived From*: OrderDate: Timestamp of sale |
+| 2026-05-02 14:28:30 | SELECT | #SalesAudit (UserId) | **owner**: SalesDept<br/>**sensitive**: true<br/>**d**: Customer UID<br/>**author**: chuck<br/>**engine_version**: 0.6.0<br/>*Derived From*: UserId: Customer UID |

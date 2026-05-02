@@ -1,0 +1,1 @@
+﻿File: JSON (Newtonsoft.Json)\nOptions: PATH, ROOT_PATH, ENCODING, COMPRESS, ENCRYPT.

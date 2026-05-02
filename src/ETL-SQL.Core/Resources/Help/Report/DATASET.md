@@ -1,0 +1,1 @@
+﻿Syntax: CREATE DATASET #name [REFRESH EVERY 'time'] [TTL 'time'] [ENCRYPT = MACHINE|PASSWORD|KEYFILE] AS (SELECT ...)\nPurpose: Defines a persistent or cached result set that can be shared across reports.

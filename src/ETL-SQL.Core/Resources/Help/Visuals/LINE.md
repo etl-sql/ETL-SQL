@@ -1,0 +1,1 @@
+﻿Type: LINE, AREA\nMappings: X (time/categories), Y (metrics), COLOR (series).\nOptions: SMOOTH (ON|OFF), SYMBOLS (ON|OFF), AREA (ON|OFF).\nExample:\n  CREATE VISUAL Trend AS LINE (\n    SOURCE = #daily, MAPPINGS (X = Date, Y = Total)\n  );

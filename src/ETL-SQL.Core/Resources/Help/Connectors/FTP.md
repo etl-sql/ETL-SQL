@@ -1,0 +1,1 @@
+﻿Protocol: FTP, FTPS\nOptions: HOST, PORT, USER, PASSWORD, USE_SSL.

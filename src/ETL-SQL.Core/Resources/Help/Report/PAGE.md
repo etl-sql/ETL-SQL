@@ -1,0 +1,1 @@
+﻿Syntax: CREATE PAGE <name> AS LAYOUT ( ... body ... )\nBody Properties:\n  - STRUCTURE: CSS grid-template-areas (e.g., 'A A / B C').\n  - MAP:       Maps slots to visuals (MAP ('A' = MyChart)).\n  - STYLE:     Page-level styling.

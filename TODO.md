@@ -105,5 +105,54 @@
         - [ ] **Secret Management**: Implement an encrypted `appsettings.Production.json` or Environment Variable provider for sensitive connection strings.
         - [ ] **Admin Guides**: Create `Docs/Administrators_Guide.md` covering service management, backup/restore, and multi-server networking.
         - [ ] **Final Verification**: Perform a "Clean Machine" install on a fresh Windows VM and verify full "Workstation-to-Server" connectivity.
-- [ ] **Smarter suggestions** Right now the suggestion list is just whatever matches.  I would like to try and make this smarter by showing only the words that are valid.  Likewise options should be shown rather than having the user guess.
-- [ ] **VS Code get ctrl+hover help working**  I think some of the framework is in place but its not working currently.  Example  ctrl+hover over 'CONNECTION' in the editor does not bring up help.  Same for other commands.
+- [ ] **Smarter Suggestions (IntelliSense 2.0)** — Move from generic keyword matching to a "Pattern-Based Statement State Machine" for high-value context. ~4 dev-days.
+    - [x] **Phase 0 — Documentation Migration (Embedded Markdown Resources)**
+        - [x] Create `src/ETL-SQL.Core/Resources/Help/` directory to house all documentation.
+        - [x] Migrate all hard-coded help strings from C# code into standalone `.md` files (e.g., `SELECT.md`, `WITH.md`, `JSON_VALUE.md`).
+        - [x] Update `ETL-SQL.Core.csproj` to treat the Help directory as an `EmbeddedResource`.
+        - [x] Update `ILanguageHelpRegistry` to use Automatic Resource Discovery (mapping `Filename.md` directly to `KEYWORD` via reflection).
+        - [x] Add a unit test to verify that every keyword and function in the engine has a matching resource file.
+        - [x] Checkpoint: 100% Tests Pass, 100% Samples Pass, Manual Audit of Help Content, Git Commit.
+    - [/] **Phase 1 — Pattern Engine & Anchors**
+        - [ ] `ETL-SQL.TUI/UI/SuggestionProviders.cs`: Implement `PatternProvider` (upgrades/replaces `ContextAwareProvider`).
+        - [ ] Implement `TokenWindow` logic: extract the last 3-5 tokens leading up to the cursor.
+        - [ ] Define "Anchor Patterns" for: `CREATE`, `CREATE CONNECTION`, `FROM/JOIN`, `WITH`, `SET`.
+        - [ ] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Pattern discovery works), Git Commit.
+    - **Phase 2 — Connector & Option Intelligence**
+        - [ ] Dynamic Option Discovery: When inside `WITH(...)`, reverse-scan for the `ON <Type>` anchor and fetch valid `OptionNames` from `ConnectorRegistry`.
+        - [ ] Option Value Suggestions: After `<OptionName> =`, suggest known values (e.g., `COMMA`, `PIPE`, `FORMAT` types).
+        - [ ] Connection/Table Member Access: After `<Alias>.`, suggest columns; after `<Connection>.`, suggest tables.
+        - [ ] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Option/Value suggestions work), Git Commit.
+    - **Phase 3 — Priority & Fallback Tuning**
+        - [ ] Weighting: Ensure `PatternProvider` results have the highest priority (`Priority 0`) in `SuggestionEngine`.
+        - [ ] Fallback: Maintain `KeywordProvider` as the safety net for "small wins" (e.g., `SE` -> `SELECT`).
+        - [ ] TUI Rendering: Verify that "Smart" suggestions appear at the top of the dropdown.
+        - [ ] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Ranking/Priorities work), Git Commit.
+    - **Phase 4 — Unified Language Service (TUI + LSP Integration)**
+        - [ ] **Architectural Refactor**: Create `ETL-SQL.Core/Services/LanguageService.cs` to house all pattern-matching and suggestion logic.
+        - [ ] **Consolidate Providers**: Move `PatternProvider`, `KeywordProvider`, and `FilePathProvider` into this shared core service to eliminate logic duplication.
+        - [ ] **TUI Update**: Refactor `SuggestionEngine` to delegate all context discovery to the shared `LanguageService`.
+        - [ ] **LSP Update**: Refactor `ETL-SQL.LanguageServer/CompletionProvider.cs` to use the shared service, ensuring 100% feature parity between terminal and IDE.
+        - [ ] **Verification**: Confirm that adding a new keyword or connector automatically populates both environments from the single source of truth.
+        - [ ] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (TUI + LSP parity), Git Commit.
+    - **Phase 5 — Knowledge Cross-Pollination (Help + IntelliSense Integration)**
+        - [ ] **Shared Documentation Mapping**: Ensure the `LanguageService` automatically links each suggestion to its corresponding entry in the `ILanguageHelpRegistry`.
+        - [ ] **TUI: Help Sidebar**: Implement a reactive side-panel in the TUI autocomplete dropdown that displays the markdown documentation for the currently highlighted suggestion.
+        - [ ] **LSP: Hover & Signature Help**:
+            - [ ] Implement `IHoverHandler` in the Language Server to show full HELP content on `Ctrl+Hover`.
+            - [ ] Implement `ISignatureHelpHandler` to provide parameter tooltips when typing functions (e.g., `JSON_VALUE(expr, path)`).
+        - [ ] **Contextual Documentation**: Pass statement context (e.g., `ConnectorType`) to the help fetcher so users see connector-specific documentation for generic options like `FORMAT` or `DELIMITER`.
+        - [ ] **Snippet Templates**: Integrate "Cookbook" snippets into the suggestion list, allowing users to "tab-complete" full statement patterns.
+        - [ ] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Help Sidebar + Hover work), Git Commit.
+    - **Phase 6 — Visual Intelligence (Inlay Hints & Semantic Highlighting)**
+        - [ ] **Inlay Hints**: Implement "Ghost Text" parameter hints for functions (e.g., showing `[interval]`, `[number]` inside `DATEADD`).
+        - [ ] **TUI Rendering**: Support dim-color inline rendering for hints without affecting cursor positioning.
+        - [ ] **LSP Support**: Implement `IInlayHintHandler` for VS Code.
+        - [ ] **Semantic Highlighting**: Upgrade highlighters to color-code Remote Tables, Temp Tables, and CTEs differently based on the `LanguageService` context.
+        - [ ] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Hints/Colors work), Git Commit.
+    - **Phase 7 — Editing Assistance (Smart Refactoring & Quick Fixes)**
+        - [ ] **Smart Rename (F2)**: Implement safe symbol renaming for variables, aliases, and `#temp` tables across the entire script.
+        - [ ] **Quick Fixes (Lightbulb)**: Integrate Linter rules with automated fixes (e.g., "Encrypt plaintext password", "Convert TOP to LIMIT for Postgres").
+        - [ ] **Column Expansion**: Offer a quick fix to transform `SELECT *` into an explicit column list.
+        - [ ] **LSP Support**: Implement `IRenameHandler` and `ICodeActionHandler`.
+        - [ ] **Final Checkpoint**: Full Regression Suite, Release Tag.

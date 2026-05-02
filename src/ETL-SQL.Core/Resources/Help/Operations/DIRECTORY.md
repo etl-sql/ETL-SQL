@@ -1,0 +1,1 @@
+﻿Directory Operations:\n  CREATE DIRECTORY 'path'\n  DELETE DIRECTORY 'path'\n  RENAME DIRECTORY 'old' TO 'new'\n  MOVE DIRECTORY 'src' TO 'dest'\n  COPY DIRECTORY 'src' TO 'dest'\n  COMPRESS DIRECTORY 'src' TO 'dest.zip'\n  ENCRYPT DIRECTORY 'src' TO 'dest' PASSWORD('pwd')\n  DECRYPT DIRECTORY 'src' TO 'dest' PASSWORD('pwd')

@@ -10,6 +10,85 @@ namespace ETL_SQL.Core.Metadata
         private readonly Dictionary<string, string> _topLevelHelp = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, Dictionary<string, string>> _subTopicHelp = new(StringComparer.OrdinalIgnoreCase);
 
+        public LanguageHelpRegistry()
+        {
+            LoadResources();
+        }
+
+        private void LoadResources()
+        {
+            var assembly = typeof(LanguageHelpRegistry).Assembly;
+            var resourceNames = assembly.GetManifestResourceNames()
+                .Where(n => n.StartsWith("ETL_SQL.Core.Resources.Help.") && n.EndsWith(".md"));
+
+            foreach (var name in resourceNames)
+            {
+                // Format: ETL_SQL.Core.Resources.Help.Category.Topic.md
+                // Or: ETL_SQL.Core.Resources.Help.Category.Topic.SubTopic.md
+                var parts = name.Replace("ETL_SQL.Core.Resources.Help.", "").Replace(".md", "").Split('.');
+                if (parts.Length < 2) continue;
+
+                var category = parts[0]; // e.g. Keywords, Visuals
+                var topic = parts[1];    // e.g. SELECT, BAR
+                var subTopic = parts.Length > 2 ? parts[2] : null;
+
+                using var stream = assembly.GetManifestResourceStream(name);
+                if (stream == null) continue;
+                using var reader = new System.IO.StreamReader(stream);
+                var content = reader.ReadToEnd();
+
+                string? mappedTopic = null;
+                string? mappedSubTopic = null;
+
+                switch (category.ToUpperInvariant())
+                {
+                    case "KEYWORDS":
+                        mappedTopic = topic;
+                        break;
+                    case "VISUALS":
+                        mappedTopic = "VISUAL";
+                        mappedSubTopic = topic;
+                        break;
+                    case "CONNECTORS":
+                        mappedTopic = "CONNECTION";
+                        mappedSubTopic = topic;
+                        break;
+                    case "VARIABLES":
+                        mappedTopic = "VARIABLES";
+                        mappedSubTopic = topic;
+                        break;
+                    case "FUNCTIONS":
+                        mappedTopic = "FUNCTION";
+                        mappedSubTopic = topic;
+                        break;
+                    case "OPERATIONS":
+                        mappedTopic = topic;
+                        break;
+                    case "REPORT":
+                        mappedTopic = "REPORT";
+                        mappedSubTopic = topic;
+                        break;
+                    default:
+                        mappedTopic = topic;
+                        mappedSubTopic = subTopic;
+                        break;
+                }
+
+                if (mappedTopic != null)
+                {
+                    // If the subtopic is INDEX, it's actually the help for the topic itself
+                    if (string.Equals(mappedSubTopic, "INDEX", StringComparison.OrdinalIgnoreCase))
+                    {
+                        RegisterHelp(mappedTopic, content, null);
+                    }
+                    else
+                    {
+                        RegisterHelp(mappedTopic, content, mappedSubTopic);
+                    }
+                }
+            }
+        }
+
         public void RegisterHelp(string topic, string helpText, string? subTopic = null)
         {
             if (string.IsNullOrEmpty(subTopic))

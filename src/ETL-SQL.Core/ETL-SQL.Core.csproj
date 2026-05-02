@@ -26,4 +26,8 @@
     <InternalsVisibleTo Include="ETL-SQL.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Help\**\*.md" />
+  </ItemGroup>
+
 </Project>

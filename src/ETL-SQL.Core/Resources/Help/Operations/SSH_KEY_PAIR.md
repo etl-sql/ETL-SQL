@@ -1,0 +1,1 @@
+﻿SSH Key Pair Operations:\n  CREATE SSH_KEY_PAIR 'path' WITH(BITS=2048, ALGORITHM='RSA', PASSPHRASE='pwd')

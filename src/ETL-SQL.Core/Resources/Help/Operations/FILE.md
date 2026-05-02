@@ -1,0 +1,1 @@
+﻿File Operations:\n  COPY FILE 'src' TO 'dest'\n  MOVE FILE 'src' TO 'dest'\n  RENAME FILE 'old' TO 'new'\n  DELETE FILE 'path'\n  COMPRESS FILE 'src' TO 'dest.zip'\n  ENCRYPT FILE 'src' TO 'dest' PASSWORD('pwd')\n  DECRYPT FILE 'src' TO 'dest' PASSWORD('pwd')

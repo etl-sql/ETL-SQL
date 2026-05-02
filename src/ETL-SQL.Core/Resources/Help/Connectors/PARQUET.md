@@ -1,0 +1,1 @@
+﻿File: Apache Parquet\nOptions: PATH, COMPRESSION (SNAPPY|GZIP|ZSTD), ENCRYPT, PASSWORD.
