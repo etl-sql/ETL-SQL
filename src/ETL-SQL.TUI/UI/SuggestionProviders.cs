@@ -25,10 +25,10 @@ namespace ETL_SQL.TUI.UI
         Connection
     }
 
-    /// <summary>Represents a single autocomplete suggestion.</summary>
     /// <param name="Text">The text to insert.</param>
     /// <param name="Type">The category of the suggestion.</param>
-    public record Suggestion(string Text, SuggestionType Type);
+    /// <param name="Priority">The ranking priority (lower is higher priority).</param>
+    public record Suggestion(string Text, SuggestionType Type, int Priority = 100);
 
     /// <summary>Contains the full script context required for generating suggestions.</summary>
     public class SuggestionContext
@@ -59,13 +59,13 @@ namespace ETL_SQL.TUI.UI
 
             var keywords = LanguageMetadata.GetAllKeywords();
             results.AddRange(keywords.Where(k => k.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase))
-                                     .Select(k => new Suggestion(k, SuggestionType.Keyword)));
+                                     .Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 100)));
             
             results.AddRange(LanguageMetadata.Functions.Where(f => f.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase))
-                                                       .Select(f => new Suggestion(f, SuggestionType.Function)));
+                                                       .Select(f => new Suggestion(f, SuggestionType.Function, Priority: 110)));
             
             results.AddRange(LanguageMetadata.DataTypes.Where(d => d.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase))
-                                                       .Select(d => new Suggestion(d, SuggestionType.Keyword))); 
+                                                       .Select(d => new Suggestion(d, SuggestionType.Keyword, Priority: 120))); 
             return Task.FromResult<IEnumerable<Suggestion>>(results);
         }
     }
@@ -317,21 +317,21 @@ namespace ETL_SQL.TUI.UI
                         var pluginValues = ConnectorRegistry.Instance!.GetAllConnectorOptionValues();
                         if (pluginValues.TryGetValue(optionName, out var values))
                         {
-                            results.AddRange(values.Select(v => new Suggestion(v, SuggestionType.OptionValue)));
+                            results.AddRange(values.Select(v => new Suggestion(v, SuggestionType.OptionValue, Priority: 0)));
                         }
 
                         // Add common defaults for standard options
                         if (optionName == "FORMAT" || optionName == "TYPE")
                         {
-                            results.AddRange(new[] { "CSV", "JSON", "XML", "PARQUET", "AVRO", "EXCEL", "FLATFILE" }.Select(v => new Suggestion(v, SuggestionType.OptionValue)));
+                            results.AddRange(new[] { "CSV", "JSON", "XML", "PARQUET", "AVRO", "EXCEL", "FLATFILE" }.Select(v => new Suggestion(v, SuggestionType.OptionValue, Priority: 0)));
                         }
                         else if (optionName == "DELIMITER" || optionName == "FIELDTERMINATOR")
                         {
-                            results.AddRange(new[] { "COMMA", "PIPE", "TAB", "SEMICOLON" }.Select(v => new Suggestion(v, SuggestionType.OptionValue)));
+                            results.AddRange(new[] { "COMMA", "PIPE", "TAB", "SEMICOLON" }.Select(v => new Suggestion(v, SuggestionType.OptionValue, Priority: 0)));
                         }
                         else if (optionName == "HEADER" || optionName == "FIRSTROW" || optionName == "STRICT_SCHEMA" || optionName == "TRUSTED_CONNECTION")
                         {
-                            results.AddRange(new[] { "TRUE", "FALSE" }.Select(v => new Suggestion(v, SuggestionType.OptionValue)));
+                            results.AddRange(new[] { "TRUE", "FALSE" }.Select(v => new Suggestion(v, SuggestionType.OptionValue, Priority: 0)));
                         }
                     }
                 }
@@ -360,12 +360,12 @@ namespace ETL_SQL.TUI.UI
                 if (last.Text.Equals("CREATE", StringComparison.OrdinalIgnoreCase))
                 {
                     results.AddRange(new[] { "CONNECTION", "TABLE", "VISUAL", "PAGE", "DATASET", "STYLE", "CONTAINER", "NAVIGATION", "JOB", "DIRECTORY", "PROCEDURE", "FUNCTION", "INDEX" }
-                        .Select(k => new Suggestion(k, SuggestionType.Keyword)));
+                        .Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
                 }
                 // 2. CREATE CONNECTION [name] ON
                 else if (last.Text.Equals("ON", StringComparison.OrdinalIgnoreCase) && prev2?.Text.Equals("CONNECTION", StringComparison.OrdinalIgnoreCase) == true)
                 {
-                    results.AddRange(ConnectorRegistry.Instance!.GetRegisteredNames().Select(c => new Suggestion(c, SuggestionType.Connection)));
+                    results.AddRange(ConnectorRegistry.Instance!.GetRegisteredNames().Select(c => new Suggestion(c, SuggestionType.Connection, Priority: 0)));
                 }
                 // 3. FROM / JOIN / INTO / UPDATE
                 else if (last.Text.Equals("FROM", StringComparison.OrdinalIgnoreCase) || 
@@ -373,14 +373,14 @@ namespace ETL_SQL.TUI.UI
                          last.Text.Equals("INTO", StringComparison.OrdinalIgnoreCase) || 
                          last.Text.Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
                 {
-                    results.AddRange(context.Connections.Keys.Select(c => new Suggestion(c, SuggestionType.Connection)));
-                    results.AddRange(context.VirtualSchemas.Keys.Select(v => new Suggestion(v, SuggestionType.Table)));
+                    results.AddRange(context.Connections.Keys.Select(c => new Suggestion(c, SuggestionType.Connection, Priority: 0)));
+                    results.AddRange(context.VirtualSchemas.Keys.Select(v => new Suggestion(v, SuggestionType.Table, Priority: 1)));
                     foreach (var conn in context.Connections.Values)
                     {
                         if (conn is IDatabaseSource db)
                         {
-                            try { results.AddRange((await db.GetTablesAsync()).Select(t => new Suggestion(t, SuggestionType.Table))); } catch { }
-                            try { results.AddRange((await db.GetViewsAsync()).Select(v => new Suggestion(v, SuggestionType.Table))); } catch { }
+                            try { results.AddRange((await db.GetTablesAsync()).Select(t => new Suggestion(t, SuggestionType.Table, Priority: 2))); } catch { }
+                            try { results.AddRange((await db.GetViewsAsync()).Select(v => new Suggestion(v, SuggestionType.Table, Priority: 3))); } catch { }
                         }
                     }
                 }
@@ -388,20 +388,20 @@ namespace ETL_SQL.TUI.UI
                 else if (last.Text.Equals("SET", StringComparison.OrdinalIgnoreCase))
                 {
                     results.AddRange(new[] { "WHAT_IF", "PROFILING", "REPORT", "BATCH_SIZE", "STRICT_SCHEMA", "MAX_ERRORS" }
-                        .Select(k => new Suggestion(k, SuggestionType.Keyword)));
+                        .Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
                 }
                 // 5. SET WHAT_IF / PROFILING
                 else if (last.Text.Equals("WHAT_IF", StringComparison.OrdinalIgnoreCase) || last.Text.Equals("PROFILING", StringComparison.OrdinalIgnoreCase))
                 {
-                    results.AddRange(new[] { "ON", "OFF" }.Select(k => new Suggestion(k, SuggestionType.Keyword)));
+                    results.AddRange(new[] { "ON", "OFF" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
                 }
                 // 6. Generic "After Keyword" fallback (similar to old ContextAwareProvider)
                 else if (last.IsKeyword)
                 {
                     // Fallback to basic connector/table/alias suggestions if no specific pattern matched
-                    results.AddRange(context.Connections.Keys.Select(c => new Suggestion(c, SuggestionType.Connection)));
-                    results.AddRange(context.VirtualSchemas.Keys.Select(v => new Suggestion(v, SuggestionType.Table)));
-                    results.AddRange(context.Aliases.Keys.Select(a => new Suggestion(a, SuggestionType.Alias)));
+                    results.AddRange(context.Connections.Keys.Select(c => new Suggestion(c, SuggestionType.Connection, Priority: 10)));
+                    results.AddRange(context.VirtualSchemas.Keys.Select(v => new Suggestion(v, SuggestionType.Table, Priority: 11)));
+                    results.AddRange(context.Aliases.Keys.Select(a => new Suggestion(a, SuggestionType.Alias, Priority: 12)));
                 }
             }
             catch (Exception ex) { context.Logger?.Debug($"[PatternProvider] Error: {ex.Message}"); }
@@ -495,7 +495,8 @@ namespace ETL_SQL.TUI.UI
             }
             
             return candidates.Values
-                .OrderBy(c => GetTypePriority(c.Type))
+                .OrderBy(c => c.Priority)
+                .ThenBy(c => GetTypePriority(c.Type))
                 .ThenBy(c => c.Text)
                 .ToList();
         }

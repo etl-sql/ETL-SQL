@@ -123,12 +123,12 @@
         - [x] Option Value Suggestions: After `<OptionName> =`, suggest known values (e.g., `COMMA`, `PIPE`, `FORMAT` types).
         - [x] Connection/Table Member Access: After `<Alias>.`, suggest columns; after `<Connection>.`, suggest tables.
         - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Option/Value suggestions work), Git Commit.
-    - [/] **Phase 3 — Priority & Fallback Tuning**
-        - [ ] Weighting: Ensure `PatternProvider` results have the highest priority (`Priority 0`) in `SuggestionEngine`.
-        - [ ] Fallback: Maintain `KeywordProvider` as the safety net for "small wins" (e.g., `SE` -> `SELECT`).
-        - [ ] TUI Rendering: Verify that "Smart" suggestions appear at the top of the dropdown.
-        - [ ] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Ranking/Priorities work), Git Commit.
-    - **Phase 4 — Unified Language Service (TUI + LSP Integration)**
+    - [x] **Phase 3 — Priority & Fallback Tuning**
+        - [x] Weighting: Ensure `PatternProvider` results have the highest priority (`Priority 0`) in `SuggestionEngine`.
+        - [x] Fallback: Maintain `KeywordProvider` as the safety net for "small wins" (e.g., `SE` -> `SELECT`).
+        - [x] TUI Rendering: Verify that "Smart" suggestions appear at the top of the dropdown.
+        - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Ranking/Priorities work), Git Commit.
+    - [/] **Phase 4 — Unified Language Service (TUI + LSP Integration)**
         - [ ] **Architectural Refactor**: Create `ETL-SQL.Core/Services/LanguageService.cs` to house all pattern-matching and suggestion logic.
         - [ ] **Consolidate Providers**: Move `PatternProvider`, `KeywordProvider`, and `FilePathProvider` into this shared core service to eliminate logic duplication.
         - [ ] **TUI Update**: Refactor `SuggestionEngine` to delegate all context discovery to the shared `LanguageService`.
