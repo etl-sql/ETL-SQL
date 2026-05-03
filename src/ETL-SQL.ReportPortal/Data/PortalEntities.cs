@@ -121,6 +121,8 @@ public class Subscription
     public string              SmtpAlias        { get; set; } = "";
     public string              Recipients       { get; set; } = "";
     public string?             ScriptPath       { get; set; }
+    public string?             Name             { get; set; }
+    public string?             ParametersJson   { get; set; }
     public DateTime?           LastSentAt       { get; set; }
     public DateTime?           NextRunAt        { get; set; }
     public int                 FailCount        { get; set; } = 0;
