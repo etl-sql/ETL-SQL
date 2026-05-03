@@ -1980,6 +1980,11 @@ namespace ETL_SQL.Core
     {
     }
 
+    /// <summary>SET SCRIPT_HASH_POLICY = 'Warn'|'Block' — controls behaviour when a script's hash differs from the pinned value.</summary>
+    public record SetScriptHashPolicyStatement(string Policy) : Statement
+    {
+    }
+
     public enum SecurityOverride
     {
         FileTypeAccess,

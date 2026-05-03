@@ -4,7 +4,7 @@ namespace ETL_SQL.Core.Parser
     {
         // Keywords
         CREATE, CONNECTION, ON, FILE, DATABASE, EXCEL, JSON, XML,
-        MSSQL, ORACLE, POSTGRES, MOCKDB, ODBC, FLATFILE, GENERATE,
+        MSSQL, ORACLE, POSTGRES, SNOWFLAKE, BIGQUERY, MOCKDB, ODBC, FLATFILE, GENERATE,
         SELECT, FROM, WHERE, GROUP, BY, HAVING, QUALIFY, FILTER,
         INSERT, INTO, VALUES,
         UPDATE, SET,
@@ -57,6 +57,7 @@ namespace ETL_SQL.Core.Parser
         UNTIL,
         CONFIG,
         WEEK_START_DAY,
+        SCRIPT_HASH_POLICY,
         LF, CR, CRLF, TAB,
         
         // Joins

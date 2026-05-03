@@ -16,6 +16,8 @@ namespace ETL_SQL.Core.Services
     /// </summary>
     public class MetadataManager : IMetadataManager
     {
+        private static readonly TimeSpan WarehouseCacheTtl = TimeSpan.FromMinutes(5);
+
         private readonly ILogger _logger;
         private readonly IConnectorRegistry _connectors;
         private readonly ConcurrentDictionary<string, ConnectionInfo> _globalConnections = new(StringComparer.OrdinalIgnoreCase);
@@ -24,12 +26,24 @@ namespace ETL_SQL.Core.Services
         private readonly ConcurrentDictionary<string, List<string>> _views = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, List<string>> _docTempTables = new(StringComparer.OrdinalIgnoreCase);
         private readonly ConcurrentDictionary<string, List<string>> _columns = new(StringComparer.OrdinalIgnoreCase);
+        private readonly ConcurrentDictionary<string, DateTimeOffset> _cacheTimestamps = new(StringComparer.OrdinalIgnoreCase);
 
         public MetadataManager(ILogger logger, IConnectorRegistry connectors)
         {
             _logger = logger;
             _connectors = connectors;
         }
+
+        private bool IsCacheValid(string cacheKey, string? connectorType)
+        {
+            if (!_cacheTimestamps.TryGetValue(cacheKey, out var fetchedAt)) return false;
+            var connector = connectorType != null ? _connectors.GetConnector(connectorType) : null;
+            if (connector?.IsDataWarehouse == true)
+                return DateTimeOffset.UtcNow - fetchedAt < WarehouseCacheTtl;
+            return true;
+        }
+
+        private void StampCache(string cacheKey) => _cacheTimestamps[cacheKey] = DateTimeOffset.UtcNow;
 
         /// <summary>Normalizes a document URI for consistent cache lookups.</summary>
         private string NormalizeUri(string? uri)
@@ -126,7 +140,7 @@ namespace ETL_SQL.Core.Services
                 if (conn == null) return Enumerable.Empty<string>();
 
                 var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
-                if (_tables.TryGetValue(key, out var cached)) return cached;
+                if (_tables.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type)) return cached;
 
                 var connector = _connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
@@ -141,7 +155,13 @@ namespace ETL_SQL.Core.Services
                     tables.AddRange(temps.Where(t => !tables.Contains(t, StringComparer.OrdinalIgnoreCase)));
                 }
 
+                if (!tables.Contains("DUAL", StringComparer.OrdinalIgnoreCase))
+                {
+                    tables.Add("DUAL");
+                }
+
                 _tables[key] = tables;
+                StampCache(key);
                 return tables;
             }
             catch (Exception ex)
@@ -159,7 +179,7 @@ namespace ETL_SQL.Core.Services
                 if (conn == null) return Enumerable.Empty<string>();
 
                 var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null);
-                if (_views.TryGetValue(key, out var cached)) return cached;
+                if (_views.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type)) return cached;
 
                 var connector = _connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
@@ -170,8 +190,9 @@ namespace ETL_SQL.Core.Services
                 {
                     views = (await db.GetViewsAsync()).ToList();
                 }
-                
+
                 _views[key] = views.ToList();
+                StampCache(key);
                 return views;
             }
             catch (Exception ex)
@@ -242,7 +263,7 @@ namespace ETL_SQL.Core.Services
                 if (conn == null) return Enumerable.Empty<string>();
 
                 var key = GetCacheKey(connectionName, conn.IsDocument ? uri : null) + ":" + tableName.ToUpperInvariant();
-                if (_columns.TryGetValue(key, out var cached)) return cached;
+                if (_columns.TryGetValue(key, out var cached) && IsCacheValid(key, conn.Type)) return cached;
 
                 var connector = _connectors.GetConnector(conn.Type);
                 if (connector == null) return Enumerable.Empty<string>();
@@ -260,6 +281,7 @@ namespace ETL_SQL.Core.Services
                 }
 
                 _columns[key] = columns.ToList();
+                StampCache(key);
                 return columns;
             }
             catch (Exception ex)
@@ -285,6 +307,7 @@ namespace ETL_SQL.Core.Services
             _views.Clear();
             _columns.Clear();
             _docTempTables.Clear();
+            _cacheTimestamps.Clear();
         }
 
         public void ClearCacheForUri(string uri) => ClearCacheForDocument(uri);

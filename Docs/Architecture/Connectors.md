@@ -186,8 +186,46 @@ public interface IConnector
     /// Default returns empty string; override if the connector uses standard DSNs.
     /// </summary>
     string BuildConnectionString(Dictionary<string, string> properties) => string.Empty;
+
+    /// <summary>
+    /// Default command timeout in seconds. OLTP connectors return 30; data warehouse
+    /// connectors (Snowflake, BigQuery) return 1800 (30 min). Scripts may override
+    /// per-connection with CREATE CONNECTION … WITH(TIMEOUT_SECONDS = n).
+    /// </summary>
+    int CommandTimeoutSeconds => 30;
+
+    /// <summary>
+    /// True for analytical data warehouse connectors (Snowflake, BigQuery).
+    /// Effects:
+    ///   • Schema metadata cache expires after 5 min (vs. indefinite for OLTP).
+    ///   • Tools surface a warning when writes are attempted against this connection.
+    ///   • Default command timeout is 1800 s instead of 30 s.
+    /// </summary>
+    bool IsDataWarehouse => false;
 }
 ```
+
+#### `CommandTimeoutSeconds` and `TIMEOUT_SECONDS` override
+
+The `CommandTimeoutSeconds` property on `IConnector` is a per-connector default. Individual connections can override it at creation time:
+
+```sql
+CREATE CONNECTION my_redshift ON ODBC()
+    WITH(DRIVER='{Amazon Redshift ODBC Driver}', …, TIMEOUT_SECONDS=3600);
+```
+
+The `TIMEOUT_SECONDS` value in the `WITH` clause is stored in the connection's options dictionary (`IDataSource.Options["TIMEOUT_SECONDS"]`). SQL connectors read it in their constructor and apply it to every `DbCommand.CommandTimeout` they create. Non-SQL connectors may ignore it.
+
+#### Schema metadata cache TTL
+
+`MetadataManager` (the LSP/TUI schema cache) applies connection-type-aware expiry:
+
+| Connector type | `IsDataWarehouse` | Cache TTL |
+| :--- | :---: | :--- |
+| MSSQL, POSTGRES, ORACLE, ODBC | `false` | Indefinite (cleared only on connection change) |
+| SNOWFLAKE, BIGQUERY | `true` | 5 minutes |
+
+Configurable in `appsettings.json → Connectors.DataWarehouse.SchemaCacheTtlSeconds`.
 
 ### 2.2 `IDataSource` — The Stateful Session
 

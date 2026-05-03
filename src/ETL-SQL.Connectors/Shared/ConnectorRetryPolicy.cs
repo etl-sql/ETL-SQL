@@ -4,6 +4,7 @@ using Microsoft.Data.SqlClient;
 using Npgsql;
 using Oracle.ManagedDataAccess.Client;
 using System.Data.Odbc;
+using Snowflake.Data.Client;
 using Polly;
 using Polly.Retry;
 using ETL_SQL.Common;
@@ -167,6 +168,79 @@ namespace ETL_SQL.Connectors.Shared
                 17008 => true,  // Closed Connection
                 17410 => true,  // No more data to read from socket
                 _     => false
+            };
+
+        // ── Snowflake ────────────────────────────────────────────────────────
+
+        public static ResiliencePipeline ForSnowflake(ILogger logger) =>
+            new ResiliencePipelineBuilder()
+                .AddRetry(new RetryStrategyOptions
+                {
+                    MaxRetryAttempts = MaxAttempts,
+                    Delay             = BaseDelay,
+                    BackoffType       = DelayBackoffType.Exponential,
+                    UseJitter         = true,
+                    ShouldHandle      = new PredicateBuilder()
+                        .Handle<SnowflakeDbException>(IsTransientSnowflake)
+                        .Handle<TimeoutException>(),
+                    OnRetry = args =>
+                    {
+                        logger.Warning(
+                            "Snowflake transient error on attempt {Attempt}/{Max}: {Message}. Retrying in {Delay}ms.",
+                            args.AttemptNumber + 1, MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
+                        return ValueTask.CompletedTask;
+                    }
+                })
+                .Build();
+
+        /// <summary>
+        /// Returns true for SnowflakeDbException error codes that represent transient conditions.
+        /// 390100=network, 390110=timeout, 250001=no connection available.
+        /// </summary>
+        private static bool IsTransientSnowflake(SnowflakeDbException ex) =>
+            ex.ErrorCode switch
+            {
+                390100 => true,  // Network error
+                390110 => true,  // Connection timeout
+                250001 => true,  // No connection available
+                _      => false
+            };
+
+        // ── BigQuery ─────────────────────────────────────────────────────────
+
+        public static ResiliencePipeline ForBigQuery(ILogger logger) =>
+            new ResiliencePipelineBuilder()
+                .AddRetry(new RetryStrategyOptions
+                {
+                    MaxRetryAttempts = MaxAttempts,
+                    Delay             = BaseDelay,
+                    BackoffType       = DelayBackoffType.Exponential,
+                    UseJitter         = true,
+                    ShouldHandle      = new PredicateBuilder()
+                        .Handle<Google.GoogleApiException>(IsTransientBigQuery)
+                        .Handle<TimeoutException>(),
+                    OnRetry = args =>
+                    {
+                        logger.Warning(
+                            "BigQuery transient error on attempt {Attempt}/{Max}: {Message}. Retrying in {Delay}ms.",
+                            args.AttemptNumber + 1, MaxAttempts, args.Outcome.Exception?.Message, (int)args.RetryDelay.TotalMilliseconds);
+                        return ValueTask.CompletedTask;
+                    }
+                })
+                .Build();
+
+        /// <summary>
+        /// Returns true for GoogleApiException HTTP status codes that represent transient conditions.
+        /// 429=rate limit, 500=internal (sometimes transient), 503=service unavailable, 408=request timeout.
+        /// </summary>
+        private static bool IsTransientBigQuery(Google.GoogleApiException ex) =>
+            (int)ex.HttpStatusCode switch
+            {
+                408 => true,  // Request timeout
+                429 => true,  // Rate limit / quota exceeded
+                500 => true,  // Internal server error (often transient in cloud)
+                503 => true,  // Service unavailable
+                _   => false
             };
 
         // ── ODBC ─────────────────────────────────────────────────────────────

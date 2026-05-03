@@ -53,6 +53,21 @@ namespace ETL_SQL.Data
 
         /// <summary>Returns true if the connector is file-based (e.g., CSV, Parquet, SQLite), requiring path resolution.</summary>
         bool IsFileBased => false;
+
+        /// <summary>
+        /// Default command timeout in seconds for queries executed through this connector.
+        /// OLTP connectors default to 30 s; analytical data warehouse connectors default to 1800 s (30 min).
+        /// Scripts may override per-connection via <c>CREATE CONNECTION … WITH(TIMEOUT_SECONDS = n)</c>.
+        /// </summary>
+        int CommandTimeoutSeconds => 30;
+
+        /// <summary>
+        /// Indicates this connector targets an analytical data warehouse (e.g., Snowflake, BigQuery).
+        /// The schema metadata cache applies a shorter TTL for warehouse connectors (default 5 min)
+        /// because warehouse schemas change less frequently but the LSP caches need to stay fresh.
+        /// Tools may also surface a warning when writing to a warehouse-typed connection.
+        /// </summary>
+        bool IsDataWarehouse => false;
     }
 
 

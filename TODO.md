@@ -41,54 +41,54 @@
         - [x] `src/ETL-SQL.Core/Resources/Help`: Added `Keywords/RELDATE.md`, `Keywords/SUBSCRIPTION.md`; updated `DECLARE.md` and `SET.md`.
 - [x] **Security Manifest**: Strategy document complete. See [`Docs/Strategy/ScriptSecurity_Strategy.md`](Strategy/ScriptSecurity_Strategy.md). Full PKI signing not recommended — disproportionate key management overhead. **Hash pinning** instead: store SHA-256 of script at schedule/publish time, compare at run time, warn or block on mismatch. ~2 dev-days across 3 phases.
     - **Phase 1 — Orchestrator hash pinning**
-        - [ ] `OrchestratorJob` entity: Add `ScriptHash` (TEXT) + `HashPolicy` (`Warn`/`Block`, default `Warn`).
-        - [ ] New EF Core migration: `AddJobScriptHash`.
-        - [ ] `JobScheduler`: Compute and store hash at schedule time.
-        - [ ] `JobRunner`: Recompute at run time; compare; apply policy; log result.
-        - [ ] `ExecutionHistory` entity: Add `ScriptHashAtRunTime` (TEXT) + `HashMatched` (bool).
-        - [ ] `appsettings.json`: Add `Engine.ScriptHashPolicy` global default.
-        - [ ] `SET SCRIPT_HASH_POLICY` statement: Parse + apply per-script override.
-        - [ ] Tests: match → runs; mismatch+Warn → runs with log; mismatch+Block → `ExecutionException`.
+        - [x] `OrchestratorJob` entity: Add `ScriptHash` (TEXT) + `HashPolicy` (`Warn`/`Block`, default `Warn`).
+        - [x] New EF Core migration: `AddJobScriptHash`. *(Note: Orchestrator uses raw SQLite — handled via `PRAGMA + ALTER TABLE` migration, not EF Core)*
+        - [x] `JobScheduler`: Compute and store hash at schedule time (`CreateJobStatementHandler`).
+        - [x] `JobRunner`: Recompute at run time; compare; apply policy; log result (`SchedulerService.ExecuteJobAsync`).
+        - [x] `ExecutionHistory` entity: Add `ScriptHashAtRunTime` (TEXT) + `HashMatched` (bool).
+        - [x] `appsettings.json`: Add `Engine.ScriptHashPolicy` global default.
+        - [x] `SET SCRIPT_HASH_POLICY` statement: Parse + apply per-script override.
+        - [x] Tests: match → runs; mismatch+Warn → runs with log; mismatch+Block → `ExecutionException`.
     - **Phase 2 — Report Portal hash pinning**
-        - [ ] `Report` entity: Add `PublishedScriptHash` (TEXT).
-        - [ ] Publish flow: Compute and store hash.
-        - [ ] Snapshot builder: Compare hash; log `ScriptHashAtRunTime` + `HashMatched` on snapshot record.
-        - [ ] Admin → Reports view: Show "script changed since published" (distinct from generic stale indicator).
-        - [ ] Audit log: Include `ScriptHash` on `EXECUTE_REPORT` events.
+        - [x] `Report` entity: Add `PublishedScriptHash` (TEXT).
+        - [x] Publish flow: Compute and store hash.
+        - [x] Snapshot builder: Compare hash; log `ScriptHashAtRunTime` + `HashMatched` on snapshot record.
+        - [x] Admin → Reports view: Show "script changed since published" (`ScriptChanged` field on `ReportDto`).
+        - [x] Audit log: Include `ScriptHash` on `EXECUTE_REPORT` events.
     - **Phase 3 — Documentation**
-        - [ ] `Docs/Administrators_Guide.md`: Add `Engine.ScriptHashPolicy` to config reference.
-        - [ ] `Docs/ReportPortal_Administrators_Guide.md`: Hash tracking in publishing + execution sections.
-        - [ ] `Docs/Architecture/Orchestrator.md`: Hash fields on job and execution history entities.
+        - [x] `Docs/Administrators_Guide.md`: Add `Engine.ScriptHashPolicy` to config reference.
+        - [x] `Docs/ReportPortal_Administrators_Guide.md`: Hash tracking in publishing + execution sections.
+        - [x] `Docs/Architecture/Orchestrator.md`: Hash fields on job and execution history entities.
 - [x] **Data Lake Connection brainstorm**: Strategy document complete. See [`Docs/Strategy/DataLake_Connectors_Strategy.md`](Strategy/DataLake_Connectors_Strategy.md). Revised scope: existing ODBC connector already covers Redshift, Databricks, Synapse, Trino, Dremio. Existing Parquet + Avro connectors already cover the file formats. Only Snowflake and BigQuery need new native connectors (complex auth not expressible in an ODBC string). DuckDB added as low-priority ergonomics improvement. ~6.5 dev-days across 4 phases.
     - **Phase 1 — Snowflake native connector** *(most requested platform)*
-        - [ ] `ETL-SQL.Core/TokenType.cs`: Add `SNOWFLAKE` keyword.
-        - [ ] `ETL-SQL.Connectors/SnowflakeConnector.cs` (new): `Snowflake.Data.Client`. Auth: username+password and private-key JWT (`PRIVATE_KEY_FILE` option). Fields: `HOST`, `WAREHOUSE`, `DATABASE`, `SCHEMA`, `USERNAME`.
-        - [ ] `ISchemaProvider` via `INFORMATION_SCHEMA`.
-        - [ ] `DependencyInjectionSetup.cs`: Register connector.
-        - [ ] Unit tests with Snowflake mock transport; `Category=Integration` tests with 30-day trial. CI secret: `SNOWFLAKE_CONNECTION_STRING`.
-        - [ ] `Docs/Reference/Data_Connectors.md`: Snowflake section.
+        - [x] `ETL-SQL.Core/TokenType.cs`: Add `SNOWFLAKE` keyword.
+        - [x] `ETL-SQL.Connectors/SnowflakeConnector.cs` (new): `Snowflake.Data.Client`. Auth: username+password and private-key JWT (`PRIVATE_KEY_FILE` option). Fields: `HOST`, `WAREHOUSE`, `DATABASE`, `SCHEMA`, `USERNAME`.
+        - [x] `ISchemaProvider` via `INFORMATION_SCHEMA`.
+        - [x] `DependencyInjectionExtensions.cs`: Register connector.
+        - [x] Unit tests: `SnowflakeConnectorTests` + `SnowflakeSyntaxTests` (18 tests, all passing). `Category=Integration` tests deferred — require 30-day trial account. CI secret: `SNOWFLAKE_CONNECTION_STRING`.
+        - [x] `Docs/Reference/Data_Connectors.md`: Snowflake section (section 2.5).
     - **Phase 2 — BigQuery native connector** *(unique SQL dialect + GCP auth)*
-        - [ ] `ETL-SQL.Core/TokenType.cs`: Add `BIGQUERY` keyword.
-        - [ ] `ETL-SQL.Connectors/BigQueryConnector.cs` (new): `Google.Cloud.BigQuery.V2`. Auth: `CREDENTIAL_FILE` (service account JSON) or ADC (omit file for workload identity).
-        - [ ] Pushdown dialect: backtick `QuoteIdentifier`; `project.dataset.table` three-part name resolution via `ISqlCompilerContext`.
-        - [ ] `ISchemaProvider` via `INFORMATION_SCHEMA`.
-        - [ ] Unit tests against BigQuery emulator Docker image; `Category=Integration` tests using `bigquery-public-data` (no fixture setup). CI secret: `GCP_SA_KEY_JSON`.
-        - [ ] `Docs/Reference/Data_Connectors.md`: BigQuery section.
+        - [x] `ETL-SQL.Core/TokenType.cs`: Add `BIGQUERY` keyword.
+        - [x] `ETL-SQL.Connectors/BigQueryConnector.cs` (new): `Google.Cloud.BigQuery.V2`. Auth: `CREDENTIAL_FILE` (service account JSON) or ADC (omit file for workload identity).
+        - [x] Pushdown dialect: backtick `QuoteIdentifier`; `project.dataset.table` three-part name parsed in `ParseTableName`.
+        - [x] `ISchemaProvider` via `INFORMATION_SCHEMA` (tables, views, columns).
+        - [x] Unit tests: `BigQueryConnectorTests` + `BigQuerySyntaxTests` (25 tests, all passing). `Category=Integration` tests deferred — require GCP project. CI secret: `GCP_SA_KEY_JSON`.
+        - [x] `Docs/Reference/Data_Connectors.md`: BigQuery section (section 2.6).
     - **Phase 3 — Connector interface enhancements + ODBC docs**
-        - [ ] `IConnector` / connector metadata: Add `CommandTimeoutSeconds` (default 30 for OLTP, 1800 for warehouse connectors) and `ReadOnly` flag (default `true` for warehouse connectors).
-        - [ ] `CREATE CONNECTION OPTIONS(TIMEOUT_SECONDS = n)`: Parse and apply per-connection override.
-        - [ ] `appsettings.json`: Add `Connectors.DataWarehouse.DefaultCommandTimeoutSeconds`.
-        - [ ] LSP schema cache TTL: configurable per connection type; default 5 min for warehouse connections.
-        - [ ] `Docs/Reference/Data_Connectors.md`: **Data Warehouse via ODBC** section with connection string examples for Redshift, Databricks, Synapse, Trino, Dremio. Note which platforms need native connectors vs. ODBC.
-        - [ ] `Docs/Architecture/Connectors.md`: Document `CommandTimeoutSeconds` and `ReadOnly` fields.
-        - [ ] `Docs/Standards/Connectors_Standards.md`: Data warehouse connector checklist.
+        - [x] `IConnector` interface: Added `CommandTimeoutSeconds` (default 30; Snowflake+BigQuery override to 1800) and `IsDataWarehouse` flag (default `false`; Snowflake+BigQuery override to `true`).
+        - [x] `CREATE CONNECTION … WITH(TIMEOUT_SECONDS = n)`: Already parsed generically. Snowflake data source reads it from options and applies to `DbCommand.CommandTimeout`. `TIMEOUT_SECONDS` added to `GetSupportedOptions()` on both warehouse connectors.
+        - [x] `appsettings.json`: Added `Connectors.DataWarehouse.DefaultCommandTimeoutSeconds: 1800` and `SchemaCacheTtlSeconds: 300`.
+        - [x] LSP schema cache TTL: `MetadataManager` checks `IsCacheValid()` — warehouse connectors expire after 5 min; OLTP connectors cache indefinitely.
+        - [x] `Docs/Reference/Data_Connectors.md`: Added **Data Warehouses via ODBC** sub-section under 2.4 with Redshift, Synapse, Databricks, Trino, Dremio examples.
+        - [x] `Docs/Architecture/Connectors.md`: Documented `CommandTimeoutSeconds`, `IsDataWarehouse`, `TIMEOUT_SECONDS` override, and schema cache TTL table.
+        - [x] `Docs/Standards/Connectors_Standards.md`: Part IV — Data Warehouse Connector Checklist (DW-1 through DW-10).
 - [ ] **Distributed Deployment & Distribution** — Transition ETL-SQL from a local tool to an enterprise platform with multi-machine simulation and native cross-platform installers.
     - **Phase 1 — Dockerization & Orchestration (The Simulation)**
-        - [ ] Create Dockerfile for `ETL-SQL.Orchestrator` (ASP.NET Core 10 runtime).
-        - [ ] Create Dockerfile for `ETL-SQL.ReportPortal` (ASP.NET Core 10 runtime).
-        - [ ] Create `docker-compose.yml` defining a 3-tier virtual network: `orchestrator-srv`, `portal-srv`, and a `mock-db` (Postgres).
-        - [ ] Implement `Orchestrator:ApiUrl` config in Report Portal to support remote job triggering via `HttpJobChannelClient`.
-        - [ ] **Verification**: Launch full stack via `docker-compose up` and execute a report on the Portal that triggers a job on the isolated Orchestrator container.
+        - [x] Create Dockerfile for `ETL-SQL.Orchestrator` (ASP.NET Core 10 runtime).
+        - [x] Create Dockerfile for `ETL-SQL.ReportPortal` (ASP.NET Core 10 runtime).
+        - [x] Create `docker-compose.yml` defining a 3-tier virtual network: `orchestrator-srv`, `portal-srv`, and a `mock-db` (Postgres).
+        - [x] Implement `Orchestrator:ApiUrl` config in Report Portal to support remote job triggering via `HttpJobChannelClient`.
+        - [x] **Verification**: Launch full stack via `docker-compose up` and execute a report on the Portal that triggers a job on the isolated Orchestrator container.
     - **Phase 2 — The Workstation SDK (Client Tools)**
         - [ ] Define "Workstation SDK" bundle: `ETL-SQL.App` (CLI/TUI) + `ETL-SQL.LanguageServer`, Report builder.
         - [ ] Implement "Self-Contained" build profiles in `.csproj` for `win-x64`, `linux-x64`, and `osx-arm64`.
@@ -106,50 +106,52 @@
         - [ ] **Secret Management**: Implement an encrypted `appsettings.Production.json` or Environment Variable provider for sensitive connection strings.
         - [ ] **Admin Guides**: Create `Docs/Administrators_Guide.md` covering service management, backup/restore, and multi-server networking.
         - [ ] **Final Verification**: Perform a "Clean Machine" install on a fresh Windows VM and verify full "Workstation-to-Server" connectivity.
-- [ ] **Smarter Suggestions (IntelliSense 2.0)** — Move from generic keyword matching to a "Pattern-Based Statement State Machine" for high-value context. ~4 dev-days.
-    - [x] **Phase 0 — Documentation Migration (Embedded Markdown Resources)**
-        - [x] Create `src/ETL-SQL.Core/Resources/Help/` directory to house all documentation.
-        - [x] Migrate all hard-coded help strings from C# code into standalone `.md` files (e.g., `SELECT.md`, `WITH.md`, `JSON_VALUE.md`).
-        - [x] Update `ETL-SQL.Core.csproj` to treat the Help directory as an `EmbeddedResource`.
-        - [x] Update `ILanguageHelpRegistry` to use Automatic Resource Discovery (mapping `Filename.md` directly to `KEYWORD` via reflection).
-        - [x] Add a unit test to verify that every keyword and function in the engine has a matching resource file.
-        - [x] Checkpoint: 100% Tests Pass, 100% Samples Pass, Manual Audit of Help Content, Git Commit.
-    - [x] **Phase 1 — Pattern Engine & Anchors**
-        - [x] `ETL-SQL.TUI/UI/SuggestionProviders.cs`: Implement `PatternProvider` (upgrades/replaces `ContextAwareProvider`).
-        - [x] Implement `TokenWindow` logic: extract the last 3-5 tokens leading up to the cursor.
-        - [x] Define "Anchor Patterns" for: `CREATE`, `CREATE CONNECTION`, `FROM/JOIN`, `WITH`, `SET`.
-        - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Pattern discovery works), Git Commit.
-    - [x] **Phase 2 — Connector & Option Intelligence**
-        - [x] Dynamic Option Discovery: When inside `WITH(...)`, reverse-scan for the `ON <Type>` anchor and fetch valid `OptionNames` from `ConnectorRegistry`.
-        - [x] Option Value Suggestions: After `<OptionName> =`, suggest known values (e.g., `COMMA`, `PIPE`, `FORMAT` types).
-        - [x] Connection/Table Member Access: After `<Alias>.`, suggest columns; after `<Connection>.`, suggest tables.
-        - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Option/Value suggestions work), Git Commit.
-    - [x] **Phase 3 — Priority & Fallback Tuning**
-        - [x] Weighting: Ensure `PatternProvider` results have the highest priority (`Priority 0`) in `SuggestionEngine`.
-        - [x] Fallback: Maintain `KeywordProvider` as the safety net for "small wins" (e.g., `SE` -> `SELECT`).
-        - [x] TUI Rendering: Verify that "Smart" suggestions appear at the top of the dropdown.
-        - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Ranking/Priorities work), Git Commit.
-    - [x] **Phase 4 — Unified Language Service (TUI + LSP Integration)**
-        - [x] **Architectural Refactor**: Create `ETL-SQL.Core/Services/LanguageService.cs` to house all pattern-matching and suggestion logic.
-        - [x] **Consolidate Providers**: Move `PatternProvider`, `KeywordProvider`, and `FilePathProvider` into this shared core service to eliminate logic duplication.
-        - [x] **TUI Update**: Refactor `SuggestionEngine` to delegate all context discovery to the shared `LanguageService`.
-        - [x] **LSP Update**: Refactor `ETL-SQL.LanguageServer/CompletionProvider.cs` to use the shared service, ensuring 100% feature parity between terminal and IDE.
-        - [x] **Verification**: Confirm that adding a new keyword or connector automatically populates both environments from the single source of truth.
-        - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (TUI + LSP parity), Git Commit.
-    - [x] **Phase 5 — Knowledge Cross-Pollination (Help + IntelliSense Integration)**
-        - [x] **Shared Documentation Mapping**: Ensure the `LanguageService` automatically links each suggestion to its corresponding entry in the `ILanguageHelpRegistry`.
-        - [x] **TUI: Help Sidebar**: Implement a reactive side-panel in the TUI autocomplete dropdown that displays the markdown documentation for the currently highlighted suggestion.
-        - [x] **LSP: Hover & Signature Help**:
-            - [x] Implement `IHoverHandler` in the Language Server to show full HELP content on `Ctrl+Hover`.
-            - [/] Implement `ISignatureHelpHandler` to provide parameter tooltips when typing functions (e.g., `JSON_VALUE(expr, path)`).
-        - [x] **Contextual Documentation**: Pass statement context (e.g., `ConnectorType`) to the help fetcher so users see connector-specific documentation for generic options like `FORMAT` or `DELIMITER`.
-        - [/] **Snippet Templates**: Integrate "Cookbook" snippets into the suggestion list, allowing users to "tab-complete" full statement patterns.
-        - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Help Sidebar + Hover work), Git Commit.
-    - [x] **Phase 6 — Visual Intelligence (Semantic Highlighting & Clean-up)**
-        - [x] **Inlay Hints**: (REMOVED) Purged from Core, TUI, and LSP to improve performance and stability.
-        - [x] **Semantic Highlighting**: (REMOVED) Purged from Core, TUI, and LSP for better stability and performance.
-        - [x] **Checkpoint**: 100% Tests Pass, build success.
-    - [x] **Phase 7 — Editing Assistance (Smart Refactoring & Quick Fixes)**
-        - [x] **Smart Rename (F2)**: (REMOVED) Purged from TUI and LSP for stability.
-        - [x] **Quick Fixes (Lightbulb)**: (REMOVED) Purged from LSP for stability.
-        - [x] **Final Checkpoint**: 100% Tests Pass (1257/1257), full build success, parity verified between TUI and LSP.
+- [ ] **Reporting Misc missing items**
+    - [ ] BUBBLE, RADAR, CANDLESTICK chart types
+    - [ ] Report CROSS_FILTER missing?  Not finding the code to make this work.
+    - [ ] **MAP Chart Type (Choropleth)** — Render geographic data as a color-scaled choropleth map using Apache ECharts' native map support. GeoJSON served as static files; client fetches and registers before chart init. See design notes in planning conversation.
+        - **Phase 1 — GeoJSON Assets**
+            - [ ] Source and simplify GeoJSON for the six bundled maps (all public domain):
+                - `world.geojson` — Natural Earth 110m countries (~100 KB)
+                - `us-states.geojson` — US Census TIGER simplified 50 states + DC (~150 KB)
+                - `us-counties.geojson` — US Census TIGER simplified counties (~1.5 MB)
+                - `mn-counties.geojson` — MN Geospatial Commons Minnesota counties (~80 KB)
+                - `canada-provinces.geojson` — Statistics Canada simplified provinces/territories (~150 KB)
+                - `europe.geojson` — Natural Earth 50m European countries (~200 KB)
+            - [ ] Place all six files in `src/ETL-SQL.ReportPlayer/wwwroot/maps/`. They are static files, not embedded resources.
+            - [ ] Verify feature `name` and `id` values in each file and document the expected match values (what the user's data column must contain to light up a region).
+        - **Phase 2 — Parser / AST**
+            - [ ] `ETL-SQL.Core/Ast.cs`: No AST change needed — visual type is already a free string on `VisualStatement`. Confirm `MAP` passes through cleanly.
+            - [ ] `ETL-SQL.Core/Parser`: Ensure the following visual options are accepted by the options parser (most are already generic):
+                - `MAP_NAME` — built-in map key: `WORLD`, `US_STATES`, `US_COUNTIES`, `MN_COUNTIES`, `CANADA_PROVINCES`, `EUROPE`
+                - `MAP_FILE` — path to a user-supplied GeoJSON file (resolved via `ResolvePath`)
+                - `REGION_COL` — column in the dataset whose values match GeoJSON feature names/ids
+                - `VALUE_COL` — column supplying the numeric value for color scaling
+                - `MATCH_BY` — `NAME` (default) or `ID`; selects whether to match on GeoJSON `properties.name` or `id`
+                - `COLOR_LOW`, `COLOR_HIGH` — hex color range endpoints (defaults: `'#e0f3f8'`, `'#08306b'`)
+                - `SHOW_LABELS` — `TRUE`/`FALSE`; show region name labels on the map (default `FALSE`)
+        - **Phase 3 — Server-Side Renderer**
+            - [ ] `ETL-SQL.ReportBuilder/Renderers/GeographicRenderer.cs` *(new)*: Implement `RenderChoropleth(VisualManifest v)`.
+                - Resolve `MAP_NAME` → lowercase file key (e.g. `"WORLD"` → `"world"`); fall back to `MAP_FILE` if provided.
+                - Emit an ECharts option object with: `geo` component referencing the registered map name, `visualMap` component (continuous, min/max auto-computed from the value column in `v.Rows`), `series` of type `map` bound to the same map name, and `tooltip`.
+                - Do **not** embed GeoJSON in the option — the client fetches it separately.
+                - Column resolution: use `REGION_COL` / `VALUE_COL` options, falling back to first and second column by position.
+            - [ ] `ETL-SQL.ReportBuilder/EChartsRenderer.cs`: Add `"MAP" => _geographic.RenderChoropleth(visual)` to the dispatch switch. Instantiate `_geographic = new GeographicRenderer()`.
+            - [ ] `ETL-SQL.ReportBuilder/Renderers/TerminalRenderer.cs`: Add `"MAP" => new Panel(new Text("Map visual not supported in TUI", new Style(Color.Grey)))` to the TUI switch (same pattern as TREEMAP).
+        - **Phase 4 — Client-Side Runtime**
+            - [ ] `src/ETL-SQL.ReportPlayer/wwwroot/report-runtime.js`: Before initializing any visual whose `type == 'MAP'`:
+                - Determine the map key: use `options['MAP_NAME']?.toLowerCase()` or derive the filename from `options['MAP_FILE']`.
+                - If the key has not already been registered (track a `Set` of registered names), `fetch('/maps/{key}.geojson')`, parse the JSON, call `echarts.registerMap(key, geojson)`.
+                - Registration is async — `await` it before calling `echarts.init()`.
+                - Cache registered names so repeat visuals using the same map on one page only fetch once.
+            - [ ] Add the `MAP` type to the comment on line ~407 that lists supported ECharts types.
+        - **Phase 5 — Documentation and Help**
+            - [ ] `src/ETL-SQL.Core/Resources/Help/Visuals/MAP.md` *(new)*: Document syntax, all options, built-in map keys with their expected region name formats, and two complete examples (world choropleth, US states choropleth).
+            - [ ] `Docs/Reference/Report_SQL_Guide.md` (or equivalent): Add MAP to the visual type table with options and examples.
+        - **Phase 6 — Custom Map Files (MAP_FILE option)**  *(can be done alongside Phase 3/4 or deferred)*
+            - [ ] Server: When `MAP_FILE` is set, `GeographicRenderer` should embed the file path in the ECharts option as a custom property (e.g. `mapFile`) so the client knows to fetch it from a local route instead of `/maps/`.
+            - [ ] `ETL-SQL.ReportPlayer`: Add a dynamic route `GET /maps/custom?path=...` that reads the file via `ResolvePath`, validates it is GeoJSON, and streams it. Never expose raw filesystem paths in the URL — use a server-side resolve.
+            - [ ] `ETL-SQL.ReportBuilder`: Add a validation step that checks `MAP_FILE` exists at manifest build time and warns if not found.
+- [ ] **Add batch separator GO command**  Add the GO batch separator command so that we can run different parts of a scripts and if any batch fails the following will still run because its in a different batch.
+- [ ] **Do file operation functions work with Directory CONNECTION?**  That's how its intended to work but I haven't seen any examples of this.
+- [x] **All the function need help files** All the functions need to have help file in the C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\Resources folder.  Follow the examples in that folder for the format.

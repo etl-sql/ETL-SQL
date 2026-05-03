@@ -224,6 +224,76 @@ New keywords may be added to the exclusion list. Existing exclusions may not be 
 
 New aliases may be added to `IConnector.Aliases`. Existing aliases may not be removed — scripts referencing the old alias will fail at parse time if it disappears.
 
+---
+
+## Part IV — Data Warehouse Connector Checklist
+
+A connector targeting an analytical data warehouse (Redshift, BigQuery, Snowflake, Databricks, Synapse, Trino, Dremio, etc.) must satisfy all rules in Parts I–III **plus** the following additional requirements.
+
+### DW-1: Override `IsDataWarehouse` and `CommandTimeoutSeconds`
+
+```csharp
+public bool IsDataWarehouse => true;
+public int CommandTimeoutSeconds => 1800;   // 30 minutes
+```
+
+Rationale: warehouse queries routinely scan billions of rows and take minutes. Inheriting the 30-second OLTP default causes false timeouts on first use.
+
+### DW-2: Apply `TIMEOUT_SECONDS` from Options
+
+The connector's `IDataSource` implementation must read `TIMEOUT_SECONDS` from `_options` in its constructor and apply it to every database command:
+
+```csharp
+_commandTimeout = options != null
+    && options.TryGetValue("TIMEOUT_SECONDS", out var ts)
+    && int.TryParse(ts, out var t) ? t : 1800;
+```
+
+For ADO.NET-based connectors, set `cmd.CommandTimeout = _commandTimeout;` on every `DbCommand` before execution.
+
+### DW-3: Document `TIMEOUT_SECONDS` in `GetSupportedOptions()`
+
+```csharp
+{ "TIMEOUT_SECONDS", Array.Empty<string>() }
+```
+
+Users must be able to discover that this option exists via `SHOW CONNECTION HELP <name>`.
+
+### DW-4: `ITransactionalDataSource` Is Optional — Be Explicit
+
+If the warehouse does not support traditional RDBMS transactions (e.g., BigQuery), do **not** implement `ITransactionalDataSource`. The engine gracefully falls back to auto-commit mode.
+
+If the warehouse supports transactions (e.g., Snowflake), implement `ITransactionalDataSource` and hold a dedicated connection for the transaction lifetime.
+
+### DW-5: Schema Introspection via `INFORMATION_SCHEMA`
+
+All warehouse connectors must implement `GetTablesAsync()`, `GetViewsAsync()`, and `GetColumnsAsync(tableName)` via `INFORMATION_SCHEMA` queries. This feeds the LSP schema cache and TUI autocomplete.
+
+### DW-6: `SupportsSqlPushdown = true`
+
+Warehouse connectors must set `SupportsSqlPushdown = true`. They are the primary use case for full SQL pushdown — ETL-SQL generates the SQL and the warehouse executes it.
+
+### DW-7: Backtick or Double-Quote Identifiers — Never Unquoted
+
+All identifier quoting must handle multi-part names (`project.dataset.table` or `schema.table`):
+- Snowflake / most warehouses: double-quote each segment (`"schema"."table"`)
+- BigQuery: backtick each segment (`` `project`.`dataset`.`table` ``)
+
+### DW-8: Credential File Paths Must Go Through `ResolvePath`
+
+If the connector accepts a file path for credentials (e.g., `CREDENTIAL_FILE`, `PRIVATE_KEY_FILE`), it must resolve the path via `context.ResolvePath(rawPath)` — the same as any other file-I/O connector (Rule 4 of Part I applies here too).
+
+### DW-9: ADC / Workload Identity Support
+
+Cloud warehouse connectors must support credential-less auth via the platform's ambient identity mechanism:
+- GCP (BigQuery): Application Default Credentials — omit `CREDENTIAL_FILE`
+- Snowflake: Private-key JWT — omit `PASSWORD`, provide `PRIVATE_KEY_FILE`
+- Azure (Synapse via ODBC): Managed Identity — use `Authentication=ActiveDirectoryMsi` in the DSN
+
+### DW-10: Streaming vs. Bulk Write Trade-offs Must Be Documented
+
+The connector's `GetHelp()` string and the reference documentation must explain the write mechanism (streaming inserts, bulk load, DML) and its implications for throughput, cost, and atomicity.
+
 ### Rule V4: Breaking Changes Require a Transition Period
 
 Any change that removes an option key, renames a connector token, or changes the semantics of an existing interface method requires:
