@@ -2,6 +2,9 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
+using CoreParser = ETL_SQL.Core.Parser.Parser;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
@@ -153,6 +156,43 @@ public class ReportsController(PortalDbContext db, AuditService audit, PortalCon
         await audit.LogAsync(CurrentUserId, "UPDATE_REPORT", "Report", id.ToString());
 
         return Ok(ToDto(report, null));
+    }
+
+    // ── GET /api/reports/{id}/parameters ─────────────────────────────────────
+
+    /// <summary>
+    /// Parses the report script and returns metadata for all INPUT-declared parameters.
+    /// No script execution occurs. Used by the subscription UI to build parameter forms.
+    /// </summary>
+    [HttpGet("reports/{id:int}/parameters")]
+    public async Task<IActionResult> GetParameters(int id)
+    {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null) return Forbid();
+
+        if (!System.IO.File.Exists(report.ScriptPath))
+            return Ok(Array.Empty<ReportParameterDto>());
+
+        var scriptText = await System.IO.File.ReadAllTextAsync(report.ScriptPath);
+        var tokens     = new Lexer(scriptText).Tokenize();
+        var parser     = new CoreParser(tokens, scriptText);
+        var script     = parser.Parse();
+
+        var parameters = script.Statements
+            .OfType<DeclareStatement>()
+            .Where(d => d.IsInput)
+            .Select(d => new ReportParameterDto(
+                d.VariableName,
+                d.DataType,
+                d.InitialValue is LiteralExpression lit ? lit.Value?.ToString() : null,
+                d.InitialValue is null,
+                d.Description))
+            .ToList();
+
+        return Ok(parameters);
     }
 
     // ── DELETE /api/reports/{id} ──────────────────────────────────────────────
