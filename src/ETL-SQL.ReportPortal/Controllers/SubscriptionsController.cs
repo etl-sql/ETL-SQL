@@ -236,6 +236,16 @@ public class SubscriptionsController(
         return Ok(history);
     }
 
+    // ── SMTP alias list (any authenticated user) ───────────────────────────────
+
+    /// <summary>Returns SMTP alias names so the subscribe modal can populate a dropdown.</summary>
+    [HttpGet("api/smtp-aliases")]
+    public async Task<IActionResult> ListSmtpAliases()
+    {
+        var aliases = await db.SmtpConnections.Select(c => c.Alias).ToListAsync();
+        return Ok(aliases);
+    }
+
     // ── SMTP connections (Admin only) ──────────────────────────────────────────
 
     [HttpGet("api/admin/smtp")]

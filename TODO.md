@@ -18,8 +18,8 @@
         - [x] `ETL-SQL.Engine/CreatePortalSubscriptionHandler.cs`: Persist `Name` + `ParametersJson`.
         - [x] `ETL-SQL.Engine/AlterPortalSubscriptionHandler.cs` *(new)*: Update schedule/format/active/params; replace full param set when clause present; leave unchanged when absent; clear when clause is empty list.
     - **Phase 3 — Portal Data Layer**
-        - [ ] `Subscription.cs` entity: Add `Name` (nullable `TEXT`) + `ParametersJson` (nullable `TEXT`).
-        - [ ] New EF Core migration: `AddSubscriptionNameAndParameters`.
+        - [x] `Subscription.cs` entity: Add `Name` (nullable `TEXT`) + `ParametersJson` (nullable `TEXT`).
+        - [x] New EF Core migration: `AddSubscriptionNameAndParameters`.
     - **Phase 4 — Portal API**
         - [x] `CreateSubscriptionRequest` / `UpdateSubscriptionRequest` models: Add `Name?`, `Parameters?`.
         - [x] Subscription response DTOs: Add `Name?`, `Parameters?`, `ParameterSummary` (server-built compact string).
@@ -29,16 +29,16 @@
         - [x] `GET /api/subscriptions` (admin + mine): Include name, parameters, summary.
         - [x] Orchestrator job runner: Pass stored parameter values to script; resolve `RELDATE` expressions fresh at fire time.
     - **Phase 5 — Portal UI**
-        - [ ] Subscribe modal: call `/api/reports/{path}/parameters` before render; append per-type INPUT controls (RELDATE=quick-pick+custom, LIST=chip input, etc.). Serialize to `{ "@name": "value" }` on save.
-        - [ ] My Subscriptions list: show parameter summary; **Edit Parameters** modal (pre-populated, saves via PATCH).
-        - [ ] Admin Subscriptions view: parameter summary column + Edit Parameters action.
+        - [x] Subscribe modal: call `/api/reports/{path}/parameters` before render; append per-type INPUT controls (RELDATE=quick-pick+custom, LIST=chip input, etc.). Serialize to `{ "@name": "value" }` on save.
+        - [x] My Subscriptions list: show parameter summary; **Edit Parameters** modal (pre-populated, saves via PATCH).
+        - [x] Admin Subscriptions view: parameter summary column + Edit Parameters action.
     - **Phase 6 — Documentation** *(update as phases land)*
-        - [ ] `Docs/Report_SQL_Guide.md`: Add `RELDATE`/`LIST`/`INPUT` to parameter type table; `INPUT` modifier section.
-        - [ ] `Docs/ReportPortal_User_Guide.md`: Sections 6 + 7 with parameter controls and Edit Parameters UX.
-        - [ ] `Docs/ReportPortal_Administrators_Guide.md`: Section 8 with `CREATE SUBSCRIPTION` / `ALTER SUBSCRIPTION` full syntax.
-        - [ ] `Docs/User_Manual.md`: `SET WEEK_START_DAY` in SET reference; `Engine.StartOfWeek` in config reference.
-        - [ ] `Docs/Reference/Grammar.md`: New productions for all added statements and types.
-        - [ ] `Add to help, ETL-SQL.Common/Resources/Help`: Add in the help for RELDATE, and SUBSCRIPTION
+        - [x] `Docs/Report_SQL_Guide.md`: Add `RELDATE`/`LIST`/`INPUT` to parameter type table; `INPUT` modifier section.
+        - [x] `Docs/ReportPortal_User_Guide.md`: Sections 6 + 7 with parameter controls and Edit Parameters UX.
+        - [x] `Docs/ReportPortal_Administrators_Guide.md`: Section 8 with `CREATE SUBSCRIPTION` / `ALTER SUBSCRIPTION` full syntax.
+        - [x] `Docs/User_Manual.md`: `SET WEEK_START_DAY` in SET reference; `Engine.StartOfWeek` in config reference.
+        - [x] `Docs/Reference/Grammar.md`: New productions for all added statements and types.
+        - [x] `src/ETL-SQL.Core/Resources/Help`: Added `Keywords/RELDATE.md`, `Keywords/SUBSCRIPTION.md`; updated `DECLARE.md` and `SET.md`.
 - [x] **Security Manifest**: Strategy document complete. See [`Docs/Strategy/ScriptSecurity_Strategy.md`](Strategy/ScriptSecurity_Strategy.md). Full PKI signing not recommended — disproportionate key management overhead. **Hash pinning** instead: store SHA-256 of script at schedule/publish time, compare at run time, warn or block on mismatch. ~2 dev-days across 3 phases.
     - **Phase 1 — Orchestrator hash pinning**
         - [ ] `OrchestratorJob` entity: Add `ScriptHash` (TEXT) + `HashPolicy` (`Warn`/`Block`, default `Warn`).
@@ -82,58 +82,6 @@
         - [ ] `Docs/Reference/Data_Connectors.md`: **Data Warehouse via ODBC** section with connection string examples for Redshift, Databricks, Synapse, Trino, Dremio. Note which platforms need native connectors vs. ODBC.
         - [ ] `Docs/Architecture/Connectors.md`: Document `CommandTimeoutSeconds` and `ReadOnly` fields.
         - [ ] `Docs/Standards/Connectors_Standards.md`: Data warehouse connector checklist.
-- [ ] **Native State Persistence (High-Water Marks)** — Implement a unified mechanism for scripts to store and retrieve execution state across runs.
-    - **Phase 1 — Engine: State Statements**
-        - [ ] Add `SET_STATE(@key, @value)` and `GET_STATE(@key, @default)` statements/functions.
-        - [ ] Implement `IStateProvider` interface in `ETL-SQL.Core`.
-        - [ ] Add `SQLiteStateProvider` in `ETL-SQL.Orchestrator` using the existing SQLite infrastructure.
-    - **Phase 2 — Orchestrator Integration**
-        - [ ] Scoping: State should be scoped by `(JobName, Key)` or `(ScriptPath, Key)`.
-        - [ ] Dashboard: Add a "State Viewer" to the Orchestrator/Portal to allow admins to inspect or reset high-water marks manually.
-- [ ] **Enterprise Observability: OpenLineage** — Export internal lineage maps to industry-standard platforms.
-    - **Phase 1 — OpenLineage Payload Generator**
-        - [ ] Implement `OpenLineageMapper` in `ETL-SQL.Engine` to convert `LineageTracker` data into OpenLineage JSON facets.
-        - [ ] Capture job start/complete events with input/output dataset URIs.
-    - **Phase 2 — Emitters**
-        - [ ] Add `HTTP` emitter to send payloads to Marquez/DataHub/Collibra.
-        - [ ] Add `FILE` emitter for offline debugging of lineage facets.
-- [ ] **AI-Ready ETL: Vector Connector & Embeddings** — Enable RAG workflows natively.
-    - **Phase 1 — Vector Type & Handler**
-        - [ ] Ensure `VECTOR` data type is fully supported in `InMemoryDataSource`.
-        - [ ] Add `EMBED(@text, @model_conn)` function to `ExpressionEvaluator`.
-    - **Phase 2 — AI Connectors**
-        - [ ] Add `AI_MODEL` connector for OpenAI/Azure/Ollama providers.
-        - [ ] Add `PINECONE` or `PGVECTOR` native connectors for vector storage.
-- [ ] **Advanced Lineage & Infinite Documentation (Tags)** — Leverage the "Cumulative Metadata" model for enterprise-grade governance. *Note: Extends basic lineage beyond current "Last-Wins" inheritance.*
-    - **Phase 1 — Tag Inheritance & Flow (The "Sticky" Tag)**
-        - [ ] **Cumulative Tag Union**: Update `LineageTracker.InheritMetadata` to support multi-source unions. If `colA` is `#PII` and `colB` is `#GDPR`, `colA + colB` must inherit *both* tags (currently it overwrites).
-        - [ ] **Infinite Documentation (Description Concat)**: Automatically concatenate descriptions (`@d` tag) from all sources during transformations so context is never lost (e.g., `full_name` inherits history from both `first_name` and `last_name`).
-        - [ ] **Lineage Breadcrumbs (VS Code)**: Update Hover to show "Provenance" — a visual trace of exactly which source file/line introduced each specific tag.
-    - **Phase 2 — Impact Analysis (Forward Lineage)**
-        - [ ] **Forward Graph Traversal**: Implement `GetDescendants(table, column)` in `LineageTracker` to walk the graph forward (inverse of `GetAncestors`).
-        - [ ] **Impact Command**: Add `EXPLAIN IMPACT <table/column>` command to show what downstream scripts, reports, or `#temp` tables will be affected if a source schema changes.
-    - **Phase 3 — Tag-Based Governance (Enforcement)**
-        - [ ] **Strict Governance Mode**: Add `SET GOVERNANCE_MODE = STRICT`.
-        - [ ] **Data Firewalls**: Implement enforcement in `Evaluator`. Prevent `SEND EMAIL` or `EXPORT` of any column tagged (directly or via lineage) as `PII` or `SENSITIVE` to insecure connectors (e.g., `FLATFILE`) without an explicit `SET OVERRIDE_GOVERNANCE = TRUE`.
-        - [ ] **Governance Audit**: Log every "blocked" attempt and "override" with the full lineage path of the offending data.
-- [ ] **Inbound Metadata & Discovery (The Reverse Bridge)** — Harvest existing knowledge from source databases.
-    - **Phase 1 — Native Comment Harvesting**
-        - [ ] Update `ISchemaProvider` to include `GetMetadataAsync(table, column)`.
-        - [ ] Implement native metadata queries for MSSQL (`sys.extended_properties`) and Postgres (`pg_description`).
-        - [ ] Automatically merge native DB comments into the `LineageTracker` as tags during `CREATE CONNECTION`.
-    - **Phase 2 — View Dependency Mapping**
-        - [ ] For SQL-based connectors, query native dependency views (e.g., `sys.sql_expression_dependencies`) to identify source tables/columns for Views.
-        - [ ] Inject these "Hidden Ancestors" into the Lineage Graph automatically.
-- [ ] **Enterprise Observability: OpenLineage** — Export internal lineage maps and "Cumulative Tags" to industry-standard platforms.
-    - **Phase 1 — OpenLineage Payload Generator**
-        - [ ] Implement `OpenLineageMapper` in `ETL-SQL.Engine` to convert `LineageTracker` data into OpenLineage JSON facets.
-        - [ ] Map "Cumulative Tags" to OpenLineage **Custom Facets**.
-        - [ ] Capture job start/complete events with input/output dataset URIs.
-    - **Phase 2 — Emitters**
-        - [ ] Add `HTTP` emitter to send payloads to Marquez/DataHub/Collibra.
-        - [ ] Add `FILE` emitter for offline debugging of lineage facets.
-- [ ] **Architectural Refactor: Statement Handler Registry** — De-monolith `Evaluator.cs`.
-    - **Phase 1 — IStatementHandler Decoupling**
 - [ ] **Distributed Deployment & Distribution** — Transition ETL-SQL from a local tool to an enterprise platform with multi-machine simulation and native cross-platform installers.
     - **Phase 1 — Dockerization & Orchestration (The Simulation)**
         - [ ] Create Dockerfile for `ETL-SQL.Orchestrator` (ASP.NET Core 10 runtime).
@@ -197,15 +145,11 @@
         - [x] **Contextual Documentation**: Pass statement context (e.g., `ConnectorType`) to the help fetcher so users see connector-specific documentation for generic options like `FORMAT` or `DELIMITER`.
         - [/] **Snippet Templates**: Integrate "Cookbook" snippets into the suggestion list, allowing users to "tab-complete" full statement patterns.
         - [x] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Help Sidebar + Hover work), Git Commit.
-    - [/] **Phase 6 — Visual Intelligence (Inlay Hints & Semantic Highlighting)**
-        - [x] **Inlay Hints**: Implement "Ghost Text" parameter hints for functions (e.g., showing `[interval]`, `[number]` inside `DATEADD`).
-        - [x] **TUI Rendering**: Support dim-color inline rendering for hints without affecting cursor positioning.
-        - [x] **LSP Support**: Implement custom `etlsql/inlayHints` handler (LSP 3.17 InlayHint fallback).
-        - [ ] **Semantic Highlighting**: Upgrade highlighters to color-code Remote Tables, Temp Tables, and CTEs differently based on the `LanguageService` context.
-        - [ ] **Checkpoint**: 100% Tests Pass, 100% Samples Pass, Manual Check (Hints/Colors work), Git Commit.
-    - **Phase 7 — Editing Assistance (Smart Refactoring & Quick Fixes)**
-        - [ ] **Smart Rename (F2)**: Implement safe symbol renaming for variables, aliases, and `#temp` tables across the entire script.
-        - [ ] **Quick Fixes (Lightbulb)**: Integrate Linter rules with automated fixes (e.g., "Encrypt plaintext password", "Convert TOP to LIMIT for Postgres").
-        - [x] **Column Expansion**: Offer a quick fix to transform `SELECT *` into an explicit column list.
-        - [ ] **LSP Support**: Implement `IRenameHandler` and `ICodeActionHandler`.
-        - [ ] **Final Checkpoint**: Full Regression Suite, Release Tag.
+    - [x] **Phase 6 — Visual Intelligence (Semantic Highlighting & Clean-up)**
+        - [x] **Inlay Hints**: (REMOVED) Purged from Core, TUI, and LSP to improve performance and stability.
+        - [x] **Semantic Highlighting**: (REMOVED) Purged from Core, TUI, and LSP for better stability and performance.
+        - [x] **Checkpoint**: 100% Tests Pass, build success.
+    - [x] **Phase 7 — Editing Assistance (Smart Refactoring & Quick Fixes)**
+        - [x] **Smart Rename (F2)**: (REMOVED) Purged from TUI and LSP for stability.
+        - [x] **Quick Fixes (Lightbulb)**: (REMOVED) Purged from LSP for stability.
+        - [x] **Final Checkpoint**: 100% Tests Pass (1257/1257), full build success, parity verified between TUI and LSP.

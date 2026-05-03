@@ -134,10 +134,6 @@ namespace ETL_SQL.Core.Services
                 await using var source = connector.CreateDataSource(SystemExecutionContext.Instance, conn.ConnectionString);
                 var tables = (await source.GetTablesAsync()).ToList();
                 
-                if (!tables.Contains("DUAL", StringComparer.OrdinalIgnoreCase))
-                {
-                    tables.Insert(0, "DUAL");
-                }
 
                 var normalizedUri = NormalizeUri(uri);
                 if (!string.IsNullOrEmpty(normalizedUri) && _docTempTables.TryGetValue(normalizedUri, out var temps))

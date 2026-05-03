@@ -249,8 +249,6 @@ namespace ETL_SQL.Core
         public Expression? Offset { get; init; }
         public ForClause? ForClause { get; init; }
         public Expression? QualifyClause { get; init; }
-        /// <summary>Common Table Expressions (WITH clause) applied to this SELECT statement.</summary>
-        public new List<CteDefinition>? Ctes { get; init; }
         public bool IsRecursive { get; init; }
 
         public SelectStatement(List<SelectColumn> columns, TableReference? intoTable, TableReference fromTable, List<JoinClause> joins, Expression? whereClause, List<Expression>? groupBy = null, Expression? havingClause = null, List<OrderByClause>? orderBy = null)

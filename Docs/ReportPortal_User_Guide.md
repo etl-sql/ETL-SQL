@@ -12,9 +12,9 @@ The Report Portal is a web application that lets you browse, run, and subscribe 
 4. [Running a Report](#4-running-a-report)
 5. [Viewing & Exporting Results](#5-viewing--exporting-results)
 6. [Subscribing to a Report](#6-subscribing-to-a-report)
-   - [6.1 Report Parameters *(Proposed)*](#61-report-parameters)
+   - [6.1 Report Parameters](#61-report-parameters)
 7. [Managing Your Subscriptions](#7-managing-your-subscriptions)
-   - [7.1 Editing Parameters *(Proposed)*](#71-editing-parameters)
+   - [7.1 Editing Parameters](#71-editing-parameters)
 8. [Changing Your Password](#8-changing-your-password)
 
 ---
@@ -126,57 +126,39 @@ A subscription delivers a report to your email inbox on a schedule.
 
 ### 6.1 Report Parameters
 
-> [!NOTE]
-> **Proposed** — This section describes functionality planned for a future release.
-
 Some reports are written with **INPUT parameters** — values that control what data is included each time the report runs (e.g. date range, region filter). When you subscribe, you can set a value for each parameter that will be used every time your subscription fires.
 
 #### Parameter controls by type
 
 | Parameter type | Control shown | Notes |
 | :--- | :--- | :--- |
-| Text (`VARCHAR`) | Text input | |
-| Number (`INT`, `DECIMAL`) | Number input | |
-| Date (`DATE`) | Date picker | |
-| Date + time (`DATETIME`) | Date and time picker | |
-| Relative date (`RELDATE`) | Quick-pick dropdown | See below |
-| Multi-value list (`LIST`) | Tag / chip input | Each chip is one value |
+| Text (`VARCHAR`, `STRING`) | Text input | |
+| Number (`INT`, `DECIMAL`) | Text input | Enter the number as text |
+| Date (`DATE`, `DATETIME`) | Text input | Use ISO format: `2026-01-15` |
+| Relative date (`RELDATE`) | Quick-pick buttons + text input | See below |
+| Multi-value list (`LIST`) | Text input | Comma-separated values |
 
 #### Relative date parameters
 
-A **RELDATE** parameter lets you say "yesterday" or "start of last month" instead of picking a specific date. The portal resolves the expression to an actual date each time your subscription runs.
+A **RELDATE** parameter lets you say "yesterday" or "last month" instead of picking a specific date. The expression is stored as-is and resolved to an actual date each time your subscription fires — so "D-1" always means the day before the run, not the day before you subscribed.
 
-The quick-pick dropdown covers the most common choices:
+Quick-pick buttons cover the most common values:
 
-| Label | What it means |
-| :--- | :--- |
-| Today | The current calendar day |
-| Yesterday | The day before the run date |
-| Start of this week | Monday (or your organization's configured week start) |
-| Start of last week | The Monday of last week |
-| End of last week | The Sunday of last week |
-| Start of this month | The 1st of the current month |
-| Start of last month | The 1st of last month |
-| End of last month | The last day of last month |
-| Start of this quarter | The 1st of the current quarter |
-| Start of last quarter | The 1st of last quarter |
-| End of last quarter | The last day of last quarter |
-| Start of this year | January 1 of the current year |
-| Start of last year | January 1 of last year |
-| End of last year | December 31 of last year |
-| Now | The exact time the subscription fires |
+| Button | Expression | Resolves to at run time |
+| :--- | :--- | :--- |
+| Today | `D-0` | The current calendar day at midnight |
+| D-1 | `D-1` | Yesterday at midnight |
+| D-7 | `D-7` | Seven days ago |
+| D-30 | `D-30` | Thirty days ago |
+| M-1 | `M-1` | First day of last month |
+| M-3 | `M-3` | First day of the month three months ago |
+| Y-1 | `Y-1` | January 1 of last year |
 
-Click **Advanced** to type a custom expression (e.g. `N-2H` for "2 hours ago"). The portal validates the expression before saving.
-
-You can also enter a fixed date (e.g. `2026-01-01`) to pin the subscription to a specific value that never changes.
-
-#### Multi-value list parameters
-
-Type a value and press **Enter** or **,** to add it as a chip. Click the × on a chip to remove it. You can add as many values as needed.
+You can also type any valid expression directly in the text field — for example `W-1` (start of last week), `ME-1` (last day of last month), or `N-2H` (exactly 2 hours ago). Enter a fixed ISO date (`2026-01-01`) to pin the subscription to a specific date that never changes.
 
 #### Leaving a parameter blank
 
-An empty field means **no value** (`NULL`) is passed for that parameter. Most report writers interpret a NULL parameter as "no filter" — meaning the report will return data for all values of that dimension. Check the report's description or ask your administrator if you are unsure.
+An empty field means **no value** (`NULL`) is passed for that parameter. Most report writers interpret a NULL parameter as "no filter" — meaning the report will return all data for that dimension. Check the report's description or ask your administrator if you are unsure.
 
 ---
 
@@ -190,9 +172,6 @@ Open **My Subscriptions** from the user menu (top-right). The list shows all sub
 - **History** — shows the last delivery attempts with timestamps and any error messages.
 
 ### 7.1 Editing Parameters
-
-> [!NOTE]
-> **Proposed** — This section describes functionality planned for a future release.
 
 Click **Edit Parameters** (or the parameter summary text) on any subscription row. The same per-type controls used in the Subscribe form appear, pre-populated with your saved values. Make your changes and click **Save**. The updated values are used on the next scheduled run — there is no need to recreate the subscription.
 

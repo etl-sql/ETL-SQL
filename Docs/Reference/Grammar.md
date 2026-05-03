@@ -39,7 +39,7 @@ DECLARE @inventory TABLE;
 | **Temporal** | `DATE`, `TIME`, `DATETIME`, `DATETIME2`, `SMALLDATETIME`, `DATETIMEOFFSET`, `TIMESTAMP` |
 | **Character** | `CHAR`, `VARCHAR`, `VARCHAR2`, `NCHAR`, `NVARCHAR`, `TEXT`, `NTEXT`, `STRING`, `MARKDOWN` |
 | **Binary** | `BINARY`, `VARBINARY`, `IMAGE`, `BLOB`, `LOB` |
-| **Specialized** | `XML`, `JSON`, `UNIQUEIDENTIFIER`, `UUID`, `GUID`, `GEOMETRY`, `GEOGRAPHY`, `HIERARCHYID`, `VARIANT`, `SQL_VARIANT`, `ANY`, `PATH`, `MINMAX`, `CURSOR`, `ENCRYPTED`, `VECTOR`, `SENSITIVE`, `SECRET` |
+| **Specialized** | `XML`, `JSON`, `UNIQUEIDENTIFIER`, `UUID`, `GUID`, `GEOMETRY`, `GEOGRAPHY`, `HIERARCHYID`, `VARIANT`, `SQL_VARIANT`, `ANY`, `PATH`, `MINMAX`, `CURSOR`, `ENCRYPTED`, `VECTOR`, `SENSITIVE`, `SECRET`, `RELDATE` |
 | **Collections** | `LIST`, `LIST(<type>)`, `TABLE` |
 
 ### 1.2 Specialty Types
@@ -223,6 +223,41 @@ DECLARE @bearerToken SECRET    = GetBearerToken(...);  -- purged from RAM on fin
 
 > [!NOTE]
 > Log scrubbing is always active regardless of variable type. The engine automatically redacts patterns like `password=value`, `token=value`, and any `ENC:...` constant found in log messages or connection string text. Variables are scrubbed by pattern, not by metadata — so `SENSITIVE`/`SECRET` masking applies specifically to `SHOW VARIABLES` output and the auto-decrypt pathway.
+
+---
+
+#### `RELDATE`
+
+A relative-date expression — a string that the engine resolves to a concrete `DATE` or `DATETIME` value each time the script executes. Storing the expression rather than a fixed date means "yesterday" always means yesterday relative to the run.
+
+```sql
+DECLARE @start RELDATE INPUT = 'M-1';   -- first day of last month
+DECLARE @end   RELDATE INPUT = 'D';     -- today at midnight
+DECLARE @fixed RELDATE       = '2026-01-01';  -- pinned: never changes
+
+SELECT * FROM prod.Sales WHERE SaleDate BETWEEN @start AND @end;
+```
+
+**Expression format:** `<anchor><unit><offset>` — e.g. `D-7`, `W-1`, `ME-1`, `N-2H`.
+
+| Anchor | Meaning |
+| :--- | :--- |
+| `D` | Today at midnight |
+| `W` | Start of current week |
+| `M` | Start of current month |
+| `Q` | Start of current quarter |
+| `Y` | Start of current year |
+| `N` | Now (current timestamp) |
+| `WE`, `ME`, `QE`, `YE` | End of current week/month/quarter/year |
+| ISO date string | Fixed date — resolves to itself |
+
+Append `-<n>` to shift back n periods, e.g. `M-3` = first day of three months ago. Append `+<n>` for future offsets. For `N` (Now), use inline units: `N-2H` (2 hours), `N-30M` (30 minutes), `N-7D` (7 days).
+
+Week-boundary anchors (`W`, `WE`) use **Monday** as week-start by default; override with `SET WEEK_START_DAY` (§2.6) or the `Engine.StartOfWeek` config key.
+
+`RELDATE` is most useful combined with `INPUT` so callers can supply expressions at run time without editing the script. See **§1.5 INPUT and OUTPUT Variables**.
+
+---
 
 ### 1.3 `SET`
 Assigns a new value to an existing variable.
@@ -430,7 +465,16 @@ Override `appsettings.json` defaults for the current session.
 | `SET REGEX_TIMEOUT = n` | 1,000 | Milliseconds before a regex match is aborted |
 
 
-### 2.6 Observability & Telemetry
+### 2.6 `SET WEEK_START_DAY`
+Override the first day of the week for `RELDATE` week-boundary expressions (`W`, `W-1`, `WE`, `WE-1`, etc.) for the current script.
+
+```sql
+SET WEEK_START_DAY = 'Sunday';   -- valid for this script only
+```
+
+Valid values (case-insensitive): `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday`. The engine default is `Monday`; the organisation default can be changed with `Engine.StartOfWeek` in `appsettings.json`.
+
+### 2.7 Observability & Telemetry
 
 ETL-SQL provides two layers of performance monitoring: **Telemetry** and **Profiling**.
 
@@ -2092,26 +2136,60 @@ EXECUTE portal BEGIN
     -- =========================================================
     -- SUBSCRIPTIONS
     -- Group membership is evaluated at delivery time, not creation time.
+    -- PARAMETERS values are stored as-is; RELDATE expressions are resolved
+    -- fresh each time the subscription fires.
     -- =========================================================
-    CREATE SUBSCRIPTION FOR REPORT '/Finance/MonthlySales'
+    CREATE SUBSCRIPTION DailySales
+        FOR REPORT '/Finance/MonthlySales'
         DELIVER TO 'john.doe'
         SCHEDULE '0 8 * * MON'
         FORMAT PDF
-        AT smtp;
+        AT smtp
+        PARAMETERS (
+            @start  = 'D-1',
+            @end    = 'D',
+            @region = NULL
+        );
 
-    CREATE SUBSCRIPTION FOR REPORT '/Finance/MonthlySales'
+    CREATE SUBSCRIPTION MonthlyExec
+        FOR REPORT '/Finance/MonthlySales'
         DELIVER TO GROUP 'Finance'
         ON REFRESH                  -- fires whenever the dataset refreshes
         FORMAT BOTH                 -- PDF and CSV
+        AT smtp
+        PARAMETERS (
+            @period_start = 'M-1',
+            @period_end   = 'ME-1'
+        );
+
+    -- Optional subscription name; PARAMETERS clause is optional
+    CREATE SUBSCRIPTION FOR REPORT '/Ops/StatusReport'
+        DELIVER TO 'ops@example.com'
+        SCHEDULE '0 9 * * *'
+        FORMAT LINK
         AT smtp;
 
-    ALTER SUBSCRIPTION 5 SET SCHEDULE = '0 9 * * MON';
-    ALTER SUBSCRIPTION 5 ENABLE;
-    ALTER SUBSCRIPTION 5 DISABLE;
-    DROP SUBSCRIPTION 5;
+    -- ALTER: change schedule or format only (PARAMETERS unchanged when clause omitted)
+    ALTER SUBSCRIPTION DailySales SET SCHEDULE '0 9 * * MON-FRI';
+    ALTER SUBSCRIPTION DailySales SET FORMAT CSV;
+    ALTER SUBSCRIPTION DailySales SET ACTIVE;
+    ALTER SUBSCRIPTION DailySales SET INACTIVE;
 
-    SHOW SUBSCRIPTIONS                                   [INTO #subs];
-    SHOW SUBSCRIPTIONS FOR REPORT '/Finance/MonthlySales' [INTO #subs];
+    -- ALTER: replace full parameter set (empty list clears all parameters)
+    ALTER SUBSCRIPTION DailySales
+        PARAMETERS (
+            @start  = 'W-1',
+            @end    = 'W',
+            @region = 'North'
+        );
+
+    ALTER SUBSCRIPTION DailySales PARAMETERS ();   -- clears all parameters
+
+    DROP SUBSCRIPTION DailySales;
+    DROP SUBSCRIPTION 5;            -- by ID
+
+    SHOW SUBSCRIPTIONS                                    [INTO #subs];
+    SHOW SUBSCRIPTIONS FOR REPORT '/Finance/MonthlySales'  [INTO #subs];
 
     -- =========================================================
     -- SESSION MANAGEMENT

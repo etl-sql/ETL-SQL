@@ -101,6 +101,75 @@ ETL-SQL-Report serve report.rptsql        # → opens http://localhost:5200
 
 ---
 
+## Report Parameters (INPUT Variables)
+
+Report-SQL uses standard ETL-SQL `@variables` for all parameters. Declare them with `DECLARE` at the top of your script — any variable marked `INPUT` can be overridden by the Report Portal at runtime (when running on-demand or via a subscription).
+
+```sql
+-- Basic text/number parameters
+DECLARE @region   VARCHAR INPUT = 'All';
+DECLARE @min_sale DECIMAL INPUT = 0;
+
+-- Relative date range — the portal resolves these fresh on each subscription fire
+DECLARE @start    RELDATE INPUT = 'M-1';  -- first day of last month
+DECLARE @end      RELDATE INPUT = 'D';    -- today
+
+SELECT region, SUM(revenue) AS revenue
+INTO #summary
+FROM prod.Sales
+WHERE region   = CASE WHEN @region = 'All' THEN region ELSE @region END
+  AND sale_date BETWEEN @start AND @end
+  AND amount   >= @min_sale
+GROUP BY region;
+```
+
+### INPUT parameter types
+
+| Type | Portal control | Notes |
+| :--- | :--- | :--- |
+| `VARCHAR`, `STRING` | Text input | |
+| `INT`, `DECIMAL` | Text input | Parsed as a number at runtime |
+| `DATE`, `DATETIME` | Text input | ISO format: `2026-01-15` |
+| `RELDATE` | Quick-pick buttons + text | Expression stored; resolved at each subscription fire |
+| `LIST` | Text input | Comma-separated; e.g. `North,South,East` |
+| `BOOL`, `BIT` | Text input | `true`/`false` or `1`/`0` |
+
+### RELDATE parameters
+
+`RELDATE` is the recommended type for date-range parameters in subscription-friendly reports. Instead of storing a fixed date, the subscriber stores an expression — `M-1`, `W-1`, `D-7` — that is resolved to a concrete date each time the subscription fires.
+
+```sql
+DECLARE @start RELDATE INPUT = 'M-1';  -- default: first day of last month
+DECLARE @end   RELDATE INPUT = 'D';    -- default: today
+
+-- Override week boundaries if your organisation uses a different week start:
+SET WEEK_START_DAY = 'Sunday';
+```
+
+See the [ETL-SQL Grammar Reference](Reference/Grammar.md#reldate) for the full expression syntax.
+
+### Connecting parameters to interactive filter visuals
+
+Use `ACTIONS (ON_CHANGE = SET_PARAMETER(@var, value))` on `SLICER`, `DATEPICKER`, or `SLIDER` visuals to wire user input to a parameter variable. The variable's value is then injected into every visual that references it.
+
+```sql
+DECLARE @region VARCHAR = 'All';
+
+CREATE VISUAL RegionFilter AS SLICER (
+  SOURCE  = #regions,
+  MAPPINGS (VALUE = region_name),
+  DEFAULT = 'All',
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@region, value))
+);
+
+CREATE VISUAL SalesChart AS BAR (
+  SOURCE = (SELECT * FROM #summary WHERE region = @region OR @region = 'All'),
+  MAPPINGS (X = region, Y = revenue)
+);
+```
+
+---
+
 ## SET REPORT TITLE / SET REPORT DESCRIPTION
 
 Sets the report title and description displayed in the dashboard header and catalog page.

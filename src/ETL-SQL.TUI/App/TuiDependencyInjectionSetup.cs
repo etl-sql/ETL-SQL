@@ -73,7 +73,12 @@ namespace ETL_SQL.TUI
             services.AddSingleton<Core.Functions.IFunctionRegistry>(registry);
             
             var helpRegistry = new Core.Metadata.LanguageHelpRegistry();
+            Engine.Services.LanguageHelpService.Initialize(helpRegistry);
             services.AddSingleton<Core.Interfaces.ILanguageHelpRegistry>(helpRegistry);
+            
+            // ── Language Intelligence ──────────────────────────────────────────
+            services.AddSingleton<Core.IMetadataManager, Core.Services.MetadataManager>();
+            services.AddSingleton<Core.Services.ILanguageService, Core.Services.LanguageService>();
 
             services.AddTransient<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager, DockerContainerManager>();

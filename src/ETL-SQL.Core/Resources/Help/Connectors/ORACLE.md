@@ -1,1 +1,37 @@
-﻿Relational: ORACLE\nOptions: HOST, PORT, SERVICE_NAME, TNS_NAME, USER, PASSWORD, TABLE.
+# ORACLE
+Connects to Oracle Database using a host/service combination or a TNS alias.
+
+Syntax:
+  CREATE CONNECTION <name> ON ORACLE(
+    HOST         = 'oracle.corp.local',
+    PORT         = 1521,
+    SERVICE_NAME = 'ORCL',
+    USER         = 'username',
+    PASSWORD     = '<password>'
+  );
+
+Options:
+  HOST          — Oracle server hostname or IP (required unless using TNS_NAME)
+  PORT          — listener port (default 1521)
+  SERVICE_NAME  — Oracle service name
+  TNS_NAME      — TNS alias (alternative to HOST + PORT + SERVICE_NAME)
+  USER          — schema/user (required)
+  PASSWORD      — password (required)
+  TABLE         — default table for unqualified SELECT/INSERT
+
+```sql
+CREATE CONNECTION FinanceDB ON ORACLE(
+  HOST         = 'oracle.finance.corp',
+  PORT         = 1521,
+  SERVICE_NAME = 'FINPROD',
+  USER         = @ora_user,
+  PASSWORD     = @ora_pass
+);
+
+SELECT account_id, balance, last_updated
+  INTO #accounts
+  FROM FinanceDB.FINANCE.ACCOUNTS
+  WHERE status = 'ACTIVE';
+
+PRINT 'Accounts loaded: ' + @@ROWCOUNT;
+```

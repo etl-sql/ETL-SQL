@@ -121,7 +121,10 @@ namespace ETL_SQL.TUI.UI
             if (_connections.TryGetValue(connectionName, out var source))
             {
                 if (source is IDatabaseSource db)
-                    return await db.GetColumnsAsync(tableName);
+                {
+                    var cols = (await db.GetColumnsAsync(tableName)).ToList();
+                    if (cols.Any()) return cols;
+                }
                 return await source.GetColumnsAsync();
             }
             return Enumerable.Empty<string>();

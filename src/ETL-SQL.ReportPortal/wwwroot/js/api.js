@@ -151,7 +151,21 @@ export const reportsApi = {
     setParameters: (id, params)      =>
         apiJson(`/api/reports/${id}/parameters`, { method: 'POST', body: { params } }),
 
-    exportUrl: (id, format) => `/api/reports/${id}/export/${format}`
+    exportUrl: (id, format) => `/api/reports/${id}/export/${format}`,
+
+    getParameters: (id) => apiJson(`/api/reports/${id}/parameters`)
+};
+
+// ── Subscriptions ──────────────────────────────────────────────────────────────
+
+export const subscriptionsApi = {
+    list:       ()          => apiJson('/api/subscriptions'),
+    get:        (id)        => apiJson(`/api/subscriptions/${id}`),
+    create:     (body)      => apiJson('/api/subscriptions',      { method: 'POST',   body }),
+    update:     (id, body)  => apiJson(`/api/subscriptions/${id}`, { method: 'PUT',    body }),
+    delete:     (id)        => apiJson(`/api/subscriptions/${id}`, { method: 'DELETE' }),
+    history:    (id, n=50)  => apiJson(`/api/subscriptions/${id}/history?limit=${n}`),
+    smtpAliases: ()         => apiJson('/api/smtp-aliases')
 };
 
 // ── Admin — users ──────────────────────────────────────────────────────────────
@@ -178,7 +192,13 @@ export const adminApi = {
 
     // audit
     auditLog: (page = 1, pageSize = 50, action = '', userId = '') =>
-        apiJson(`/api/admin/audit?page=${page}&pageSize=${pageSize}&action=${encodeURIComponent(action)}&userId=${userId}`)
+        apiJson(`/api/admin/audit?page=${page}&pageSize=${pageSize}&action=${encodeURIComponent(action)}&userId=${userId}`),
+
+    // smtp
+    listSmtp: () => apiJson('/api/admin/smtp'),
+
+    // subscriptions (admin sees all)
+    listAllSubscriptions: () => apiJson('/api/subscriptions')
 };
 
 // ── Install global fetch intercept for report-runtime.js ──────────────────────

@@ -14,7 +14,7 @@ This guide covers everything an administrator needs to deploy, configure, and op
 6. [Publishing Reports](#6-publishing-reports)
 7. [SMTP Connections](#7-smtp-connections)
 8. [Subscriptions](#8-subscriptions)
-   - [8.4 Scripted Subscription Management *(Proposed)*](#84-scripted-subscription-management)
+   - [8.4 Scripted Subscription Management](#84-scripted-subscription-management)
 9. [Health Monitoring](#9-health-monitoring)
 10. [Audit Log](#10-audit-log)
 11. [Security Model](#11-security-model)
@@ -108,6 +108,9 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
     },
     "FirstRun": {
       "AdminUsername": "admin"
+    },
+    "Engine": {
+      "StartOfWeek": "Monday"
     }
   }
 }
@@ -126,6 +129,7 @@ All settings live under the `"Portal"` key in `appsettings.json`. Every key can 
 | `Jwt.ExpiryMinutes` | `60` | How long an access token is valid. |
 | `Jwt.RefreshExpiryDays` | `7` | How long a refresh token is valid. |
 | `FirstRun.AdminUsername` | `admin` | Username created on first start if no users exist yet. |
+| `Engine.StartOfWeek` | `Monday` | Day used as the start of week when resolving `RELDATE` week-boundary expressions (`W`, `W-1`, etc.). Accepted values: `Monday`–`Sunday`. Can be overridden per-script with `SET WEEK_START_DAY = '<day>'`. |
 
 > [!IMPORTANT]
 > **`Jwt.Secret` must be set before production use.** Generate a strong random string of at least 32 characters and set it via an environment variable rather than storing it in the checked-in `appsettings.json`:
@@ -282,9 +286,6 @@ Subscription jobs are handed to the **ETL-SQL Orchestrator** for scheduling. If 
 Each subscription tracks a `FailCount`. After repeated failures the Orchestrator will stop retrying. Investigate via **Admin → Subscriptions → History** and correct the SMTP configuration or report script before re-enabling.
 
 ### 8.4 Scripted Subscription Management
-
-> [!NOTE]
-> **Proposed** — This section describes functionality planned for a future release.
 
 Administrators can create and modify subscriptions using ETL-SQL script syntax. This is useful for bulk setup, deployment automation, or version-controlling subscription configuration alongside report scripts.
 

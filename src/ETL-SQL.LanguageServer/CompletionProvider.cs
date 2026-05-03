@@ -73,11 +73,12 @@ namespace ETL_SQL.LSP
                     Detail = s.Type.ToString(),
                     Documentation = s.Documentation != null ? new MarkupContent { Kind = MarkupKind.Markdown, Value = s.Documentation } : null,
                     SortText = s.Priority.ToString("D4") + "_" + s.Text,
+                    FilterText = isExpansion ? prefix : s.Text,
                     InsertText = s.Text,
-                    TextEdit = isExpansion ? new TextEditOrInsertReplaceEdit(new TextEdit { 
+                    TextEdit = new TextEditOrInsertReplaceEdit(new TextEdit { 
                         Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(line, startCol, line, col), 
                         NewText = s.Text 
-                    }) : null
+                    })
                 };
             }).ToList();
 

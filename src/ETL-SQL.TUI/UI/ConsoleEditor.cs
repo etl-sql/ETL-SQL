@@ -15,6 +15,8 @@ using ETL_SQL.Core.Linting;
 using ETL_SQL.Core.Linting.Rules;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Services;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Services;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -32,6 +34,7 @@ namespace ETL_SQL.TUI.UI
         internal readonly MetadataManager _metadata;
         internal readonly AutocompleteController _autocomplete;
         internal readonly InputHandler _input;
+        private readonly ILanguageService _languageService;
         private readonly Dictionary<string, IDataSource> _connections;
 
         private readonly Services.IClipboardService _clipboard;
@@ -64,8 +67,12 @@ namespace ETL_SQL.TUI.UI
             _fileHandler = new EditorFileHandler(new PhysicalFileSystem(), _security);
             _metadata = new MetadataManager(_evaluator, _connections);
             var helpRegistry = Program.ServiceProvider.GetService<Core.Interfaces.ILanguageHelpRegistry>();
+            _languageService = Program.ServiceProvider.GetRequiredService<ILanguageService>();
             _autocomplete = new AutocompleteController(_buffer, _renderer, _metadata, _connections, _logger, helpRegistry);
             _input = new InputHandler(this, _buffer, _renderer, _autocomplete);
+            
+
+
             if (_logger is LoggerService ls)
             {
                 ls.SuppressConsole = true;

@@ -5,6 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin — ETL-SQL Report Portal</title>
   <link rel="stylesheet" href="/css/portal.css">
+  <style>
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1000}
+    .modal-card{background:#fff;border-radius:8px;padding:24px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.25);max-height:90vh;overflow-y:auto}
+    .param-row{margin-bottom:12px}
+    .param-label{display:block;font-size:.85em;font-weight:600;margin-bottom:4px;color:#555}
+    .param-input{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:.9em;box-sizing:border-box}
+    .reldate-quickpicks{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
+    .reldate-quickpicks button{padding:2px 6px;font-size:.78em;border:1px solid #ccc;border-radius:3px;background:#f5f5f5;cursor:pointer}
+    .reldate-quickpicks button:hover{background:#e8e8e8}
+    .subs-table-wrap{overflow-x:auto}
+  </style>
 </head>
 <body>
 <div class="app-shell">
@@ -33,6 +44,7 @@
         <button class="admin-tab" data-tab="groups">Groups</button>
         <button class="admin-tab" data-tab="folders">Folders &amp; ACL</button>
         <button class="admin-tab" data-tab="audit">Audit Log</button>
+        <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
       </div>
 
       <!-- ── Users panel ─────────────────────────────────────────────── -->
@@ -203,12 +215,38 @@
         </div>
       </div>
 
+      <!-- ── Subscriptions panel ───────────────────────────────────────── -->
+      <div class="admin-panel" id="panel-subscriptions">
+        <div class="card">
+          <div class="card-header">
+            <h3>All Subscriptions</h3>
+            <button class="btn btn-outline btn-sm" id="subsRefreshBtn">Refresh</button>
+          </div>
+          <div class="subs-table-wrap" id="subsTableWrap"><div class="viewer-loading">Loading…</div></div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
 
+<!-- Edit Parameters modal -->
+<div id="editParamsModal" class="modal-overlay" style="display:none">
+  <div class="modal-card" style="max-width:520px">
+    <h3 id="editParamsTitle" style="margin:0 0 16px">Edit Parameters</h3>
+    <div id="editParamsFields"></div>
+    <div id="editParamsError" class="error-msg"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+      <button class="btn btn-outline" id="editParamsCancelBtn">Cancel</button>
+      <button class="btn btn-primary" id="editParamsSaveBtn">Save</button>
+    </div>
+    <input type="hidden" id="editParamsSubId">
+    <input type="hidden" id="editParamsReportId">
+  </div>
+</div>
+
 <script type="module">
-import { auth, authApi, foldersApi, adminApi } from '/js/api.js';
+import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi } from '/js/api.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 
@@ -224,7 +262,7 @@ try {
 document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
-const panels = { users: null, groups: null, folders: null, audit: null };
+const panels = { users: null, groups: null, folders: null, audit: null, subscriptions: null };
 document.querySelectorAll('.admin-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
@@ -239,7 +277,7 @@ document.querySelectorAll('.admin-tab').forEach(btn => {
   });
 });
 
-const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, audit: loadAudit };
+const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, audit: loadAudit, subscriptions: loadSubscriptions };
 // Load the initial tab (users)
 panels.users = true;
 loadUsers();
@@ -604,9 +642,139 @@ document.getElementById('auditExportBtn').addEventListener('click', () => {
   }).catch(() => alert('Export failed.'));
 });
 
+// ── Subscriptions ──────────────────────────────────────────────────────────────
+async function loadSubscriptions() {
+  const $wrap = document.getElementById('subsTableWrap');
+  try {
+    const subs = await adminApi.listAllSubscriptions();
+    if (!subs.length) { $wrap.innerHTML = '<div class="empty-state">No subscriptions.</div>'; return; }
+    const rows = subs.map(s => {
+      const schedule = s.deliverOnRefresh ? 'On Refresh' : (s.schedule || '—');
+      return `
+        <tr>
+          <td class="text-sm">${esc(s.recipients || '')}</td>
+          <td>${esc(s.reportName || '')}</td>
+          <td>${esc(s.name || '—')}</td>
+          <td class="text-sm">${esc(schedule)}</td>
+          <td>${esc(s.format || '')}</td>
+          <td class="text-sm text-muted">${esc(s.parameterSummary || '—')}</td>
+          <td><span class="chip ${s.isActive ? 'chip-active' : 'chip-inactive'}">${s.isActive ? 'Active' : 'Paused'}</span></td>
+          <td>
+            <button class="btn btn-outline btn-sm" data-action="edit-params"
+              data-id="${s.id}" data-rid="${s.reportId}"
+              data-label="${escAttr(s.name || s.reportName)}"
+              data-params='${escAttr(JSON.stringify(s.parameters || {}))}'>Edit Params</button>
+          </td>
+        </tr>`;
+    }).join('');
+    $wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Recipients</th><th>Report</th><th>Name</th><th>Schedule</th><th>Format</th><th>Parameters</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    $wrap.querySelectorAll('[data-action="edit-params"]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const current = JSON.parse(btn.dataset.params || '{}');
+        openEditParamsModal(+btn.dataset.id, +btn.dataset.rid, btn.dataset.label, current, () => loadSubscriptions());
+      });
+    });
+  } catch { $wrap.innerHTML = '<div class="empty-state">Failed to load subscriptions.</div>'; }
+}
+
+document.getElementById('subsRefreshBtn').addEventListener('click', () => loadSubscriptions());
+
+let _onParamsSaved = null;
+
+function openEditParamsModal(subId, reportId, label, currentValues, onSaved) {
+  _onParamsSaved = onSaved;
+  document.getElementById('editParamsSubId').value = subId;
+  document.getElementById('editParamsReportId').value = reportId;
+  document.getElementById('editParamsTitle').textContent = `Edit Parameters — ${label}`;
+  document.getElementById('editParamsError').classList.remove('show');
+  const $fields = document.getElementById('editParamsFields');
+  $fields.innerHTML = '<div class="viewer-loading">Loading…</div>';
+  document.getElementById('editParamsModal').style.display = 'flex';
+
+  reportsApi.getParameters(reportId).then(params => {
+    if (!params.length) {
+      $fields.innerHTML = '<p style="color:#888">This report has no input parameters.</p>';
+      return;
+    }
+    renderParamFields('editParamsFields', params, currentValues);
+  }).catch(() => {
+    $fields.innerHTML = '<p style="color:#c00">Failed to load parameters.</p>';
+  });
+}
+
+function renderParamFields(containerId, params, currentValues) {
+  const $c = document.getElementById(containerId);
+  $c.innerHTML = params.map(p => {
+    const val = currentValues?.[p.name] ?? p.default ?? '';
+    const isReldate = (p.type || '').toUpperCase() === 'RELDATE';
+    const quickpicks = isReldate ? `
+      <div class="reldate-quickpicks">
+        ${['D-0','D-1','D-7','D-30','M-1','M-3','Y-1'].map(v =>
+          `<button type="button" data-qp="${v}" data-target="param-${p.name}">${v === 'D-0' ? 'Today' : v}</button>`
+        ).join('')}
+      </div>` : '';
+    return `
+      <div class="param-row">
+        <label class="param-label">${esc(p.name)}${p.required ? ' *' : ''} <span style="color:#888;font-weight:400">(${esc(p.type || '')})</span></label>
+        ${p.description ? `<div style="font-size:.8em;color:#888;margin-bottom:4px">${esc(p.description)}</div>` : ''}
+        <input class="param-input" id="param-${p.name}" type="text" value="${escAttr(String(val))}"
+          placeholder="${isReldate ? 'e.g. D-1, M-1, Y-1' : ''}">
+        ${quickpicks}
+      </div>`;
+  }).join('');
+
+  $c.querySelectorAll('[data-qp]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById(btn.dataset.target).value = btn.dataset.qp;
+    });
+  });
+}
+
+function collectParamValues(containerId, params) {
+  const result = {};
+  params.forEach(p => {
+    const $input = document.getElementById(`param-${p.name}`);
+    if ($input && $input.value.trim()) result[p.name] = $input.value.trim();
+  });
+  return Object.keys(result).length ? result : null;
+}
+
+document.getElementById('editParamsCancelBtn').addEventListener('click', () => {
+  document.getElementById('editParamsModal').style.display = 'none';
+});
+
+document.getElementById('editParamsSaveBtn').addEventListener('click', async () => {
+  const subId    = +document.getElementById('editParamsSubId').value;
+  const reportId = +document.getElementById('editParamsReportId').value;
+  const $err = document.getElementById('editParamsError');
+  $err.classList.remove('show');
+
+  let params;
+  try {
+    const allParams = await reportsApi.getParameters(reportId);
+    params = collectParamValues('editParamsFields', allParams);
+  } catch { params = null; }
+
+  try {
+    await subscriptionsApi.update(subId, { parameters: params });
+    document.getElementById('editParamsModal').style.display = 'none';
+    _onParamsSaved?.();
+  } catch (err) {
+    $err.textContent = err.message || 'Save failed.';
+    $err.classList.add('show');
+  }
+});
+
 // ── Utilities ──────────────────────────────────────────────────────────────────
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function alertErr(err) { alert(err.message || 'An error occurred.'); }
 </script>

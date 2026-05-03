@@ -83,7 +83,6 @@ namespace ETL_SQL.LSP
                         services.AddSingleton<ILanguageService, LanguageService>();
                         services.AddSingleton<DocumentStateStore>();
                         services.AddSingleton<TextDocumentHandler>();
-                        services.AddSingleton<CodeActionProvider>();
                         
                         // Engine Services
                         services.AddSingleton<Common.ILogger>(Common.NullLogger.Instance);
@@ -130,7 +129,6 @@ namespace ETL_SQL.LSP
                     .WithHandler<CompletionProvider>()
                     .WithHandler<SignatureHelpProvider>()
                     .WithHandler<FormattingProvider>()
-                    .WithHandler<CodeActionProvider>()
                     .WithHandler<CustomMethodsHandler>()
                     .WithHandler<RefreshMetadataHandler>()
             );

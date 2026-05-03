@@ -90,7 +90,6 @@ namespace ETL_SQL.TUI.UI
             if (key.Key == ConsoleKey.Z && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.Undo(); return; }
             if (key.Key == ConsoleKey.Y && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor.Redo(); return; }
             if (key.Key == ConsoleKey.S && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.SaveScript(key.Modifiers.HasFlag(ConsoleModifiers.Shift)); return; }
-            if (key.Key == ConsoleKey.F2) { await _editor.SaveScript(false); return; }
             if (key.Key == ConsoleKey.O && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await ShowOpenPrompt(); return; }
             if (key.Key == ConsoleKey.N && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { await _editor.NewFile(); return; }
             if (key.Key == ConsoleKey.R && key.Modifiers.HasFlag(ConsoleModifiers.Control)) { _editor._evaluator.ClearResults(); _renderer.ShowStatus("Results cleared."); return; }

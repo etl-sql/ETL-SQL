@@ -13,7 +13,8 @@
   <header class="topbar">
     <span class="topbar-brand">ETL-SQL <span>Portal</span></span>
     <nav class="topbar-nav">
-      <a href="/index.html" class="active">Reports</a>
+      <a href="/index.html" class="active" id="navReports">Reports</a>
+      <a href="#" id="navSubscriptions">My Subscriptions</a>
     </nav>
     <span id="adminNav" style="display:none">
       <nav class="topbar-nav"><a href="/admin.html">Admin</a></nav>
@@ -27,7 +28,7 @@
   <div class="app-body">
 
     <!-- Sidebar: folder tree -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
       <div class="sidebar-hdr">Folders</div>
       <div class="sidebar-tree" id="folderTree">
         <div class="text-muted text-sm" style="padding:8px 16px">Loading…</div>
@@ -43,9 +44,8 @@
 </div>
 
 <!-- ── Export modal ─────────────────────────────────────────────────────── -->
-<div id="exportModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
-     z-index:1000; display:none; align-items:center; justify-content:center;">
-  <div style="background:#fff; border-radius:8px; padding:24px; width:340px; box-shadow:0 8px 32px rgba(0,0,0,.2)">
+<div id="exportModal" class="modal-overlay" style="display:none">
+  <div class="modal-card" style="width:340px">
     <h3 style="margin:0 0 16px">Export Report</h3>
     <p class="text-muted text-sm" style="margin:0 0 16px">Choose an export format.</p>
     <div style="display:flex; gap:8px; justify-content:flex-end">
@@ -56,19 +56,116 @@
   </div>
 </div>
 
+<!-- ── Subscribe modal ──────────────────────────────────────────────────── -->
+<div id="subscribeModal" class="modal-overlay" style="display:none">
+  <div class="modal-card" style="width:480px; max-height:90vh; overflow-y:auto">
+    <h3 style="margin:0 0 16px">Subscribe to Report</h3>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Subscription Name <span class="text-muted text-sm">(optional)</span></label>
+        <input id="sub-name" type="text" placeholder="e.g. Weekly Finance">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Schedule</label>
+        <select id="sub-schedule">
+          <option value="Daily">Daily</option>
+          <option value="Weekly">Weekly</option>
+          <option value="Monthly">Monthly</option>
+          <option value="Hourly">Hourly</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Delivery Time <span class="text-muted text-sm">(HH:MM, optional)</span></label>
+        <input id="sub-attime" type="time">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Format</label>
+        <select id="sub-format">
+          <option value="PDF">PDF</option>
+          <option value="CSV">CSV</option>
+          <option value="Markdown">Markdown</option>
+          <option value="Link">Link only</option>
+        </select>
+      </div>
+      <div class="form-group" id="sub-smtp-group">
+        <label>SMTP Connection</label>
+        <select id="sub-smtp"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Recipient Email <span class="text-muted text-sm">(uses your profile email if blank)</span></label>
+        <input id="sub-email" type="email" placeholder="user@example.com">
+      </div>
+    </div>
+
+    <!-- Dynamic parameter fields injected here -->
+    <div id="sub-params-section" style="display:none">
+      <hr style="margin:12px 0; border:none; border-top:1px solid #e0e0e0">
+      <p style="margin:0 0 10px; font-weight:600; font-size:.9em">Report Parameters</p>
+      <div id="sub-params-fields"></div>
+    </div>
+
+    <div id="sub-error" class="error-msg"></div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px">
+      <button class="btn btn-primary" id="sub-saveBtn">Subscribe</button>
+      <button class="btn btn-outline" id="sub-cancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Edit Parameters modal ────────────────────────────────────────────── -->
+<div id="editParamsModal" class="modal-overlay" style="display:none">
+  <div class="modal-card" style="width:420px; max-height:90vh; overflow-y:auto">
+    <h3 style="margin:0 0 4px">Edit Parameters</h3>
+    <p id="ep-subtitle" class="text-muted text-sm" style="margin:0 0 16px"></p>
+    <div id="ep-fields"></div>
+    <div id="ep-error" class="error-msg"></div>
+    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px">
+      <button class="btn btn-primary" id="ep-saveBtn">Save</button>
+      <button class="btn btn-outline" id="ep-cancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  z-index: 1000; display: flex; align-items: center; justify-content: center;
+}
+.modal-card {
+  background: #fff; border-radius: 8px; padding: 24px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.2);
+}
+.param-row { margin-bottom: 12px; }
+.param-label { font-size: .85em; font-weight: 600; margin-bottom: 4px; display: block; }
+.param-input { width: 100%; box-sizing: border-box; }
+.reldate-quickpicks { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.reldate-quickpicks button {
+  padding: 2px 8px; font-size: .78em; border: 1px solid #ccc;
+  border-radius: 4px; background: #f5f5f5; cursor: pointer;
+}
+.reldate-quickpicks button:hover { background: #e8e8e8; }
+.subs-table-wrap { overflow-x: auto; }
+</style>
+
 <script type="module">
-import { auth, authApi, foldersApi, reportsApi } from '/js/api.js';
+import { auth, authApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────────
-let currentFolderId  = null;
-let currentReportId  = null;
+let currentFolderId   = null;
+let currentReportId   = null;
 let currentFolderName = '';
-let isAdmin = false;
+let isAdmin           = false;
 
 async function init() {
-  // Decode JWT to get display name + role
   try {
     const payload = JSON.parse(atob(auth.getToken().split('.')[1]));
     document.getElementById('topbarUser').textContent = payload.sub || payload.unique_name || '';
@@ -78,6 +175,13 @@ async function init() {
   } catch {}
 
   document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
+  document.getElementById('navSubscriptions').addEventListener('click', e => {
+    e.preventDefault();
+    showMySubscriptions();
+  });
+
+  wireSubscribeModal();
+  wireEditParamsModal();
   await loadFolderTree();
 }
 
@@ -92,7 +196,7 @@ async function loadFolderTree() {
       return;
     }
     renderFolderChildren($tree, buildTree(folders), 0);
-  } catch (err) {
+  } catch {
     document.getElementById('folderTree').innerHTML =
       `<div class="text-muted text-sm" style="padding:8px 16px">Error loading folders.</div>`;
   }
@@ -130,9 +234,9 @@ function renderFolderChildren($parent, nodes, depth) {
 function selectFolder(id, name) {
   document.querySelectorAll('.folder-item').forEach(el =>
     el.classList.toggle('active', el.dataset.id == id));
-  currentFolderId  = id;
+  currentFolderId   = id;
   currentFolderName = name;
-  currentReportId  = null;
+  currentReportId   = null;
   loadReportList(id, name);
 }
 
@@ -140,7 +244,6 @@ function selectFolder(id, name) {
 async function loadReportList(folderId, folderName) {
   const $main = document.getElementById('mainContent');
   $main.innerHTML = `<div class="viewer-loading">Loading…</div>`;
-
   try {
     const reports = await reportsApi.list(folderId);
     renderReportList(reports, folderName);
@@ -159,16 +262,13 @@ function renderReportList(reports, folderName) {
   }
 
   const cards = reports.map(r => {
-    const staleBadge = r.isStale   ? `<span class="badge badge-stale">Stale</span>` : '';
+    const staleBadge = r.isStale ? `<span class="badge badge-stale">Stale</span>` : '';
     const builtAt    = r.lastBuiltAt ? new Date(r.lastBuiltAt).toLocaleString() : 'Never run';
     return `
       <div class="report-card" data-id="${r.id}">
         <h3>${esc(r.name)}</h3>
         <p>${esc(r.description || '')}</p>
-        <div class="report-card-meta">
-          <span>${builtAt}</span>
-          ${staleBadge}
-        </div>
+        <div class="report-card-meta"><span>${builtAt}</span>${staleBadge}</div>
       </div>`;
   }).join('');
 
@@ -193,15 +293,10 @@ async function openReport(id) {
   try {
     [report, snapshot] = await Promise.all([reportsApi.get(id), reportsApi.getSnapshot(id)]);
   } catch (err) {
-    if (err.status === 404) {
-      // No snapshot yet — show execute prompt
-      renderNoSnapshot(id);
-      return;
-    }
+    if (err.status === 404) { renderNoSnapshot(id); return; }
     $main.innerHTML = `<div class="empty-state">Failed to load report: ${esc(err.message)}</div>`;
     return;
   }
-
   renderViewer(report, snapshot);
 }
 
@@ -209,18 +304,17 @@ function renderNoSnapshot(id) {
   const $main = document.getElementById('mainContent');
   $main.innerHTML = `
     <div class="viewer-header">
-      <div class="viewer-header-info">
-        <h2>Report</h2>
-        <p>This report has not been executed yet.</p>
-      </div>
+      <div class="viewer-header-info"><h2>Report</h2><p>This report has not been executed yet.</p></div>
       <div class="viewer-actions">
         <button class="btn btn-primary" id="execBtn">Run Report</button>
+        <button class="btn btn-outline" id="subBtn">Subscribe…</button>
         <button class="btn btn-outline" id="backBtn">← Back</button>
       </div>
     </div>
     <div class="viewer-body empty-state">No snapshot available. Run the report to generate one.</div>`;
 
   document.getElementById('execBtn').addEventListener('click', () => runAndPoll(id));
+  document.getElementById('subBtn').addEventListener('click', () => openSubscribeModal(id));
   document.getElementById('backBtn').addEventListener('click', () =>
     currentFolderId ? loadReportList(currentFolderId, currentFolderName) : null);
 }
@@ -242,6 +336,7 @@ function renderViewer(report, snapshot) {
       <div class="viewer-actions">
         <button class="btn btn-outline btn-sm" id="refreshBtn2">Refresh</button>
         <button class="btn btn-outline btn-sm" id="exportBtn">Export…</button>
+        <button class="btn btn-outline btn-sm" id="subBtn">Subscribe…</button>
         <button class="btn btn-outline btn-sm" id="backBtn">← Back</button>
       </div>
     </div>
@@ -254,6 +349,7 @@ function renderViewer(report, snapshot) {
     currentFolderId ? loadReportList(currentFolderId, currentFolderName) : null);
   document.getElementById('refreshBtn2').addEventListener('click', () => runAndPoll(report.id));
   document.getElementById('exportBtn').addEventListener('click', () => showExport(report.id));
+  document.getElementById('subBtn').addEventListener('click', () => openSubscribeModal(report.id));
   const staleBtn = document.getElementById('refreshBtn');
   if (staleBtn) staleBtn.addEventListener('click', () => runAndPoll(report.id));
 
@@ -263,12 +359,8 @@ function renderViewer(report, snapshot) {
 function loadReportFrame(id) {
   const $frame = document.getElementById('reportFrame');
   if (!$frame) return;
-
-  // Set globals that report-runtime.js reads
   window.__IS_WEB__   = true;
   window.__API_BASE__ = `/api/reports/${id}`;
-
-  // Load runtime into an isolated iframe so its globals don't pollute the host page
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'width:100%;height:100%;border:none;min-height:500px';
   iframe.srcdoc = buildRuntimeHtml(id);
@@ -285,7 +377,6 @@ function buildRuntimeHtml(id) {
 <script>
   window.__IS_WEB__   = true;
   window.__API_BASE__ = '/api/reports/${id}';
-  // Inject auth token into all /api/ fetches
   const _f = window.fetch.bind(window);
   window.fetch = (input, init={}) => {
     const url = typeof input === 'string' ? input : input.url;
@@ -321,15 +412,11 @@ async function runAndPoll(id) {
     return;
   }
 
-  // Poll until done
   for (let i = 0; i < 120; i++) {
     await sleep(1500);
     try {
       const job = await reportsApi.pollJob(jobId);
-      if (job.status === 'Completed') {
-        openReport(id);
-        return;
-      }
+      if (job.status === 'Completed') { openReport(id); return; }
       if (job.status === 'Failed') {
         $main.innerHTML = `<div class="empty-state">Report execution failed: ${esc(job.error || 'unknown error')}</div>`;
         return;
@@ -343,7 +430,6 @@ async function runAndPoll(id) {
 function showExport(id) {
   const $modal = document.getElementById('exportModal');
   $modal.style.display = 'flex';
-
   document.getElementById('exportCsvBtn').onclick = () => {
     window.open(reportsApi.exportUrl(id, 'csv'));
     $modal.style.display = 'none';
@@ -352,14 +438,276 @@ function showExport(id) {
     window.open(reportsApi.exportUrl(id, 'pdf'));
     $modal.style.display = 'none';
   };
-  document.getElementById('exportCancelBtn').onclick = () => {
-    $modal.style.display = 'none';
-  };
+  document.getElementById('exportCancelBtn').onclick = () => { $modal.style.display = 'none'; };
 }
+
+// ── Subscribe modal ────────────────────────────────────────────────────────────
+let _subReportId = null;
+let _subParams   = [];    // ReportParameterDto[]
+
+async function openSubscribeModal(reportId) {
+  _subReportId = reportId;
+  _subParams   = [];
+
+  // Reset form
+  document.getElementById('sub-name').value     = '';
+  document.getElementById('sub-schedule').value = 'Daily';
+  document.getElementById('sub-attime').value   = '';
+  document.getElementById('sub-format').value   = 'PDF';
+  document.getElementById('sub-email').value    = '';
+  document.getElementById('sub-error').textContent = '';
+  document.getElementById('sub-error').classList.remove('show');
+  document.getElementById('sub-params-section').style.display = 'none';
+  document.getElementById('sub-params-fields').innerHTML = '';
+
+  // Load SMTP aliases into dropdown
+  const $smtp = document.getElementById('sub-smtp');
+  try {
+    const aliases = await subscriptionsApi.smtpAliases();
+    $smtp.innerHTML = aliases.length
+      ? aliases.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join('')
+      : '<option value="">No SMTP connections configured</option>';
+  } catch {
+    $smtp.innerHTML = '<option value="">Error loading connections</option>';
+  }
+
+  // Fetch report INPUT parameters
+  try {
+    _subParams = await reportsApi.getParameters(reportId);
+    if (_subParams.length) {
+      document.getElementById('sub-params-section').style.display = '';
+      renderParamFields('sub-params-fields', _subParams, {});
+    }
+  } catch { /* parameters section stays hidden */ }
+
+  document.getElementById('subscribeModal').style.display = 'flex';
+}
+
+function wireSubscribeModal() {
+  // Toggle SMTP group visibility based on format
+  document.getElementById('sub-format').addEventListener('change', function() {
+    document.getElementById('sub-smtp-group').style.display =
+      this.value === 'Link' ? 'none' : '';
+  });
+
+  document.getElementById('sub-cancelBtn').addEventListener('click', () => {
+    document.getElementById('subscribeModal').style.display = 'none';
+  });
+
+  document.getElementById('sub-saveBtn').addEventListener('click', async () => {
+    const $err = document.getElementById('sub-error');
+    $err.classList.remove('show');
+
+    const format = document.getElementById('sub-format').value;
+    const smtp   = format !== 'Link' ? document.getElementById('sub-smtp').value : null;
+
+    // Collect parameters from dynamic fields
+    const parameters = collectParamValues('sub-params-fields', _subParams);
+
+    const body = {
+      reportId:       _subReportId,
+      name:           document.getElementById('sub-name').value.trim() || null,
+      schedule:       document.getElementById('sub-schedule').value,
+      format,
+      smtpAlias:      smtp || null,
+      recipientEmail: document.getElementById('sub-email').value.trim() || null,
+      atTime:         document.getElementById('sub-attime').value || null,
+      parameters:     Object.keys(parameters).length ? parameters : null
+    };
+
+    try {
+      await subscriptionsApi.create(body);
+      document.getElementById('subscribeModal').style.display = 'none';
+      alert('Subscription created successfully.');
+    } catch (err) {
+      $err.textContent = err.message || 'Failed to create subscription.';
+      $err.classList.add('show');
+    }
+  });
+}
+
+// ── My Subscriptions view ──────────────────────────────────────────────────────
+async function showMySubscriptions() {
+  document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
+  const $main = document.getElementById('mainContent');
+  $main.innerHTML = `<div class="viewer-loading">Loading subscriptions…</div>`;
+
+  try {
+    const subs = await subscriptionsApi.list();
+    renderMySubscriptions(subs);
+  } catch {
+    $main.innerHTML = `<div class="empty-state">Failed to load subscriptions.</div>`;
+  }
+}
+
+function renderMySubscriptions(subs) {
+  const $main = document.getElementById('mainContent');
+  const rows = subs.map(s => `
+    <tr>
+      <td>${esc(s.name || s.reportName)}</td>
+      <td>${esc(s.reportName)}</td>
+      <td>${esc(s.schedule || 'On Refresh')}</td>
+      <td>${esc(s.format)}</td>
+      <td class="text-sm text-muted">${esc(s.parameterSummary || '—')}</td>
+      <td><span class="chip ${s.isActive ? 'chip-active' : 'chip-inactive'}">${s.isActive ? 'Active' : 'Paused'}</span></td>
+      <td>
+        <div class="table-actions">
+          <button class="btn btn-outline btn-sm" data-action="edit-params" data-id="${s.id}"
+                  data-report-id="${s.reportId}" data-name="${esc(s.name || s.reportName)}"
+                  data-params='${escAttr(JSON.stringify(s.parameters || {}))}'>
+            Edit Params
+          </button>
+          <button class="btn btn-outline btn-sm" data-action="toggle" data-id="${s.id}"
+                  data-active="${s.isActive}">${s.isActive ? 'Pause' : 'Resume'}</button>
+          <button class="btn btn-danger btn-sm" data-action="delete" data-id="${s.id}">Delete</button>
+        </div>
+      </td>
+    </tr>`).join('');
+
+  $main.innerHTML = `
+    <div class="report-list-hdr">
+      <h2>My Subscriptions</h2>
+      <span class="badge badge-ok">${subs.length} subscription${subs.length !== 1 ? 's' : ''}</span>
+    </div>
+    <div class="subs-table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Name</th><th>Report</th><th>Schedule</th><th>Format</th>
+            <th>Parameters</th><th>Status</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>${rows || '<tr><td colspan="7" class="empty-state">No subscriptions yet.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+
+  $main.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => handleSubAction(btn));
+  });
+}
+
+async function handleSubAction(btn) {
+  const id     = +btn.dataset.id;
+  const action = btn.dataset.action;
+  if (action === 'delete') {
+    if (!confirm('Delete this subscription?')) return;
+    try { await subscriptionsApi.delete(id); showMySubscriptions(); }
+    catch (err) { alert(err.message); }
+  } else if (action === 'toggle') {
+    const isActive = btn.dataset.active === 'true';
+    try { await subscriptionsApi.update(id, { isActive: !isActive }); showMySubscriptions(); }
+    catch (err) { alert(err.message); }
+  } else if (action === 'edit-params') {
+    const currentParams = JSON.parse(btn.dataset.params || '{}');
+    const reportId      = +btn.dataset.reportId;
+    const label         = btn.dataset.name;
+    openEditParamsModal(id, reportId, label, currentParams, () => showMySubscriptions());
+  }
+}
+
+// ── Edit Parameters modal ─────────────────────────────────────────────────────
+let _epSubId      = null;
+let _epParams     = [];
+let _epOnSaved    = null;
+
+async function openEditParamsModal(subId, reportId, label, currentValues, onSaved) {
+  _epSubId   = subId;
+  _epParams  = [];
+  _epOnSaved = onSaved;
+
+  document.getElementById('ep-subtitle').textContent = label;
+  document.getElementById('ep-error').textContent    = '';
+  document.getElementById('ep-error').classList.remove('show');
+  document.getElementById('ep-fields').innerHTML = '<div class="viewer-loading">Loading…</div>';
+  document.getElementById('editParamsModal').style.display = 'flex';
+
+  try {
+    _epParams = await reportsApi.getParameters(reportId);
+  } catch { _epParams = []; }
+
+  if (!_epParams.length) {
+    // Fall back to editing existing params as plain key-value pairs
+    _epParams = Object.keys(currentValues).map(k => ({ name: k, type: 'TEXT', default: currentValues[k], required: false, description: null }));
+  }
+
+  renderParamFields('ep-fields', _epParams, currentValues);
+}
+
+function wireEditParamsModal() {
+  document.getElementById('ep-cancelBtn').addEventListener('click', () => {
+    document.getElementById('editParamsModal').style.display = 'none';
+  });
+  document.getElementById('ep-saveBtn').addEventListener('click', async () => {
+    const $err = document.getElementById('ep-error');
+    $err.classList.remove('show');
+    const parameters = collectParamValues('ep-fields', _epParams);
+    try {
+      await subscriptionsApi.update(_epSubId, { parameters: Object.keys(parameters).length ? parameters : null });
+      document.getElementById('editParamsModal').style.display = 'none';
+      _epOnSaved?.();
+    } catch (err) {
+      $err.textContent = err.message || 'Failed to save parameters.';
+      $err.classList.add('show');
+    }
+  });
+}
+
+// ── Parameter field rendering helpers ─────────────────────────────────────────
+const RELDATE_PICKS = ['Today', 'D-1', 'D-7', 'D-30', 'M-1', 'M-3', 'Y-1'];
+
+function renderParamFields(containerId, params, currentValues) {
+  const $container = document.getElementById(containerId);
+  $container.innerHTML = '';
+
+  params.forEach(p => {
+    const inputId = `param-${containerId}-${p.name.replace(/[^a-z0-9]/gi, '_')}`;
+    const current = currentValues[p.name] ?? p.default ?? '';
+    const isReldate = p.type?.toUpperCase() === 'RELDATE';
+
+    const $row = document.createElement('div');
+    $row.className = 'param-row';
+
+    const label = `${p.name}${p.required ? ' *' : ''}`;
+    const hint  = p.description ? ` <span class="text-muted text-sm">— ${esc(p.description)}</span>` : '';
+    $row.innerHTML = `
+      <span class="param-label">${esc(label)}${hint}
+        <span class="text-muted text-sm">(${esc(p.type)})</span>
+      </span>
+      <input class="param-input" type="text" id="${inputId}" data-param="${esc(p.name)}"
+             value="${esc(String(current))}" placeholder="${p.required ? 'Required' : 'Optional'}">
+      ${isReldate ? `<div class="reldate-quickpicks">${RELDATE_PICKS.map(q => `<button type="button" data-pick="${q}" data-for="${inputId}">${q}</button>`).join('')}</div>` : ''}`;
+
+    $container.appendChild($row);
+  });
+
+  // Wire quick-pick buttons
+  $container.querySelectorAll('[data-pick]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pick = btn.dataset.pick === 'Today' ? 'D-0' : btn.dataset.pick;
+      document.getElementById(btn.dataset.for).value = pick;
+    });
+  });
+}
+
+function collectParamValues(containerId, params) {
+  const result = {};
+  const $container = document.getElementById(containerId);
+  $container.querySelectorAll('[data-param]').forEach(input => {
+    const val = input.value.trim();
+    if (val) result[input.dataset.param] = val;
+  });
+  return result;
+}
+
+// ── Export modal ───────────────────────────────────────────────────────────────
+function showExportModal() {}  // defined inline above
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
 function esc(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using Spectre.Console;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Metadata;
+using ETL_SQL.Core.Services;
 using ETL_SQL.ReportBuilder;
 
 namespace ETL_SQL.TUI.UI
@@ -68,6 +70,10 @@ namespace ETL_SQL.TUI.UI
         public int ActiveReportPageIndex { get; set; } = 0;
         public int ReportScrollRow { get; set; } = 0;
         public ReportManifest? CurrentReportManifest { get; set; }
+        private Dictionary<int, int> _linePhysicalShifts = new();
+
+        public void SetLinePhysicalShift(int lineIdx, int shift) => _linePhysicalShifts[lineIdx] = shift;
+        public int GetLinePhysicalShift(int lineIdx) => _linePhysicalShifts.TryGetValue(lineIdx, out var s) ? s : 0;
 
         private readonly IConsoleInterface _console;
         private readonly EditorPanel _editorPanel;
@@ -369,7 +375,8 @@ namespace ETL_SQL.TUI.UI
 
                     int screenRow = popupRow + i;
                     if (screenRow < 0 || screenRow >= totalHeight) continue;
-                    _console.SetCursorPosition((buffer.CursorColumn - ScrollCol) + gutterWidth, screenRow);
+                    int physicalX = (buffer.CursorColumn - ScrollCol) + gutterWidth + GetLinePhysicalShift(buffer.CursorLine);
+                    _console.SetCursorPosition(physicalX, screenRow);
                     
                     var suggestion = AutocompleteOptions[optionIndex];
                     var text = Markup.Escape(suggestion.Text);
@@ -405,7 +412,8 @@ namespace ETL_SQL.TUI.UI
             // 8. Restore absolute cursor
             if (!ResultsFocus && !Headless && !HelpVisible && !PromptVisible)
             {
-                _console.SetCursorPosition((buffer.CursorColumn - ScrollCol) + gutterWidth, (buffer.CursorLine - ScrollLine) + editorAreaTop);
+                int physicalX = (buffer.CursorColumn - ScrollCol) + gutterWidth + GetLinePhysicalShift(buffer.CursorLine);
+                _console.SetCursorPosition(physicalX, (buffer.CursorLine - ScrollLine) + editorAreaTop);
                 _console.CursorVisible = true;
             }
         }
@@ -415,7 +423,7 @@ namespace ETL_SQL.TUI.UI
             if (col >= totalWidth - 10) return; // Not enough space
 
             int maxWidth = Math.Min(60, totalWidth - col - 2);
-            var lines = doc.Split('\n');
+            var lines = doc.Replace("\r", "").Split('\n');
             var wrappedLines = new List<string>();
 
             foreach (var line in lines)

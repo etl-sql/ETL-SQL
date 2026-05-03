@@ -4,10 +4,9 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.IO;
-using ETL_SQL.Core.Parser;
-using ETL_SQL.Core.Common;
-using ETL_SQL.Core.Interfaces;
 using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Core.Services
 {
@@ -48,11 +47,13 @@ namespace ETL_SQL.Core.Services
     {
         private readonly IMetadataManager _metadata;
         private readonly Core.Interfaces.ILanguageHelpRegistry? _helpRegistry;
+        private readonly Core.Functions.IFunctionRegistry? _functionRegistry;
 
-        public LanguageService(IMetadataManager metadata, Core.Interfaces.ILanguageHelpRegistry? helpRegistry = null)
+        public LanguageService(IMetadataManager metadata, Core.Interfaces.ILanguageHelpRegistry? helpRegistry = null, Core.Functions.IFunctionRegistry? functionRegistry = null)
         {
             _metadata = metadata;
             _helpRegistry = helpRegistry;
+            _functionRegistry = functionRegistry;
         }
 
         public async Task<List<Suggestion>> GetSuggestionsAsync(SuggestionContext context)
@@ -68,6 +69,7 @@ namespace ETL_SQL.Core.Services
                 allSuggestions.AddRange(await GetWithClauseSuggestionsAsync(context));
                 allSuggestions.AddRange(await GetDatabaseSchemaSuggestionsAsync(context));
                 allSuggestions.AddRange(await GetAliasColumnSuggestionsAsync(context));
+                allSuggestions.AddRange(GetConnectionNameSuggestions(context));
                 allSuggestions.AddRange(GetKeywordSuggestions(context));
                 allSuggestions.AddRange(GetVariableSuggestions(context));
 
@@ -89,13 +91,27 @@ namespace ETL_SQL.Core.Services
                 // Enrich with documentation if help registry is available
                 if (_helpRegistry != null)
                 {
-                    foreach (var s in finalResults.Where(x => x.Type == SuggestionType.Keyword || x.Type == SuggestionType.Function))
+                    for (int i = 0; i < finalResults.Count; i++)
                     {
-                        var help = _helpRegistry.GetHelp(s.Text);
+                        var s = finalResults[i];
+                        string? help = null;
+
+                        if (s.Type == SuggestionType.Keyword)
+                        {
+                            help = _helpRegistry.GetHelp(s.Text);
+                        }
+                        else if (s.Type == SuggestionType.Function)
+                        {
+                            help = _helpRegistry.GetHelp("FUNCTION", s.Text);
+                        }
+                        else if (s.Type == SuggestionType.Connection)
+                        {
+                            help = _helpRegistry.GetHelp("CONNECTION", s.Text);
+                        }
+
                         if (help != null)
                         {
-                            // Using reflection or casting if needed, but for now we just want the summary
-                            // s.Documentation = help.Summary; // Suggestion is a record, so we'd need to create a new one
+                            finalResults[i] = s with { Documentation = help };
                         }
                     }
                 }
@@ -176,35 +192,29 @@ namespace ETL_SQL.Core.Services
                 else if (last.Text.Equals("FROM", StringComparison.OrdinalIgnoreCase) || last.Text.Equals("JOIN", StringComparison.OrdinalIgnoreCase) || last.Text.Equals("INTO", StringComparison.OrdinalIgnoreCase) || last.Text.Equals("UPDATE", StringComparison.OrdinalIgnoreCase))
                 {
                     var conns = _metadata.GetConnections(context.DocumentUri);
-                    results.AddRange(conns.Select(c => new Suggestion(c.Name, SuggestionType.Connection, Priority: 0)));
-                    foreach (var conn in conns) { try { var tables = await _metadata.GetTablesAsync(conn.Name, context.DocumentUri); var filteredTables = tables.Where(t => string.IsNullOrEmpty(context.Prefix) || t.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase)).ToList(); results.AddRange(filteredTables.Select(t => new Suggestion(t, SuggestionType.Table, Priority: 5))); results.AddRange(filteredTables.Select(t => new Suggestion($"{conn.Name}.{t}", SuggestionType.Table, Priority: 2))); } catch {} }
-                }
-                else if (context.Prefix.EndsWith("*"))
-                {
-                    var starMatch = Regex.Match(context.Prefix, @"(?:(\w+)\.)?\*$", RegexOptions.IgnoreCase);
-                    if (starMatch.Success)
-                    {
-                        var alias = starMatch.Groups[1].Value;
-                        var tables = string.IsNullOrEmpty(alias) ? context.Aliases.Values.Distinct().ToList() : context.Aliases.Values.Where(a => (a.Alias?.Equals(alias, StringComparison.OrdinalIgnoreCase) == true) || (string.IsNullOrEmpty(a.Alias) && a.TableName.Equals(alias, StringComparison.OrdinalIgnoreCase))).Distinct().ToList();
-                        var allCols = new List<string>();
-                        foreach (var info in tables) { var conn = info.ConnectionName ?? info.TableName; var table = info.BaseTableName ?? info.TableName; var cols = (await _metadata.GetColumnsAsync(conn, table, context.DocumentUri)).ToList(); if (cols.Count == 0 && conn.Equals(table, StringComparison.OrdinalIgnoreCase)) { var sub = await _metadata.GetTablesAsync(conn, context.DocumentUri); foreach (var st in sub) cols.AddRange(await _metadata.GetColumnsAsync(conn, st, context.DocumentUri)); if (cols.Count == 0) cols = (await _metadata.GetColumnsAsync(conn, "", context.DocumentUri)).ToList(); } if (cols.Any()) allCols.AddRange(cols.Select(c => $"{(string.IsNullOrEmpty(info.Alias) ? info.TableName : info.Alias)}.{c}")); }
-                        if (allCols.Any()) results.Add(new Suggestion(string.Join(", ", allCols.Distinct()), SuggestionType.Column, Priority: 0));
+                    results.AddRange(conns.Select(c => new Suggestion(c.Name, SuggestionType.Connection, Priority: 1)));
+                    foreach (var conn in conns) 
+                    { 
+                        try 
+                        { 
+                            var tables = await _metadata.GetTablesAsync(conn.Name, context.DocumentUri); 
+                            
+                            if (context.Prefix.StartsWith($"{conn.Name}.", StringComparison.OrdinalIgnoreCase))
+                            {
+                                var prefRest = context.Prefix.Substring(conn.Name.Length + 1);
+                                var filtered = tables.Where(t => t.StartsWith(prefRest, StringComparison.OrdinalIgnoreCase));
+                                results.AddRange(filtered.Select(t => new Suggestion($"{conn.Name}.{t}", SuggestionType.Table, Priority: 2)));
+                            }
+                            else
+                            {
+                                var filteredTables = tables.Where(t => string.IsNullOrEmpty(context.Prefix) || t.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase)).ToList(); 
+                                results.AddRange(filteredTables.Select(t => new Suggestion(t, SuggestionType.Table, Priority: 5))); 
+                                results.AddRange(filteredTables.Select(t => new Suggestion($"{conn.Name}.{t}", SuggestionType.Table, Priority: 8))); 
+                            }
+                        } catch {} 
                     }
                 }
                 else if (last.Text.Equals("SET", StringComparison.OrdinalIgnoreCase)) results.AddRange(new[] { "WHAT_IF", "PROFILING", "REPORT", "BATCH_SIZE", "STRICT_SCHEMA", "MAX_ERRORS" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
-                else if (last.Text.Equals("WHAT_IF", StringComparison.OrdinalIgnoreCase) || last.Text.Equals("PROFILING", StringComparison.OrdinalIgnoreCase)) results.AddRange(new[] { "ON", "OFF" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
-                else if (prev1?.Text.Equals("FROM", StringComparison.OrdinalIgnoreCase) == true || prev1?.Text.Equals("JOIN", StringComparison.OrdinalIgnoreCase) == true || prev1?.Text.Equals("INTO", StringComparison.OrdinalIgnoreCase) == true || prev1?.Text.Equals("UPDATE", StringComparison.OrdinalIgnoreCase) == true)
-                {
-                    var conns = _metadata.GetConnections(context.DocumentUri);
-                    results.AddRange(conns.Select(c => new Suggestion(c.Name, SuggestionType.Connection, Priority: 0)));
-                    foreach (var conn in conns) { try { results.AddRange((await _metadata.GetTablesAsync(conn.Name, context.DocumentUri)).Select(t => new Suggestion(t, SuggestionType.Table, Priority: 2))); } catch {} }
-                }
-                else if (last.IsKeyword)
-                {
-                    var conns = _metadata.GetConnections(context.DocumentUri);
-                    results.AddRange(conns.Select(c => new Suggestion(c.Name, SuggestionType.Connection, Priority: 10)));
-                    results.AddRange(context.Aliases.Keys.Select(a => new Suggestion(a, SuggestionType.Alias, Priority: 12)));
-                }
             } catch {}
             return results;
         }
@@ -214,20 +224,59 @@ namespace ETL_SQL.Core.Services
             var results = new List<Suggestion>();
             try
             {
-                int lastWith = context.ScriptBefore.LastIndexOf("WITH", StringComparison.OrdinalIgnoreCase);
-                if (lastWith < 0) return results;
-                string afterWith = context.ScriptBefore.Substring(lastWith);
-                int openParen = afterWith.IndexOf('(');
-                int closeParen = afterWith.IndexOf(')');
-                if (openParen >= 0 && (closeParen < 0 || openParen > closeParen))
+                var tokens = GetLastTokens(context.ScriptBefore, 10);
+                var withIdx = tokens.FindLastIndex(t => t.Text.Equals("WITH", StringComparison.OrdinalIgnoreCase));
+                if (withIdx < 0) return results;
+
+                var onIdx = tokens.FindLastIndex(t => t.Text.Equals("ON", StringComparison.OrdinalIgnoreCase));
+                if (onIdx < 0 || onIdx > withIdx) return results;
+
+                var connectorType = tokens[onIdx + 1].Text;
+                var connector = _metadata.GetConnector(connectorType);
+                if (connector == null) return results;
+                var options = connector.GetSupportedOptions();
+
+                var last = tokens.LastOrDefault();
+                if (last == null) return results;
+
+                // Case 1: We are at ( or , or just after them (prefix is empty) -> Suggest option names
+                if (last.Text == "(" || last.Text == "," || (string.IsNullOrEmpty(context.Prefix) && (last.Text == "(" || last.Text == ",")))
                 {
-                    var onMatch = Regex.Match(context.ScriptBefore.Substring(0, lastWith), @"\bON\s+(\w+)\b", RegexOptions.IgnoreCase | RegexOptions.RightToLeft);
-                    if (onMatch.Success) { var conn = _metadata.GetConnector(onMatch.Groups[1].Value.ToUpperInvariant()); if (conn != null) { var used = Regex.Matches(afterWith, @"\b(\w+)\s*=", RegexOptions.IgnoreCase).Cast<Match>().Select(m => m.Groups[1].Value.ToUpperInvariant()).ToHashSet(); results.AddRange(conn.GetSupportedOptions().Keys.Where(o => !used.Contains(o.ToUpperInvariant())).Select(o => new Suggestion(o, SuggestionType.OptionName))); } }
-                    var valMatch = Regex.Match(context.ScriptBefore.TrimEnd(), @"\b(\w+)\s*=\s*['""]?(\w*)$", RegexOptions.IgnoreCase);
-                    if (valMatch.Success) { string opt = valMatch.Groups[1].Value.ToUpperInvariant(); if (opt == "FORMAT" || opt == "TYPE") results.AddRange(new[] { "CSV", "JSON", "XML", "PARQUET", "AVRO", "EXCEL", "FLATFILE" }.Select(v => new Suggestion(v, SuggestionType.OptionValue, Priority: 0))); else if (opt == "DELIMITER" || opt == "FIELDTERMINATOR") results.AddRange(new[] { "COMMA", "PIPE", "TAB", "SEMICOLON" }.Select(v => new Suggestion(v, SuggestionType.OptionValue, Priority: 0))); else if (opt == "HEADER" || opt == "FIRSTROW" || opt == "STRICT_SCHEMA" || opt == "TRUSTED_CONNECTION") results.AddRange(new[] { "TRUE", "FALSE" }.Select(v => new Suggestion(v, SuggestionType.OptionValue, Priority: 0))); else if (opt == "TEXT_QUALIFIER" || opt == "QUALIFIER") results.AddRange(new[] { "DOUBLEQUOTE", "DOUBLEQUOTES", "SINGLEQUOTE", "NONE" }.Select(v => new Suggestion(v, SuggestionType.OptionValue, Priority: 0))); }
+                    results.AddRange(options.Keys.Select(o => new Suggestion(o, SuggestionType.OptionName, Priority: 0)));
                 }
-            } catch {}
+                // Case 2: We are typing an option name -> last is the prefix, prev is ( or ,
+                else if (tokens.Count > 1 && (tokens[tokens.Count - 2].Text == "(" || tokens[tokens.Count - 2].Text == ","))
+                {
+                    results.AddRange(options.Keys.Select(o => new Suggestion(o, SuggestionType.OptionName, Priority: 0)));
+                }
+                // Case 3: We are at = -> Suggest option values
+                else if (last.Text == "=")
+                {
+                    var optName = tokens.Count > 1 ? tokens[tokens.Count - 2].Text : "";
+                    if (options.TryGetValue(optName, out var values))
+                        results.AddRange(values.Select(v => new Suggestion(v, SuggestionType.OptionValue, Priority: 0)));
+                }
+                // Case 4: We are typing an option value -> last is the prefix, prev is =
+                else if (tokens.Count > 1 && tokens[tokens.Count - 2].Text == "=")
+                {
+                    var optName = tokens.Count > 2 ? tokens[tokens.Count - 3].Text : "";
+                    if (options.TryGetValue(optName, out var values))
+                        results.AddRange(values.Select(v => new Suggestion(v, SuggestionType.OptionValue, Priority: 0)));
+                }
+            }
+            catch { }
             return results;
+        }
+
+        private List<Suggestion> GetConnectionNameSuggestions(SuggestionContext context)
+        {
+            try 
+            { 
+                return _metadata.GetConnections(context.DocumentUri)
+                    .Select(c => new Suggestion(c.Name, SuggestionType.Connection, Priority: 150))
+                    .ToList(); 
+            }
+            catch { return new List<Suggestion>(); }
         }
 
         private async Task<List<Suggestion>> GetDatabaseSchemaSuggestionsAsync(SuggestionContext context)
@@ -235,19 +284,12 @@ namespace ETL_SQL.Core.Services
             var results = new List<Suggestion>();
             try
             {
-                results.AddRange(context.VirtualSchemas.Keys.Select(k => new Suggestion(k, SuggestionType.Table, Priority: 15)));
-                var conns = _metadata.GetConnections(context.DocumentUri);
-                foreach (var conn in conns)
+                if (context.Prefix.Contains("."))
                 {
-                    if (!context.Prefix.Contains(".")) results.Add(new Suggestion(conn.Name, SuggestionType.Connection, Priority: 5));
-                    if (context.Prefix.StartsWith($"{conn.Name}.", StringComparison.OrdinalIgnoreCase))
-                    {
-                        var tables = (await _metadata.GetTablesAsync(conn.Name, context.DocumentUri)).ToList();
-                        var pref = context.Prefix.Substring(conn.Name.Length + 1);
-                        if (pref.Contains(".")) { var parts = pref.Split('.'); if (tables.Any(t => t.Equals(parts[0], StringComparison.OrdinalIgnoreCase))) results.AddRange((await _metadata.GetColumnsAsync(conn.Name, parts[0], context.DocumentUri)).Select(c => new Suggestion($"{conn.Name}.{parts[0]}.{c}", SuggestionType.Column, Priority: 10))); }
-                        else results.AddRange(tables.Where(t => t.StartsWith(pref, StringComparison.OrdinalIgnoreCase)).Select(t => new Suggestion($"{conn.Name}.{t}", SuggestionType.Table, Priority: 8)));
-                    }
-                    else if (string.IsNullOrEmpty(context.Prefix) || conn.Name.StartsWith(context.Prefix, StringComparison.OrdinalIgnoreCase)) { var tables = await _metadata.GetTablesAsync(conn.Name, context.DocumentUri); results.AddRange(tables.Select(t => new Suggestion($"{conn.Name}.{t}", SuggestionType.Table, Priority: 20))); }
+                    var parts = context.Prefix.Split('.');
+                    var connName = parts[0];
+                    var tables = await _metadata.GetTablesAsync(connName, context.DocumentUri);
+                    results.AddRange(tables.Where(t => t.StartsWith(parts[1], StringComparison.OrdinalIgnoreCase)).Select(t => new Suggestion($"{connName}.{t}", SuggestionType.Table, Priority: 0)));
                 }
             } catch {}
             return results;
@@ -258,27 +300,96 @@ namespace ETL_SQL.Core.Services
             var results = new List<Suggestion>();
             try
             {
-                if (string.IsNullOrEmpty(context.Prefix)) return results;
-                if (context.Prefix == "*")
+                if (string.IsNullOrEmpty(context.Prefix) || context.Prefix == "*")
                 {
                     var allCols = new List<string>();
-                    foreach (var info in context.Aliases.Values) { var cols = await _metadata.GetColumnsAsync(info.ConnectionName ?? info.TableName, info.BaseTableName ?? info.TableName, context.DocumentUri); var alias = info.HasExplicitAlias ? info.Alias : info.TableName; allCols.AddRange(cols.Select(c => $"{alias}.{c.Trim('[', ']', '\"', '\'')}")); }
-                    if (allCols.Any()) { results.Add(new Suggestion(string.Join(", ", allCols.Distinct()), SuggestionType.Column)); return results; }
+                    foreach (var info in context.Aliases.Values)
+                    {
+                        var cols = await _metadata.GetColumnsAsync(info.ConnectionName ?? info.TableName, info.BaseTableName ?? info.TableName, context.DocumentUri);
+                        string? prefixAlias = context.Prefix == "*" ? "" : null;
+
+                        if (cols.Any())
+                        {
+                            var prefix = string.IsNullOrEmpty(prefixAlias) 
+                                ? (string.IsNullOrEmpty(info.Alias) ? info.TableName : info.Alias) 
+                                : prefixAlias;
+                                
+                            allCols.AddRange(cols.Select(c => $"{prefix}.{c}"));
+                        }
+                    }
+
+                    if (allCols.Any())
+                    {
+                        results.Add(new Suggestion(string.Join(", ", allCols), SuggestionType.Column, Priority: 0));
+                    }
+                    return results;
                 }
-                if (!context.Prefix.Contains(".")) return results;
-                var parts = context.Prefix.Split('.');
-                var aliasName = parts[0];
-                if (context.Aliases.TryGetValue(aliasName, out var infoAlias))
+
+                if (context.Prefix.Contains("."))
                 {
-                    if (context.VirtualSchemas.TryGetValue(infoAlias.TableName, out var vCols)) results.AddRange(vCols.Select(c => new Suggestion($"{aliasName}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column)));
-                    else { var conn = infoAlias.ConnectionName ?? infoAlias.TableName; var table = infoAlias.BaseTableName ?? infoAlias.TableName; var cols = (await _metadata.GetColumnsAsync(conn, table, context.DocumentUri)).ToList(); if (cols.Count == 0 && conn.Equals(table, StringComparison.OrdinalIgnoreCase)) { var sub = await _metadata.GetTablesAsync(conn, context.DocumentUri); foreach (var t in sub) cols.AddRange(await _metadata.GetColumnsAsync(conn, t, context.DocumentUri)); if (cols.Count == 0) cols = (await _metadata.GetColumnsAsync(conn, "", context.DocumentUri)).ToList(); } results.AddRange(cols.Select(c => new Suggestion($"{aliasName}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column))); }
+                    var parts = context.Prefix.Split('.');
+                    var alias = parts[0];
+                    var pref = parts[1];
+
+                    if (context.Aliases.TryGetValue(alias, out var infoAlias))
+                    {
+                        var cols = await _metadata.GetColumnsAsync(infoAlias.ConnectionName ?? infoAlias.TableName, infoAlias.BaseTableName ?? infoAlias.TableName, context.DocumentUri);
+                        
+                        if (pref == "*")
+                        {
+                            if (cols.Any())
+                            {
+                                string expansion = string.Join(", ", cols.Select(c => $"{alias}.{c.Trim('[', ']', '\"', '\'')}"));
+                                results.Add(new Suggestion(expansion, SuggestionType.Column, Priority: 0));
+                            }
+                        }
+                        else
+                        {
+                            results.AddRange(cols.Where(c => c.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                                               .Select(c => new Suggestion($"{alias}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column)));
+                            
+                            if (context.VirtualSchemas.TryGetValue(infoAlias.TableName, out var vCols))
+                            {
+                                results.AddRange(vCols.Where(c => c.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                                                      .Select(c => new Suggestion($"{alias}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column)));
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // Check if it's a direct connection reference
+                        var conns = _metadata.GetConnections(context.DocumentUri);
+                        var match = conns.FirstOrDefault(c => c.Name.Equals(alias, StringComparison.OrdinalIgnoreCase));
+                        if (match != null)
+                        {
+                            // Avoid suggesting columns if we are likely in a FROM/JOIN context where tables are expected
+                            var lastTokens = GetLastTokens(context.ScriptBefore, 5);
+                            bool inTableContext = lastTokens.Any(t => t.Text.Equals("FROM", StringComparison.OrdinalIgnoreCase) || 
+                                                                    t.Text.Equals("JOIN", StringComparison.OrdinalIgnoreCase) ||
+                                                                    t.Text.Equals("INTO", StringComparison.OrdinalIgnoreCase) ||
+                                                                    t.Text.Equals("UPDATE", StringComparison.OrdinalIgnoreCase));
+
+                            if (!inTableContext)
+                            {
+                                var cols = await _metadata.GetColumnsAsync(match.Name, match.Name, context.DocumentUri);
+                                results.AddRange(cols.Where(c => c.StartsWith(pref, StringComparison.OrdinalIgnoreCase))
+                                                   .Select(c => new Suggestion($"{alias}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column)));
+                            }
+                        }
+                    }
                 }
-                else { var conns = _metadata.GetConnections(context.DocumentUri); if (conns.Any(c => c.Name.Equals(aliasName, StringComparison.OrdinalIgnoreCase))) { var cols = await _metadata.GetColumnsAsync(aliasName, aliasName, context.DocumentUri); var colList = cols.ToList(); if (colList.Count == 0) colList = (await _metadata.GetColumnsAsync(aliasName, "", context.DocumentUri)).ToList(); results.AddRange(colList.Select(c => new Suggestion($"{aliasName}.{c.Trim('[', ']', '\"', '\'')}", SuggestionType.Column))); } }
             } catch {}
             return results;
         }
 
-        private List<TokenInfo> GetLastTokens(string text, int count) { var matches = Regex.Matches(text, @"(@?\w+|==|!=|<=|>=|[=<>+\-*/().,;])").Cast<Match>().Select(m => new TokenInfo(m.Value)).ToList(); return matches.Skip(Math.Max(0, matches.Count - count)).ToList(); }
+        private List<TokenInfo> GetLastTokens(string text, int count)
+        {
+            var matches = Regex.Matches(text, @"(--.*|\/\*[\s\S]*?\*\/|'[^']*'|""[^""]*""|\[[^\]]*\]|@?\w+|==|!=|<=|>=|[=<>+\-*/().,;])")
+                .Cast<Match>()
+                .Select(m => new TokenInfo(m.Value))
+                .ToList();
+            return matches.Skip(Math.Max(0, matches.Count - count)).ToList();
+        }
         private record TokenInfo(string Text) { public bool IsKeyword => LanguageMetadata.IsKeyword(Text); }
     }
 }

@@ -160,6 +160,7 @@ export function activate(context: vscode.ExtensionContext) {
                 // outputChannel.appendLine(`Received ${params.variables.length} variables from script: ${normalizedUri}`);
                 sidebarProvider.postMessage({ type: 'scriptVariables', uri: normalizedUri, variables: params.variables });
             });
+
         }).catch(err => {
             outputChannel.appendLine(`CRITICAL: Language Client failed to start: ${err}`);
         });

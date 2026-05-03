@@ -292,6 +292,7 @@ namespace ETL_SQL.Core.Parser
             do
             {
                 string name;
+                var nameToken = _parser.Current;
                 if (_parser.Current.Type == TokenType.IDENTIFIER || LanguageMetadata.IsKeyword(_parser.Current.Value))
                     name = _parser.Advance().Value;
                 else
@@ -315,7 +316,7 @@ namespace ETL_SQL.Core.Parser
                 _parser.Consume(TokenType.LPAREN, "Expected '('");
                 var subq = _parser.ParseQuery();
                 _parser.Consume(TokenType.RPAREN, "Expected ')'");
-                ctes.Add(new CteDefinition(name, subq, columnNames));
+                ctes.Add(new CteDefinition(name, subq, columnNames) { Line = nameToken.Line, Column = nameToken.Column });
             } while (_parser.Match(TokenType.COMMA));
             return ctes;
         }

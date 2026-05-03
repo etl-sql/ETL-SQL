@@ -157,7 +157,55 @@ RUN SCRIPT 'ingest.etlsql' WITH (@Env = 'PROD', @Loaded = @Loaded);
 PRINT 'Loaded rows: ' + @Loaded;
 ```
 
-### 3.2 Environment Sets — Switching DEV / QA / PROD
+### 3.2 RELDATE Variables
+
+`RELDATE` is a specialized variable type for expressing dates relative to the time a script runs. Instead of computing date arithmetic manually, you declare the intent and the engine resolves it at execution time.
+
+```sql
+DECLARE @start RELDATE INPUT = 'M-1';   -- first day of last month
+DECLARE @end   RELDATE INPUT = 'D';     -- today
+
+SELECT * FROM prod.Sales WHERE SaleDate BETWEEN @start AND @end;
+```
+
+Common expressions:
+
+| Expression | Resolves to |
+| :--- | :--- |
+| `'D'` | Today at midnight |
+| `'D-1'` | Yesterday |
+| `'D-7'` | Seven days ago |
+| `'W-1'` | First day of last week |
+| `'ME-1'` | Last day of last month |
+| `'M-1'` | First day of last month |
+| `'QE-1'` | Last day of last quarter |
+| `'Y-1'` | January 1 of last year |
+| `'N-2H'` | Exactly 2 hours before execution |
+| `'2026-01-01'` | Fixed date (never changes) |
+
+`RELDATE` variables are most useful when combined with `INPUT`, so callers (CLI, parent scripts, or Report Portal subscriptions) can override them at run time without editing the script.
+
+```sql
+-- Override at CLI
+ETL-SQL run report.etlsql --var @start=W-1 --var @end=D
+
+-- Override from a parent script
+RUN SCRIPT 'daily_summary.etlsql' WITH (@start = 'D-1', @end = 'D');
+```
+
+#### Week-start day
+
+Week-boundary expressions (`W`, `W-1`, `WE-1`, etc.) use **Monday** as the start of the week by default. Override for the current script with:
+
+```sql
+SET WEEK_START_DAY = 'Sunday';
+```
+
+Valid values: `Monday`, `Tuesday`, `Wednesday`, `Thursday`, `Friday`, `Saturday`, `Sunday`.
+
+The default can also be changed for all scripts by setting `Engine.StartOfWeek` in `appsettings.json`.
+
+### 3.3 Environment Sets — Switching DEV / QA / PROD
 
 Instead of changing connection strings throughout your script, define **named environment sets** once and activate them with a single command:
 
