@@ -37,6 +37,8 @@
 
   <Target Name="CopyReportRuntime" BeforeTargets="Build">
     <Copy SourceFiles="..\ETL-SQL.ReportPlayer\wwwroot\report-runtime.js" DestinationFolder="wwwroot\js" SkipUnchangedFiles="true" />
+    <!-- GeoJSON maps are served from ReportPlayer's wwwroot automatically via its ProjectReference above.
+         No copy needed — the static web assets system merges them at /maps/*.geojson. -->
   </Target>
 
 </Project>
