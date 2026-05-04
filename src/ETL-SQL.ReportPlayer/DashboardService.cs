@@ -29,11 +29,13 @@ namespace ETL_SQL.ReportPlayer
     /// Parameter changes from slicer interactions call <see cref="RebuildAsync"/>
     /// to re-evaluate only the affected visuals (Phase 9D simplified: full rebuild).
     /// </summary>
-    public class DashboardService
+    public class DashboardService : IDisposable
     {
         private readonly string _scriptPath;
+        private readonly IServiceScopeFactory _scopeFactory;
         private readonly SemaphoreSlim _lock = new(1, 1);
 
+        private IServiceScope? _currentScope;
         private ReportManifest? _manifest;
         private Evaluator? _evaluator;
         private Dictionary<string, string> _parameters = new(StringComparer.OrdinalIgnoreCase);
@@ -42,9 +44,18 @@ namespace ETL_SQL.ReportPlayer
         private CancellationTokenSource? _refreshCts;
         private static readonly Regex _intervalPattern = new(@"^(\d+)([smhd])$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        public DashboardService(string scriptPath)
+        public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory)
         {
             _scriptPath = scriptPath ?? throw new ArgumentNullException(nameof(scriptPath));
+            _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+        }
+
+        public void Dispose()
+        {
+            _currentScope?.Dispose();
+            _refreshCts?.Cancel();
+            _refreshCts?.Dispose();
+            _lock.Dispose();
         }
 
         /// <summary>Returns the cached manifest, building it on first call.</summary>
@@ -130,8 +141,9 @@ namespace ETL_SQL.ReportPlayer
                 var parser   = new Parser(tokens, source);
                 var script   = parser.Parse();
 
-                var provider  = DependencyInjectionSetup.BuildServiceProvider();
-                var evaluator = provider.GetRequiredService<Evaluator>();
+                _currentScope?.Dispose();
+                _currentScope = _scopeFactory.CreateScope();
+                var evaluator = _currentScope.ServiceProvider.GetRequiredService<Evaluator>();
                 evaluator.RedirectOutput = true;
 
                 // Security Hardening (CR-S1): Inject current parameter values directly into the scope

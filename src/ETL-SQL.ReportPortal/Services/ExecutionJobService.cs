@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using ETL_SQL.ReportBuilder;
 using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.Orchestrator.Channels;
 using Microsoft.EntityFrameworkCore;
 
 namespace ETL_SQL.ReportPortal.Services;
@@ -32,19 +34,22 @@ public class ExecutionJobService : IDisposable
     private readonly ConcurrentDictionary<int, string>          _activeRefreshes = new();
     private readonly SemaphoreSlim _gate;
     private readonly PortalConfig  _config;
-    private readonly IServiceScopeFactory _scopes;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ExecutionJobService> _log;
     private readonly SessionCache _sessions;
+    private readonly IJobChannel  _channel;
     public ExecutionJobService(
         PortalConfig config,
-        IServiceScopeFactory scopes,
+        IServiceScopeFactory scopeFactory,
         ILogger<ExecutionJobService> log,
-        SessionCache sessions)
+        SessionCache sessions,
+        IJobChannel channel)
     {
         _config   = config;
-        _scopes   = scopes;
+        _scopeFactory = scopeFactory;
         _log      = log;
         _sessions = sessions;
+        _channel  = channel;
         _gate     = new SemaphoreSlim(config.Resources.MaxConcurrentReportExecutions,
                                        config.Resources.MaxConcurrentReportExecutions);
     }
@@ -99,39 +104,92 @@ public class ExecutionJobService : IDisposable
 
         try
         {
-            // Use an independent DashboardService for snapshots (not the session cache)
-            var svc = new ETL_SQL.ReportPlayer.DashboardService(scriptPath);
+            // Hash the script file at execution time for integrity tracking
+            string? runTimeHash = null;
+            bool? hashMatched = null;
+            if (System.IO.File.Exists(scriptPath))
+            {
+                runTimeHash = "sha256:" + Convert.ToHexString(
+                    SHA256.HashData(System.IO.File.ReadAllBytes(scriptPath))).ToLowerInvariant();
+            }
 
-            if (parameters is { Count: > 0 })
-                await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));
+            string? manifestPath = null;
+            if (_channel is HttpJobChannelClient)
+            {
+                _log.LogInformation("Submitting execution job {JobId} to remote orchestrator", job.Id);
+                var scriptText = await System.IO.File.ReadAllTextAsync(scriptPath, cts.Token);
+                var remoteJobId = await _channel.SubmitJobAsync(new JobSubmitRequest
+                {
+                    ScriptText = scriptText,
+                    Label      = $"Report {job.ReportId} Execution",
+                    SessionId  = job.Id,
+                    Metadata   = new Dictionary<string, string>
+                    {
+                        { "ReportId", job.ReportId.ToString() },
+                        { "IsReport", "true" }
+                    }
+                }, cts.Token);
 
-            var manifest = await svc.RebuildAsync().WaitAsync(cts.Token);
+                // Poll for completion
+                while (true)
+                {
+                    var status = await _channel.GetStatusAsync(remoteJobId, cts.Token);
+                    if (status.Status == JobRunStatus.Completed) break;
+                    if (status.Status == JobRunStatus.Failed) throw new Exception(status.ErrorMessage ?? "Remote job failed.");
+                    if (status.Status == JobRunStatus.Cancelled) throw new OperationCanceledException();
+                    await Task.Delay(1000, cts.Token);
+                }
+                
+                // Orchestrator saved it to the shared volume; path is deterministic
+                manifestPath = Path.Combine(Path.GetFullPath(_config.SnapshotDirectory), $"report_{job.ReportId}_{job.Id}.snapshot.json");
+            }
+            else
+            {
+                // Use an independent DashboardService for snapshots (not the session cache)
+                using var svc = new ETL_SQL.ReportPlayer.DashboardService(scriptPath, _scopeFactory);
 
-            // Save manifest to portal's SnapshotDirectory
-            var snapshotDir = Path.GetFullPath(_config.SnapshotDirectory);
-            Directory.CreateDirectory(snapshotDir);
-            var manifestPath = Path.Combine(snapshotDir, $"report_{job.ReportId}_{job.Id}.snapshot.json");
+                if (parameters is { Count: > 0 })
+                    await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));
 
-            var store = new SnapshotStore();
-            await store.SaveAsync(manifest, manifestPath);
+                var manifest = await svc.RebuildAsync().WaitAsync(cts.Token);
+
+                // Save manifest to portal's SnapshotDirectory
+                var snapshotDir = Path.GetFullPath(_config.SnapshotDirectory);
+                Directory.CreateDirectory(snapshotDir);
+                manifestPath = Path.Combine(snapshotDir, $"report_{job.ReportId}_{job.Id}.snapshot.json");
+
+                var store = new SnapshotStore();
+                await store.SaveAsync(manifest, manifestPath);
+            }
 
             // Persist to DB
-            using var scope = _scopes.CreateScope();
+            using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+
+            // Compare hash against published hash
+            var report = await db.Reports.FindAsync(job.ReportId);
+            if (report?.PublishedScriptHash is not null && runTimeHash is not null)
+            {
+                hashMatched = string.Equals(runTimeHash, report.PublishedScriptHash, StringComparison.OrdinalIgnoreCase);
+                if (!hashMatched.Value)
+                    _log.LogWarning("Script hash mismatch for report {ReportId}. Expected: {Expected}, Got: {Got}",
+                        job.ReportId, report.PublishedScriptHash, runTimeHash);
+            }
 
             db.ReportSnapshots.Add(new ReportSnapshot
             {
-                ReportId       = job.ReportId,
-                ManifestPath   = manifestPath,
-                BuiltAt        = DateTime.UtcNow,
-                BuiltBy        = job.UserId,
-                ParametersJson = parameters is { Count: > 0 }
+                ReportId            = job.ReportId,
+                ManifestPath        = manifestPath,
+                BuiltAt             = DateTime.UtcNow,
+                BuiltBy             = job.UserId,
+                ParametersJson      = parameters is { Count: > 0 }
                     ? System.Text.Json.JsonSerializer.Serialize(parameters)
-                    : null
+                    : null,
+                ScriptHashAtRunTime = runTimeHash,
+                HashMatched         = hashMatched
             });
 
             // Update ScriptLastModified on the report
-            var report = await db.Reports.FindAsync(job.ReportId);
             if (report is not null && System.IO.File.Exists(scriptPath))
                 report.ScriptLastModified = System.IO.File.GetLastWriteTimeUtc(scriptPath);
 
@@ -158,7 +216,8 @@ public class ExecutionJobService : IDisposable
             job.Status      = JobStatus.Failed;
             job.CompletedAt = DateTime.UtcNow;
             job.Error       = ex.Message;
-            _log.LogError(ex, "Execution job {JobId} failed", job.Id);
+            _log.LogError(ex, "Execution job {JobId} failed: {Message}. StackTrace: {Stack}", 
+                job.Id, ex.Message, ex.StackTrace);
         }
         finally
         {

@@ -21,4 +21,5 @@ public record ReportDto(
     DateTime ScriptLastModified,
     bool HasSnapshot,
     DateTime? SnapshotBuiltAt,
-    bool IsStale);
+    bool IsStale,
+    bool ScriptChanged);

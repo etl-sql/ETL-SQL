@@ -5,6 +5,13 @@ using Xunit;
 using ETL_SQL.ReportPlayer;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
+using ETL_SQL.Engine;
+using ETL_SQL.Engine.Handlers;
+using ETL_SQL.Services;
+using ETL_SQL.Common;
+using Microsoft.Extensions.Configuration;
 
 namespace ETL_SQL.Tests.Reporting
 {
@@ -28,7 +35,7 @@ CREATE PAGE Main AS LAYOUT (STRUCTURE = 'A B', MAP('A' = AffectedVisual, 'B' = S
 
             try 
             {
-                var service = new DashboardService(scriptPath);
+                var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
                 
                 // 2. Initial build
                 var manifest1 = await service.GetManifestAsync();

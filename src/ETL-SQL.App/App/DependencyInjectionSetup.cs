@@ -24,6 +24,7 @@ using ETL_SQL.Connectors.Rest;
 using ETL_SQL.Connectors.Excel;
 using ETL_SQL.Connectors.Directory;
 using ETL_SQL.Engine.Services;
+using ETL_SQL.Orchestrator;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Connectors.Parquet;
 using ETL_SQL.Connectors.Avro;
@@ -113,109 +114,16 @@ namespace ETL_SQL.App
 
 
             
-            // Connectors
-            services.AddSingleton<IConnector, MockDbConnector>();
-            services.AddSingleton<IConnector, SqlServerConnector>();
-            services.AddSingleton<IConnector, OracleConnector>();
-            services.AddSingleton<IConnector, PostgresConnector>();
-            services.AddSingleton<IConnector, FlatFileConnector>();
-            services.AddSingleton<IConnector, JsonConnector>();
-            services.AddSingleton<IConnector, XmlConnector>();
-            services.AddSingleton<IConnector, OdbcConnector>();
-            services.AddSingleton<IConnector, RestConnector>();
-            services.AddSingleton<IConnector, ExcelConnector>();
-            services.AddSingleton<IConnector, DirectoryConnector>();
-            services.AddSingleton<IConnector, ParquetConnector>();
-            services.AddSingleton<IConnector, AvroConnector>();
-            services.AddSingleton<IConnector, SmtpConnector>();
-            
-            // Options-based remote connectors
-            var ftpHost = configuration["Connectors:Ftp:Host"] ?? "localhost";
-            var ftpUser = configuration["Connectors:Ftp:Username"] ?? "anonymous";
-            var ftpPass = configuration["Connectors:Ftp:Password"] ?? "";
-            
-            var sftpHost = configuration["Connectors:Sftp:Host"] ?? "localhost";
-            var sftpUser = configuration["Connectors:Sftp:Username"] ?? "user";
-            var sftpPass = configuration["Connectors:Sftp:Password"] ?? "pass";
-            
-            var azureConn = configuration["Connectors:AzureBlob:ConnectionString"] ?? "UseDevelopmentStorage=true";
-            var azureContainer = configuration["Connectors:AzureBlob:Container"] ?? "test";
-
-            services.AddSingleton<IConnector>(new FtpConnector(ftpHost, ftpUser, ftpPass));
-            services.AddSingleton<IConnector>(new SftpConnector(sftpHost, sftpUser, sftpPass));
-            services.AddSingleton<IConnector>(new AzureBlobConnector(azureConn, azureContainer));
-
             services.AddSingleton<IConnectorRegistry>(sp => {
                 var connectors = sp.GetServices<IConnector>();
                 return new ConnectorRegistry(connectors);
             });
             services.AddSingleton<ISystemResources, DefaultSystemResources>();
-            services.AddSingleton<IBufferManager, BufferManager>();
             services.AddSingleton(Microsoft.Extensions.Options.Options.Create(new BufferManagerOptions()));
             
-            services.AddSingleton<ISessionStateManager, SessionStateManager>();
-            services.AddSingleton<SessionStateManager>(sp => (SessionStateManager)sp.GetRequiredService<ISessionStateManager>());
-            
-            services.AddTransient<ETL_SQL.Engine.Services.ReportRegistry>();
-            services.AddTransient<IReportContext, ETL_SQL.Engine.Services.ReportRegistry>();
-            services.AddTransient<ETL_SQL.Engine.Services.EvaluatorComponentRegistry>();
+            services.AddEtlSqlEngine(configuration);
 
             // Linter & Security Rules
-            var sensitiveKeywords = configuration.GetSection("Security:SensitiveKeywords").Get<string[]>();
-            services.AddSingleton<ETL_SQL.Core.Linting.Rules.CredentialLeakRule>(new ETL_SQL.Core.Linting.Rules.CredentialLeakRule(sensitiveKeywords));
-            services.AddSingleton<ETL_SQL.Core.Linting.ILintRule>(sp => sp.GetRequiredService<ETL_SQL.Core.Linting.Rules.CredentialLeakRule>());
-
-            services.AddTransient<ExecutionSession>();
-            
-            services.AddSingleton<IJobHistoryStore, SQLiteJobHistoryStore>();
-            services.Configure<JobThrottleOptions>(configuration.GetSection("Orchestration:JobThrottle"));
-            services.AddSingleton<JobThrottle>();
-            
-            services.Configure<BufferManagerOptions>(configuration.GetSection("Orchestration:ResourceManagement"));
-            services.AddSingleton<BufferManager>();
-            services.AddSingleton<IBufferManager>(sp => sp.GetRequiredService<BufferManager>());
-
-            services.AddSingleton<SchedulerService>();
-            services.AddSingleton<IJobManager>(sp => sp.GetRequiredService<SchedulerService>());
-
-            services.AddTransient<Evaluator>(sp => {
-                var evaluator = ActivatorUtilities.CreateInstance<Evaluator>(sp);
-                return evaluator;
-            });
-
-
-            // Map all interfaces back to the same Evaluator instance
-            services.AddTransient<IExecutionContext>(sp => (IExecutionContext)sp.GetRequiredService<Evaluator>());
-            services.AddTransient<IVariableContext>(sp => (IVariableContext)sp.GetRequiredService<Evaluator>());
-            services.AddTransient<IQueryContext>(sp => (IQueryContext)sp.GetRequiredService<Evaluator>());
-            services.AddTransient<ILineageContext>(sp => (ILineageContext)sp.GetRequiredService<Evaluator>());
-            services.AddTransient<ISqlCompilerContext>(sp => (ISqlCompilerContext)sp.GetRequiredService<Evaluator>());
-            services.AddTransient<ITransactionContext>(sp => (ITransactionContext)sp.GetRequiredService<Evaluator>());
-            services.AddTransient<IDockerContext>(sp => (IDockerContext)sp.GetRequiredService<Evaluator>());
-            services.AddTransient<ILoggingContext>(sp => (ILoggingContext)sp.GetRequiredService<Evaluator>());
-            services.AddTransient<IEvaluationContext>(sp => (IEvaluationContext)sp.GetRequiredService<Evaluator>());
-            services.AddTransient<IDataContext>(sp => (IDataContext)sp.GetRequiredService<Evaluator>());
-            services.AddTransient<IEngineContext>(sp => (IEngineContext)sp.GetRequiredService<Evaluator>());
-
-            // IScriptExecutor — thin adapter used by SchedulerService for job execution
-            services.AddTransient<IScriptExecutor, ScriptExecutorAdapter>();
-
-            // Register handlers from Engine and ReportBuilder (auto-discovered by assembly scan)
-            var handlerAssemblies = new[]
-            {
-                typeof(DeclareStatementHandler).Assembly,                    // ETL-SQL.Engine
-                typeof(ETL_SQL.ReportBuilder.ExportReportStatementHandler).Assembly  // ETL-SQL.ReportBuilder
-            };
-
-            foreach (var asm in handlerAssemblies)
-            {
-                foreach (var type in asm.GetTypes()
-                    .Where(t => typeof(IStatementHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract))
-                {
-                    services.AddTransient(typeof(IStatementHandler), type);
-                    services.AddTransient(type);
-                }
-            }
 
             return services.BuildServiceProvider();
         }

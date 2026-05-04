@@ -226,11 +226,19 @@ Publishing registers a `.rptsql` script file as a named report in a folder.
 
 The portal validates that the path stays within `ScriptRootPath` (path traversal attacks are blocked).
 
-### 6.1 Updating a Report
+### 6.1 Script hash pinning
 
-Edit the `.rptsql` file on disk. The portal detects the modification timestamp and marks the report as **stale** until a new snapshot is built. The snapshot is not rebuilt automatically — a user with Execute permission (or an Orchestrator dataset job) must trigger a refresh.
+When a report is published, the portal computes a SHA-256 hash of the `.rptsql` file and stores it as `PublishedScriptHash` in the database. This hash is the "known-good" fingerprint for that version of the report.
 
-### 6.2 Deleting a Report
+At every execution (snapshot build), the portal computes a fresh hash of the file and records it as `ScriptHashAtRunTime` in the `ReportSnapshots` table, along with a `HashMatched` flag. If the file has changed since publishing, `HashMatched = false` and the portal logs a warning. The `GET /api/reports/{id}` response includes a `scriptChanged` field that is `true` when the current file hash differs from the published hash.
+
+> **Note:** the hash is advisory — execution is not blocked by a mismatch in the Report Portal (unlike the Orchestrator's `BLOCK` policy). Use `scriptChanged = true` as a signal to re-publish the report after intentional changes or to investigate unexpected modifications.
+
+### 6.2 Updating a Report
+
+Edit the `.rptsql` file on disk. The portal detects the modification timestamp and marks the report as **stale** until a new snapshot is built. The snapshot is not rebuilt automatically — a user with Execute permission (or an Orchestrator dataset job) must trigger a refresh. If you intentionally changed the script, re-publish the report (via `PUT /api/reports/{id}` or by deleting and re-publishing) to reset the pinned hash.
+
+### 6.3 Deleting a Report
 
 Soft-delete via the report's **Delete** button. The record is marked `IsDeleted = true` and hidden from users; snapshots are retained on disk. Hard deletion requires removing the database record and snapshot files manually.
 

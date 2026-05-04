@@ -6,8 +6,16 @@
     <Nullable>enable</Nullable>
     <RootNamespace>ETL_SQL.TUI</RootNamespace>
     <AssemblyName>ETL-SQL-TUI</AssemblyName>
-  </PropertyGroup>
-  <ItemGroup>
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
+    </PropertyGroup>
+
+    <ItemGroup>
+    <Content Include="..\appsettings.json" Link="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    </ItemGroup>
+
+    <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.5" />
@@ -38,10 +46,5 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="ETL-SQL.Tests" />
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="..\appsettings.json" Link="appsettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
 </Project>

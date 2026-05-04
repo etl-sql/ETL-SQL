@@ -105,6 +105,20 @@ namespace ETL_SQL.Orchestrator.Storage
                 cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN RetryDelaySeconds INTEGER NOT NULL DEFAULT 30;";
                 await cmd.ExecuteNonQueryAsync();
             }
+
+            if (!columns.Contains("ScriptHash"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN ScriptHash TEXT;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            if (!columns.Contains("HashPolicy"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE Jobs ADD COLUMN HashPolicy TEXT NOT NULL DEFAULT 'Warn';";
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
 
         private async Task EnsureHistoryColumnsExist(SqliteConnection connection)
@@ -130,6 +144,20 @@ namespace ETL_SQL.Orchestrator.Storage
                 cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN CpuTimeSeconds REAL DEFAULT 0;";
                 await cmd.ExecuteNonQueryAsync();
             }
+
+            if (!columns.Contains("ScriptHashAtRunTime"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN ScriptHashAtRunTime TEXT;";
+                await cmd.ExecuteNonQueryAsync();
+            }
+
+            if (!columns.Contains("HashMatched"))
+            {
+                using var cmd = connection.CreateCommand();
+                cmd.CommandText = "ALTER TABLE JobHistory ADD COLUMN HashMatched INTEGER;";
+                await cmd.ExecuteNonQueryAsync();
+            }
         }
 
         public async Task SaveJobAsync(JobDefinition job)
@@ -139,8 +167,8 @@ namespace ETL_SQL.Orchestrator.Storage
             await connection.OpenAsync();
 
             var sql = @"
-                INSERT OR REPLACE INTO Jobs (Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds)
-                VALUES ($name, $script, $interval, $unit, $atTime, $lastRun, $nextRun, $isEnabled, $maxRetries, $retryDelay);";
+                INSERT OR REPLACE INTO Jobs (Name, Script, Interval, Unit, AtTime, LastRun, NextRun, IsEnabled, MaxRetries, RetryDelaySeconds, ScriptHash, HashPolicy)
+                VALUES ($name, $script, $interval, $unit, $atTime, $lastRun, $nextRun, $isEnabled, $maxRetries, $retryDelay, $scriptHash, $hashPolicy);";
 
             using var command = connection.CreateCommand();
             command.CommandText = sql;
@@ -154,6 +182,8 @@ namespace ETL_SQL.Orchestrator.Storage
             command.Parameters.AddWithValue("$isEnabled", job.IsEnabled ? 1 : 0);
             command.Parameters.AddWithValue("$maxRetries", job.MaxRetries);
             command.Parameters.AddWithValue("$retryDelay", job.RetryDelaySeconds);
+            command.Parameters.AddWithValue("$scriptHash", (object?)job.ScriptHash ?? DBNull.Value);
+            command.Parameters.AddWithValue("$hashPolicy", job.HashPolicy);
 
             await command.ExecuteNonQueryAsync();
         }
@@ -182,7 +212,9 @@ namespace ETL_SQL.Orchestrator.Storage
                     reader.IsDBNull(6) ? null : DateTime.Parse(reader.GetString(6)),
                     reader.GetInt32(7) == 1,
                     reader.IsDBNull(8) ? 0 : reader.GetInt32(8),
-                    reader.IsDBNull(9) ? 30 : reader.GetInt32(9)
+                    reader.IsDBNull(9) ? 30 : reader.GetInt32(9),
+                    reader.IsDBNull(10) ? null : reader.GetString(10),
+                    reader.IsDBNull(11) ? "Warn" : reader.GetString(11)
                 ));
             }
             return jobs;
@@ -250,13 +282,13 @@ namespace ETL_SQL.Orchestrator.Storage
             return (long)(await command.ExecuteScalarAsync())!;
         }
 
-        public async Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0)
+        public async Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null)
         {
             await EnsureInitializedAsync();
             using var connection = new SqliteConnection(_connectionString);
             await connection.OpenAsync();
 
-            var sql = "UPDATE JobHistory SET EndTime = $end, Status = $status, ErrorMessage = $err, RowsProcessed = $rows, PeakMemoryBytes = $mem, CpuTimeSeconds = $cpu WHERE Id = $id;";
+            var sql = "UPDATE JobHistory SET EndTime = $end, Status = $status, ErrorMessage = $err, RowsProcessed = $rows, PeakMemoryBytes = $mem, CpuTimeSeconds = $cpu, ScriptHashAtRunTime = $hash, HashMatched = $matched WHERE Id = $id;";
             using var command = connection.CreateCommand();
             command.CommandText = sql;
             command.Parameters.AddWithValue("$id", entryId);
@@ -266,6 +298,8 @@ namespace ETL_SQL.Orchestrator.Storage
             command.Parameters.AddWithValue("$rows", rowsProcessed);
             command.Parameters.AddWithValue("$mem", peakMemoryBytes);
             command.Parameters.AddWithValue("$cpu", cpuTimeSeconds);
+            command.Parameters.AddWithValue("$hash", (object?)scriptHashAtRunTime ?? DBNull.Value);
+            command.Parameters.AddWithValue("$matched", hashMatched.HasValue ? (object)(hashMatched.Value ? 1 : 0) : DBNull.Value);
 
             await command.ExecuteNonQueryAsync();
         }
@@ -298,7 +332,9 @@ namespace ETL_SQL.Orchestrator.Storage
                     reader.IsDBNull(5) ? null : reader.GetString(5),
                     reader.GetInt64(6),
                     reader.IsDBNull(7) ? 0 : reader.GetInt64(7),
-                    reader.IsDBNull(8) ? 0 : reader.GetDouble(8)
+                    reader.IsDBNull(8) ? 0 : reader.GetDouble(8),
+                    reader.IsDBNull(9) ? null : reader.GetString(9),
+                    reader.IsDBNull(10) ? null : (bool?)(reader.GetInt32(10) != 0)
                 ));
             }
             return entries;

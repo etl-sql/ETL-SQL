@@ -228,6 +228,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.TEMPLATE_PATH)) return SystemParser.ParseSetTemplatePath();
             if (_parser.Match(TokenType.REPORT)) return SystemParser.ParseSetReportMetadata();
             if (_parser.Match(TokenType.WEEK_START_DAY)) return SystemParser.ParseSetWeekStartDay();
+            if (_parser.Match(TokenType.SCRIPT_HASH_POLICY)) return SystemParser.ParseSetScriptHashPolicy();
 
             if (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.StartsWith("ALLOW_", System.StringComparison.OrdinalIgnoreCase))
             {

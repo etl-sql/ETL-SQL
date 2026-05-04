@@ -14,7 +14,9 @@ namespace ETL_SQL.Core.Data
         DateTime? NextRun,
         bool IsEnabled = true,
         int MaxRetries = 0,
-        int RetryDelaySeconds = 30
+        int RetryDelaySeconds = 30,
+        string? ScriptHash = null,
+        string HashPolicy = "Warn"
     );
 
     public record JobHistoryEntry(
@@ -26,13 +28,15 @@ namespace ETL_SQL.Core.Data
         string? ErrorMessage,
         long RowsProcessed = 0,
         long PeakMemoryBytes = 0,
-        double CpuTimeSeconds = 0
+        double CpuTimeSeconds = 0,
+        string? ScriptHashAtRunTime = null,
+        bool? HashMatched = null
     );
 
     public interface IJobHistoryStore
     {
         Task InitializeAsync();
-        
+
         // Job Management
         Task SaveJobAsync(JobDefinition job);
         Task<IEnumerable<JobDefinition>> GetActiveJobsAsync();
@@ -41,7 +45,7 @@ namespace ETL_SQL.Core.Data
 
         // History Management
         Task<long> LogJobStartAsync(string jobName);
-        Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0);
+        Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0, string? scriptHashAtRunTime = null, bool? hashMatched = null);
         Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100);
     }
 }

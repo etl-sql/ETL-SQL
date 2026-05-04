@@ -317,6 +317,9 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("PublishedScriptHash")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -339,6 +342,9 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Property<int>("BuiltBy")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool?>("HashMatched")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ManifestPath")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -348,6 +354,9 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
 
                     b.Property<int>("ReportId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("ScriptHashAtRunTime")
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 

@@ -53,7 +53,7 @@ CREATE PAGE Dashboard AS LAYOUT (
 
             try
             {
-                var service = new DashboardService(scriptPath);
+                var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
                 var manifest = await service.GetManifestAsync();
 
                 // 2. Verify Manifest Structure
@@ -103,7 +103,7 @@ CREATE PAGE Main AS LAYOUT (
 
             try
             {
-                var service = new DashboardService(scriptPath);
+                var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
                 
                 // Initial build (All regions)
                 var manifest1 = await service.GetManifestAsync();

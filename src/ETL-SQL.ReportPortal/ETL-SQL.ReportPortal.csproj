@@ -6,7 +6,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ETL_SQL.ReportPortal</RootNamespace>
     <AssemblyName>ETL-SQL-Portal</AssemblyName>
+    <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="..\appsettings.json" Link="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ETL-SQL.Engine\ETL-SQL.Engine.csproj" />
@@ -28,5 +35,8 @@
     <PackageReference Include="Cronos" Version="0.12.0" />
   </ItemGroup>
 
+  <Target Name="CopyReportRuntime" BeforeTargets="Build">
+    <Copy SourceFiles="..\ETL-SQL.ReportPlayer\wwwroot\report-runtime.js" DestinationFolder="wwwroot\js" SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

@@ -32,8 +32,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, IDataSource> _persistentConnections
             = new(StringComparer.OrdinalIgnoreCase);
         private readonly VariableScopeManager _persistentVariables = new();
-
-        private Evaluator? _lastEvaluator;
+        public  Evaluator? LastEvaluator { get; private set; }
         private bool _disposed;
 
         /// <summary>
@@ -122,7 +121,7 @@ namespace ETL_SQL.Orchestrator.Execution
                 result.RowsProcessed  = evaluator.Telemetry.RowsProcessed;
                 result.Messages       = evaluator.Messages.ToList();
                 result.Success        = true;
-                _lastEvaluator        = evaluator;
+                LastEvaluator        = evaluator;
             }
             catch (Exception ex)
             {
@@ -154,9 +153,9 @@ namespace ETL_SQL.Orchestrator.Execution
             if (_disposed) return;
             _disposed = true;
 
-            if (_lastEvaluator is IAsyncDisposable asyncDisposable)
+            if (LastEvaluator is IAsyncDisposable asyncDisposable)
                 await asyncDisposable.DisposeAsync();
-            else if (_lastEvaluator is IDisposable disposable)
+            else if (LastEvaluator is IDisposable disposable)
                 disposable.Dispose();
 
             foreach (var ds in _persistentConnections.Values)

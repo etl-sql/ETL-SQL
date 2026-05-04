@@ -832,8 +832,8 @@ CREATE PAGE Composition AS LAYOUT (
     TOOLTIP   = 'TREEMAP, HEATMAP, FUNNEL, GAUGE variants, and PIE with data labels.',
     STRUCTURE = '
         A A B B /
-        C C D E /
-        C C F F
+        D E C C /
+        F F C C
     ',
     MAP (
         'A' = TreemapCat,

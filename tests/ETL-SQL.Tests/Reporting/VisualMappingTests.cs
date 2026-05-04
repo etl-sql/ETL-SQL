@@ -35,7 +35,7 @@ CREATE PAGE P AS LAYOUT (
 
             try
             {
-                var service = new DashboardService(scriptPath);
+                var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
                 var manifest = await service.GetManifestAsync();
 
                 var visual = manifest.Visuals.First(v => v.Name == "BadMapping");
@@ -68,7 +68,7 @@ CREATE PAGE P AS LAYOUT (
 
             try
             {
-                var service = new DashboardService(scriptPath);
+                var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
                 var manifest = await service.GetManifestAsync();
 
                 var visual = manifest.Visuals.First(v => v.Name == "NullValues");

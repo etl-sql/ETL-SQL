@@ -239,7 +239,7 @@ CREATE [OR ALTER] VISUAL <name> AS <TYPE> (
     [aggregate(column) [AS alias], ...]
   ),]
   [MAPPINGS (role = column, ...),]
-  [OPTIONS (key = value, ..., X_AXIS (...), Y_AXIS (...), COLORS (...), LEGEND (...)),]
+  [OPTIONS (key = value, ..., X_AXIS (...), Y_AXIS (...), COLORS (...)),]
   [STYLE = <styleName> | STYLE (key = value, ...),]
   [SERIES (type column, ...),]
   [ACTIONS (trigger = action, ...)]
@@ -878,60 +878,10 @@ CREATE VISUAL ScoreVsRank AS SCATTER (
 
 Multiple `GOAL` lines are supported — just add additional `GOAL(n)` entries. `OVERLAYS` applies to BAR, HBAR, LINE, and SCATTER visuals; it is ignored on PIE, DONUT, TABLE, CARD, and filter controls.
 
-### CROSS_FILTER
 
-Cross-filtering lets a chart act as an interactive filter for other visuals on the same page — no parameters, no actions, no server round-trip needed.
+> [!NOTE]
+> **Cross-filtering is on the roadmap** — the ability to click a chart bar/slice and have it automatically filter TABLE visuals on the same page without parameters or server round-trips. It is not yet implemented. Use `ACTIONS (ON_CLICK = DRILL_DOWN(...))` or `ACTIONS (ON_CHANGE = SET_PARAMETER(...))` for interactive filtering today.
 
-**How it works**
-
-- Add `OPTIONS (CROSS_FILTER = ON)` to any chart visual (BAR, LINE, PIE, etc.) to make it a **filter source**.
-- Add `OPTIONS (CROSS_FILTER = ON)` to any TABLE visual on the same page to make it a **filter target**.
-- Clicking a data point in the chart filters every TABLE target to rows that match the clicked X-axis value.
-- Clicking the same value a second time **clears** the filter (toggle behavior).
-
-**Full example**
-
-```sql
--- Load data
-SELECT Region, Product, Revenue
-INTO #sales
-FROM orders;
-
--- Chart: clicking a bar filters the table below
-CREATE VISUAL SalesByRegion AS BAR (
-  SOURCE   = (SELECT Region, SUM(Revenue) AS Revenue FROM #sales GROUP BY Region),
-  MAPPINGS (X = Region, Y = Revenue),
-  OPTIONS  (CROSS_FILTER = ON)
-);
-
--- Table: receives the filter broadcast from the chart above
-CREATE VISUAL SalesDetail AS TABLE (
-  SOURCE  = (SELECT Region, Product, Revenue FROM #sales),
-  OPTIONS (CROSS_FILTER = ON)
-);
-
--- Place both on the same page
-CREATE PAGE Overview AS LAYOUT (
-  GRID 2 x 1
-  MAP (
-    [0,0] = SalesByRegion,
-    [1,0] = SalesDetail
-  )
-);
-```
-
-When the user clicks the "West" bar, `SalesDetail` is filtered to show only rows where `Region = 'West'`. Clicking "West" again restores all rows.
-
-**Rules and limitations**
-
-| Rule | Detail |
-|---|---|
-| Same-page only | Cross-filtering is scoped to the page section in the DOM. Visuals on other pages are unaffected. |
-| Chart → TABLE | The filter source must be a chart type (BAR, LINE, PIE, etc.). TABLE → TABLE cross-filtering is not supported. |
-| X-axis column | The filter column is the X-axis mapping column (the `MAPPINGS (X = ...)` value). It must exist in the TABLE's data. |
-| Client-side | No server round-trip. The full dataset is in the manifest; filtering is done in the browser. Large datasets (>10k rows) may cause visible filter latency. |
-| Multiple targets | One chart can filter multiple TABLE visuals on the same page simultaneously. |
-| Multiple sources | Multiple charts on the same page can each be filter sources, but only one filter is active at a time per page — the most recently clicked chart wins. |
 
 ### STYLE
 
@@ -1289,6 +1239,9 @@ CREATE PAGE Main AS LAYOUT (
 
 ---
 
+## CREATE CONTAINER
+
+```
 CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL (
   [TITLE = '<string>',]
   [SUBTITLE = '<string>',]
@@ -1604,9 +1557,15 @@ ETL-SQL-Report serve report.rptsql
 
 # Multi-report catalog (see reports.json below)
 ETL-SQL-Report serve --manifest reports.json
+
+# Override the default port
+ETL-SQL-Report serve report.rptsql --port 8080
+
+# Port 0 = OS-assigned (actual URL echoed as REPORT_URL=...)
+ETL-SQL-Report serve report.rptsql --port 0
 ```
 
-Internally this launches `ETL-SQL-Portal` (the Kestrel ASP.NET server) and opens the browser after 2.5 s. Keep the process running; the dashboard is served for as long as the process is alive.
+Internally this launches `ETL-SQL.ReportPlayer` (the Kestrel ASP.NET server) and opens the browser after 2.5 s. Keep the process running; the dashboard is served for as long as the process is alive.
 
 ---
 

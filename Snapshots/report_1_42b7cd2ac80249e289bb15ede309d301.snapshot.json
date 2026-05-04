@@ -1,0 +1,186 @@
+{
+  "source": "remote_script.rptsql",
+  "builtAt": "2026-05-03T18:02:58.0292559Z",
+  "title": "Sales Dashboard",
+  "description": "Regional and product-level revenue by month.",
+  "visuals": [
+    {
+      "name": "RegionFilter",
+      "visualType": "Slicer",
+      "chartConfig": null,
+      "defaultValue": "All",
+      "columns": [],
+      "rows": [],
+      "options": {
+        "mapping:value": "region"
+      },
+      "error": "Cannot access a disposed object.\nObject name: \u0027IServiceProvider\u0027.",
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumn": null,
+          "parameterName": "@region",
+          "valueExpression": "region"
+        }
+      ]
+    },
+    {
+      "name": "TotalRevenue",
+      "visualType": "Card",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Total Revenue",
+        "FORMAT": "C0",
+        "mapping:value": "val",
+        "mapping:label": "lbl"
+      },
+      "error": "Cannot access a disposed object.\nObject name: \u0027IServiceProvider\u0027.",
+      "actions": []
+    },
+    {
+      "name": "RevenueByRegion",
+      "visualType": "Bar",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Revenue by Region",
+        "axis:x:label": "Region",
+        "axis:y:label": "Revenue ($)",
+        "axis:y:min": "0",
+        "mapping:x": "region",
+        "mapping:y": "revenue"
+      },
+      "error": "Cannot access a disposed object.\nObject name: \u0027IServiceProvider\u0027.",
+      "actions": []
+    },
+    {
+      "name": "RevenueByRegionMonth",
+      "visualType": "Bar",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Revenue by Region (Monthly)",
+        "STACKED": "True",
+        "axis:x:label": "Month",
+        "axis:y:label": "Revenue ($)",
+        "axis:y:min": "0",
+        "mapping:x": "month",
+        "mapping:y": "revenue",
+        "mapping:series": "region"
+      },
+      "error": "Cannot access a disposed object.\nObject name: \u0027IServiceProvider\u0027.",
+      "actions": []
+    },
+    {
+      "name": "RevenueByProduct",
+      "visualType": "Donut",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Revenue by Product",
+        "mapping:label": "product",
+        "mapping:value": "revenue"
+      },
+      "error": "Cannot access a disposed object.\nObject name: \u0027IServiceProvider\u0027.",
+      "actions": []
+    },
+    {
+      "name": "UnitsByMonth",
+      "visualType": "Line",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Units Sold by Month",
+        "SMOOTH": "True",
+        "axis:x:label": "Month",
+        "axis:y:label": "Units Sold",
+        "axis:y:min": "0",
+        "mapping:x": "month",
+        "mapping:y": "units"
+      },
+      "error": "Cannot access a disposed object.\nObject name: \u0027IServiceProvider\u0027.",
+      "actions": []
+    },
+    {
+      "name": "SalesTable",
+      "visualType": "Table",
+      "chartConfig": null,
+      "columns": [
+        "month",
+        "region",
+        "product",
+        "units",
+        "revenue"
+      ],
+      "rows": [],
+      "options": {},
+      "error": null,
+      "actions": []
+    }
+  ],
+  "pages": [
+    {
+      "name": "Overview",
+      "structure": "A B / C C / D D",
+      "slotMap": {
+        "A": "KpiRow",
+        "B": "RegionFilter",
+        "C": "RevenueByRegion",
+        "D": "SalesTable"
+      }
+    },
+    {
+      "name": "Trends",
+      "structure": "A / B / C",
+      "title": "Market Trends",
+      "slotMap": {
+        "A": "RevenueByRegionMonth",
+        "B": "UnitsByMonth",
+        "C": "RevenueByProduct"
+      }
+    }
+  ],
+  "datasets": [],
+  "containers": [
+    {
+      "name": "KpiRow",
+      "containerType": "BOX",
+      "structure": "A",
+      "slotMap": {
+        "A": "TotalRevenue"
+      }
+    }
+  ],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "Overview",
+      "pages": [
+        "Overview",
+        "Trends"
+      ]
+    }
+  ],
+  "parameters": {
+    "@region": "All"
+  },
+  "telemetry": {
+    "rowsProcessed": 0,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  }
+}

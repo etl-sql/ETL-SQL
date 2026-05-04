@@ -26,7 +26,7 @@ namespace ETL_SQL.ReportBuilder.Renderers
                 tooltip = new { trigger = "item" },
                 series = new[]
                 {
-                    new { type = "treemap", name = v.Name, data,
+                    new { type = "treemap", name = v.Name, data, roam = false,
                           label = new { show = true },
                           breadcrumb = new { show = false } }
                 }

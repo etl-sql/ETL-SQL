@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  orchestrator-srv:
+    build:
+      context: .
+      dockerfile: src/ETL-SQL.Orchestrator.Service/Dockerfile
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./Reports:/app/Reports
+      - ./Snapshots:/app/Snapshots
+      - ./logs/orchestrator:/app/logs
+    environment:
+      - Jobs__UseProcessSpawning=false
+      - Session__Root=/app/Sessions
+
+  portal-srv:
+    build:
+      context: .
+      dockerfile: src/ETL-SQL.ReportPortal/Dockerfile
+    ports:
+      - "5002:5002"
+    volumes:
+      - ./Reports:/app/Reports
+      - ./Snapshots:/app/Snapshots
+      - ./data:/app/data
+    environment:
+      - Portal__Orchestrator__ApiUrl=http://orchestrator-srv:5001
+      - Portal__DatabasePath=/app/data/portal.db
+      - Portal__ScriptRootPath=/app/Reports
+      - Portal__SnapshotDirectory=/app/Snapshots
+    depends_on:
+      - orchestrator-srv
+
+  mock-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: etl_user
+      POSTGRES_PASSWORD: etl_password
+      POSTGRES_DB: mock_data
+    ports:
+      - "5432:5432"
+
+volumes:
+  reports_data:
+  snapshots_data:

@@ -8,6 +8,12 @@ public class PortalConfig
     public ResourcesConfig Resources { get; set; } = new();
     public JwtConfig       Jwt       { get; set; } = new();
     public FirstRunConfig  FirstRun  { get; set; } = new();
+    public OrchestratorConfig Orchestrator { get; set; } = new();
+}
+
+public class OrchestratorConfig
+{
+    public string? ApiUrl { get; set; }
 }
 
 public class ResourcesConfig

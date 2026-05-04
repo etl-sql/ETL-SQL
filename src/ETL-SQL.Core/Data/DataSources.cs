@@ -166,14 +166,23 @@ namespace ETL_SQL.Data
             {
                 if (_executionContext != null)
                 {
-                    _executionContext.ServiceProvider.GetService<IBufferManager>()?.UnregisterSpillable(this);
+                    try 
+                    {
+                        _executionContext.ServiceProvider.GetService<IBufferManager>()?.UnregisterSpillable(this);
+                    }
+                    catch (ObjectDisposedException) { /* ignore during shutdown */ }
                 }
                 _executionContext = value;
                 if (_executionContext != null)
                 {
-                    _executionContext.ServiceProvider.GetService<IBufferManager>()?.RegisterSpillable(this);
+                    try 
+                    {
+                        _executionContext.ServiceProvider.GetService<IBufferManager>()?.RegisterSpillable(this);
+                    }
+                    catch (ObjectDisposedException) { /* ignore during shutdown */ }
                 }
             }
+
         }
 
         public long MemoryUsageBytes

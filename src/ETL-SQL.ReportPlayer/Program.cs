@@ -12,7 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using ETL_SQL.ReportBuilder;
-
+using ETL_SQL.Orchestrator;
 using ETL_SQL.ReportPlayer;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -62,19 +62,24 @@ var builder = WebApplication.CreateBuilder(args);
 // Resolve port: CLI arg > appsettings > default 5200. Port 0 = OS-assigned dynamic port.
 int port = portArg ?? builder.Configuration.GetValue<int>("ReportPlayer:Port", 5200);
 
-DashboardService?        singleSvc = null;
-DashboardServiceFactory? factory   = null;
+// We need a ServiceProvider to build the services, but we also want to register them.
+// In Phase 9F, these are effectively singletons.
+// We'll use a placeholder and then fix it up once the app is built.
 
 if (multiMode)
 {
-    factory = new DashboardServiceFactory(Path.GetFullPath(manifestPath!));
-    builder.Services.AddSingleton(factory);
+    // For Multi-mode, we register the factory itself.
+    builder.Services.AddSingleton<DashboardServiceFactory>(sp => 
+        new DashboardServiceFactory(Path.GetFullPath(manifestPath!), sp.GetRequiredService<IServiceScopeFactory>()));
 }
 else
 {
-    singleSvc = new DashboardService(Path.GetFullPath(scriptPath!));
-    builder.Services.AddSingleton(singleSvc);
+    // For Single-mode, we register the service.
+    builder.Services.AddSingleton<DashboardService>(sp => 
+        new DashboardService(Path.GetFullPath(scriptPath!), sp.GetRequiredService<IServiceScopeFactory>()));
 }
+
+builder.Services.AddEtlSqlEngine(builder.Configuration);
 
 var app = builder.Build();
 
@@ -218,7 +223,8 @@ var actualUrl = boundAddresses?.FirstOrDefault() ?? $"http://localhost:{port}";
 
 if (multiMode)
 {
-    Console.WriteLine($"ReportPlayer: hosting {factory!.Reports.Count} report(s) from {Path.GetFileName(manifestPath)}");
+    var fac = app.Services.GetRequiredService<DashboardServiceFactory>();
+    Console.WriteLine($"ReportPlayer: hosting {fac.Reports.Count} report(s) from {Path.GetFileName(manifestPath)}");
     Console.WriteLine($"Catalog: {actualUrl}");
 }
 else

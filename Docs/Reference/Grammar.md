@@ -2,7 +2,7 @@
 
 This document is the authoritative reference for the ETL-SQL scripting language. It defines every statement type, clause, and keyword — everything needed to write, administer, and automate with ETL-SQL.
 
-> **Sections marked `[PROPOSED]`** contain syntax designed during the Report Portal planning phase that has not yet been implemented. All other sections reflect the current engine.
+> This document reflects the current ETL-SQL engine. All syntax shown here is implemented and parseable.
 
 ---
 
@@ -460,9 +460,7 @@ Override `appsettings.json` defaults for the current session.
 | `SET MAX_SESSION_SIZE = n` | 524,288,000 | Max session state in bytes before eviction (~500 MB) |
 | `SET SPILL_ENCRYPTION = ON/OFF` | ON | AES-256 encryption on spill files |
 | `SET SPILL_COMPRESSION = ON/OFF` | ON | Brotli compression on spill files |
-| `SET SPILL_FORMAT = 'AUTO'|'JSON'|'PARQUET'` | AUTO | Storage format for spilled engine data |
-| `SET PARALLEL_MAX_DEGREE = n` | 8 | Max concurrent branches inside a `PARALLEL` block |
-| `SET REGEX_TIMEOUT = n` | 1,000 | Milliseconds before a regex match is aborted |
+| `SET SPILL_FORMAT = 'AUTO'\|'JSON'\|'PARQUET'` | AUTO | Storage format for spilled engine data |
 
 
 ### 2.6 `SET WEEK_START_DAY`
@@ -500,8 +498,8 @@ Profiling is a high-resolution, opt-in monitoring layer that captures detailed t
 | `@@variables` | ✓ | ✓ |
 | `SHOW PROFILE` | ✗ | ✓ |
 | Execution Tree | ✗ | ✓ |
-orted |
-| `SET TELEMETRY = ON/OFF` | ON | Collect high-cost execution metrics |
+
+**Commands:** `SET TELEMETRY ON` / `SET TELEMETRY OFF` toggle telemetry collection. `SET PROFILING ON` / `SET PROFILING OFF` toggle statement-level profiling.
 
 ---
 
@@ -666,6 +664,7 @@ ALTER CONNECTION stage ON POSTGRES('prod-server-v2');
 ```sql
 DROP CONNECTION prod;
 DROP CONNECTION prod IF EXISTS;
+```
 
 ### 3.4 Connection Introspection
 
@@ -689,9 +688,8 @@ SHOW CONNECTION my_db CONFIG;
 SHOW CONNECTION my_db CONFIG INTO #cfg;
 SELECT * FROM #cfg WHERE Option = 'SERVER';
 ```
-```
 
-### 3.3 Credential Helpers
+### 3.5 Credential Helpers
 
 | Form | Usage |
 | :--- | :--- |
@@ -1387,9 +1385,9 @@ EXEC orch BEGIN
 END
 ```
 
-> **Error behavior:** Stop-on-first-error within each block. The block is not transactional — a failure mid-block leaves prior statements applied. `GO` as a sub-batch separator is a planned v1.1 extension.
+> **Error behavior:** Stop-on-first-error within each block. The block is not transactional — a failure mid-block leaves prior statements applied.
 
-### 11.3 `PARALLEL`
+### 11.2 `PARALLEL`
 ```sql
 PARALLEL
 BEGIN
@@ -1410,7 +1408,7 @@ BEGIN
 END
 ```
 
-### 11.4 `RUN SCRIPT`
+### 11.3 `RUN SCRIPT`
 ```sql
 RUN SCRIPT 'sub_process.etlsql' WITH (@batchId = 1234, @env = 'PROD', @result = @out_var OUTPUT);
 ```
@@ -1714,7 +1712,7 @@ SEND EMAIL
 | `ATTACH` | No | Local file path; repeatable |
 | `AT` | No | Defaults to the last configured SMTP connection |
 
-### 16.2 Example
+### 17.2 Example
 ```sql
 CREATE CONNECTION mailer ON SMTP(
     HOST         = 'smtp.company.com',
@@ -1763,7 +1761,7 @@ DECLARE @conn VARCHAR(500) = mssql_db.CONNECTION_STRING;
 CREATE CONNECTION stage_db ON MSSQL(@conn);
 ```
 
-### 17.2 Supported Images
+### 18.2 Supported Images
 
 | Database | Image pattern | Default credentials | Port |
 | :--- | :--- | :--- | :--- |
@@ -1771,7 +1769,7 @@ CREATE CONNECTION stage_db ON MSSQL(@conn);
 | PostgreSQL | contains `postgres` | `postgres` / `postgres` | 5432 |
 | Oracle | contains `oracle` | `system` / `oracle` | 1521 |
 
-### 17.3 Lifecycle Commands
+### 18.3 Lifecycle Commands
 
 | Command | Effect |
 | :--- | :--- |
@@ -1785,7 +1783,7 @@ Function-style aliases: `START_DOCKER`, `STOP_DOCKER`, `CLOSE_DOCKER`.
 
 > Containers are **not** automatically closed when a script ends. Always include an explicit `CLOSE_DOCKER` or wrap in `TRY...CATCH`.
 
-### 17.4 Multiple Containers
+### 18.4 Multiple Containers
 ```sql
 USE DOCKER('mcr.microsoft.com/mssql/server:2022-latest') AS src;
 USE DOCKER('postgres:15-alpine')                         AS dst;
@@ -1909,7 +1907,7 @@ CREATE VISUAL <name> AS <type> (
 );
 ```
 
-**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `RADAR`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `CANDLESTICK`, `MAP`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
+**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
 
 **FORMATTING operators:** `<`, `>`, `<=`, `>=`, `=`, `<>`
 

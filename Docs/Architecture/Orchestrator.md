@@ -337,24 +337,32 @@ ProcessJobExecutor.ExecuteTextAsync(script):
 
 ```sql
 CREATE TABLE IF NOT EXISTS Jobs (
-    Name      TEXT PRIMARY KEY,
-    Script    TEXT NOT NULL,
-    Interval  INTEGER NOT NULL,    -- numeric magnitude
-    Unit      TEXT NOT NULL,       -- 'SECOND'|'MINUTE'|'HOUR'|'DAY'
-    AtTime    TEXT,                -- optional wall-clock anchor, e.g. '22:00'
-    LastRun   TEXT,                -- ISO-8601 or NULL
-    NextRun   TEXT,                -- ISO-8601 or NULL (NULL = run immediately)
-    IsEnabled INTEGER NOT NULL DEFAULT 1
+    Name               TEXT PRIMARY KEY,
+    Script             TEXT NOT NULL,
+    Interval           INTEGER NOT NULL,    -- numeric magnitude
+    Unit               TEXT NOT NULL,       -- 'SECOND'|'MINUTE'|'HOUR'|'DAY'
+    AtTime             TEXT,                -- optional wall-clock anchor, e.g. '22:00'
+    LastRun            TEXT,                -- ISO-8601 or NULL
+    NextRun            TEXT,                -- ISO-8601 or NULL (NULL = run immediately)
+    IsEnabled          INTEGER NOT NULL DEFAULT 1,
+    MaxRetries         INTEGER NOT NULL DEFAULT 0,
+    RetryDelaySeconds  INTEGER NOT NULL DEFAULT 30,
+    ScriptHash         TEXT,                -- 'sha256:<hex>' of Script bytes at CREATE JOB time
+    HashPolicy         TEXT NOT NULL DEFAULT 'Warn'  -- 'Warn'|'Block'
 );
 
 CREATE TABLE IF NOT EXISTS JobHistory (
-    Id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    JobName       TEXT NOT NULL,
-    StartTime     TEXT NOT NULL,   -- ISO-8601
-    EndTime       TEXT,            -- NULL while RUNNING
-    Status        TEXT NOT NULL,   -- 'RUNNING'|'SUCCESS'|'FAILURE'
-    ErrorMessage  TEXT,
-    RowsProcessed INTEGER DEFAULT 0
+    Id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    JobName             TEXT NOT NULL,
+    StartTime           TEXT NOT NULL,   -- ISO-8601
+    EndTime             TEXT,            -- NULL while RUNNING
+    Status              TEXT NOT NULL,   -- 'RUNNING'|'SUCCESS'|'FAILURE'|'BLOCKED'
+    ErrorMessage        TEXT,
+    RowsProcessed       INTEGER DEFAULT 0,
+    PeakMemoryBytes     INTEGER DEFAULT 0,
+    CpuTimeSeconds      REAL DEFAULT 0,
+    ScriptHashAtRunTime TEXT,            -- hash computed at execution time
+    HashMatched         INTEGER          -- 1=match, 0=mismatch, NULL=no pinned hash
 );
 ```
 
@@ -369,14 +377,34 @@ public interface IJobHistoryStore
     Task DeleteJobAsync(string name);
     Task UpdateJobLastRunAsync(string name, DateTime lastRun, DateTime? nextRun);
     Task<long> LogJobStartAsync(string jobName);
-    Task LogJobEndAsync(long entryId, string status, string? errorMessage = null, long rowsProcessed = 0);
+    Task LogJobEndAsync(long entryId, string status, string? errorMessage = null,
+        long rowsProcessed = 0, long peakMemoryBytes = 0, double cpuTimeSeconds = 0,
+        string? scriptHashAtRunTime = null, bool? hashMatched = null);
     Task<IEnumerable<JobHistoryEntry>> GetHistoryAsync(string? jobName = null, int limit = 100);
 }
 ```
 
 `JobDefinition` and `JobHistoryEntry` are positional record types defined in `ETL-SQL.Core/Data/IJobHistoryStore.cs`.
 
-### 6.3 Engine integration
+`JobDefinition` carries two hash-pinning fields: `ScriptHash` (stored at `CREATE JOB` time as `"sha256:<hex>"`) and `HashPolicy` (`"Warn"` or `"Block"`). `JobHistoryEntry` carries `ScriptHashAtRunTime` and `HashMatched` so every execution is auditable regardless of whether the hash matched.
+
+### 6.3 Script hash integrity
+
+When a job is created via `CREATE JOB`, `CreateJobStatementHandler` computes a SHA-256 hash of the script text and stores it as `ScriptHash` in the `Jobs` table. At execution time, `SchedulerService.ExecuteJobAsync` recomputes the hash and compares it:
+
+- **Match**: execution proceeds; `HashMatched = 1` is recorded in `JobHistory`.
+- **Mismatch + `HashPolicy = 'Warn'`** (default): a warning is logged and execution continues; `HashMatched = 0` is recorded.
+- **Mismatch + `HashPolicy = 'Block'`**: a `BLOCKED` history entry is written and the job is skipped for this run cycle.
+
+The default policy is controlled by `Engine:ScriptHashPolicy` in `appsettings.json` and may be overridden per-session with:
+
+```sql
+SET SCRIPT_HASH_POLICY = 'Block';
+```
+
+This guards against out-of-band modifications to the `Script` column in `etlsql.db` (e.g., direct SQLite edits). It does not provide cryptographic key management or signing — the hash is advisory, not a trust anchor.
+
+### 6.4 Engine integration
 
 `CREATE JOB` and `DROP JOB` statements in `ETL-SQL.Engine` call `IJobHistoryStore` directly through the `IExecutionContext`. `SHOW JOBS` and `SHOW JOB HISTORY` read from the same store. This means the engine language layer and the Orchestrator share the same SQLite database and the same `IJobHistoryStore` abstraction — there is no separate API or message bus between them.
 

@@ -260,6 +260,32 @@ public class AdminController(
         return NoContent();
     }
 
+    // ── Reports ───────────────────────────────────────────────────────────────
+
+    [HttpGet("reports")]
+    public async Task<IActionResult> GetReports()
+    {
+        var reports = await db.Reports
+            .Include(r => r.Folder)
+            .Where(r => !r.IsDeleted)
+            .OrderBy(r => r.Folder!.Path).ThenBy(r => r.Name)
+            .Select(r => new
+            {
+                r.Id,
+                r.Name,
+                r.Description,
+                r.ScriptPath,
+                r.FolderId,
+                FolderName = r.Folder != null ? r.Folder.Name : "Root",
+                FolderPath = r.Folder != null ? r.Folder.Path : "/",
+                r.CreatedAt,
+                r.UpdatedAt
+            })
+            .ToListAsync();
+
+        return Ok(reports);
+    }
+
     // ── Audit log ─────────────────────────────────────────────────────────────
 
     [HttpGet("audit")]

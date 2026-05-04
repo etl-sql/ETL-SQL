@@ -244,6 +244,15 @@ namespace ETL_SQL.Core.Parser.Components
             return new SetWeekStartDayStatement(dayToken.Value) { Line = startToken.Line, Column = startToken.Column };
         }
 
+        public Statement ParseSetScriptHashPolicy()
+        {
+            var startToken = _parser.Previous;
+            Consume(TokenType.EQUALS, "Expected '=' after SET SCRIPT_HASH_POLICY");
+            var policyToken = Consume(TokenType.STRING_LITERAL, "Expected 'Warn' or 'Block' after SET SCRIPT_HASH_POLICY =");
+            Match(TokenType.SEMICOLON);
+            return new SetScriptHashPolicyStatement(policyToken.Value) { Line = startToken.Line, Column = startToken.Column };
+        }
+
         public Statement ParseSetTemplatePath()
         {
             var startToken = _parser.Previous;

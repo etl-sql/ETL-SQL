@@ -11,7 +11,7 @@
 
     // Web mode  (single or multi-report server): window.__IS_WEB__ = true
     // VS Code mode (webview preview):           window.__MANIFEST__ set, no __IS_WEB__
-    const isWebMode = window.location.protocol.startsWith('http');
+    const isWebMode = window.__IS_WEB__ || window.location.protocol.startsWith('http');
     
     function getOption(options, key) {
         if (!options) return null;

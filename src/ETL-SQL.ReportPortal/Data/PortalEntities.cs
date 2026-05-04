@@ -81,9 +81,10 @@ public class Report
     public Folder    Folder             { get; set; } = null!;
     public string    Name               { get; set; } = "";
     public string?   Description        { get; set; }
-    public string    ScriptPath         { get; set; } = "";
-    public DateTime  ScriptLastModified { get; set; }
-    public int       CreatedBy          { get; set; }
+    public string    ScriptPath           { get; set; } = "";
+    public DateTime  ScriptLastModified   { get; set; }
+    public string?   PublishedScriptHash  { get; set; }
+    public int       CreatedBy            { get; set; }
     public DateTime  CreatedAt          { get; set; } = DateTime.UtcNow;
     public DateTime  UpdatedAt          { get; set; } = DateTime.UtcNow;
     public bool      IsDeleted          { get; set; } = false;
@@ -95,13 +96,15 @@ public class Report
 
 public class ReportSnapshot
 {
-    public int      Id             { get; set; }
-    public int      ReportId       { get; set; }
-    public Report   Report         { get; set; } = null!;
-    public string   ManifestPath   { get; set; } = "";
-    public DateTime BuiltAt        { get; set; } = DateTime.UtcNow;
-    public int      BuiltBy        { get; set; }
-    public string?  ParametersJson { get; set; }
+    public int      Id                   { get; set; }
+    public int      ReportId             { get; set; }
+    public Report   Report               { get; set; } = null!;
+    public string   ManifestPath         { get; set; } = "";
+    public DateTime BuiltAt              { get; set; } = DateTime.UtcNow;
+    public int      BuiltBy              { get; set; }
+    public string?  ParametersJson       { get; set; }
+    public string?  ScriptHashAtRunTime  { get; set; }
+    public bool?    HashMatched          { get; set; }
 }
 
 // ── Subscriptions ─────────────────────────────────────────────────────────────

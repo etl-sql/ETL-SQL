@@ -56,5 +56,11 @@ namespace ETL_SQL.Engine.Services
             var s = config?.GetValue<string>("Engine:StartOfWeek") ?? "Monday";
             return Enum.TryParse<DayOfWeek>(s, ignoreCase: true, out var day) ? day : DayOfWeek.Monday;
         }
+
+        public static string ScriptHashPolicy(IConfiguration? config)
+        {
+            var policy = config?.GetValue<string>("Engine:ScriptHashPolicy") ?? "Warn";
+            return policy.Equals("Block", StringComparison.OrdinalIgnoreCase) ? "Block" : "Warn";
+        }
     }
 }

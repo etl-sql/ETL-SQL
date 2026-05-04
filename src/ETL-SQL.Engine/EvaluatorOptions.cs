@@ -56,6 +56,9 @@ namespace ETL_SQL.Engine
         // --- Date/Time ---
         public DayOfWeek WeekStartDay { get; set; } = DayOfWeek.Monday;
 
+        // --- Security ---
+        public string ScriptHashPolicy { get; set; } = "Warn";
+
         // --- UI / Verbosity ---
         public bool IsVerbose { get; set; }
         public bool RedirectOutput { get; set; }

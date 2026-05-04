@@ -53,7 +53,7 @@ namespace ETL_SQL.Common
 
         public static readonly HashSet<string> Keywords = new(StringComparer.OrdinalIgnoreCase)
         {
-            "RELDATE", "WEEK_START_DAY",
+            "RELDATE", "WEEK_START_DAY", "SCRIPT_HASH_POLICY",
             "SUBSCRIPTION", "ENABLE", "DISABLE",
             "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON", "WHAT_IF", "SYSDATE", "PERCENT", "TIES", "FILTER",
             "CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME",

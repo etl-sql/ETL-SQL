@@ -1,4 +1,6 @@
 using System;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Data;
@@ -22,9 +24,13 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (CreateJobStatement)statement;
+            var scriptText = stmt.Script.ToSql();
+            var hashBytes  = SHA256.HashData(Encoding.UTF8.GetBytes(scriptText));
+            var scriptHash = "sha256:" + Convert.ToHexString(hashBytes).ToLowerInvariant();
+
             var job = new JobDefinition(
                 stmt.JobName,
-                stmt.Script.ToSql(),
+                scriptText,
                 stmt.Schedule.Interval,
                 stmt.Schedule.Unit,
                 stmt.Schedule.AtTime,
@@ -32,7 +38,9 @@ namespace ETL_SQL.Engine.Handlers
                 null,
                 true,
                 stmt.MaxRetries,
-                stmt.RetryDelaySeconds
+                stmt.RetryDelaySeconds,
+                ScriptHash:  scriptHash,
+                HashPolicy:  context.ScriptHashPolicy
             );
 
             await _store.SaveJobAsync(job);

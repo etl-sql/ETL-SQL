@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -45,13 +46,22 @@ public class ReportsController(PortalDbContext db, AuditService audit, PortalCon
         if (snap is not null && System.IO.File.Exists(r.ScriptPath))
             isStale = System.IO.File.GetLastWriteTimeUtc(r.ScriptPath) > snap.BuiltAt;
 
+        bool scriptChanged = false;
+        if (r.PublishedScriptHash is not null && System.IO.File.Exists(r.ScriptPath))
+        {
+            var currentHash = "sha256:" + Convert.ToHexString(
+                SHA256.HashData(System.IO.File.ReadAllBytes(r.ScriptPath))).ToLowerInvariant();
+            scriptChanged = !string.Equals(currentHash, r.PublishedScriptHash, StringComparison.OrdinalIgnoreCase);
+        }
+
         return new ReportDto(
             r.Id, r.FolderId, r.Folder?.Path ?? "",
             r.Name, r.Description, r.ScriptPath,
             r.ScriptLastModified,
             snap is not null,
             snap?.BuiltAt,
-            isStale);
+            isStale,
+            scriptChanged);
     }
 
     // ── GET /api/folders/{id}/reports ─────────────────────────────────────────
@@ -94,16 +104,22 @@ public class ReportsController(PortalDbContext db, AuditService audit, PortalCon
             ? System.IO.File.GetLastWriteTimeUtc(resolved)
             : DateTime.UtcNow;
 
+        string? publishedHash = null;
+        if (System.IO.File.Exists(resolved))
+            publishedHash = "sha256:" + Convert.ToHexString(
+                SHA256.HashData(System.IO.File.ReadAllBytes(resolved))).ToLowerInvariant();
+
         var report = new Report
         {
-            FolderId           = req.FolderId,
-            Name               = req.Name,
-            Description        = req.Description,
-            ScriptPath         = resolved,
-            ScriptLastModified = lastModified,
-            CreatedBy          = CurrentUserId,
-            CreatedAt          = DateTime.UtcNow,
-            UpdatedAt          = DateTime.UtcNow
+            FolderId            = req.FolderId,
+            Name                = req.Name,
+            Description         = req.Description,
+            ScriptPath          = resolved,
+            ScriptLastModified  = lastModified,
+            PublishedScriptHash = publishedHash,
+            CreatedBy           = CurrentUserId,
+            CreatedAt           = DateTime.UtcNow,
+            UpdatedAt           = DateTime.UtcNow
         };
         db.Reports.Add(report);
         await db.SaveChangesAsync();

@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -52,8 +53,15 @@ public class ExecutionController(
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null || perm < FolderPermission.Execute) return Forbid();
 
+        string? scriptHash = null;
+        if (System.IO.File.Exists(report.ScriptPath))
+        {
+            var bytes = await System.IO.File.ReadAllBytesAsync(report.ScriptPath);
+            scriptHash = "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+        }
+
         var jobId = jobService.EnqueueExecution(id, CurrentUserId, report.ScriptPath, req?.Parameters);
-        await audit.LogAsync(CurrentUserId, "EXECUTE_REPORT", "Report", id.ToString());
+        await audit.LogAsync(CurrentUserId, "EXECUTE_REPORT", "Report", id.ToString(), scriptHash);
 
         return Accepted(new { jobId });
     }

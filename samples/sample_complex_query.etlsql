@@ -1,7 +1,7 @@
 -- Comprehensive Verification Suite for Phase 11
 -- Tests CTEs, Scalar Functions, and complex queries
 
-CREATE CONNECTION csv ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\TestData\comprehensive_test.csv') WITH(TEXT_QUALIFIER=DOUBLEQUOTES);
+CREATE CONNECTION csv ON FLATFILE('TestData/comprehensive_test.csv') WITH(TEXT_QUALIFIER=DOUBLEQUOTES);
 
 -- 1. Test Scalar Functions (String & Math)
 PRINT('--- 1. Testing Scalar Functions ---');

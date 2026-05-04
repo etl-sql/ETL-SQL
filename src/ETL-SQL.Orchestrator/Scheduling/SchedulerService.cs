@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -150,6 +152,31 @@ namespace ETL_SQL.Orchestrator.Scheduling
         {
             _logger.LogInformation("Job runner: {JobName} starting execution cycle (MaxRetries={Max}).", job.Name, job.MaxRetries);
 
+            var currentHash = "sha256:" + Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(job.Script))).ToLowerInvariant();
+
+            bool? hashMatched = null;
+            if (job.ScriptHash is not null)
+            {
+                hashMatched = string.Equals(currentHash, job.ScriptHash, StringComparison.OrdinalIgnoreCase);
+                if (!hashMatched.Value)
+                {
+                    var mismatchMsg = $"Script hash mismatch for job '{job.Name}'. Expected: {job.ScriptHash}, Got: {currentHash}";
+                    _logger.LogWarning(mismatchMsg);
+                    if (job.HashPolicy.Equals("Block", StringComparison.OrdinalIgnoreCase))
+                    {
+                        long blockedId = 0;
+                        try { blockedId = await _store.LogJobStartAsync(job.Name); } catch { }
+                        if (blockedId > 0)
+                            await _store.LogJobEndAsync(blockedId, "BLOCKED", mismatchMsg,
+                                scriptHashAtRunTime: currentHash, hashMatched: false);
+                        var blockedNextRun = CalculateNextRun(job);
+                        try { await _store.UpdateJobLastRunAsync(job.Name, DateTime.Now, blockedNextRun); } catch { }
+                        return;
+                    }
+                }
+            }
+
             string? sessionId = null;
             int maxAttempts = Math.Max(1, job.MaxRetries + 1);
             ScriptExecutionResult? lastResult = null;
@@ -181,29 +208,31 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     try
                     {
                         lastResult = await executor.ExecuteTextAsync(job.Script, sessionId, jobCts.Token);
-                        
+
                         // Capture sessionId for potential persistence in retry (CQ-S2)
                         sessionId = lastResult.SessionId;
 
                         if (lastResult.Success)
                         {
-                            _logger.LogInformation("Job {JobName} finished successfully on attempt {Attempt}. (RAM: {Mem} bytes, CPU: {Cpu}s)", 
+                            _logger.LogInformation("Job {JobName} finished successfully on attempt {Attempt}. (RAM: {Mem} bytes, CPU: {Cpu}s)",
                                 job.Name, attempt, lastResult.PeakMemoryBytes, lastResult.CpuTimeSeconds);
-                            
+
                             if (historyId > 0)
-                                await _store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: lastResult.RowsProcessed, 
-                                    peakMemoryBytes: lastResult.PeakMemoryBytes, cpuTimeSeconds: lastResult.CpuTimeSeconds);
-                                    
+                                await _store.LogJobEndAsync(historyId, "SUCCESS", rowsProcessed: lastResult.RowsProcessed,
+                                    peakMemoryBytes: lastResult.PeakMemoryBytes, cpuTimeSeconds: lastResult.CpuTimeSeconds,
+                                    scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
+
                             break; // Done
                         }
                         else
                         {
-                            _logger.LogWarning("Job {JobName} finished with failure on attempt {Attempt}/{Max}: {Error}", 
+                            _logger.LogWarning("Job {JobName} finished with failure on attempt {Attempt}/{Max}: {Error}",
                                 job.Name, attempt, maxAttempts, lastResult.ErrorMessage);
-                            
+
                             if (historyId > 0)
-                                await _store.LogJobEndAsync(historyId, "FAILURE", lastResult.ErrorMessage, 
-                                    peakMemoryBytes: lastResult.PeakMemoryBytes, cpuTimeSeconds: lastResult.CpuTimeSeconds);
+                                await _store.LogJobEndAsync(historyId, "FAILURE", lastResult.ErrorMessage,
+                                    peakMemoryBytes: lastResult.PeakMemoryBytes, cpuTimeSeconds: lastResult.CpuTimeSeconds,
+                                    scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
                         }
                     }
                     finally
@@ -216,7 +245,8 @@ namespace ETL_SQL.Orchestrator.Scheduling
                     _logger.LogError(ex, "Error executing job {JobName} on attempt {Attempt}.", job.Name, attempt);
                     if (historyId > 0)
                     {
-                        await _store.LogJobEndAsync(historyId, "FAILURE", ex.Message);
+                        await _store.LogJobEndAsync(historyId, "FAILURE", ex.Message,
+                            scriptHashAtRunTime: currentHash, hashMatched: hashMatched);
                     }
                     lastResult = new ScriptExecutionResult(false, 0, ex.Message);
                 }

@@ -54,6 +54,7 @@ namespace ETL_SQL.Engine
         private readonly ETL_SQL.Common.ILogger _logger;
         private readonly Core.Interfaces.ILanguageHelpRegistry _languageHelp;
         private readonly ConcurrentDictionary<string, IDataSource> _connections;
+        private readonly IBufferManager? _bufferManager;
         private readonly Dictionary<string, IDataSource> _localSources = new(StringComparer.OrdinalIgnoreCase);
 
         public IDictionary<string, IDataSource> Connections => _connections;
@@ -75,9 +76,10 @@ namespace ETL_SQL.Engine
         private readonly Dictionary<(Guid? ParentId, Statement Stmt), ExecutionNode> _nodeReuseMap = new();
         private readonly TransactionManager _transactionManager = new();
         private readonly ISpillStore _spillStore;
-        private readonly Action<string, string?, ConsoleColor> _onMessageHandler;
+        private Action<string, string?, ConsoleColor>? _onMessageHandler;
 
         public ISpillStore SpillStore => _spillStore;
+
         public QueryCompiler QueryCompiler => _registry.QueryCompiler;
         public ExpressionEvaluator ExpressionEvaluator => _registry.ExpressionEvaluator;
         public ProcedureExecutor ProcedureExecutor => _registry.ProcedureExecutor;
@@ -161,6 +163,8 @@ namespace ETL_SQL.Engine
         public List<object?>? Parameters { get; set; }
         /// <summary>Start-of-week day for RELDATE W/WS/WE anchors. Settable at runtime via SET WEEK_START_DAY.</summary>
         public DayOfWeek WeekStartDay { get => _options.WeekStartDay; set => _options.WeekStartDay = value; }
+        /// <summary>Hash-mismatch policy for script integrity checks. Settable at runtime via SET SCRIPT_HASH_POLICY.</summary>
+        public string ScriptHashPolicy { get => _options.ScriptHashPolicy; set => _options.ScriptHashPolicy = value; }
         
         /// <summary>Last script lexing duration in milliseconds.</summary>
         public long LastLexTimeMs { get; set; }
@@ -410,6 +414,7 @@ namespace ETL_SQL.Engine
             _securityService = securityService;
             _logger = logger;
             _languageHelp = languageHelp;
+            _bufferManager = _serviceProvider?.GetService<IBufferManager>();
             
             _options = options ?? new EvaluatorOptions();
             _registry = registry ?? new EvaluatorComponentRegistry();
@@ -456,7 +461,8 @@ namespace ETL_SQL.Engine
 
             SessionId = Guid.NewGuid().ToString("N")[..8];
 
-            InitializeThresholds(_serviceProvider?.GetService<Microsoft.Extensions.Configuration.IConfiguration>());
+            var config = _serviceProvider?.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
+            InitializeThresholds(config);
 
             _logger.Info("Evaluator initialized.");
 
@@ -478,7 +484,7 @@ namespace ETL_SQL.Engine
             _logger.OnMessage += _onMessageHandler;
 
             // Register for spill orchestration
-            _serviceProvider?.GetService<IBufferManager>()?.RegisterSpillable(this);
+            _bufferManager?.RegisterSpillable(this);
         }
 
         private void InitializeThresholds(Microsoft.Extensions.Configuration.IConfiguration? config)
@@ -507,6 +513,7 @@ namespace ETL_SQL.Engine
             MaxLastResultRows = DefaultThresholds.MaxLastResultRows(config);
             MaxMessages = config?.GetValue<int>("Engine:MaxMessages", 1000) ?? 1000;
             WeekStartDay = DefaultThresholds.StartOfWeek(config);
+            ScriptHashPolicy = DefaultThresholds.ScriptHashPolicy(config);
         }
 
 
@@ -1000,17 +1007,21 @@ namespace ETL_SQL.Engine
 
         public async ValueTask DisposeAsync()
         {
+            if (_onMessageHandler != null)
+            {
+                _logger.OnMessage -= _onMessageHandler;
+                _onMessageHandler = null;
+            }
+
             if (_sessionId != null) _sessionStateManager.UnregisterActiveSession(_sessionId);
             
             // Reclaim any 'Zombie' resource reservations (Reference Counting protection)
-            var bufferManager = _serviceProvider.GetService<IBufferManager>();
             if (!string.IsNullOrEmpty(SessionId))
             {
-                bufferManager?.ReleaseAllForSession(SessionId);
+                _bufferManager?.ReleaseAllForSession(SessionId);
             }
 
             _spillStore?.Dispose();
-            _logger.OnMessage -= _onMessageHandler;
             foreach (var conn in _connections.Values) await conn.DisposeAsync();
             await DockerManager.DisposeAsync();
             _connections.Clear();

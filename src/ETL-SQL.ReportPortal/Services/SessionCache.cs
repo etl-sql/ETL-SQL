@@ -20,12 +20,14 @@ public class SessionCache : IHostedService, IDisposable
 
     private readonly ConcurrentDictionary<SessionKey, Entry> _sessions = new();
     private readonly PortalConfig _config;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<SessionCache> _log;
     private Timer? _evictionTimer;
 
-    public SessionCache(PortalConfig config, ILogger<SessionCache> log)
+    public SessionCache(PortalConfig config, IServiceScopeFactory scopeFactory, ILogger<SessionCache> log)
     {
         _config = config;
+        _scopeFactory = scopeFactory;
         _log    = log;
     }
 
@@ -40,7 +42,7 @@ public class SessionCache : IHostedService, IDisposable
             return existing.Service;
         }
 
-        var svc   = new DashboardService(scriptPath);
+        var svc   = new DashboardService(scriptPath, _scopeFactory);
         var entry = new Entry(svc, scriptPath);
         _sessions[key] = entry;
 

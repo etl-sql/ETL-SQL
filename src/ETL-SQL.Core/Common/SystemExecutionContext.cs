@@ -103,6 +103,7 @@ namespace ETL_SQL.Core.Common
         public bool IsPersistentSession { get; set; }
         public List<object?>? Parameters { get; set; }
         public DayOfWeek WeekStartDay { get; set; } = DayOfWeek.Monday;
+        public string ScriptHashPolicy { get; set; } = "Warn";
 
         public Stack<Row> OuterRowStack { get; } = new();
         public LruCache<SubqueryCacheKey, Data.SubqueryResult> SubqueryCache { get; } = new(5000);

@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
+using ETL_SQL.Engine;
 
 namespace ETL_SQL.Orchestrator.Execution
 {
@@ -18,6 +19,7 @@ namespace ETL_SQL.Orchestrator.Execution
         private readonly IServiceProvider _serviceProvider;
         private readonly CliContext _ctx;
         private readonly ILogger _logger;
+        public  Evaluator? LastEvaluator { get; private set; }
 
         public ScriptExecutorAdapter(IServiceProvider serviceProvider, CliContext ctx, ILogger logger)
         {
@@ -39,6 +41,7 @@ namespace ETL_SQL.Orchestrator.Execution
 
                 var session = new ExecutionSession(_serviceProvider, _ctx, _logger);
                 var result = await session.ExecuteAsync(scriptText, cancellationToken);
+                LastEvaluator = session.LastEvaluator;
                 
                 process.Refresh();
                 var endCpu = process.TotalProcessorTime.TotalSeconds;

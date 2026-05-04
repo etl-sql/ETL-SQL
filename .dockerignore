@@ -1,0 +1,13 @@
+**/.bin/
+**/.obj/
+**/bin/
+**/obj/
+.git/
+.vs/
+.vscode/
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+*.sln.dotSettings

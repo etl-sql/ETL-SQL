@@ -38,6 +38,8 @@ namespace ETL_SQL.LanguageServer.Tests
                             services.AddSingleton<IMetadataManager, MetadataManager>();
                             services.AddSingleton<ILanguageService, LanguageService>();
                             services.AddSingleton<DocumentStateStore>();
+                            services.AddSingleton<ETL_SQL.LSP.TextDocumentHandler>();
+                            services.AddSingleton<ETL_SQL.Common.ILogger>(ETL_SQL.Common.NullLogger.Instance);
                         })
                         .WithHandler<TextDocumentHandler>()
                 );

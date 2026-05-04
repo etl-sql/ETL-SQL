@@ -32,7 +32,7 @@ CREATE PAGE Main AS LAYOUT (STRUCTURE = 'A', MAP('A' = InjectionResult));
 
             try 
             {
-                var service = new DashboardService(scriptPath);
+                var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
                 
                 // 2. Initial build is implicit or explicit
                 await service.GetManifestAsync();

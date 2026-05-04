@@ -43,6 +43,7 @@
         <button class="admin-tab active" data-tab="users">Users</button>
         <button class="admin-tab" data-tab="groups">Groups</button>
         <button class="admin-tab" data-tab="folders">Folders &amp; ACL</button>
+        <button class="admin-tab" data-tab="reports">Reports</button>
         <button class="admin-tab" data-tab="audit">Audit Log</button>
         <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
       </div>
@@ -168,6 +169,36 @@
           </div>
         </div>
 
+        <!-- Publish Report Form -->
+        <div class="card" id="publishReportForm" style="display:none">
+          <div class="card-header"><h3>Publish New Report</h3></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Report Name</label>
+              <input id="pr-name" type="text" placeholder="Daily Sales">
+            </div>
+            <div class="form-group">
+              <label>Script Path (relative to ScriptRoot)</label>
+              <input id="pr-path" type="text" placeholder="sales/daily.rptsql">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Destination Folder</label>
+              <select id="pr-folder"></select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="pr-desc" rows="2" style="width:100%"></textarea>
+          </div>
+          <div id="pr-error" class="error-msg"></div>
+          <div style="display:flex; gap:8px; margin-top:12px">
+            <button class="btn btn-primary btn-sm" id="pr-saveBtn">Publish</button>
+            <button class="btn btn-outline btn-sm" id="pr-cancelBtn">Cancel</button>
+          </div>
+        </div>
+
         <!-- ACL sub-panel -->
         <div class="card" id="aclPanel" style="display:none">
           <div class="card-header">
@@ -195,6 +226,20 @@
               <button class="btn btn-outline" id="acl-cancelBtn">Cancel</button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- ── Reports panel ───────────────────────────────────────────── -->
+      <div class="admin-panel" id="panel-reports">
+        <div class="card">
+          <div class="card-header">
+            <h3>Published Reports</h3>
+            <div style="display:flex; gap:8px">
+              <button class="btn btn-primary btn-sm" id="openPublishBtn">+ Publish New Report</button>
+              <button class="btn btn-outline btn-sm" id="reportsRefreshBtn">Refresh</button>
+            </div>
+          </div>
+          <div id="reportsTableWrap"><div class="viewer-loading">Loading…</div></div>
         </div>
       </div>
 
@@ -262,7 +307,7 @@ try {
 document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
-const panels = { users: null, groups: null, folders: null, audit: null, subscriptions: null };
+const panels = { users: null, groups: null, folders: null, reports: null, audit: null, subscriptions: null };
 document.querySelectorAll('.admin-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
@@ -277,7 +322,7 @@ document.querySelectorAll('.admin-tab').forEach(btn => {
   });
 });
 
-const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, audit: loadAudit, subscriptions: loadSubscriptions };
+const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, reports: loadReports, audit: loadAudit, subscriptions: loadSubscriptions };
 // Load the initial tab (users)
 panels.users = true;
 loadUsers();
@@ -560,22 +605,88 @@ document.getElementById('nf-saveBtn').addEventListener('click', async () => {
   } catch (err) { $err.textContent = err.message; $err.classList.add('show'); }
 });
 
-document.getElementById('addAclBtn').addEventListener('click', async () => {
-  const $form = document.getElementById('addAclForm');
+// ── Reports ────────────────────────────────────────────────────────────────────
+async function loadReports() {
+  const $wrap = document.getElementById('reportsTableWrap');
+  try {
+    const reports = await adminApi.listAllReports();
+    const rows = reports.map(r => `
+      <tr>
+        <td>${esc(r.name)}</td>
+        <td class="text-sm text-muted">${esc(r.folderPath)}</td>
+        <td class="text-sm text-muted"><code>${esc(r.scriptPath)}</code></td>
+        <td class="text-sm">${new Date(r.createdAt).toLocaleDateString()}</td>
+        <td>
+          <div class="table-actions">
+            <button class="btn btn-danger btn-sm" data-action="delete-report" data-id="${r.id}">Delete</button>
+          </div>
+        </td>
+      </tr>`).join('');
+
+    $wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Report Name</th><th>Folder</th><th>Script Path</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="5" class="empty-state">No reports published.</td></tr>'}</tbody>
+      </table>`;
+
+    $wrap.querySelectorAll('[data-action="delete-report"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this report? Subscription schedules for this report will be cancelled.')) return;
+        await reportsApi.delete(+btn.dataset.id).catch(alertErr);
+        loadReports();
+      });
+    });
+  } catch { $wrap.innerHTML = `<div class="empty-state">Failed to load reports.</div>`; }
+}
+
+document.getElementById('reportsRefreshBtn').addEventListener('click', () => loadReports());
+
+document.getElementById('openPublishBtn').addEventListener('click', async () => {
+  const $form = document.getElementById('publishReportForm');
   $form.style.display = '';
-  const groups = allGroups.length ? allGroups : await adminApi.listGroups().catch(() => []);
-  document.getElementById('aclGroupSelect').innerHTML =
-    groups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
+  document.getElementById('pr-name').value = '';
+  document.getElementById('pr-path').value = '';
+  document.getElementById('pr-desc').value = '';
+  document.getElementById('pr-error').classList.remove('show');
+
+  // Populate folder dropdown
+  const folders = allFolders.length ? allFolders : await foldersApi.list().catch(() => []);
+  const $sel = document.getElementById('pr-folder');
+  $sel.innerHTML = folders.map(f => `<option value="${f.id}">${esc(f.path || f.name)}</option>`).join('');
 });
-document.getElementById('acl-cancelBtn').addEventListener('click', () => {
-  document.getElementById('addAclForm').style.display = 'none';
+
+// Publish Report
+document.getElementById('pr-cancelBtn').addEventListener('click', () => {
+  document.getElementById('publishReportForm').style.display = 'none';
 });
-document.getElementById('acl-saveBtn').addEventListener('click', async () => {
-  const groupId    = +document.getElementById('aclGroupSelect').value;
-  const permission = document.getElementById('aclPermSelect').value;
-  await foldersApi.grantAcl(selectedFolderId, groupId, permission).catch(alertErr);
-  document.getElementById('addAclForm').style.display = 'none';
-  loadAcl(selectedFolderId);
+document.getElementById('pr-saveBtn').addEventListener('click', async () => {
+  const name = document.getElementById('pr-name').value.trim();
+  const path = document.getElementById('pr-path').value.trim();
+  const desc = document.getElementById('pr-desc').value.trim();
+  const folderId = +document.getElementById('pr-folder').value;
+  const $err = document.getElementById('pr-error');
+  $err.classList.remove('show');
+
+  if (!name || !path || !folderId) {
+    $err.textContent = 'Name, Path, and Folder are required.';
+    $err.classList.add('show');
+    return;
+  }
+
+  try {
+    await reportsApi.create({
+      folderId: folderId,
+      name,
+      description: desc,
+      scriptPath: path
+    });
+    document.getElementById('publishReportForm').style.display = 'none';
+    loadReports();
+    alert('Report published successfully.');
+  } catch (err) {
+    $err.textContent = err.message || 'Failed to publish report.';
+    $err.classList.add('show');
+  }
 });
 
 // ── Audit log ──────────────────────────────────────────────────────────────────

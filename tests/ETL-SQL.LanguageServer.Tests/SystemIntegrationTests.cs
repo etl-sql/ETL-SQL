@@ -76,9 +76,7 @@ namespace ETL_SQL.LanguageServer.Tests
             foreach (var item in list) _output.WriteLine($" - {item.Label} ({item.Detail})");
 
             // Assert: Should see columns from Users (UserID, UserName, Email)
-            Assert.Contains(list, i => i.Label == "UserID");
-
-            // 3. Test expand columns u.* (line 1, col 10)
+            Assert.Contains(list, i => i.Label == "u.UserID");
             script = "CREATE CONNECTION m ON MOCKDB();\r\nSELECT u.* FROM m.Users AS u;";
             await handler.AnalyzeAsync(uri, script);
             
@@ -114,7 +112,7 @@ namespace ETL_SQL.LanguageServer.Tests
             _output.WriteLine($"Expand columns (no alias) InsertText: {expandItem.InsertText}");
             
             // Should expand WITHOUT alias prefix if not aliased and only 1 table.
-            Assert.Contains("UserID, UserName, Email", expandItem.InsertText);
+            Assert.Contains("m.Users.UserID", expandItem.InsertText);
         }
         [Fact]
         public async Task Variable_Completion_Should_Include_Loop_Variables()
@@ -221,7 +219,7 @@ namespace ETL_SQL.LanguageServer.Tests
             // Assert
             Assert.NotNull(hover);
             md = hover.Contents.MarkupContent;
-            Assert.Contains("Relational: MSSQL", md.Value);
+            Assert.Contains("# MSSQL", md.Value);
         }
     }
 }

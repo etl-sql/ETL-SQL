@@ -61,10 +61,11 @@ try
            .WriteTo.File("logs/orchestrator-.log", rollingInterval: RollingInterval.Day));
 
     // ── Windows Service / systemd integration ────────────────────────────
-    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-        builder.Host.UseWindowsService(opts => opts.ServiceName = "ETL-SQL Orchestrator");
-    else
-        builder.Host.UseSystemd();
+#if WINDOWS
+    builder.Host.UseWindowsService(opts => opts.ServiceName = "ETL-SQL Orchestrator");
+#else
+    builder.Host.UseSystemd();
+#endif
 
     // ── Configuration ────────────────────────────────────────────────────
     builder.Configuration
@@ -74,7 +75,7 @@ try
 
     var cfg = builder.Configuration;
 
-    // ── Engine services (mirrors App/DependencyInjectionSetup) ───────────
+    // ── Engine services (centralized in Orchestrator extension) ─────────
     var loggerService = new LoggerService();
     loggerService.InitializeAppLogger(
         cfg["Logging:AppLog:Directory"] ?? "logs/orchestrator",
@@ -85,82 +86,7 @@ try
     builder.Services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
     builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
 
-    var fnRegistry = new ETL_SQL.Engine.Functions.FunctionRegistry();
-    ETL_SQL.Engine.Functions.FileFunctions.Register(fnRegistry);
-    ETL_SQL.Engine.Functions.StandardFunctions.Register(fnRegistry);
-    ETL_SQL.Engine.Functions.JsonFunctions.Register(fnRegistry);
-    ETL_SQL.Engine.Functions.XmlFunctions.Register(fnRegistry);
-    builder.Services.AddSingleton<ETL_SQL.Core.Functions.IFunctionRegistry>(fnRegistry);
-
-    builder.Services.AddSingleton<ILineageTracker, LineageTracker>();
-    builder.Services.AddSingleton<IDockerManager, DockerContainerManager>();
-    builder.Services.AddSingleton<SessionStateManager>(sp => 
-    {
-        var scfg = sp.GetRequiredService<IConfiguration>();
-        var slog = sp.GetRequiredService<ETL_SQL.Common.ILogger>();
-        var ssec = sp.GetRequiredService<ETL_SQL.Services.SecurityService>();
-        var customDir = scfg["Session:Root"];
-        return new SessionStateManager(slog, ssec, scfg, customDir);
-    });
-    
-    var securityService = new ETL_SQL.Services.SecurityService(loggerService);
-    securityService.UpdateFromConfiguration(cfg);
-    builder.Services.AddSingleton<ETL_SQL.Services.SecurityService>(securityService);
-
-    // Connectors
-    builder.Services.AddSingleton<IConnector, MockDbConnector>();
-    builder.Services.AddSingleton<IConnector, SqlServerConnector>();
-    builder.Services.AddSingleton<IConnector, OracleConnector>();
-    builder.Services.AddSingleton<IConnector, PostgresConnector>();
-    builder.Services.AddSingleton<IConnector, FlatFileConnector>();
-    builder.Services.AddSingleton<IConnector, JsonConnector>();
-    builder.Services.AddSingleton<IConnector, XmlConnector>();
-    builder.Services.AddSingleton<IConnector, ExcelConnector>();
-    builder.Services.AddSingleton<IConnector, DirectoryConnector>();
-    builder.Services.AddSingleton<IConnector, ParquetConnector>();
-    builder.Services.AddSingleton<IConnector, AvroConnector>();
-    builder.Services.AddSingleton<IConnector, SmtpConnector>();
-    builder.Services.AddSingleton<IConnector>(new FtpConnector(
-        cfg["Connectors:Ftp:Host"] ?? "localhost",
-        cfg["Connectors:Ftp:Username"] ?? "anonymous",
-        cfg["Connectors:Ftp:Password"] ?? ""));
-    builder.Services.AddSingleton<IConnector>(new SftpConnector(
-        cfg["Connectors:Sftp:Host"] ?? "localhost",
-        cfg["Connectors:Sftp:Username"] ?? "user",
-        cfg["Connectors:Sftp:Password"] ?? "pass"));
-    builder.Services.AddSingleton<IConnector>(new AzureBlobConnector(
-        cfg["Connectors:AzureBlob:ConnectionString"] ?? "UseDevelopmentStorage=true",
-        cfg["Connectors:AzureBlob:Container"]       ?? "test"));
-
-    builder.Services.AddSingleton<IConnectorRegistry, ConnectorRegistry>();
-    builder.Services.AddSingleton<CliContext>(new CliContext());
-    builder.Services.AddTransient<ExecutionSession>();
-    builder.Services.AddTransient<Evaluator>();
-    builder.Services.AddTransient<IExecutionContext>(sp => (IExecutionContext)sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<IVariableContext>(sp => (IVariableContext)sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<IQueryContext>(sp => (IQueryContext)sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<ILineageContext>(sp => (ILineageContext)sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<ISqlCompilerContext>(sp => (ISqlCompilerContext)sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<ITransactionContext>(sp => (ITransactionContext)sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<IDockerContext>(sp => (IDockerContext)sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<ILoggingContext>(sp => (ILoggingContext)sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<IEvaluationContext>(sp => (IEvaluationContext)sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<IDataContext>(sp => (IDataContext)sp.GetRequiredService<Evaluator>());
-    builder.Services.AddTransient<IEngineContext>(sp => (IEngineContext)sp.GetRequiredService<Evaluator>());
-
-    var handlerTypes = typeof(DeclareStatementHandler).Assembly.GetTypes()
-        .Where(t => typeof(IStatementHandler).IsAssignableFrom(t) && !t.IsInterface && !t.IsAbstract);
-    foreach (var type in handlerTypes)
-    {
-        builder.Services.AddTransient(typeof(IStatementHandler), type);
-        builder.Services.AddTransient(type);
-    }
-
-    // Storage, Scheduling, Throttle, Executor
-    builder.Services.AddSingleton<IJobHistoryStore, SQLiteJobHistoryStore>();
-    builder.Services.Configure<ETL_SQL.Orchestrator.Execution.JobThrottleOptions>(cfg.GetSection("Jobs"));
-    builder.Services.AddSingleton<ETL_SQL.Orchestrator.Execution.JobThrottle>();
-    builder.Services.AddSingleton<SchedulerService>();
+    builder.Services.AddEtlSqlEngine(cfg);
 
     // Phase 7: choose execution strategy via config
     // "Jobs:UseProcessSpawning": true  → spawn ETL-SQL.exe run as child processes (production)

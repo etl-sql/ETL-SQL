@@ -10,12 +10,30 @@ using ETL_SQL.ReportPortal;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Middleware;
 using ETL_SQL.ReportPortal.Services.HealthChecks;
+using ETL_SQL.Orchestrator.Channels;
+using ETL_SQL.Orchestrator;
+using ETL_SQL.Common;
+using ETL_SQL.Core;
+using ETL_SQL.Engine.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 var portalConfig = builder.Configuration.GetSection("Portal").Get<PortalConfig>()
     ?? new PortalConfig();
+
+// ── Engine services (centralized in Orchestrator extension) ─────────
+var loggerService = new LoggerService();
+loggerService.InitializeAppLogger(
+    builder.Configuration["Logging:AppLog:Directory"] ?? "logs/portal",
+    int.TryParse(builder.Configuration["Logging:AppLog:RetentionDays"],   out var rd) ? rd : 30,
+    int.TryParse(builder.Configuration["Logging:AppLog:FileSizeLimitMb"], out var sl) ? sl : 10);
+
+builder.Services.AddSingleton<LoggerService>(loggerService);
+builder.Services.AddSingleton<ETL_SQL.Common.ILogger>(loggerService);
+builder.Services.AddSingleton<ETL_SQL.Common.ILoggerService>(loggerService);
+
+builder.Services.AddEtlSqlEngine(builder.Configuration);
 
 // JWT secret validation: registered as a hosted-service check so it fires AFTER
 // WebApplicationFactory has had a chance to inject test configuration.
@@ -102,6 +120,21 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SmtpPasswordProtector>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorDbLocator>();
 
+// ── Orchestrator Channel ──────────────────────────────────────────────────────
+if (!string.IsNullOrEmpty(portalConfig.Orchestrator.ApiUrl))
+{
+    builder.Services.AddHttpClient<IJobChannel, HttpJobChannelClient>(client =>
+    {
+        client.BaseAddress = new Uri(portalConfig.Orchestrator.ApiUrl);
+    });
+}
+else
+{
+    // Fallback to in-process execution (requires IScriptExecutor)
+    builder.Services.AddTransient<IScriptExecutor, ETL_SQL.Orchestrator.Execution.ScriptExecutorAdapter>();
+    builder.Services.AddSingleton<IJobChannel, InProcessJobChannel>();
+}
+
 // Phase 2 — execution, session cache, Orchestrator poller
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SessionCache>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ETL_SQL.ReportPortal.Services.SessionCache>());
@@ -144,6 +177,13 @@ else
     app.UseHttpsRedirection();
     app.UseHsts();
 }
+
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    context.Response.Headers.Append("Pragma", "no-cache");
+    await next();
+});
 
 app.UseStaticFiles();
 app.UseAuthentication();

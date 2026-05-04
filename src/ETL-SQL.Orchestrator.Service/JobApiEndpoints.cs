@@ -10,6 +10,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
+using ETL_SQL.ReportBuilder;
 
 namespace ETL_SQL.Orchestrator.Service
 {
@@ -33,15 +34,17 @@ namespace ETL_SQL.Orchestrator.Service
             app.MapGet("/health", () => Results.Ok(new { Status = "Healthy" }))
                .WithName("health");
 
-            app.MapPost("/jobs", async (JobSubmitRequest request, IScriptExecutor executor, ILogger<Program> logger, CancellationToken ct) =>
+            app.MapPost("/jobs", (JobSubmitRequest request, IServiceScopeFactory scopeFactory, ILogger<Program> logger) =>
             {
                 var jobId = Guid.NewGuid().ToString("N")[..8];
-                var cts   = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                // Background job should NOT be linked to the request's CancellationToken (ct),
+                // otherwise it cancels as soon as the HTTP response is sent.
+                var cts   = new CancellationTokenSource(); 
                 var entry = new JobEntry(jobId, cts);
                 _jobs[jobId] = entry;
 
                 logger.LogInformation("Job {JobId} submitted (label={Label})", jobId, request.Label);
-                _ = RunJobAsync(entry, request, executor, logger, cts.Token);
+                _ = RunJobAsync(entry, request, scopeFactory, logger, cts.Token);
 
                 return Results.Accepted($"/jobs/{jobId}", new { JobId = jobId });
             })
@@ -92,16 +95,48 @@ namespace ETL_SQL.Orchestrator.Service
         }
 
         private static async Task RunJobAsync(JobEntry entry, JobSubmitRequest request,
-            IScriptExecutor executor, ILogger logger, CancellationToken ct)
+            IServiceScopeFactory scopeFactory, ILogger logger, CancellationToken ct)
         {
             entry.Status = JobRunStatus.Running;
             var sw = System.Diagnostics.Stopwatch.StartNew();
+            
+            using var scope = scopeFactory.CreateScope();
+            var executor = scope.ServiceProvider.GetRequiredService<IScriptExecutor>();
+            
             try
             {
                 var result = await executor.ExecuteTextAsync(request.ScriptText, cancellationToken: ct);
                 entry.RowsProcessed = result.RowsProcessed;
                 entry.Status        = result.Success ? JobRunStatus.Completed : JobRunStatus.Failed;
                 entry.ErrorMessage  = result.ErrorMessage;
+
+                // If this is a report job, build and save the manifest
+                if (result.Success && request.Metadata != null && 
+                    request.Metadata.TryGetValue("IsReport", out var isReport) && isReport == "true")
+                {
+                    logger.LogInformation("Job {JobId} is a report; building manifest", entry.JobId);
+                    if (executor is ScriptExecutorAdapter adapter)
+                    {
+                        var evaluator = adapter.LastEvaluator; // Need to expose this
+                        if (evaluator != null)
+                        {
+                            var builder = new ManifestBuilder(evaluator);
+                            var manifest = await builder.BuildAsync("remote_script.rptsql");
+                            
+                            // Save to shared Snapshots directory
+                            var snapshotDir = "Snapshots"; 
+                            Directory.CreateDirectory(snapshotDir);
+                            var reportId = request.Metadata.GetValueOrDefault("ReportId", "unknown");
+                            var sessionId = request.SessionId ?? entry.JobId;
+                            var manifestPath = Path.Combine(snapshotDir, $"report_{reportId}_{sessionId}.snapshot.json");
+                            
+                            var store = new SnapshotStore();
+                            await store.SaveAsync(manifest, manifestPath);
+                            logger.LogInformation("Manifest saved to {Path}", manifestPath);
+                        }
+                    }
+                }
+
                 logger.LogInformation("Job {JobId} {Status} in {ElapsedMs}ms, rows={Rows}",
                     entry.JobId, entry.Status, sw.ElapsedMilliseconds, result.RowsProcessed);
             }
@@ -114,7 +149,8 @@ namespace ETL_SQL.Orchestrator.Service
             {
                 entry.Status       = JobRunStatus.Failed;
                 entry.ErrorMessage = ex.Message;
-                logger.LogError(ex, "Job {JobId} failed unexpectedly", entry.JobId);
+                logger.LogError(ex, "Job {JobId} failed unexpectedly: {Message}. StackTrace: {Stack}", 
+                    entry.JobId, ex.Message, ex.StackTrace);
             }
             finally
             {

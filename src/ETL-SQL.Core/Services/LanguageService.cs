@@ -156,7 +156,7 @@ namespace ETL_SQL.Core.Services
 
         private List<Suggestion> GetVariableSuggestions(SuggestionContext context)
         {
-            try { return Regex.Matches(context.FullScript, @"(@\w+)").Cast<Match>().Select(m => new Suggestion(m.Value, SuggestionType.Variable)).Distinct().ToList(); }
+            try { return Regex.Matches(context.ScriptBefore, @"(@\w+)").Cast<Match>().Select(m => new Suggestion(m.Value, SuggestionType.Variable)).Distinct().ToList(); }
             catch { return new List<Suggestion>(); }
         }
 

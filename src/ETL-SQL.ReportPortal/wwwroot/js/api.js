@@ -78,6 +78,7 @@ async function apiJson(url, opts = {}) {
         }
         throw Object.assign(new Error(err.error || res.statusText), { status: res.status, body: err });
     }
+    if (res.status === 204) return {};
     return res.json();
 }
 
@@ -198,7 +199,10 @@ export const adminApi = {
     listSmtp: () => apiJson('/api/admin/smtp'),
 
     // subscriptions (admin sees all)
-    listAllSubscriptions: () => apiJson('/api/subscriptions')
+    listAllSubscriptions: () => apiJson('/api/subscriptions'),
+
+    // reports (admin sees all)
+    listAllReports: () => apiJson('/api/admin/reports')
 };
 
 // ── Install global fetch intercept for report-runtime.js ──────────────────────

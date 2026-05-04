@@ -31,7 +31,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             mockStore.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.GetActiveJobsAsync()).ReturnsAsync(jobs);
             mockStore.Setup(s => s.LogJobStartAsync(It.IsAny<string>())).ReturnsAsync(1L);
-            mockStore.Setup(s => s.LogJobEndAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>())).Returns(Task.CompletedTask);
+            mockStore.Setup(s => s.LogJobEndAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>())).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.UpdateJobLastRunAsync(It.IsAny<string>(), It.IsAny<DateTime>(),
                 It.IsAny<DateTime?>())).Returns(Task.CompletedTask);
 
@@ -131,7 +131,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             service.Stop();
 
             store.Verify(s => s.LogJobStartAsync("LogJob"), Times.AtLeastOnce());
-            store.Verify(s => s.LogJobEndAsync(1L, "SUCCESS", null, 42, It.IsAny<long>(), It.IsAny<double>()), Times.AtLeastOnce());
+            store.Verify(s => s.LogJobEndAsync(1L, "SUCCESS", null, 42, It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()), Times.AtLeastOnce());
         }
 
         [Fact]
@@ -144,7 +144,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             await Task.Delay(500);
             service.Stop();
 
-            store.Verify(s => s.LogJobEndAsync(1L, "FAILURE", "Parse error", It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>()), Times.AtLeastOnce());
+            store.Verify(s => s.LogJobEndAsync(1L, "FAILURE", "Parse error", It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()), Times.AtLeastOnce());
         }
 
         [Fact]
@@ -156,7 +156,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             mockStore.Setup(s => s.InitializeAsync()).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.GetActiveJobsAsync()).ReturnsAsync(jobs);
             mockStore.Setup(s => s.LogJobStartAsync(It.IsAny<string>())).ReturnsAsync(1L);
-            mockStore.Setup(s => s.LogJobEndAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>())).Returns(Task.CompletedTask);
+            mockStore.Setup(s => s.LogJobEndAsync(It.IsAny<long>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>())).Returns(Task.CompletedTask);
             mockStore.Setup(s => s.UpdateJobLastRunAsync(It.IsAny<string>(), It.IsAny<DateTime>(),
                 It.IsAny<DateTime?>())).Returns(Task.CompletedTask);
 
@@ -170,7 +170,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             await Task.Delay(500);
             service.Stop();
 
-            mockStore.Verify(s => s.LogJobEndAsync(1L, "FAILURE", "DB connection lost", It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>()),
+            mockStore.Verify(s => s.LogJobEndAsync(1L, "FAILURE", "DB connection lost", It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()),
                 Times.AtLeastOnce());
         }
 
@@ -187,7 +187,7 @@ namespace ETL_SQL.Tests.Integration.Misc
             // Both start and end should be logged
             store.Verify(s => s.LogJobStartAsync("HistJob"), Times.AtLeastOnce());
             store.Verify(s => s.LogJobEndAsync(It.IsAny<long>(), It.IsAny<string>(),
-                It.IsAny<string>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>()), Times.AtLeastOnce());
+                It.IsAny<string>(), It.IsAny<long>(), It.IsAny<long>(), It.IsAny<double>(), It.IsAny<string?>(), It.IsAny<bool?>()), Times.AtLeastOnce());
         }
 
         [Fact]

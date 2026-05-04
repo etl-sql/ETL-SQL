@@ -22,7 +22,7 @@ CREATE VISUAL V1 AS CARD (SOURCE = (SELECT @SafeParam AS val, 'Label' AS lbl));
 
             try
             {
-                var service = new DashboardService(scriptPath);
+                var service = new DashboardService(scriptPath, ETL_SQL.Tests.Reporting.DashboardTestHelper.CreateMockScopeFactory());
 
                 // 2. Attempt script injection via a parameter value
                 // If it's concatenated, this would cause two DECLAREs or a statement breakage.

@@ -1,4 +1,4 @@
-# ETL-SQL Administrator's Guide
+﻿# ETL-SQL Administrator's Guide
 
 This guide is for system administrators and DevOps engineers responsible for deploying, configuring, and monitoring the ETL-SQL engine in production environments.
 
@@ -8,40 +8,50 @@ This guide is for system administrators and DevOps engineers responsible for dep
 
 ETL-SQL is a portable .NET application. It requires **.NET 10 Runtime** installed on the host.
 
-### 1.1 Windows Service (NSSM)
-To run the background scheduler continuously on Windows, we recommend using [NSSM](https://nssm.cc/):
+### 1.1 Windows Service
+
+The Orchestrator Service has native Windows Service support built in via `UseWindowsService()`. Use the included PowerShell script to publish and register it:
 
 ```powershell
-# 1. Install the service
-nssm install ETL-SQL-TUI "C:\Path\To\ETL-SQL" "ui repl"
+# Run in an elevated PowerShell session from the project directory:
+.\src\ETL-SQL.Orchestrator.Service\install-service-windows.ps1
 
-# 2. Configure logging and directory
-nssm set ETL-SQL-Scheduler AppDirectory "C:\Path\To"
-nssm set ETL-SQL-Scheduler AppStdout "C:\Logs\service.log"
-nssm set ETL-SQL-Scheduler AppStderr "C:\Logs\service-error.log"
+# Custom install path:
+.\src\ETL-SQL.Orchestrator.Service\install-service-windows.ps1 -InstallDir "D:\Services\ETL-SQL"
+```
 
-# 3. Start
-nssm start ETL-SQL-Scheduler
+The script publishes the binary, registers it with the Windows SCM (`sc.exe`), and starts the service. The service name defaults to `ETL-SQL-OrchestratorService`. Logs are written to `<InstallDir>\logs\`.
+
+```powershell
+# Check status after install
+sc.exe query ETL-SQL-OrchestratorService
+
+# Stop / restart
+Stop-Service  ETL-SQL-OrchestratorService
+Start-Service ETL-SQL-OrchestratorService
 ```
 
 ### 1.2 Linux Daemon (systemd)
-On Linux, use a systemd unit file:
 
-```ini
-# /etc/systemd/system/etlsql.service
-[Unit]
-Description=ETL-SQL Scheduler Service
-After=network.target
+The Orchestrator Service has native systemd integration via `UseSystemd()`. Use the included shell script:
 
-[Service]
-ExecStart=/opt/etlsql/etl-sql ui repl
-WorkingDirectory=/opt/etlsql
-Restart=always
-User=etluser
+```bash
+# Run as root or with sudo:
+sudo bash src/ETL-SQL.Orchestrator.Service/install-service-linux.sh
 
-[Install]
-WantedBy=multi-user.target
+# Custom install path:
+sudo bash src/ETL-SQL.Orchestrator.Service/install-service-linux.sh /opt/my-etlsql
 ```
+
+The script publishes the binary, writes a systemd unit file to `/etc/systemd/system/etl-sql-orchestrator.service`, then enables and starts the service.
+
+```bash
+# Check status and live logs
+systemctl status etl-sql-orchestrator
+journalctl -u etl-sql-orchestrator -f
+```
+
+The generated unit file uses `Type=notify` so systemd knows when the service is fully ready.
 
 ---
 
@@ -51,9 +61,10 @@ ETL-SQL uses a **unified configuration model**. In a standard installation, all 
 
 | Host | Purpose |
 | :--- | :--- |
-| **ETL-SQL-TUI** | Interactive REPL, batch script runner, and embedded scheduler |
-| **ETL-SQL-Service** | Standalone REST-based job scheduler; used in production |
-| **ETL-SQL-Portal** | Report-SQL dashboard web server |
+| **ETL-SQL.App** (CLI) | One-shot script runner (`etl-sql run <script.etlsql>`), used for cron / CI pipelines |
+| **ETL-SQL.TUI** | Interactive REPL and in-process IDE for development |
+| **ETL-SQL.Orchestrator.Service** | Standalone REST-based job scheduler; the production background service (ports 5100 by default) |
+| **ETL-SQL.ReportPortal** | Report-SQL dashboard web server (port 5200 by default) |
 
 All hosts support environment variable overrides (standard .NET `DOTNET_*` / section prefix pattern).
 
@@ -109,12 +120,9 @@ Applies to: **All Hosts**
 | `Engine:MaxLastResultRows` | `50000` | Maximum rows held in the session result buffer for interactive display. |
 | `Engine:ExternalHashPartitions` | `32` | Number of disk partitions used for spilled joins and aggregates. Increase if spill files become very large. |
 | `Engine:ExternalSort:ChunkSize` | `100000` | Rows per chunk in the external sort engine. |
-| `Engine:MaxMessages` | `1000` | Maximum number of print/log messages held in a session's message buffer. |
-
-| `Orchestration:ResourceManagement:MaxGlobalMemoryMB` | `2048` | Aggregate RAM (MB) allowed for all active sessions before queuing occurs. |
-| `Orchestration:ResourceManagement:MaxStreamingCursors` | `50` | Maximum number of concurrent high-speed database cursors allowed globally. |
-| `Orchestration:ResourceManagement:ResourceWaitTimeoutSeconds` | `600` | How long a script waits for resources (with 1-min feedback) before timing out. |
-| `Orchestration:ResourceManagement:HysteresisMemoryMB` | `256` | Safe buffer size required before resuming queue processing after exhaustion. |
+| `Engine:SubqueryCacheSize` | `5000` | Maximum scalar subquery results cached per session. |
+| `Engine:StartOfWeek` | `Monday` | First day of week for `RELDATE` expressions (`W`, `WE`, etc.). Valid values: `Monday`–`Sunday`. |
+| `Engine:ScriptHashPolicy` | `Warn` | Policy when a scheduled job's script doesn't match its pinned hash. `Warn` logs and continues; `Block` prevents execution. |
 
 ---
 
@@ -127,12 +135,17 @@ Applies to: **All Hosts**
 | `Orchestration:MaxInMemoryBatches` | `100` | Maximum number of data batches held in RAM before `#temp` tables begin spilling to disk. |
 | `Orchestration:ForeachPageSize` | `10000` | Rows fetched per page in remote `FOREACH` pagination loops. |
 | `Orchestration:JobThrottle:MaxConcurrentJobs` | `0` | Maximum simultaneous background jobs. `0` = auto (`ProcessorCount / 2`, minimum 1). |
+| `Orchestration:ResourceManagement:MaxGlobalMemoryMB` | `2048` | Aggregate RAM (MB) allowed for all active sessions before queuing occurs. |
+| `Orchestration:ResourceManagement:MaxStreamingCursors` | `50` | Maximum number of concurrent high-speed database cursors allowed globally. |
+| `Orchestration:ResourceManagement:ResourceWaitTimeoutSeconds` | `600` | How long a script waits for resources (with 1-min feedback) before timing out. |
+| `Orchestration:ResourceManagement:HysteresisMemoryMB` | `256` | Safe buffer size required before resuming queue processing after exhaustion. |
+| `Orchestration:ResourceManagement:SystemMemoryFloorMB` | `4096` | Minimum free system memory (MB) that must remain before queuing is released. |
 
 ---
 
 ### 3.4 Orchestrator Service (Standalone)
 
-Applies to: **ETL-SQL-Service only**
+Applies to: **ETL-SQL.Orchestrator.Service only**
 
 The standalone Orchestrator runs as an independent HTTP service. Its settings live under a `Jobs` section (not `Orchestration`).
 
@@ -161,19 +174,31 @@ The standalone Orchestrator runs as an independent HTTP service. Its settings li
 
 ---
 
-### 3.5 Reporting Dashboard
+### 3.5 Report Portal
 
-Applies to: **ETL-SQL-Portal only**
+Applies to: **ETL-SQL.ReportPortal only**
+
+The Report Portal has its own `appsettings.json` in the `ETL-SQL.ReportPortal` project, separate from the shared engine config.
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
-| `ReportPlayer:Port` | `5200` | Port the Report-SQL web dashboard listens on. |
+| `Portal:DatabasePath` | `./portal.db` | SQLite database file for users, groups, reports, and subscriptions. |
+| `Portal:ScriptRootPath` | `./Reports` | Root directory where published `.rptsql` script files are stored. |
+| `Portal:SnapshotDirectory` | `./Snapshots` | Directory where execution manifests (`.snapshot.json`) are cached. |
+| `Portal:Resources:MaxConcurrentReportExecutions` | `4` | Maximum parallel report executions. |
+| `Portal:Resources:ExecutionTimeoutSeconds` | `300` | Per-execution timeout (5 minutes by default). |
+| `Portal:Resources:SessionCacheMaxSize` | `50` | Maximum number of cached report sessions held in memory. |
+| `Portal:Resources:SessionCacheTtlMinutes` | `30` | Minutes before an idle session cache entry is evicted. |
+| `Portal:Jwt:Secret` | `""` | JWT signing secret. **Must be set to a strong random value in production.** |
+| `Portal:Jwt:ExpiryMinutes` | `60` | JWT access token lifetime in minutes. |
+| `Portal:Jwt:RefreshExpiryDays` | `7` | JWT refresh token lifetime in days. |
+| `Portal:Orchestrator:ApiUrl` | `null` | URL of the remote Orchestrator Service. When set, report executions are delegated via HTTP. When `null`, execution runs in-process. |
 
 ---
 
 ### 3.6 Connector Defaults
 
-Applies to: **App / TUI**
+Applies to: **All Hosts** (connectors are registered in the App, TUI, and Orchestrator Service)
 
 These settings provide default credentials for connectors that don't receive inline credentials from a script. In production, replace the placeholder values and use `ENC:` encrypted strings where possible.
 
@@ -194,7 +219,7 @@ These settings provide default credentials for connectors that don't receive inl
 
 ### 3.7 Logging & Retention
 
-Applies to: **App / TUI** (the Orchestrator.Service uses the same keys under `Logging:AppLog`)
+Applies to: **All Hosts**
 
 | Key | Default | Description |
 | :--- | :--- | :--- |
@@ -216,105 +241,77 @@ Applies to: **App / TUI**
 | Key | Default | Description |
 | :--- | :--- | :--- |
 | `Session:StaleSessionRetentionDays` | `7` | Days to keep inactive session state (`.etlsession` files) before the engine reaps them on next startup. |
+| `Session:PersistentSessionTTLHours` | `24` | Hours before a persistent session token expires. |
 
 ## 4. Complete Master `appsettings.json`
- 
- Use this as a reference when you need to reset to defaults or create a new installation. In a unified deployment, this single file controls all components.
- 
- ```json
- {
-   "Urls": "http://localhost:5100",
-   "AllowedHosts": "*",
-   "Logging": {
-     "LogLevel": {
-       "Default": "Information",
-       "Microsoft": "Warning",
-       "Microsoft.Hosting.Lifetime": "Information",
-       "Microsoft.AspNetCore": "Warning"
-     },
-     "AppLog": {
-       "Directory": "logs/app",
-       "RetentionDays": 30,
-       "FileSizeLimitMb": 10
-     },
-     "ScriptLog": {
-       "Directory": "logs/scripts",
-       "DefaultRetentionDays": 30,
-       "FileSizeLimitMb": 10
-     },
-     "TestLog": {
-       "Directory": "logs/tests",
-       "RetentionDays": 30,
-       "FileSizeLimitMb": 50
-     }
-   },
-    "Security": {
-      "PathProtectionMode": "Restricted",
-      "AllowedHosts": ["*"],
-      "ApprovedSafeZones": [],
-      "AllowedEnvVars": ["TEMP", "USERDOMAIN", "PROCESSOR_ARCHITECTURE"],
-      "MaxFileOperationsPerScript": 100,
-      "MaxRecursiveNestingDepth": 5,
-      "MaxParallelDegree": 32,
-      "MaxStringResultSize": 104857600,
-      "RegexMatchTimeoutMs": 1000,
-      "SpillEncryptionEnabled": true,
-      "SpillCompressionEnabled": true
+
+Use this as a reference when you need to reset to defaults or create a new installation. This file is shared by the App, TUI, and Orchestrator Service. The Report Portal uses a separate `appsettings.json` (see section 3.5).
+
+```json
+{
+  "Urls": "http://localhost:5100",
+  "AllowedHosts": "*",
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft": "Warning",
+      "Microsoft.Hosting.Lifetime": "Information",
+      "Microsoft.AspNetCore": "Warning"
     },
-   "Engine": {
-     "BatchSize": 10000,
-     "MaxRecursiveDepth": 10000,
-     "JoinSpillThreshold": 100000,
-     "WindowSpillThreshold": 100000,
-     "TempTableSpillThresholdRows": 1000000,
-      "MaxLastResultRows": 50000,
-     "ExternalHashPartitions": 32,
-     "ExternalSort": {
-       "ChunkSize": 100000
-     },
-     "MaxMessages": 1000
-   },
-   "Orchestration": {
-     "MaxInMemoryBatches": 100,
-     "ForeachPageSize": 10000,
-     "JobThrottle": {
-       "MaxConcurrentJobs": 4
-     },
-     "ResourceManagement": {
-       "MaxGlobalMemoryMB": 2048,
-       "MaxStreamingCursors": 50,
-       "ResourceWaitTimeoutSeconds": 600
-     }
-   },
-   "Scheduler": {
-     "MetricsIntervalSeconds": 60,
-     "SleepIntervalSeconds": 30,
-     "SessionReapIntervalMinutes": 60
-   },
-   "Jobs": {
-     "UseProcessSpawning": false,
-     "ExecutablePath": "",
-     "TimeoutSeconds": 3600,
-     "MaxConcurrentJobs": 0
-   },
-   "ReportPlayer": {
-     "Port": 5200
-   },
-   "Session": {
-     "StaleSessionRetentionDays": 7,
-     "Root": null
-   },
-   "Connectors": {
-     "Retry": {
-       "MaxAttempts": 3,
-       "BaseDelaySeconds": 1.0
-     },
-     "Ftp": { "Host": "localhost", "Username": "anonymous", "Password": "" },
-     "Sftp": { "Host": "localhost", "Username": "user", "Password": "pass" },
-     "AzureBlob": { "ConnectionString": "UseDevelopmentStorage=true", "Container": "test" }
-   }
- }
- ```
+    "AppLog": { "Directory": "logs/app", "RetentionDays": 30, "FileSizeLimitMb": 10 },
+    "ScriptLog": { "Directory": "logs/scripts", "DefaultRetentionDays": 30, "FileSizeLimitMb": 10 },
+    "TestLog": { "Directory": "logs/tests", "RetentionDays": 30, "FileSizeLimitMb": 50 }
+  },
+  "Security": {
+    "PathProtectionMode": "Restricted",
+    "AllowedHosts": [ "*" ],
+    "ApprovedSafeZones": [],
+    "AllowedEnvVars": [ "TEMP", "USERDOMAIN", "PROCESSOR_ARCHITECTURE" ],
+    "MaxFileOperationsPerScript": 100,
+    "MaxRecursiveNestingDepth": 5,
+    "MaxParallelDegree": 32,
+    "MaxStringResultSize": 104857600,
+    "RegexMatchTimeoutMs": 1000,
+    "SpillEncryptionEnabled": true,
+    "SpillCompressionEnabled": true,
+    "SpillFormat": "Arrow"
+  },
+  "Engine": {
+    "BatchSize": 10000,
+    "MaxRecursiveDepth": 10000,
+    "JoinSpillThreshold": 100000,
+    "WindowSpillThreshold": 100000,
+    "TempTableSpillThresholdRows": 1000000,
+    "MaxLastResultRows": 50000,
+    "ExternalHashPartitions": 32,
+    "ExternalSort": { "ChunkSize": 100000 },
+    "SubqueryCacheSize": 5000,
+    "StartOfWeek": "Monday",
+    "ScriptHashPolicy": "Warn"
+  },
+  "Orchestration": {
+    "MaxInMemoryBatches": 100,
+    "ForeachPageSize": 10000,
+    "JobThrottle": { "MaxConcurrentJobs": 0 },
+    "ResourceManagement": {
+      "MaxGlobalMemoryMB": 2048,
+      "MaxStreamingCursors": 50,
+      "ResourceWaitTimeoutSeconds": 600,
+      "HysteresisMemoryMB": 256,
+      "SystemMemoryFloorMB": 4096
+    }
+  },
+  "Scheduler": { "MetricsIntervalSeconds": 60, "SleepIntervalSeconds": 30, "SessionReapIntervalMinutes": 60 },
+  "Jobs": { "UseProcessSpawning": false, "ExecutablePath": "", "TimeoutSeconds": 3600, "MaxConcurrentJobs": 0 },
+  "Session": { "StaleSessionRetentionDays": 7, "PersistentSessionTTLHours": 24, "Root": null },
+  "Connectors": {
+    "Retry": { "MaxAttempts": 3, "BaseDelaySeconds": 1.0 },
+    "Ftp": { "Host": "localhost", "Username": "anonymous", "Password": "" },
+    "Sftp": { "Host": "localhost", "Username": "user", "Password": "pass" },
+    "AzureBlob": { "ConnectionString": "UseDevelopmentStorage=true", "Container": "test" }
+  }
+}
+```
 
 ---
 
@@ -335,27 +332,28 @@ The default job concurrency (`MaxConcurrentJobs: 0`) auto-selects `ProcessorCoun
 ### 5.3 Security Guardrails
 The engine enforces **Runaway Protection**. If a script exceeds `MaxFileOperationsPerScript`, it halts with a `SecurityException`.
 
-Users can bypass this by adding a `SET ALLOW_GREATER_THAN_n_FILE ON;` statement, but **only if the script is executing within an Approved Safe Zone** configured in `appsettings.json`.
+Users can bypass some of these limits using `SET` overrides, **but only if the script is executing within an Approved Safe Zone** configured in `appsettings.json`.
 
 Any authorized bypass is logged as an **Audit Warning**. Administrators can view active safe zones at runtime:
 ```sql
 SHOW SAFE ZONES;
 ```
 
-Available security overrides:
-- `SET ALLOW_FILE_TYPE_ACCESS ON/OFF`: Bypasses strictly whitelisted extensions.
-- `SET ALLOW_GREATER_THAN_n_FILE ON/OFF`: Bypasses the file operation limit.
-- `SET ALLOW_RECURSIVE_GREATER_THAN_n_LAYERS ON/OFF`: Bypasses script nesting limits.
-- `SET MAX_PARALLEL_DEGREE = n`: Sets concurrent task limit (requires Safe Zone if > global limit).
-- `SET MAX_STRING_RESULT_SIZE = n`: Sets string result size ceiling (requires Safe Zone if > global limit).
-- `SET REGEX_MATCH_TIMEOUT = n`: Sets regex timeout in ms (requires Safe Zone if > global limit).
-- `SET SPILL_ENCRYPTION ON/OFF`: Toggles disk spill encryption.
-- `SET SPILL_COMPRESSION ON/OFF`: Toggles disk spill compression.
+Available security overrides (see Grammar.md §2.4 for full reference):
+- `SET ALLOW_FILE_TYPE_ACCESS ON/OFF` — Bypasses strictly whitelisted file extensions.
+- `SET ALLOW_FILE_TYPE_ACCESS = '.ext'` — Adds a specific extension to the session whitelist.
+- `SET ALLOW_FILE_OPERATIONS = n` — Overrides the file operation limit for this session.
+- `SET ALLOW_RECURSIVE_LAYERS = n` — Overrides the recursion/nesting depth limit.
+- `SET PARALLEL_MAX_DEGREE = n` — Sets concurrent task limit.
+- `SET MAX_STRING_RESULT_SIZE = n` — Sets string result size ceiling.
+- `SET REGEX_MATCH_TIMEOUT = n` — Sets regex timeout in milliseconds.
+- `SET SPILL_ENCRYPTION ON/OFF` — Toggles disk spill encryption.
+- `SET SPILL_COMPRESSION ON/OFF` — Toggles disk spill compression.
 
 > [!TIP]
 > **Synthetic Data for Isolated Testing**: Administrators can encourage the use of the `GENERATE` statement to populate in-memory `#temp` tables with synthetic data. This allows developers to test complex logic and Report-SQL dashboards within **Approved Safe Zones** without requiring database egress or local file system access.
 
-### 5.6 Mock Data Generation & Testing
+### 5.4 Mock Data Generation & Testing
 The engine supports a dedicated `GENERATE` statement for producing deterministic mock data. This is particularly useful for:
 - **Air-gapped development**: Generating data locally without connecting to production databases.
 - **Performance benchmarking**: Creating millions of rows to test join/spill logic.
@@ -377,7 +375,7 @@ AS (
 );
 ```
 
-### 5.4 Performance Monitoring
+### 5.5 Performance Monitoring
 
 Session metrics can be queried at any time using system variables. These are particularly useful for profiling complex ETL pipelines.
 
@@ -405,7 +403,7 @@ PRINT 'Spilled: ' + (@@TOTAL_SPILLED_BYTES / 1024 / 1024) + ' MB across ' + @@PA
 - **Per-Job Metrics**: Every job completion records `PeakRAM` and `CPUTime`.
 - **Historical Audit**: Run `SHOW JOB HISTORY;` in the TUI to see resource consumption across past executions.
 
-### 5.5 Dynamic Overrides & Hierarchy
+### 5.6 Dynamic Overrides & Hierarchy
 
 ETL-SQL supports a three-tier configuration hierarchy, allowing administrators to set global boundaries while giving script authors the flexibility to optimize for specific workloads.
 
