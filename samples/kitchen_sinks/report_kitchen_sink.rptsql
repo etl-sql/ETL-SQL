@@ -247,37 +247,35 @@ INTO #candlestick_data
 FROM #ohlc_raw;
 
 -- 1u. US state revenue (choropleth — Midwest + Great Plains sample)
-SELECT 'Minnesota'   AS StateName, CAST(185000 AS DECIMAL) AS Revenue UNION ALL
-SELECT 'Wisconsin',                CAST(142000 AS DECIMAL) UNION ALL
-SELECT 'Iowa',                     CAST( 98000 AS DECIMAL) UNION ALL
-SELECT 'Illinois',                 CAST(320000 AS DECIMAL) UNION ALL
-SELECT 'Michigan',                 CAST(275000 AS DECIMAL) UNION ALL
-SELECT 'Indiana',                  CAST(165000 AS DECIMAL) UNION ALL
-SELECT 'Ohio',                     CAST(290000 AS DECIMAL) UNION ALL
-SELECT 'Missouri',                 CAST(178000 AS DECIMAL) UNION ALL
-SELECT 'Kansas',                   CAST( 87000 AS DECIMAL) UNION ALL
-SELECT 'Nebraska',                 CAST( 71000 AS DECIMAL) UNION ALL
-SELECT 'South Dakota',             CAST( 43000 AS DECIMAL) UNION ALL
-SELECT 'North Dakota',             CAST( 38000 AS DECIMAL)
-INTO #state_revenue;
+SELECT 'Minnesota'   AS StateName, CAST(185000 AS DECIMAL) AS Revenue INTO #state_revenue
+UNION ALL SELECT 'Wisconsin',                CAST(142000 AS DECIMAL)
+UNION ALL SELECT 'Iowa',                     CAST( 98000 AS DECIMAL)
+UNION ALL SELECT 'Illinois',                 CAST(320000 AS DECIMAL)
+UNION ALL SELECT 'Michigan',                 CAST(275000 AS DECIMAL)
+UNION ALL SELECT 'Indiana',                  CAST(165000 AS DECIMAL)
+UNION ALL SELECT 'Ohio',                     CAST(290000 AS DECIMAL)
+UNION ALL SELECT 'Missouri',                 CAST(178000 AS DECIMAL)
+UNION ALL SELECT 'Kansas',                   CAST( 87000 AS DECIMAL)
+UNION ALL SELECT 'Nebraska',                 CAST( 71000 AS DECIMAL)
+UNION ALL SELECT 'South Dakota',             CAST( 43000 AS DECIMAL)
+UNION ALL SELECT 'North Dakota',             CAST( 38000 AS DECIMAL);
 
 -- 1v. World revenue by country (choropleth — major markets)
-SELECT 'United States of America'  AS Country, CAST(1250000 AS DECIMAL) AS Revenue UNION ALL
-SELECT 'Canada',                               CAST( 420000 AS DECIMAL) UNION ALL
-SELECT 'United Kingdom',                       CAST( 380000 AS DECIMAL) UNION ALL
-SELECT 'Germany',                              CAST( 350000 AS DECIMAL) UNION ALL
-SELECT 'France',                               CAST( 290000 AS DECIMAL) UNION ALL
-SELECT 'Australia',                            CAST( 210000 AS DECIMAL) UNION ALL
-SELECT 'Japan',                                CAST( 195000 AS DECIMAL) UNION ALL
-SELECT 'Brazil',                               CAST( 160000 AS DECIMAL) UNION ALL
-SELECT 'Mexico',                               CAST( 145000 AS DECIMAL) UNION ALL
-SELECT 'India',                                CAST( 120000 AS DECIMAL) UNION ALL
-SELECT 'China',                                CAST( 110000 AS DECIMAL) UNION ALL
-SELECT 'South Korea',                          CAST(  88000 AS DECIMAL) UNION ALL
-SELECT 'Netherlands',                          CAST(  72000 AS DECIMAL) UNION ALL
-SELECT 'Sweden',                               CAST(  65000 AS DECIMAL) UNION ALL
-SELECT 'Spain',                                CAST(  58000 AS DECIMAL)
-INTO #world_revenue;
+SELECT 'United States of America'  AS Country, CAST(1250000 AS DECIMAL) AS Revenue INTO #world_revenue
+UNION ALL SELECT 'Canada',                               CAST( 420000 AS DECIMAL)
+UNION ALL SELECT 'United Kingdom',                       CAST( 380000 AS DECIMAL)
+UNION ALL SELECT 'Germany',                              CAST( 350000 AS DECIMAL)
+UNION ALL SELECT 'France',                               CAST( 290000 AS DECIMAL)
+UNION ALL SELECT 'Australia',                            CAST( 210000 AS DECIMAL)
+UNION ALL SELECT 'Japan',                                CAST( 195000 AS DECIMAL)
+UNION ALL SELECT 'Brazil',                               CAST( 160000 AS DECIMAL)
+UNION ALL SELECT 'Mexico',                               CAST( 145000 AS DECIMAL)
+UNION ALL SELECT 'India',                                CAST( 120000 AS DECIMAL)
+UNION ALL SELECT 'China',                                CAST( 110000 AS DECIMAL)
+UNION ALL SELECT 'South Korea',                          CAST(  88000 AS DECIMAL)
+UNION ALL SELECT 'Netherlands',                          CAST(  72000 AS DECIMAL)
+UNION ALL SELECT 'Sweden',                               CAST(  65000 AS DECIMAL)
+UNION ALL SELECT 'Spain',                                CAST(  58000 AS DECIMAL);
 
 -- ============================================================================
 -- Phase 2: Named Shared Styles
