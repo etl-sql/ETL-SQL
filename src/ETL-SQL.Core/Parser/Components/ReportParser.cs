@@ -866,6 +866,9 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.BUBBLE))       return VisualType.Bubble;
             if (Match(TokenType.RADAR))        return VisualType.Radar;
             if (Match(TokenType.CANDLESTICK))  return VisualType.Candlestick;
+            // MAP token already exists for container MAP() clauses; match it here only when
+            // ParseVisualType() is called (i.e. after AS in CREATE VISUAL ... AS MAP).
+            if (Match(TokenType.MAP))          return VisualType.Map;
 
             if (_parser.Current.Type == TokenType.IDENTIFIER)
             {
@@ -897,6 +900,7 @@ namespace ETL_SQL.Core.Parser.Components
                     "BUBBLE"       => VisualType.Bubble,
                     "RADAR"        => VisualType.Radar,
                     "CANDLESTICK"  => VisualType.Candlestick,
+                    "MAP"          => VisualType.Map,
                     _ => throw new SyntaxException(
                              $"Unknown visual type '{val}'.",
                              _parser.Previous.Line, _parser.Previous.Column)
@@ -904,7 +908,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             throw new SyntaxException(
-                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK) but got '{_parser.Current.Value}'",
+                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP) but got '{_parser.Current.Value}'",
                 _parser.Current.Line, _parser.Current.Column);
         }
 

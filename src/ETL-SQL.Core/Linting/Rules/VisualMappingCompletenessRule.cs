@@ -66,7 +66,8 @@ namespace ETL_SQL.Core.Linting.Rules
                 VisualType.Combo       => new List<string> { "X" },
                 VisualType.Bubble      => new List<string> { "X", "Y" },
                 VisualType.Candlestick => new List<string> { "X", "OPEN", "HIGH", "LOW", "CLOSE" },
-                _ => null  // Radar: flexible — any number of metric columns
+                VisualType.Map         => new List<string> { "REGION" },
+                _ => null  // Radar: flexible; Map POINTS mode uses LON/LAT instead
             };
         }
     }

@@ -18,6 +18,7 @@ namespace ETL_SQL.ReportBuilder
         private readonly HierarchicalRenderer _hierarchical = new();
         private readonly StatisticalRenderer  _statistical  = new();
         private readonly SpecializedRenderer  _specialized  = new();
+        private readonly GeographicRenderer   _geographic   = new();
 
         /// <summary>
         /// Returns an ECharts option JSON string, or null for non-chart visual types.
@@ -45,6 +46,8 @@ namespace ETL_SQL.ReportBuilder
                 "BUBBLE"                  => _specialized.RenderBubble(visual),
                 "RADAR"                   => _specialized.RenderRadar(visual),
                 "CANDLESTICK"             => _specialized.RenderCandlestick(visual),
+
+                "MAP"                     => _geographic.RenderMap(visual),
 
                 _                         => null   // TABLE, CARD, SLICER, TEXT — rendered client-side
             };

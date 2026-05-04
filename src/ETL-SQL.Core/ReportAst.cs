@@ -70,7 +70,8 @@ namespace ETL_SQL.Core
         Donut, HorizontalBar, BoxPlot, Treemap, HeatMap, Text, Combo,
         DatePicker, Slider, MultiSelect, Search,
         Gauge, Funnel, Waterfall, Image,
-        Bubble, Radar, Candlestick
+        Bubble, Radar, Candlestick,
+        Map
     }
 
     public enum DatasetEncryptionMode

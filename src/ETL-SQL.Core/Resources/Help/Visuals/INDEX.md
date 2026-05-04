@@ -26,6 +26,7 @@ Charts:
   BOXPLOT     — statistical distribution: median, quartiles, whiskers, outliers
   COMBO       — bar + line on shared axes (dual Y axis)
   CANDLESTICK — OHLC price chart for financial time-series data
+  MAP         — geographic choropleth or scatter-points overlay on a base map
 
 Display:
   CARD        — large KPI number with optional label, trend, and goal

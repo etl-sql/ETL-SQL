@@ -1331,9 +1331,13 @@ namespace ETL_SQL.Core
         }
     }
 
-    public record BreakStatement : Statement 
+    public record BreakStatement : Statement
     {
     }
+
+    /// <summary>Marks a batch boundary. The Evaluator runs each batch independently;
+    /// if one batch fails the next batch still executes.</summary>
+    public record GoStatement(int Count = 1) : Statement;
 
     /// <summary>Base class for all expressions that return a value.</summary>
     public abstract record Expression : AstNode 

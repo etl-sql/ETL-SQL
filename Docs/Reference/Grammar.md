@@ -1907,7 +1907,7 @@ CREATE VISUAL <name> AS <type> (
 );
 ```
 
-**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `RADAR`, `CANDLESTICK`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
+**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `RADAR`, `CANDLESTICK`, `MAP`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
 
 **Mapping roles by visual type:**
 
@@ -1925,6 +1925,8 @@ CREATE VISUAL <name> AS <type> (
 | `WATERFALL` | `X`, `Y` | — |
 | `RADAR` | _(none — first column = series name, remaining columns = metric axes)_ | — |
 | `CANDLESTICK` | `X`, `OPEN`, `HIGH`, `LOW`, `CLOSE` | — |
+| `MAP` (choropleth) | `REGION` | `VALUE` |
+| `MAP` (points — `MODE=POINTS`) | `LON`, `LAT` | `VALUE`, `LABEL` |
 | `TABLE` | _(all source columns rendered automatically)_ | — |
 | `CARD` | `VALUE` | `LABEL` |
 | `SLICER`, `MULTISELECT` | `VALUE` | — |

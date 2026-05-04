@@ -11,6 +11,7 @@
 --   4. Controls    – MULTISELECT, DATEPICKER, SLIDER, SEARCH, TEXT, IMAGE
 --   5. Detail      – SCROLL container, deep-formatted TABLE, BACK / REFRESH buttons
 --   6. New Charts  – BUBBLE, RADAR, CANDLESTICK
+--   7. Maps        – MAP choropleth (US States, World)
 -- ============================================================================
 
 -- ============================================================================
@@ -244,6 +245,39 @@ SELECT
     CAST(open_price + close_delta AS DECIMAL)    AS ClosePrice
 INTO #candlestick_data
 FROM #ohlc_raw;
+
+-- 1u. US state revenue (choropleth — Midwest + Great Plains sample)
+SELECT 'Minnesota'   AS StateName, CAST(185000 AS DECIMAL) AS Revenue UNION ALL
+SELECT 'Wisconsin',                CAST(142000 AS DECIMAL) UNION ALL
+SELECT 'Iowa',                     CAST( 98000 AS DECIMAL) UNION ALL
+SELECT 'Illinois',                 CAST(320000 AS DECIMAL) UNION ALL
+SELECT 'Michigan',                 CAST(275000 AS DECIMAL) UNION ALL
+SELECT 'Indiana',                  CAST(165000 AS DECIMAL) UNION ALL
+SELECT 'Ohio',                     CAST(290000 AS DECIMAL) UNION ALL
+SELECT 'Missouri',                 CAST(178000 AS DECIMAL) UNION ALL
+SELECT 'Kansas',                   CAST( 87000 AS DECIMAL) UNION ALL
+SELECT 'Nebraska',                 CAST( 71000 AS DECIMAL) UNION ALL
+SELECT 'South Dakota',             CAST( 43000 AS DECIMAL) UNION ALL
+SELECT 'North Dakota',             CAST( 38000 AS DECIMAL)
+INTO #state_revenue;
+
+-- 1v. World revenue by country (choropleth — major markets)
+SELECT 'United States of America'  AS Country, CAST(1250000 AS DECIMAL) AS Revenue UNION ALL
+SELECT 'Canada',                               CAST( 420000 AS DECIMAL) UNION ALL
+SELECT 'United Kingdom',                       CAST( 380000 AS DECIMAL) UNION ALL
+SELECT 'Germany',                              CAST( 350000 AS DECIMAL) UNION ALL
+SELECT 'France',                               CAST( 290000 AS DECIMAL) UNION ALL
+SELECT 'Australia',                            CAST( 210000 AS DECIMAL) UNION ALL
+SELECT 'Japan',                                CAST( 195000 AS DECIMAL) UNION ALL
+SELECT 'Brazil',                               CAST( 160000 AS DECIMAL) UNION ALL
+SELECT 'Mexico',                               CAST( 145000 AS DECIMAL) UNION ALL
+SELECT 'India',                                CAST( 120000 AS DECIMAL) UNION ALL
+SELECT 'China',                                CAST( 110000 AS DECIMAL) UNION ALL
+SELECT 'South Korea',                          CAST(  88000 AS DECIMAL) UNION ALL
+SELECT 'Netherlands',                          CAST(  72000 AS DECIMAL) UNION ALL
+SELECT 'Sweden',                               CAST(  65000 AS DECIMAL) UNION ALL
+SELECT 'Spain',                                CAST(  58000 AS DECIMAL)
+INTO #world_revenue;
 
 -- ============================================================================
 -- Phase 2: Named Shared Styles
@@ -794,6 +828,46 @@ CREATE VISUAL CandlestickDemo AS CANDLESTICK (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- PAGE 7 — MAP CHARTS  (CHOROPLETH, POINTS / geographic visuals)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- CHOROPLETH — US states coloured by revenue (Midwest sample, unmatched states stay grey)
+CREATE VISUAL StateRevenueMap AS MAP (
+    SOURCE   = #state_revenue,
+    TITLE    = 'US State Revenue (Choropleth)',
+    SUBTITLE = 'Midwest & Great Plains sample — unmatched states remain grey',
+    MAPPINGS (
+        REGION = StateName,
+        VALUE  = Revenue
+    ),
+    OPTIONS  (
+        MAP_NAME   = 'US_STATES',
+        COLOR_LOW  = '#c6dbef',
+        COLOR_HIGH = '#08519c',
+        TITLE      = 'Revenue by State'
+    ),
+    STYLE    = ChartPanel
+);
+
+-- CHOROPLETH — World revenue map (major markets highlighted)
+CREATE VISUAL WorldRevenueMap AS MAP (
+    SOURCE   = #world_revenue,
+    TITLE    = 'Global Revenue by Country',
+    SUBTITLE = 'Major market countries coloured by total revenue',
+    MAPPINGS (
+        REGION = Country,
+        VALUE  = Revenue
+    ),
+    OPTIONS  (
+        MAP_NAME   = 'WORLD',
+        COLOR_LOW  = '#d4e6f1',
+        COLOR_HIGH = '#1a5276',
+        TITLE      = 'Global Revenue'
+    ),
+    STYLE    = ChartPanel
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- PAGE 5 — DETAIL  (scroll container + extra table features)
 -- ─────────────────────────────────────────────────────────────────────────────
 
@@ -912,11 +986,7 @@ CREATE PAGE Trends AS LAYOUT (
 CREATE PAGE Composition AS LAYOUT (
     TITLE     = 'Composition',
     TOOLTIP   = 'TREEMAP, HEATMAP, FUNNEL, GAUGE variants, and PIE with data labels.',
-    STRUCTURE = '
-        A A B B /
-        D E C C /
-        F F C C
-    ',
+    STRUCTURE = 'A A B B / D E C C / F F C C',
     MAP (
         'A' = TreemapCat,
         'B' = HeatmapRegCat,
@@ -997,6 +1067,21 @@ CREATE PAGE NewCharts AS LAYOUT (
     STYLE (THEME = dark)
 );
 
+-- ── PAGE 7: Map Charts ───────────────────────────────────────────────────────
+CREATE PAGE MapCharts AS LAYOUT (
+    TITLE     = 'Maps',
+    TOOLTIP   = 'Choropleth MAP visuals — US states and world country revenue heat maps.',
+    STRUCTURE = '
+        A A /
+        B B
+    ',
+    MAP (
+        'A' = StateRevenueMap,
+        'B' = WorldRevenueMap
+    ),
+    STYLE (THEME = dark)
+);
+
 -- ============================================================================
 -- Phase 7: Navigation
 -- ============================================================================
@@ -1005,7 +1090,7 @@ CREATE NAVIGATION MainNav AS TAB (
     ORIENTATION = HORIZONTAL,
     DEFAULT     = Overview
 )
-WITH PAGES (Overview, Trends, Composition, Controls, Detail, NewCharts);
+WITH PAGES (Overview, Trends, Composition, Controls, Detail, NewCharts, MapCharts);
 
 -- ============================================================================
 -- Phase 8: Global Style Override

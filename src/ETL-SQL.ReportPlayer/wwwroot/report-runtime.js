@@ -52,6 +52,7 @@
     // Current report parameters (for interactive controls)
     const parameters = {};
     let _refreshTimers = [];
+    const _registeredMaps = new Set();
 
     /**
      * Entry point: obtain manifest and render all visuals + pages.
@@ -284,18 +285,16 @@
         if (layoutDef.structure) {
             container.style.display = 'grid';
             // CSS grid-template-areas needs each row quoted: "A A" "B C"
-            // The manifest structure is likely: A A / B C or multiline strings
-            container.style.gridTemplateAreas = layoutDef.structure
-                .split('/')
-                .map(r => r.trim())
-                .filter(r => r.length > 0)
-                .map(row => `"${row}"`)
-                .join(' ');
-            // Extract unique letters to set column count if needed (simplified fallback)
-            const areas = layoutDef.structure.split('/').map(r => r.trim()).filter(r => r);
-            if (areas.length > 0) {
-                const cols = areas[0].split(/\s+/).length;
+            const rows = layoutDef.structure.split('/')
+                .map(r => r.trim().split(/\s+/).filter(s => s).join(' '))
+                .filter(r => r.length > 0);
+            
+            container.style.gridTemplateAreas = rows.map(r => `"${r}"`).join(' ');
+
+            if (rows.length > 0) {
+                const cols = rows[0].split(/\s+/).length;
                 container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+                container.style.gridTemplateRows    = `repeat(${rows.length}, minmax(360px, auto))`;
             }
 
             const slotMap = layoutDef.slotMap || {};
@@ -407,7 +406,7 @@
         container.appendChild(card);
     }
 
-    // ── Chart (ECharts — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL) ──
+    // ── Chart (ECharts — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL / BUBBLE / RADAR / CANDLESTICK / MAP) ──
 
     // Cross-filter state: { filterValue, filterColumn }. Stored per page section.
     function getPageState(container) {
@@ -452,6 +451,24 @@
         });
     }
 
+    function registerMapThenRender(mapKey, mapFile, onReady, wrapper) {
+        if (_registeredMaps.has(mapKey)) { onReady(); return; }
+        const url = mapFile
+            ? `/maps/custom?path=${encodeURIComponent(mapFile)}`
+            : `/maps/${mapKey}.geojson`;
+        fetch(url)
+            .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+            .then(geojson => {
+                echarts.registerMap(mapKey, geojson);
+                _registeredMaps.add(mapKey);
+                onReady();
+            })
+            .catch(err => {
+                const parent = wrapper.parentElement;
+                if (parent) parent.appendChild(noDataEl('Map load failed: ' + err.message));
+            });
+    }
+
     function renderChart(container, visual, effectiveTheme) {
         if (!visual.chartConfig) {
             container.appendChild(noDataEl('No chart config available'));
@@ -477,58 +494,91 @@
         wrapper.className = 'chart-wrapper';
         container.appendChild(wrapper);
 
-        // effectiveTheme: visual-level THEME, falling back to page-level THEME
-        const chart = echarts.init(wrapper, effectiveTheme || null);
-        
-        // Auto-fix formatting for gauges and high-precision labels
-        if (option.series) {
-            option.series.forEach(s => {
-                if (s.type === 'gauge') {
-                    if (s.detail && (s.detail.formatter === '{value}' || s.detail.formatter === '{value:.1f}')) {
-                        s.detail.formatter = (v) => (typeof v === 'number') ? v.toFixed(1) : v;
-                    }
-                }
-                // If label is shown but no formatter, add a default one to trim decimals
-                if (s.label && s.label.show && !s.label.formatter) {
-                    s.label.formatter = (params) => {
-                        let v = params.value;
-                        if (Array.isArray(v)) v = v[v.length - 1]; 
-                        if (typeof v === 'number' && !Number.isInteger(v)) return v.toFixed(1);
-                        return v;
-                    };
-                }
+        // Extract MAP metadata markers (not valid ECharts properties — delete before setOption)
+        const mapKey  = option.__mapKey;
+        const matchBy = (option.__matchBy || 'NAME').toUpperCase();
+        const mapFile = option.__mapFile;
+        delete option.__mapKey;
+        delete option.__matchBy;
+        delete option.__mapFile;
+
+        // BUBBLE: __bubbleSymbolSize on root option → wire symbolSize function on scatter series
+        if (option.__bubbleSymbolSize) {
+            delete option.__bubbleSymbolSize;
+            (option.series || []).forEach(s => {
+                if (s.type === 'scatter') s.symbolSize = val => val[2];
+            });
+        }
+        // MAP POINTS: __pointsSymbolSize on series object → same treatment
+        (option.series || []).forEach(s => {
+            if (s.__pointsSymbolSize) {
+                delete s.__pointsSymbolSize;
+                if (s.type === 'scatter') s.symbolSize = val => val[2];
+            }
+        });
+
+        // FIPS matching: tell ECharts to use the 'fips' property instead of default 'name'
+        if (matchBy === 'FIPS') {
+            (option.series || []).forEach(s => {
+                if (s.type === 'map') s.nameProperty = 'fips';
             });
         }
 
-        // Disable interactions in preview mode
-        if (window.__IS_PREVIEW__) {
-            option.tooltip = { show: false };
-            option.toolbox = { show: false };
-            option.animation = false;
-            // Disable panning/zooming if any
-            (option.series || []).forEach(s => { if (s.roam) s.roam = false; });
+        function finalize() {
+            // Auto-fix formatting for gauges and high-precision labels
+            if (option.series) {
+                option.series.forEach(s => {
+                    if (s.type === 'gauge') {
+                        if (s.detail && (s.detail.formatter === '{value}' || s.detail.formatter === '{value:.1f}')) {
+                            s.detail.formatter = (v) => (typeof v === 'number') ? v.toFixed(1) : v;
+                        }
+                    }
+                    if (s.label && s.label.show && !s.label.formatter) {
+                        s.label.formatter = (params) => {
+                            let v = params.value;
+                            if (Array.isArray(v)) v = v[v.length - 1];
+                            if (typeof v === 'number' && !Number.isInteger(v)) return v.toFixed(1);
+                            return v;
+                        };
+                    }
+                });
+            }
+
+            if (window.__IS_PREVIEW__) {
+                option.tooltip = { show: false };
+                option.toolbox = { show: false };
+                option.animation = false;
+                (option.series || []).forEach(s => { if (s.roam) s.roam = false; });
+            }
+
+            const chart = echarts.init(wrapper, effectiveTheme || null);
+            chart.setOption(option);
+            wrapper._echartsInst = chart;
+
+            const clickActions = actionsFor(visual, 'ON_CLICK');
+            const crossFilter  = isOn((visual.options || {})['CROSS_FILTER']);
+            const xMappingCol  = (visual.options || {})['mapping:x'];
+
+            if (clickActions.length > 0 || crossFilter) {
+                chart.on('click', params => {
+                    const idx     = params.dataIndex != null ? params.dataIndex : -1;
+                    const rowData = idx >= 0 ? (visual.rows || [])[idx] || [] : [];
+                    clickActions.forEach(action => executeAction(action, rowData, visual.columns || []));
+                    if (crossFilter) {
+                        const clickedValue = params.name || params.value || (rowData.length > 0 ? rowData[0] : null);
+                        const colName = xMappingCol || (visual.columns && visual.columns[0]);
+                        if (clickedValue != null && colName) {
+                            applyPageCrossFilter(container, String(clickedValue), colName);
+                        }
+                    }
+                });
+            }
         }
 
-        chart.setOption(option);
-        wrapper._echartsInst = chart;  // stored so page-show can resize hidden charts
-
-        const clickActions  = actionsFor(visual, 'ON_CLICK');
-        const crossFilter   = isOn((visual.options || {})['CROSS_FILTER']);
-        const xMappingCol   = (visual.options || {})['mapping:x'];
-
-        if (clickActions.length > 0 || crossFilter) {
-            chart.on('click', params => {
-                const idx     = params.dataIndex != null ? params.dataIndex : -1;
-                const rowData = idx >= 0 ? (visual.rows || [])[idx] || [] : [];
-                clickActions.forEach(action => executeAction(action, rowData, visual.columns || []));
-                if (crossFilter) {
-                    const clickedValue = params.name || params.value || (rowData.length > 0 ? rowData[0] : null);
-                    const colName = xMappingCol || (visual.columns && visual.columns[0]);
-                    if (clickedValue != null && colName) {
-                        applyPageCrossFilter(container, String(clickedValue), colName);
-                    }
-                }
-            });
+        if (mapKey) {
+            registerMapThenRender(mapKey, mapFile, finalize, wrapper);
+        } else {
+            finalize();
         }
     }
 

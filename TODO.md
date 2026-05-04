@@ -110,48 +110,46 @@
     - [x] BUBBLE, RADAR, CANDLESTICK chart types
     - [x] Report CROSS_FILTER — confirmed working (chart→table); chart→chart not yet implemented
     - [ ] **MAP Chart Type (Choropleth)** — Render geographic data as a color-scaled choropleth map using Apache ECharts' native map support. GeoJSON served as static files; client fetches and registers before chart init. See design notes in planning conversation.
-        - **Phase 1 — GeoJSON Assets**
-            - [ ] Source and simplify GeoJSON for the six bundled maps (all public domain):
-                - `world.geojson` — Natural Earth 110m countries (~100 KB)
-                - `us-states.geojson` — US Census TIGER simplified 50 states + DC (~150 KB)
-                - `us-counties.geojson` — US Census TIGER simplified counties (~1.5 MB)
-                - `mn-counties.geojson` — MN Geospatial Commons Minnesota counties (~80 KB)
-                - `canada-provinces.geojson` — Statistics Canada simplified provinces/territories (~150 KB)
-                - `europe.geojson` — Natural Earth 50m European countries (~200 KB)
-            - [ ] Place all six files in `src/ETL-SQL.ReportPlayer/wwwroot/maps/`. They are static files, not embedded resources.
-            - [ ] Verify feature `name` and `id` values in each file and document the expected match values (what the user's data column must contain to light up a region).
-        - **Phase 2 — Parser / AST**
-            - [ ] `ETL-SQL.Core/Ast.cs`: No AST change needed — visual type is already a free string on `VisualStatement`. Confirm `MAP` passes through cleanly.
-            - [ ] `ETL-SQL.Core/Parser`: Ensure the following visual options are accepted by the options parser (most are already generic):
-                - `MAP_NAME` — built-in map key: `WORLD`, `US_STATES`, `US_COUNTIES`, `MN_COUNTIES`, `CANADA_PROVINCES`, `EUROPE`
-                - `MAP_FILE` — path to a user-supplied GeoJSON file (resolved via `ResolvePath`)
-                - `REGION_COL` — column in the dataset whose values match GeoJSON feature names/ids
-                - `VALUE_COL` — column supplying the numeric value for color scaling
-                - `MATCH_BY` — `NAME` (default) or `ID`; selects whether to match on GeoJSON `properties.name` or `id`
-                - `COLOR_LOW`, `COLOR_HIGH` — hex color range endpoints (defaults: `'#e0f3f8'`, `'#08306b'`)
-                - `SHOW_LABELS` — `TRUE`/`FALSE`; show region name labels on the map (default `FALSE`)
-        - **Phase 3 — Server-Side Renderer**
-            - [ ] `ETL-SQL.ReportBuilder/Renderers/GeographicRenderer.cs` *(new)*: Implement `RenderChoropleth(VisualManifest v)`.
-                - Resolve `MAP_NAME` → lowercase file key (e.g. `"WORLD"` → `"world"`); fall back to `MAP_FILE` if provided.
-                - Emit an ECharts option object with: `geo` component referencing the registered map name, `visualMap` component (continuous, min/max auto-computed from the value column in `v.Rows`), `series` of type `map` bound to the same map name, and `tooltip`.
-                - Do **not** embed GeoJSON in the option — the client fetches it separately.
-                - Column resolution: use `REGION_COL` / `VALUE_COL` options, falling back to first and second column by position.
-            - [ ] `ETL-SQL.ReportBuilder/EChartsRenderer.cs`: Add `"MAP" => _geographic.RenderChoropleth(visual)` to the dispatch switch. Instantiate `_geographic = new GeographicRenderer()`.
-            - [ ] `ETL-SQL.ReportBuilder/Renderers/TerminalRenderer.cs`: Add `"MAP" => new Panel(new Text("Map visual not supported in TUI", new Style(Color.Grey)))` to the TUI switch (same pattern as TREEMAP).
+        - **Phase 1 — GeoJSON Assets** ✓
+            - [x] Source and simplify GeoJSON for the six bundled maps (all public domain):
+                - `world.geojson` — Natural Earth 110m, slimmed props → 257 KB, 177 features; match by `name` (e.g. "France") or `id` ISO A3 (e.g. "FRA")
+                - `us-states.geojson` — PublicaMundi Census TIGER simplified → 87 KB, 52 features; match by `name` (e.g. "Minnesota") or `id` = state name
+                - `us-counties.geojson` — Census TIGER 20m, coord-rounded → 1.6 MB, 3221 features; match by `name` (e.g. "Hennepin") or `id` FIPS (e.g. "27053")
+                - `mn-counties.geojson` — filtered from us-counties, FIPS state=27 → 35 KB, 87 features; match by `name` (e.g. "Hennepin") or `id` FIPS (e.g. "27053")
+                - `canada-provinces.geojson` — wisdomtheif/Canadian_GeoJSON, 1-decimal rounded → 247 KB, 13 features; match by `name` (e.g. "Alberta") or `id` = province name
+                - `europe.geojson` — filtered from Natural Earth 110m world → 48 KB, 39 features; match by `name` (e.g. "France") or `id` ISO A3 (e.g. "FRA")
+            - [x] Place all six files in `src/ETL-SQL.ReportPlayer/wwwroot/maps/`. They are static files, not embedded resources.
+            - [x] Verified feature `name` and `id` values — all files use `properties.name` for ECharts region matching; county files also expose FIPS via `id` for numeric join.
+        - **Phase 2 — Parser / AST** ✓
+            - [x] `VisualType` enum: added `Map`. `ReportParser.ParseVisualType()`: added `Match(TokenType.MAP)` and `"MAP"` identifier fallback. Build clean, smoke test passes.
+            - [x] All MAP options (`MAP_NAME`, `MAP_FILE`, `MATCH_BY`, `COLOR_LOW`, `COLOR_HIGH`, `SHOW_LABELS`, `MODE`, `LON_COL`, `LAT_COL`) handled by generic `else` branch in `ParseOptions` — no new tokens needed.
+            - [x] `REGION`/`VALUE`/`LON`/`LAT`/`LABEL` mappings work via generic `ParseMappings` — no changes needed.
+            - [x] Lint rules updated: `VisualSourceRequiredRule` (Map → true), `VisualMappingCompletenessRule` (Map → ["REGION"]).
+            - [x] `TerminalRenderer`: MAP added to TUI-unsupported panel fallback.
+            - [x] **Zip codes**: No bundled ZCTA file (Census ZCTA GeoJSON is ~300 MB uncompressed — too large to ship). Users supply their own via `MAP_FILE`. See `Docs/Report_Cookbook.md` recipe 11 for the full workflow and the Census Cartographic Boundary Files download link.
+        - **Phase 3 — Server-Side Renderer** ✓
+            - [x] `GeographicRenderer.cs` *(new)*: `RenderMap()` dispatches to `RenderChoropleth()` or `RenderPoints()` based on `MODE` option.
+                - `RenderChoropleth`: resolves MAP_NAME via `BuiltinMapKeys` dict → file key; emits `series[type=map]` + `visualMap` + `tooltip`. `__mapKey` signals client fetch; `__matchBy` (NAME|FIPS) passed through.
+                - `RenderPoints`: emits `geo` base + `scatter[coordinateSystem=geo]` + `visualMap`. Pre-scales dot size into `data[2]`; `__pointsSymbolSize` marker handled client-side (same pattern as BUBBLE).
+                - `MAP_FILE` path appended as `__mapFile` for Phase 6 client routing.
+                - `DataRange` auto-computes min/max from value column; handles single-value and empty edge cases.
+            - [x] `EChartsRenderer.cs`: `"MAP" => _geographic.RenderMap(visual)` added. Build clean, smoke test passes — correct `__mapKey`, `series.type=map`, `visualMap`, and data.
+            - [x] `TerminalRenderer.cs`: already done in Phase 2.
         - **Phase 4 — Client-Side Runtime**
-            - [ ] `src/ETL-SQL.ReportPlayer/wwwroot/report-runtime.js`: Before initializing any visual whose `type == 'MAP'`:
-                - Determine the map key: use `options['MAP_NAME']?.toLowerCase()` or derive the filename from `options['MAP_FILE']`.
-                - If the key has not already been registered (track a `Set` of registered names), `fetch('/maps/{key}.geojson')`, parse the JSON, call `echarts.registerMap(key, geojson)`.
-                - Registration is async — `await` it before calling `echarts.init()`.
-                - Cache registered names so repeat visuals using the same map on one page only fetch once.
-            - [ ] Add the `MAP` type to the comment on line ~407 that lists supported ECharts types.
+            - [x] `src/ETL-SQL.ReportPlayer/wwwroot/report-runtime.js`: `registerMapThenRender()` added — fetches `/maps/{key}.geojson`, calls `echarts.registerMap()`, caches in `_registeredMaps` Set. `renderChart()` restructured to defer `echarts.init()` via `finalize()` callback for MAP visuals.
+            - [x] `__bubbleSymbolSize` (root option) and `__pointsSymbolSize` (series-level) both wired to `symbolSize = val => val[2]` function.
+            - [x] `MATCH_BY = FIPS` injects `nameProperty: 'fips'` on map series; `__mapKey`/`__matchBy`/`__mapFile` deleted before `setOption()`.
+            - [x] `MAP` added to chart type comment.
+            - [x] Layout bug fixed: `gridTemplateRows = repeat(N, minmax(360px, auto))` added to `renderLayout()`. Flex-fill chain added to SharedCss — `.page-grid .visual-card` and `.page-grid .chart-wrapper` now fill their grid row height. Mobile override updated.
         - **Phase 5 — Documentation and Help**
-            - [ ] `src/ETL-SQL.Core/Resources/Help/Visuals/MAP.md` *(new)*: Document syntax, all options, built-in map keys with their expected region name formats, and two complete examples (world choropleth, US states choropleth).
-            - [ ] `Docs/Reference/Report_SQL_Guide.md` (or equivalent): Add MAP to the visual type table with options and examples.
+            - [x] `src/ETL-SQL.Core/Resources/Help/Visuals/MAP.md` *(new)*: Documents CHOROPLETH and POINTS modes, all options, all 6 built-in map keys, FIPS matching, zip code workaround reference, and four complete examples.
+            - [x] `Docs/Reference/Grammar.md`: `MAP` added to visual types list; two rows added to mapping roles table (choropleth and points modes).
+            - [x] `src/ETL-SQL.Core/Resources/Help/Visuals/INDEX.md`: MAP entry added under Charts.
+            - [ ] `Docs/Report_Cookbook.md` recipe 11 already written — verify examples compile once Phase 3/4 are done.
         - **Phase 6 — Custom Map Files (MAP_FILE option)**  *(can be done alongside Phase 3/4 or deferred)*
             - [ ] Server: When `MAP_FILE` is set, `GeographicRenderer` should embed the file path in the ECharts option as a custom property (e.g. `mapFile`) so the client knows to fetch it from a local route instead of `/maps/`.
             - [ ] `ETL-SQL.ReportPlayer`: Add a dynamic route `GET /maps/custom?path=...` that reads the file via `ResolvePath`, validates it is GeoJSON, and streams it. Never expose raw filesystem paths in the URL — use a server-side resolve.
             - [ ] `ETL-SQL.ReportBuilder`: Add a validation step that checks `MAP_FILE` exists at manifest build time and warns if not found.
-- [ ] **Add batch separator GO command**  Add the GO batch separator command so that we can run different parts of a scripts and if any batch fails the following will still run because its in a different batch.
+- [x] **Add batch separator GO command**  `GO` and `GO <count>` implemented. Parser emits `GoStatement`; Evaluator splits statements into batches at GO boundaries and wraps each batch in its own try/catch — a failed batch is logged and skipped, later batches run normally. No-GO scripts retain the original fail-fast behavior. `GO <count>` repeats the preceding batch N times. 5 tests added in `GoStatementTests`. Help file: `Keywords/GO.md`.
 - [ ] **Do file operation functions work with Directory CONNECTION?**  That's how its intended to work but I haven't seen any examples of this.
 - [x] **All the function need help files** All the functions need to have help file in the C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\Resources folder.  Follow the examples in that folder for the format.

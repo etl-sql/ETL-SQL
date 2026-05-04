@@ -67,6 +67,7 @@ namespace ETL_SQL.Core.Parser
             _dispatchMap[TokenType.RETURN]        = () => FlowParser.ParseReturn();
             _dispatchMap[TokenType.BREAK]         = () => FlowParser.ParseBreak();
             _dispatchMap[TokenType.CONTINUE]      = () => FlowParser.ParseContinue();
+            _dispatchMap[TokenType.GO]            = () => ParseGo();
             _dispatchMap[TokenType.HELP]          = () => SystemParser.ParseHelp();
             _dispatchMap[TokenType.USE]           = () => { var t = _parser.Previous; return SystemParser.ParseUse(t); };
             _dispatchMap[TokenType.BULK]          = () => { var t = _parser.Previous; return DataParser.ParseBulkInsert(t); };
@@ -349,6 +350,20 @@ namespace ETL_SQL.Core.Parser
 
             _parser.Consume(TokenType.END, "Expected END");
             return raw.Trim();
+        }
+
+        private Statement ParseGo()
+        {
+            var t = _parser.Previous;
+            int count = 1;
+            if (_parser.Current.Type == TokenType.NUMBER &&
+                int.TryParse(_parser.Current.Value, out var n) && n > 0)
+            {
+                count = n;
+                _parser.Advance();
+            }
+            if (_parser.Current.Type == TokenType.SEMICOLON) _parser.Advance();
+            return new GoStatement(count) { Line = t.Line, Column = t.Column };
         }
 
         private static bool IsContextualKeyword(TokenType type)

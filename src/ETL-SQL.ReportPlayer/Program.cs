@@ -253,7 +253,7 @@ const string SharedCss = @"
   h3   { margin-bottom: 8px; }
   .visual-card  { background: #fff; border: 1px solid #ddd; border-radius: 6px;
                   padding: 16px; margin-bottom: 24px; }
-  .chart-wrapper { width: 100%; max-width: 640px; height: 400px; }
+  .chart-wrapper { width: 100%; height: 400px; }
   .table-wrapper { overflow: auto; max-height: 500px; }
   table { border-collapse: collapse; width: 100%; }
   th, td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; }
@@ -283,6 +283,9 @@ const string SharedCss = @"
   .page { display: none; }
   .page.active { display: block; }
   .page-grid { display: grid; gap: 16px; }
+  .page-grid > div { display: flex; flex-direction: column; min-height: 0; }
+  .page-grid .visual-card { flex: 1; display: flex; flex-direction: column; min-height: 0; margin-bottom: 0; }
+  .page-grid .chart-wrapper { flex: 1; height: auto; max-width: none; min-height: 0; }
   .container-box { display: flex; flex-direction: column; gap: 12px; }
   .container-scroll { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
   .filter-wrapper { display: flex; flex-direction: column; gap: 6px; }
@@ -296,9 +299,11 @@ const string SharedCss = @"
     border-radius: 4px; background: #5470c6; color: white; cursor: pointer; font-size: 0.9em; }
   .filter-wrapper .filter-apply:hover { background: #3a56a8; }
   @media (max-width: 768px) {
-    .page-grid { grid-template-areas: none !important; grid-template-columns: 1fr !important; }
+    .page-grid { grid-template-areas: none !important; grid-template-columns: 1fr !important;
+                 grid-template-rows: none !important; }
     .page-grid > div { grid-area: auto !important; }
-    .chart-wrapper { height: 240px !important; }
+    .page-grid .visual-card { flex: none; }
+    .chart-wrapper { height: 240px !important; flex: none !important; }
     .nav-bar { flex-direction: column; }
     .visual-card { width: auto !important; }
   }

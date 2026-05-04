@@ -66,6 +66,7 @@ namespace ETL_SQL.Core.Linting.Rules
                 VisualType.Bubble      => true,
                 VisualType.Radar       => true,
                 VisualType.Candlestick => true,
+                VisualType.Map         => true,
                 _ => false // Text, DatePicker, Slider, Search don't need source
             };
         }

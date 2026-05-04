@@ -562,12 +562,35 @@ namespace ETL_SQL.Engine
                 }
 
                 CancellationToken = cancellationToken;
-                foreach (var statement in script.Statements)
+
+                // Split into batches at GO boundaries.
+                // Each batch runs independently — a failed batch is logged and skipped; later batches still execute.
+                var batches = SplitIntoBatches(script.Statements);
+                bool hasBatches = batches.Count > 1;
+                int batchNum = 0;
+
+                foreach (var batch in batches)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    await EvaluateStatement(statement);
+                    batchNum++;
+                    if (batch.Count == 0) continue;
+
+                    try
+                    {
+                        foreach (var statement in batch)
+                        {
+                            cancellationToken.ThrowIfCancellationRequested();
+                            await EvaluateStatement(statement);
+                        }
+                        if (hasBatches) Log($"Batch {batchNum} completed.", ConsoleColor.DarkGray);
+                    }
+                    catch (OperationCanceledException) { throw; }
+                    catch (ReturnException) { throw; }
+                    catch (Exception ex) when (hasBatches)
+                    {
+                        Log($"Batch {batchNum} failed: {ex.Message}", ConsoleColor.Red);
+                    }
                 }
-                
+
                 scriptNode.Status = ExecutionStatus.Completed;
                 scriptNode.EndTicks = Stopwatch.GetTimestamp();
             }
@@ -593,6 +616,27 @@ namespace ETL_SQL.Engine
 
         public void ClearResults() => LastResult = null;
         public (Dictionary<string, object?>, Dictionary<string, VariableMetadata>) GetGlobalState() => _variableScopeManager.GetGlobalState();
+
+        private static List<List<Statement>> SplitIntoBatches(List<Statement> statements)
+        {
+            var batches = new List<List<Statement>>();
+            var current = new List<Statement>();
+            foreach (var stmt in statements)
+            {
+                if (stmt is GoStatement go)
+                {
+                    for (int i = 0; i < go.Count; i++)
+                        batches.Add(new List<Statement>(current));
+                    current = new List<Statement>();
+                }
+                else
+                {
+                    current.Add(stmt);
+                }
+            }
+            batches.Add(current);
+            return batches;
+        }
 
         public async Task LoadSessionState(SessionState state)
         {

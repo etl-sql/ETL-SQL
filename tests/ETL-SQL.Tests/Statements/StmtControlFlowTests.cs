@@ -141,7 +141,82 @@ namespace ETL_SQL.Tests.Statements
         {
             return TestHelpers.Parse(source);
         }
+    }
 
+    public class GoStatementTests
+    {
+        private static Evaluator MakeEval() =>
+            DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
 
+        [Fact]
+        public async Task Go_ParsesWithoutError()
+        {
+            var ev = MakeEval();
+            await ev.Evaluate(TestHelpers.Parse("DECLARE @x INT; SET @x = 1; GO DECLARE @y INT; SET @y = 2;"));
+            // Both variables are session-scoped and visible after GO
+            Assert.Equal(1m, ev.Variables["@x"]);
+            Assert.Equal(2m, ev.Variables["@y"]);
+        }
+
+        [Fact]
+        public async Task Go_SecondBatchRunsAfterFirstFails()
+        {
+            var ev = MakeEval();
+            // Batch 1 fails (divide by zero), batch 2 should still run
+            string script = """
+                DECLARE @a INT;
+                SET @a = 1 / 0;
+                GO
+                DECLARE @b INT;
+                SET @b = 42;
+                """;
+            // Should not throw; batch 2 completes successfully
+            await ev.Evaluate(TestHelpers.Parse(script));
+            Assert.Equal(42m, ev.Variables["@b"]);
+        }
+
+        [Fact]
+        public async Task Go_WithoutSeparator_FailFastBehaviorUnchanged()
+        {
+            var ev = MakeEval();
+            // No GO — single batch, error propagates as before
+            string script = """
+                DECLARE @a INT;
+                SET @a = 1 / 0;
+                DECLARE @b INT;
+                SET @b = 42;
+                """;
+            await Assert.ThrowsAsync<ETL_SQL.Core.Common.Exceptions.ExecutionException>(
+                () => ev.Evaluate(TestHelpers.Parse(script)));
+        }
+
+        [Fact]
+        public async Task Go_CountRepeatsBatch()
+        {
+            var ev = MakeEval();
+            // GO 3 repeats the preceding batch 3 times
+            string script = """
+                DECLARE @n INT; SET @n = 0;
+                GO
+                SET @n = @n + 1;
+                GO 3
+                """;
+            await ev.Evaluate(TestHelpers.Parse(script));
+            Assert.Equal(3m, ev.Variables["@n"]);
+        }
+
+        [Fact]
+        public async Task Go_TempTablesPersistAcrossBatches()
+        {
+            var ev = MakeEval();
+            string script = """
+                SELECT 1 AS Val INTO #t;
+                GO
+                DECLARE @v INT;
+                SET @v = (SELECT Val FROM #t);
+                """;
+            await ev.Evaluate(TestHelpers.Parse(script));
+            Assert.Equal(1m, ev.Variables["@v"]);
+        }
     }
 }
