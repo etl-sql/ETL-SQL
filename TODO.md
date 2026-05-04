@@ -1,87 +1,5 @@
 # ETL-SQL Development Roadmap
 ## Up Next
-- [ ] **Subscription Parameters** — Full strategy: [`Docs/Strategy/SubscriptionParameters_Strategy.md`](Strategy/SubscriptionParameters_Strategy.md). RELDATE/LIST types, `SET WEEK_START_DAY`, `CREATE/ALTER SUBSCRIPTION PARAMETERS(...)`, portal INPUT parameter UX. ~6.5 dev-days across 6 phases. Implementation tasks below.
-    - **Phase 1 — Engine: New Types** *(most isolated, start here)*
-        - [x] `ETL-SQL.Core/Ast.cs`: Add `RelDateType`, `ListType` to type system; `SetWeekStartDayStatement` record; `INPUT` modifier on `DeclareStatement`.
-        ListType, INPUT modifier already exist.
-        - [x] `ETL-SQL.Core/TokenType.cs` + `Lexer.cs`: Add `RELDATE`, `LIST`, `INPUT`, `WEEK_START_DAY` tokens/keywords.
-        - [x] `ETL-SQL.Core/Parser`: Parse `DECLARE @var RELDATE = <expr> [INPUT]`, `DECLARE @var LIST(type) [= default] [INPUT]`, `SET WEEK_START_DAY = '<day>'`.
-        - [x] `ETL-SQL.Engine/RelDateResolver.cs` *(new)*: Stateless resolver — anchor parse, period-shift arithmetic, N/NU inline units, fixed-date passthrough, `ExecutionException` on bad input. See spec in strategy doc.
-        - [x] `ETL-SQL.Engine/SetWeekStartDayHandler.cs` *(new)*: Validate day name, store on `IExecutionContext`.
-        - [x] `ETL-SQL.Engine/Evaluator.cs`: Surface `WeekStartDay` from `appsettings.json → Engine.StartOfWeek` (default Monday). Wire handler.
-        - [x] `appsettings.json`: Add `Engine.StartOfWeek` string setting.
-        - [x] `ExpressionEvaluator.cs`: Resolve `RELDATE` variable reads via `RelDateResolver` at runtime.
-        - [x] Tests: `RelDateResolverTests.cs` (exhaustive), `SetWeekStartDayTests.cs`, `WeekStartArithmeticTests.cs`.
-    - **Phase 2 — Subscription SQL Syntax**
-        - [x] `ETL-SQL.Core`: Add `Name?` + `Parameters: IReadOnlyList<SubscriptionParameter>` to `CreatePortalSubscriptionStatement`; new `SubscriptionParameter(Name, Value)` record; `AlterPortalSubscriptionStatement` record.
-        - [x] `ETL-SQL.Core/Parser`: Parse optional `<name>` on `CREATE SUBSCRIPTION`; parse `PARAMETERS(...)` clause; parse `ALTER SUBSCRIPTION` statement.
-        - [x] `ETL-SQL.Engine/CreatePortalSubscriptionHandler.cs`: Persist `Name` + `ParametersJson`.
-        - [x] `ETL-SQL.Engine/AlterPortalSubscriptionHandler.cs` *(new)*: Update schedule/format/active/params; replace full param set when clause present; leave unchanged when absent; clear when clause is empty list.
-    - **Phase 3 — Portal Data Layer**
-        - [x] `Subscription.cs` entity: Add `Name` (nullable `TEXT`) + `ParametersJson` (nullable `TEXT`).
-        - [x] New EF Core migration: `AddSubscriptionNameAndParameters`.
-    - **Phase 4 — Portal API**
-        - [x] `CreateSubscriptionRequest` / `UpdateSubscriptionRequest` models: Add `Name?`, `Parameters?`.
-        - [x] Subscription response DTOs: Add `Name?`, `Parameters?`, `ParameterSummary` (server-built compact string).
-        - [x] New endpoint: `GET /api/reports/{id:int}/parameters` — parse script AST, return INPUT parameter metadata (name, type, default, required). No script execution.
-        - [x] `POST /api/subscriptions`: Persist name + parameters JSON.
-        - [x] `PUT /api/subscriptions/{id}`: Accept parameter replacement.
-        - [x] `GET /api/subscriptions` (admin + mine): Include name, parameters, summary.
-        - [x] Orchestrator job runner: Pass stored parameter values to script; resolve `RELDATE` expressions fresh at fire time.
-    - **Phase 5 — Portal UI**
-        - [x] Subscribe modal: call `/api/reports/{path}/parameters` before render; append per-type INPUT controls (RELDATE=quick-pick+custom, LIST=chip input, etc.). Serialize to `{ "@name": "value" }` on save.
-        - [x] My Subscriptions list: show parameter summary; **Edit Parameters** modal (pre-populated, saves via PATCH).
-        - [x] Admin Subscriptions view: parameter summary column + Edit Parameters action.
-    - **Phase 6 — Documentation** *(update as phases land)*
-        - [x] `Docs/Report_SQL_Guide.md`: Add `RELDATE`/`LIST`/`INPUT` to parameter type table; `INPUT` modifier section.
-        - [x] `Docs/ReportPortal_User_Guide.md`: Sections 6 + 7 with parameter controls and Edit Parameters UX.
-        - [x] `Docs/ReportPortal_Administrators_Guide.md`: Section 8 with `CREATE SUBSCRIPTION` / `ALTER SUBSCRIPTION` full syntax.
-        - [x] `Docs/User_Manual.md`: `SET WEEK_START_DAY` in SET reference; `Engine.StartOfWeek` in config reference.
-        - [x] `Docs/Reference/Grammar.md`: New productions for all added statements and types.
-        - [x] `src/ETL-SQL.Core/Resources/Help`: Added `Keywords/RELDATE.md`, `Keywords/SUBSCRIPTION.md`; updated `DECLARE.md` and `SET.md`.
-- [x] **Security Manifest**: Strategy document complete. See [`Docs/Strategy/ScriptSecurity_Strategy.md`](Strategy/ScriptSecurity_Strategy.md). Full PKI signing not recommended — disproportionate key management overhead. **Hash pinning** instead: store SHA-256 of script at schedule/publish time, compare at run time, warn or block on mismatch. ~2 dev-days across 3 phases.
-    - **Phase 1 — Orchestrator hash pinning**
-        - [x] `OrchestratorJob` entity: Add `ScriptHash` (TEXT) + `HashPolicy` (`Warn`/`Block`, default `Warn`).
-        - [x] New EF Core migration: `AddJobScriptHash`. *(Note: Orchestrator uses raw SQLite — handled via `PRAGMA + ALTER TABLE` migration, not EF Core)*
-        - [x] `JobScheduler`: Compute and store hash at schedule time (`CreateJobStatementHandler`).
-        - [x] `JobRunner`: Recompute at run time; compare; apply policy; log result (`SchedulerService.ExecuteJobAsync`).
-        - [x] `ExecutionHistory` entity: Add `ScriptHashAtRunTime` (TEXT) + `HashMatched` (bool).
-        - [x] `appsettings.json`: Add `Engine.ScriptHashPolicy` global default.
-        - [x] `SET SCRIPT_HASH_POLICY` statement: Parse + apply per-script override.
-        - [x] Tests: match → runs; mismatch+Warn → runs with log; mismatch+Block → `ExecutionException`.
-    - **Phase 2 — Report Portal hash pinning**
-        - [x] `Report` entity: Add `PublishedScriptHash` (TEXT).
-        - [x] Publish flow: Compute and store hash.
-        - [x] Snapshot builder: Compare hash; log `ScriptHashAtRunTime` + `HashMatched` on snapshot record.
-        - [x] Admin → Reports view: Show "script changed since published" (`ScriptChanged` field on `ReportDto`).
-        - [x] Audit log: Include `ScriptHash` on `EXECUTE_REPORT` events.
-    - **Phase 3 — Documentation**
-        - [x] `Docs/Administrators_Guide.md`: Add `Engine.ScriptHashPolicy` to config reference.
-        - [x] `Docs/ReportPortal_Administrators_Guide.md`: Hash tracking in publishing + execution sections.
-        - [x] `Docs/Architecture/Orchestrator.md`: Hash fields on job and execution history entities.
-- [x] **Data Lake Connection brainstorm**: Strategy document complete. See [`Docs/Strategy/DataLake_Connectors_Strategy.md`](Strategy/DataLake_Connectors_Strategy.md). Revised scope: existing ODBC connector already covers Redshift, Databricks, Synapse, Trino, Dremio. Existing Parquet + Avro connectors already cover the file formats. Only Snowflake and BigQuery need new native connectors (complex auth not expressible in an ODBC string). DuckDB added as low-priority ergonomics improvement. ~6.5 dev-days across 4 phases.
-    - **Phase 1 — Snowflake native connector** *(most requested platform)*
-        - [x] `ETL-SQL.Core/TokenType.cs`: Add `SNOWFLAKE` keyword.
-        - [x] `ETL-SQL.Connectors/SnowflakeConnector.cs` (new): `Snowflake.Data.Client`. Auth: username+password and private-key JWT (`PRIVATE_KEY_FILE` option). Fields: `HOST`, `WAREHOUSE`, `DATABASE`, `SCHEMA`, `USERNAME`.
-        - [x] `ISchemaProvider` via `INFORMATION_SCHEMA`.
-        - [x] `DependencyInjectionExtensions.cs`: Register connector.
-        - [x] Unit tests: `SnowflakeConnectorTests` + `SnowflakeSyntaxTests` (18 tests, all passing). `Category=Integration` tests deferred — require 30-day trial account. CI secret: `SNOWFLAKE_CONNECTION_STRING`.
-        - [x] `Docs/Reference/Data_Connectors.md`: Snowflake section (section 2.5).
-    - **Phase 2 — BigQuery native connector** *(unique SQL dialect + GCP auth)*
-        - [x] `ETL-SQL.Core/TokenType.cs`: Add `BIGQUERY` keyword.
-        - [x] `ETL-SQL.Connectors/BigQueryConnector.cs` (new): `Google.Cloud.BigQuery.V2`. Auth: `CREDENTIAL_FILE` (service account JSON) or ADC (omit file for workload identity).
-        - [x] Pushdown dialect: backtick `QuoteIdentifier`; `project.dataset.table` three-part name parsed in `ParseTableName`.
-        - [x] `ISchemaProvider` via `INFORMATION_SCHEMA` (tables, views, columns).
-        - [x] Unit tests: `BigQueryConnectorTests` + `BigQuerySyntaxTests` (25 tests, all passing). `Category=Integration` tests deferred — require GCP project. CI secret: `GCP_SA_KEY_JSON`.
-        - [x] `Docs/Reference/Data_Connectors.md`: BigQuery section (section 2.6).
-    - **Phase 3 — Connector interface enhancements + ODBC docs**
-        - [x] `IConnector` interface: Added `CommandTimeoutSeconds` (default 30; Snowflake+BigQuery override to 1800) and `IsDataWarehouse` flag (default `false`; Snowflake+BigQuery override to `true`).
-        - [x] `CREATE CONNECTION … WITH(TIMEOUT_SECONDS = n)`: Already parsed generically. Snowflake data source reads it from options and applies to `DbCommand.CommandTimeout`. `TIMEOUT_SECONDS` added to `GetSupportedOptions()` on both warehouse connectors.
-        - [x] `appsettings.json`: Added `Connectors.DataWarehouse.DefaultCommandTimeoutSeconds: 1800` and `SchemaCacheTtlSeconds: 300`.
-        - [x] LSP schema cache TTL: `MetadataManager` checks `IsCacheValid()` — warehouse connectors expire after 5 min; OLTP connectors cache indefinitely.
-        - [x] `Docs/Reference/Data_Connectors.md`: Added **Data Warehouses via ODBC** sub-section under 2.4 with Redshift, Synapse, Databricks, Trino, Dremio examples.
-        - [x] `Docs/Architecture/Connectors.md`: Documented `CommandTimeoutSeconds`, `IsDataWarehouse`, `TIMEOUT_SECONDS` override, and schema cache TTL table.
-        - [x] `Docs/Standards/Connectors_Standards.md`: Part IV — Data Warehouse Connector Checklist (DW-1 through DW-10).
 - [ ] **Distributed Deployment & Distribution** — Transition ETL-SQL from a local tool to an enterprise platform with multi-machine simulation and native cross-platform installers.
     - **Phase 1 — Dockerization & Orchestration (The Simulation)**
         - [x] Create Dockerfile for `ETL-SQL.Orchestrator` (ASP.NET Core 10 runtime).
@@ -106,10 +24,10 @@
         - [ ] **Secret Management**: Implement an encrypted `appsettings.Production.json` or Environment Variable provider for sensitive connection strings.
         - [ ] **Admin Guides**: Create `Docs/Administrators_Guide.md` covering service management, backup/restore, and multi-server networking.
         - [ ] **Final Verification**: Perform a "Clean Machine" install on a fresh Windows VM and verify full "Workstation-to-Server" connectivity.
-- [ ] **Reporting Misc missing items**
+- [x] **Reporting Misc missing items**
     - [x] BUBBLE, RADAR, CANDLESTICK chart types
     - [x] Report CROSS_FILTER — confirmed working (chart→table); chart→chart not yet implemented
-    - [ ] **MAP Chart Type (Choropleth)** — Render geographic data as a color-scaled choropleth map using Apache ECharts' native map support. GeoJSON served as static files; client fetches and registers before chart init. See design notes in planning conversation.
+    - [x] **MAP Chart Type (Choropleth)** — Render geographic data as a color-scaled choropleth map using Apache ECharts' native map support. GeoJSON served as static files; client fetches and registers before chart init. See design notes in planning conversation.
         - **Phase 1 — GeoJSON Assets** ✓
             - [x] Source and simplify GeoJSON for the six bundled maps (all public domain):
                 - `world.geojson` — Natural Earth 110m, slimmed props → 257 KB, 177 features; match by `name` (e.g. "France") or `id` ISO A3 (e.g. "FRA")
@@ -145,11 +63,11 @@
             - [x] `src/ETL-SQL.Core/Resources/Help/Visuals/MAP.md` *(new)*: Documents CHOROPLETH and POINTS modes, all options, all 6 built-in map keys, FIPS matching, zip code workaround reference, and four complete examples.
             - [x] `Docs/Reference/Grammar.md`: `MAP` added to visual types list; two rows added to mapping roles table (choropleth and points modes).
             - [x] `src/ETL-SQL.Core/Resources/Help/Visuals/INDEX.md`: MAP entry added under Charts.
-            - [ ] `Docs/Report_Cookbook.md` recipe 11 already written — verify examples compile once Phase 3/4 are done.
-        - **Phase 6 — Custom Map Files (MAP_FILE option)**  *(can be done alongside Phase 3/4 or deferred)*
-            - [ ] Server: When `MAP_FILE` is set, `GeographicRenderer` should embed the file path in the ECharts option as a custom property (e.g. `mapFile`) so the client knows to fetch it from a local route instead of `/maps/`.
-            - [ ] `ETL-SQL.ReportPlayer`: Add a dynamic route `GET /maps/custom?path=...` that reads the file via `ResolvePath`, validates it is GeoJSON, and streams it. Never expose raw filesystem paths in the URL — use a server-side resolve.
-            - [ ] `ETL-SQL.ReportBuilder`: Add a validation step that checks `MAP_FILE` exists at manifest build time and warns if not found.
+            - [x] `Docs/Report_Cookbook.md` recipe 11 already written — verified: 4 parser tests added covering all cookbook MAP variants (MATCH_BY=FIPS, MODE=POINTS, MAP_FILE, basic choropleth). All pass.
+        - **Phase 6 — Custom Map Files (MAP_FILE option)** ✓
+            - [x] Server: `GeographicRenderer` embeds `MAP_FILE` path as `__mapFile` in the chart option so the client fetches from `/maps/custom?path=...` instead of `/maps/`.
+            - [x] `ETL-SQL.ReportPlayer`: `GET /maps/custom?path=...` route added — resolves path relative to script directory, validates `.geojson`/`.json` extension, streams file. Multi-report mode also exposes `GET /reports/{name}/maps/custom` with per-report path resolution. `DashboardService.ScriptDirectory` property exposed.
+            - [x] `ETL-SQL.ReportBuilder`: `VisualBuilder` validates `MAP_FILE` path at build time via `ctx.ResolvePath()`; sets `vm.Error` with a clear message if file not found.
 - [x] **Add batch separator GO command**  `GO` and `GO <count>` implemented. Parser emits `GoStatement`; Evaluator splits statements into batches at GO boundaries and wraps each batch in its own try/catch — a failed batch is logged and skipped, later batches run normally. No-GO scripts retain the original fail-fast behavior. `GO <count>` repeats the preceding batch N times. 5 tests added in `GoStatementTests`. Help file: `Keywords/GO.md`.
 - [ ] **Do file operation functions work with Directory CONNECTION?**  That's how its intended to work but I haven't seen any examples of this.
 - [x] **All the function need help files** All the functions need to have help file in the C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\Resources folder.  Follow the examples in that folder for the format.
