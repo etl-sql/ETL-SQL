@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
@@ -117,15 +118,35 @@ namespace ETL_SQL.ReportBuilder.Builders
                 });
             }
 
-            try
+            // MAP_FILE validation: resolve and verify the file exists at build time.
+            if (vStmt.VisualType == VisualType.Map &&
+                vStmt.Options.FirstOrDefault(o => o.Key.Equals("MAP_FILE", StringComparison.OrdinalIgnoreCase)) is { } mapFileOpt &&
+                !string.IsNullOrWhiteSpace(mapFileOpt.Value))
             {
-                await FetchDataAsync(vStmt, vm);
-                CalculateSummaries(vStmt, vm);
-                vm.ChartConfig = renderer.Render(vm);
+                try
+                {
+                    var resolved = ctx.ResolvePath(mapFileOpt.Value);
+                    if (!File.Exists(resolved))
+                        vm.Error = $"MAP_FILE not found: {mapFileOpt.Value}";
+                }
+                catch (Exception ex)
+                {
+                    vm.Error = $"MAP_FILE path error: {ex.Message}";
+                }
             }
-            catch (Exception ex)
+
+            if (vm.Error == null)
             {
-                vm.Error = ex.Message;
+                try
+                {
+                    await FetchDataAsync(vStmt, vm);
+                    CalculateSummaries(vStmt, vm);
+                    vm.ChartConfig = renderer.Render(vm);
+                }
+                catch (Exception ex)
+                {
+                    vm.Error = ex.Message;
+                }
             }
 
             return vm;

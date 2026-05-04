@@ -211,6 +211,69 @@ else
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Custom GeoJSON file route — shared across single and multi-report modes.
+// Serves a user-supplied MAP_FILE path safely from the server's filesystem.
+// The client sends: GET /maps/custom?path=<url-encoded-absolute-path>
+// ─────────────────────────────────────────────────────────────────────────────
+app.MapGet("/maps/custom", async (HttpContext ctx) =>
+{
+    var rawPath = ctx.Request.Query["path"].FirstOrDefault();
+    if (string.IsNullOrWhiteSpace(rawPath))
+        return Results.BadRequest("path query parameter is required");
+
+    // Resolve relative paths against the script directory (single-mode) or CWD (multi-mode).
+    string baseDir = multiMode
+        ? Directory.GetCurrentDirectory()
+        : Path.GetDirectoryName(Path.GetFullPath(scriptPath!)) ?? Directory.GetCurrentDirectory();
+
+    string fullPath = Path.IsPathRooted(rawPath)
+        ? Path.GetFullPath(rawPath)
+        : Path.GetFullPath(rawPath, baseDir);
+
+    if (!File.Exists(fullPath))
+        return Results.NotFound($"Map file not found: {Path.GetFileName(fullPath)}");
+
+    // Only serve GeoJSON files — reject anything else by extension.
+    if (!fullPath.EndsWith(".geojson", StringComparison.OrdinalIgnoreCase) &&
+        !fullPath.EndsWith(".json",    StringComparison.OrdinalIgnoreCase))
+        return Results.BadRequest("Only .geojson / .json files may be served via this route");
+
+    ctx.Response.ContentType = "application/geo+json; charset=utf-8";
+    await ctx.Response.SendFileAsync(fullPath);
+    return Results.Empty;
+});
+
+// Multi-report mode also exposes the same route scoped per-report so that
+// report-specific paths (relative to each script dir) can be resolved.
+if (multiMode)
+{
+    app.MapGet("/reports/{name}/maps/custom", async (string name, HttpContext ctx, DashboardServiceFactory fac) =>
+    {
+        var svc = fac.GetService(name);
+        if (svc == null) return Results.NotFound();
+
+        var rawPath = ctx.Request.Query["path"].FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(rawPath))
+            return Results.BadRequest("path query parameter is required");
+
+        string fullPath = Path.IsPathRooted(rawPath)
+            ? Path.GetFullPath(rawPath)
+            : Path.GetFullPath(rawPath, svc.ScriptDirectory);
+
+        if (!File.Exists(fullPath))
+            return Results.NotFound($"Map file not found: {Path.GetFileName(fullPath)}");
+
+        if (!fullPath.EndsWith(".geojson", StringComparison.OrdinalIgnoreCase) &&
+            !fullPath.EndsWith(".json",    StringComparison.OrdinalIgnoreCase))
+            return Results.BadRequest("Only .geojson / .json files may be served via this route");
+
+        ctx.Response.ContentType = "application/geo+json; charset=utf-8";
+        await ctx.Response.SendFileAsync(fullPath);
+        return Results.Empty;
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Start
 // ─────────────────────────────────────────────────────────────────────────────
 app.Urls.Add($"http://localhost:{port}");

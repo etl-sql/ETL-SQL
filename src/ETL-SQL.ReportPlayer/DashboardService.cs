@@ -44,6 +44,8 @@ namespace ETL_SQL.ReportPlayer
         private CancellationTokenSource? _refreshCts;
         private static readonly Regex _intervalPattern = new(@"^(\d+)([smhd])$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        public string ScriptDirectory => Path.GetDirectoryName(_scriptPath) ?? Directory.GetCurrentDirectory();
+
         public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory)
         {
             _scriptPath = scriptPath ?? throw new ArgumentNullException(nameof(scriptPath));
