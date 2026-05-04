@@ -163,7 +163,37 @@ if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 let currentFolderId   = null;
 let currentReportId   = null;
 let currentFolderName = '';
+let currentActivePage = null;  // tracks active report page for back/refresh
 let isAdmin           = false;
+
+// Track active page reported by the report iframe
+window.addEventListener('message', e => {
+  if (e.data && e.data.type === 'etl-page-changed') {
+    currentActivePage = e.data.page;
+    history.replaceState(
+      { view: 'report', id: currentReportId, page: currentActivePage,
+        folderId: currentFolderId, folderName: currentFolderName },
+      '');
+  }
+});
+
+// Browser back/forward: restore the correct view
+window.addEventListener('popstate', e => {
+  const s = e.state;
+  if (!s) return;
+  if (s.view === 'folder') {
+    currentFolderId   = s.folderId;
+    currentFolderName = s.folderName;
+    currentReportId   = null;
+    currentActivePage = null;
+    loadReportList(s.folderId, s.folderName, /*pushState=*/false);
+  } else if (s.view === 'report') {
+    currentFolderId   = s.folderId;
+    currentFolderName = s.folderName;
+    currentActivePage = s.page || null;
+    openReport(s.id, /*pushState=*/false);
+  }
+});
 
 async function init() {
   try {
@@ -241,7 +271,10 @@ function selectFolder(id, name) {
 }
 
 // ── Report list ────────────────────────────────────────────────────────────────
-async function loadReportList(folderId, folderName) {
+async function loadReportList(folderId, folderName, pushState = true) {
+  if (pushState) {
+    history.pushState({ view: 'folder', folderId, folderName }, '');
+  }
   const $main = document.getElementById('mainContent');
   $main.innerHTML = `<div class="viewer-loading">Loading…</div>`;
   try {
@@ -290,8 +323,14 @@ function renderReportList(reports, folderName) {
 }
 
 // ── Report viewer ──────────────────────────────────────────────────────────────
-async function openReport(id) {
+async function openReport(id, pushState = true) {
   currentReportId = id;
+  if (pushState) {
+    currentActivePage = null;
+    history.pushState(
+      { view: 'report', id, page: null, folderId: currentFolderId, folderName: currentFolderName },
+      '');
+  }
   const $main = document.getElementById('mainContent');
   $main.innerHTML = `<div class="viewer-loading">Loading report…</div>`;
 
@@ -351,31 +390,32 @@ function renderViewer(report, snapshot) {
       <div class="viewer-loading">Rendering…</div>
     </div>`;
 
-  document.getElementById('backBtn').addEventListener('click', () =>
-    currentFolderId ? loadReportList(currentFolderId, currentFolderName) : null);
+  document.getElementById('backBtn').addEventListener('click', () => {
+    if (currentFolderId) loadReportList(currentFolderId, currentFolderName);
+  });
   document.getElementById('refreshBtn2').addEventListener('click', () => runAndPoll(report.id));
   document.getElementById('exportBtn').addEventListener('click', () => showExport(report.id));
   document.getElementById('subBtn').addEventListener('click', () => openSubscribeModal(report.id));
   const staleBtn = document.getElementById('refreshBtn');
   if (staleBtn) staleBtn.addEventListener('click', () => runAndPoll(report.id));
 
-  loadReportFrame(report.id);
+  loadReportFrame(report.id, currentActivePage);
 }
 
-function loadReportFrame(id) {
+function loadReportFrame(id, initialPage = null) {
   const $frame = document.getElementById('reportFrame');
   if (!$frame) return;
-  window.__IS_WEB__   = true;
-  window.__API_BASE__ = `/api/reports/${id}`;
   const iframe = document.createElement('iframe');
   iframe.style.cssText = 'width:100%;height:100%;border:none;';
-  iframe.srcdoc = buildRuntimeHtml(id);
+  iframe.srcdoc = buildRuntimeHtml(id, false, initialPage);
   $frame.innerHTML = '';
   $frame.appendChild(iframe);
 }
 
-function buildRuntimeHtml(id, isPreview = false) {
+function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
   const token = auth.getToken() || '';
+  const initialPageJs = initialPage
+    ? `window.__INITIAL_PAGE__ = ${JSON.stringify(initialPage)};` : '';
   return `<!DOCTYPE html>
 <html><head>
 <meta charset="UTF-8">
@@ -384,6 +424,7 @@ function buildRuntimeHtml(id, isPreview = false) {
   window.__IS_WEB__     = true;
   window.__IS_PREVIEW__ = ${isPreview};
   window.__API_BASE__   = '/api/reports/${id}';
+  ${initialPageJs}
   const _f = window.fetch.bind(window);
   window.fetch = (input, init={}) => {
     const url = typeof input === 'string' ? input : input.url;
@@ -405,6 +446,7 @@ function buildRuntimeHtml(id, isPreview = false) {
 
 // ── Execute / Refresh with polling ────────────────────────────────────────────
 async function runAndPoll(id) {
+  const savedPage = currentActivePage;  // remember which tab the user was on
   const $main = document.getElementById('mainContent');
   $main.innerHTML = `
     <div class="refresh-banner" id="pollBanner">
@@ -425,7 +467,11 @@ async function runAndPoll(id) {
     await sleep(1500);
     try {
       const job = await reportsApi.pollJob(jobId);
-      if (job.status === 'Completed') { openReport(id); return; }
+      if (job.status === 'Completed') {
+        currentActivePage = savedPage;  // restore before openReport renders the iframe
+        openReport(id, false);
+        return;
+      }
       if (job.status === 'Failed') {
         $main.innerHTML = `<div class="empty-state">Report execution failed: ${esc(job.error || 'unknown error')}</div>`;
         return;

@@ -191,36 +191,52 @@
 
             el.dataset.page = pageName; // allows programmatic navigation
             el.addEventListener('click', () => {
-                // Hide all, show clicked
-                navDef.pages.forEach(n => {
-                    const s = pageSections[n];
-                    if (s) s.style.display = 'none';
-                });
-                const target = pageSections[pageName];
-                if (target) {
-                    target.style.display = 'block';
-                    resizeChartsIn(target);
-                }
-
-                // Update active class
-                nav.querySelectorAll('.' + itemClass).forEach(e => e.classList.remove('active'));
-                el.classList.add('active');
+                activatePage(pageName, pageSections, navDef.pages, nav, itemClass);
             });
 
             nav.appendChild(el);
         });
 
-        // Show default page, hide others; resize charts that initialised hidden
+        // Show default page (or __INITIAL_PAGE__ if the parent set it), hide others
+        const initialPage = (typeof window.__INITIAL_PAGE__ === 'string' && window.__INITIAL_PAGE__)
+            ? window.__INITIAL_PAGE__ : defaultPageName;
         pages.forEach(p => {
             const s = pageSections[p.name];
             if (!s) return;
-            if (p.name === defaultPageName) {
-                s.style.display = 'block';
-                resizeChartsIn(s);
-            } else {
-                s.style.display = 'none';
+            s.style.display = 'none';
+        });
+        activatePage(initialPage, pageSections, navDef.pages,
+            nav, navDef.navType === 'TAB' ? 'nav-tab' : navDef.navType === 'BUTTON' ? 'nav-btn' : 'nav-link');
+
+        // Listen for parent-frame navigation requests (back/forward, post-refresh restore)
+        window.addEventListener('message', e => {
+            if (e.data && e.data.type === 'etl-navigate' && e.data.page) {
+                activatePage(e.data.page, pageSections, navDef.pages,
+                    nav, navDef.navType === 'TAB' ? 'nav-tab' : navDef.navType === 'BUTTON' ? 'nav-btn' : 'nav-link');
             }
         });
+    }
+
+    // Shared page-switch logic; notifies parent frame of the change.
+    function activatePage(pageName, pageSections, allPageNames, nav, itemClass) {
+        allPageNames.forEach(n => {
+            const s = pageSections[n];
+            if (s) s.style.display = 'none';
+        });
+        const target = pageSections[pageName];
+        if (target) {
+            target.style.display = 'block';
+            resizeChartsIn(target);
+        }
+        if (nav) {
+            nav.querySelectorAll('.' + itemClass).forEach(e => e.classList.remove('active'));
+            const el = nav.querySelector(`[data-page="${CSS.escape(pageName)}"]`);
+            if (el) el.classList.add('active');
+        }
+        // Tell the parent frame which page is now active so it can track for refresh / history
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({type: 'etl-page-changed', page: pageName}, '*');
+        }
     }
 
     function syncParameters(params) {

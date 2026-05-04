@@ -7,9 +7,10 @@
   h2   { border-bottom: 2px solid #ccc; padding-bottom: 4px; margin-top: 32px; }
   h3   { margin-bottom: 8px; }
   .visual-card  { background: #fff; border: 1px solid #ddd; border-radius: 6px;
-                  padding: 16px; margin: 0; display: flex; flex-direction: column; }
+                  padding: 16px; margin: 0; display: flex; flex-direction: column;
+                  flex: 1; min-height: 0; }
   .visual-card.fill-height { height: 100%; }
-  .chart-wrapper { width: 100%; height: 100%; flex: 1; min-height: 300px; }
+  .chart-wrapper { width: 100%; flex: 1; height: auto; min-height: 0; }
   .table-wrapper { overflow: auto; max-height: 500px; }
   table { border-collapse: collapse; width: 100%; }
   th, td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; }
@@ -39,6 +40,7 @@
   .page { display: none; }
   .page.active { display: block; }
   .page-grid { display: grid; gap: 24px; }
+  .page-grid > div { display: flex; flex-direction: column; min-height: 0; }
   .container-box { display: flex; flex-direction: column; gap: 12px; }
   .container-scroll { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
   .filter-wrapper { display: flex; flex-direction: column; gap: 6px; }
@@ -52,11 +54,12 @@
     border-radius: 4px; background: #5470c6; color: white; cursor: pointer; font-size: 0.9em; }
   .filter-wrapper .filter-apply:hover { background: #3a56a8; }
   @media (max-width: 768px) {
-    .page-grid { grid-template-areas: none !important; grid-template-columns: 1fr !important; }
-    .page-grid > div { grid-area: auto !important; }
-    .chart-wrapper { height: 240px !important; }
+    .page-grid { grid-template-areas: none !important; grid-template-columns: 1fr !important;
+                 grid-template-rows: none !important; }
+    .page-grid > div { grid-area: auto !important; flex: none; }
+    .visual-card { width: auto !important; flex: none; }
+    .chart-wrapper { height: 240px !important; flex: none !important; }
     .nav-bar { flex-direction: column; }
-    .visual-card { width: auto !important; }
   }
   
   /* Preview Mode overrides for thumbnails */
