@@ -340,9 +340,10 @@ const VisualCard: React.FC<{
                              />
                          )}
                          {type === 'IMAGE' && <ReportImage visual={visual} />}
-                         {['BAR', 'LINE', 'PIE', 'DONUT', 'SCATTER', 'HBAR', 'HORIZONTALBAR', 'BOXPLOT', 'TREEMAP', 'HEATMAP', 'COMBO', 'GAUGE', 'FUNNEL', 'WATERFALL'].includes(type) && (
+                         {['BAR', 'LINE', 'PIE', 'DONUT', 'SCATTER', 'HBAR', 'HORIZONTALBAR', 'BOXPLOT', 'TREEMAP', 'HEATMAP', 'COMBO', 'GAUGE', 'FUNNEL', 'WATERFALL', 'BUBBLE', 'RADAR', 'CANDLESTICK'].includes(type) && (
                              <ReportChart visual={visual} />
                          )}
+                         {type === 'MAP' && <ReportMapPlaceholder visual={visual} />}
                     </div>
                 )}
             </div>
@@ -367,18 +368,32 @@ const ReportChart: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
         }
 
         try {
-            const option = typeof visual.chartConfig === 'string' 
-                ? JSON.parse(visual.chartConfig) 
+            const option = typeof visual.chartConfig === 'string'
+                ? JSON.parse(visual.chartConfig)
                 : visual.chartConfig;
-            
-            // DEBUG: Log HBAR options if blank
-            if (visual.visualType.toUpperCase() === 'HBAR') {
-                console.log('[DEBUG] HBAR config:', option);
+
+            // BUBBLE: __bubbleSymbolSize signals scatter size is in data[2]
+            if (option.__bubbleSymbolSize) {
+                delete option.__bubbleSymbolSize;
+                (option.series || []).forEach((s: any) => {
+                    if (s.type === 'scatter') s.symbolSize = (val: number[]) => val[2];
+                });
             }
+            // MAP POINTS: same marker on the series object
+            (option.series || []).forEach((s: any) => {
+                if (s.__pointsSymbolSize) {
+                    delete s.__pointsSymbolSize;
+                    if (s.type === 'scatter') s.symbolSize = (val: number[]) => val[2];
+                }
+            });
+            // Strip MAP metadata markers (GeoJSON not available in preview)
+            delete option.__mapKey;
+            delete option.__matchBy;
+            delete option.__mapFile;
 
             // Inject transparent background for glassmorphism integration
             option.backgroundColor = 'transparent';
-            
+
             chartInstance.current.setOption(option, true);
         } catch (e) {
             console.error('Failed to render chart:', e);
@@ -640,10 +655,26 @@ const ReportImage: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
 const ReportText: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
     // TEXT visuals usually store their content in defaultValue (parsed from VALUE property)
     const text = visual.defaultValue || visual.options['VALUE'] || visual.options['value'] || '';
-    
+
     return (
         <div className="w-full h-full min-h-[100px] overflow-y-auto whitespace-pre-wrap text-[var(--text)] text-sm opacity-90 leading-relaxed font-mono bg-transparent">
             {text}
+        </div>
+    );
+};
+
+const ReportMapPlaceholder: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
+    const mapKey = (visual.options?.['MAP_NAME'] || visual.options?.['map_name'] || '').toUpperCase();
+    const mode   = (visual.options?.['MODE'] || 'CHOROPLETH').toUpperCase();
+    return (
+        <div className="h-full w-full flex flex-col items-center justify-center gap-3 text-center p-8 opacity-70">
+            <span className="text-4xl select-none">🗺</span>
+            <p className="text-sm font-bold text-[var(--muted)] tracking-wide">Map preview unavailable</p>
+            <p className="text-xs text-[var(--muted)]/70 max-w-[280px] leading-relaxed">
+                {mapKey ? `${mapKey} · ${mode}` : 'MAP'} charts require the HTTP server to load GeoJSON.
+                Open the report in <span className="font-mono text-indigo-400">Report Portal</span> or run the
+                script with <span className="font-mono text-indigo-400">--ui</span> to see the live map.
+            </p>
         </div>
     );
 };
