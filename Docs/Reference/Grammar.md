@@ -1907,7 +1907,28 @@ CREATE VISUAL <name> AS <type> (
 );
 ```
 
-**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
+**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `RADAR`, `CANDLESTICK`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
+
+**Mapping roles by visual type:**
+
+| Type | Required roles | Optional roles |
+|------|---------------|----------------|
+| `BAR`, `HBAR`, `LINE` | `X`, `Y` | `SERIES` |
+| `SCATTER` | `X`, `Y` | `COLOR`, `LABEL` |
+| `BUBBLE` | `X`, `Y` | `SIZE`, `LABEL` |
+| `PIE`, `DONUT`, `FUNNEL` | `LABEL`, `VALUE` | — |
+| `COMBO` | `X` | _(declare each series in `SERIES(BAR col, LINE col)`)_ |
+| `BOXPLOT` | `X`, `LOW`, `Q1`, `MEDIAN`, `Q3`, `HIGH` | — |
+| `TREEMAP` | `LABEL`, `VALUE` | `PARENT` |
+| `HEATMAP` | `X`, `Y`, `VALUE` | — |
+| `GAUGE` | `VALUE` | `LABEL` |
+| `WATERFALL` | `X`, `Y` | — |
+| `RADAR` | _(none — first column = series name, remaining columns = metric axes)_ | — |
+| `CANDLESTICK` | `X`, `OPEN`, `HIGH`, `LOW`, `CLOSE` | — |
+| `TABLE` | _(all source columns rendered automatically)_ | — |
+| `CARD` | `VALUE` | `LABEL` |
+| `SLICER`, `MULTISELECT` | `VALUE` | — |
+| `TEXT`, `IMAGE`, `DATEPICKER`, `SLIDER`, `SEARCH` | _(no mappings)_ | — |
 
 **FORMATTING operators:** `<`, `>`, `<=`, `>=`, `=`, `<>`
 

@@ -15,7 +15,8 @@ Charts:
   LINE        — line / area trend chart
   PIE         — pie chart; DONUT for hollow-centre variant
   DONUT       — pie with a centre hole and optional centre label
-  SCATTER     — scatter plot; BUBBLE adds a SIZE mapping
+  SCATTER     — scatter plot correlating two numeric dimensions
+  BUBBLE      — scatter with a third column controlling circle radius
   GAUGE       — dial/arc for a single KPI vs. target and range
   RADAR       — spider chart for multi-dimension comparison
   HEATMAP     — colour grid: two categories × one metric
@@ -24,6 +25,7 @@ Charts:
   TREEMAP     — nested rectangles sized by value; supports hierarchy
   BOXPLOT     — statistical distribution: median, quartiles, whiskers, outliers
   COMBO       — bar + line on shared axes (dual Y axis)
+  CANDLESTICK — OHLC price chart for financial time-series data
 
 Display:
   CARD        — large KPI number with optional label, trend, and goal

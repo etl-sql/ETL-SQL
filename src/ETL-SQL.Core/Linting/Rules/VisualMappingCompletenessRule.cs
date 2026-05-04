@@ -62,9 +62,11 @@ namespace ETL_SQL.Core.Linting.Rules
                 VisualType.Gauge => new List<string> { "VALUE" },
                 VisualType.Slicer => new List<string> { "VALUE" },
                 VisualType.MultiSelect => new List<string> { "VALUE" },
-                VisualType.BoxPlot => new List<string> { "X", "LOW", "Q1", "MEDIAN", "Q3", "HIGH" },
-                VisualType.Combo => new List<string> { "X" },
-                _ => null
+                VisualType.BoxPlot     => new List<string> { "X", "LOW", "Q1", "MEDIAN", "Q3", "HIGH" },
+                VisualType.Combo       => new List<string> { "X" },
+                VisualType.Bubble      => new List<string> { "X", "Y" },
+                VisualType.Candlestick => new List<string> { "X", "OPEN", "HIGH", "LOW", "CLOSE" },
+                _ => null  // Radar: flexible — any number of metric columns
             };
         }
     }

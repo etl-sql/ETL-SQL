@@ -99,7 +99,7 @@ namespace ETL_SQL.ReportBuilder.Renderers
                 ["min"] = gaugeMin,
                 ["max"] = gaugeMax,
                 ["data"] = new[] { new { value, name } },
-                ["detail"] = new { valueAnimation = true, formatter = "{value:.1f}" }
+                ["detail"] = new { valueAnimation = true, formatter = "{value}" }
             };
 
             if (isProgress)
@@ -118,7 +118,7 @@ namespace ETL_SQL.ReportBuilder.Renderers
                 series["axisTick"] = new { show = false };
                 series["splitLine"] = new { show = false };
                 series["axisLabel"] = new { show = false };
-                series["detail"] = new { offsetCenter = new[] { "0", "-10%" }, valueAnimation = true, formatter = "{value:.1f}" };
+                series["detail"] = new { offsetCenter = new[] { "0", "-10%" }, valueAnimation = true, formatter = "{value}" };
             }
             else if (isRing)
             {
@@ -199,5 +199,149 @@ namespace ETL_SQL.ReportBuilder.Renderers
                 }
             });
         }
+
+        // ── BUBBLE ────────────────────────────────────────────────────────────
+        // Expected mappings: X, Y, SIZE (optional), LABEL (optional).
+        // Without SIZE mapping, falls back to the third column; if absent, uniform size 20.
+
+        public string RenderBubble(VisualManifest v)
+        {
+            var xCol    = FindRole(v, "x")     ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var yCol    = FindRole(v, "y")     ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var sizeCol = FindRole(v, "size")  ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
+            var lblCol  = FindRole(v, "label") ?? (v.Columns.Count > 3 ? v.Columns[3] : null);
+
+            int xi = ColIdx(v, xCol);
+            int yi = ColIdx(v, yCol);
+            int si = ColIdx(v, sizeCol);
+            int li = ColIdx(v, lblCol);
+
+            double maxSize = si >= 0 ? v.Rows.Max(r => ToDouble(r.Count > si ? r[si] : null) ?? 0.0) : 1;
+            if (maxSize == 0) maxSize = 1;
+
+            // Encode [x, y, scaledSize, rawSize, name] per point.
+            // ECharts scatter uses symbolSize as a function — the client reads index 2 for display size.
+            var data = v.Rows.Select(r =>
+            {
+                double x       = ToDouble(xi >= 0 && xi < r.Count ? r[xi] : null) ?? 0.0;
+                double y       = ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null) ?? 0.0;
+                double rawSize = si >= 0 && si < r.Count ? ToDouble(r[si]) ?? 0.0 : 0.0;
+                double scaled  = si >= 0 ? rawSize / maxSize * 60 + 5 : 20.0;
+                string name    = li >= 0 && li < r.Count ? r[li]?.ToString() ?? "" : "";
+                return (object)new { value = new object[] { x, y, scaled, rawSize }, name };
+            }).ToList();
+
+            // symbolSize is a client-side function; embed a marker so report-runtime.js knows to apply it.
+            return Serialize(new
+            {
+                title   = TitleOpt(v),
+                tooltip = new { trigger = "item" },
+                xAxis   = new { },
+                yAxis   = new { },
+                __bubbleSymbolSize = true,   // signal to client to wire symbolSize function
+                series  = new[] { new { type = "scatter", name = v.Name, data } }
+            });
+        }
+
+        // ── RADAR ─────────────────────────────────────────────────────────────
+        // Expected data shape: first column = series name (one row per series),
+        // remaining columns = metric values matching indicator labels.
+        // OPTIONS: MIN (default 0), MAX (default auto).
+
+        public string RenderRadar(VisualManifest v)
+        {
+            if (v.Columns.Count < 2)
+                return Serialize(new { title = TitleOpt(v) });
+
+            double radarMax = 100;
+            if (v.Options.TryGetValue("MAX", out var maxStr) && double.TryParse(maxStr, out var mx)) radarMax = mx;
+            else if (v.Rows.Count > 0)
+            {
+                double autoMax = v.Rows
+                    .SelectMany(r => r.Skip(1))
+                    .Select(val => ToDouble(val) ?? 0.0)
+                    .DefaultIfEmpty(0)
+                    .Max();
+                radarMax = autoMax > 0 ? autoMax * 1.1 : 100;
+            }
+
+            double radarMin = 0;
+            if (v.Options.TryGetValue("MIN", out var minStr) && double.TryParse(minStr, out var mn)) radarMin = mn;
+
+            var indicators = v.Columns.Skip(1).Select(c => (object)new { name = c, max = radarMax, min = radarMin }).ToList();
+
+            var seriesData = v.Rows.Select(r =>
+            {
+                var name   = r.Count > 0 ? r[0]?.ToString() ?? "" : "";
+                var values = r.Skip(1).Select(val => ToDouble(val) ?? 0.0).ToList();
+                return (object)new { name, value = values };
+            }).ToList();
+
+            return Serialize(new
+            {
+                title  = TitleOpt(v),
+                legend = LegendOpt(v),
+                radar  = new { indicator = indicators },
+                series = new[] { new { type = "radar", name = v.Name, data = seriesData } }
+            });
+        }
+
+        // ── CANDLESTICK ───────────────────────────────────────────────────────
+        // Expected mappings: X (date/label), OPEN, HIGH, LOW, CLOSE.
+        // Falls back to first five columns in that order if mappings are absent.
+
+        public string RenderCandlestick(VisualManifest v)
+        {
+            var xCol     = FindRole(v, "x")     ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var openCol  = FindRole(v, "open")  ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var highCol  = FindRole(v, "high")  ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
+            var lowCol   = FindRole(v, "low")   ?? (v.Columns.Count > 3 ? v.Columns[3] : null);
+            var closeCol = FindRole(v, "close") ?? (v.Columns.Count > 4 ? v.Columns[4] : null);
+
+            int xi  = ColIdx(v, xCol);
+            int oi  = ColIdx(v, openCol);
+            int hi  = ColIdx(v, highCol);
+            int li  = ColIdx(v, lowCol);
+            int ci  = ColIdx(v, closeCol);
+
+            var categories = v.Rows.Select(r => xi >= 0 && xi < r.Count ? r[xi]?.ToString() ?? "" : "").ToList();
+            var ohlc = v.Rows.Select(r => new[]
+            {
+                ToDouble(oi >= 0 && oi < r.Count ? r[oi] : null) ?? 0.0,
+                ToDouble(ci >= 0 && ci < r.Count ? r[ci] : null) ?? 0.0,
+                ToDouble(li >= 0 && li < r.Count ? r[li] : null) ?? 0.0,
+                ToDouble(hi >= 0 && hi < r.Count ? r[hi] : null) ?? 0.0
+            }).ToList();
+
+            v.Options.TryGetValue("COLOR_UP",   out var colorUp);
+            v.Options.TryGetValue("COLOR_DOWN", out var colorDown);
+
+            return Serialize(new
+            {
+                title   = TitleOpt(v),
+                tooltip = new { trigger = "axis", axisPointer = new { type = "cross" } },
+                xAxis   = new { type = "category", data = categories, boundaryGap = true, axisLine = new { onZero = false } },
+                yAxis   = new { scale = true },
+                series  = new[]
+                {
+                    new
+                    {
+                        type      = "candlestick",
+                        name      = v.Name,
+                        data      = ohlc,
+                        itemStyle = new
+                        {
+                            color        = colorUp   ?? "#ec0000",
+                            color0       = colorDown ?? "#00da3c",
+                            borderColor  = colorUp   ?? "#8A0000",
+                            borderColor0 = colorDown ?? "#008F28"
+                        }
+                    }
+                }
+            });
+        }
+
+        private static int ColIdx(VisualManifest v, string? col) =>
+            col != null ? v.Columns.FindIndex(c => string.Equals(c, col, StringComparison.OrdinalIgnoreCase)) : -1;
     }
 }

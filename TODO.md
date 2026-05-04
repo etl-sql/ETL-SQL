@@ -107,8 +107,8 @@
         - [ ] **Admin Guides**: Create `Docs/Administrators_Guide.md` covering service management, backup/restore, and multi-server networking.
         - [ ] **Final Verification**: Perform a "Clean Machine" install on a fresh Windows VM and verify full "Workstation-to-Server" connectivity.
 - [ ] **Reporting Misc missing items**
-    - [ ] BUBBLE, RADAR, CANDLESTICK chart types
-    - [ ] Report CROSS_FILTER missing?  Not finding the code to make this work.
+    - [x] BUBBLE, RADAR, CANDLESTICK chart types
+    - [x] Report CROSS_FILTER — confirmed working (chart→table); chart→chart not yet implemented
     - [ ] **MAP Chart Type (Choropleth)** — Render geographic data as a color-scaled choropleth map using Apache ECharts' native map support. GeoJSON served as static files; client fetches and registers before chart init. See design notes in planning conversation.
         - **Phase 1 — GeoJSON Assets**
             - [ ] Source and simplify GeoJSON for the six bundled maps (all public domain):

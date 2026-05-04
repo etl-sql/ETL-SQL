@@ -863,6 +863,9 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.FUNNEL))       return VisualType.Funnel;
             if (Match(TokenType.WATERFALL))    return VisualType.Waterfall;
             if (Match(TokenType.IMAGE))        return VisualType.Image;
+            if (Match(TokenType.BUBBLE))       return VisualType.Bubble;
+            if (Match(TokenType.RADAR))        return VisualType.Radar;
+            if (Match(TokenType.CANDLESTICK))  return VisualType.Candlestick;
 
             if (_parser.Current.Type == TokenType.IDENTIFIER)
             {
@@ -870,27 +873,30 @@ namespace ETL_SQL.Core.Parser.Components
                 Advance();
                 return val switch
                 {
-                    "BAR"         => VisualType.Bar,
-                    "LINE"        => VisualType.Line,
-                    "SCATTER"     => VisualType.Scatter,
-                    "PIE"         => VisualType.Pie,
-                    "TABLE"       => VisualType.Table,
-                    "CARD"        => VisualType.Card,
-                    "SLICER"      => VisualType.Slicer,
-                    "HEATMAP"     => VisualType.HeatMap,
-                    "DONUT"       => VisualType.Donut,
-                    "HBAR"        => VisualType.HorizontalBar,
-                    "BOXPLOT"     => VisualType.BoxPlot,
-                    "TREEMAP"     => VisualType.Treemap,
-                    "TEXT"        => VisualType.Text,
-                    "COMBO"       => VisualType.Combo,
-                    "DATEPICKER"  => VisualType.DatePicker,
-                    "SLIDER"      => VisualType.Slider,
-                    "MULTISELECT" => VisualType.MultiSelect,
-                    "SEARCH"      => VisualType.Search,
-                    "GAUGE"       => VisualType.Gauge,
-                    "FUNNEL"      => VisualType.Funnel,
-                    "WATERFALL"   => VisualType.Waterfall,
+                    "BAR"          => VisualType.Bar,
+                    "LINE"         => VisualType.Line,
+                    "SCATTER"      => VisualType.Scatter,
+                    "PIE"          => VisualType.Pie,
+                    "TABLE"        => VisualType.Table,
+                    "CARD"         => VisualType.Card,
+                    "SLICER"       => VisualType.Slicer,
+                    "HEATMAP"      => VisualType.HeatMap,
+                    "DONUT"        => VisualType.Donut,
+                    "HBAR"         => VisualType.HorizontalBar,
+                    "BOXPLOT"      => VisualType.BoxPlot,
+                    "TREEMAP"      => VisualType.Treemap,
+                    "TEXT"         => VisualType.Text,
+                    "COMBO"        => VisualType.Combo,
+                    "DATEPICKER"   => VisualType.DatePicker,
+                    "SLIDER"       => VisualType.Slider,
+                    "MULTISELECT"  => VisualType.MultiSelect,
+                    "SEARCH"       => VisualType.Search,
+                    "GAUGE"        => VisualType.Gauge,
+                    "FUNNEL"       => VisualType.Funnel,
+                    "WATERFALL"    => VisualType.Waterfall,
+                    "BUBBLE"       => VisualType.Bubble,
+                    "RADAR"        => VisualType.Radar,
+                    "CANDLESTICK"  => VisualType.Candlestick,
                     _ => throw new SyntaxException(
                              $"Unknown visual type '{val}'.",
                              _parser.Previous.Line, _parser.Previous.Column)
@@ -898,7 +904,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             throw new SyntaxException(
-                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL) but got '{_parser.Current.Value}'",
+                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK) but got '{_parser.Current.Value}'",
                 _parser.Current.Line, _parser.Current.Column);
         }
 

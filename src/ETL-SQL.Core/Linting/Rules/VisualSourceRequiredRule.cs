@@ -58,11 +58,14 @@ namespace ETL_SQL.Core.Linting.Rules
                 VisualType.Treemap => true,
                 VisualType.HeatMap => true,
                 VisualType.Combo => true,
-                VisualType.Gauge => true,
-                VisualType.Funnel => true,
-                VisualType.Waterfall => true,
-                VisualType.Table => true,
-                VisualType.Card => true,
+                VisualType.Gauge       => true,
+                VisualType.Funnel      => true,
+                VisualType.Waterfall   => true,
+                VisualType.Table       => true,
+                VisualType.Card        => true,
+                VisualType.Bubble      => true,
+                VisualType.Radar       => true,
+                VisualType.Candlestick => true,
                 _ => false // Text, DatePicker, Slider, Search don't need source
             };
         }

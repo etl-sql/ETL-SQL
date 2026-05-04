@@ -10,6 +10,7 @@
 --   3. Composition – TREEMAP, HEATMAP, FUNNEL, GAUGE, PIE (with data labels)
 --   4. Controls    – MULTISELECT, DATEPICKER, SLIDER, SEARCH, TEXT, IMAGE
 --   5. Detail      – SCROLL container, deep-formatted TABLE, BACK / REFRESH buttons
+--   6. New Charts  – BUBBLE, RADAR, CANDLESTICK
 -- ============================================================================
 
 -- ============================================================================
@@ -205,6 +206,44 @@ UNION ALL SELECT DISTINCT Region FROM #sales;
 
 SELECT 'All' AS Category INTO #category_opts
 UNION ALL SELECT DISTINCT Category FROM #sales;
+
+-- 1r. Bubble: salesperson price vs. discount, sized by total revenue
+SELECT
+    Salesperson,
+    CAST(AVG(UnitPrice)   AS DECIMAL) AS AvgPrice,
+    CAST(AVG(DiscountPct) AS DECIMAL) AS AvgDiscount,
+    CAST(SUM(Revenue)     AS DECIMAL) AS TotalRevenue
+INTO #bubble_data
+FROM #sales
+GROUP BY Salesperson;
+
+-- 1s. Radar: region KPI comparison across four dimensions (columnar format)
+SELECT
+    Region,
+    CAST(SUM(Revenue)  / 1000  AS DECIMAL) AS RevK,
+    SUM(Qty)                               AS Units,
+    COUNT(*)                               AS Txns,
+    SUM(Returned)                          AS Returns
+INTO #radar_data
+FROM #sales
+GROUP BY Region;
+
+-- 1t. Candlestick: 30-day simulated OHLC price series
+GENERATE 30 ROWS INTO #ohlc_raw AS (
+    trade_day   = 'SEQUENCE(2026-01-02, 1, DAY)',
+    open_price  = 'RANDOM_DECIMAL(95, 105)',
+    high_add    = 'RANDOM_DECIMAL(3, 12)',
+    low_sub     = 'RANDOM_DECIMAL(3, 12)',
+    close_delta = 'RANDOM_DECIMAL(-8, 8)'
+);
+SELECT
+    CAST(trade_day               AS VARCHAR(10)) AS TradeDate,
+    CAST(open_price              AS DECIMAL)     AS OpenPrice,
+    CAST(open_price + high_add   AS DECIMAL)     AS HighPrice,
+    CAST(open_price - low_sub    AS DECIMAL)     AS LowPrice,
+    CAST(open_price + close_delta AS DECIMAL)    AS ClosePrice
+INTO #candlestick_data
+FROM #ohlc_raw;
 
 -- ============================================================================
 -- Phase 2: Named Shared Styles
@@ -712,6 +751,49 @@ CREATE BUTTON BtnExport AS REFRESH (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- PAGE 6 — NEW CHARTS  (BUBBLE, RADAR, CANDLESTICK)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- BUBBLE — Salesperson avg price vs. discount, circle sized by total revenue
+CREATE VISUAL BubbleSalesPerson AS BUBBLE (
+    SOURCE   = #bubble_data,
+    TITLE    = 'Salesperson Price vs. Discount',
+    SUBTITLE = 'X = avg unit price · Y = avg discount % · Size = total revenue',
+    MAPPINGS (
+        X     = AvgPrice,
+        Y     = AvgDiscount,
+        SIZE  = TotalRevenue,
+        LABEL = Salesperson
+    ),
+    STYLE    = ChartPanel
+);
+
+-- RADAR — Regional KPI spider chart (columnar: Region then four metric columns)
+CREATE VISUAL RadarRegions AS RADAR (
+    SOURCE   = #radar_data,
+    TITLE    = 'Regional Performance Radar',
+    SUBTITLE = 'Compare North / South / East / West across RevK, Units, Txns, Returns',
+    OPTIONS  (MAX = 500),
+    STYLE    = ChartPanel
+);
+
+-- CANDLESTICK — 30-day simulated OHLC price series
+CREATE VISUAL CandlestickDemo AS CANDLESTICK (
+    SOURCE   = #candlestick_data,
+    TITLE    = '30-Day Simulated Price Series',
+    SUBTITLE = 'OHLC candlestick · Teal = up day · Red = down day',
+    MAPPINGS (
+        X     = TradeDate,
+        OPEN  = OpenPrice,
+        HIGH  = HighPrice,
+        LOW   = LowPrice,
+        CLOSE = ClosePrice
+    ),
+    OPTIONS  (COLOR_UP = '#26a69a', COLOR_DOWN = '#ef5350'),
+    STYLE    = ChartPanel
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- PAGE 5 — DETAIL  (scroll container + extra table features)
 -- ─────────────────────────────────────────────────────────────────────────────
 
@@ -899,6 +981,22 @@ CREATE PAGE Detail AS LAYOUT (
     STYLE (THEME = dark)
 );
 
+-- ── PAGE 6: New Charts ────────────────────────────────────────────────────────
+CREATE PAGE NewCharts AS LAYOUT (
+    TITLE     = 'New Charts',
+    TOOLTIP   = 'BUBBLE scatter with variable point size, RADAR spider chart, and CANDLESTICK OHLC price series.',
+    STRUCTURE = '
+        A A B B /
+        C C C C
+    ',
+    MAP (
+        'A' = BubbleSalesPerson,
+        'B' = RadarRegions,
+        'C' = CandlestickDemo
+    ),
+    STYLE (THEME = dark)
+);
+
 -- ============================================================================
 -- Phase 7: Navigation
 -- ============================================================================
@@ -907,7 +1005,7 @@ CREATE NAVIGATION MainNav AS TAB (
     ORIENTATION = HORIZONTAL,
     DEFAULT     = Overview
 )
-WITH PAGES (Overview, Trends, Composition, Controls, Detail);
+WITH PAGES (Overview, Trends, Composition, Controls, Detail, NewCharts);
 
 -- ============================================================================
 -- Phase 8: Global Style Override

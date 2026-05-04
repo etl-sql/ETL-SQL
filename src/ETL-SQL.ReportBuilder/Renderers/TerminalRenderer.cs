@@ -73,7 +73,8 @@ namespace ETL_SQL.ReportBuilder.Renderers
                     "SCATTER" => RenderScatterPlot(visual),
                     "HEATMAP" => RenderHeatMap(visual),
                     "SLICER" or "MULTISELECT" or "DATEPICKER" or "SLIDER" or "SEARCH" => RenderSlicer(visual, manifest),
-                    "TREEMAP" => new Panel(new Text("TreeMap not supported in TUI", new Style(Color.Grey)))
+                    "TREEMAP" or "RADAR" or "BUBBLE" or "CANDLESTICK" => new Panel(
+                        new Text($"{visual.VisualType} not supported in TUI", new Style(Color.Grey)))
                     {
                         Header = new PanelHeader(Markup.Escape(GetVisualTitle(visual))),
                         Border = BoxBorder.Rounded,

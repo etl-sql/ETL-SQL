@@ -42,7 +42,10 @@ namespace ETL_SQL.ReportBuilder
                 "GAUGE"                   => _specialized.RenderGauge(visual),
                 "FUNNEL"                  => _specialized.RenderFunnel(visual),
                 "WATERFALL"               => _specialized.RenderWaterfall(visual),
-                
+                "BUBBLE"                  => _specialized.RenderBubble(visual),
+                "RADAR"                   => _specialized.RenderRadar(visual),
+                "CANDLESTICK"             => _specialized.RenderCandlestick(visual),
+
                 _                         => null   // TABLE, CARD, SLICER, TEXT — rendered client-side
             };
     }

@@ -316,10 +316,7 @@
                         renderContainer(wrapper, nested, manifest, pageTheme);
                     } else {
                         const btn = (manifest.buttons || []).find(b => b.name.toLowerCase() === item.toLowerCase());
-                        if (btn) {
-                            renderButton(wrapper, btn);
-                            wrapper.style.alignSelf = 'start'; // Buttons should not stretch vertically
-                        }
+                        if (btn) renderButton(wrapper, btn);
                     }
                 }
                 container.appendChild(wrapper);
@@ -331,14 +328,6 @@
                 const visual = (manifest.visuals || []).find(v => v.name.toLowerCase() === item.toLowerCase());
                 if (visual) {
                     renderVisual(container, visual, pageTheme, manifest);
-                    const type = (visual.visualType || '').toUpperCase();
-                    if (['CARD', 'SLICER', 'MULTISELECT', 'DATEPICKER', 'SLIDER', 'SEARCH', 'TEXT'].includes(type)) {
-                        // If container is flex, we can set alignSelf
-                        if (container.style.display === 'flex' || container.classList.contains('container-box') || container.classList.contains('container-scroll')) {
-                           // For flex containers, we'd need to wrap it if we want to control individual item alignment easily,
-                           // but most visuals already have a visual-card which we can target.
-                        }
-                    }
                 } else {
                     const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
                     if (nested) {
@@ -356,13 +345,8 @@
     const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'DATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH']);
 
     function renderVisual(container, visual, pageTheme, manifest) {
-        const type = (visual.visualType || '').toUpperCase();
         const card = document.createElement('div');
         card.className = 'visual-card';
-        // Only charts and tables should fill height
-        if (!['CARD', 'SLICER', 'MULTISELECT', 'DATEPICKER', 'SLIDER', 'SEARCH', 'TEXT', 'IMAGE'].includes(type)) {
-            card.classList.add('fill-height');
-        }
         card.setAttribute('data-visual-name', visual.name);
         card._visualData = visual;
 
@@ -391,6 +375,7 @@
             return;
         }
 
+        const type = (visual.visualType || '').toUpperCase();
 
         // Empty state handling: If not a filter/text type and no data rows, show "No Data" icon + message.
         if (!FILTER_TYPES.has(type) && (!visual.rows || visual.rows.length === 0)) {
@@ -495,6 +480,26 @@
         // effectiveTheme: visual-level THEME, falling back to page-level THEME
         const chart = echarts.init(wrapper, effectiveTheme || null);
         
+        // Auto-fix formatting for gauges and high-precision labels
+        if (option.series) {
+            option.series.forEach(s => {
+                if (s.type === 'gauge') {
+                    if (s.detail && (s.detail.formatter === '{value}' || s.detail.formatter === '{value:.1f}')) {
+                        s.detail.formatter = (v) => (typeof v === 'number') ? v.toFixed(1) : v;
+                    }
+                }
+                // If label is shown but no formatter, add a default one to trim decimals
+                if (s.label && s.label.show && !s.label.formatter) {
+                    s.label.formatter = (params) => {
+                        let v = params.value;
+                        if (Array.isArray(v)) v = v[v.length - 1]; 
+                        if (typeof v === 'number' && !Number.isInteger(v)) return v.toFixed(1);
+                        return v;
+                    };
+                }
+            });
+        }
+
         // Disable interactions in preview mode
         if (window.__IS_PREVIEW__) {
             option.tooltip = { show: false };
@@ -503,7 +508,7 @@
             // Disable panning/zooming if any
             (option.series || []).forEach(s => { if (s.roam) s.roam = false; });
         }
-        
+
         chart.setOption(option);
         wrapper._echartsInst = chart;  // stored so page-show can resize hidden charts
 

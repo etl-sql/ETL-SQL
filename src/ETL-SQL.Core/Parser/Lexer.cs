@@ -119,9 +119,12 @@ namespace ETL_SQL.Core.Parser
             dict["SLIDER"]      = TokenType.SLIDER;
             dict["MULTISELECT"] = TokenType.MULTISELECT;
             dict["SEARCH"]      = TokenType.SEARCH;
-            dict["GAUGE"]       = TokenType.GAUGE;
-            dict["FUNNEL"]      = TokenType.FUNNEL;
-            dict["WATERFALL"]   = TokenType.WATERFALL;
+            dict["GAUGE"]        = TokenType.GAUGE;
+            dict["FUNNEL"]       = TokenType.FUNNEL;
+            dict["WATERFALL"]    = TokenType.WATERFALL;
+            dict["RADAR"]        = TokenType.RADAR;
+            dict["BUBBLE"]       = TokenType.BUBBLE;
+            dict["CANDLESTICK"]  = TokenType.CANDLESTICK;
             dict["FORMATTING"]  = TokenType.FORMATTING;
             dict["EXPECT"]      = TokenType.EXPECT;
 
