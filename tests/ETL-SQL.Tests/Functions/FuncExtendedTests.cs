@@ -31,12 +31,12 @@ namespace ETL_SQL.Tests.Functions
         public async Task TestStringSplit()
         {
             var ev = GetEvaluator();
-            var result = await EvaluateExpression(ev, "STRING_SPLIT('a,b,c', ',')") as List<object?>;
+            var result = await EvaluateExpression(ev, "STRING_SPLIT('a,b,c', ',')") as DataTable;
             Assert.NotNull(result);
-            Assert.Equal(3, result.Count);
-            Assert.Equal("a", result[0]);
-            Assert.Equal("b", result[1]);
-            Assert.Equal("c", result[2]);
+            Assert.Equal(3, result.Rows.Count);
+            Assert.Equal("a", result.Rows[0][0]);
+            Assert.Equal("b", result.Rows[1][0]);
+            Assert.Equal("c", result.Rows[2][0]);
         }
 
         [Fact]

@@ -4,6 +4,7 @@ using System.Linq;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Functions;
 using ETL_SQL.Core.Data;
+using ETL_SQL.Data;
 
 namespace ETL_SQL.Engine.Functions
 {
@@ -153,12 +154,22 @@ namespace ETL_SQL.Engine.Functions
             return s;
         }
 
-        private static object? StringSplit(List<object?> args, IExecutionContext ctx)
+        private static async Task<object?> StringSplit(List<object?> args, IExecutionContext ctx)
         {
-            if (args.Count < 2) return new List<object?>();
-            string s = args[0]?.ToString() ?? "";
-            string sep = args[1]?.ToString() ?? "";
-            return s.Split(new[] { sep }, StringSplitOptions.None).Cast<object?>().ToList();
+            if (args.Count < 2 || args[0] == null) return new DataTable();
+            string s = args[0]!.ToString()!;
+            string sep = args[1]?.ToString() ?? ",";
+            
+            var dt = new DataTable();
+            dt.SetColumns(new[] { "VALUE" });
+            
+            var parts = s.Split(new[] { sep }, StringSplitOptions.None);
+            foreach (var part in parts)
+            {
+                await dt.AddRowAsync(new Row { ["VALUE"] = part });
+            }
+            
+            return dt;
         }
 
         private static object? Format(List<object?> args, IExecutionContext ctx)

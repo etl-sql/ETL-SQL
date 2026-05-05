@@ -11,7 +11,15 @@ namespace ETL_SQL.Core.Parser.Components
 
         public Statement ParseGenerate(Token startToken)
         {
+            if (Match(TokenType.SECRET) || (_parser.Current.Type == TokenType.IDENTIFIER && _parser.Current.Value.Equals("JWT_SECRET", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (_parser.Previous.Type == TokenType.IDENTIFIER) Advance(); // Consume JWT_SECRET if it was an identifier
+                if (Match(TokenType.SEMICOLON)) { }
+                return new GenerateJwtSecretStatement { Line = startToken.Line, Column = startToken.Column };
+            }
+
             var rowCount = ParseExpression();
+
             Consume(TokenType.ROWS, "Expected 'ROWS' after count");
             Consume(TokenType.INTO, "Expected 'INTO' after ROWS");
             var target = _parser.ParseTableReference(allowFunction: false, allowWithClause: false, allowAlias: false);

@@ -170,6 +170,9 @@
         }
 
         const defaultPageName = navDef.defaultPage || (pages.length > 0 ? pages[0].name : null);
+        // __INITIAL_PAGE__ is injected by the portal to restore the active tab after refresh / back-nav
+        const requestedPage  = (window.__INITIAL_PAGE__ || '').trim();
+        const pageToShow     = (requestedPage && pageSections[requestedPage]) ? requestedPage : defaultPageName;
         const itemClass = navDef.navType === 'TAB' ? 'nav-tab' :
                           navDef.navType === 'BUTTON' ? 'nav-btn' : 'nav-link';
         const isLink = navDef.navType === 'LINK';
@@ -186,56 +189,49 @@
             el.className = itemClass;
             el.textContent = pageName;
 
-            const isDefault = pageName === defaultPageName;
-            if (isDefault) el.classList.add('active');
+            if (pageName === pageToShow) el.classList.add('active');
 
             el.dataset.page = pageName; // allows programmatic navigation
             el.addEventListener('click', () => {
-                activatePage(pageName, pageSections, navDef.pages, nav, itemClass);
+                // Hide all, show clicked
+                navDef.pages.forEach(n => {
+                    const s = pageSections[n];
+                    if (s) s.style.display = 'none';
+                });
+                const target = pageSections[pageName];
+                if (target) {
+                    target.style.display = 'block';
+                    resizeChartsIn(target);
+                }
+
+                // Update active class
+                nav.querySelectorAll('.' + itemClass).forEach(e => e.classList.remove('active'));
+                el.classList.add('active');
+
+                // Notify portal of user-driven tab change so it can push a history entry
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'etl-page-changed', page: pageName, userTriggered: true }, '*');
+                }
             });
 
             nav.appendChild(el);
         });
 
-        // Show default page (or __INITIAL_PAGE__ if the parent set it), hide others
-        const initialPage = (typeof window.__INITIAL_PAGE__ === 'string' && window.__INITIAL_PAGE__)
-            ? window.__INITIAL_PAGE__ : defaultPageName;
+        // Show the target page, hide others
         pages.forEach(p => {
             const s = pageSections[p.name];
             if (!s) return;
-            s.style.display = 'none';
-        });
-        activatePage(initialPage, pageSections, navDef.pages,
-            nav, navDef.navType === 'TAB' ? 'nav-tab' : navDef.navType === 'BUTTON' ? 'nav-btn' : 'nav-link');
-
-        // Listen for parent-frame navigation requests (back/forward, post-refresh restore)
-        window.addEventListener('message', e => {
-            if (e.data && e.data.type === 'etl-navigate' && e.data.page) {
-                activatePage(e.data.page, pageSections, navDef.pages,
-                    nav, navDef.navType === 'TAB' ? 'nav-tab' : navDef.navType === 'BUTTON' ? 'nav-btn' : 'nav-link');
+            if (p.name === pageToShow) {
+                s.style.display = 'block';
+                resizeChartsIn(s);
+            } else {
+                s.style.display = 'none';
             }
         });
-    }
 
-    // Shared page-switch logic; notifies parent frame of the change.
-    function activatePage(pageName, pageSections, allPageNames, nav, itemClass) {
-        allPageNames.forEach(n => {
-            const s = pageSections[n];
-            if (s) s.style.display = 'none';
-        });
-        const target = pageSections[pageName];
-        if (target) {
-            target.style.display = 'block';
-            resizeChartsIn(target);
-        }
-        if (nav) {
-            nav.querySelectorAll('.' + itemClass).forEach(e => e.classList.remove('active'));
-            const el = nav.querySelector(`[data-page="${CSS.escape(pageName)}"]`);
-            if (el) el.classList.add('active');
-        }
-        // Tell the parent frame which page is now active so it can track for refresh / history
+        // Announce initial page to portal (uses replaceState — no new history entry)
         if (window.parent && window.parent !== window) {
-            window.parent.postMessage({type: 'etl-page-changed', page: pageName}, '*');
+            window.parent.postMessage({ type: 'etl-page-changed', page: pageToShow }, '*');
         }
     }
 
@@ -308,9 +304,10 @@
             container.style.gridTemplateAreas = rows.map(r => `"${r}"`).join(' ');
 
             if (rows.length > 0) {
-                const cols = rows[0].split(/\s+/).length;
-                container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-                container.style.gridTemplateRows    = `repeat(${rows.length}, minmax(360px, auto))`;
+                const rows = (layoutDef.structure.split('/') || []).map(r => r.trim()).filter(r => r.length > 0);
+                const rowCount = rows.length;
+                container.style.gridTemplateRows = `repeat(${rowCount}, auto)`;
+                container.style.gridTemplateColumns = `repeat(${rows[0].split(/\s+/).length}, 1fr)`;
             }
 
             const slotMap = layoutDef.slotMap || {};
@@ -357,7 +354,7 @@
     }
 
     // Filter types that render without requiring rows
-    const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'DATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH']);
+    const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH']);
 
     function renderVisual(container, visual, pageTheme, manifest) {
         const card = document.createElement('div');
@@ -411,9 +408,10 @@
             case 'CARD':        renderCard(card, visual);                         break;
             case 'SLICER':      renderSlicer(card, visual, manifest);             break;
             case 'TEXT':        renderText(card, visual);                         break;
-            case 'DATEPICKER':  renderDatePicker(card, visual, manifest);          break;
+            case 'DATEPICKER':    renderDatePicker(card, visual, manifest);        break;
+            case 'RELDATEPICKER': renderRelDatePicker(card, visual, manifest);     break;
             case 'SLIDER':      renderSlider(card, visual, manifest);             break;
-            case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
+            case 'MULTISELECT': renderMultiSelect(card, visual, manifest);        break;
             case 'SEARCH':      renderSearch(card, visual, manifest);             break;
             case 'IMAGE':       renderImage(card, visual);                        break;
             default:            renderChart(card, visual, effectiveTheme);        break;
@@ -470,7 +468,7 @@
     function registerMapThenRender(mapKey, mapFile, onReady, wrapper) {
         if (_registeredMaps.has(mapKey)) { onReady(); return; }
         const url = mapFile
-            ? `/maps/custom?path=${encodeURIComponent(mapFile)}`
+            ? `/api/maps/custom?path=${encodeURIComponent(mapFile)}`
             : `/maps/${mapKey}.geojson`;
         fetch(url)
             .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
@@ -541,7 +539,12 @@
         }
 
         function finalize() {
-            // Auto-fix formatting for gauges and high-precision labels
+            // Global tooltip value formatter for decimals
+            if (!option.tooltip) option.tooltip = { show: true };
+            if (option.tooltip.show !== false && !option.tooltip.valueFormatter && !option.tooltip.formatter) {
+                option.tooltip.valueFormatter = (v) => (typeof v === 'number' && !Number.isInteger(v)) ? v.toFixed(2) : v;
+            }
+
             if (option.series) {
                 option.series.forEach(s => {
                     if (s.type === 'gauge') {
@@ -553,8 +556,7 @@
                         s.label.formatter = (params) => {
                             let v = params.value;
                             if (Array.isArray(v)) v = v[v.length - 1];
-                            if (typeof v === 'number' && !Number.isInteger(v)) return v.toFixed(1);
-                            return v;
+                            return (typeof v === 'number' && !Number.isInteger(v)) ? v.toFixed(2) : v;
                         };
                     }
                 });
@@ -864,33 +866,63 @@
         const div = document.createElement('div');
         div.className = 'text-visual';
         div.style.textAlign = align;
-        div.innerHTML = simpleMarkdown(value);
+        
+        let html = '';
+        const markedInstance = window.marked?.parse ? window.marked : (typeof marked === 'function' ? { parse: marked } : (window.marked || {}));
+        if (markedInstance.parse) {
+            html = markedInstance.parse(value);
+        } else {
+            html = simpleMarkdown(value);
+        }
+        
+        div.innerHTML = html;
         container.appendChild(div);
     }
 
-    // Minimal markdown → HTML: bold, italic, inline code, headers, line breaks.
+    // Minimal markdown → HTML: bold, italic, inline code, headers, line breaks, tables.
     function simpleMarkdown(src) {
-        return escHtml(src)
+        let html = escHtml(src)
             .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.+?)\*/g,     '<em>$1</em>')
             .replace(/`(.+?)`/g,       '<code>$1</code>')
             .replace(/^### (.+)$/gm,   '<h3>$1</h3>')
             .replace(/^## (.+)$/gm,    '<h2>$1</h2>')
-            .replace(/^# (.+)$/gm,     '<h1>$1</h1>')
-            .replace(/\n/g,            '<br>');
+            .replace(/^# (.+)$/gm,     '<h1>$1</h1>');
+
+        // Basic table support
+        const lines = html.split('\n');
+        let inTable = false;
+        let tableHtml = '<table>';
+        const finalLines = [];
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line.startsWith('|') && line.endsWith('|')) {
+                if (!inTable) { inTable = true; tableHtml = '<table>'; }
+                const cells = line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+                const tag = tableHtml.includes('<th>') ? 'td' : 'th';
+                // Skip separator rows |---|---|
+                if (cells.every(c => c.trim().match(/^-+$/))) continue;
+                tableHtml += '<tr>' + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('') + '</tr>';
+            } else {
+                if (inTable) { inTable = false; finalLines.push(tableHtml + '</table>'); }
+                finalLines.push(line);
+            }
+        }
+        if (inTable) finalLines.push(tableHtml + '</table>');
+
+        return finalLines.join('<br>');
     }
 
     // ── DatePicker ──────────────────────────────────────────────────────────
 
     function renderDatePicker(container, visual, manifest) {
         const opts          = visual.options || {};
-        // Parameter binding comes from ACTIONS (ON_CHANGE = SET_PARAMETER), not from OPTIONS
         const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
         const param         = changeActions.length > 0 ? changeActions[0].parameterName : null;
         const min           = opts['MIN'] || opts['min'] || '';
         const max           = opts['MAX'] || opts['max'] || '';
 
-        // Initial value: current parameter value > DEFAULT clause > fallback empty
         let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
         if (param && manifest && manifest.parameters) {
             const current = getParam(manifest.parameters, param);
@@ -900,17 +932,135 @@
         const wrapper = document.createElement('div');
         wrapper.className = 'filter-wrapper';
 
-        const input = document.createElement('input');
-        input.type  = 'date';
-        if (min) input.min = min;
-        if (max) input.max = max;
-        if (def) input.value = def;
-        if (param) input.setAttribute('data-parameter', param);
-        wrapper.appendChild(input);
+        const inputRow = document.createElement('div');
+        inputRow.className = 'reldate-wrapper';
+
+        const textInput = document.createElement('input');
+        textInput.type = 'text';
+        textInput.placeholder = 'YYYY-MM-DD or T-1...';
+        textInput.value = def;
+        if (param) textInput.setAttribute('data-parameter', param);
+
+        const datePicker = document.createElement('input');
+        datePicker.type = 'date';
+        if (min) datePicker.min = min;
+        if (max) datePicker.max = max;
+        datePicker.style.cssText = 'position:absolute; opacity:0; width:0; height:0; pointer-events:none;';
+
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'reldate-btn';
+        btn.textContent = '📅';
+        btn.addEventListener('click', () => {
+            if (typeof datePicker.showPicker === 'function') datePicker.showPicker();
+            else datePicker.focus();
+        });
+
+        datePicker.addEventListener('change', () => {
+            textInput.value = datePicker.value;
+            textInput.dispatchEvent(new Event('change'));
+        });
+
+        inputRow.appendChild(textInput);
+        inputRow.appendChild(datePicker);
+        inputRow.appendChild(btn);
+
+        wrapper.appendChild(inputRow);
 
         if (isWebMode && changeActions.length > 0) {
-            input.addEventListener('change', () => {
-                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = input.value; return o; }, {});
+            textInput.addEventListener('change', () => {
+                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = textInput.value; return o; }, {});
+                postParameters(batch).then(m => { if (m) renderManifest(m); });
+            });
+        }
+        container.appendChild(wrapper);
+    }
+
+    // ── RelDatePicker ────────────────────────────────────────────────────────
+
+    function renderRelDatePicker(container, visual, manifest) {
+        const opts          = visual.options || {};
+        const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+        const param         = changeActions.length > 0 ? changeActions[0].parameterName : null;
+        const min           = opts['MIN'] || opts['min'] || '';
+        const max           = opts['MAX'] || opts['max'] || '';
+
+        let def = visual.defaultValue || opts['DEFAULT'] || opts['default'] || '';
+        if (param && manifest && manifest.parameters) {
+            const current = getParam(manifest.parameters, param);
+            if (current !== undefined) def = current;
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'filter-wrapper';
+
+        // ── Text input + calendar button row ──────────────────────────────
+        const inputRow = document.createElement('div');
+        inputRow.className = 'reldate-wrapper';
+
+        const textInput = document.createElement('input');
+        textInput.type = 'text';
+        textInput.placeholder = 'D-7, M-1, Y-1 or YYYY-MM-DD';
+        textInput.value = def;
+        if (param) textInput.setAttribute('data-parameter', param);
+
+        const hiddenDate = document.createElement('input');
+        hiddenDate.type = 'date';
+        if (min) hiddenDate.min = min;
+        if (max) hiddenDate.max = max;
+        hiddenDate.style.cssText = 'position:absolute; opacity:0; width:0; height:0; pointer-events:none;';
+
+        const calBtn = document.createElement('button');
+        calBtn.type = 'button';
+        calBtn.className = 'reldate-btn';
+        calBtn.textContent = '📅';
+        calBtn.title = 'Pick a date (writes ISO date)';
+        calBtn.addEventListener('click', () => {
+            if (typeof hiddenDate.showPicker === 'function') hiddenDate.showPicker();
+            else hiddenDate.focus();
+        });
+
+        hiddenDate.addEventListener('change', () => {
+            textInput.value = hiddenDate.value;
+            textInput.dispatchEvent(new Event('change'));
+        });
+
+        inputRow.appendChild(textInput);
+        inputRow.appendChild(hiddenDate);
+        inputRow.appendChild(calBtn);
+
+        // ── Quick-pick buttons ────────────────────────────────────────────
+        const quickRow = document.createElement('div');
+        quickRow.className = 'reldate-quick';
+
+        const quickPicks = [
+            { label: 'Today',  value: 'D-0'  },
+            { label: 'D-1',    value: 'D-1'  },
+            { label: 'D-7',    value: 'D-7'  },
+            { label: 'D-30',   value: 'D-30' },
+            { label: 'M-1',    value: 'M-1'  },
+            { label: 'M-3',    value: 'M-3'  },
+            { label: 'Y-1',    value: 'Y-1'  },
+        ];
+
+        quickPicks.forEach(qp => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'reldate-quick-btn';
+            btn.textContent = qp.label;
+            btn.addEventListener('click', () => {
+                textInput.value = qp.value;
+                textInput.dispatchEvent(new Event('change'));
+            });
+            quickRow.appendChild(btn);
+        });
+
+        wrapper.appendChild(inputRow);
+        wrapper.appendChild(quickRow);
+
+        if (isWebMode && changeActions.length > 0) {
+            textInput.addEventListener('change', () => {
+                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = textInput.value; return o; }, {});
                 postParameters(batch).then(m => { if (m) renderManifest(m); });
             });
         }
@@ -966,37 +1116,70 @@
 
     // ── MultiSelect ─────────────────────────────────────────────────────────
 
-    function renderMultiSelect(container, visual) {
-        const opts  = visual.options || {};
-        const param = opts['PARAMETER'] || opts['parameter'] || null;
-
+    function renderMultiSelect(container, visual, manifest) {
         const wrapper = document.createElement('div');
-        wrapper.className = 'filter-wrapper';
+        wrapper.className = 'multiselect-wrapper';
 
-        const select = document.createElement('select');
-        select.multiple = true;
+        // Find the parameter name from actions
+        const action = visual.actions.find(a => a.type === 'SET_PARAMETER');
+        const paramName = action ? action.parameterName : null;
+        if (paramName) wrapper.setAttribute('data-parameter', paramName);
 
-        (visual.rows || []).forEach(row => {
-            const opt = document.createElement('option');
-            opt.value       = String(row[0] ?? '');
-            opt.textContent = String(row[0] ?? '');
-            select.appendChild(opt);
-        });
+        // Configuration for value/label columns
+        const valCol = (visual.options['mapping:value'] || 'value').toLowerCase();
+        const lblCol = (visual.options['mapping:label'] || 'label').toLowerCase();
+        
+        const valIdx = visual.columns.findIndex(c => c.toLowerCase() === valCol);
+        const lblIdx = visual.columns.findIndex(c => c.toLowerCase() === lblCol);
+        
+        const finalValIdx = valIdx >= 0 ? valIdx : 0;
+        const finalLblIdx = lblIdx >= 0 ? lblIdx : (visual.columns.length > 1 ? 1 : 0);
 
-        wrapper.appendChild(select);
-
-        if (isWebMode && param) {
-            const applyBtn = document.createElement('button');
-            applyBtn.className   = 'filter-apply';
-            applyBtn.textContent = 'Apply';
-            applyBtn.addEventListener('click', () => {
-                const selected = Array.from(select.selectedOptions).map(o => o.value).join(',');
-                postParameter(param, selected)
-                    .then(m => { if (m) renderManifest(m); });
-            });
-            wrapper.appendChild(applyBtn);
+        // Current values (manifest stores them as a comma-separated string for multi-select params)
+        let currentValues = [];
+        if (paramName && manifest && manifest.parameters) {
+            const raw = getParam(manifest.parameters, paramName);
+            if (raw) {
+                currentValues = String(raw).split(',').map(v => v.trim()).filter(Boolean);
+            }
         }
 
+        const itemsContainer = document.createElement('div');
+        
+        (visual.rows || []).forEach((row, i) => {
+            const val   = String(row[finalValIdx] ?? '');
+            const label = String(row[finalLblIdx] ?? '');
+            const id    = `ms-${visual.name}-${i}`;
+
+            const item = document.createElement('div');
+            item.className = 'multiselect-item';
+
+            const checkbox = document.createElement('input');
+            checkbox.type  = 'checkbox';
+            checkbox.id    = id;
+            checkbox.value = val;
+            if (currentValues.includes(val)) checkbox.checked = true;
+
+            const lbl = document.createElement('label');
+            lbl.setAttribute('for', id);
+            lbl.textContent = label;
+
+            item.appendChild(checkbox);
+            item.appendChild(lbl);
+            itemsContainer.appendChild(item);
+
+            if (isWebMode && action) {
+                checkbox.addEventListener('change', () => {
+                    const selected = Array.from(itemsContainer.querySelectorAll('input[type=checkbox]:checked'))
+                                          .map(cb => cb.value)
+                                          .join(',');
+                    postParameter(action.parameterName, selected)
+                        .then(m => { if (m) renderManifest(m); });
+                });
+            }
+        });
+
+        wrapper.appendChild(itemsContainer);
         container.appendChild(wrapper);
     }
 
@@ -1221,12 +1404,6 @@
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    function noDataEl(msg) {
-        const p = document.createElement('p');
-        p.className = 'no-data';
-        p.textContent = msg;
-        return p;
-    }
 
     function errorEl(detail) {
         const el = document.createElement('details');

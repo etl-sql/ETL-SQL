@@ -13,7 +13,7 @@
     
     <!-- Portability & Single-File Config (Only active when an RID is provided) -->
     <PublishSingleFile Condition="'$(RuntimeIdentifier)' != ''">true</PublishSingleFile>
-    <SelfContained Condition="'$(RuntimeIdentifier)' != ''">true</SelfContained>
+    <SelfContained Condition="'$(RuntimeIdentifier)' != ''">false</SelfContained>
     <PublishReadyToRun Condition="'$(RuntimeIdentifier)' != ''">true</PublishReadyToRun>
     <IncludeNativeLibrariesForSelfExtract Condition="'$(RuntimeIdentifier)' != ''">true</IncludeNativeLibrariesForSelfExtract>
     <DebugType>embedded</DebugType>

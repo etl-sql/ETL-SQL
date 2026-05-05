@@ -1339,6 +1339,13 @@ namespace ETL_SQL.Core
     /// if one batch fails the next batch still executes.</summary>
     public record GoStatement(int Count = 1) : Statement;
 
+    /// <summary>Generates a 32-bit cryptographically secure JWT secret, encrypts it, 
+    /// and optionally updates the appsettings.json file.</summary>
+    public record GenerateJwtSecretStatement : Statement
+    {
+    }
+
+
     /// <summary>Base class for all expressions that return a value.</summary>
     public abstract record Expression : AstNode 
     {

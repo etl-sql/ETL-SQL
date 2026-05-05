@@ -24,6 +24,13 @@
                   font-size: 0.9em; }
   footer { margin-top: 32px; color: #888; font-size: 0.8em; }
   .text-visual { line-height: 1.6; }
+  .text-visual blockquote { border-left: 4px solid #ddd; padding-left: 12px; margin-left: 0; color: #666; font-style: italic; }
+  .text-visual code { background: #f0f0f0; padding: 2px 4px; border-radius: 3px; font-family: monospace; font-size: 0.9em; }
+  .text-visual ul, .text-visual ol { padding-left: 20px; }
+  .text-visual table { border-collapse: collapse; width: auto; min-width: 200px; margin: 12px 0; }
+  .text-visual th, .text-visual td { border: 1px solid #ddd; padding: 6px 12px; text-align: left; }
+  .text-visual th { background: #f8f9fa; font-weight: 600; }
+  .text-visual tr:nth-child(even) { background: #fafafa; }
   .no-data { color: #999; font-style: italic; }
   .error   { color: #c00; }
   .error-card { border: 1px solid #f5c6cb; border-radius: 4px; padding: 6px 10px; background: #fff5f5; }
@@ -45,7 +52,8 @@
   .container-scroll { display: flex; flex-direction: column; gap: 12px; overflow-y: auto; }
   .filter-wrapper { display: flex; flex-direction: column; gap: 6px; }
   .filter-wrapper input[type=date], .filter-wrapper input[type=range],
-  .filter-wrapper input[type=search], .filter-wrapper select[multiple] {
+  .filter-wrapper input[type=search], .filter-wrapper select[multiple],
+  .reldate-wrapper input[type=text] {
     font-size: 1em; padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px;
     background: #fff; width: 100%; max-width: 320px; }
   .filter-wrapper select[multiple] { height: 120px; }
@@ -53,6 +61,32 @@
   .filter-wrapper .filter-apply { margin-top: 4px; padding: 4px 14px; border: 1px solid #5470c6;
     border-radius: 4px; background: #5470c6; color: white; cursor: pointer; font-size: 0.9em; }
   .filter-wrapper .filter-apply:hover { background: #3a56a8; }
+
+  .reldate-wrapper { display: flex; flex-direction: row; gap: 0; align-items: stretch; max-width: 320px; width: 100%; position: relative; }
+  .reldate-wrapper input[type=text] { 
+    border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none; 
+    flex: 1; min-width: 0; width: auto; max-width: none; height: 32px;
+  }
+  .reldate-btn { padding: 0 10px; border: 1px solid #ccc; border-left: none; 
+                 border-top-right-radius: 4px; border-bottom-right-radius: 4px;
+                 border-top-left-radius: 0; border-bottom-left-radius: 0;
+                 background: #f8f9fa; cursor: pointer; font-size: 1.1em; line-height: 1; 
+                 display: flex; align-items: center; justify-content: center; height: 32px; }
+  .reldate-btn:hover { background: #e9ecef; }
+  .reldate-quick { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; max-width: 320px; }
+  .reldate-quick-btn { padding: 2px 8px; font-size: 0.8em; border: 1px solid #ccc; border-radius: 3px;
+                       background: #f0f0f0; cursor: pointer; white-space: nowrap; }
+  .reldate-quick-btn:hover { background: #dde3f5; border-color: #5470c6; color: #5470c6; }
+
+  .multiselect-wrapper { border: 1px solid #ccc; border-radius: 4px; padding: 8px; background: #fff;
+                         max-height: 200px; overflow-y: auto; max-width: 320px; }
+  .multiselect-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; cursor: pointer; }
+  .multiselect-item:last-child { margin-bottom: 0; }
+  .multiselect-item input[type=checkbox] { cursor: pointer; width: 16px; height: 16px; margin: 0; }
+  .multiselect-item label { cursor: pointer; font-size: 0.95em; flex: 1; user-select: none; }
+  .multiselect-item:hover { background: #f8f9fa; }
+
+  .chart-wrapper { width: 100%; flex: 1; min-height: 300px; }
   @media (max-width: 768px) {
     .page-grid { grid-template-areas: none !important; grid-template-columns: 1fr !important;
                  grid-template-rows: none !important; }
