@@ -8,17 +8,19 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 ### Added
 
-**Reporting & Portal**
+**Report Portal & Dashboards**
+- **Web-Based Report Portal**: Introduced the primary dashboarding interface (`ETL-SQL.ReportPortal`) for hosting and interacting with compiled reports.
+- **ECharts Integration**: High-performance charting engine with support for 25+ visual types including Sunburst, TreeMap, and Funnel.
 - **Interactive Multi-Select**: New `MULTISELECT` visual type rendering as a checkbox list with automatic parameter synchronization.
-- **Enhanced Date Picking**: Native `RELDATEPICKER` (hybrid text + calendar) support in the report portal.
+- **Enhanced Date Picking**: Native `RELDATEPICKER` (hybrid text + calendar) support.
 - **Interactive Slicers**: Support for `SLIDER` and `SEARCH` visual types with immediate dashboard re-rendering.
 - **Markdown Tables**: Full support for GFM-style tables in `TEXT` visuals via `marked.js` integration.
-- **Cache Management**: Aggressive cache-busting logic for portal assets (`?v=${Date.now()}`) to ensure runtime parity.
 - **Portal Responsiveness**: Improved mobile layout and CSS grid stability for complex dashboards.
 
 **Security & Cryptography**
 - **PGP Engine Hardening**: Improved `PGP_KEY_PAIR` generation and validation logic.
 - **Security Guardrails**: Whitelisted PGP-related file extensions in `SecurityService` to allow authorized cryptographic operations.
+- **ACL & Permissions**: Implemented administrative portal ACL assignment logic for granular report visibility.
 
 **Lineage & Governance**
 - **Standard Tag Library**: Defined 20 core lineage tags (`@pii`, `@sensitive`, `@owner`, etc.) with `@pii: true-wins` inheritance logic.
