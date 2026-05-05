@@ -6,33 +6,58 @@ and anywhere an expression is valid.
 
 Categories
 ----------
-  STRING      Text manipulation — UPPER, TRIM, SUBSTRING, REPLACE, CONCAT, etc.
-  DATE        Date/time arithmetic — GETDATE, DATEADD, DATEDIFF, FORMAT, etc.
-  MATH        Numeric operations — ROUND, ABS, POWER, SQRT, LOG, trig, etc.
-  AGGREGATE   Group operations — SUM, COUNT, AVG, MIN, MAX, STRING_AGG, etc.
-  WINDOW      Analytic/ranking — ROW_NUMBER, RANK, LAG, LEAD, running totals, etc.
-  JSON        JSON manipulation — JSON_VALUE, JSON_QUERY, JSON_MODIFY, OPENJSON, etc.
-  XML         XML manipulation — XMLVALUE, XMLEXISTS, XMLQUERY, XMLTABLE, etc.
-  REGEX       Regular expressions — REGEXP_LIKE, REGEXP_SUBSTR, REGEXP_REPLACE, etc.
-  FILE        File system — FILE_LIST, FILE_EXISTS, DIRECTORY_EXISTS, REMOTE_FILE_LIST.
-  NULL        NULL handling — ISNULL, COALESCE, NULLIF, IIF, GREATEST, DECODE, etc.
-  CONVERSION  Type casting — CAST, CONVERT, TRY_CAST, PARSE, HASHBYTES, etc.
-  SYSTEM      Utilities — lists, GENERATE_SERIES, NEWID, ENV, ERROR_MESSAGE, etc.
+  STRING      Text manipulation
+              UPPER, LOWER, TRIM, LTRIM, RTRIM, LEN, LENGTH, CHAR_LENGTH, LEFT, RIGHT, SUBSTRING,
+              SUBSTR, CHARINDEX, INSTR, PATINDEX, POSITION, REPLACE, STUFF, TRANSLATE, REVERSE,
+              REPLICATE, SPACE, CONCAT, CONCAT_WS, STRING_SPLIT, STR, SOUNDEX, DIFFERENCE,
+              QUOTENAME, STRING_ESCAPE, ASCII, UNICODE, CHAR, OVERLAY
+
+  DATE        Date/time arithmetic
+              GETDATE, NOW, CURRENT_TIMESTAMP, CURRENT_DATE, CURRENT_TIME, YEAR, MONTH, DAY,
+              HOUR, MINUTE, SECOND, DATEPART, DATENAME, DATEADD, DATEDIFF, DATETRUNC, EOMONTH,
+              DATETIMEFROMPARTS, TIMEFROMPARTS, ISDATE, FORMAT
+
+  MATH        Numeric operations
+              ABS, ROUND, TRUNCATE, TRUNC, CEILING, CEIL, FLOOR, SIGN, POWER, POW, SQRT, EXP,
+              LOG, LOG10, SIN, COS, TAN, ASIN, ACOS, ATAN, ATAN2, DEGREES, RADIANS, PI, MOD,
+              QUOTIENT, RANDOM, RAND, RANDOM_INT, RANDOM_DECIMAL
+
+  AGGREGATE   Group operations
+              SUM, COUNT, AVG, MIN, MAX, STRING_AGG, LISTAGG, STDEV, STDEVP, VAR, VARP,
+              MEDIAN, PERCENTILE_CONT, PERCENTILE_DISC
+
+  WINDOW      Analytic/ranking
+              ROW_NUMBER, RANK, DENSE_RANK, NTILE, LAG, LEAD, FIRST_VALUE, LAST_VALUE
+
+  JSON        JSON manipulation
+              JSON_VALUE, JSON_QUERY, JSON_MODIFY, ISJSON
+
+  XML         XML manipulation
+              XMLVALUE, XMLEXISTS, XMLQUERY
+
+  REGEX       Regular expressions
+              REGEXP_LIKE, REGEXP_SUBSTR, REGEXP_REPLACE, REGEXP_INSTR
+
+  FILE        File system
+              FILE_LIST, DIRECTORY, FILE_EXISTS, DIRECTORY_EXISTS, REMOTE_FILE_LIST
+
+  NULL        NULL handling
+              ISNULL, IFNULL, NVL, COALESCE, NULLIF, NVL2, IIF, DECODE, IS_NULL, IS_NOT_NULL,
+              GREATEST, LEAST
+
+  CONVERSION  Type casting
+              CAST, TRY_CAST, CONVERT, TRY_CONVERT, PARSE, TRY_PARSE, TO_STR, HASHBYTES,
+              CHECKSUM, BINARY_CHECKSUM
+
+  SYSTEM      Utilities
+              APPEND_TO_LIST, ADD_TO_LIST, REMOVE_FROM_LIST, SORT_LIST, GENERATE_SERIES,
+              NEWID, NEWSEQUENTIALID, ERROR_NUMBER, ERROR_MESSAGE, ERROR_SEVERITY,
+              ERROR_STATE, ERROR_LINE, ENV
 
 Usage
 -----
-  HELP FUNCTIONS STRING       -- string function reference
-  HELP FUNCTIONS DATE         -- date/time function reference
-  HELP FUNCTIONS MATH         -- math and numeric functions
-  HELP FUNCTIONS AGGREGATE    -- aggregate functions
-  HELP FUNCTIONS WINDOW       -- window / analytic functions
-  HELP FUNCTIONS JSON         -- JSON functions
-  HELP FUNCTIONS XML          -- XML functions
-  HELP FUNCTIONS REGEX        -- regular expression functions
-  HELP FUNCTIONS FILE         -- file and directory functions
-  HELP FUNCTIONS NULL         -- NULL handling and conditional functions
-  HELP FUNCTIONS CONVERSION   -- type conversion functions
-  HELP FUNCTIONS SYSTEM       -- list, series, identity, and system functions
+  HELP [FUNCTION_NAME]        -- Get detailed help for a specific function (e.g. HELP DATEADD)
+  HELP FUNCTIONS              -- Show this index
 
 Notes
 -----

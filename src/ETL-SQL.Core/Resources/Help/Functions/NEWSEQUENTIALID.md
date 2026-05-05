@@ -1,0 +1,9 @@
+# NEWSEQUENTIALID
+Alias for NEWID().
+
+Syntax:
+  NEWSEQUENTIALID()
+
+```sql
+SELECT NEWSEQUENTIALID();
+```

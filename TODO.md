@@ -3,7 +3,7 @@
 - [x] **Do file operation functions work with Directory CONNECTION?** Verified: CREATE, COPY, SELECT, FILE_LIST all work with connection aliases. Updated Grammar.md and Specialized_Operations.md.
 - [x] **Fix Portal Markdown tables** Updated `renderText` in `report-runtime.js` to use `marked` library.
 - [x] **Fix Portal MULTISELECT visual** Re-implemented as checkbox list in `report-runtime.js`.
-- [ ] **Fix Slicer North/South issue** Currently investigating session refresh/caching behavior in the portal.
+- [x] **Fix Slicer North/South issue** Currently investigating session refresh/caching behavior in the portal.
 
 - [ ] **Lineage & Data Governance — Full Feature Set** *(priority — core selling feature)* — See `Docs/Strategy/Lineage_Strategy.md` for the complete design. Reference documentation for standard tags and usage: `Docs/Reference/Lineage.md`.
     - **Phase 1 — Standard Tag Library & Reference Docs** ✓: Define the 20 standard tags (`@pii`, `@phi`, `@pci`, `@sensitive`, `@classification`, `@encrypted_at_rest`, `@owner`, `@domain`, `@steward`, `@contact`, `@freshness`, `@sla`, `@quality`, `@nullable`, `@d`, `@example`, `@unit`, `@format`, `@source_system`, `@source_table`, `@load_pattern`). Created `Docs/Reference/Lineage.md`. Rewrote `Help/Operations/LINEAGE.md`. Added `LanguageMetadata.StandardTags` set. Added `@`-prefix completions with docs to `LanguageService`. @pii: true-wins inheritance implemented.
