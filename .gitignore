@@ -50,6 +50,9 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
+Snapshots/
+Reports/
+publish_test/
 
 ## OS
 Thumbs.db

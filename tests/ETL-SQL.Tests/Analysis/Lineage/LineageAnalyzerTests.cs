@@ -173,9 +173,256 @@ namespace ETL_SQL.Tests.Analysis.Lineage
             
             var updateEntry = entries.First(e => e.Operation == "MERGE UPDATE" && e.TargetColumn == "X");
             Assert.Equal("Val X", updateEntry.Metadata["d"]);
-            
+
             var insertEntry = entries.First(e => e.Operation == "MERGE INSERT" && e.TargetColumn == "X");
             Assert.Equal("Val X", insertEntry.Metadata["d"]);
+        }
+
+        [Fact]
+        public void ClassifyExpression_PassThrough_ForSimpleColumnRef()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("SELECT col1 INTO #T FROM Src;"));
+
+            var entry = tracker.GetColumnLineage("#T", "col1").First();
+            Assert.Equal(TransformationKind.PassThrough, entry.TransformationKind);
+            Assert.Null(entry.TransformationExpression);
+        }
+
+        [Fact]
+        public void ClassifyExpression_Aggregation_ForSumCount()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("SELECT SUM(amount) AS total, COUNT(*) AS cnt INTO #T FROM Src GROUP BY id;"));
+
+            var totalEntry = tracker.GetColumnLineage("#T", "total").First();
+            Assert.Equal(TransformationKind.Aggregation, totalEntry.TransformationKind);
+            Assert.Contains("SUM", totalEntry.FunctionsApplied!);
+
+            var cntEntry = tracker.GetColumnLineage("#T", "cnt").First();
+            Assert.Equal(TransformationKind.Aggregation, cntEntry.TransformationKind);
+            Assert.Contains("COUNT", cntEntry.FunctionsApplied!);
+        }
+
+        [Fact]
+        public void ClassifyExpression_CaseExpression_ForCaseWhen()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("SELECT CASE WHEN amount > 0 THEN 'Y' ELSE 'N' END AS flag INTO #T FROM Src;"));
+
+            var entry = tracker.GetColumnLineage("#T", "flag").First();
+            Assert.Equal(TransformationKind.CaseExpression, entry.TransformationKind);
+            Assert.NotNull(entry.TransformationExpression);
+        }
+
+        [Fact]
+        public void ClassifyExpression_Arithmetic_ForBinaryOp()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("SELECT price * qty AS line_total INTO #T FROM Src;"));
+
+            var entry = tracker.GetColumnLineage("#T", "line_total").First();
+            Assert.Equal(TransformationKind.Arithmetic, entry.TransformationKind);
+            Assert.NotNull(entry.TransformationExpression);
+        }
+
+        [Fact]
+        public void ClassifyExpression_Literal_ForConstant()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("SELECT 42 AS answer INTO #T FROM Src;"));
+
+            var entry = tracker.GetColumnLineage("#T", "answer").First();
+            Assert.Equal(TransformationKind.Literal, entry.TransformationKind);
+        }
+
+        [Fact]
+        public void ClassifyExpression_FunctionCall_ForScalarFunction()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("SELECT UPPER(name) AS uname INTO #T FROM Src;"));
+
+            var entry = tracker.GetColumnLineage("#T", "uname").First();
+            Assert.Equal(TransformationKind.FunctionCall, entry.TransformationKind);
+            Assert.Contains("UPPER", entry.FunctionsApplied!);
+        }
+
+        [Fact]
+        public void ClassifyExpression_Cast_ForCastExpression()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("SELECT CAST(amount AS DECIMAL) AS amt INTO #T FROM Src;"));
+
+            var entry = tracker.GetColumnLineage("#T", "amt").First();
+            Assert.Equal(TransformationKind.Cast, entry.TransformationKind);
+            Assert.Contains("CAST", entry.FunctionsApplied!);
+        }
+
+        [Fact]
+        public void ClassifyExpression_WindowFunction_ForRowNumber()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("SELECT ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary DESC) AS rn INTO #T FROM Src;"));
+
+            var entry = tracker.GetColumnLineage("#T", "rn").First();
+            Assert.Equal(TransformationKind.WindowFunction, entry.TransformationKind);
+            Assert.Contains("ROW_NUMBER", entry.FunctionsApplied!);
+        }
+
+        [Fact]
+        public void ClassifyExpression_Conditional_ForCoalesce()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("SELECT COALESCE(preferred_name, first_name) AS display_name INTO #T FROM Src;"));
+
+            var entry = tracker.GetColumnLineage("#T", "display_name").First();
+            Assert.Equal(TransformationKind.Conditional, entry.TransformationKind);
+            Assert.Contains("COALESCE", entry.FunctionsApplied!);
+        }
+
+        [Fact]
+        public void PiiInheritance_TrueWins_FromSourceColumn()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            tracker.Record("Src", Enumerable.Empty<string>(), "SEED", "email", metadata: new Dictionary<string, string> { ["pii"] = "true" });
+
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("SELECT UPPER(email) AS email_upper INTO #T FROM Src;"));
+
+            var entry = tracker.GetColumnLineage("#T", "email_upper").First();
+            Assert.Equal("true", entry.Metadata["pii"]);
+        }
+
+        // ── Phase 4 — Report Lineage ─────────────────────────────────────────
+
+        [Fact]
+        public void Analyze_CreateDataset_RecordsDatasetLineage()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("CREATE DATASET #sales AS (SELECT amount FROM orders);"));
+
+            var entries = tracker.GetFullLineage().ToList();
+            var datasetEntry = entries.FirstOrDefault(e => e.Operation == "CREATE DATASET");
+
+            Assert.NotNull(datasetEntry);
+            Assert.Equal("dataset:#sales", datasetEntry!.TargetTable);
+            Assert.Contains("orders", datasetEntry.SourceTables, StringComparer.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void Analyze_CreateVisual_WithTempTableSource_RecordsVisualLineage()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("CREATE VISUAL SalesChart AS BAR (SOURCE = #sales, MAPPINGS (x = month, y = amount));"));
+
+            var entries = tracker.GetFullLineage().ToList();
+            var visualEntry = entries.FirstOrDefault(e => e.Operation == "CREATE VISUAL");
+
+            Assert.NotNull(visualEntry);
+            Assert.Equal("report:SalesChart", visualEntry!.TargetTable);
+            Assert.Contains("#sales", visualEntry.SourceTables, StringComparer.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void Analyze_CreateVisual_WithInlineSelect_RecordsVisualAndQueryLineage()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            analyzer.Analyze(Parse("CREATE VISUAL RegionChart AS PIE (SOURCE = (SELECT region, revenue FROM #orders), MAPPINGS (label = region, value = revenue));"));
+
+            var entries = tracker.GetFullLineage().ToList();
+            var visualEntry = entries.FirstOrDefault(e => e.Operation == "CREATE VISUAL");
+
+            Assert.NotNull(visualEntry);
+            Assert.Equal("report:RegionChart", visualEntry!.TargetTable);
+            Assert.Contains("#orders", visualEntry.SourceTables, StringComparer.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void Analyze_EndToEndReportChain_VisibleInFullLineage()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            var analyzer = new LineageAnalyzer(tracker);
+            var sql = @"
+SELECT amount INTO #orders FROM CRM.dbo.Orders;
+CREATE DATASET #daily_sales AS (SELECT amount FROM #orders);
+CREATE VISUAL SalesChart AS BAR (SOURCE = #daily_sales, MAPPINGS (x = day, y = amount));
+";
+            analyzer.Analyze(Parse(sql));
+
+            var all = tracker.GetFullLineage().ToList();
+
+            // Source table flows to #orders
+            Assert.Contains(all, e => e.TargetTable == "#orders" && e.SourceTables.Contains("CRM.dbo.Orders", StringComparer.OrdinalIgnoreCase));
+            // Dataset links #orders as source
+            Assert.Contains(all, e => e.Operation == "CREATE DATASET" && e.TargetTable == "dataset:#daily_sales" && e.SourceTables.Contains("#orders", StringComparer.OrdinalIgnoreCase));
+            // Visual links dataset as source
+            Assert.Contains(all, e => e.Operation == "CREATE VISUAL" && e.TargetTable == "report:SalesChart" && e.SourceTables.Contains("#daily_sales", StringComparer.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void Render_ReportNode_UsesVisualLabel()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            tracker.Record("report:SalesChart", new[] { "#sales" }, "CREATE VISUAL");
+
+            var renderer = new LineageGraphRenderer();
+            var output = renderer.Render(tracker);
+
+            Assert.Contains("[Visual: SalesChart]", output);
+            Assert.DoesNotContain("[Table: report:SalesChart]", output);
+        }
+
+        [Fact]
+        public void Render_DatasetNode_UsesDatasetLabel()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            tracker.Record("dataset:#sales", new[] { "#orders" }, "CREATE DATASET");
+
+            var renderer = new LineageGraphRenderer();
+            var output = renderer.Render(tracker);
+
+            Assert.Contains("[Dataset: #sales]", output);
+            Assert.DoesNotContain("[Table: dataset:#sales]", output);
+        }
+
+        [Fact]
+        public void RenderMermaid_ReportNode_UsesRoundedShape()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            tracker.Record("report:SalesChart", new[] { "#orders" }, "CREATE VISUAL");
+
+            var renderer = new LineageGraphRenderer();
+            var mermaid = renderer.RenderMermaid(tracker);
+
+            // report: node should use rounded parentheses, not square brackets
+            Assert.Contains("(\"report:SalesChart\")", mermaid);
+            Assert.DoesNotContain("[\"report:SalesChart\"]", mermaid);
+        }
+
+        [Fact]
+        public void RenderMermaid_DatasetNode_UsesCylinderShape()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            tracker.Record("dataset:#sales", new[] { "#orders" }, "CREATE DATASET");
+
+            var renderer = new LineageGraphRenderer();
+            var mermaid = renderer.RenderMermaid(tracker);
+
+            // dataset: node should use cylinder shape
+            Assert.Contains("[(\"dataset:#sales\")]", mermaid);
+            Assert.DoesNotContain("[\"dataset:#sales\"]", mermaid);
         }
     }
 }

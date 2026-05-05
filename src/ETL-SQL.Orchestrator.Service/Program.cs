@@ -71,7 +71,8 @@ try
     builder.Configuration
         .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
         .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-        .AddEnvironmentVariables();
+        .AddEnvironmentVariables()
+        .AddSecureConfiguration();
 
     var cfg = builder.Configuration;
 
@@ -111,6 +112,15 @@ try
 
     // Hosted service (starts/stops SchedulerService with the host)
     builder.Services.AddHostedService<OrchestratorHostedService>();
+
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        var kestrelSection = builder.Configuration.GetSection("Kestrel");
+        if (kestrelSection.Exists())
+        {
+            options.Configure(kestrelSection);
+        }
+    });
 
     var app = builder.Build();
 

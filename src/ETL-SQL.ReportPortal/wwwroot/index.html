@@ -166,14 +166,19 @@ let currentFolderName = '';
 let currentActivePage = null;  // tracks active report page for back/refresh
 let isAdmin           = false;
 
-// Track active page reported by the report iframe
+// Track active page reported by the report iframe.
+// userTriggered=true  → user clicked a tab → push a history entry (enables browser back)
+// no userTriggered    → initial load or restore → replace current entry (no new back step)
 window.addEventListener('message', e => {
   if (e.data && e.data.type === 'etl-page-changed') {
     currentActivePage = e.data.page;
-    history.replaceState(
-      { view: 'report', id: currentReportId, page: currentActivePage,
-        folderId: currentFolderId, folderName: currentFolderName },
-      '');
+    const state = { view: 'report', id: currentReportId, page: currentActivePage,
+                    folderId: currentFolderId, folderName: currentFolderName };
+    if (e.data.userTriggered) {
+      history.pushState(state, '');
+    } else {
+      history.replaceState(state, '');
+    }
   }
 });
 
@@ -323,12 +328,12 @@ function renderReportList(reports, folderName) {
 }
 
 // ── Report viewer ──────────────────────────────────────────────────────────────
-async function openReport(id, pushState = true) {
+async function openReport(id, isPushState = true, initialPage = null) {
   currentReportId = id;
-  if (pushState) {
-    currentActivePage = null;
+  if (initialPage) currentActivePage = initialPage;
+  if (isPushState) {
     history.pushState(
-      { view: 'report', id, page: null, folderId: currentFolderId, folderName: currentFolderName },
+      { view: 'report', id, page: initialPage, folderId: currentFolderId, folderName: currentFolderName },
       '');
   }
   const $main = document.getElementById('mainContent');
@@ -342,7 +347,7 @@ async function openReport(id, pushState = true) {
     $main.innerHTML = `<div class="empty-state">Failed to load report: ${esc(err.message)}</div>`;
     return;
   }
-  renderViewer(report, snapshot);
+  renderViewer(report, snapshot, initialPage);
 }
 
 function renderNoSnapshot(id) {
@@ -364,11 +369,11 @@ function renderNoSnapshot(id) {
     currentFolderId ? loadReportList(currentFolderId, currentFolderName) : null);
 }
 
-function renderViewer(report, snapshot) {
+function renderViewer(report, snapshot, initialPage = null) {
   const $main = document.getElementById('mainContent');
   const staleHtml = snapshot.isStale
     ? `<div class="stale-banner">
-         ⚠ Snapshot is stale — the script has changed since last run.
+         <span><b>Note:</b> This data is from ${new Date(snapshot.builtAt).toLocaleString()}.</span>
          <button class="btn btn-sm btn-outline" id="refreshBtn">Refresh Now</button>
        </div>` : '';
 
@@ -399,7 +404,7 @@ function renderViewer(report, snapshot) {
   const staleBtn = document.getElementById('refreshBtn');
   if (staleBtn) staleBtn.addEventListener('click', () => runAndPoll(report.id));
 
-  loadReportFrame(report.id, currentActivePage);
+  loadReportFrame(report.id, initialPage || currentActivePage);
 }
 
 function loadReportFrame(id, initialPage = null) {
@@ -439,6 +444,7 @@ function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
 </head><body style="margin:0">
 <div id="root"></div>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"><\/script>
 <script src="/js/report-runtime.js"><\/script>
 </body></html>`;
 }
@@ -728,8 +734,17 @@ function renderParamFields(containerId, params, currentValues) {
       <span class="param-label">${esc(label)}${hint}
         <span class="text-muted text-sm">(${esc(p.type)})</span>
       </span>
-      <input class="param-input" type="text" id="${inputId}" data-param="${esc(p.name)}"
-             value="${esc(String(current))}" placeholder="${p.required ? 'Required' : 'Optional'}">
+      <div style="display:flex; gap:0; align-items:stretch">
+        <input class="param-input" type="text" id="${inputId}" data-param="${esc(p.name)}"
+               value="${esc(String(current))}" placeholder="${p.required ? 'Required' : 'Optional'}"
+               style="flex:1; border-top-right-radius:0; border-bottom-right-radius:0; border-right:none">
+        ${isReldate ? `
+          <button type="button" class="btn btn-outline" style="padding:0 8px; border-top-left-radius:0; border-bottom-left-radius:0" 
+                  onclick="document.getElementById('${inputId}-picker').showPicker()">📅</button>
+          <input type="date" id="${inputId}-picker" style="position:absolute; opacity:0; width:0; height:0; pointer-events:none"
+                 onchange="document.getElementById('${inputId}').value = this.value">
+        ` : ''}
+      </div>
       ${isReldate ? `<div class="reldate-quickpicks">${RELDATE_PICKS.map(q => `<button type="button" data-pick="${q}" data-for="${inputId}">${q}</button>`).join('')}</div>` : ''}`;
 
     $container.appendChild($row);

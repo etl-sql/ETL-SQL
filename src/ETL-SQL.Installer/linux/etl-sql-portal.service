@@ -1,0 +1,15 @@
+[Unit]
+Description=ETL-SQL Report Portal
+After=network.target etl-sql-orchestrator.service
+
+[Service]
+Type=simple
+User=etlsql
+WorkingDirectory=/usr/lib/etl-sql/portal
+ExecStart=/usr/lib/etl-sql/portal/ETL-SQL.ReportPortal
+Restart=always
+RestartSec=10
+Environment=ASPNETCORE_URLS=http://*:5002
+
+[Install]
+WantedBy=multi-user.target

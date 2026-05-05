@@ -15,6 +15,7 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Linting;
 using ETL_SQL.Core.Linting.Rules;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Services;
 
 namespace ETL_SQL.App
 {
@@ -73,6 +74,11 @@ namespace ETL_SQL.App
             if (ctx.Command == "doctor")
             {
                 return await RunDoctor(logger);
+            }
+            
+            if (ctx.Command == "config-setup-jwt")
+            {
+                return await RunSetupJwt(logger, ctx.UpdateConfig);
             }
 
             if (ctx.Command.StartsWith("ui-"))
@@ -557,6 +563,64 @@ namespace ETL_SQL.App
             if (!canWrite)
             {
                 AnsiConsole.MarkupLine("[red]CRITICAL:[/] ETL-SQL requires write access to its base directory for log and session management.");
+            }
+
+            return 0;
+        }
+
+        private static async Task<int> RunSetupJwt(ILogger logger, bool updateConfig)
+        {
+            // 1. Generate 256-bit secret
+            var bytes = new byte[32];
+            using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
+            rng.GetBytes(bytes);
+            var secret = Convert.ToBase64String(bytes);
+
+            // 2. Encrypt using Machine Key
+            var machineKey = SecurityService.GetMachineKey();
+            var encryptedSecret = CryptoUtils.Encrypt(secret, machineKey);
+
+            // 3. UI - Bold Warning
+            AnsiConsole.Write(new FigletText("JWT SETUP").Centered().Color(Color.Yellow));
+            AnsiConsole.Write(new Rule("[red bold]CRITICAL SECURITY INFORMATION[/]").RuleStyle("red"));
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[bold red]GENERATED PLAIN-TEXT SECRET:[/]");
+            AnsiConsole.MarkupLine($"[bold yellow]{Markup.Escape(secret)}[/]");
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[bold white]ENCRYPTED CONFIG VALUE (Machine-Bound):[/]");
+            AnsiConsole.MarkupLine($"[cyan]{Markup.Escape(encryptedSecret)}[/]");
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[bold red]IMPORTANT:[/] Record the plain-text secret in your password manager. It cannot be recovered from the encrypted value if the machine key changes.");
+
+            if (updateConfig)
+            {
+                // Update appsettings.json
+                try 
+                {
+                    var configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+                    if (File.Exists(configPath))
+                    {
+                        var json = File.ReadAllText(configPath);
+                        var doc = System.Text.Json.Nodes.JsonNode.Parse(json);
+                        if (doc != null)
+                        {
+                            var portal = doc["Portal"] ?? (doc["Portal"] = new System.Text.Json.Nodes.JsonObject());
+                            var jwt = portal["Jwt"] ?? (portal["Jwt"] = new System.Text.Json.Nodes.JsonObject());
+                            jwt["Secret"] = encryptedSecret;
+                            
+                            File.WriteAllText(configPath, doc.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+                            AnsiConsole.MarkupLine("[green]SUCCESS:[/] Updated Portal:Jwt:Secret in appsettings.json.");
+                        }
+                    }
+                    else
+                    {
+                        AnsiConsole.MarkupLine("[yellow]WARN:[/] appsettings.json not found in base directory. Skipping auto-update.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLine($"[red]ERROR:[/] Failed to update appsettings.json: {ex.Message}");
+                }
             }
 
             return 0;

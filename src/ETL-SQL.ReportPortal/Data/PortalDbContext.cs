@@ -20,6 +20,8 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
     public DbSet<AuditLog>       AuditLogs       => Set<AuditLog>();
     public DbSet<DatasetJob>     DatasetJobs     => Set<DatasetJob>();
     public DbSet<RefreshToken>   RefreshTokens   => Set<RefreshToken>();
+    public DbSet<Dataset>        Datasets        => Set<Dataset>();
+    public DbSet<DatasetAcl>     DatasetAcls     => Set<DatasetAcl>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -69,6 +71,18 @@ public class PortalDbContext(DbContextOptions<PortalDbContext> options)
         builder.Entity<Folder>(e =>
         {
             e.HasIndex(x => x.Path).IsUnique();
+        });
+
+        builder.Entity<Dataset>(e =>
+        {
+            e.HasOne(x => x.OwningReport).WithMany().HasForeignKey(x => x.OwningReportId).OnDelete(DeleteBehavior.SetNull);
+            e.HasIndex(x => new { x.FolderPath, x.Name }).IsUnique();
+        });
+
+        builder.Entity<DatasetAcl>(e =>
+        {
+            e.HasOne(x => x.Dataset).WithMany(d => d.Acls).HasForeignKey(x => x.DatasetId);
+            e.HasOne(x => x.Group).WithMany(g => g.DatasetAcls).HasForeignKey(x => x.GroupId);
         });
     }
 }

@@ -19,10 +19,11 @@ namespace ETL_SQL.ReportBuilder.Builders
             var vm = new VisualManifest
             {
                 Name            = name,
-                VisualType      = vStmt.VisualType.ToString(),
+                VisualType      = vStmt.VisualType.ToString().ToUpperInvariant(),
                 DefaultValue    = vStmt.DefaultValue,
                 TitleIsMarkdown = titleMd,
                 SubtitleIsMarkdown = subtitleMd,
+                IsMarkdown      = vStmt.VisualType == VisualType.Text,
                 Tooltip         = styleBuilder.BuildTooltipManifest(vStmt.Tooltip)
             };
 

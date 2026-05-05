@@ -35,6 +35,10 @@ namespace ETL_SQL.Engine.Services
                 _localAliasStack.Push(localAliases);
                 try
                 {
+                    // Walk FROM and JOINs for outer references (e.g. correlated table functions)
+                    if (sel.FromTable != null) CollectOuterReferences(sel.FromTable, outerRefs);
+                    foreach (var join in sel.Joins) CollectOuterReferences(join, outerRefs);
+
                     foreach (var col in sel.Columns) CollectOuterReferences(col.Expression, outerRefs);
                     CollectOuterReferences(sel.WhereClause, outerRefs);
                     if (sel.GroupBy != null) foreach (var g in sel.GroupBy) CollectOuterReferences(g, outerRefs);
@@ -118,6 +122,10 @@ namespace ETL_SQL.Engine.Services
             {
                 CollectOuterReferences(ma.Expression, outerRefs);
             }
+            else if (node is VariableExpression vex)
+            {
+                outerRefs.Add(vex.Name);
+            }
             else if (node is ListExpression list)
             {
                 foreach (var item in list.Items) CollectOuterReferences(item, outerRefs);
@@ -125,6 +133,17 @@ namespace ETL_SQL.Engine.Services
             else if (node is SubqueryExpression subq)
             {
                 CollectOuterReferences(subq.Query, outerRefs);
+            }
+            else if (node is TableReference tr)
+            {
+                if (tr.FunctionCall != null) CollectOuterReferences(tr.FunctionCall, outerRefs);
+                if (tr.Subquery != null) CollectOuterReferences(tr.Subquery, outerRefs);
+                foreach (var op in tr.TableOperators) CollectOuterReferences(op, outerRefs);
+            }
+            else if (node is JoinClause join)
+            {
+                CollectOuterReferences(join.Table, outerRefs);
+                CollectOuterReferences(join.Condition, outerRefs);
             }
         }
     }

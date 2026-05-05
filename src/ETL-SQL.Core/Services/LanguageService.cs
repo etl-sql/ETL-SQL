@@ -215,9 +215,45 @@ namespace ETL_SQL.Core.Services
                     }
                 }
                 else if (last.Text.Equals("SET", StringComparison.OrdinalIgnoreCase)) results.AddRange(new[] { "WHAT_IF", "PROFILING", "REPORT", "BATCH_SIZE", "STRICT_SCHEMA", "MAX_ERRORS" }.Select(k => new Suggestion(k, SuggestionType.Keyword, Priority: 0)));
+
+                // Standard governance tag completions: triggered when cursor is inside /* @... */
+                if (context.Prefix.StartsWith("@", StringComparison.Ordinal))
+                {
+                    var tagPrefix = context.Prefix.TrimStart('@');
+                    results.AddRange(ETL_SQL.Common.LanguageMetadata.StandardTags
+                        .Where(t => tagPrefix.Length == 0 || t.StartsWith(tagPrefix, StringComparison.OrdinalIgnoreCase))
+                        .Select(t => new Suggestion("@" + t, SuggestionType.Keyword, Priority: 0,
+                            Documentation: GetTagDocumentation(t))));
+                }
             } catch {}
             return results;
         }
+
+        private static string? GetTagDocumentation(string tag) => tag switch
+        {
+            "pii"               => "**@pii** `true|false` — Personal Identifiable Information. Inherits `true` from any source column.",
+            "phi"               => "**@phi** `true|false` — Protected Health Information (HIPAA).",
+            "pci"               => "**@pci** `true|false` — Payment Card data (PCI-DSS).",
+            "sensitive"         => "**@sensitive** `true|false` — Sensitive data requiring access controls.",
+            "classification"    => "**@classification** `Public|Internal|Confidential|Restricted` — Data classification tier.",
+            "encrypted_at_rest" => "**@encrypted_at_rest** `true|false` — Column is stored encrypted.",
+            "owner"             => "**@owner** `team or person` — Accountable owner of this data.",
+            "domain"            => "**@domain** `Finance|HR|Sales|...` — Business domain.",
+            "steward"           => "**@steward** `name` — Person responsible for data quality.",
+            "contact"           => "**@contact** `email or handle` — Point of contact for questions.",
+            "freshness"         => "**@freshness** `daily|hourly|real-time|...` — How often this data is refreshed.",
+            "sla"               => "**@sla** `4h|T+1|...` — Delivery SLA.",
+            "quality"           => "**@quality** `high|medium|low|unverified` — Confidence in data quality.",
+            "nullable"          => "**@nullable** `true|false` — Whether this column can contain NULLs.",
+            "d"                 => "**@d** — Human-readable description (inherits to derived columns as DerivedFromDescriptions).",
+            "example"           => "**@example** `sample value` — Representative example value.",
+            "unit"              => "**@unit** `USD|ms|rows|...` — Unit of measurement.",
+            "format"            => "**@format** `YYYY-MM-DD|E.164|...` — Expected format or pattern.",
+            "source_system"     => "**@source_system** `Salesforce|SAP|...` — Originating system.",
+            "source_table"      => "**@source_table** `dbo.Orders` — Originating table.",
+            "load_pattern"      => "**@load_pattern** `full_load|incremental|streaming` — How data is loaded.",
+            _                   => null
+        };
 
         private async Task<List<Suggestion>> GetWithClauseSuggestionsAsync(SuggestionContext context)
         {

@@ -37,6 +37,7 @@ Display:
 Interactive controls (pair with ACTIONS to drive other visuals):
   SLICER      — dropdown selector; binds to a @variable
   MULTISELECT — checkbox list; binds a LIST to a @variable
-  DATEPICKER  — date-input control; binds a DATE to a @variable
-  SLIDER      — numeric range slider; binds a number to a @variable
-  SEARCH      — free-text search input; binds a STRING to a @variable
+  DATEPICKER    — date-input control; binds a DATE to a @variable
+  RELDATEPICKER — relative-date picker with text input, calendar, and quick-pick buttons
+  SLIDER        — numeric range slider; binds a number to a @variable
+  SEARCH        — free-text search input; binds a STRING to a @variable

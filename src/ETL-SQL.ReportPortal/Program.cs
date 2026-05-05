@@ -17,6 +17,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Engine.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddSecureConfiguration();
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 var portalConfig = builder.Configuration.GetSection("Portal").Get<PortalConfig>()
@@ -154,6 +155,16 @@ builder.Services.AddHealthChecks()
 
 builder.Services.AddControllers();
 
+// ── Kestrel Config (HTTPS) ────────────────────────────────────────────────────
+builder.WebHost.ConfigureKestrel(options =>
+{
+    var kestrelSection = builder.Configuration.GetSection("Kestrel");
+    if (kestrelSection.Exists())
+    {
+        options.Configure(kestrelSection);
+    }
+});
+
 // ── App pipeline ──────────────────────────────────────────────────────────────
 var app = builder.Build();
 
@@ -185,7 +196,11 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.UseStaticFiles();
+var staticFileOptions = new StaticFileOptions();
+var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+provider.Mappings[".geojson"] = "application/geo+json";
+staticFileOptions.ContentTypeProvider = provider;
+app.UseStaticFiles(staticFileOptions);
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<MustChangePasswordMiddleware>();

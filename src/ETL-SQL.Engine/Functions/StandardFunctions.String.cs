@@ -161,12 +161,12 @@ namespace ETL_SQL.Engine.Functions
             string sep = args[1]?.ToString() ?? ",";
             
             var dt = new DataTable();
-            dt.SetColumns(new[] { "VALUE" });
+            dt.SetColumns(new[] { "Value" });
             
             var parts = s.Split(new[] { sep }, StringSplitOptions.None);
             foreach (var part in parts)
             {
-                await dt.AddRowAsync(new Row { ["VALUE"] = part });
+                await dt.AddRowAsync(new Row { ["Value"] = part.Trim() });
             }
             
             return dt;

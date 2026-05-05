@@ -21,6 +21,7 @@ namespace ETL_SQL.ReportPlayer
             ReportManifest manifest, 
             IEnumerable<(string Name, string Value)> updates)
         {
+            var logger = evaluator.Logger;
             var affectedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var (name, value) in updates)
             {
@@ -29,6 +30,8 @@ namespace ETL_SQL.ReportPlayer
                 affectedNames.Add(name.TrimStart('@'));
                 manifest.Parameters[varName] = value;
             }
+
+            logger.Debug($"[DashboardSharedLogic] Refreshing visuals affected by: {string.Join(", ", affectedNames)}");
 
             var builder = new ManifestBuilder(evaluator);
             int refreshCount = 0;
@@ -40,12 +43,18 @@ namespace ETL_SQL.ReportPlayer
                     var existingVm = manifest.Visuals.FirstOrDefault(v => v.Name == visualDef.Name);
                     if (existingVm != null)
                     {
+                        logger.Debug($"[DashboardSharedLogic] Refreshing visual: {visualDef.Name}");
                         await builder.RefreshVisualAsync(visualDef, existingVm);
                         refreshCount++;
+                    }
+                    else
+                    {
+                        logger.Warning($"[DashboardSharedLogic] Found dependency but visual manifest entry missing: {visualDef.Name}");
                     }
                 }
             }
 
+            logger.Debug($"[DashboardSharedLogic] Refresh complete. {refreshCount} visuals updated.");
             return refreshCount;
         }
 

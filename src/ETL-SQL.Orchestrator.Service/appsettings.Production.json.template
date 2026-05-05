@@ -1,0 +1,26 @@
+{
+  "Jobs": {
+    "UseProcessSpawning": true,
+    "MaxParallelJobs": 8
+  },
+  "Kestrel": {
+    "Endpoints": {
+      "Http": {
+        "Url": "http://*:5001"
+      },
+      "Https": {
+        "Url": "https://*:5003",
+        "Certificate": {
+          "Path": "cert.pfx",
+          "Password": "ENC:PFX_PASSWORD"
+        }
+      }
+    }
+  },
+  "Logging": {
+    "AppLog": {
+      "Directory": "logs/orchestrator",
+      "RetentionDays": 30
+    }
+  }
+}

@@ -51,10 +51,10 @@ public class SessionCache : IHostedService, IDisposable
     }
 
     /// <summary>Removes all sessions for a report (called on snapshot invalidation).</summary>
-    public void InvalidateReport(int reportId)
+    public async Task InvalidateReportAsync(int reportId)
     {
         foreach (var key in _sessions.Keys.Where(k => k.ReportId == reportId))
-            _sessions.TryRemove(key, out _);
+            if (_sessions.TryRemove(key, out var entry)) await entry.Service.DisposeAsync();
     }
 
     // ── IHostedService ────────────────────────────────────────────────────────
@@ -72,7 +72,16 @@ public class SessionCache : IHostedService, IDisposable
         return Task.CompletedTask;
     }
 
-    public void Dispose() => _evictionTimer?.Dispose();
+    public void Dispose()
+    {
+        _evictionTimer?.Dispose();
+        foreach (var entry in _sessions.Values)
+        {
+            // We are in sync Dispose, so we have to use the sync Dispose fallback or fire-and-forget
+            entry.Service.Dispose();
+        }
+        _sessions.Clear();
+    }
 
     // ── Eviction ──────────────────────────────────────────────────────────────
 
@@ -85,7 +94,7 @@ public class SessionCache : IHostedService, IDisposable
         // First remove idle sessions beyond TTL
         foreach (var (key, entry) in _sessions)
             if (now - entry.LastAccess > ttl)
-                _sessions.TryRemove(key, out _);
+                if (_sessions.TryRemove(key, out var e)) _ = e.Service.DisposeAsync();
 
         // Then trim to max size by evicting oldest
         if (_sessions.Count > maxSize)
@@ -96,7 +105,7 @@ public class SessionCache : IHostedService, IDisposable
                 .Select(kv => kv.Key);
 
             foreach (var key in evict)
-                _sessions.TryRemove(key, out _);
+                if (_sessions.TryRemove(key, out var e)) _ = e.Service.DisposeAsync();
 
             _log.LogDebug("SessionCache evicted to {Size} entries", _sessions.Count);
         }

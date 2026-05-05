@@ -1,0 +1,36 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+namespace ETL_SQL.Core.Data
+{
+    public enum DatasetAccessLevel { Private, Public }
+    public enum DatasetPermission { Viewer, Editor, Owner }
+
+    public class DatasetMetadata
+    {
+        public string             Name            { get; set; } = "";
+        public string             FolderPath      { get; set; } = "";
+        public string             ParquetFilePath { get; set; } = "";
+        public int?               OwningReportId  { get; set; }
+        public string             SourceQuery     { get; set; } = "";
+        public DatasetAccessLevel AccessLevel     { get; set; } = DatasetAccessLevel.Private;
+        public DateTime?          LastRefresh     { get; set; }
+        public string?            Ttl             { get; set; }
+        public string?            RefreshInterval { get; set; }
+        public long               RowCount        { get; set; }
+        public string?            ColumnSchema    { get; set; } // JSON
+        public DateTime           CreatedAt       { get; set; } = DateTime.UtcNow;
+        public DateTime           UpdatedAt       { get; set; } = DateTime.UtcNow;
+    }
+
+    public interface IDatasetRegistry
+    {
+        Task RegisterOrUpdate(DatasetMetadata metadata);
+        Task<DatasetMetadata?> Lookup(string name, string folderPath);
+        Task<bool> Exists(string name, string folderPath);
+        Task SetStale(string name, string folderPath);
+        Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions);
+        Task Delete(string name, string folderPath);
+    }
+}

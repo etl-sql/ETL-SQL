@@ -6,6 +6,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>ETL_SQL.ReportPortal</RootNamespace>
     <AssemblyName>ETL-SQL-Portal</AssemblyName>
+    <!-- Disable automatic static web assets to prevent duplicate conflicts with referenced projects -->
+    <StaticWebAssetsEnabled>false</StaticWebAssetsEnabled>
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
@@ -35,10 +37,25 @@
     <PackageReference Include="Cronos" Version="0.12.0" />
   </ItemGroup>
 
-  <Target Name="CopyReportRuntime" BeforeTargets="Build">
-    <Copy SourceFiles="..\ETL-SQL.ReportPlayer\wwwroot\report-runtime.js" DestinationFolder="wwwroot\js" SkipUnchangedFiles="true" />
-    <!-- GeoJSON maps are served from ReportPlayer's wwwroot automatically via its ProjectReference above.
-         No copy needed — the static web assets system merges them at /maps/*.geojson. -->
+  <!-- Manual asset copy since we disabled StaticWebAssets -->
+  <Target Name="CopyManualAssets" BeforeTargets="Build">
+    <ItemGroup>
+      <_PlayerRuntime Include="..\ETL-SQL.ReportPlayer\wwwroot\report-runtime.js" />
+      <_PlayerMaps Include="..\ETL-SQL.ReportPlayer\wwwroot\maps\*.geojson" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PlayerRuntime)" DestinationFolder="wwwroot\js" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_PlayerMaps)" DestinationFolder="wwwroot\maps" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyManualAssetsOnPublish" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
+    <ItemGroup>
+      <_PortalRoot Include="wwwroot\**\*" />
+      <_PlayerRuntimePub Include="..\ETL-SQL.ReportPlayer\wwwroot\report-runtime.js" />
+      <_PlayerMapsPub Include="..\ETL-SQL.ReportPlayer\wwwroot\maps\*.geojson" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_PortalRoot)" DestinationFolder="$(PublishDir)wwwroot\%(RecursiveDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_PlayerRuntimePub)" DestinationFolder="$(PublishDir)wwwroot\js" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_PlayerMapsPub)" DestinationFolder="$(PublishDir)wwwroot\maps" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

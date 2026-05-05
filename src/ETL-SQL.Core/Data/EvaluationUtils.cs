@@ -28,6 +28,11 @@ namespace ETL_SQL.Core.Data
                     return true;
                 }
 
+                // SCALAR vs ROW comparison (Phase 9F fix for STRING_SPLIT IN filtering)
+                // If one side is a row and the other is a scalar, compare the first column.
+                if (a is Row r1 && !(b is Row)) return IsSoftEqual(r1[0], b, logger);
+                if (b is Row r2 && !(a is Row)) return IsSoftEqual(a, r2[0], logger);
+
                 if (a.IsNull() || b.IsNull()) 
                     return a.IsNull() && b.IsNull();
 

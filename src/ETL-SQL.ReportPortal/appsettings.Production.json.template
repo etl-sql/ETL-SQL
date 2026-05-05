@@ -1,0 +1,35 @@
+{
+  "Portal": {
+    "DatabasePath": "data/portal.db",
+    "Jwt": {
+      "Secret": "ENC:GENERATED_SECRET_HERE",
+      "ExpiryMinutes": 60
+    },
+    "FirstRun": {
+      "AdminUsername": "admin"
+    }
+  },
+  "ConnectionStrings": {
+    "Default": "ENC:ENCRYPTED_CONNECTION_STRING"
+  },
+  "Kestrel": {
+    "Endpoints": {
+      "Http": {
+        "Url": "http://*:5000"
+      },
+      "Https": {
+        "Url": "https://*:5002",
+        "Certificate": {
+          "Path": "cert.pfx",
+          "Password": "ENC:PFX_PASSWORD"
+        }
+      }
+    }
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  }
+}

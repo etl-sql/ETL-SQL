@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using ETL_SQL.App;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Handlers;
@@ -92,7 +93,7 @@ namespace ETL_SQL.Tests.Analysis.Statements
         public async Task ShowTags_IntoTempTable_PopulatesDestination()
         {
             var eval = NewEval();
-            
+
             var metadata = new Dictionary<string, string> { { "author", "ETL_SQL" } };
             eval.LineageTracker.Record("TempSource", new List<string>(), "CREATE", null, null, metadata);
 
@@ -105,6 +106,73 @@ namespace ETL_SQL.Tests.Analysis.Statements
             Assert.NotNull(eval.LastResult);
             Assert.Single(eval.LastResult!.Rows);
             Assert.Equal("author", eval.LastResult.Rows[0]["TagName"]?.ToString());
+        }
+
+        // ── SHOW SCRIPT TAGS / -- @tag support ───────────────────────────────
+
+        [Fact]
+        public void ParseShowScriptTags_AlternativeSyntax_ParsesCorrectly()
+        {
+            // Both "SHOW SCRIPT TAGS" and "SHOW SCRIPT TAG" should parse
+            var stmtPlural = TestHelpers.Parse("SHOW SCRIPT TAGS;").Statements.OfType<ShowScriptTagsStatement>().FirstOrDefault();
+            var stmtSingular = TestHelpers.Parse("SHOW SCRIPT TAG;").Statements.OfType<ShowScriptTagsStatement>().FirstOrDefault();
+            Assert.NotNull(stmtPlural);
+            Assert.NotNull(stmtSingular);
+        }
+
+        [Fact]
+        public async Task ShowScriptTags_AlternativeSyntax_ReturnsScriptMetadata()
+        {
+            var eval = NewEval();
+            // Script-header tags (block comment) feed into GlobalMetadata via script.Metadata
+            var script = TestHelpers.Parse("/* @owner: DataEngineering; @version: 2.1; */\nSHOW SCRIPT TAGS;");
+            await eval.Evaluate(script);
+
+            Assert.NotNull(eval.LastResult);
+            var tags = eval.LastResult!.Rows.ToDictionary(r => r["TagName"]!.ToString()!, r => r["TagValue"]!.ToString()!);
+            Assert.True(tags.ContainsKey("owner"));
+            Assert.Equal("DataEngineering", tags["owner"]);
+        }
+
+        [Fact]
+        public async Task ShowScriptTags_IntoTemp_AlternativeSyntax_Works()
+        {
+            var eval = NewEval();
+            // Use -- @tag header syntax (new Lexer support) to populate script metadata
+            var script = TestHelpers.Parse("-- @pipeline: DailySales\nSHOW SCRIPT TAGS INTO #tags;\nSELECT * FROM #tags;");
+            await eval.Evaluate(script);
+
+            Assert.NotNull(eval.LastResult);
+            Assert.Contains(eval.LastResult!.Rows, r => r["TagName"]?.ToString() == "pipeline" && r["TagValue"]?.ToString() == "DailySales");
+        }
+
+        [Fact]
+        public void Lexer_LineCommentTag_EmitsColumnTagToken()
+        {
+            // "-- @pii: true" should produce a COLUMN_TAG token, not be discarded
+            var tokens = new Lexer("-- @pii: true").Tokenize();
+            Assert.Contains(tokens, t => t.Type == TokenType.COLUMN_TAG);
+            var tag = tokens.First(t => t.Type == TokenType.COLUMN_TAG);
+            Assert.StartsWith("@pii", tag.Value);
+        }
+
+        [Fact]
+        public void Lexer_RegularLineComment_IsDiscarded()
+        {
+            // "-- regular comment" (no @) should NOT produce any token
+            var tokens = new Lexer("-- just a comment\nSELECT 1;").Tokenize();
+            Assert.DoesNotContain(tokens, t => t.Type == TokenType.COLUMN_TAG);
+        }
+
+        [Fact]
+        public void Parser_LineCommentHeaderTag_CapturedInScriptMetadata()
+        {
+            // Script-header "-- @tag: value" should populate script.Metadata
+            var source = "-- @owner: TeamA\n-- @version: 3.0\nSELECT 1;";
+            var script = new Parser(new Lexer(source).Tokenize()).Parse();
+            Assert.True(script.Metadata.ContainsKey("owner"));
+            Assert.Equal("TeamA", script.Metadata["owner"]);
+            Assert.Equal("3.0", script.Metadata["version"]);
         }
     }
 }

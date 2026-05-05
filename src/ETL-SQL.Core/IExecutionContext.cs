@@ -293,6 +293,7 @@ namespace ETL_SQL.Core
         IVariableContext VarContext { get; }
         IReportContext ReportContext { get; }
         ITelemetryContext Telemetry { get; }
+        IDatasetRegistry? DatasetRegistry { get; }
         
         IEvaluationContext EvaluationContext => this;
         IDataContext DataContext => this;
@@ -345,7 +346,7 @@ namespace ETL_SQL.Core
     public interface ILineageTracker
     {
         Dictionary<string, string> GlobalMetadata { get; }
-        void Record(string target, IEnumerable<string> sources, string operation, string? targetColumn = null, IEnumerable<string>? sourceColumns = null, Dictionary<string, string>? metadata = null, string? derivedFromDescriptions = null, int line = 0, int column = 0, int endLine = 0, int endColumn = 0, string? sourceFile = null);
+        void Record(string target, IEnumerable<string> sources, string operation, string? targetColumn = null, IEnumerable<string>? sourceColumns = null, Dictionary<string, string>? metadata = null, string? derivedFromDescriptions = null, int line = 0, int column = 0, int endLine = 0, int endColumn = 0, string? sourceFile = null, TransformationKind transformationKind = TransformationKind.Unknown, string? transformationExpression = null, IReadOnlyList<string>? functionsApplied = null);
         IEnumerable<LineageEntry> GetLineage(string tableName);
         IEnumerable<LineageEntry> GetColumnLineage(string tableName, string columnName);
         Dictionary<string, string> GetTableMetadata(string tableName);

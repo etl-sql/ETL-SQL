@@ -16,11 +16,12 @@ namespace ETL_SQL.Engine.Storage
         private readonly ILineageTracker _tracker;
         private readonly string? _targetTable;
         private readonly string? _targetColumn;
-        private readonly List<string> _columns = new() 
-        { 
-            "Timestamp", "Operation", "TargetTable", "TargetColumn", 
-            "SourceTables", "SourceColumns", "Description", "Metadata", 
-            "DerivedFromDescriptions", "SourceFile", "Line", "Column" 
+        private readonly List<string> _columns = new()
+        {
+            "Timestamp", "Operation", "TargetTable", "TargetColumn",
+            "SourceTables", "SourceColumns", "Description", "Metadata",
+            "DerivedFromDescriptions", "SourceFile", "Line", "Column",
+            "TransformationKind", "TransformationExpression", "FunctionsApplied"
         };
 
         public string Path => "LINEAGE";
@@ -63,6 +64,9 @@ namespace ETL_SQL.Engine.Storage
                 row["SourceFile"] = entry.SourceFile;
                 row["Line"] = entry.Line;
                 row["Column"] = entry.Column;
+                row["TransformationKind"] = entry.TransformationKind == ETL_SQL.Core.TransformationKind.Unknown ? null : entry.TransformationKind.ToString();
+                row["TransformationExpression"] = entry.TransformationExpression;
+                row["FunctionsApplied"] = entry.FunctionsApplied != null ? string.Join(", ", entry.FunctionsApplied) : null;
                 rows.Add(row);
 
                 if (rows.Count >= batchSize)

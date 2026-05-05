@@ -86,7 +86,16 @@ export function activate(context: vscode.ExtensionContext) {
     let serverPath = (config.get<string>('server.path') || '').trim();
 
     if (!serverPath) {
-        // Try bundled path first
+        // 1. Try System PATH first (User-installed SDK)
+        const inPath = findInPath(os.platform() === 'win32' ? 'ETL-SQL-LSP' : 'ETL-SQL-LSP');
+        if (inPath) {
+            serverPath = inPath;
+            outputChannel.appendLine(`Using Language Server from PATH: ${serverPath}`);
+        }
+    }
+
+    if (!serverPath) {
+        // 2. Try bundled path
         const bundledServer = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL-LSP.exe' : 'ETL-SQL-LSP');
         if (fs.existsSync(bundledServer)) {
             serverPath = bundledServer;
@@ -95,6 +104,7 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     if (!serverPath) {
+        // 3. Search in build folder
         outputChannel.appendLine("Server path not configured. Searching in build folder...");
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (workspaceFolder) {
@@ -439,11 +449,15 @@ function getExecutablePath(context: vscode.ExtensionContext, config: vscode.Work
     let exePath = (config.get<string>('executable.path') || '').trim();
     if (exePath) return exePath;
 
-    // 1. Try bundled path first
+    // 1. Try System PATH first (User-installed SDK)
+    const inPath = findInPath(os.platform() === 'win32' ? 'ETL-SQL' : 'ETL-SQL');
+    if (inPath) return inPath;
+
+    // 2. Try bundled path
     const bundledPath = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL.exe' : 'ETL-SQL');
     if (fs.existsSync(bundledPath)) return bundledPath;
 
-    // 2. Search in common build folders
+    // 3. Search in common build folders
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (workspaceFolder) {
         const searchPaths = [
@@ -453,8 +467,8 @@ function getExecutablePath(context: vscode.ExtensionContext, config: vscode.Work
         for (const p of searchPaths) if (fs.existsSync(p)) return p;
     }
 
-    const finalPath = 'ETL-SQL.exe'; // Fallback to PATH
-    outputChannel.appendLine(`Engine executable not found in bundled or build folders. Falling back to: ${finalPath}`);
+    const finalPath = 'ETL-SQL.exe'; // Fallback to PATH for spawn even if findInPath failed
+    outputChannel.appendLine(`Engine executable not found. Falling back to: ${finalPath}`);
     return finalPath;
 }
 
@@ -469,4 +483,19 @@ export function deactivate(): Thenable<void> | undefined {
     ReplManager.getInstance().stop();
     if (!client) return undefined;
     return client.stop();
+}
+
+function findInPath(command: string): string | undefined {
+    try {
+        const platform = os.platform();
+        const cmd = platform === 'win32' ? `where ${command}` : `which ${command}`;
+        const out = cp.execSync(cmd, { stdio: [] }).toString().trim();
+        if (out) {
+            const lines = out.split(/\r?\n/);
+            return lines[0].trim();
+        }
+    } catch (e) {
+        // ignore
+    }
+    return undefined;
 }

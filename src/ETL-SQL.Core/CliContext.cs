@@ -31,6 +31,7 @@ namespace ETL_SQL.Core
         public bool EnablePaging { get; set; }
         public bool DisplayProgress { get; set; }
         public string SessionId { get; set; } = System.Guid.NewGuid().ToString("N");
+        public bool UpdateConfig { get; set; }
         public Dictionary<string, object?> Variables { get; } = new(System.StringComparer.OrdinalIgnoreCase);
     }
 }

@@ -146,7 +146,7 @@ public class ExecutionJobService : IDisposable
             else
             {
                 // Use an independent DashboardService for snapshots (not the session cache)
-                using var svc = new ETL_SQL.ReportPlayer.DashboardService(scriptPath, _scopeFactory);
+                await using var svc = new ETL_SQL.ReportPlayer.DashboardService(scriptPath, _scopeFactory);
 
                 if (parameters is { Count: > 0 })
                     await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));
@@ -196,7 +196,7 @@ public class ExecutionJobService : IDisposable
             await db.SaveChangesAsync();
 
             // Invalidate sessions so next parameter interaction picks up fresh data
-            _sessions.InvalidateReport(job.ReportId);
+            await _sessions.InvalidateReportAsync(job.ReportId);
 
             job.Status       = JobStatus.Completed;
             job.ManifestPath = manifestPath;

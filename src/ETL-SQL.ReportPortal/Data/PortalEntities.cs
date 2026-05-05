@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.ReportPortal.Data;
 
@@ -34,6 +35,7 @@ public class Group
 
     public ICollection<UserGroup>  UserGroups  { get; set; } = [];
     public ICollection<FolderAcl>  FolderAcls  { get; set; } = [];
+    public ICollection<DatasetAcl> DatasetAcls { get; set; } = [];
 }
 
 public class UserGroup
@@ -181,4 +183,37 @@ public class RefreshToken
     public string     Token     { get; set; } = "";
     public DateTime   ExpiresAt { get; set; }
     public DateTime?  RevokedAt { get; set; }
+}
+
+// ── Datasets ──────────────────────────────────────────────────────────────────
+
+public class Dataset
+{
+    public int                Id              { get; set; }
+    public string             Name            { get; set; } = "";
+    public string             FolderPath      { get; set; } = "";
+    public string             ParquetFilePath { get; set; } = "";
+    public int?               OwningReportId  { get; set; }
+    public Report?            OwningReport    { get; set; }
+    public string             SourceQuery     { get; set; } = "";
+    public DatasetAccessLevel AccessLevel     { get; set; } = DatasetAccessLevel.Private;
+    public DateTime?          LastRefresh     { get; set; }
+    public string?            Ttl             { get; set; }
+    public string?            RefreshInterval { get; set; }
+    public long               RowCount        { get; set; }
+    public string?            ColumnSchema    { get; set; } // JSON
+    public DateTime           CreatedAt       { get; set; } = DateTime.UtcNow;
+    public DateTime           UpdatedAt       { get; set; } = DateTime.UtcNow;
+
+    public ICollection<DatasetAcl> Acls { get; set; } = [];
+}
+
+public class DatasetAcl
+{
+    public int               Id         { get; set; }
+    public int               DatasetId  { get; set; }
+    public Dataset           Dataset    { get; set; } = null!;
+    public int               GroupId    { get; set; }
+    public Group             Group      { get; set; } = null!;
+    public DatasetPermission Permission { get; set; }
 }

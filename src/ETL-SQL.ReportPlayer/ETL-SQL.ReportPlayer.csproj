@@ -9,11 +9,6 @@
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Content Include="..\appsettings.json" Link="appsettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\ETL-SQL.ReportBuilder\ETL-SQL.ReportBuilder.csproj" />

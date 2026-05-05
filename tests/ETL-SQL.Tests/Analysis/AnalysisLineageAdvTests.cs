@@ -138,6 +138,174 @@ namespace ETL_SQL.Tests.Analysis
             }
         }
 
+        [Fact]
+        public async Task LineageTags_VirtualTable_ExposesFlatTagRows()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var ev = services.GetRequiredService<Evaluator>();
+
+            var script = @"
+SELECT
+    id   /* @pii: true; @d: Primary key */,
+    name /* @sensitive: true */
+INTO #tagged
+FROM (SELECT 1 AS id, 'Alice' AS name) AS x;
+
+SELECT TagName, TagValue
+INTO #result
+FROM LINEAGE_TAGS
+WHERE TargetTable = '#tagged';
+
+SELECT * FROM #result;
+";
+            await ev.Evaluate(Parse(script));
+
+            var rows = ev.LastResult?.Rows ?? new List<Row>();
+            Assert.Contains(rows, r => r["TagName"]?.ToString() == "pii" && r["TagValue"]?.ToString() == "true");
+            Assert.Contains(rows, r => r["TagName"]?.ToString() == "sensitive" && r["TagValue"]?.ToString() == "true");
+        }
+
+        [Fact]
+        public async Task LineageTags_VirtualTable_HasCorrectScope()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var ev = services.GetRequiredService<Evaluator>();
+
+            var script = @"
+SELECT id /* @owner: Finance */
+INTO #t
+FROM (SELECT 1 AS id) AS x;
+
+SELECT Scope
+INTO #result
+FROM LINEAGE_TAGS
+WHERE TargetTable = '#t' AND TagName = 'owner';
+
+SELECT * FROM #result;
+";
+            await ev.Evaluate(Parse(script));
+
+            var rows = ev.LastResult?.Rows ?? new List<Row>();
+            Assert.NotEmpty(rows);
+            Assert.All(rows, r => Assert.Equal("column", r["Scope"]?.ToString()));
+        }
+
+        [Fact]
+        public async Task HasTag_ReturnsTrueWhenTagExists()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var ev = services.GetRequiredService<Evaluator>();
+
+            var script = @"
+SELECT email /* @pii: true */
+INTO #users
+FROM (SELECT 'a@b.com' AS email) AS x;
+
+SELECT HAS_TAG('#users', 'email', 'pii') AS has_pii;
+";
+            await ev.Evaluate(Parse(script));
+
+            var rows = ev.LastResult?.Rows ?? new List<Row>();
+            Assert.Single(rows);
+            Assert.Equal(1m, rows[0]["has_pii"]);
+        }
+
+        [Fact]
+        public async Task HasTag_WithExpectedValue_ReturnsTrueOnMatch()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var ev = services.GetRequiredService<Evaluator>();
+
+            var script = @"
+SELECT email /* @pii: true */
+INTO #users
+FROM (SELECT 'a@b.com' AS email) AS x;
+
+SELECT
+    HAS_TAG('#users', 'email', 'pii', 'true') AS match,
+    HAS_TAG('#users', 'email', 'pii', 'false') AS no_match;
+";
+            await ev.Evaluate(Parse(script));
+
+            var rows = ev.LastResult?.Rows ?? new List<Row>();
+            Assert.Single(rows);
+            Assert.Equal(1m, rows[0]["match"]);
+            Assert.Equal(0m, rows[0]["no_match"]);
+        }
+
+        [Fact]
+        public async Task HasTag_ReturnsFalseWhenTagMissing()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var ev = services.GetRequiredService<Evaluator>();
+
+            var script = @"
+SELECT name
+INTO #t
+FROM (SELECT 'Alice' AS name) AS x;
+
+SELECT HAS_TAG('#t', 'name', 'pii') AS result;
+";
+            await ev.Evaluate(Parse(script));
+
+            var rows = ev.LastResult?.Rows ?? new List<Row>();
+            Assert.Single(rows);
+            Assert.Equal(0m, rows[0]["result"]);
+        }
+
+        [Fact]
+        public async Task ForeachLoop_RecordsLoopVariableLineage()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var tracker = services.GetRequiredService<ILineageTracker>();
+            var ev = services.GetRequiredService<Evaluator>();
+
+            var script = @"
+CREATE TABLE #src (id INT, val VARCHAR);
+INSERT INTO #src VALUES (1, 'a'), (2, 'b');
+
+DECLARE @row OBJECT;
+FOREACH @row IN (SELECT id, val FROM #src)
+BEGIN
+    PRINT @row.val;
+END;
+";
+            await ev.Evaluate(Parse(script));
+
+            var loopEntries = tracker.GetFullLineage()
+                .Where(e => e.Operation == "FOREACH_LOOP")
+                .ToList();
+
+            Assert.NotEmpty(loopEntries);
+            var entry = loopEntries.First();
+            Assert.Equal("@row", entry.TargetColumn);
+            Assert.Contains("#src", entry.SourceTables, StringComparer.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task ForLoop_RecordsCounterVariableLineage()
+        {
+            var services = DependencyInjectionSetup.BuildServiceProvider();
+            var tracker = services.GetRequiredService<ILineageTracker>();
+            var ev = services.GetRequiredService<Evaluator>();
+
+            var script = @"
+DECLARE @i INT = 0;
+FOR @i = 1 TO 3
+BEGIN
+    SET @i = @i;
+END;
+";
+            await ev.Evaluate(Parse(script));
+
+            var loopEntries = tracker.GetFullLineage()
+                .Where(e => e.Operation == "FOR_LOOP")
+                .ToList();
+
+            Assert.NotEmpty(loopEntries);
+            Assert.Equal("@i", loopEntries.First().TargetColumn);
+        }
+
         private static Script Parse(string source)
         {
             var lexer = new Lexer(source);

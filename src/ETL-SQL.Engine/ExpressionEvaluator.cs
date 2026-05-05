@@ -36,6 +36,8 @@ namespace ETL_SQL.Engine
 
         private bool IsResolvableInOuterScope(string name, Row? context = null)
         {
+            if (name.StartsWith("@")) return _context.VarContext.ContainsVariable(name);
+
             if (context != null)
             {
                 if (context.HasColumn(name)) return true;
@@ -55,6 +57,8 @@ namespace ETL_SQL.Engine
 
         private object? ResolveIdentifier(string name, Row? context)
         {
+            if (name.StartsWith("@")) return _context.VarContext.GetVariable(name);
+
             // 1. Check immediate context (with ambiguity check)
             if (context != null)
             {
@@ -291,6 +295,21 @@ namespace ETL_SQL.Engine
                     {
                         if (IsSoftEqual(l, itemVal)) { found = true; break; }
                     }
+                }
+            }
+            else
+            {
+                var rightVal = await EvaluateInternal(inExp.Right, context, decryptSensitive);
+                if (rightVal is System.Collections.IEnumerable listVal && !(rightVal is string))
+                {
+                    foreach (var item in listVal)
+                    {
+                        if (IsSoftEqual(l, item)) { found = true; break; }
+                    }
+                }
+                else
+                {
+                    found = IsSoftEqual(l, rightVal);
                 }
             }
             return inExp.IsNot ? !found : found;

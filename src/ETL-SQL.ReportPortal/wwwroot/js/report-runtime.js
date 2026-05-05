@@ -52,6 +52,7 @@
     // Current report parameters (for interactive controls)
     const parameters = {};
     let _refreshTimers = [];
+    let _lastActivePage = null;
     const _registeredMaps = new Set();
 
     /**
@@ -104,7 +105,6 @@
             Object.keys(manifest.parameters).forEach(k => {
                 parameters[k] = manifest.parameters[k];
             });
-            syncParameters(manifest.parameters);
         }
 
         // Navigation bar
@@ -135,6 +135,11 @@
             }
         } else {
             (manifest.visuals || []).forEach(v => renderVisual(root, v, null));
+        }
+
+        // Synchronize parameter values to any newly rendered controls
+        if (manifest.parameters) {
+            syncParameters(manifest.parameters);
         }
 
         // Set up per-page auto-refresh timers (web mode only; VS Code preview ignores).
@@ -170,8 +175,9 @@
         }
 
         const defaultPageName = navDef.defaultPage || (pages.length > 0 ? pages[0].name : null);
-        // __INITIAL_PAGE__ is injected by the portal to restore the active tab after refresh / back-nav
-        const requestedPage  = (window.__INITIAL_PAGE__ || '').trim();
+        // Track the current page between refreshes/manifest updates. 
+        // We prioritize _lastActivePage (dynamic) over window.__INITIAL_PAGE__ (set at load).
+        const requestedPage  = (_lastActivePage || window.__INITIAL_PAGE__ || '').trim();
         const pageToShow     = (requestedPage && pageSections[requestedPage]) ? requestedPage : defaultPageName;
         const itemClass = navDef.navType === 'TAB' ? 'nav-tab' :
                           navDef.navType === 'BUTTON' ? 'nav-btn' : 'nav-link';
@@ -207,6 +213,7 @@
                 // Update active class
                 nav.querySelectorAll('.' + itemClass).forEach(e => e.classList.remove('active'));
                 el.classList.add('active');
+                _lastActivePage = pageName;
 
                 // Notify portal of user-driven tab change so it can push a history entry
                 if (window.parent && window.parent !== window) {
@@ -247,7 +254,14 @@
                                     ? [el] 
                                     : Array.from(el.querySelectorAll('select, input'));
                     targets.forEach(t => {
-                        if (t.value !== val) t.value = val;
+                        if (t.multiple && t.tagName === 'SELECT') {
+                            const csvValues = (String(val || '')).split(',').map(v => v.trim());
+                            Array.from(t.options).forEach(opt => {
+                                opt.selected = csvValues.includes(opt.value);
+                            });
+                        } else if (t.value !== val) {
+                            t.value = val;
+                        }
                     });
                 }
             });
@@ -411,7 +425,7 @@
             case 'DATEPICKER':    renderDatePicker(card, visual, manifest);        break;
             case 'RELDATEPICKER': renderRelDatePicker(card, visual, manifest);     break;
             case 'SLIDER':      renderSlider(card, visual, manifest);             break;
-            case 'MULTISELECT': renderMultiSelect(card, visual, manifest);        break;
+            case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
             case 'SEARCH':      renderSearch(card, visual, manifest);             break;
             case 'IMAGE':       renderImage(card, visual);                        break;
             default:            renderChart(card, visual, effectiveTheme);        break;
@@ -835,8 +849,12 @@
 
         if (isWebMode && changeActions.length > 0) {
             select.addEventListener('change', () => {
+                let val = select.value;
+                if (select.multiple) {
+                    val = Array.from(select.selectedOptions).map(o => o.value).join(',');
+                }
                 changeActions.forEach(action => {
-                    postParameter(action.parameterName, select.value)
+                    postParameter(action.parameterName, val)
                         .then(manifest => { if (manifest) renderManifest(manifest); });
                 });
             });
@@ -866,52 +884,20 @@
         const div = document.createElement('div');
         div.className = 'text-visual';
         div.style.textAlign = align;
-        
-        let html = '';
-        const markedInstance = window.marked?.parse ? window.marked : (typeof marked === 'function' ? { parse: marked } : (window.marked || {}));
-        if (markedInstance.parse) {
-            html = markedInstance.parse(value);
-        } else {
-            html = simpleMarkdown(value);
-        }
-        
-        div.innerHTML = html;
+        div.innerHTML = simpleMarkdown(value);
         container.appendChild(div);
     }
 
-    // Minimal markdown → HTML: bold, italic, inline code, headers, line breaks, tables.
+    // Minimal markdown → HTML: bold, italic, inline code, headers, line breaks.
     function simpleMarkdown(src) {
-        let html = escHtml(src)
+        return escHtml(src)
             .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.+?)\*/g,     '<em>$1</em>')
             .replace(/`(.+?)`/g,       '<code>$1</code>')
             .replace(/^### (.+)$/gm,   '<h3>$1</h3>')
             .replace(/^## (.+)$/gm,    '<h2>$1</h2>')
-            .replace(/^# (.+)$/gm,     '<h1>$1</h1>');
-
-        // Basic table support
-        const lines = html.split('\n');
-        let inTable = false;
-        let tableHtml = '<table>';
-        const finalLines = [];
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line.startsWith('|') && line.endsWith('|')) {
-                if (!inTable) { inTable = true; tableHtml = '<table>'; }
-                const cells = line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
-                const tag = tableHtml.includes('<th>') ? 'td' : 'th';
-                // Skip separator rows |---|---|
-                if (cells.every(c => c.trim().match(/^-+$/))) continue;
-                tableHtml += '<tr>' + cells.map(c => `<${tag}>${c.trim()}</${tag}>`).join('') + '</tr>';
-            } else {
-                if (inTable) { inTable = false; finalLines.push(tableHtml + '</table>'); }
-                finalLines.push(line);
-            }
-        }
-        if (inTable) finalLines.push(tableHtml + '</table>');
-
-        return finalLines.join('<br>');
+            .replace(/^# (.+)$/gm,     '<h1>$1</h1>')
+            .replace(/\n/g,            '<br>');
     }
 
     // ── DatePicker ──────────────────────────────────────────────────────────
@@ -930,10 +916,7 @@
         }
 
         const wrapper = document.createElement('div');
-        wrapper.className = 'filter-wrapper';
-
-        const inputRow = document.createElement('div');
-        inputRow.className = 'reldate-wrapper';
+        wrapper.className = 'filter-wrapper reldate-wrapper';
 
         const textInput = document.createElement('input');
         textInput.type = 'text';
@@ -961,11 +944,9 @@
             textInput.dispatchEvent(new Event('change'));
         });
 
-        inputRow.appendChild(textInput);
-        inputRow.appendChild(datePicker);
-        inputRow.appendChild(btn);
-
-        wrapper.appendChild(inputRow);
+        wrapper.appendChild(textInput);
+        wrapper.appendChild(datePicker);
+        wrapper.appendChild(btn);
 
         if (isWebMode && changeActions.length > 0) {
             textInput.addEventListener('change', () => {
@@ -1116,70 +1097,37 @@
 
     // ── MultiSelect ─────────────────────────────────────────────────────────
 
-    function renderMultiSelect(container, visual, manifest) {
+    function renderMultiSelect(container, visual) {
+        const opts  = visual.options || {};
+        const param = opts['PARAMETER'] || opts['parameter'] || null;
+
         const wrapper = document.createElement('div');
-        wrapper.className = 'multiselect-wrapper';
+        wrapper.className = 'filter-wrapper';
 
-        // Find the parameter name from actions
-        const action = visual.actions.find(a => a.type === 'SET_PARAMETER');
-        const paramName = action ? action.parameterName : null;
-        if (paramName) wrapper.setAttribute('data-parameter', paramName);
+        const select = document.createElement('select');
+        select.multiple = true;
 
-        // Configuration for value/label columns
-        const valCol = (visual.options['mapping:value'] || 'value').toLowerCase();
-        const lblCol = (visual.options['mapping:label'] || 'label').toLowerCase();
-        
-        const valIdx = visual.columns.findIndex(c => c.toLowerCase() === valCol);
-        const lblIdx = visual.columns.findIndex(c => c.toLowerCase() === lblCol);
-        
-        const finalValIdx = valIdx >= 0 ? valIdx : 0;
-        const finalLblIdx = lblIdx >= 0 ? lblIdx : (visual.columns.length > 1 ? 1 : 0);
-
-        // Current values (manifest stores them as a comma-separated string for multi-select params)
-        let currentValues = [];
-        if (paramName && manifest && manifest.parameters) {
-            const raw = getParam(manifest.parameters, paramName);
-            if (raw) {
-                currentValues = String(raw).split(',').map(v => v.trim()).filter(Boolean);
-            }
-        }
-
-        const itemsContainer = document.createElement('div');
-        
-        (visual.rows || []).forEach((row, i) => {
-            const val   = String(row[finalValIdx] ?? '');
-            const label = String(row[finalLblIdx] ?? '');
-            const id    = `ms-${visual.name}-${i}`;
-
-            const item = document.createElement('div');
-            item.className = 'multiselect-item';
-
-            const checkbox = document.createElement('input');
-            checkbox.type  = 'checkbox';
-            checkbox.id    = id;
-            checkbox.value = val;
-            if (currentValues.includes(val)) checkbox.checked = true;
-
-            const lbl = document.createElement('label');
-            lbl.setAttribute('for', id);
-            lbl.textContent = label;
-
-            item.appendChild(checkbox);
-            item.appendChild(lbl);
-            itemsContainer.appendChild(item);
-
-            if (isWebMode && action) {
-                checkbox.addEventListener('change', () => {
-                    const selected = Array.from(itemsContainer.querySelectorAll('input[type=checkbox]:checked'))
-                                          .map(cb => cb.value)
-                                          .join(',');
-                    postParameter(action.parameterName, selected)
-                        .then(m => { if (m) renderManifest(m); });
-                });
-            }
+        (visual.rows || []).forEach(row => {
+            const opt = document.createElement('option');
+            opt.value       = String(row[0] ?? '');
+            opt.textContent = String(row[0] ?? '');
+            select.appendChild(opt);
         });
 
-        wrapper.appendChild(itemsContainer);
+        wrapper.appendChild(select);
+
+        if (isWebMode && param) {
+            const applyBtn = document.createElement('button');
+            applyBtn.className   = 'filter-apply';
+            applyBtn.textContent = 'Apply';
+            applyBtn.addEventListener('click', () => {
+                const selected = Array.from(select.selectedOptions).map(o => o.value).join(',');
+                postParameter(param, selected)
+                    .then(m => { if (m) renderManifest(m); });
+            });
+            wrapper.appendChild(applyBtn);
+        }
+
         container.appendChild(wrapper);
     }
 

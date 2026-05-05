@@ -327,6 +327,8 @@ DECLARE @startDate    VARCHAR = '2026-01-01';
 DECLARE @endDate      VARCHAR = '2026-12-31';
 DECLARE @minQty       INT     = 0;
 DECLARE @search       VARCHAR = '';
+DECLARE @relStartDate RELDATE = 'D-1';
+DECLARE @relEndDate   RELDATE = 'D';
 
 -- ============================================================================
 -- Phase 5: Visual Definitions
@@ -411,7 +413,7 @@ CREATE VISUAL DrillRegionDetail AS BAR (
     SOURCE   = (
         SELECT Category, SUM(Revenue) AS Revenue
         FROM #sales
-        WHERE @region = 'All' OR Region = @region
+        WHERE @region = 'All' OR Region IN (SELECT value FROM STRING_SPLIT(@region, ','))
         GROUP BY Category
     ),
     TITLE    = 'Category Breakdown',
@@ -481,7 +483,7 @@ CREATE VISUAL TxnTable AS TABLE (
         SELECT TxnDate, Category, Region, Salesperson,
                Qty, UnitPrice, DiscountPct, Revenue, Returned
         FROM #sales
-        WHERE (@region   = 'All' OR Region   = @region)
+        WHERE (@region   = 'All' OR Region IN (SELECT value FROM STRING_SPLIT(@region, ',')))
           AND (@category = 'All' OR Category = @category)
     ),
     TITLE    = 'Transaction Detail',
@@ -698,6 +700,18 @@ CREATE VISUAL DateEnd AS DATEPICKER (
     DEFAULT  = '2026-12-31',
     ACTIONS  (ON_CHANGE = SET_PARAMETER(@endDate, value)),
     STYLE    = FilterPanel
+);
+
+CREATE VISUAL StartPicker AS RELDATEPICKER (
+  TITLE   = 'Relative Start Date (RELDATEPICKER)',
+  OPTIONS (DEFAULT = 'M-1'),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@relStartDate, value))
+);
+
+CREATE VISUAL EndPicker AS RELDATEPICKER (
+  TITLE   = 'Relative End Date (RELDATEPICKER)',
+  OPTIONS (DEFAULT = 'D-0'),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@relEndDate, value))
 );
 
 -- SLIDER — Minimum quantity threshold
@@ -1005,13 +1019,23 @@ CREATE CONTAINER ButtonBar AS BOX (
     )
 );
 
+CREATE CONTAINER DateControls AS BOX (
+    STRUCTURE = 'A B / C D',
+    MAP (
+        'A' = DateStart,
+        'B' = DateEnd,
+        'C' = StartPicker,
+        'D' = EndPicker
+    )
+);
+
 -- ── PAGE 4: Controls ──────────────────────────────────────────────────────────
 CREATE PAGE Controls AS LAYOUT (
     TITLE     = 'Controls',
     TOOLTIP   = 'Every filter type: SLICER, MULTISELECT, DATEPICKER, SLIDER, SEARCH, IMAGE, TEXT, and BUTTONs.',
     STRUCTURE = '
         A A B B /
-        C D E F /
+        C D E E /
         G G G G /
         H H H H /
         I I I I /
@@ -1022,8 +1046,7 @@ CREATE PAGE Controls AS LAYOUT (
         'B' = BrandImage,
         'C' = CategorySlicer,
         'D' = RegionMulti,
-        'E' = DateStart,
-        'F' = DateEnd,
+        'E' = DateControls,
         'G' = QtySlider,
         'H' = TxnSearch,
         'I' = ButtonsText,

@@ -47,6 +47,89 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.ToTable("AuditLogs");
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Dataset", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AccessLevel")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ColumnSchema")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FolderPath")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastRefresh")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("OwningReportId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ParquetFilePath")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RefreshInterval")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long>("RowCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SourceQuery")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Ttl")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwningReportId");
+
+                    b.HasIndex("FolderPath", "Name")
+                        .IsUnique();
+
+                    b.ToTable("Datasets");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.DatasetAcl", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DatasetId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("GroupId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Permission")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DatasetId");
+
+                    b.HasIndex("GroupId");
+
+                    b.ToTable("DatasetAcls");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.DatasetJob", b =>
                 {
                     b.Property<int>("Id")
@@ -310,14 +393,14 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("PublishedScriptHash")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime>("ScriptLastModified")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ScriptPath")
                         .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PublishedScriptHash")
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -423,7 +506,13 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Property<DateTime?>("LastSentAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Name")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("NextRunAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ParametersJson")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Recipients")
@@ -434,12 +523,6 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Schedule")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ParametersJson")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("ScriptPath")
@@ -573,6 +656,35 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("AspNetUserTokens", (string)null);
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Dataset", b =>
+                {
+                    b.HasOne("ETL_SQL.ReportPortal.Data.Report", "OwningReport")
+                        .WithMany()
+                        .HasForeignKey("OwningReportId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("OwningReport");
+                });
+
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.DatasetAcl", b =>
+                {
+                    b.HasOne("ETL_SQL.ReportPortal.Data.Dataset", "Dataset")
+                        .WithMany("Acls")
+                        .HasForeignKey("DatasetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("ETL_SQL.ReportPortal.Data.Group", "Group")
+                        .WithMany("DatasetAcls")
+                        .HasForeignKey("GroupId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Dataset");
+
+                    b.Navigation("Group");
                 });
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.DatasetJob", b =>
@@ -736,6 +848,11 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Dataset", b =>
+                {
+                    b.Navigation("Acls");
+                });
+
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Folder", b =>
                 {
                     b.Navigation("Acls");
@@ -747,6 +864,8 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
 
             modelBuilder.Entity("ETL_SQL.ReportPortal.Data.Group", b =>
                 {
+                    b.Navigation("DatasetAcls");
+
                     b.Navigation("FolderAcls");
 
                     b.Navigation("UserGroups");

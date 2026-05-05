@@ -40,11 +40,24 @@ Report-SQL extends ETL-SQL with dedicated statement types for building interacti
 
 A `.rptsql` file is a normal ETL-SQL script that may also contain Report-SQL statements. The engine evaluates it exactly like any `.etlsql` file; the new statements register definitions in the execution context. After evaluation the `ManifestBuilder` snapshots the data and produces a `ReportManifest` — a serializable JSON structure consumed by both the static Markdown renderer and the live web dashboard.
 
-### Data Sources for Visuals
+### The Three-Tier Logic Model
 
-The recommended way to supply data to a visual is a named temp table populated with a `SELECT INTO` or inline `UNION ALL`:
+To build interactive reports that respond to user input (slicers, date pickers) efficiently, you must understand the **Three-Tier Logic** model. This distinguishes between logic that runs once during the build and logic that runs every time a user changes a filter.
+
+| Tier | Name | Responsibility | Trigger | Patterns |
+| :--- | :--- | :--- | :--- | :--- |
+| **Tier 1** | **Ingestion** | Connecting to remote DBs, SFTP, or APIs. | Build / Scheduled Refresh | `CREATE CONNECTION`, `RUN SCRIPT` |
+| **Tier 2** | **Preparation** | Heavy lifting: staging into `#temp` tables, massive JOINs, and `GROUP BY` on raw data. | Build / Scheduled Refresh | `SELECT ... INTO #staged FROM ...` |
+| **Tier 3** | **Presentation** | Interactive filtering, drilling, and sorting for the user. | **User Interaction** (Slicers, etc.) | `CREATE VISUAL ... SOURCE = (SELECT ... WHERE @var = col)` |
+
+> [!IMPORTANT]
+> **The "Tier 2 Trap"**: Never put `@parameters` that are controlled by Slicers inside a `SELECT INTO #tempTable` statement. Why? Because the `#tempTable` is built **once** during the report evaluation. If the user changes a Slicer value, the `#tempTable` is **not** re-evaluated.
+>
+> **The Correct Pattern**: Always keep your `#temp` tables as "wide" and "unfiltered" as possible (containing all data the user might need). Then, apply the `@parameter` filters inside the `SOURCE = (SELECT ...)` clause of your `CREATE VISUAL`. The engine is optimized to re-evaluate only these "Tier 3" visual queries when a parameter changes.
 
 ```sql
+-- ❌ INCORRECT (The Tier 2 Trap): @region will only filter on the initial load.
+SELECT * INTO #summary FROM sales WHERE region = @region;
 SELECT 'Product A' AS Label, 100 AS Value INTO #kpi
 UNION ALL
 SELECT 'Product B', 250;
@@ -246,7 +259,7 @@ CREATE [OR ALTER] VISUAL <name> AS <TYPE> (
 );
 ```
 
-All clauses inside the outer `( )` are separated by commas. The closing `)` ends the statement. `SOURCE` is required for all types except `TEXT`, `DATEPICKER`, `SLIDER`, and `SEARCH`.
+All clauses inside the outer `( )` are separated by commas. The closing `)` ends the statement. `SOURCE` is required for all types except `TEXT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, and `SEARCH`.
 
 ### Visual types
 
@@ -271,6 +284,7 @@ All clauses inside the outer `( )` are separated by commas. The closing `)` ends
 | `TEXT` | Free-form text or HTML block. Uses the `DEFAULT` clause, not a SOURCE query. | `<div>` |
 | `SLICER` | Dropdown parameter selector. SOURCE provides the option list. | `<select>` |
 | `DATEPICKER` | Date input control. No SOURCE required. | `<input type="date">` |
+| `RELDATEPICKER` | Relative-date picker: text input + calendar + quick-pick buttons. No SOURCE required. | Text + calendar |
 | `SLIDER` | Numeric range slider. No SOURCE required. | `<input type="range">` |
 | `MULTISELECT` | Multi-value checkbox list. SOURCE provides the option list. | Checkbox list |
 | `SEARCH` | Free-text search box with debounce. No SOURCE required. | `<input type="text">` |
@@ -289,7 +303,7 @@ SOURCE = (SELECT region, SUM(revenue) AS rev FROM #summary GROUP BY region)
 
 Inline SELECTs are evaluated at build time and their results are snapshotted into the manifest. If you need the visual to refresh independently, use `CREATE DATASET` and reference the dataset by name.
 
-`TEXT`, `DATEPICKER`, `SLIDER`, and `SEARCH` visuals do not require `SOURCE`. `MULTISELECT` requires a `SOURCE` to populate the option list.
+`TEXT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, and `SEARCH` visuals do not require `SOURCE`. `MULTISELECT` requires a `SOURCE` to populate the option list.
 
 ### TITLE and SUBTITLE
 
@@ -512,6 +526,40 @@ CREATE VISUAL StartDate AS DATEPICKER (
 | `MAX` | Latest selectable date (`'YYYY-MM-DD'`). |
 | `DEFAULT` | Initial date when the page loads. |
 
+#### RELDATEPICKER
+
+`RELDATEPICKER` is a combined control for relative or absolute date values. No `SOURCE` is required. It renders a text input (accepts relative expressions such as `D-7`, `M-1`, `Y-1` or ISO dates like `2026-04-27`), a 📅 calendar button that writes the selected ISO date into the text box, and a row of quick-pick buttons (Today, D-1, D-7, D-30, M-1, M-3, Y-1).
+
+Use `DATEPICKER` when the variable is `DATE`/`DATETIME` and only absolute dates are needed. Use `RELDATEPICKER` when users need to enter relative expressions that your script evaluates with `RELDATE()`.
+
+```sql
+DECLARE @Start RELDATE = 'M-1';
+DECLARE @End   RELDATE = 'D-0';
+
+CREATE VISUAL StartPicker AS RELDATEPICKER (
+  TITLE   = 'From',
+  OPTIONS (DEFAULT = 'M-1'),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@Start, value))
+);
+
+CREATE VISUAL EndPicker AS RELDATEPICKER (
+  TITLE   = 'To',
+  OPTIONS (DEFAULT = 'D-0'),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@End, value))
+);
+
+-- In each data visual's inline SELECT:
+-- DECLARE @StartDate DATE = RELDATE(@Start);
+-- DECLARE @EndDate   DATE = RELDATE(@End);
+-- SELECT * FROM orders WHERE order_date BETWEEN @StartDate AND @EndDate;
+```
+
+| Option key | Description |
+|------------|-------------|
+| `DEFAULT` | Initial relative expression or ISO date when the page loads. |
+| `MIN` | Earliest selectable calendar date (`'YYYY-MM-DD'`). |
+| `MAX` | Latest selectable calendar date (`'YYYY-MM-DD'`). |
+
 #### SEARCH
 
 `SEARCH` is a free-text input box with debounce. No `SOURCE` is required.
@@ -531,14 +579,14 @@ CREATE VISUAL ProductSearch AS SEARCH (
 
 #### How Parameter Binding Works
 
-Parameter binding for `DATEPICKER`, `SLIDER`, and `SEARCH` (and for `SLICER` / `MULTISELECT`) is **always explicit** — there is no automatic wiring. The mechanism is:
+Parameter binding for `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, and `SEARCH` (and for `SLICER` / `MULTISELECT`) is **always explicit** — there is no automatic wiring. The mechanism is:
 
 1. Declare a variable at the top of your script: `DECLARE @year INT = 2024`
 2. Use `@year` inside the inline `SELECT` of any visual that should react to it.
 3. Add `ACTIONS (ON_CHANGE = SET_PARAMETER(@year, value))` to the control visual.
 
 The second argument to `SET_PARAMETER` is a column reference:
-- For **`SLIDER`**, **`DATEPICKER`**, and **`SEARCH`**: use the literal word `value` — it refers to the control's current value at the time the event fires.
+- For **`SLIDER`**, **`DATEPICKER`**, **`RELDATEPICKER`**, and **`SEARCH`**: use the literal word `value` — it refers to the control's current value at the time the event fires.
 - For **`SLICER`** and **`MULTISELECT`**: use the column name from your `SOURCE` query that holds the selectable value (e.g., `region`).
 
 When the user interacts with a control, the dashboard posts the new value to the server, which re-evaluates only the visuals whose `SELECT` queries reference the updated variable. Visuals that do not reference the changed variable are not re-queried.
@@ -555,6 +603,7 @@ When using visual filters to control parameters, ensure the target variable type
 | **`MULTISELECT`** | `LIST(TYPE)` | `VALUE` | `SET_PARAMETER` (adds to/removes from list) |
 | **`SLIDER`** | `MINMAX(TYPE)` | `VALUE` | `SET_PARAMETER` (updates range bounds) |
 | **`DATEPICKER`** | `DATE` or `DATETIME` | N/A | `SET_PARAMETER` (selected date) |
+| **`RELDATEPICKER`** | `VARCHAR` | N/A | `SET_PARAMETER` (relative expression or ISO date string) |
 | **`SEARCH`** | `VARCHAR` or `TEXT` | `VALUE` | `SET_PARAMETER` (search string) |
 
 > [!TIP]
@@ -933,7 +982,7 @@ ACTIONS (
 | Trigger | Description |
 |---------|-------------|
 | `ON_CLICK` | Fires when the user clicks a chart element (bar, slice, point). |
-| `ON_CHANGE` | Fires when a SLICER, MULTISELECT, DATEPICKER, SLIDER, or SEARCH value changes. |
+| `ON_CHANGE` | Fires when a SLICER, MULTISELECT, DATEPICKER, RELDATEPICKER, SLIDER, or SEARCH value changes. |
 
 #### DRILL_DOWN
 

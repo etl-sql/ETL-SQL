@@ -399,8 +399,17 @@ namespace ETL_SQL.Core.Parser.Components
                 if (Match(TokenType.LOCAL)) { localOnly = true; Consume(TokenType.VARIABLES, "Expected VARIABLES after SHOW LOCAL"); }
                 stmt = new ShowVariablesStatement(localOnly);
             }
+            else if (Match(TokenType.SCRIPT))
+            {
+                // SHOW SCRIPT TAGS [INTO #temp]
+                if (Match(TokenType.TAGS) || Match(TokenType.TAG))
+                    stmt = new ShowScriptTagsStatement();
+                else
+                    throw new SyntaxException("Expected TAGS after SHOW SCRIPT", _parser.Current.Line, _parser.Current.Column);
+            }
             else if (Match(TokenType.TAGS))
             {
+                // SHOW TAGS FOR SCRIPT | SHOW TAGS FOR TABLE <name> [COLUMN <col>]
                 Consume(TokenType.FOR, "Expected FOR after SHOW TAGS");
                 if (Match(TokenType.SCRIPT))
                 {
@@ -464,7 +473,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             if (stmt == null)
-                throw new SyntaxException("Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, VARIABLES, TAGS, VERSION or LINEAGE after SHOW", _parser.Current.Line, _parser.Current.Column);
+                throw new SyntaxException("Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, VARIABLES, SCRIPT TAGS, TAGS, VERSION or LINEAGE after SHOW", _parser.Current.Line, _parser.Current.Column);
 
             if (Match(TokenType.INTO))
             {

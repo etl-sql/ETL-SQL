@@ -33,7 +33,7 @@ namespace ETL_SQL.Core
 
             foreach (var tableGroup in groupedByTable)
             {
-                sb.AppendLine($"[Table: {tableGroup.Key}]");
+                sb.AppendLine(FormatGroupHeader(tableGroup.Key));
                 
                 var columns = tableGroup.Where(e => e.TargetColumn != null).GroupBy(e => e.TargetColumn!, StringComparer.OrdinalIgnoreCase);
                 if (targetColumn != null) columns = columns.Where(g => g.Key.Equals(targetColumn, StringComparison.OrdinalIgnoreCase));
@@ -82,7 +82,7 @@ namespace ETL_SQL.Core
 
                 if (visited.Add(nodeId))
                 {
-                    sb.AppendLine($"    {nodeId}[\"{label}\"]");
+                    sb.AppendLine(MermaidNode(nodeId, entry.TargetTable, label));
                 }
 
                 for (int i = 0; i < entry.SourceTables.Count; i++)
@@ -95,7 +95,7 @@ namespace ETL_SQL.Core
 
                     if (visited.Add(srcNodeId))
                     {
-                        sb.AppendLine($"    {srcNodeId}[\"{srcLabel}\"]");
+                        sb.AppendLine(MermaidNode(srcNodeId, srcTable, srcLabel));
                     }
                     sb.AppendLine($"    {srcNodeId} --> {nodeId}");
                 }
@@ -106,25 +106,49 @@ namespace ETL_SQL.Core
 
         private string CleanId(string id) => new string(id.Where(c => char.IsLetterOrDigit(c) || c == '_').ToArray());
 
+        private static string FormatGroupHeader(string tableName) =>
+            tableName.StartsWith("report:", StringComparison.OrdinalIgnoreCase)
+                ? $"[Visual: {tableName[7..]}]"
+                : tableName.StartsWith("dataset:", StringComparison.OrdinalIgnoreCase)
+                    ? $"[Dataset: {tableName[8..]}]"
+                    : $"[Table: {tableName}]";
+
+        private static string MermaidNode(string nodeId, string tableName, string label)
+        {
+            if (tableName.StartsWith("report:", StringComparison.OrdinalIgnoreCase))
+                return $"    {nodeId}(\"{label}\")";      // rounded rectangle — report visual
+            if (tableName.StartsWith("dataset:", StringComparison.OrdinalIgnoreCase))
+                return $"    {nodeId}[(\"{label}\")]";    // cylinder — dataset
+            return $"    {nodeId}[\"{label}\"]";           // rectangle — table/temp
+        }
+
         private void RenderSources(StringBuilder sb, ILineageTracker tracker, LineageEntry entry, string indent, int depth, HashSet<string> visited)
         {
             string key = entry.TargetColumn != null ? $"{entry.TargetTable}.{entry.TargetColumn}.{entry.Operation}" : $"{entry.TargetTable}.{entry.Operation}";
-            if (depth > 20 || visited.Contains(key)) return; 
+            if (visited.Contains(key)) return;
             visited.Add(key);
+
+            // Show transformation annotation on the entry itself (before its sources)
+            if (entry.TransformationKind != TransformationKind.Unknown && entry.TransformationKind != TransformationKind.PassThrough)
+            {
+                string kindLabel = entry.TransformationKind.ToString();
+                string fnLabel = entry.FunctionsApplied?.Count > 0 ? $" [{string.Join(", ", entry.FunctionsApplied)}]" : string.Empty;
+                sb.AppendLine($"{indent}    ⟶ {kindLabel}{fnLabel}");
+            }
 
             int sourceCount = entry.SourceTables.Count;
             for (int i = 0; i < sourceCount; i++)
             {
                 string sourceTable = entry.SourceTables[i];
                 string? sourceCol = entry.SourceColumns.Count > i ? entry.SourceColumns[i] : null;
-                
+
                 bool isLastSource = i == sourceCount - 1;
                 string prefix = isLastSource ? "└── " : "├── ";
                 string label = sourceCol != null ? $"{sourceTable}.{sourceCol}" : sourceTable;
-                
+
                 sb.AppendLine($"{indent}{prefix}{label}");
 
-                var deeperEntries = sourceCol != null 
+                var deeperEntries = sourceCol != null
                     ? tracker.GetColumnLineage(sourceTable, sourceCol).ToList()
                     : tracker.GetLineage(sourceTable).ToList();
 

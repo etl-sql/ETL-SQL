@@ -22,6 +22,9 @@ namespace ETL_SQL.Core
         public int Column { get; set; }
         public int EndLine { get; set; }
         public int EndColumn { get; set; }
+        public TransformationKind TransformationKind { get; set; } = TransformationKind.Unknown;
+        public string? TransformationExpression { get; set; }
+        public IReadOnlyList<string>? FunctionsApplied { get; set; }
 
         public LineageEntry() { }
 
@@ -52,10 +55,10 @@ namespace ETL_SQL.Core
             _logger = logger;
         }
 
-        public void Record(string target, IEnumerable<string> sources, string operation, string? targetColumn = null, IEnumerable<string>? sourceColumns = null, Dictionary<string, string>? metadata = null, string? derivedFromDescriptions = null, int line = 0, int column = 0, int endLine = 0, int endColumn = 0, string? sourceFile = null)
+        public void Record(string target, IEnumerable<string> sources, string operation, string? targetColumn = null, IEnumerable<string>? sourceColumns = null, Dictionary<string, string>? metadata = null, string? derivedFromDescriptions = null, int line = 0, int column = 0, int endLine = 0, int endColumn = 0, string? sourceFile = null, TransformationKind transformationKind = TransformationKind.Unknown, string? transformationExpression = null, IReadOnlyList<string>? functionsApplied = null)
         {
             if (string.IsNullOrEmpty(target)) return;
-            
+
             lock (_lock)
             {
                 var key = (target.ToLowerInvariant(), operation.ToLowerInvariant(), targetColumn?.ToLowerInvariant(), line, column, sourceFile);
@@ -66,6 +69,9 @@ namespace ETL_SQL.Core
                         foreach (var kv in metadata) existing.Metadata[kv.Key] = kv.Value;
                     }
                     if (derivedFromDescriptions != null) existing.DerivedFromDescriptions = derivedFromDescriptions;
+                    if (transformationKind != TransformationKind.Unknown) existing.TransformationKind = transformationKind;
+                    if (transformationExpression != null) existing.TransformationExpression = transformationExpression;
+                    if (functionsApplied != null) existing.FunctionsApplied = functionsApplied;
                     return;
                 }
 
@@ -80,7 +86,10 @@ namespace ETL_SQL.Core
                     Column = column,
                     EndLine = endLine,
                     EndColumn = endColumn,
-                    SourceFile = sourceFile
+                    SourceFile = sourceFile,
+                    TransformationKind = transformationKind,
+                    TransformationExpression = transformationExpression,
+                    FunctionsApplied = functionsApplied
                 };
 
                 // Merge global metadata

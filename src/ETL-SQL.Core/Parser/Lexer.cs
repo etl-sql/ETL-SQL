@@ -115,7 +115,8 @@ namespace ETL_SQL.Core.Parser
             dict["TAB"]         = TokenType.NAV_TAB;
             dict["BUTTON"]      = TokenType.BUTTON;
             dict["LINK"]        = TokenType.LINK_NAV;
-            dict["DATEPICKER"]  = TokenType.DATEPICKER;
+            dict["DATEPICKER"]    = TokenType.DATEPICKER;
+            dict["RELDATEPICKER"] = TokenType.RELDATEPICKER;
             dict["SLIDER"]      = TokenType.SLIDER;
             dict["MULTISELECT"] = TokenType.MULTISELECT;
             dict["SEARCH"]      = TokenType.SEARCH;
@@ -225,10 +226,17 @@ namespace ETL_SQL.Core.Parser
         {
             if (CurrentChar == '-' && Peek() == '-')
             {
+                Advance(); // first -
+                Advance(); // second -
+                var sb = new StringBuilder();
                 while (CurrentChar != '\0' && CurrentChar != '\n')
                 {
+                    sb.Append(CurrentChar);
                     Advance();
                 }
+                string lineContent = sb.ToString().Trim();
+                if (lineContent.StartsWith("@"))
+                    return new Token(TokenType.COLUMN_TAG, lineContent, line, column, _line, _column, startOffset, _position);
                 return null;
             }
             else if (CurrentChar == '/' && Peek() == '*')

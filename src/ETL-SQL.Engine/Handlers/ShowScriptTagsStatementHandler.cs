@@ -29,7 +29,6 @@ namespace ETL_SQL.Engine.Handlers
                 await dt.AddRowAsync(new Row(dt.Schema, new object?[] { kvp.Key, kvp.Value }));
             }
 
-            // Standard result processing
             if (!string.IsNullOrEmpty(stmt.IntoTable))
             {
                 if (!context.Connections.ContainsKey(stmt.IntoTable))
@@ -41,8 +40,8 @@ namespace ETL_SQL.Engine.Handlers
             }
             else
             {
-                ResultFormatter.PrintTable(dt);
-                context.OnResultSet?.Invoke(dt);
+                context.LastResult = dt;
+                context.LastResultSets.Add(dt);
             }
         }
     }

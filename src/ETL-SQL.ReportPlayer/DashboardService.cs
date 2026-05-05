@@ -9,7 +9,7 @@ using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Parser;
-
+using ETL_SQL.Core.Data;
 
 using ETL_SQL.Engine;
 using ETL_SQL.ReportBuilder;
@@ -29,7 +29,7 @@ namespace ETL_SQL.ReportPlayer
     /// Parameter changes from slicer interactions call <see cref="RebuildAsync"/>
     /// to re-evaluate only the affected visuals (Phase 9D simplified: full rebuild).
     /// </summary>
-    public class DashboardService : IDisposable
+    public class DashboardService : IAsyncDisposable
     {
         private readonly string _scriptPath;
         private readonly IServiceScopeFactory _scopeFactory;
@@ -52,8 +52,24 @@ namespace ETL_SQL.ReportPlayer
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
         }
 
+        public async ValueTask DisposeAsync()
+        {
+            _currentScope?.Dispose();
+            
+            if (_evaluator != null)
+            {
+                await _evaluator.DisposeAsync();
+                _evaluator = null;
+            }
+
+            _refreshCts?.Cancel();
+            _refreshCts?.Dispose();
+            _lock.Dispose();
+        }
+
         public void Dispose()
         {
+            // Fallback for sync disposal (though we prefer DisposeAsync)
             _currentScope?.Dispose();
             _refreshCts?.Cancel();
             _refreshCts?.Dispose();
@@ -143,9 +159,23 @@ namespace ETL_SQL.ReportPlayer
                 var parser   = new Parser(tokens, source);
                 var script   = parser.Parse();
 
-                _currentScope?.Dispose();
+                if (_currentScope != null)
+                {
+                    _currentScope.Dispose();
+                    _currentScope = null;
+                }
+
+                if (_evaluator != null)
+                {
+                    await _evaluator.DisposeAsync();
+                    _evaluator = null;
+                }
+
                 _currentScope = _scopeFactory.CreateScope();
                 var evaluator = _currentScope.ServiceProvider.GetRequiredService<Evaluator>();
+                var registry = _currentScope.ServiceProvider.GetService<IDatasetRegistry>();
+                if (registry != null) evaluator.DatasetRegistry = registry;
+
                 evaluator.RedirectOutput = true;
 
                 // Security Hardening (CR-S1): Inject current parameter values directly into the scope

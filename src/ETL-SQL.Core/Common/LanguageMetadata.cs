@@ -86,8 +86,27 @@ namespace ETL_SQL.Common
             "INSIDE_TOP_LEFT", "INSIDE_TOP_RIGHT", "INSIDE_BOTTOM_LEFT", "INSIDE_BOTTOM_RIGHT",
             "NONE", "HEADER", "FOOTER", "CSS", "JS", "FAVICON", "LOGO", "BACKGROUND",
             "MAX_GENERATE_ROWS", "MAX_INTERNAL_OPERATIONS", "ALLOW_FILE_OPERATIONS", "ALLOW_RECURSIVE_LAYERS",
-            "BAR", "HBAR", "LINE", "SCATTER", "PIE", "DONUT", "TABLE", "CARD", "TEXT", "SLICER", "DATEPICKER", "SLIDER", "SEARCH", 
+            "LINEAGE_TAGS",
+            "BAR", "HBAR", "LINE", "SCATTER", "PIE", "DONUT", "TABLE", "CARD", "TEXT", "SLICER", "DATEPICKER", "RELDATEPICKER", "SLIDER", "SEARCH",
             "GAUGE", "FUNNEL", "WATERFALL", "BOXPLOT", "TREEMAP", "HEATMAP", "COMBO", "MAP", "STRUCTURE", "MAPPINGS", "ACTIONS"
+        };
+
+        /// <summary>
+        /// Standard governance tag names recognized for intellisense and documentation hints.
+        /// These appear after /* @... */ in column and table annotations.
+        /// </summary>
+        public static readonly HashSet<string> StandardTags = new(StringComparer.OrdinalIgnoreCase)
+        {
+            // Security & privacy
+            "pii", "phi", "pci", "sensitive", "classification", "encrypted_at_rest",
+            // Ownership
+            "owner", "domain", "steward", "contact",
+            // Quality
+            "freshness", "sla", "quality", "nullable",
+            // Documentation
+            "d", "example", "unit", "format",
+            // Source
+            "source_system", "source_table", "load_pattern"
         };
 
         public static readonly HashSet<string> DataTypes = new(StringComparer.OrdinalIgnoreCase)
@@ -123,7 +142,9 @@ namespace ETL_SQL.Common
             // XML functions
             "XMLVALUE", "XMLEXISTS", "XMLQUERY", "XMLTABLE", "XMLELEMENT", "XMLATTRIBUTES", "XMLFOREST", "EXTRACTVALUE",
             // Data Generation Functions
-            "SEQUENCE", "RANDOM", "RANDOM_INT", "RANDOM_DECIMAL"
+            "SEQUENCE", "RANDOM", "RANDOM_INT", "RANDOM_DECIMAL",
+            // Lineage & governance functions
+            "GET_TAGS", "GET_TAG_VALUE", "HAS_TAG"
         };
 
         public static string EngineVersion => typeof(LanguageMetadata).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";

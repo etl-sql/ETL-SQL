@@ -94,11 +94,28 @@ namespace ETL_SQL.Engine.Services
                     await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
                     return mem;
                 }
+                else if (result is System.Collections.IEnumerable list && !(result is string))
+                {
+                    var mem = new InMemoryDataSource();
+                    mem.Validator = _evaluator;
+                    mem.ExecutionContext = _evaluator;
+                    mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
+
+                    var dtResult = new DataTable();
+                    dtResult.SetColumns(new[] { "Value" });
+                    foreach (var item in list) await dtResult.AddRowAsync(new Row { ["Value"] = item });
+                    await mem.WriteBatches(new[] { dtResult }.ToAsyncEnumerable());
+                    return mem;
+                }
                 throw new ExecutionException($"Function {table.FunctionCall.FunctionName} did not return a table.");
             }
             else if (name.Equals("LINEAGE", StringComparison.OrdinalIgnoreCase))
             {
                 return new LineageDataSource(_evaluator.LineageTracker);
+            }
+            else if (name.Equals("LINEAGE_TAGS", StringComparison.OrdinalIgnoreCase))
+            {
+                return new LineageTagsDataSource(_evaluator.LineageTracker);
             }
             else if (name.Equals("DUAL", StringComparison.OrdinalIgnoreCase))
 
@@ -129,8 +146,8 @@ namespace ETL_SQL.Engine.Services
                     mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
 
                     var dt = new DataTable();
-                    dt.SetColumns(new[] { "Val" });
-                    foreach (var item in list) await dt.AddRowAsync(new Row { ["Val"] = item });
+                    dt.SetColumns(new[] { "Value" });
+                    foreach (var item in list) await dt.AddRowAsync(new Row { ["Value"] = item });
                     await mem.WriteBatches(new[] { dt }.ToAsyncEnumerable());
                     return mem;
                 }

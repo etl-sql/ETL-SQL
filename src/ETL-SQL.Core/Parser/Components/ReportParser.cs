@@ -123,6 +123,7 @@ namespace ETL_SQL.Core.Parser.Components
             {
                 if (visualType == VisualType.Text
                     || visualType == VisualType.DatePicker
+                    || visualType == VisualType.RelDatePicker
                     || visualType == VisualType.Slider
                     || visualType == VisualType.Search
                     || visualType == VisualType.Slicer
@@ -855,7 +856,8 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.TREEMAP))      return VisualType.Treemap;
             if (Match(TokenType.TEXT))         return VisualType.Text;
             if (Match(TokenType.COMBO))        return VisualType.Combo;
-            if (Match(TokenType.DATEPICKER))   return VisualType.DatePicker;
+            if (Match(TokenType.DATEPICKER))    return VisualType.DatePicker;
+            if (Match(TokenType.RELDATEPICKER)) return VisualType.RelDatePicker;
             if (Match(TokenType.SLIDER))       return VisualType.Slider;
             if (Match(TokenType.MULTISELECT))  return VisualType.MultiSelect;
             if (Match(TokenType.SEARCH))       return VisualType.Search;
@@ -890,7 +892,8 @@ namespace ETL_SQL.Core.Parser.Components
                     "TREEMAP"      => VisualType.Treemap,
                     "TEXT"         => VisualType.Text,
                     "COMBO"        => VisualType.Combo,
-                    "DATEPICKER"   => VisualType.DatePicker,
+                    "DATEPICKER"    => VisualType.DatePicker,
+                    "RELDATEPICKER" => VisualType.RelDatePicker,
                     "SLIDER"       => VisualType.Slider,
                     "MULTISELECT"  => VisualType.MultiSelect,
                     "SEARCH"       => VisualType.Search,
@@ -908,7 +911,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             throw new SyntaxException(
-                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP) but got '{_parser.Current.Value}'",
+                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, RELDATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP) but got '{_parser.Current.Value}'",
                 _parser.Current.Line, _parser.Current.Column);
         }
 

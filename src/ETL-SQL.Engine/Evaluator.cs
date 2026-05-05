@@ -285,6 +285,7 @@ namespace ETL_SQL.Engine
         public ISessionStateManager SessionStateManager => _sessionStateManager;
 
         public ILogger Logger => _logger;
+        public IDatasetRegistry? DatasetRegistry { get; set; }
 
         /// <summary>
         /// Unique identifier for the current session.

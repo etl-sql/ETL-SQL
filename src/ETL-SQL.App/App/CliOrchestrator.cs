@@ -25,6 +25,7 @@ namespace ETL_SQL.App
         private static readonly Option<string?> SessionOption = new(new[] { "--session" }, "Enable session persistence with the specified session ID.");
         private static readonly Option<string[]> VarOption = new(new[] { "--var", "-d" }, "Inject a variable into the script (e.g. @Name=Value).") { AllowMultipleArgumentsPerToken = true };
         private static readonly Option<bool> ProgressOption = new(new[] { "--progress", "-g" }, "Display real-time graphical execution progress.");
+        private static readonly Option<bool> UpdateJwtOption = new(new[] { "--update" }, "Update the local appsettings.json file with the new secret.");
         
         private static readonly Argument<string> RunScriptArg = new("script", "The ETL-SQL script to execute.");
         private static readonly Argument<string> EncryptValueArg = new("value", "The string to encrypt.");
@@ -109,6 +110,15 @@ namespace ETL_SQL.App
             var doctorCommand = new Command("doctor", "Perform a system health check to verify the environment");
             doctorCommand.SetHandler(async (context) => await Dispatch(context, "doctor", handler));
 
+            // 8. CONFIG Command
+            var configCommand = new Command("config", "Manage application configuration");
+            var setupJwtSubcommand = new Command("setup-jwt", "Generate a secure JWT secret and update appsettings.json")
+            {
+                UpdateJwtOption
+            };
+            setupJwtSubcommand.SetHandler(async (context) => await Dispatch(context, "config-setup-jwt", handler));
+            configCommand.AddCommand(setupJwtSubcommand);
+
             rootCommand.AddCommand(runCommand);
             rootCommand.AddCommand(testCommand);
             rootCommand.AddCommand(encryptCommand);
@@ -116,6 +126,7 @@ namespace ETL_SQL.App
             rootCommand.AddCommand(sessionCommand);
             rootCommand.AddCommand(uiCommand);
             rootCommand.AddCommand(doctorCommand);
+            rootCommand.AddCommand(configCommand);
 
             return rootCommand;
         }
@@ -170,6 +181,10 @@ namespace ETL_SQL.App
                     cliContext.ScriptFile = string.IsNullOrWhiteSpace(input) ? null : new FileInfo(input.Trim('"', '\'', ' '));
                 }
             }
+            else if (commandName == "config-setup-jwt")
+            {
+                cliContext.UpdateConfig = res.GetValueForOption(UpdateJwtOption);
+            }
 
             var sessionOptVal = res.FindResultFor(SessionOption) != null ? res.GetValueForOption(SessionOption) : null;
             if (sessionOptVal != null) cliContext.SessionId = sessionOptVal;
@@ -213,6 +228,7 @@ namespace ETL_SQL.App
             table.AddRow($"test [blue]{Markup.Escape("<category>")}[/]", "Run unit or integration tests (e.g., unit).");
             table.AddRow($"encrypt [blue]{Markup.Escape("<string>")}[/]", "Securely encrypt connection strings.");
             table.AddRow("generate", "Generate large scale mock data for performance validation.");
+            table.AddRow("config setup-jwt", "Generate a secure 256-bit JWT secret.");
             table.AddRow("ui repl", "Start the JSON-based REPL protocol.");
             AnsiConsole.Write(table);
             AnsiConsole.MarkupLine($"\nUse [cyan]ETL-SQL {Markup.Escape("<command>")} --help[/] for details on specific options.");

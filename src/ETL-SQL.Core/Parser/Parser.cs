@@ -185,23 +185,14 @@ namespace ETL_SQL.Core.Parser
         {
             var script = new Script();
             
-            // Capture script metadata from header comments
+            // Capture script metadata from header comments (/* @tag: v */ or -- @tag: v)
             while (Current.Type == TokenType.COLUMN_TAG)
             {
-                var comment = Advance().Value;
-                var lines = comment.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.RemoveEmptyEntries);
-                foreach (var line in lines)
-                {
-                    var trimmedLine = line.Trim();
-                    if (trimmedLine.StartsWith("@"))
-                    {
-                        var parts = trimmedLine.Substring(1).Split(':', 2);
-                        if (parts.Length == 2)
-                        {
-                            script.Metadata[parts[0].Trim()] = parts[1].Trim();
-                        }
-                    }
-                }
+                var content = Advance().Value;
+                // Normalize embedded newlines to semicolons so ParseMetadataTags handles
+                // both block-comment multi-line format and semicolon-separated inline format
+                var normalized = content.Replace('\r', ';').Replace('\n', ';');
+                ParseMetadataTags(normalized, script.Metadata);
             }
 
             while (Current.Type != TokenType.EOF)

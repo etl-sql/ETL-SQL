@@ -237,4 +237,31 @@ public class ReportsController(PortalDbContext db, AuditService audit, PortalCon
         await audit.LogAsync(CurrentUserId, "DELETE_REPORT", "Report", id.ToString(), report.Name);
         return NoContent();
     }
+
+    // ── GET /api/maps/custom ─────────────────────────────────────────────────
+
+    [HttpGet("maps/custom")]
+    [AllowAnonymous] // Maps are public assets like CSS/JS once the portal is accessible
+    public async Task<IActionResult> GetCustomMap([FromQuery] string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return BadRequest("Path is required");
+
+        // Zero-trust check: path must be within ScriptRootPath or the local maps folder
+        var rootPath = Path.GetFullPath(config.ScriptRootPath);
+        var resolved = Path.GetFullPath(path, rootPath);
+
+        if (!resolved.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
+        {
+            // Fallback: check the local wwwroot/maps directory
+            var localMaps = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "maps");
+            resolved = Path.GetFullPath(path, localMaps);
+            if (!resolved.StartsWith(localMaps, StringComparison.OrdinalIgnoreCase))
+                return Forbid();
+        }
+
+        if (!System.IO.File.Exists(resolved)) return NotFound("Map file not found: " + path);
+
+        var json = await System.IO.File.ReadAllTextAsync(resolved);
+        return Content(json, "application/geo+json");
+    }
 }

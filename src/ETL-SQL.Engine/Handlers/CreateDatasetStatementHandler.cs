@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using System.IO;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
@@ -66,6 +67,30 @@ namespace ETL_SQL.Engine.Handlers
                     throw new ExecutionException($"Dataset '{stmt.TempTableName}' already exists. Use CREATE OR ALTER or DROP DATASET first.", null, stmt.Line, stmt.Column);
                 }
                 rc.DatasetDefinitions[stmt.TempTableName] = stmt;
+            }
+
+            // Phase 10 Integration: Register in persistent IDatasetRegistry if available
+            if (context is Evaluator e && e.DatasetRegistry != null)
+            {
+                _logger.Debug("Registering dataset '{TempTableName}' in persistent registry...", stmt.TempTableName);
+                
+                var metadata = new ETL_SQL.Core.Data.DatasetMetadata
+                {
+                    Name = stmt.TempTableName,
+                    SourceQuery = stmt.SourceQuery.ToSql(),
+                    RefreshInterval = stmt.RefreshInterval,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    FolderPath = Path.GetDirectoryName(context.CurrentScriptPath) ?? ""
+                };
+
+                // Attempt to capture row count if it was just materialized
+                if (context.Telemetry.LastStatementRowsProcessed > 0)
+                {
+                    metadata.RowCount = context.Telemetry.LastStatementRowsProcessed;
+                }
+
+                await e.DatasetRegistry.RegisterOrUpdate(metadata);
             }
 
             var intervalNote = string.IsNullOrWhiteSpace(stmt.RefreshInterval)

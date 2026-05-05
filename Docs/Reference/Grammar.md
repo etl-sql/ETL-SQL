@@ -1907,7 +1907,7 @@ CREATE VISUAL <name> AS <type> (
 );
 ```
 
-**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `RADAR`, `CANDLESTICK`, `MAP`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
+**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `RADAR`, `CANDLESTICK`, `MAP`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
 
 **Mapping roles by visual type:**
 
@@ -1930,7 +1930,7 @@ CREATE VISUAL <name> AS <type> (
 | `TABLE` | _(all source columns rendered automatically)_ | — |
 | `CARD` | `VALUE` | `LABEL` |
 | `SLICER`, `MULTISELECT` | `VALUE` | — |
-| `TEXT`, `IMAGE`, `DATEPICKER`, `SLIDER`, `SEARCH` | _(no mappings)_ | — |
+| `TEXT`, `IMAGE`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH` | _(no mappings)_ | — |
 
 **FORMATTING operators:** `<`, `>`, `<=`, `>=`, `=`, `<>`
 
@@ -1957,6 +1957,11 @@ CREATE VISUAL RegionFilter AS SLICER (
 CREATE VISUAL DateFilter AS DATEPICKER (
   OPTIONS (TYPE = 'RANGE', FORMAT = 'yyyy-MM-dd'),
   ACTIONS (ON_CHANGE = SET_PARAMETER(@date_range, value))
+);
+
+CREATE VISUAL StartPicker AS RELDATEPICKER (
+  OPTIONS (DEFAULT = 'M-1'),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@start_date, value))
 );
 ```
 

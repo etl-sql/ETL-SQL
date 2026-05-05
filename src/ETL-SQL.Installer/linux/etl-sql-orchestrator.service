@@ -1,0 +1,15 @@
+[Unit]
+Description=ETL-SQL Orchestrator Service
+After=network.target
+
+[Service]
+Type=simple
+User=etlsql
+WorkingDirectory=/usr/lib/etl-sql/orchestrator
+ExecStart=/usr/lib/etl-sql/orchestrator/ETL-SQL.Orchestrator.Service
+Restart=always
+RestartSec=10
+Environment=ASPNETCORE_URLS=http://*:5001
+
+[Install]
+WantedBy=multi-user.target

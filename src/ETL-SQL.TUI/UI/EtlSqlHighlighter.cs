@@ -51,10 +51,24 @@ namespace ETL_SQL.TUI.UI
             foreach (Match m in StringRegex.Matches(line))
                 tokens.Add(new HighlightToken(m.Index, m.Length, HighlightColor.String));
 
-            // 2. Comments
+            // 2. Comments — split -- @tag lines into Comment prefix + Variable tag body
             foreach (Match m in CommentRegex.Matches(line))
-                if (!Covered(tokens, m.Index))
+            {
+                if (Covered(tokens, m.Index)) continue;
+                // Find the position of '@' after the '--' prefix (skipping spaces)
+                int scanPos = m.Index + 2;
+                while (scanPos < m.Index + m.Length && line[scanPos] == ' ') scanPos++;
+                if (scanPos < m.Index + m.Length && line[scanPos] == '@')
+                {
+                    // "--" prefix as Comment, "@tag..." body as Variable (same as /* @tag */ highlighting)
+                    tokens.Add(new HighlightToken(m.Index, scanPos - m.Index, HighlightColor.Comment));
+                    tokens.Add(new HighlightToken(scanPos, m.Index + m.Length - scanPos, HighlightColor.Variable));
+                }
+                else
+                {
                     tokens.Add(new HighlightToken(m.Index, m.Length, HighlightColor.Comment));
+                }
+            }
 
             // 3. Variables
             foreach (Match m in VariableRegex.Matches(line))

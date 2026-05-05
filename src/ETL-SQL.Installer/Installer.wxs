@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Product Id="*" Name="ETL-SQL Enterprise Suite" Language="1033" Version="0.6.0.0" Manufacturer="AmericanSuperstar" UpgradeCode="7e3da743-19a2-463e-a794-b9fb9a1757e1">
+        <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
+
+        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+        <MediaTemplate EmbedCab="yes" />
+
+        <Feature Id="ProductFeature" Title="ETL-SQL Enterprise" Level="1" ConfigurableDirectory="INSTALLFOLDER">
+            <!-- 1. Workstation SDK Feature -->
+            <Feature Id="Feature_SDK" Title="Workstation SDK" Description="CLI, TUI, and Language Server for developers." Level="1">
+                <ComponentGroupRef Id="SDKComponents" />
+                <ComponentRef Id="PathEnvironment" />
+            </Feature>
+
+            <!-- 2. Server Features -->
+            <Feature Id="Feature_Server" Title="Server Components" Description="Backend services for enterprise deployment." Level="1">
+                <Feature Id="Feature_Orchestrator" Title="Orchestrator Service" Description="Background job scheduler and engine coordinator." Level="1">
+                    <ComponentGroupRef Id="OrchestratorComponents" />
+                </Feature>
+                <Feature Id="Feature_Portal" Title="Report Portal" Description="Web-based dashboard and report management portal." Level="1">
+                    <ComponentGroupRef Id="PortalComponents" />
+                </Feature>
+            </Feature>
+        </Feature>
+
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="ProgramFiles64Folder">
+                <Directory Id="INSTALLFOLDER" Name="ETL-SQL">
+                    <Directory Id="BINDIR" Name="bin" />
+                    <Directory Id="PortalDir" Name="portal" />
+                    <Directory Id="OrchestratorDir" Name="orchestrator" />
+                </Directory>
+            </Directory>
+        </Directory>
+
+        <!-- SDK Components -->
+        <ComponentGroup Id="SDKComponents" Directory="BINDIR">
+            <Component Id="ETL_SQL_EXE" Guid="*">
+                <File Source="publish\win-x64\bin\ETL-SQL.exe" KeyPath="yes" />
+            </Component>
+            <Component Id="ETL_SQL_LSP_EXE" Guid="*">
+                <File Source="publish\win-x64\bin\ETL-SQL-LSP.exe" />
+            </Component>
+            <Component Id="ETL_SQL_REPORT_EXE" Guid="*">
+                <File Source="publish\win-x64\bin\ETL-SQL-Report.exe" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- Orchestrator Components & Service -->
+        <ComponentGroup Id="OrchestratorComponents" Directory="OrchestratorDir">
+            <Component Id="Orchestrator_EXE" Guid="*">
+                <File Source="publish\win-x64\bin\ETL-SQL.Orchestrator.Service.exe" KeyPath="yes" />
+                <ServiceInstall Id="ServiceInstaller_Orchestrator" 
+                                Type="ownProcess" 
+                                Name="ETL-SQL-Orchestrator" 
+                                DisplayName="ETL-SQL Orchestrator" 
+                                Description="Coordinates distributed ETL-SQL jobs." 
+                                Start="auto" 
+                                Account="LocalSystem" 
+                                ErrorControl="normal" />
+                <ServiceControl Id="StartService_Orchestrator" Start="install" Stop="both" Remove="uninstall" Name="ETL-SQL-Orchestrator" Wait="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- Portal Components & Service -->
+        <ComponentGroup Id="PortalComponents" Directory="PortalDir">
+            <Component Id="Portal_EXE" Guid="*">
+                <File Source="publish\win-x64\bin\ETL-SQL.ReportPortal.exe" KeyPath="yes" />
+                <ServiceInstall Id="ServiceInstaller_Portal" 
+                                Type="ownProcess" 
+                                Name="ETL-SQL-Portal" 
+                                DisplayName="ETL-SQL Report Portal" 
+                                Description="Web interface for ETL-SQL reports." 
+                                Start="auto" 
+                                Account="LocalSystem" 
+                                ErrorControl="normal" />
+                <ServiceControl Id="StartService_Portal" Start="install" Stop="both" Remove="uninstall" Name="ETL-SQL-Portal" Wait="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- Environment Variables -->
+        <DirectoryRef Id="TARGETDIR">
+            <Component Id="PathEnvironment" Guid="dc70ead1-c4db-42f1-a8e1-7a35cc06cf3f">
+                <Environment Id="PATH" Name="PATH" Value="[BINDIR]" Permanent="no" Part="last" Action="set" System="yes" />
+            </Component>
+        </DirectoryRef>
+
+        <!-- UI -->
+        <UIRef Id="WixUI_FeatureTree" />
+    </Product>
+</Wix>

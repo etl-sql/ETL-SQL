@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.IO;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Data;
@@ -57,6 +58,7 @@ namespace ETL_SQL.Core.Common
         public ILineageTracker LineageTracker => throw new NotSupportedException();
         public IDockerManager DockerManager => throw new NotSupportedException();
         public IFunctionRegistry FunctionRegistry => throw new NotSupportedException();
+        public IDatasetRegistry? DatasetRegistry { get; set; }
         public Interfaces.ILanguageHelpRegistry LanguageHelp { get; } = new Metadata.LanguageHelpRegistry();
         
         public IDictionary<string, object?> Variables => new Dictionary<string, object?>();

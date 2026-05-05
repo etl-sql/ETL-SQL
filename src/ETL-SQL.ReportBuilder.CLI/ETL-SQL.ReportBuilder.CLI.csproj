@@ -7,6 +7,8 @@
     <RootNamespace>ETL_SQL.ReportBuilder.CLI</RootNamespace>
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-arm64</RuntimeIdentifiers>
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-arm64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>

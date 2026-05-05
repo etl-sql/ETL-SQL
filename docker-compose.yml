@@ -25,6 +25,7 @@ services:
       - ./Reports:/app/Reports
       - ./Snapshots:/app/Snapshots
       - ./data:/app/data
+      - ./src/ETL-SQL.ReportPortal/wwwroot:/app/wwwroot
     environment:
       - Portal__Orchestrator__ApiUrl=http://orchestrator-srv:5001
       - Portal__DatabasePath=/app/data/portal.db
@@ -33,14 +34,14 @@ services:
     depends_on:
       - orchestrator-srv
 
-  mock-db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: etl_user
-      POSTGRES_PASSWORD: etl_password
-      POSTGRES_DB: mock_data
-    ports:
-      - "5432:5432"
+#  mock-db:
+#    image: postgres:16-alpine
+#    environment:
+#      POSTGRES_USER: etl_user
+#      POSTGRES_PASSWORD: etl_password
+#      POSTGRES_DB: mock_data
+#    ports:
+#      - "5432:5432"
 
 volumes:
   reports_data:
