@@ -6,7 +6,40 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 ## [Unreleased]
 
-*Changes staged on `dev` that have not yet been cut into a release.*
+### Added
+
+**Reporting & Portal**
+- **Interactive Multi-Select**: New `MULTISELECT` visual type rendering as a checkbox list with automatic parameter synchronization.
+- **Enhanced Date Picking**: Native `RELDATEPICKER` (hybrid text + calendar) support in the report portal.
+- **Interactive Slicers**: Support for `SLIDER` and `SEARCH` visual types with immediate dashboard re-rendering.
+- **Markdown Tables**: Full support for GFM-style tables in `TEXT` visuals via `marked.js` integration.
+- **Cache Management**: Aggressive cache-busting logic for portal assets (`?v=${Date.now()}`) to ensure runtime parity.
+- **Portal Responsiveness**: Improved mobile layout and CSS grid stability for complex dashboards.
+
+**Security & Cryptography**
+- **PGP Engine Hardening**: Improved `PGP_KEY_PAIR` generation and validation logic.
+- **Security Guardrails**: Whitelisted PGP-related file extensions in `SecurityService` to allow authorized cryptographic operations.
+
+**Lineage & Governance**
+- **Standard Tag Library**: Defined 20 core lineage tags (`@pii`, `@sensitive`, `@owner`, etc.) with `@pii: true-wins` inheritance logic.
+- **Transformation Tracking**: Automated recording of transformation types (`Cast`, `Aggregation`, `FunctionCall`, etc.) across the evaluation pipeline.
+- **Lineage Visualization**: Enhanced Mermaid-based lineage graphs with distinct shapes for Reports (rounded) and Datasets (cylinder).
+- **Metadata Discovery**: LSP support for `@`-prefix tag completions and documentation hovers.
+
+**Documentation & UX**
+- **Report SQL Audit**: Comprehensive rewrite of `Report_SQL_Guide.md` to match current production engine state.
+- **Grammar & Ops**: Updated `Grammar.md` and `Specialized_Operations.md` to reflect `DIRECTORY` connection alias support in file operations.
+- **LSP Stability**: Finalized purge of unstable semantic features; improved autocomplete reliability for connector options and asterisk expansion.
+
+### Fixed
+- **Multi-Select Regression**: Fixed a duplication bug where legacy dropdown logic was overwriting the new checkbox-list implementation.
+- **Markdown Rendering**: Resolved issues where Markdown tables were displayed as raw text due to library interface mismatches.
+- **IntelliSense Regressions**: Fixed missing connector option suggestions and asterisk expansion failures in `LanguageService.cs`.
+- **Portal State Bugs**: Resolved "white screen" and state synchronization issues in the report portal.
+- **Slicer Logic**: Fixed null-reference errors in `renderSlicer` when actions were undefined.
+
+### Changed
+- **Directory Connections**: Statements like `COPY DIRECTORY` and `FILE_LIST` now natively accept `DIRECTORY` connection aliases as path arguments.
 
 ---
 

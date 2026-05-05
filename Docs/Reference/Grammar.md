@@ -65,9 +65,10 @@ Specialty types carry semantic meaning beyond a plain string or number. They inf
 Stored as a string at declaration time. When the value is passed to any file I/O operation, `ResolvePath()` activates and:
 
 - Strips surrounding double-quotes that Windows *Copy as path* adds (e.g. `"C:\tmp\file.csv"`)
-- Accepts a connector name as the root segment: `MyDrive/subdir/file.csv` where `MyDrive` is a configured file or SFTP connector
-- Resolves relative paths against the script's working directory
-- Validates the resolved path against configured security boundaries (allowed root paths, permitted file extensions)
+- **Connector Support**: Accepts a connector name as the root segment: `MyDrive/subdir/file.csv`.
+- **Directory Connections**: For local folders, you can use a `DIRECTORY` connection name as the path itself: `CREATE CONNECTION d ON DIRECTORY('C:\tmp'); COPY DIRECTORY d TO 'C:\Backup';`.
+- **Normalization**: Normalizes separators, resolves relative paths against the script's working directory.
+- **Security**: Validates the resolved path against configured security boundaries (allowed root paths, permitted file extensions).
 
 ```sql
 DECLARE @out PATH = 'C:\Data\results.csv';       -- absolute
@@ -1614,6 +1615,8 @@ DECRYPT FILE  '<source>' TO '<destination>' PASSWORD '<pwd>' [WITH (OVERWRITE = 
 ```
 
 ### 16.3 Directory Statements
+All path arguments (`<src>`, `<dest>`, `<path>`) can be either a literal string path or a **DIRECTORY connection** alias.
+
 ```sql
 CREATE DIRECTORY '<path>' [IF NOT EXISTS];
 

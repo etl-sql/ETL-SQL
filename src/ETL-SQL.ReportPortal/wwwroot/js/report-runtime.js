@@ -1,5 +1,7 @@
 /**
- * report-runtime.js — Phase 9E
+ * report-runtime.js — Phase 9E.3 (2026-05-05)
+ * [DEBUG] MULTISELECT checkbox-list logic active.
+ * [FIX]   Markdown rendering robustness improved.
  *
  * Dual-mode bootstrap:
  *   - VS Code WebviewPanel: reads `window.__MANIFEST__` (injected by reportPreviewPanel.ts)
@@ -8,6 +10,8 @@
  */
 (function () {
     'use strict';
+
+    console.log('[ETL-SQL] report-runtime.js Phase 9E.3 loaded at ' + new Date().toISOString());
 
     // Web mode  (single or multi-report server): window.__IS_WEB__ = true
     // VS Code mode (webview preview):           window.__MANIFEST__ set, no __IS_WEB__
@@ -425,7 +429,7 @@
             case 'DATEPICKER':    renderDatePicker(card, visual, manifest);        break;
             case 'RELDATEPICKER': renderRelDatePicker(card, visual, manifest);     break;
             case 'SLIDER':      renderSlider(card, visual, manifest);             break;
-            case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
+            case 'MULTISELECT': renderMultiSelect(card, visual, manifest);        break;
             case 'SEARCH':      renderSearch(card, visual, manifest);             break;
             case 'IMAGE':       renderImage(card, visual);                        break;
             default:            renderChart(card, visual, effectiveTheme);        break;
@@ -844,8 +848,8 @@
             if (current !== undefined) select.value = current;
         }
 
-        const changeActions = actionsFor(visual, 'ON_CHANGE')
-            .filter(a => a.type === 'SET_PARAMETER');
+        const actions = visual.actions || [];
+        const changeActions = actions.filter(a => a.type === 'SET_PARAMETER' && a.trigger === 'ON_CHANGE');
 
         if (isWebMode && changeActions.length > 0) {
             select.addEventListener('change', () => {
@@ -873,6 +877,70 @@
         container.appendChild(wrapper);
     }
 
+    // ── MultiSelect ──────────────────────────────────────────────────────────
+
+    function renderMultiSelect(container, visual, manifest) {
+        console.log(`[ReportRuntime] renderMultiSelect called for ${visual.name}`);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'multiselect-wrapper';
+        
+        const actions = visual.actions || [];
+        const action = actions.find(a => a.type === 'SET_PARAMETER');
+        const paramName = action ? action.parameterName : null;
+
+        const options = visual.options || {};
+        const valCol = (options['mapping:value'] || 'value').toLowerCase();
+        const lblCol = (options['mapping:label'] || 'label').toLowerCase();
+        const valIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === valCol);
+        const lblIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === lblCol);
+        const finalValIdx = valIdx >= 0 ? valIdx : 0;
+        const finalLblIdx = lblIdx >= 0 ? lblIdx : ((visual.columns || []).length > 1 ? 1 : 0);
+
+        let currentValues = [];
+        if (paramName && manifest && manifest.parameters) {
+            const current = getParam(manifest.parameters, paramName);
+            if (current) currentValues = String(current).split(',').map(s => s.trim());
+        }
+
+        const changeActions = (visual.actions || []).filter(a => a.type === 'SET_PARAMETER');
+
+        (visual.rows || []).forEach((row, idx) => {
+            const val = row[finalValIdx];
+            const lbl = row[finalLblIdx];
+            
+            const item = document.createElement('div');
+            item.className = 'multiselect-item';
+            
+            const chkId = `ms-${visual.name.replace(/\s+/g, '_')}-${idx}`;
+            
+            const chk = document.createElement('input');
+            chk.type = 'checkbox';
+            chk.id = chkId;
+            chk.value = val;
+            if (currentValues.includes(String(val))) chk.checked = true;
+            
+            const lab = document.createElement('label');
+            lab.htmlFor = chkId;
+            lab.textContent = lbl;
+            
+            item.appendChild(chk);
+            item.appendChild(lab);
+            wrapper.appendChild(item);
+
+            if (isWebMode && changeActions.length > 0) {
+                chk.addEventListener('change', () => {
+                    const selected = Array.from(wrapper.querySelectorAll('input:checked')).map(i => i.value).join(',');
+                    changeActions.forEach(action => {
+                        postParameter(action.parameterName, selected)
+                            .then(m => { if (m) renderManifest(m); });
+                    });
+                });
+            }
+        });
+
+        container.appendChild(wrapper);
+    }
+
     // ── Text ────────────────────────────────────────────────────────────────
 
     function renderText(container, visual) {
@@ -884,7 +952,26 @@
         const div = document.createElement('div');
         div.className = 'text-visual';
         div.style.textAlign = align;
-        div.innerHTML = simpleMarkdown(value);
+        
+        if (window.marked) {
+            try {
+                // marked v4+ uses marked.parse(); older versions use marked() directly.
+                if (typeof marked.parse === 'function') {
+                    div.innerHTML = marked.parse(value);
+                } else if (typeof marked === 'function') {
+                    div.innerHTML = marked(value);
+                } else {
+                    console.warn('[ETL-SQL] marked is defined but neither marked() nor marked.parse() is a function.');
+                    div.innerHTML = simpleMarkdown(value);
+                }
+            } catch (e) {
+                console.error('[ETL-SQL] Error parsing markdown:', e);
+                div.innerHTML = simpleMarkdown(value);
+            }
+        } else {
+            console.warn('[ETL-SQL] marked.js not found; falling back to simpleMarkdown.');
+            div.innerHTML = simpleMarkdown(value);
+        }
         container.appendChild(div);
     }
 
@@ -1097,39 +1184,6 @@
 
     // ── MultiSelect ─────────────────────────────────────────────────────────
 
-    function renderMultiSelect(container, visual) {
-        const opts  = visual.options || {};
-        const param = opts['PARAMETER'] || opts['parameter'] || null;
-
-        const wrapper = document.createElement('div');
-        wrapper.className = 'filter-wrapper';
-
-        const select = document.createElement('select');
-        select.multiple = true;
-
-        (visual.rows || []).forEach(row => {
-            const opt = document.createElement('option');
-            opt.value       = String(row[0] ?? '');
-            opt.textContent = String(row[0] ?? '');
-            select.appendChild(opt);
-        });
-
-        wrapper.appendChild(select);
-
-        if (isWebMode && param) {
-            const applyBtn = document.createElement('button');
-            applyBtn.className   = 'filter-apply';
-            applyBtn.textContent = 'Apply';
-            applyBtn.addEventListener('click', () => {
-                const selected = Array.from(select.selectedOptions).map(o => o.value).join(',');
-                postParameter(param, selected)
-                    .then(m => { if (m) renderManifest(m); });
-            });
-            wrapper.appendChild(applyBtn);
-        }
-
-        container.appendChild(wrapper);
-    }
 
     // ── Search ──────────────────────────────────────────────────────────────
 

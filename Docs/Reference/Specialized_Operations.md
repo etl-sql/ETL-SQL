@@ -36,6 +36,7 @@ DECRYPT_FILE('src', 'dest', 'pwd' | 'keyfile_path' | 'pgp_key_path' [, ON|OFF])
 ```
 
 ### 1.3 Directory Statements (SQL Style)
+Path arguments can be literal strings or **DIRECTORY connection** aliases (e.g. `COPY DIRECTORY my_alias TO 'C:\Backup'`).
 
 ```sql
 CREATE DIRECTORY '<path>' [WITH(OVERWRITE=ON|OFF)];
@@ -89,7 +90,29 @@ CREATE DIRECTORY 'C:\AppTemp\PipelineA';
 DELETE DIRECTORY_CONTENTS 'C:\AppTemp\PipelineA' WITH(RECURSIVE=ON);
 ```
 
-### 1.6 Filesystem Query Functions
+### 1.6 Path Resolution & Directory Connections
+
+ETL-SQL supports path aliasing via connections. If a path string starts with a registered connection name, the engine resolves it to the connection's base path.
+
+**Using DIRECTORY connections as path aliases:**
+```sql
+-- Define a logical name for a physical path
+CREATE CONNECTION source_dir ON DIRECTORY('C:\Users\Chuck\Documents\Input');
+CREATE CONNECTION backup_dir ON DIRECTORY('D:\Backups\Daily');
+
+-- Use the alias instead of the full path in any file statement or function
+COPY DIRECTORY source_dir TO backup_dir;
+SELECT * FROM FILE_LIST(source_dir);
+
+-- You can also append sub-paths to the alias
+DELETE FILE 'source_dir/stale_lock.txt';
+```
+
+This pattern is highly recommended for scripts that move between environments (Dev/Test/Prod) as it isolates the physical path logic to a single `CREATE CONNECTION` block.
+
+---
+
+## 2. Filesystem Query Functions
 
 | Function | Signature | Returns |
 | :--- | :--- | :--- |
