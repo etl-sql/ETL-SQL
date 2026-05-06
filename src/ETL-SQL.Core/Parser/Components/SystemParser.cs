@@ -121,6 +121,16 @@ namespace ETL_SQL.Core.Parser.Components
             return new SetWhatIfStatement { Enabled = enabled };
         }
 
+        public Statement ParseSetPersist()
+        {
+            bool enabled;
+            if (Match(TokenType.ON)) enabled = true;
+            else if (Match(TokenType.OFF)) enabled = false;
+            else throw new SyntaxException("Expected ON or OFF after SET PERSIST", _parser.Current.Line, _parser.Current.Column);
+            Match(TokenType.SEMICOLON);
+            return new SetPersistStatement { Enabled = enabled };
+        }
+
         public Statement ParseSetShowPassword()
         {
             bool enabled;

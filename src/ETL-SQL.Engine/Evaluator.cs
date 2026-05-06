@@ -515,6 +515,7 @@ namespace ETL_SQL.Engine
             MaxMessages = config?.GetValue<int>("Engine:MaxMessages", 1000) ?? 1000;
             WeekStartDay = DefaultThresholds.StartOfWeek(config);
             ScriptHashPolicy = DefaultThresholds.ScriptHashPolicy(config);
+            IsPersistentSession = DefaultThresholds.PersistenceDefault(config);
         }
 
 

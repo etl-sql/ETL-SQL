@@ -38,6 +38,9 @@ namespace ETL_SQL.Engine.Handlers
                         {
                             eval.SessionId = null; // Prevent future saves
                         }
+
+                        // NEW: Clear live memory (visuals, variables, temp tables)
+                        await context.ResetSessionAsync();
                     }
                     break;
 

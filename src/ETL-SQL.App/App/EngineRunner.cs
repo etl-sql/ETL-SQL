@@ -387,7 +387,7 @@ namespace ETL_SQL.App
                         }
                     }
 
-                    if (!string.IsNullOrEmpty(ctx.SessionId))
+                    if (!string.IsNullOrEmpty(ctx.SessionId) && evaluator.IsPersistentSession)
                     {
                         logger.WriteLine($"Saving session {ctx.SessionId}...", ConsoleColor.Cyan);
                         await sessionManager.SaveSession(ctx.SessionId, evaluator, source);

@@ -62,5 +62,8 @@ namespace ETL_SQL.Engine.Services
             var policy = config?.GetValue<string>("Engine:ScriptHashPolicy") ?? "Warn";
             return policy.Equals("Block", StringComparison.OrdinalIgnoreCase) ? "Block" : "Warn";
         }
+
+        public static bool PersistenceDefault(IConfiguration? config)
+            => config?.GetValue<bool?>("Session:PersistenceDefault") ?? true;
     }
 }
