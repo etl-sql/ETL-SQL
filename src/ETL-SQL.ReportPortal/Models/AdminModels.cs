@@ -8,6 +8,8 @@ public record CreateUserRequest(
     string? FirstName,
     string? LastName);
 
+public record ResetPasswordRequest(string NewPassword);
+
 public record UserDto(
     int Id,
     string Username,
@@ -28,6 +30,7 @@ public record UpdateUserRequest(
     bool? IsActive);
 
 public record CreateGroupRequest(string Name, string? Description);
+public record UpdateGroupRequest(string? Name, string? Description);
 
 public record GroupDto(int Id, string Name, string? Description, int MemberCount);
 

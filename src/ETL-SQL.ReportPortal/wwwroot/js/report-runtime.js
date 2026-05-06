@@ -1,7 +1,5 @@
 /**
- * report-runtime.js — Phase 9E.3 (2026-05-05)
- * [DEBUG] MULTISELECT checkbox-list logic active.
- * [FIX]   Markdown rendering robustness improved.
+ * report-runtime.js — Phase 9E
  *
  * Dual-mode bootstrap:
  *   - VS Code WebviewPanel: reads `window.__MANIFEST__` (injected by reportPreviewPanel.ts)
@@ -10,8 +8,6 @@
  */
 (function () {
     'use strict';
-
-    console.log('[ETL-SQL] report-runtime.js Phase 9E.3 loaded at ' + new Date().toISOString());
 
     // Web mode  (single or multi-report server): window.__IS_WEB__ = true
     // VS Code mode (webview preview):           window.__MANIFEST__ set, no __IS_WEB__
@@ -164,6 +160,7 @@
         }
 
         renderFooter(root, manifest);
+        renderPipelineConsole(root, manifest);
     }
 
     function renderNavBar(container, navDef, pageSections, pages) {
@@ -429,7 +426,7 @@
             case 'DATEPICKER':    renderDatePicker(card, visual, manifest);        break;
             case 'RELDATEPICKER': renderRelDatePicker(card, visual, manifest);     break;
             case 'SLIDER':      renderSlider(card, visual, manifest);             break;
-            case 'MULTISELECT': renderMultiSelect(card, visual, manifest);        break;
+            case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
             case 'SEARCH':      renderSearch(card, visual, manifest);             break;
             case 'IMAGE':       renderImage(card, visual);                        break;
             default:            renderChart(card, visual, effectiveTheme);        break;
@@ -848,8 +845,8 @@
             if (current !== undefined) select.value = current;
         }
 
-        const actions = visual.actions || [];
-        const changeActions = actions.filter(a => a.type === 'SET_PARAMETER' && a.trigger === 'ON_CHANGE');
+        const changeActions = actionsFor(visual, 'ON_CHANGE')
+            .filter(a => a.type === 'SET_PARAMETER');
 
         if (isWebMode && changeActions.length > 0) {
             select.addEventListener('change', () => {
@@ -877,70 +874,6 @@
         container.appendChild(wrapper);
     }
 
-    // ── MultiSelect ──────────────────────────────────────────────────────────
-
-    function renderMultiSelect(container, visual, manifest) {
-        console.log(`[ReportRuntime] renderMultiSelect called for ${visual.name}`);
-        const wrapper = document.createElement('div');
-        wrapper.className = 'multiselect-wrapper';
-        
-        const actions = visual.actions || [];
-        const action = actions.find(a => a.type === 'SET_PARAMETER');
-        const paramName = action ? action.parameterName : null;
-
-        const options = visual.options || {};
-        const valCol = (options['mapping:value'] || 'value').toLowerCase();
-        const lblCol = (options['mapping:label'] || 'label').toLowerCase();
-        const valIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === valCol);
-        const lblIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === lblCol);
-        const finalValIdx = valIdx >= 0 ? valIdx : 0;
-        const finalLblIdx = lblIdx >= 0 ? lblIdx : ((visual.columns || []).length > 1 ? 1 : 0);
-
-        let currentValues = [];
-        if (paramName && manifest && manifest.parameters) {
-            const current = getParam(manifest.parameters, paramName);
-            if (current) currentValues = String(current).split(',').map(s => s.trim());
-        }
-
-        const changeActions = (visual.actions || []).filter(a => a.type === 'SET_PARAMETER');
-
-        (visual.rows || []).forEach((row, idx) => {
-            const val = row[finalValIdx];
-            const lbl = row[finalLblIdx];
-            
-            const item = document.createElement('div');
-            item.className = 'multiselect-item';
-            
-            const chkId = `ms-${visual.name.replace(/\s+/g, '_')}-${idx}`;
-            
-            const chk = document.createElement('input');
-            chk.type = 'checkbox';
-            chk.id = chkId;
-            chk.value = val;
-            if (currentValues.includes(String(val))) chk.checked = true;
-            
-            const lab = document.createElement('label');
-            lab.htmlFor = chkId;
-            lab.textContent = lbl;
-            
-            item.appendChild(chk);
-            item.appendChild(lab);
-            wrapper.appendChild(item);
-
-            if (isWebMode && changeActions.length > 0) {
-                chk.addEventListener('change', () => {
-                    const selected = Array.from(wrapper.querySelectorAll('input:checked')).map(i => i.value).join(',');
-                    changeActions.forEach(action => {
-                        postParameter(action.parameterName, selected)
-                            .then(m => { if (m) renderManifest(m); });
-                    });
-                });
-            }
-        });
-
-        container.appendChild(wrapper);
-    }
-
     // ── Text ────────────────────────────────────────────────────────────────
 
     function renderText(container, visual) {
@@ -952,26 +885,7 @@
         const div = document.createElement('div');
         div.className = 'text-visual';
         div.style.textAlign = align;
-        
-        if (window.marked) {
-            try {
-                // marked v4+ uses marked.parse(); older versions use marked() directly.
-                if (typeof marked.parse === 'function') {
-                    div.innerHTML = marked.parse(value);
-                } else if (typeof marked === 'function') {
-                    div.innerHTML = marked(value);
-                } else {
-                    console.warn('[ETL-SQL] marked is defined but neither marked() nor marked.parse() is a function.');
-                    div.innerHTML = simpleMarkdown(value);
-                }
-            } catch (e) {
-                console.error('[ETL-SQL] Error parsing markdown:', e);
-                div.innerHTML = simpleMarkdown(value);
-            }
-        } else {
-            console.warn('[ETL-SQL] marked.js not found; falling back to simpleMarkdown.');
-            div.innerHTML = simpleMarkdown(value);
-        }
+        div.innerHTML = simpleMarkdown(value);
         container.appendChild(div);
     }
 
@@ -1184,6 +1098,39 @@
 
     // ── MultiSelect ─────────────────────────────────────────────────────────
 
+    function renderMultiSelect(container, visual) {
+        const opts  = visual.options || {};
+        const param = opts['PARAMETER'] || opts['parameter'] || null;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'filter-wrapper';
+
+        const select = document.createElement('select');
+        select.multiple = true;
+
+        (visual.rows || []).forEach(row => {
+            const opt = document.createElement('option');
+            opt.value       = String(row[0] ?? '');
+            opt.textContent = String(row[0] ?? '');
+            select.appendChild(opt);
+        });
+
+        wrapper.appendChild(select);
+
+        if (isWebMode && param) {
+            const applyBtn = document.createElement('button');
+            applyBtn.className   = 'filter-apply';
+            applyBtn.textContent = 'Apply';
+            applyBtn.addEventListener('click', () => {
+                const selected = Array.from(select.selectedOptions).map(o => o.value).join(',');
+                postParameter(param, selected)
+                    .then(m => { if (m) renderManifest(m); });
+            });
+            wrapper.appendChild(applyBtn);
+        }
+
+        container.appendChild(wrapper);
+    }
 
     // ── Search ──────────────────────────────────────────────────────────────
 
@@ -1349,6 +1296,148 @@
         const built  = manifest.builtAt ? new Date(manifest.builtAt).toLocaleString() : '';
         footer.innerHTML = '<small>Built: ' + escHtml(built) + '</small>';
         container.appendChild(footer);
+    }
+
+    function renderPipelineConsole(root, manifest) {
+        if (window.__IS_PREVIEW__) return;
+        if (!manifest.messages?.length && !manifest.executionTree?.length && !manifest.error) return;
+
+        const consoleWrapper = document.createElement('div');
+        consoleWrapper.className = 'pipeline-console collapsed';
+        
+        const header = document.createElement('div');
+        header.className = 'pipeline-header';
+        
+        let statusColor = 'gray';
+        let statusText = 'Completed';
+        if (manifest.error) {
+            statusColor = 'red';
+            statusText = 'Failed';
+        }
+
+        header.innerHTML = `
+            <span>Pipeline Console</span>
+            <span style="color: ${statusColor}; font-weight: normal;">
+                ${statusText} 
+                <span class="toggle-icon" style="margin-left: 8px;">&#x25B2;</span>
+            </span>
+        `;
+        
+        const body = document.createElement('div');
+        body.className = 'pipeline-body';
+        
+        const leftPane = document.createElement('div');
+        leftPane.className = 'pipeline-pane left-pane';
+        leftPane.innerHTML = '<div class="pane-title">Execution Tree</div>';
+        
+        const rightPane = document.createElement('div');
+        rightPane.className = 'pipeline-pane';
+        rightPane.innerHTML = '<div class="pane-title">Messages</div>';
+        
+        body.appendChild(leftPane);
+        body.appendChild(rightPane);
+        
+        consoleWrapper.appendChild(header);
+        consoleWrapper.appendChild(body);
+        
+        let isCollapsed = true;
+        header.addEventListener('click', () => {
+            isCollapsed = !isCollapsed;
+            consoleWrapper.classList.toggle('collapsed', isCollapsed);
+            const icon = header.querySelector('.toggle-icon');
+            icon.innerHTML = isCollapsed ? '&#x25B2;' : '&#x25BC;';
+        });
+
+        // Render Execution Tree
+        if (manifest.executionTree) {
+            const treeRoot = document.createElement('div');
+            
+            function renderNode(node, container) {
+                const el = document.createElement('div');
+                el.className = 'tree-node';
+                
+                const content = document.createElement('div');
+                content.className = 'tree-node-content';
+                
+                const hasChildren = node.children && node.children.length > 0;
+                const iconStr = hasChildren ? '&#x25BC;' : '&nbsp;';
+                
+                let timeStr = '';
+                if (node.durationMs != null) timeStr = `[${node.durationMs}ms]`;
+                
+                let rowsStr = '';
+                if (node.rowsProcessed != null) rowsStr = `(${node.rowsProcessed} rows)`;
+                
+                content.innerHTML = `
+                    <span class="tree-icon" style="color:#888">${iconStr}</span>
+                    <span class="node-name">${escHtml(node.name || 'Unnamed')}</span>
+                    <span class="node-meta">
+                        <span class="status-${node.status || 'Completed'}">${escHtml(node.status || 'Completed')}</span>
+                        ${timeStr} ${rowsStr}
+                    </span>
+                `;
+                
+                el.appendChild(content);
+                
+                if (hasChildren) {
+                    const childrenContainer = document.createElement('div');
+                    childrenContainer.className = 'tree-children';
+                    node.children.forEach(child => renderNode(child, childrenContainer));
+                    el.appendChild(childrenContainer);
+                    
+                    content.querySelector('.tree-icon').addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const isHidden = childrenContainer.style.display === 'none';
+                        childrenContainer.style.display = isHidden ? 'block' : 'none';
+                        e.target.innerHTML = isHidden ? '&#x25BC;' : '&#x25B6;';
+                    });
+                }
+                container.appendChild(el);
+            }
+            
+            if (Array.isArray(manifest.executionTree)) {
+                manifest.executionTree.forEach(rootNode => renderNode(rootNode, treeRoot));
+            } else {
+                renderNode(manifest.executionTree, treeRoot);
+            }
+            
+            leftPane.appendChild(treeRoot);
+        } else {
+            leftPane.innerHTML += '<div class="no-data">No execution tree available.</div>';
+        }
+
+        // Render Messages
+        if (manifest.messages && manifest.messages.length > 0) {
+            manifest.messages.forEach(msg => {
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                
+                const time = new Date(msg.timestamp).toLocaleTimeString();
+                const colorClass = msg.color ? `log-${msg.color}` : 'log-white';
+                
+                entry.innerHTML = `
+                    <span class="log-time">[${time}]</span>
+                    <span class="${colorClass}">${escHtml(msg.message)}</span>
+                `;
+                rightPane.appendChild(entry);
+            });
+        } else {
+            rightPane.innerHTML += '<div class="no-data">No messages recorded.</div>';
+        }
+
+        if (manifest.error) {
+            const errEntry = document.createElement('div');
+            errEntry.className = 'log-entry log-red';
+            errEntry.innerHTML = `<br/><b>Fatal Error:</b><br/><pre>${escHtml(manifest.error)}</pre>`;
+            rightPane.appendChild(errEntry);
+            
+            // Auto-expand if there's an error
+            isCollapsed = false;
+            consoleWrapper.classList.remove('collapsed');
+            header.querySelector('.toggle-icon').innerHTML = '&#x25BC;';
+        }
+        
+        root.appendChild(consoleWrapper);
     }
 
     // ── Actions ─────────────────────────────────────────────────────────────

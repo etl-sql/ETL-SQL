@@ -123,6 +123,80 @@ public class FoldersController(PortalDbContext db, AuditService audit) : Control
         return Ok(new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, []));
     }
 
+    [HttpPut("{id:int}")]
+    [Authorize(Roles = "Admin,Publisher")]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateFolderRequest req)
+    {
+        var folder = await db.Folders.FindAsync(id);
+        if (folder is null) return NotFound();
+
+        if (!await HasPermissionAsync(folder.Id, FolderPermission.Manage))
+            return Forbid();
+
+        bool pathChanged = false;
+        if (req.Name is not null && req.Name != folder.Name)
+        {
+            folder.Name = req.Name;
+            pathChanged = true;
+        }
+
+        if (req.ParentId.HasValue && req.ParentId != folder.ParentId)
+        {
+            if (req.ParentId == id) return BadRequest("Folder cannot be its own parent.");
+            
+            // Check for circular reference
+            var p = await db.Folders.FindAsync(req.ParentId.Value);
+            if (p is null) return NotFound("Target parent folder not found");
+            
+            var curr = p;
+            while (curr != null)
+            {
+                if (curr.Id == id) return BadRequest("Folder cannot be moved into its own descendant.");
+                curr = curr.ParentId.HasValue ? await db.Folders.FindAsync(curr.ParentId.Value) : null;
+            }
+
+            if (!await HasPermissionAsync(p.Id, FolderPermission.Manage))
+                return Forbid();
+
+            folder.ParentId = req.ParentId;
+            pathChanged = true;
+        }
+        else if (req.ParentId == null && folder.ParentId != null)
+        {
+            if (!IsAdmin) return Forbid();
+            folder.ParentId = null;
+            pathChanged = true;
+        }
+
+        if (pathChanged)
+        {
+            string parentPath = "";
+            if (folder.ParentId.HasValue)
+            {
+                var parent = await db.Folders.FindAsync(folder.ParentId.Value);
+                parentPath = parent!.Path;
+            }
+            folder.Path = parentPath == "" ? $"/{folder.Name}" : $"{parentPath}/{folder.Name}";
+            
+            // Recursively update all children's paths
+            await UpdatePathsRecursiveAsync(folder);
+        }
+
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "UPDATE_FOLDER", "Folder", id.ToString(), folder.Path);
+        return Ok(new FolderDto(folder.Id, folder.ParentId, folder.Name, folder.Path, []));
+    }
+
+    private async Task UpdatePathsRecursiveAsync(Folder folder)
+    {
+        var children = await db.Folders.Where(f => f.ParentId == folder.Id).ToListAsync();
+        foreach (var child in children)
+        {
+            child.Path = $"{folder.Path}/{child.Name}";
+            await UpdatePathsRecursiveAsync(child);
+        }
+    }
+
     [HttpDelete("{id:int}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(int id, [FromQuery] bool cascade = false)

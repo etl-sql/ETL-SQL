@@ -209,6 +209,13 @@ namespace ETL_SQL.ReportBuilder
                     });
                 }
             }
+            
+            // ── Messages ─────────────────────────────────────────────────────
+            manifest.Messages = _ctx.Messages
+                .Select(m => new LogEntryManifest(m.Message, m.Color.ToString().ToLowerInvariant(), m.Timestamp))
+                .ToList();
+
+            manifest.ExecutionTree = _ctx.Telemetry.ExecutionTree.ToSnapshot();
 
             return manifest;
         }

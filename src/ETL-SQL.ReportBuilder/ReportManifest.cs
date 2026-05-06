@@ -111,7 +111,25 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("telemetry")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public TelemetryManifest? Telemetry { get; set; }
+
+        [JsonPropertyName("messages")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<LogEntryManifest>? Messages { get; set; }
+
+        [JsonPropertyName("executionTree")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public object? ExecutionTree { get; set; }
+
+        [JsonPropertyName("error")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Error { get; set; }
     }
+
+    public record LogEntryManifest(
+        [property: JsonPropertyName("message")]   string Message,
+        [property: JsonPropertyName("color")]     string? Color,
+        [property: JsonPropertyName("timestamp")] DateTime Timestamp
+    );
 
     /// <summary>A single visual with its data snapshot and ECharts config.</summary>
     public class VisualManifest

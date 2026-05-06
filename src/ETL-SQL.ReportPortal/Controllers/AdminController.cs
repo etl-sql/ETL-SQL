@@ -134,13 +134,13 @@ public class AdminController(
     // ── Admin password reset ──────────────────────────────────────────────────
 
     [HttpPost("users/{id:int}/reset-password")]
-    public async Task<IActionResult> ResetPassword(int id, [FromBody] string newPassword)
+    public async Task<IActionResult> ResetPassword(int id, [FromBody] ResetPasswordRequest req)
     {
         var user = await userManager.FindByIdAsync(id.ToString());
         if (user is null) return NotFound();
 
         var token  = await userManager.GeneratePasswordResetTokenAsync(user);
-        var result = await userManager.ResetPasswordAsync(user, token, newPassword);
+        var result = await userManager.ResetPasswordAsync(user, token, req.NewPassword);
         if (!result.Succeeded)
             return BadRequest(new { errors = result.Errors.Select(e => e.Description) });
 
@@ -193,6 +193,27 @@ public class AdminController(
             .Select(g => new GroupDto(g.Id, g.Name, g.Description, g.UserGroups.Count))
             .FirstOrDefaultAsync(g => g.Id == id);
         return group is null ? NotFound() : Ok(group);
+    }
+
+    [HttpPut("groups/{id:int}")]
+    public async Task<IActionResult> UpdateGroup(int id, [FromBody] UpdateGroupRequest req)
+    {
+        var group = await db.Groups.FindAsync(id);
+        if (group is null) return NotFound();
+
+        if (req.Name is not null)
+        {
+            if (await db.Groups.AnyAsync(g => g.Name == req.Name && g.Id != id))
+                return Conflict(new { error = $"Group '{req.Name}' already exists" });
+            group.Name = req.Name;
+        }
+
+        if (req.Description is not null)
+            group.Description = req.Description;
+
+        await db.SaveChangesAsync();
+        await audit.LogAsync(CurrentUserId, "UPDATE_GROUP", "Group", id.ToString());
+        return NoContent();
     }
 
     [HttpDelete("groups/{id:int}")]

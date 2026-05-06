@@ -9,7 +9,8 @@ public record PublishReportRequest(
 public record UpdateReportRequest(
     string? Name,
     string? Description,
-    int? FolderId);
+    int?    FolderId,
+    string? ScriptPath);
 
 public record ReportDto(
     int Id,

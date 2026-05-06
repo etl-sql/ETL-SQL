@@ -10,6 +10,7 @@ services:
     volumes:
       - ./Reports:/app/Reports
       - ./Snapshots:/app/Snapshots
+      - ./data:/app/data
       - ./logs/orchestrator:/app/logs
     environment:
       - Jobs__UseProcessSpawning=false

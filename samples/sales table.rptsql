@@ -1,0 +1,27 @@
+SET REPORT TITLE = 'Sales Table';
+SET REPORT DESCRIPTION = 'Demonstrate how to use input parameters';
+
+DECLARE @start datetime INPUT = '2024-01-01';
+
+CREATE CONNECTION c ON FLATFILE('"C:\Users\chuck\scratch\ETL-SQL\TestData\test_sales.csv"');
+
+SELECT * INTO #sales_table FROM c.FILE;
+
+CREATE VISUAL SalesGrid AS TABLE (
+    SOURCE   = (
+        SELECT region, product, units, revenue, month, date
+        FROM #sales_table
+        WHERE CAST(date AS DATE) >= @start
+    ),
+    TITLE    = 'Sales Detail'
+);
+
+CREATE PAGE Main AS LAYOUT (
+    STRUCTURE = 'A',
+    MAP ('A' = SalesGrid)
+);
+
+-- Diagnostics
+DECLARE @cnt INT = (SELECT COUNT(*) FROM #sales_table WHERE CAST(date AS DATE) >= @start);
+PRINT 'Total number of rows: ' + CAST(@cnt AS STRING);
+PRINT 'Filter Start: ' + CAST(@start AS STRING);

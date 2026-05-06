@@ -60,7 +60,7 @@
 
         <!-- Inline new-user form -->
         <div class="card" id="newUserForm" style="display:none">
-          <div class="card-header"><h3>Create User</h3></div>
+          <div class="card-header"><h3 id="nu-title">Create User</h3></div>
           <div class="form-row">
             <div class="form-group">
               <label>Username</label>
@@ -85,11 +85,13 @@
               </select>
             </div>
           </div>
+          <div id="nu-pass-hint" style="font-size:0.8em; color:#888; margin-bottom:12px; display:none">Leave password blank to keep current.</div>
           <div id="nu-error" class="error-msg"></div>
           <div style="display:flex; gap:8px">
             <button class="btn btn-primary" id="nu-saveBtn">Create</button>
             <button class="btn btn-outline" id="nu-cancelBtn">Cancel</button>
           </div>
+          <input type="hidden" id="nu-id">
         </div>
       </div>
 
@@ -104,11 +106,17 @@
         </div>
 
         <div class="card" id="newGroupForm" style="display:none">
-          <div class="card-header"><h3>Create Group</h3></div>
+          <div class="card-header"><h3 id="ng-title">Create Group</h3></div>
           <div class="form-row">
             <div class="form-group">
               <label>Group Name</label>
               <input id="ng-name" type="text">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Description (optional)</label>
+              <input id="ng-desc" type="text">
             </div>
           </div>
           <div id="ng-error" class="error-msg"></div>
@@ -116,6 +124,7 @@
             <button class="btn btn-primary" id="ng-saveBtn">Create</button>
             <button class="btn btn-outline" id="ng-cancelBtn">Cancel</button>
           </div>
+          <input type="hidden" id="ng-id">
         </div>
 
         <!-- Members panel (shown when a group is selected) -->
@@ -151,7 +160,7 @@
         </div>
 
         <div class="card" id="newFolderForm" style="display:none">
-          <div class="card-header"><h3>Create Folder</h3></div>
+          <div class="card-header"><h3 id="nf-title">Create Folder</h3></div>
           <div class="form-row">
             <div class="form-group">
               <label>Name</label>
@@ -167,36 +176,7 @@
             <button class="btn btn-primary" id="nf-saveBtn">Create</button>
             <button class="btn btn-outline" id="nf-cancelBtn">Cancel</button>
           </div>
-        </div>
-
-        <!-- Publish Report Form -->
-        <div class="card" id="publishReportForm" style="display:none">
-          <div class="card-header"><h3>Publish New Report</h3></div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Report Name</label>
-              <input id="pr-name" type="text" placeholder="Daily Sales">
-            </div>
-            <div class="form-group">
-              <label>Script Path (relative to ScriptRoot)</label>
-              <input id="pr-path" type="text" placeholder="sales/daily.rptsql">
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label>Destination Folder</label>
-              <select id="pr-folder"></select>
-            </div>
-          </div>
-          <div class="form-group">
-            <label>Description</label>
-            <textarea id="pr-desc" rows="2" style="width:100%"></textarea>
-          </div>
-          <div id="pr-error" class="error-msg"></div>
-          <div style="display:flex; gap:8px; margin-top:12px">
-            <button class="btn btn-primary btn-sm" id="pr-saveBtn">Publish</button>
-            <button class="btn btn-outline btn-sm" id="pr-cancelBtn">Cancel</button>
-          </div>
+          <input type="hidden" id="nf-id">
         </div>
 
         <!-- ACL sub-panel -->
@@ -240,6 +220,40 @@
             </div>
           </div>
           <div id="reportsTableWrap"><div class="viewer-loading">Loading…</div></div>
+        </div>
+
+        <!-- Publish/Edit Report Form -->
+        <div class="card" id="publishReportForm" style="display:none">
+          <div class="card-header"><h3 id="pr-title">Publish New Report</h3></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Report Name</label>
+              <input id="pr-name" type="text" placeholder="Daily Sales">
+            </div>
+            <div class="form-group">
+              <label>Script Path (relative to ScriptRoot)</label>
+              <div style="display:flex; gap:8px">
+                <input id="pr-path" type="text" placeholder="sales/daily.rptsql" style="flex:1">
+                <button class="btn btn-outline btn-sm" id="pr-browseBtn" type="button">Browse…</button>
+              </div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Destination Folder</label>
+              <select id="pr-folder"></select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <textarea id="pr-desc" rows="2" style="width:100%"></textarea>
+          </div>
+          <div id="pr-error" class="error-msg"></div>
+          <div style="display:flex; gap:8px; margin-top:12px">
+            <button class="btn btn-primary btn-sm" id="pr-saveBtn">Publish</button>
+            <button class="btn btn-outline btn-sm" id="pr-cancelBtn">Cancel</button>
+          </div>
+          <input type="hidden" id="pr-id">
         </div>
       </div>
 
@@ -289,7 +303,29 @@
     <input type="hidden" id="editParamsReportId">
   </div>
 </div>
+<!-- Script Browser modal -->
+<div id="scriptBrowserModal" class="modal-overlay" style="display:none">
+  <div class="modal-card" style="width:500px">
+    <div class="card-header" style="padding:0 0 16px">
+      <h3>Select Report Script</h3>
+      <input type="text" id="sb-filter" placeholder="Filter scripts…" style="padding:4px 8px; border:1px solid #ccc; border-radius:4px; font-size:.85em; width:180px">
+    </div>
+    <div id="sb-list" style="max-height:400px; overflow-y:auto; border:1px solid #eee; border-radius:4px">
+      <div class="viewer-loading">Loading…</div>
+    </div>
+    <div id="sb-error" class="error-msg"></div>
+    <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end">
+      <button class="btn btn-outline" id="sb-cancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
 
+<style>
+  .sb-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f5f5f5; font-size: .9em; font-family: monospace; display: flex; align-items: center; gap: 8px; }
+  .sb-item:hover { background: #f0f7ff; }
+  .sb-item:last-child { border-bottom: none; }
+  .sb-item i { color: #888; font-style: normal; }
+</style>
 <script type="module">
 import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi } from '/js/api.js';
 
@@ -342,6 +378,7 @@ async function loadUsers() {
         <td><span class="chip ${u.isActive ? 'chip-active' : 'chip-inactive'}">${u.isActive ? 'Active' : 'Inactive'}</span></td>
         <td>
           <div class="table-actions">
+            <button class="btn btn-outline btn-sm" data-action="edit-user" data-id="${u.id}">Edit</button>
             <button class="btn btn-outline btn-sm" data-action="toggle" data-id="${u.id}" data-active="${u.isActive}">
               ${u.isActive ? 'Disable' : 'Enable'}
             </button>
@@ -379,11 +416,33 @@ async function handleUserAction(btn) {
     if (!pwd) return;
     await adminApi.resetPassword(id, pwd).catch(alertErr);
     alert('Password reset.');
+  } else if (action === 'edit-user') {
+    const u = allUsers.find(x => x.id == id);
+    if (!u) return;
+    document.getElementById('nu-title').textContent = 'Edit User';
+    document.getElementById('nu-saveBtn').textContent = 'Save Changes';
+    document.getElementById('nu-username').value = u.userName;
+    document.getElementById('nu-username').disabled = true; // Identity doesn't usually like username changes
+    document.getElementById('nu-email').value = u.email || '';
+    document.getElementById('nu-password').value = '';
+    document.getElementById('nu-role').value = (u.roles && u.roles[0]) || 'Viewer';
+    document.getElementById('nu-id').value = u.id;
+    document.getElementById('nu-pass-hint').style.display = '';
+    document.getElementById('newUserForm').style.display = '';
   }
 }
 
 // New user form
 document.getElementById('newUserBtn').addEventListener('click', () => {
+  document.getElementById('nu-title').textContent = 'Create User';
+  document.getElementById('nu-saveBtn').textContent = 'Create';
+  document.getElementById('nu-username').value = '';
+  document.getElementById('nu-username').disabled = false;
+  document.getElementById('nu-email').value = '';
+  document.getElementById('nu-password').value = '';
+  document.getElementById('nu-role').value = 'Viewer';
+  document.getElementById('nu-id').value = '';
+  document.getElementById('nu-pass-hint').style.display = 'none';
   document.getElementById('newUserForm').style.display = '';
 });
 document.getElementById('nu-cancelBtn').addEventListener('click', () => {
@@ -392,15 +451,27 @@ document.getElementById('nu-cancelBtn').addEventListener('click', () => {
 document.getElementById('nu-saveBtn').addEventListener('click', async () => {
   const $err = document.getElementById('nu-error');
   $err.classList.remove('show');
+  const id   = document.getElementById('nu-id').value;
   const body = {
-    userName: document.getElementById('nu-username').value.trim(),
     email:    document.getElementById('nu-email').value.trim(),
     password: document.getElementById('nu-password').value,
     role:     document.getElementById('nu-role').value
   };
-  if (!body.userName || !body.password) { $err.textContent = 'Username and password required.'; $err.classList.add('show'); return; }
+  
+  if (!id) {
+    body.userName = document.getElementById('nu-username').value.trim();
+    if (!body.userName || !body.password) { $err.textContent = 'Username and password required.'; $err.classList.add('show'); return; }
+  }
+
   try {
-    await adminApi.createUser(body);
+    if (id) {
+      await adminApi.updateUser(+id, body);
+      if (body.password) {
+        await adminApi.resetPassword(+id, body.password);
+      }
+    } else {
+      await adminApi.createUser(body);
+    }
     document.getElementById('newUserForm').style.display = 'none';
     loadUsers();
   } catch (err) { $err.textContent = err.message; $err.classList.add('show'); }
@@ -413,12 +484,13 @@ let allGroups = [];
 async function loadGroups() {
   const $wrap = document.getElementById('groupTableWrap');
   try {
-    allGroups = await adminApi.listGroups();
     const rows = allGroups.map(g => `
       <tr>
         <td>${esc(g.name)}</td>
+        <td class="text-sm text-muted">${esc(g.description || '')}</td>
         <td>
           <div class="table-actions">
+            <button class="btn btn-outline btn-sm" data-action="edit-group" data-id="${g.id}">Edit</button>
             <button class="btn btn-outline btn-sm" data-action="members" data-id="${g.id}" data-name="${esc(g.name)}">Members</button>
             <button class="btn btn-danger btn-sm" data-action="delete" data-id="${g.id}">Delete</button>
           </div>
@@ -427,8 +499,8 @@ async function loadGroups() {
 
     $wrap.innerHTML = `
       <table class="data-table">
-        <thead><tr><th>Group Name</th><th>Actions</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="2" class="empty-state">No groups.</td></tr>'}</tbody>
+        <thead><tr><th>Group Name</th><th>Description</th><th>Actions</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="3" class="empty-state">No groups.</td></tr>'}</tbody>
       </table>`;
 
     $wrap.querySelectorAll('[data-action]').forEach(btn => {
@@ -443,6 +515,15 @@ async function handleGroupAction(btn) {
     if (!confirm('Delete this group?')) return;
     await adminApi.deleteGroup(id).catch(alertErr);
     loadGroups();
+  } else if (btn.dataset.action === 'edit-group') {
+    const g = allGroups.find(x => x.id == id);
+    if (!g) return;
+    document.getElementById('ng-title').textContent = 'Edit Group';
+    document.getElementById('ng-saveBtn').textContent = 'Save Changes';
+    document.getElementById('ng-name').value = g.name;
+    document.getElementById('ng-desc').value = g.description || '';
+    document.getElementById('ng-id').value = g.id;
+    document.getElementById('newGroupForm').style.display = '';
   } else if (btn.dataset.action === 'members') {
     selectedGroupId = id;
     document.getElementById('memberGroupName').textContent = btn.dataset.name;
@@ -486,12 +567,27 @@ document.getElementById('ng-saveBtn').addEventListener('click', async () => {
   const $err = document.getElementById('ng-error');
   $err.classList.remove('show');
   const name = document.getElementById('ng-name').value.trim();
+  const desc = document.getElementById('ng-desc').value.trim();
+  const id   = document.getElementById('ng-id').value;
   if (!name) { $err.textContent = 'Name is required.'; $err.classList.add('show'); return; }
   try {
-    await adminApi.createGroup(name);
+    if (id) {
+      await adminApi.updateGroup(+id, { name, description: desc });
+    } else {
+      await adminApi.createGroup({ name, description: desc });
+    }
     document.getElementById('newGroupForm').style.display = 'none';
     loadGroups();
   } catch (err) { $err.textContent = err.message; $err.classList.add('show'); }
+});
+
+document.getElementById('newGroupBtn').addEventListener('click', () => {
+  document.getElementById('ng-title').textContent = 'Create Group';
+  document.getElementById('ng-saveBtn').textContent = 'Create';
+  document.getElementById('ng-name').value = '';
+  document.getElementById('ng-desc').value = '';
+  document.getElementById('ng-id').value = '';
+  document.getElementById('newGroupForm').style.display = '';
 });
 
 document.getElementById('addMemberBtn').addEventListener('click', async () => {
@@ -523,6 +619,7 @@ async function loadFolders() {
         <td>${esc(f.path || f.name)}</td>
         <td>
           <div class="table-actions">
+            <button class="btn btn-outline btn-sm" data-action="edit-folder" data-id="${f.id}">Edit</button>
             <button class="btn btn-outline btn-sm" data-action="acl" data-id="${f.id}" data-name="${esc(f.name)}">Permissions</button>
             <button class="btn btn-danger btn-sm" data-action="delete" data-id="${f.id}">Delete</button>
           </div>
@@ -552,6 +649,15 @@ async function handleFolderAction(btn) {
     if (!confirm('Delete this folder? Reports inside will also be removed.')) return;
     await foldersApi.delete(id, true).catch(alertErr);
     loadFolders();
+  } else if (btn.dataset.action === 'edit-folder') {
+    const f = allFolders.find(x => x.id == id);
+    if (!f) return;
+    document.getElementById('nf-title').textContent = 'Edit Folder';
+    document.getElementById('nf-saveBtn').textContent = 'Save Changes';
+    document.getElementById('nf-name').value = f.name;
+    document.getElementById('nf-parent').value = f.parentId || '';
+    document.getElementById('nf-id').value = f.id;
+    document.getElementById('newFolderForm').style.display = '';
   } else if (btn.dataset.action === 'acl') {
     selectedFolderId = id;
     document.getElementById('aclFolderName').textContent = btn.dataset.name;
@@ -597,20 +703,35 @@ document.getElementById('nf-saveBtn').addEventListener('click', async () => {
   $err.classList.remove('show');
   const name = document.getElementById('nf-name').value.trim();
   const parentId = document.getElementById('nf-parent').value || null;
+  const id = document.getElementById('nf-id').value;
   if (!name) { $err.textContent = 'Name is required.'; $err.classList.add('show'); return; }
   try {
-    await foldersApi.create(name, parentId ? +parentId : null);
+    if (id) {
+      await foldersApi.update(+id, { name, parentId: parentId ? +parentId : null });
+    } else {
+      await foldersApi.create(name, parentId ? +parentId : null);
+    }
     document.getElementById('newFolderForm').style.display = 'none';
     loadFolders();
   } catch (err) { $err.textContent = err.message; $err.classList.add('show'); }
 });
 
+document.getElementById('newFolderBtn').addEventListener('click', () => {
+  document.getElementById('nf-title').textContent = 'Create Folder';
+  document.getElementById('nf-saveBtn').textContent = 'Create';
+  document.getElementById('nf-name').value = '';
+  document.getElementById('nf-parent').value = '';
+  document.getElementById('nf-id').value = '';
+  document.getElementById('newFolderForm').style.display = '';
+});
+
 // ── Reports ────────────────────────────────────────────────────────────────────
+let allReports = [];
 async function loadReports() {
   const $wrap = document.getElementById('reportsTableWrap');
   try {
-    const reports = await adminApi.listAllReports();
-    const rows = reports.map(r => `
+    allReports = await adminApi.listAllReports();
+    const rows = allReports.map(r => `
       <tr>
         <td>${esc(r.name)}</td>
         <td class="text-sm text-muted">${esc(r.folderPath)}</td>
@@ -618,6 +739,7 @@ async function loadReports() {
         <td class="text-sm">${new Date(r.createdAt).toLocaleDateString()}</td>
         <td>
           <div class="table-actions">
+            <button class="btn btn-outline btn-sm" data-action="edit-report" data-id="${r.id}">Edit</button>
             <button class="btn btn-danger btn-sm" data-action="delete-report" data-id="${r.id}">Delete</button>
           </div>
         </td>
@@ -636,6 +758,29 @@ async function loadReports() {
         loadReports();
       });
     });
+
+    $wrap.querySelectorAll('[data-action="edit-report"]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = +btn.dataset.id;
+        const r = allReports.find(x => x.id === id);
+        if (!r) return;
+        
+        const $form = document.getElementById('publishReportForm');
+        $form.style.display = '';
+        document.getElementById('pr-title').textContent = 'Edit Report';
+        document.getElementById('pr-saveBtn').textContent = 'Save Changes';
+        document.getElementById('pr-name').value = r.name;
+        document.getElementById('pr-path').value = r.scriptPath;
+        document.getElementById('pr-desc').value = r.description || '';
+        document.getElementById('pr-id').value = r.id;
+        document.getElementById('pr-error').classList.remove('show');
+
+        const folders = allFolders.length ? allFolders : await foldersApi.list().catch(() => []);
+        const $sel = document.getElementById('pr-folder');
+        $sel.innerHTML = folders.map(f => `<option value="${f.id}">${esc(f.path || f.name)}</option>`).join('');
+        $sel.value = r.folderId;
+      });
+    });
   } catch { $wrap.innerHTML = `<div class="empty-state">Failed to load reports.</div>`; }
 }
 
@@ -644,9 +789,12 @@ document.getElementById('reportsRefreshBtn').addEventListener('click', () => loa
 document.getElementById('openPublishBtn').addEventListener('click', async () => {
   const $form = document.getElementById('publishReportForm');
   $form.style.display = '';
+  document.getElementById('pr-title').textContent = 'Publish New Report';
+  document.getElementById('pr-saveBtn').textContent = 'Publish';
   document.getElementById('pr-name').value = '';
   document.getElementById('pr-path').value = '';
   document.getElementById('pr-desc').value = '';
+  document.getElementById('pr-id').value = '';
   document.getElementById('pr-error').classList.remove('show');
 
   // Populate folder dropdown
@@ -664,6 +812,7 @@ document.getElementById('pr-saveBtn').addEventListener('click', async () => {
   const path = document.getElementById('pr-path').value.trim();
   const desc = document.getElementById('pr-desc').value.trim();
   const folderId = +document.getElementById('pr-folder').value;
+  const id = document.getElementById('pr-id').value;
   const $err = document.getElementById('pr-error');
   $err.classList.remove('show');
 
@@ -674,19 +823,66 @@ document.getElementById('pr-saveBtn').addEventListener('click', async () => {
   }
 
   try {
-    await reportsApi.create({
-      folderId: folderId,
-      name,
-      description: desc,
-      scriptPath: path
-    });
+    if (id) {
+      await reportsApi.update(+id, { name, scriptPath: path, description: desc, folderId });
+    } else {
+      await reportsApi.create({ name, scriptPath: path, description: desc, folderId });
+    }
     document.getElementById('publishReportForm').style.display = 'none';
     loadReports();
-    alert('Report published successfully.');
+    alert(id ? 'Report updated successfully.' : 'Report published successfully.');
   } catch (err) {
-    $err.textContent = err.message || 'Failed to publish report.';
+    $err.textContent = err.message || 'Failed to save report.';
     $err.classList.add('show');
   }
+});
+
+// ── Script Browser ─────────────────────────────────────────────────────────────
+let allAvailableScripts = [];
+
+document.getElementById('pr-browseBtn').addEventListener('click', async () => {
+  const $modal = document.getElementById('scriptBrowserModal');
+  const $list  = document.getElementById('sb-list');
+  $modal.style.display = 'flex';
+  $list.innerHTML = '<div class="viewer-loading">Loading scripts…</div>';
+  document.getElementById('sb-filter').value = '';
+
+  try {
+    allAvailableScripts = await reportsApi.listAvailableScripts();
+    renderScriptBrowserList(allAvailableScripts);
+  } catch (err) {
+    document.getElementById('sb-error').textContent = err.message;
+    document.getElementById('sb-error').classList.add('show');
+  }
+});
+
+function renderScriptBrowserList(scripts) {
+  const $list = document.getElementById('sb-list');
+  if (!scripts.length) {
+    $list.innerHTML = '<div class="empty-state">No .rptsql files found in ScriptRoot.</div>';
+    return;
+  }
+  $list.innerHTML = scripts.map(s => `
+    <div class="sb-item" data-path="${esc(s)}">
+      <i>📄</i> ${esc(s)}
+    </div>`).join('');
+
+  $list.querySelectorAll('.sb-item').forEach(el => {
+    el.addEventListener('click', () => {
+      document.getElementById('pr-path').value = el.dataset.path;
+      document.getElementById('scriptBrowserModal').style.display = 'none';
+    });
+  });
+}
+
+document.getElementById('sb-filter').addEventListener('input', e => {
+  const q = e.target.value.toLowerCase();
+  const filtered = allAvailableScripts.filter(s => s.toLowerCase().includes(q));
+  renderScriptBrowserList(filtered);
+});
+
+document.getElementById('sb-cancelBtn').addEventListener('click', () => {
+  document.getElementById('scriptBrowserModal').style.display = 'none';
 });
 
 // ── Audit log ──────────────────────────────────────────────────────────────────

@@ -188,7 +188,20 @@ namespace ETL_SQL.ReportPlayer
 
                 // 30s timeout prevents infinite loops from deadlocking the lock forever
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-                await evaluator.Evaluate(script, cts.Token);
+                
+                try
+                {
+                    await evaluator.Evaluate(script, cts.Token);
+                }
+                catch (Exception ex)
+                {
+                    // Build a "failure" manifest that still contains the logs and execution tree
+                    var failBuilder = new ManifestBuilder(evaluator);
+                    _evaluator       = evaluator;
+                    _manifest        = await failBuilder.BuildAsync(_scriptPath);
+                    _manifest.Error  = ex.Message;
+                    return _manifest;
+                }
 
                 var builder   = new ManifestBuilder(evaluator);
                 _evaluator    = evaluator;

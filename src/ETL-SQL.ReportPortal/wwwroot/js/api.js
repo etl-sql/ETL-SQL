@@ -120,6 +120,7 @@ export const authApi = {
 export const foldersApi = {
     list: ()                  => apiJson('/api/folders'),
     create: (name, parentId)  => apiJson('/api/folders', { method: 'POST', body: { name, parentId } }),
+    update: (id, body)        => apiJson(`/api/folders/${id}`, { method: 'PUT', body }),
     delete: (id, cascade)     => apiJson(`/api/folders/${id}?cascade=${!!cascade}`, { method: 'DELETE' }),
     listAcl: (id)             => apiJson(`/api/folders/${id}/acl`),
     grantAcl: (id, groupId, permission) =>
@@ -154,7 +155,8 @@ export const reportsApi = {
 
     exportUrl: (id, format) => `/api/reports/${id}/export/${format}`,
 
-    getParameters: (id) => apiJson(`/api/reports/${id}/parameters`)
+    getParameters: (id) => apiJson(`/api/reports/${id}/parameters`),
+    listAvailableScripts: () => apiJson('/api/reports/available-scripts')
 };
 
 // ── Subscriptions ──────────────────────────────────────────────────────────────
@@ -183,7 +185,8 @@ export const adminApi = {
 
     // groups
     listGroups:      ()           => apiJson('/api/admin/groups'),
-    createGroup:     (name)       => apiJson('/api/admin/groups',    { method: 'POST',   body: { name } }),
+    createGroup:     (body)       => apiJson('/api/admin/groups',    { method: 'POST',   body }),
+    updateGroup:     (id, body)   => apiJson(`/api/admin/groups/${id}`, { method: 'PUT', body }),
     deleteGroup:     (id)         => apiJson(`/api/admin/groups/${id}`, { method: 'DELETE' }),
     listMembers:     (id)         => apiJson(`/api/admin/groups/${id}/members`),
     addMember:       (id, userId) => apiJson(`/api/admin/groups/${id}/members`,

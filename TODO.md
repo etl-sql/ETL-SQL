@@ -1,9 +1,44 @@
 # ETL-SQL Development Roadmap
 ## Up Next
-- [x] **Do file operation functions work with Directory CONNECTION?** Verified: CREATE, COPY, SELECT, FILE_LIST all work with connection aliases. Updated Grammar.md and Specialized_Operations.md.
-- [x] **Fix Portal Markdown tables** Updated `renderText` in `report-runtime.js` to use `marked` library.
-- [x] **Fix Portal MULTISELECT visual** Re-implemented as checkbox list in `report-runtime.js`.
-- [x] **Fix Slicer North/South issue** Currently investigating session refresh/caching behavior in the portal.
+- [ ] **Portal 
+
+- [ ] **Persistence awesome and not awesome**  Persistence can be great especially if you're working with a big query and you want to run just parts of it and you have variables and temp tables up high.  But its not great a lot of the time.  I think we need to make it work like this.  If the user has SET PERSIST ON; then everything works like it does right now saving sessions ect.  If the has SET PERSIST OFF; or nothing this will be the default then every time you execute it will be from scratch.  Nothing is saved and the session is completely blank.
+
+- [ ] **Need to add VISUALS** We need to add some visuals to the reports that are not charts
+CHECKBOX (true/false)  
+TEXTBOX (string/numbers)  
+
+```sql
+CREATE VISUAL chk AS CHECKBOX (
+  TITLE = 'My Checkbox',
+  VALUE = true,
+  TOOLTIP = 'A simple checkbox'
+);
+
+CREATE VISUAL txbox AS TEXTBOX (
+  TITLE = 'My Textbox',
+  VALUE = 'Hello World',
+  TOOLTIP = 'A simple textbox'
+  FORMAT = '{0}'  
+);
+
+```
+
+- [ ] **Button Visual custom actions** The button visual currently has back, refresh and export.  We need to add the ability for it to run an ETL-SQL script.  The script can be either code or a RUN SCRIPT command that runs a script file.  The script can also use input parameters that are passed to it from the report.
+
+- [ ] **Kitchen Sink report**  We need to add CHECKBOX, TEXTBOX, and Conditional formatting to the TABLE for the kitchen sink report: C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\report_kitchen_sink.rptsql.
+
+- [ ] **Script issue**  The following script works fine in TUI and VS Code but does not show the table in the report portal: C:\Users\chuck\scratch\ETL-SQL\samples\sales table.rptsql
+
+- [ ] **Reports with input parameters**  We already have this in subscriptions but we'll need to add this to regular reports too.  If they have input parameters they should be shown and need to be entered before the user can run the report.  
+The input parameters based on type will have these default controls:
+Dates = DATEPICKER
+RELDATE = RELDATEPICKER (e.g. -2 days)
+BOOL = CHECKBOX (true/false)
+TEXT = TEXTBOX with format option
+NUM = TEXTBOX with number format option
+LIST = MULTISELECT (list of values)
+
 
 - [ ] **Lineage & Data Governance — Full Feature Set** *(priority — core selling feature)* — See `Docs/Strategy/Lineage_Strategy.md` for the complete design. Reference documentation for standard tags and usage: `Docs/Reference/Lineage.md`.
     - **Phase 1 — Standard Tag Library & Reference Docs** ✓: Define the 20 standard tags (`@pii`, `@phi`, `@pci`, `@sensitive`, `@classification`, `@encrypted_at_rest`, `@owner`, `@domain`, `@steward`, `@contact`, `@freshness`, `@sla`, `@quality`, `@nullable`, `@d`, `@example`, `@unit`, `@format`, `@source_system`, `@source_table`, `@load_pattern`). Created `Docs/Reference/Lineage.md`. Rewrote `Help/Operations/LINEAGE.md`. Added `LanguageMetadata.StandardTags` set. Added `@`-prefix completions with docs to `LanguageService`. @pii: true-wins inheritance implemented.

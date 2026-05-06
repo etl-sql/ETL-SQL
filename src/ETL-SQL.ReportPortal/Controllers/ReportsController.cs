@@ -15,8 +15,19 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [ApiController]
 [Route("api")]
 [Authorize]
-public class ReportsController(PortalDbContext db, AuditService audit, PortalConfig config) : ControllerBase
+public class ReportsController : ControllerBase
 {
+    private readonly PortalDbContext db;
+    private readonly AuditService audit;
+    private readonly PortalConfig portalConfig;
+
+    public ReportsController(PortalDbContext db, AuditService audit, PortalConfig portalConfig)
+    {
+        this.db = db;
+        this.audit = audit;
+        this.portalConfig = portalConfig;
+    }
+
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
@@ -96,8 +107,8 @@ public class ReportsController(PortalDbContext db, AuditService audit, PortalCon
 
         // Resolve path within ScriptRootPath
         var resolved = Path.GetFullPath(req.ScriptPath,
-            Path.GetFullPath(config.ScriptRootPath));
-        if (!resolved.StartsWith(Path.GetFullPath(config.ScriptRootPath), StringComparison.OrdinalIgnoreCase))
+            Path.GetFullPath(portalConfig.ScriptRootPath));
+        if (!resolved.StartsWith(Path.GetFullPath(portalConfig.ScriptRootPath), StringComparison.OrdinalIgnoreCase))
             return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
 
         var lastModified = System.IO.File.Exists(resolved)
@@ -167,6 +178,26 @@ public class ReportsController(PortalDbContext db, AuditService audit, PortalCon
                 return Forbid();
             report.FolderId = req.FolderId.Value;
         }
+
+        if (req.ScriptPath is not null)
+        {
+            var scriptRoot = portalConfig.ScriptRootPath;
+            if (string.IsNullOrWhiteSpace(scriptRoot))
+                return BadRequest(new { error = "ScriptRootPath is not configured." });
+
+            var resolved = Path.GetFullPath(req.ScriptPath, Path.GetFullPath(scriptRoot));
+            if (!resolved.StartsWith(Path.GetFullPath(scriptRoot), StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
+
+            if (!System.IO.File.Exists(resolved))
+                return BadRequest(new { error = $"Script file not found: {req.ScriptPath}" });
+
+            report.ScriptPath = resolved;
+            var bytes = await System.IO.File.ReadAllBytesAsync(resolved);
+            report.PublishedScriptHash = "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+            report.ScriptLastModified  = System.IO.File.GetLastWriteTimeUtc(resolved);
+        }
+
         report.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "UPDATE_REPORT", "Report", id.ToString());
@@ -238,6 +269,24 @@ public class ReportsController(PortalDbContext db, AuditService audit, PortalCon
         return NoContent();
     }
 
+    // ── GET /api/reports/available-scripts ───────────────────────────────────
+
+    [HttpGet("reports/available-scripts")]
+    [Authorize(Roles = "Admin,Publisher")]
+    public IActionResult GetAvailableScripts()
+    {
+        var root = portalConfig.ScriptRootPath;
+        if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root)) 
+            return Ok(Array.Empty<string>());
+
+        var files = Directory.GetFiles(root, "*.rptsql", SearchOption.AllDirectories)
+            .Select(f => Path.GetRelativePath(root, f).Replace('\\', '/'))
+            .OrderBy(f => f)
+            .ToList();
+
+        return Ok(files);
+    }
+
     // ── GET /api/maps/custom ─────────────────────────────────────────────────
 
     [HttpGet("maps/custom")]
@@ -247,7 +296,7 @@ public class ReportsController(PortalDbContext db, AuditService audit, PortalCon
         if (string.IsNullOrWhiteSpace(path)) return BadRequest("Path is required");
 
         // Zero-trust check: path must be within ScriptRootPath or the local maps folder
-        var rootPath = Path.GetFullPath(config.ScriptRootPath);
+        var rootPath = Path.GetFullPath(portalConfig.ScriptRootPath);
         var resolved = Path.GetFullPath(path, rootPath);
 
         if (!resolved.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))

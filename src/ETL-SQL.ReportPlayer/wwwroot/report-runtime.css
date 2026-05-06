@@ -83,3 +83,52 @@
   body.preview-mode .nav-bar, body.preview-mode footer { display: none !important; }
   body.preview-mode .visual-card { border: none; box-shadow: none; margin: 0; padding: 8px; }
   body.preview-mode .page-grid { gap: 8px; padding: 8px; }
+
+  /* Pipeline Console */
+  .pipeline-console {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #1e1e1e; color: #d4d4d4;
+    font-family: 'Consolas', 'Monaco', monospace; font-size: 13px;
+    z-index: 2000; border-top: 1px solid #444;
+    display: flex; flex-direction: column;
+    transition: height 0.2s ease; height: 300px;
+  }
+  .pipeline-console.collapsed { height: 32px; overflow: hidden; }
+  .pipeline-header {
+    display: flex; justify-content: space-between; padding: 6px 12px;
+    background: #2d2d2d; border-bottom: 1px solid #444; cursor: pointer;
+    font-weight: bold; font-family: -apple-system, sans-serif; font-size: 14px;
+    user-select: none;
+  }
+  .pipeline-header:hover { background: #3d3d3d; }
+  .pipeline-body {
+    display: flex; flex: 1; min-height: 0;
+  }
+  .pipeline-pane {
+    flex: 1; overflow: auto; padding: 12px;
+  }
+  .pipeline-pane.left-pane { border-right: 1px solid #444; }
+  .pane-title { color: #888; font-size: 11px; text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.05em; font-family: -apple-system, sans-serif; }
+  
+  /* Tree */
+  .tree-node { margin-top: 4px; }
+  .tree-node-content { display: flex; align-items: center; padding: 2px 0; }
+  .tree-children { margin-left: 16px; border-left: 1px solid #444; padding-left: 8px; }
+  .tree-icon { width: 14px; display: inline-block; text-align: center; margin-right: 6px; cursor: pointer; user-select: none; }
+  .node-name { font-weight: bold; color: #dcdcaa; margin-right: 8px; }
+  .node-meta { color: #888; font-size: 0.9em; }
+  
+  /* Status Colors */
+  .status-Completed { color: #4ec9b0; }
+  .status-Failed { color: #f48771; }
+  .status-Running { color: #cecece; }
+  .status-Warning { color: #d7ba7d; }
+
+  /* Messages */
+  .log-entry { margin-bottom: 4px; line-height: 1.4; word-wrap: break-word; }
+  .log-time { color: #888; margin-right: 8px; }
+  .log-gray { color: #888; }
+  .log-red { color: #f48771; }
+  .log-yellow { color: #d7ba7d; }
+  .log-green { color: #4ec9b0; }
+  .log-white { color: #d4d4d4; }

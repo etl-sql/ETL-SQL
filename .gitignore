@@ -53,6 +53,7 @@ bld/
 Snapshots/
 Reports/
 publish_test/
+data/
 
 ## OS
 Thumbs.db

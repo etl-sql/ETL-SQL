@@ -149,8 +149,8 @@ namespace ETL_SQL.TUI.UI
         public Task<IEnumerable<string>> GetTempTablesAsync(string? uri = null) => Task.FromResult(Enumerable.Empty<string>());
         public void RegisterTempTable(string uri, string name, List<string> columns) { }
         public void ClearTempTables(string uri) { }
-        public IEnumerable<string> GetRegisteredNames() => ConnectorRegistry.Instance.GetRegisteredNames();
-        public IConnector? GetConnector(string name) => ConnectorRegistry.Instance.GetConnector(name);
+        public IEnumerable<string> GetRegisteredNames() => ConnectorRegistry.Instance?.GetRegisteredNames() ?? Enumerable.Empty<string>();
+        public IConnector? GetConnector(string name) => ConnectorRegistry.Instance?.GetConnector(name);
         public void ClearCache() { }
         public void ClearCacheForUri(string uri) { }
         public bool DebugMode { get; set; }
