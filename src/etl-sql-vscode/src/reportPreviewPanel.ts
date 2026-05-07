@@ -4,7 +4,7 @@
  * Opens a VS Code WebviewPanel for .rptsql files.
  * Runs `ETL-SQL-Report build --format json` on the active file,
  * injects the resulting ReportManifest as window.__MANIFEST__,
- * and loads the shared report-runtime.js + Chart.js for rendering.
+ * and loads the shared report-runtime.js + echarts.min.js for rendering.
  *
  * Auto-refreshes when the .rptsql file is saved.
  */
@@ -52,7 +52,13 @@ export class ReportPreviewPanel {
             message => {
                 switch (message.type) {
                     case 'refreshReport':
-                        this._refreshContent(message.parameters, /* usePostMessage */ true);
+                        this._refreshContent(message.parameters, /* usePostMessage */ true, message.isInteraction);
+                        break;
+                    case 'exportReport':
+                        this._handleExport(message.format);
+                        break;
+                    case 'serve':
+                        vscode.commands.executeCommand('etlsql.launchInBrowser', vscode.Uri.file(this._scriptPath));
                         break;
                 }
             },
@@ -88,7 +94,7 @@ export class ReportPreviewPanel {
      *  usePostMessage=true sends the manifest via postMessage instead of replacing
      *  the HTML, preserving React state (e.g. slicer selection) across refreshes.
      */
-    private _refreshContent(parameters?: Record<string, string | null>, usePostMessage = false): void {
+    private _refreshContent(parameters?: Record<string, string | null>, usePostMessage = false, isInteraction = false): void {
         if (parameters) {
             this._parameters = { ...this._parameters, ...parameters };
         }
@@ -98,7 +104,7 @@ export class ReportPreviewPanel {
             this._panel.webview.html = this._getLoadingHtml();
         }
 
-        this._buildManifest((err, manifest) => {
+        this._buildManifest(isInteraction, (err, manifest) => {
             if (err || !manifest) {
                 this._panel.webview.html = this._getErrorHtml(err ?? 'No manifest produced');
                 return;
@@ -112,8 +118,70 @@ export class ReportPreviewPanel {
         });
     }
 
+    private async _handleExport(format: string): Promise<void> {
+        const filters: Record<string, string[]> = {};
+        let defaultExtension = '';
+
+        switch (format) {
+            case 'markdown':
+                filters['Markdown'] = ['md'];
+                defaultExtension = 'md';
+                break;
+            case 'pdf':
+                filters['PDF'] = ['pdf'];
+                defaultExtension = 'pdf';
+                break;
+            case 'text':
+                filters['Text'] = ['txt'];
+                defaultExtension = 'txt';
+                break;
+        }
+
+        const uri = await vscode.window.showSaveDialog({
+            defaultUri: vscode.Uri.file(this._scriptPath.replace(/\.rptsql$/, '.' + defaultExtension)),
+            filters
+        });
+
+        if (!uri) return;
+
+        const { exe, baseArgs } = this._resolveCliCall();
+        const args = [...baseArgs];
+        
+        if (format === 'text') {
+            args.push('print', this._scriptPath, '--output', uri.fsPath);
+        } else {
+            args.push('build', this._scriptPath, '--output', uri.fsPath, '--format', format === 'text' ? 'md' : format);
+        }
+
+        // Add parameters
+        for (const [key, val] of Object.entries(this._parameters)) {
+            if (val !== null) args.push('--parameter', `${key}=${val}`);
+        }
+
+        vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: `Exporting report as ${format.toUpperCase()}...`,
+            cancellable: false
+        }, async () => {
+            return new Promise<void>((resolve, reject) => {
+                const proc = cp.spawn(exe, args, { shell: false });
+                let stderr = '';
+                proc.stderr.on('data', d => stderr += d.toString());
+                proc.on('close', code => {
+                    if (code === 0) {
+                        vscode.window.showInformationMessage(`Report exported successfully to ${path.basename(uri.fsPath)}`);
+                        resolve();
+                    } else {
+                        vscode.window.showErrorMessage(`Export failed: ${stderr}`);
+                        reject(new Error(stderr));
+                    }
+                });
+            });
+        });
+    }
+
     /** Spawns `ETL-SQL-Report build --format json` and returns the parsed manifest. */
-    private async _buildManifest(callback: (err: string | null, manifest: any | null) => void): Promise<void> {
+    private async _buildManifest(isInteraction: boolean, callback: (err: string | null, manifest: any | null) => void): Promise<void> {
         const outputPath = path.join(os.tmpdir(), `etlsql-preview-${Date.now()}.json`);
         const { exe, baseArgs } = this._resolveCliCall();
         
@@ -139,6 +207,10 @@ export class ReportPreviewPanel {
         }
 
         const args = [...baseArgs, 'build', targetPath, '--output', outputPath, '--format', 'json'];
+
+        if (isInteraction) {
+            args.push('--interaction');
+        }
 
         // Add parameters
         for (const [key, val] of Object.entries(this._parameters)) {
@@ -209,31 +281,31 @@ export class ReportPreviewPanel {
         const webview = this._panel.webview;
         const nonce   = this._nonce();
         
-        try {
-            // Path to the built React app
-            const indexPath = vscode.Uri.joinPath(this._extensionUri, 'ui', 'dist', 'index.html');
-            let html = fs.readFileSync(indexPath.fsPath, 'utf8');
+        const runtimeJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'report-runtime.js'));
+        const runtimeCssUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'report-runtime.css'));
+        const echartsJsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'echarts.min.js'));
 
-            // Inject nonce, view type, and initial manifest
-            const manifestJson = JSON.stringify(manifest).replace(/</g, '\\u003c');
-            const inject = `
-                <script nonce="${nonce}">
-                    window.VIEW_TYPE = 'report';
-                    window.__INITIAL_STATE__ = { 
-                        messages: [ ${manifestJson} ]
-                    };
-                </script>`;
-            
-            html = html.replace(/<head>/, `<head>${inject}`);
-            html = html.replace(/<script type="module"/g, `<script type="module" nonce="${nonce}"`);
-            
-            const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource} https://fonts.gstatic.com; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:;">`;
-            html = html.replace(/<head>/, `<head>${csp}`);
+        const manifestJson = JSON.stringify(manifest).replace(/</g, '\\u003c');
 
-            return html;
-        } catch (err) {
-            return this._getErrorHtml(`Failed to load React UI: ${err}`);
-        }
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource};">
+    <link rel="stylesheet" href="${runtimeCssUri}">
+    <title>${manifest.title || 'ETL-SQL Report'}</title>
+</head>
+<body class="vscode-theme">
+    <div id="root"></div>
+    <script nonce="${nonce}">
+        // Injected manifest for the shared runtime
+        window.__MANIFEST__ = ${manifestJson};
+    </script>
+    <script nonce="${nonce}" src="${echartsJsUri}"></script>
+    <script nonce="${nonce}" src="${runtimeJsUri}"></script>
+</body>
+</html>`;
     }
 
     private _getLoadingHtml(): string {

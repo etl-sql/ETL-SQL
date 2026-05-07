@@ -19,32 +19,58 @@ namespace ETL_SQL.ReportPlayer
         public static async Task<int> RefreshAffectedVisualsAsync(
             Evaluator evaluator, 
             ReportManifest manifest, 
-            IEnumerable<(string Name, string Value)> updates)
+            IEnumerable<(string Name, string Value)> updates,
+            bool isInteraction = false)
         {
             var logger = evaluator.Logger;
             var affectedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var interactionValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var (name, value) in updates)
             {
                 var varName = name.StartsWith('@') ? name : '@' + name;
-                evaluator.DeclareVariable(varName, value, new VariableMetadata { IsInput = true });
                 affectedNames.Add(name.TrimStart('@'));
-                manifest.Parameters[varName] = value;
+
+                if (isInteraction)
+                {
+                    interactionValues[varName] = value;
+                }
+                else
+                {
+                    // Global Update: Apply permanently to Evaluator and Manifest
+                    evaluator.DeclareVariable(varName, value, new VariableMetadata { IsInput = true });
+                    manifest.Parameters[varName] = value;
+                }
             }
 
-            logger.Debug($"[DashboardSharedLogic] Refreshing visuals affected by: {string.Join(", ", affectedNames)}");
+            logger.Debug($"[DashboardSharedLogic] Refreshing visuals affected by: {string.Join(", ", affectedNames)} (Interaction: {isInteraction})");
 
             var builder = new ManifestBuilder(evaluator);
             int refreshCount = 0;
 
             foreach (var visualDef in evaluator.ReportContext.VisualDefinitions.Values)
             {
-                if (affectedNames.Any(n => DependsOnVariable(visualDef, n)))
+                // Visual is affected if it directly uses the variable.
+                // For interactions (Highlight), we ALWAYS refresh visuals that are marked for it.
+                bool isAffected = affectedNames.Any(n => DependsOnVariable(visualDef, n));
+                
+                if (isAffected)
                 {
                     var existingVm = manifest.Visuals.FirstOrDefault(v => v.Name == visualDef.Name);
                     if (existingVm != null)
                     {
                         logger.Debug($"[DashboardSharedLogic] Refreshing visual: {visualDef.Name}");
-                        await builder.RefreshVisualAsync(visualDef, existingVm);
+                        
+                        // If it's an interaction, we need to pass the selection values down to the visual builder
+                        // for the double-fetch logic.
+                        if (isInteraction)
+                        {
+                            await RefreshVisualWithInteractionAsync(builder, visualDef, existingVm, interactionValues);
+                        }
+                        else
+                        {
+                            await builder.RefreshVisualAsync(visualDef, existingVm);
+                        }
                         refreshCount++;
                     }
                     else
@@ -56,6 +82,15 @@ namespace ETL_SQL.ReportPlayer
 
             logger.Debug($"[DashboardSharedLogic] Refresh complete. {refreshCount} visuals updated.");
             return refreshCount;
+        }
+
+        private static async Task RefreshVisualWithInteractionAsync(ManifestBuilder builder, CreateVisualStatement visualDef, VisualManifest vm, Dictionary<string, string> interactionValues)
+        {
+            // We reuse the existing builder but we need it to be interaction-aware.
+            // Since ManifestBuilder is a facade, we can use a temporary side-channel or 
+            // a dedicated method if we added one. 
+            // Let's add an overload to RefreshVisualAsync.
+            await builder.RefreshVisualAsync(visualDef, vm, interactionValues);
         }
 
         public static bool DependsOnVariable(CreateVisualStatement visual, string variableName)

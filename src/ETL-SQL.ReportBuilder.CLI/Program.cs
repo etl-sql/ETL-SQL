@@ -42,6 +42,7 @@ namespace ETL_SQL.ReportBuilder.CLI
             string? scriptPath = null;
             string? outputPath = null;
             string  format     = "md";
+            bool    isInteraction = false;
             var     parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             for (int i = 1; i < args.Length; i++)
@@ -53,6 +54,9 @@ namespace ETL_SQL.ReportBuilder.CLI
                         break;
                     case "--format": case "-f":
                         format = i + 1 < args.Length ? args[++i].ToLowerInvariant() : "md";
+                        break;
+                    case "--interaction":
+                        isInteraction = true;
                         break;
                     case "--parameter": case "-p":
                         if (i + 1 < args.Length)
@@ -70,11 +74,17 @@ namespace ETL_SQL.ReportBuilder.CLI
             if (scriptPath == null) { Console.Error.WriteLine("error: no script path specified."); PrintUsage(); return 1; }
             if (!File.Exists(scriptPath)) { Console.Error.WriteLine($"error: script file not found: {scriptPath}"); return 1; }
 
-            var (evaluator, err) = await EvaluateScriptFile(scriptPath, parameters);
+            // In one-shot mode, we evaluate the script.
+            // If it's an interaction, we want the "Universe" to be the state with baseline parameters
+            // and the "Selection" to be the state with current parameters.
+            // However, the CLI doesn't have a "warm" session.
+            // So we treat the provided parameters as the interaction values if it's an interaction.
+            var (evaluator, err) = await EvaluateScriptFile(scriptPath, isInteraction ? null : parameters);
             if (evaluator == null) { Console.Error.WriteLine($"error: {err}"); return 2; }
 
             var builder  = new ManifestBuilder(evaluator);
-            var manifest = await builder.BuildAsync(scriptPath);
+            var manifest = await builder.BuildAsync(scriptPath, isInteraction ? parameters : null);
+            manifest.IsInteraction = isInteraction;
 
             string ext = format switch { "json" => ".report.json", "pdf" => ".report.pdf", _ => ".report.md" };
             if (outputPath == null)
@@ -132,6 +142,7 @@ namespace ETL_SQL.ReportBuilder.CLI
         private static async Task<int> PrintCommand(string[] args)
         {
             string? scriptPath = null;
+            string? outputPath = null;
             var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             for (int i = 1; i < args.Length; i++)
@@ -144,20 +155,61 @@ namespace ETL_SQL.ReportBuilder.CLI
                         parameters[pair[0]] = pair.Length > 1 ? pair[1] : string.Empty;
                     }
                 }
+                else if (args[i] == "--output" || args[i] == "-o")
+                {
+                    outputPath = i + 1 < args.Length ? args[++i] : null;
+                }
                 else if (!args[i].StartsWith("-")) scriptPath = args[i];
             }
 
             if (scriptPath == null) { Console.Error.WriteLine("error: no script path specified."); return 1; }
             if (!File.Exists(scriptPath)) { Console.Error.WriteLine($"error: script file not found: {scriptPath}"); return 1; }
 
-            AnsiConsole.MarkupLine($"[bold blue]ETL-SQL Report Printer[/]");
-            AnsiConsole.MarkupLine($"[grey]Executing {Path.GetFileName(scriptPath)}...[/]");
+            if (outputPath == null)
+            {
+                AnsiConsole.MarkupLine($"[bold blue]ETL-SQL Report Printer[/]");
+                AnsiConsole.MarkupLine($"[grey]Executing {Path.GetFileName(scriptPath)}...[/]");
+            }
 
             var (evaluator, err) = await EvaluateScriptFile(scriptPath, parameters);
-            if (evaluator == null) { AnsiConsole.MarkupLine($"[red]error: {err}[/]"); return 2; }
+            if (evaluator == null) { 
+                if (outputPath == null) AnsiConsole.MarkupLine($"[red]error: {err}[/]"); 
+                else await File.WriteAllTextAsync(outputPath, $"error: {err}");
+                return 2; 
+            }
 
             var manifest = await new ManifestBuilder(evaluator).BuildAsync(scriptPath);
             
+            if (outputPath != null)
+            {
+                // Capture output to a string and strip ANSI
+                var console = AnsiConsole.Create(new AnsiConsoleSettings {
+                    Ansi = AnsiSupport.No,
+                    ColorSystem = ColorSystemSupport.NoColors,
+                    Interactive = InteractionSupport.No,
+                    Out = new AnsiConsoleOutput(new StringWriter())
+                });
+
+                if (manifest.Pages.Count == 0)
+                {
+                    foreach (var visual in manifest.Visuals) {
+                        console.Write(TerminalRenderer.RenderVisual(visual));
+                        console.WriteLine();
+                    }
+                }
+                else
+                {
+                    foreach (var page in manifest.Pages) {
+                        console.Write(TerminalRenderer.RenderPage(page, manifest));
+                        console.WriteLine();
+                    }
+                }
+
+                var text = ((StringWriter)console.Profile.Out.Writer).ToString();
+                await File.WriteAllTextAsync(outputPath, text);
+                return 0;
+            }
+
             if (manifest.Pages.Count == 0)
             {
                 AnsiConsole.MarkupLine("[yellow]No pages defined. Printing all visuals in sequence...[/]");
@@ -229,10 +281,13 @@ namespace ETL_SQL.ReportBuilder.CLI
             string? scriptPath   = null;
             string? manifestPath = null;
 
+            int?    portArg      = null;
             for (int i = 1; i < args.Length; i++)
             {
                 if ((args[i] == "--manifest" || args[i] == "-m") && i + 1 < args.Length)
                     manifestPath = args[++i];
+                else if ((args[i] == "--port" || args[i] == "-p") && i + 1 < args.Length && int.TryParse(args[++i], out int p))
+                    portArg = p;
                 else if (!args[i].StartsWith("-"))
                     scriptPath = args[i];
             }
@@ -260,6 +315,8 @@ namespace ETL_SQL.ReportBuilder.CLI
             string playerArg = multiMode
                 ? $"--manifest \"{Path.GetFullPath(manifestPath!)}\""
                 : $"\"{Path.GetFullPath(scriptPath!)}\"";
+            
+            if (portArg.HasValue) playerArg += $" --port {portArg.Value}";
 
             // Resolve the ReportPlayer project for dotnet run (development mode)
             var selfDir      = AppContext.BaseDirectory;
@@ -295,22 +352,52 @@ namespace ETL_SQL.ReportBuilder.CLI
             if (multiMode)
             {
                 Console.WriteLine($"Starting ReportPlayer with manifest: {manifestPath}");
-                Console.WriteLine("Catalog will be available at http://localhost:5200");
             }
             else
             {
                 Console.WriteLine($"Starting ReportPlayer for: {scriptPath}");
-                Console.WriteLine("Dashboard will be available at http://localhost:5200");
             }
 
-            var psi = new ProcessStartInfo(exe, exeArgs) { UseShellExecute = false };
-            using var proc = Process.Start(psi);
-            if (proc == null) { Console.Error.WriteLine("error: Failed to start ReportPlayer."); return 1; }
+            var psi = new ProcessStartInfo(exe, exeArgs) 
+            { 
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+            
+            using var proc = new Process { StartInfo = psi };
+            
+            string? boundUrl = null;
+            proc.OutputDataReceived += (s, e) => {
+                if (e.Data == null) return;
+                Console.WriteLine(e.Data);
+                if (e.Data.StartsWith("REPORT_URL="))
+                {
+                    boundUrl = e.Data.Substring("REPORT_URL=".Length).Trim();
+                }
+            };
+            proc.ErrorDataReceived += (s, e) => {
+                if (e.Data != null) Console.Error.WriteLine(e.Data);
+            };
 
-            // Open browser after a short delay
-            await Task.Delay(2500);
-            try { Process.Start(new ProcessStartInfo("http://localhost:5200") { UseShellExecute = true }); }
-            catch { /* browser open is best-effort */ }
+            if (!proc.Start()) { Console.Error.WriteLine("error: Failed to start ReportPlayer."); return 1; }
+            
+            proc.BeginOutputReadLine();
+            proc.BeginErrorReadLine();
+
+            // Wait up to 5s for the URL to be reported
+            for (int i = 0; i < 50 && boundUrl == null; i++) {
+                await Task.Delay(100);
+            }
+
+            if (boundUrl != null)
+            {
+                // Note: We use the boundUrl from the child process output
+                try {
+                    Process.Start(new ProcessStartInfo(boundUrl) { UseShellExecute = true });
+                }
+                catch { /* browser open is best-effort */ }
+            }
 
             await proc.WaitForExitAsync();
             return proc.ExitCode;

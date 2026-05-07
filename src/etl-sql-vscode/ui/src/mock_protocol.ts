@@ -91,5 +91,12 @@ export const mockTrace: ProtocolMessage[] = [
         { name: '@process_date', value: '2026-04-25', typeName: 'DATE' },
     ]},
 
+    { type: 'reportManifest', source: 'mock:///report.rptsql', title: 'Sales Performance', description: 'Annual breakdown of sales by region and category', builtAt: new Date().toISOString(), parameters: { '@region': 'All' }, visuals: [
+        { name: 'Revenue by Region', visualType: 'BAR', columns: ['region', 'revenue'], rows: [['North', 500000], ['South', 300000], ['East', 450000], ['West', 250000]], actions: [{ type: 'CROSS_VISUAL_ACTION', parameterName: '@region' }], options: {} },
+        { name: 'Category Breakdown', visualType: 'BAR', columns: ['category', 'revenue'], rows: [['Apparel', 541905.80], ['Home', 320000], ['Electronics', 780000]], actions: [{ type: 'CROSS_VISUAL_ACTION', parameterName: '@category' }], options: {} },
+        { name: 'Details', visualType: 'TABLE', columns: ['id', 'date', 'region', 'category', 'amount'], rows: [[1, '2026-05-01', 'North', 'Apparel', 226254.92], [2, '2026-05-02', 'South', 'Home', 150000]], actions: [], options: {} }
+    ], pages: [
+        { name: 'Overview', structure: 'A B / C C', slotMap: { 'A': 'Revenue by Region', 'B': 'Category Breakdown', 'C': 'Details' } }
+    ] },
     { type: 'done', exitCode: 0 },
 ];

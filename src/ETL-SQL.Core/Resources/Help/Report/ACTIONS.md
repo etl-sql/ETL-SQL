@@ -1,0 +1,59 @@
+# ACTIONS
+Interactive visuals (charts, tables, slicers) and buttons can trigger one or more actions when a user interacts with them.
+
+Syntax:
+```sql
+ACTIONS (
+  ON_CLICK = <action>,
+  ON_CHANGE = <action>
+)
+```
+
+## Supported Triggers
+- **ON_CLICK**: Triggered when a user clicks a chart element (bar, slice, point) or a row in a table.
+- **ON_CHANGE**: Triggered when a user changes a filter value (slicer, multiselect, datepicker, etc.).
+
+## Supported Actions
+
+### SET_PARAMETER
+Updates an ETL-SQL variable and re-evaluates the dependent visuals.
+```sql
+ON_CHANGE = SET_PARAMETER(@category, value)
+```
+
+### DRILL_DOWN
+Updates a target visual by passing a filter value.
+```sql
+ON_CLICK = DRILL_DOWN(Target = DetailChart, Key = Region)
+```
+
+### RUN_SCRIPT
+Executes a custom ETL-SQL script file on the server.
+```sql
+ON_CLICK = RUN_SCRIPT('scripts/export_to_csv.etlsql', @p1 = col1, @p2 = 'StaticValue')
+```
+
+### NAVIGATE
+Navigates to a different page in the report.
+```sql
+ON_CLICK = NAVIGATE(DetailPage)
+```
+
+## Examples
+
+**Table with Row Selection:**
+```sql
+CREATE VISUAL OrdersTable AS TABLE (
+  SOURCE = #orders,
+  ACTIONS (ON_CLICK = SET_PARAMETER(@selected_order, order_id))
+);
+```
+
+**Slicer driving a variable:**
+```sql
+CREATE VISUAL RegionSlicer AS SLICER (
+  SOURCE = (SELECT DISTINCT Region FROM #data),
+  MAPPINGS (VALUE = Region),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@region, Region))
+);
+```

@@ -37,12 +37,13 @@ namespace ETL_SQL.ReportBuilder
         /// Builds the manifest by querying each visual's data source.
         /// Must be called after the script has been fully evaluated.
         /// </summary>
-        public async Task<ReportManifest> BuildAsync(string scriptSource)
+        public async Task<ReportManifest> BuildAsync(string scriptSource, Dictionary<string, string>? interactionValues = null)
         {
             var manifest = new ReportManifest
             {
                 Source      = scriptSource,
                 BuiltAt     = DateTime.UtcNow,
+                IsInteraction = (interactionValues != null && interactionValues.Count > 0) || (_ctx.ReportContext.BaselineParameters.Count > 0 && _ctx.VarContext.Variables.Any(v => _ctx.ReportContext.BaselineParameters.TryGetValue(v.Key, out var baseVal) && String.Compare(v.Value?.ToString() ?? "", baseVal ?? "", true) != 0)),
                 Title           = _ctx.ReportContext.ReportTitle,
                 TitleIsMarkdown  = _ctx.ReportContext.ReportTitleIsMarkdown,
                 Description     = _ctx.ReportContext.ReportDescription,
@@ -71,7 +72,7 @@ namespace ETL_SQL.ReportBuilder
             // ── Visuals ──────────────────────────────────────────────────────
             foreach (var (name, vStmt) in _ctx.ReportContext.VisualDefinitions)
             {
-                manifest.Visuals.Add(await _visualBuilder.BuildAsync(name, vStmt));
+                manifest.Visuals.Add(await _visualBuilder.BuildAsync(name, vStmt, interactionValues));
             }
 
             // ── Pages ────────────────────────────────────────────────────────
@@ -224,10 +225,10 @@ namespace ETL_SQL.ReportBuilder
         /// Re-queries the data for a specific visual and updates its Row/Column collections.
         /// Also regenerates the ChartConfig.
         /// </summary>
-        public async Task RefreshVisualAsync(CreateVisualStatement vStmt, VisualManifest vm)
+        public async Task RefreshVisualAsync(CreateVisualStatement vStmt, VisualManifest vm, Dictionary<string, string>? interactionValues = null)
         {
             // Refresh logic is now shared via VisualBuilder
-            var newVm = await _visualBuilder.BuildAsync(vm.Name, vStmt);
+            var newVm = await _visualBuilder.BuildAsync(vm.Name, vStmt, interactionValues);
             vm.Rows = newVm.Rows;
             vm.Columns = newVm.Columns;
             vm.Error = newVm.Error;
@@ -238,6 +239,7 @@ namespace ETL_SQL.ReportBuilder
             vm.SeriesDefs = newVm.SeriesDefs;
             vm.FormattingRules = newVm.FormattingRules;
             vm.Overlays = newVm.Overlays;
+            vm.HighlightRows = newVm.HighlightRows;
         }
 
         private VisualActionManifest TranslateAction(VisualAction action)

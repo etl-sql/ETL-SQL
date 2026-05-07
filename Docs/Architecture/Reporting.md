@@ -380,7 +380,7 @@ The `LEGEND_POSITION` flat option in `vm.Options` controls ECharts legend placem
 
 | Tier | Case | Written by | Examples |
 |---|---|---|---|
-| **Parser-supplied** | **UPPERCASE** | `VisualBuilder` — copied verbatim from the parsed option name | `STACKED`, `SMOOTH`, `CROSS_FILTER`, `FORMAT`, `LEGEND_POSITION`, `TITLE`, `SUBTITLE` |
+| **Parser-supplied** | **UPPERCASE** | `VisualBuilder` — copied verbatim from the parsed option name | `STACKED`, `SMOOTH`, `CROSS_VISUAL_ACTION`, `FORMAT`, `LEGEND_POSITION`, `TITLE`, `SUBTITLE` |
 | **Internally-computed** | **lowercase with colons** | `VisualBuilder` — synthesized during manifest build | `title`, `subtitle`, `mapping:x`, `mapping:value`, `axis:x:label`, `axis:y:min`, `color:Revenue` |
 
 **Why two tiers?** Parser-supplied keys come directly from the source script (`OPTIONS(STACKED = ON)`), so they are stored as-is in uppercase to match the grammar. Internally-computed keys are synthesized by `VisualBuilder` from structured AST nodes (`AxisOptions`, `MappingHints`, `TypedSeries`) — they use lowercase-with-colon namespace notation to avoid clashing with any future parser keyword.

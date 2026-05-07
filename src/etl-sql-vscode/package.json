@@ -147,6 +147,26 @@
         "command": "etlsql.stopScript",
         "title": "ETL-SQL: Stop Script",
         "icon": "$(primitive-square)"
+      },
+      {
+        "command": "etlsql.launchInBrowser",
+        "title": "🚀 Launch in Browser",
+        "icon": "$(rocket)"
+      },
+      {
+        "command": "etlsql.exportMarkdown",
+        "title": "📝 Export Markdown",
+        "icon": "$(markdown)"
+      },
+      {
+        "command": "etlsql.exportPdf",
+        "title": "📄 Export PDF",
+        "icon": "$(file-pdf)"
+      },
+      {
+        "command": "etlsql.exportText",
+        "title": "💾 Export Text",
+        "icon": "$(save)"
       }
     ],
     "keybindings": [
@@ -214,24 +234,44 @@
       "view/title": [
         {
           "command": "etlsql.refreshConnections",
-          "when": "view == etlsql-connections",
-          "group": "navigation"
+          "when": "view == etlsql-sidebar",
+          "group": "navigation@1"
         },
         {
           "command": "etlsql.runScript",
-          "when": "view == etlsql-connections",
-          "group": "navigation"
+          "when": "view == etlsql-sidebar",
+          "group": "navigation@2"
+        },
+        {
+          "command": "etlsql.launchInBrowser",
+          "when": "view == etlsql-sidebar && resourceExtname == .rptsql",
+          "group": "navigation@3"
+        },
+        {
+          "command": "etlsql.exportMarkdown",
+          "when": "view == etlsql-sidebar && resourceExtname == .rptsql",
+          "group": "export@1"
+        },
+        {
+          "command": "etlsql.exportPdf",
+          "when": "view == etlsql-sidebar && resourceExtname == .rptsql",
+          "group": "export@2"
+        },
+        {
+          "command": "etlsql.exportText",
+          "when": "view == etlsql-sidebar && resourceExtname == .rptsql",
+          "group": "export@3"
         }
       ],
       "view/item/context": [
         {
           "command": "etlsql.removeConnection",
-          "when": "view == etlsql-connections && viewItem == connection-global",
+          "when": "view == etlsql-sidebar && viewItem == connection-global",
           "group": "inline"
         },
         {
           "command": "etlsql.copyConnection",
-          "when": "view == etlsql-connections && (viewItem == connection-global || viewItem == connection-script)",
+          "when": "view == etlsql-sidebar && (viewItem == connection-global || viewItem == connection-script)",
           "group": "inline"
         }
       ]
@@ -239,7 +279,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
+    "compile": "npm run sync-assets && tsc -p ./",
+    "sync-assets": "powershell -NoProfile -Command \"Copy-Item ../ETL-SQL.Core/Resources/Shared/* ./media/ -Recurse -Force\"",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",

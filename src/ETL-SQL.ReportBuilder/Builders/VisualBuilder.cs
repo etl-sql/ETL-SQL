@@ -11,7 +11,7 @@ namespace ETL_SQL.ReportBuilder.Builders
 {
     public class VisualBuilder(IExecutionContext ctx, EChartsRenderer renderer, StyleBuilder styleBuilder)
     {
-        public async Task<VisualManifest> BuildAsync(string name, CreateVisualStatement vStmt)
+        public async Task<VisualManifest> BuildAsync(string name, CreateVisualStatement vStmt, Dictionary<string, string>? interactionValues = null)
         {
             var (title, titleMd) = styleBuilder.ResolveMarkdown(vStmt.Title, vStmt.TitleIsMarkdown);
             var (subtitle, subtitleMd) = styleBuilder.ResolveMarkdown(vStmt.Subtitle, vStmt.SubtitleIsMarkdown);
@@ -21,9 +21,14 @@ namespace ETL_SQL.ReportBuilder.Builders
                 Name            = name,
                 VisualType      = vStmt.VisualType.ToString().ToUpperInvariant(),
                 DefaultValue    = vStmt.DefaultValue,
+                LabelPosition   = vStmt.LabelPosition,
+                Min             = vStmt.Min,
+                Max             = vStmt.Max,
+                Decimals        = vStmt.Decimals,
+                Placeholder     = vStmt.Placeholder,
                 TitleIsMarkdown = titleMd,
                 SubtitleIsMarkdown = subtitleMd,
-                IsMarkdown      = vStmt.VisualType == VisualType.Text,
+                IsMarkdown      = vStmt.VisualType == VisualType.Text || vStmt.VisualType == VisualType.Textbox,
                 Tooltip         = styleBuilder.BuildTooltipManifest(vStmt.Tooltip)
             };
 
@@ -115,6 +120,13 @@ namespace ETL_SQL.ReportBuilder.Builders
                         ParameterName   = sp.ParameterName,
                         ValueExpression = sp.ValueExpression
                     },
+                    RunScriptAction rs => new VisualActionManifest
+                    {
+                        Type       = "RUN_SCRIPT",
+                        Trigger    = rs.Trigger,
+                        ScriptPath = rs.ScriptPath,
+                        Parameters = rs.Parameters
+                    },
                     _ => throw new NotSupportedException($"Action type {action.GetType().Name} not supported in manifest.")
                 });
             }
@@ -140,7 +152,7 @@ namespace ETL_SQL.ReportBuilder.Builders
             {
                 try
                 {
-                    await FetchDataAsync(vStmt, vm);
+                    await FetchDataAsync(vStmt, vm, interactionValues);
                     CalculateSummaries(vStmt, vm);
                     vm.ChartConfig = renderer.Render(vm);
                 }
@@ -153,7 +165,7 @@ namespace ETL_SQL.ReportBuilder.Builders
             return vm;
         }
 
-        private async Task FetchDataAsync(CreateVisualStatement vStmt, VisualManifest vm)
+        private async Task FetchDataAsync(CreateVisualStatement vStmt, VisualManifest vm, Dictionary<string, string>? interactionValues)
         {
             Statement queryStmt;
             if (vStmt.Source.IsInlineSelect && vStmt.Source.InlineSelect != null)
@@ -169,6 +181,75 @@ namespace ETL_SQL.ReportBuilder.Builders
             }
             else return;
 
+            var actionType = vm.Options.TryGetValue("CROSS_VISUAL_ACTION", out var action) ? action.ToUpperInvariant() : null;
+            if (vm.VisualType == "TABLE" || vm.VisualType == "SLICER") actionType ??= "FILTER";
+            actionType ??= "HIGHLIGHT";
+
+            if (interactionValues != null && interactionValues.Count > 0)
+            {
+                if (actionType == "HIGHLIGHT")
+                {
+                    // 1. Fetch Universe (Current Context / Slicer State)
+                    await ExecuteAndPopulateRowsAsync(queryStmt, vStmt, vm.Rows, vm.RowStyles, vm);
+
+                    // 2. Temporarily set interaction variables and fetch Selection
+                    var backup = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                    try
+                    {
+                        foreach (var kvp in interactionValues)
+                        {
+                            if (ctx.VarContext.ContainsVariable(kvp.Key))
+                            {
+                                backup[kvp.Key] = ctx.VarContext.GetVariable(kvp.Key);
+                                ctx.VarContext.SetVariable(kvp.Key, kvp.Value);
+                            }
+                        }
+                        vm.HighlightRows = new List<List<string?>>();
+                        await ExecuteAndPopulateRowsAsync(queryStmt, vStmt, vm.HighlightRows, null, vm);
+                    }
+                    finally
+                    {
+                        foreach (var kvp in backup)
+                            ctx.VarContext.SetVariable(kvp.Key, kvp.Value);
+                    }
+                }
+                else if (actionType == "FILTER")
+                {
+                    // Filter Mode: Temporarily set variables and do a single fetch
+                    var backup = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+                    try
+                    {
+                        foreach (var kvp in interactionValues)
+                        {
+                            if (ctx.VarContext.ContainsVariable(kvp.Key))
+                            {
+                                backup[kvp.Key] = ctx.VarContext.GetVariable(kvp.Key);
+                                ctx.VarContext.SetVariable(kvp.Key, kvp.Value);
+                            }
+                        }
+                        await ExecuteAndPopulateRowsAsync(queryStmt, vStmt, vm.Rows, vm.RowStyles, vm);
+                    }
+                    finally
+                    {
+                        foreach (var kvp in backup)
+                            ctx.VarContext.SetVariable(kvp.Key, kvp.Value);
+                    }
+                }
+                else 
+                {
+                    // NONE: Ignore interaction, use original state
+                    await ExecuteAndPopulateRowsAsync(queryStmt, vStmt, vm.Rows, vm.RowStyles, vm);
+                }
+            }
+            else
+            {
+                // Standard fetch (no interaction context provided)
+                await ExecuteAndPopulateRowsAsync(queryStmt, vStmt, vm.Rows, vm.RowStyles, vm);
+            }
+        }
+
+        private async Task ExecuteAndPopulateRowsAsync(Statement queryStmt, CreateVisualStatement vStmt, List<List<string?>> targetRows, List<string?>? targetStyles, VisualManifest vm)
+        {
             bool firstBatch = true;
             await foreach (var batch in ctx.ExecuteQuery(queryStmt))
             {
@@ -179,12 +260,11 @@ namespace ETL_SQL.ReportBuilder.Builders
                 }
                 foreach (var row in batch.Rows)
                 {
-                    vm.Rows.Add(vm.Columns.Select(c => row[c]?.ToString()).ToList());
-                    
-                    // Apply formatting rules row-by-row
-                    if (vStmt.FormattingRules.Count > 0)
+                    targetRows.Add(vm.Columns.Select(c => row[c]?.ToString()).ToList());
+
+                    // Apply formatting rules row-by-row (only if styles list is provided)
+                    if (targetStyles != null && vStmt.FormattingRules.Count > 0)
                     {
-                        if (vm.RowStyles == null) vm.RowStyles = new List<string?>();
                         string? matchedColor = null;
                         foreach (var rule in vStmt.FormattingRules)
                         {
@@ -194,7 +274,7 @@ namespace ETL_SQL.ReportBuilder.Builders
                                 break;
                             }
                         }
-                        vm.RowStyles.Add(matchedColor);
+                        targetStyles.Add(matchedColor);
                     }
                 }
             }

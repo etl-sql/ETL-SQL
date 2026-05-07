@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ETL-SQL.ReportBuilder.CLI": {
+      "commandName": "Project",
+      "commandLineArgs": "serve \"C:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\kitchen_sinks\\report_kitchen_sink.rptsql\""
+    }
+  }
+}

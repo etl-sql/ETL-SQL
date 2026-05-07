@@ -20,6 +20,6 @@ public record SnapshotResponse(
     bool      IsStale,
     object?   Manifest);
 
-public record ParameterUpdateRequest(string Name, string Value);
+public record ParameterUpdateRequest(string Name, string Value, bool IsInteraction = false);
 
-public record BatchParameterRequest(List<ParameterUpdateRequest> Params);
+public record BatchParameterRequest(List<ParameterUpdateRequest> Params, bool IsInteraction = false);

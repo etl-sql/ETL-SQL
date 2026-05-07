@@ -15,4 +15,11 @@
     <ProjectReference Include="..\ETL-SQL.App\ETL-SQL.App.csproj" />
   </ItemGroup>
 
+  <Target Name="SyncSharedAssets" BeforeTargets="Build">
+    <ItemGroup>
+      <SharedAssets Include="..\ETL-SQL.Core\Resources\Shared\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(SharedAssets)" DestinationFolder="wwwroot\%(RecursiveDir)" SkipUnchangedFiles="true" />
+  </Target>
+
 </Project>

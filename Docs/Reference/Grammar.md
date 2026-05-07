@@ -1902,7 +1902,7 @@ CREATE VISUAL <name> AS <type> (
                 [, X_AXIS (...)] [, Y_AXIS (...)]
                 [, COLORS ( key = '#hex' [, ...] )]
                 [, LEGEND ( position = top|bottom|left|right )]
-                [, CROSS_FILTER = true] ),]
+                [, CROSS_VISUAL_ACTION = 'FILTER'|'HIGHLIGHT'|'NONE'] ),]
   [STYLE      ( key = value [, ...] ),]
   [SERIES     ( BAR|LINE column [, ...] ),]
   [FORMATTING ( column op threshold THEN '<color>' [, ...] ),]
@@ -1911,7 +1911,7 @@ CREATE VISUAL <name> AS <type> (
 );
 ```
 
-**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `RADAR`, `CANDLESTICK`, `MAP`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`
+**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `RADAR`, `CANDLESTICK`, `MAP`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX`
 
 **Mapping roles by visual type:**
 
@@ -1934,7 +1934,7 @@ CREATE VISUAL <name> AS <type> (
 | `TABLE` | _(all source columns rendered automatically)_ | — |
 | `CARD` | `VALUE` | `LABEL` |
 | `SLICER`, `MULTISELECT` | `VALUE` | — |
-| `TEXT`, `IMAGE`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH` | _(no mappings)_ | — |
+| `TEXT`, `IMAGE`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX` | _(no mappings)_ | — |
 
 **FORMATTING operators:** `<`, `>`, `<=`, `>=`, `=`, `<>`
 
@@ -1967,6 +1967,32 @@ CREATE VISUAL StartPicker AS RELDATEPICKER (
   OPTIONS (DEFAULT = 'M-1'),
   ACTIONS (ON_CHANGE = SET_PARAMETER(@start_date, value))
 );
+
+CREATE VISUAL IsActive AS CHECKBOX (
+  LABEL_POSITION = 'LEFT',
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@active_only, value))
+);
+
+CREATE VISUAL MinValue AS NUMBERBOX (
+  MIN = 0, MAX = 1000, DECIMALS = 2,
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@min_val, value))
+);
+
+CREATE VISUAL SearchQuery AS TEXTBOX (
+  OPTIONS (PLACEHOLDER = 'Enter query...'),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@query, value))
+);
+```
+
+#### A.3.2 Visual-Specific Properties
+Input visuals (`CHECKBOX`, `TEXTBOX`, `NUMBERBOX`) and some filter types support additional top-level properties for layout and validation.
+
+| Property | Applies to | Values | Description |
+| :--- | :--- | :--- | :--- |
+| `LABEL_POSITION` | All input types | `TOP`, `LEFT`, `HIDDEN` | Position of the visual name label. |
+| `MIN` | `NUMBERBOX`, `SLIDER` | Numeric | Minimum allowed value. |
+| `MAX` | `NUMBERBOX`, `SLIDER` | Numeric | Maximum allowed value. |
+| `DECIMALS` | `NUMBERBOX` | Integer | Number of decimal places allowed. |
 ```
 
 ### A.4 `CREATE PAGE`

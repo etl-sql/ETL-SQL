@@ -264,6 +264,8 @@ namespace ETL_SQL.Core
         string TemplatePath { get; set; }
         /// <summary>Report-level title set by SET REPORT TITLE = '...'</summary>
         string? ReportTitle { get; set; }
+        /// <summary>Baseline parameter values used for ghosting in cross-highlighting.</summary>
+        IDictionary<string, string> BaselineParameters { get; }
         /// <summary>Whether the report title is markdown.</summary>
         bool ReportTitleIsMarkdown { get; set; }
         string? ReportDescription { get; set; }

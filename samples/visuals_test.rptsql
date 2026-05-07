@@ -1,0 +1,48 @@
+-- Test Script for New Interactive Visuals (Checkbox, Textbox, Numberbox)
+
+DECLARE @show_details = 'TRUE';
+DECLARE @user_name = 'Chuck';
+DECLARE @threshold = 500;
+
+-- Simple data source
+SELECT 
+    'Region A' AS Region, 1000 AS Sales, 0.15 AS Growth
+INTO #data;
+
+SET REPORT TITLE = 'Interactive Visuals Test';
+
+-- 1. Checkbox
+CREATE VISUAL ShowDetails AS CHECKBOX (
+    LABEL_POSITION = 'LEFT',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@show_details, VALUE))
+);
+
+-- 2. Textbox
+CREATE VISUAL UserName AS TEXTBOX (
+    LABEL_POSITION = 'TOP',
+    DEFAULT = 'Chuck',
+    OPTIONS (PLACEHOLDER = 'Enter your name...'),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@user_name, VALUE))
+);
+
+-- 3. Numberbox
+CREATE VISUAL SalesThreshold AS NUMBERBOX (
+    LABEL_POSITION = 'LEFT',
+    MIN = 0,
+    MAX = 10000,
+    DECIMALS = 0,
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@threshold, VALUE))
+);
+
+-- 4. Display Visual (conditional on checkbox)
+CREATE VISUAL SalesTable AS TABLE (
+    SOURCE = (SELECT * FROM #data WHERE Sales >= @threshold),
+    TITLE = 'Sales for ' + @user_name,
+    STYLE (DISPLAY = @show_details)
+);
+
+-- 5. Page Layout
+CREATE PAGE Main (
+    STRUCTURE = 'A B C / D D',
+    MAP ('A' = ShowDetails, 'B' = UserName, 'C' = SalesThreshold, 'D' = SalesTable)
+);

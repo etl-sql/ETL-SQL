@@ -40,26 +40,30 @@
   <!-- Manual asset copy since we disabled StaticWebAssets -->
   <Target Name="CopyManualAssets" BeforeTargets="Build">
     <ItemGroup>
-      <_PlayerRuntime Include="..\ETL-SQL.ReportPlayer\wwwroot\report-runtime.js" />
-      <_PlayerMaps Include="..\ETL-SQL.ReportPlayer\wwwroot\maps\*.geojson" />
-      <_PlayerCss Include="..\ETL-SQL.ReportPlayer\wwwroot\report-runtime.css" />
+      <_SharedRuntime Include="..\ETL-SQL.Core\Resources\Shared\report-runtime.js" />
+      <_SharedMaps Include="..\ETL-SQL.Core\Resources\Shared\maps\*.geojson" />
+      <_SharedCss Include="..\ETL-SQL.Core\Resources\Shared\report-runtime.css" />
+      <_SharedLibs Include="..\ETL-SQL.Core\Resources\Shared\*.min.*" />
     </ItemGroup>
-    <Copy SourceFiles="@(_PlayerRuntime)" DestinationFolder="wwwroot\js" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(_PlayerMaps)" DestinationFolder="wwwroot\maps" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(_PlayerCss)" DestinationFolder="wwwroot\css" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharedRuntime)" DestinationFolder="wwwroot\js" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharedLibs)" DestinationFolder="wwwroot\js" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharedMaps)" DestinationFolder="wwwroot\maps" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharedCss)" DestinationFolder="wwwroot\css" SkipUnchangedFiles="true" />
   </Target>
 
   <Target Name="CopyManualAssetsOnPublish" AfterTargets="Publish" Condition="'$(PublishDir)' != ''">
     <ItemGroup>
       <_PortalRoot Include="wwwroot\**\*" />
-      <_PlayerRuntimePub Include="..\ETL-SQL.ReportPlayer\wwwroot\report-runtime.js" />
-      <_PlayerMapsPub Include="..\ETL-SQL.ReportPlayer\wwwroot\maps\*.geojson" />
-      <_PlayerCssPub Include="..\ETL-SQL.ReportPlayer\wwwroot\report-runtime.css" />
+      <_SharedRuntimePub Include="..\ETL-SQL.Core\Resources\Shared\report-runtime.js" />
+      <_SharedMapsPub Include="..\ETL-SQL.Core\Resources\Shared\maps\*.geojson" />
+      <_SharedCssPub Include="..\ETL-SQL.Core\Resources\Shared\report-runtime.css" />
+      <_SharedLibsPub Include="..\ETL-SQL.Core\Resources\Shared\*.min.*" />
     </ItemGroup>
     <Copy SourceFiles="@(_PortalRoot)" DestinationFolder="$(PublishDir)wwwroot\%(RecursiveDir)" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(_PlayerRuntimePub)" DestinationFolder="$(PublishDir)wwwroot\js" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(_PlayerMapsPub)" DestinationFolder="$(PublishDir)wwwroot\maps" SkipUnchangedFiles="true" />
-    <Copy SourceFiles="@(_PlayerCssPub)" DestinationFolder="$(PublishDir)wwwroot\css" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharedRuntimePub)" DestinationFolder="$(PublishDir)wwwroot\js" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharedLibsPub)" DestinationFolder="$(PublishDir)wwwroot\js" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharedMapsPub)" DestinationFolder="$(PublishDir)wwwroot\maps" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_SharedCssPub)" DestinationFolder="$(PublishDir)wwwroot\css" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

@@ -41,3 +41,6 @@ Interactive controls (pair with ACTIONS to drive other visuals):
   RELDATEPICKER — relative-date picker with text input, calendar, and quick-pick buttons
   SLIDER        — numeric range slider; binds a number to a @variable
   SEARCH        — free-text search input; binds a STRING to a @variable
+  CHECKBOX      — boolean toggle; binds a BIT/BOOLEAN to a @variable
+  TEXTBOX       — single-line text input; binds a STRING to a @variable
+  NUMBERBOX     — numeric input with validation; binds a number to a @variable

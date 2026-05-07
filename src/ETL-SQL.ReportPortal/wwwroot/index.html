@@ -16,9 +16,9 @@
       <a href="/index.html" class="active" id="navReports">Reports</a>
       <a href="#" id="navSubscriptions">My Subscriptions</a>
     </nav>
-    <span id="adminNav" style="display:none">
-      <nav class="topbar-nav"><a href="/admin.html">Admin</a></nav>
-    </span>
+    <nav class="topbar-nav">
+      <a href="/admin.html">Admin</a>
+    </nav>
     <span class="topbar-spacer"></span>
     <span class="topbar-user" id="topbarUser"></span>
     <button class="topbar-btn" id="logoutBtn">Sign Out</button>
@@ -26,7 +26,6 @@
 
   <!-- ── App body ────────────────────────────────────────────────────────── -->
   <div class="app-body">
-
     <!-- Sidebar: folder tree -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-hdr">Folders</div>
@@ -39,7 +38,6 @@
     <main class="main-content" id="mainContent">
       <div class="empty-state">Select a folder to browse reports.</div>
     </main>
-
   </div>
 </div>
 
@@ -443,8 +441,7 @@ function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
 <\/script>
 </head><body style="margin:0">
 <div id="root"></div>
-<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js?v=3"><\/script>
-<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js?v=3"><\/script>
+<script src="/js/echarts.min.js"><\/script>
 <script src="/js/report-runtime.js?v=${Date.now()}"><\/script>
 </body></html>`;
 }

@@ -184,7 +184,7 @@ public class ExecutionController(
             return BadRequest(new { error = "name is required" });
 
         var svc      = await GetOrRebuildSessionAsync(id, report.ScriptPath);
-        var manifest = await svc.SetParameterAsync(req.Name, req.Value ?? string.Empty);
+        var manifest = await svc.SetParameterAsync(req.Name, req.Value ?? string.Empty, req.IsInteraction);
         return Ok(manifest);
     }
 
@@ -206,7 +206,7 @@ public class ExecutionController(
         var updates  = req.Params
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name, p.Value));
-        var manifest = await svc.SetParametersAsync(updates);
+        var manifest = await svc.SetParametersAsync(updates, req.IsInteraction);
         return Ok(manifest);
     }
 

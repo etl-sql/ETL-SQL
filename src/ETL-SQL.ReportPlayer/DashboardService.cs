@@ -88,39 +88,53 @@ namespace ETL_SQL.ReportPlayer
 
         /// <summary>
         /// Updates multiple parameters atomically and re-evaluates only the affected visuals.
-        /// More efficient than calling <see cref="SetParameterAsync"/> in sequence when
-        /// several filter controls (e.g. date range start + end) change together.
         /// </summary>
-        public async Task<ReportManifest> SetParametersAsync(IEnumerable<(string Name, string Value)> updates)
+        public async Task<ReportManifest> SetParametersAsync(IEnumerable<(string Name, string Value)> updates, bool isInteraction = false)
         {
-            foreach (var (name, value) in updates)
-                _parameters[name] = value;
+            // Only update global context if NOT an interaction
+            if (!isInteraction)
+            {
+                foreach (var (name, value) in updates)
+                    _parameters[name] = value;
+            }
 
             if (_evaluator != null && _manifest != null)
             {
                 await _lock.WaitAsync();
                 try
                 {
-                    int refreshCount = await DashboardSharedLogic.RefreshAffectedVisualsAsync(_evaluator, _manifest, updates);
+                    if (!isInteraction)
+                    {
+                        foreach (var (name, value) in updates)
+                        {
+                            var varName = name.StartsWith('@') ? name : '@' + name;
+                            _evaluator.ReportContext.BaselineParameters[varName] = value;
+                        }
+                    }
+
+                    int refreshCount = await DashboardSharedLogic.RefreshAffectedVisualsAsync(_evaluator, _manifest, updates, isInteraction);
                     if (refreshCount > 0)
                     {
                         _manifest.BuiltAt = DateTime.UtcNow;
+                        _manifest.IsInteraction = isInteraction;
                         return _manifest;
                     }
                 }
                 finally { _lock.Release(); }
             }
 
-            return await RebuildAsync();
+            var result = await RebuildAsync();
+            result.IsInteraction = isInteraction;
+            return result;
         }
 
         /// <summary>
-        /// Updates one parameter and re-evaluates only the affected visuals
-        /// rather than doing a full script rebuild (Tier 1 Optimization).
+        /// Updates one parameter and re-evaluates only the affected visuals.
         /// </summary>
-        public async Task<ReportManifest> SetParameterAsync(string name, string value)
+        public async Task<ReportManifest> SetParameterAsync(string name, string value, bool isInteraction = false)
         {
-            _parameters[name] = value;
+            if (!isInteraction)
+                _parameters[name] = value;
             
             // If we have an active evaluator and manifest from a previous run, try selective refresh
             if (_evaluator != null && _manifest != null)
@@ -128,17 +142,99 @@ namespace ETL_SQL.ReportPlayer
                 await _lock.WaitAsync();
                 try 
                 {
-                    int refreshCount = await DashboardSharedLogic.RefreshAffectedVisualsAsync(_evaluator, _manifest, new[] { (name, value) });
+                    if (!isInteraction)
+                    {
+                        var varName = name.StartsWith('@') ? name : '@' + name;
+                        _evaluator.ReportContext.BaselineParameters[varName] = value;
+                    }
+
+                    int refreshCount = await DashboardSharedLogic.RefreshAffectedVisualsAsync(_evaluator, _manifest, new[] { (name, value) }, isInteraction);
                     if (refreshCount > 0)
                     {
                         _manifest.BuiltAt = DateTime.UtcNow;
+                        _manifest.IsInteraction = isInteraction;
                         return _manifest;
                     }
                 }
                 finally { _lock.Release(); }
             }
 
-            return await RebuildAsync();
+            var result = await RebuildAsync();
+            result.IsInteraction = isInteraction;
+            return result;
+        }
+
+        public async Task<(string Message, bool Refresh)> RunScriptAsync(string scriptPath, Dictionary<string, string> parameters)
+        {
+            await _lock.WaitAsync();
+            try
+            {
+                // Resolve path relative to report script directory
+                var fullPath = Path.IsPathRooted(scriptPath) 
+                    ? scriptPath 
+                    : Path.Combine(ScriptDirectory, scriptPath);
+
+                if (!File.Exists(fullPath))
+                    return ($"Script file not found: {scriptPath}", false);
+
+                var source = await File.ReadAllTextAsync(fullPath);
+                
+                // We use the existing evaluator if it exists to share context (temp tables, etc.)
+                bool ownsEvaluator = false;
+                var evaluator = _evaluator;
+                IServiceScope? tempScope = null;
+                
+                if (evaluator == null)
+                {
+                    ownsEvaluator = true;
+                    tempScope = _scopeFactory.CreateScope();
+                    evaluator = tempScope.ServiceProvider.GetRequiredService<Evaluator>();
+                }
+
+                try
+                {
+                    // Set action-specific parameters
+                    foreach (var (pName, pValue) in parameters)
+                    {
+                        var varName = pName.StartsWith('@') ? pName : '@' + pName;
+                        if (!evaluator.ContainsVariable(varName))
+                            evaluator.DeclareVariable(varName, pValue, new VariableMetadata { IsInput = true });
+                        else
+                            evaluator.SetVariable(varName, pValue);
+                    }
+
+                    var lexer  = new Lexer(source);
+                    var tokens = lexer.Tokenize();
+                    var parser = new Parser(tokens, source);
+                    var script = parser.Parse();
+
+                    await evaluator.Evaluate(script);
+                    
+                    // Heuristic: refresh if script looks like it modified data
+                    bool needsRefresh = source.Contains("INSERT", StringComparison.OrdinalIgnoreCase) ||
+                                       source.Contains("UPDATE", StringComparison.OrdinalIgnoreCase) ||
+                                       source.Contains("DELETE", StringComparison.OrdinalIgnoreCase) ||
+                                       source.Contains("MERGE", StringComparison.OrdinalIgnoreCase);
+
+                    return ("Script executed successfully.", needsRefresh);
+                }
+                catch (Exception ex)
+                {
+                    return ($"Script execution failed: {ex.Message}", false);
+                }
+                finally
+                {
+                    if (ownsEvaluator)
+                    {
+                        await evaluator.DisposeAsync();
+                        tempScope?.Dispose();
+                    }
+                }
+            }
+            finally
+            {
+                _lock.Release();
+            }
         }
 
         private bool DependsOnVariable(CreateVisualStatement visual, string variableName)
@@ -184,6 +280,7 @@ namespace ETL_SQL.ReportPlayer
                 {
                     var varName = name.StartsWith('@') ? name : '@' + name;
                     evaluator.DeclareVariable(varName, value, new VariableMetadata { IsInput = true });
+                    evaluator.ReportContext.BaselineParameters[varName] = value;
                 }
 
                 // 30s timeout prevents infinite loops from deadlocking the lock forever

@@ -23,6 +23,11 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("builtAt")]
         public DateTime BuiltAt { get; set; } = DateTime.UtcNow;
 
+        /// <summary>True if this build was triggered by a cross-visual interaction (selection).</summary>
+        [JsonPropertyName("isInteraction")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool IsInteraction { get; set; }
+
         /// <summary>Optional report title (from SET REPORT TITLE = '...').</summary>
         [JsonPropertyName("title")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -159,6 +164,26 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("defaultValue")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? DefaultValue { get; set; }
+        
+        [JsonPropertyName("labelPosition")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? LabelPosition { get; set; }
+
+        [JsonPropertyName("min")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? Min { get; set; }
+
+        [JsonPropertyName("max")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? Max { get; set; }
+
+        [JsonPropertyName("decimals")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? Decimals { get; set; }
+        
+        [JsonPropertyName("placeholder")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Placeholder { get; set; }
 
         [JsonPropertyName("tooltip")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -171,6 +196,11 @@ namespace ETL_SQL.ReportBuilder
         /// <summary>Data rows — each row is a list of cell values (strings for portability).</summary>
         [JsonPropertyName("rows")]
         public List<List<string?>> Rows { get; set; } = new();
+
+        /// <summary>Subset of rows that should be highlighted (Phase 9E Path B).</summary>
+        [JsonPropertyName("highlightRows")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<List<string?>>? HighlightRows { get; set; }
 
         /// <summary>Row-level background colors applied via FORMATTING rules.</summary>
         [JsonPropertyName("rowStyles")]
@@ -255,6 +285,13 @@ namespace ETL_SQL.ReportBuilder
 
         [JsonPropertyName("valueExpression")]
         public string? ValueExpression { get; set; }
+
+        // RUN_SCRIPT fields
+        [JsonPropertyName("scriptPath")]
+        public string? ScriptPath { get; set; }
+
+        [JsonPropertyName("parameters")]
+        public Dictionary<string, string>? Parameters { get; set; }
     }
 
     /// <summary>A layout page with its slot→visual mapping.</summary>

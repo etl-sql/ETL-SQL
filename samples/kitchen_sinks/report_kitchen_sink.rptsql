@@ -417,9 +417,10 @@ CREATE VISUAL DrillRegionDetail AS BAR (
         GROUP BY Category
     ),
     TITLE    = 'Category Breakdown',
-    SUBTITLE = 'Click a region bar above to drill in • Powered by DRILL_DOWN',
+    SUBTITLE = 'Click a region bar above to see cross-highlighting',
     MAPPINGS (X = Category, Y = Revenue),
     OPTIONS  (
+        CROSS_VISUAL_ACTION = HIGHLIGHT,
         Y_AXIS (LABEL = 'Revenue ($)', MIN = 0),
         X_AXIS (LABEL = 'Category')
     ),
@@ -430,10 +431,10 @@ CREATE VISUAL DrillRegionDetail AS BAR (
 CREATE VISUAL BarByRegion AS BAR (
     SOURCE   = (SELECT Region, Revenue FROM #by_region),
     TITLE    = 'Revenue by Region',
-    SUBTITLE = 'Click a bar to drill into category breakdown • Cross-filters detail table',
+    SUBTITLE = 'Click a bar to drill into category breakdown • Highlights detail table',
     MAPPINGS (X = Region, Y = Revenue),
     OPTIONS  (
-        CROSS_FILTER = ON,
+        CROSS_VISUAL_ACTION = HIGHLIGHT,
         DATA_LABELS  = ON WITH (POSITION = 'INSIDE_TOP', COLOR = '#ffffff', FORMAT = 'C0'),
         Y_AXIS (LABEL = 'Net Revenue ($)', MIN = 0),
         X_AXIS (LABEL = 'Region'),
@@ -444,7 +445,7 @@ CREATE VISUAL BarByRegion AS BAR (
             'West'  = '#ef4444'
         )
     ),
-    ACTIONS  (ON_CLICK = DRILL_DOWN(Target = DrillRegionDetail, Key = Region)),
+    ACTIONS  (ON_CLICK = DRILL_DOWN(Target = TxnTable, Key = Region)),
     STYLE    = ChartPanel
 );
 
@@ -489,7 +490,6 @@ CREATE VISUAL TxnTable AS TABLE (
     TITLE    = 'Transaction Detail',
     SUBTITLE = 'Cross-filtered by chart clicks · Use slicers above to narrow results',
     OPTIONS  (
-        CROSS_FILTER               = ON,
         GRID                       = (HEADER, FOOTER),
         SHOW_NO_DATA_PLACEHOLDER   = ON
     ),

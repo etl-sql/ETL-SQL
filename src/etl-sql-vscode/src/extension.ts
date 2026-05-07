@@ -324,6 +324,40 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showErrorMessage(`Failed to secure connections: ${err.message}`);
         }
     }));
+
+    // Reporting Commands (Phase 3 & 4)
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.launchInBrowser', async (uri?: vscode.Uri) => {
+        let scriptPath = '';
+        if (uri) {
+            scriptPath = uri.fsPath;
+        } else {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor || !editor.document.fileName.endsWith('.rptsql')) {
+                vscode.window.showErrorMessage('ETL-SQL: Open a .rptsql file first.');
+                return;
+            }
+            scriptPath = editor.document.fileName;
+        }
+
+        const reportExe = getReportExecutablePath(context);
+        const terminal = vscode.window.createTerminal('ETL-SQL Report Server');
+        terminal.show();
+        // Forwarding to CLI which handles browser open automatically
+        const args = [...reportExe.baseArgs, 'serve', `"${scriptPath}"`].join(' ');
+        terminal.sendText(`& ${reportExe.exe} ${args}`);
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.exportMarkdown', async () => {
+        await handleExport(context, 'md', 'Markdown', ['md']);
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.exportPdf', async () => {
+        await handleExport(context, 'pdf', 'PDF', ['pdf']);
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.exportText', async () => {
+        await handleExport(context, 'text', 'Text', ['txt']);
+    }));
 }
 
 function syncConnectionsToLsp() {
@@ -382,7 +416,7 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
         masterPassword = await vscode.window.showInputBox({
             password: true,
             prompt: "Master Password required for encrypted credentials in this script",
-            placeHolder: "Enter password or leave blank to use machine key"
+            placeHolder: "Password"
         }) || "";
     }
 
@@ -498,4 +532,76 @@ function findInPath(command: string): string | undefined {
         // ignore
     }
     return undefined;
+}
+
+function getReportExecutablePath(context: vscode.ExtensionContext): { exe: string, baseArgs: string[] } {
+    const config = vscode.workspace.getConfiguration('etlsql');
+    const configured = (config.get<string>('report.executable.path') || '').trim();
+    
+    if (configured) return { exe: configured, baseArgs: [] };
+
+    // 1. Try bundled path
+    const ext = os.platform() === 'win32' ? '.exe' : '';
+    const bundledPath = path.join(context.extensionPath, 'bin', `ETL-SQL-Report${ext}`);
+    if (fs.existsSync(bundledPath)) return { exe: bundledPath, baseArgs: [] };
+
+    // 2. Dev fallback
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    if (workspaceFolder) {
+        const cliProject = path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.ReportBuilder.CLI', 'ETL-SQL.ReportBuilder.CLI.csproj');
+        if (fs.existsSync(cliProject)) {
+            return { exe: 'dotnet', baseArgs: ['run', '--project', `"${cliProject}"`, '--'] };
+        }
+    }
+
+    return { exe: 'ETL-SQL-Report', baseArgs: [] };
+}
+
+async function handleExport(context: vscode.ExtensionContext, format: string, label: string, extensions: string[]) {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || !editor.document.fileName.endsWith('.rptsql')) {
+        vscode.window.showErrorMessage('ETL-SQL: Open a .rptsql file first.');
+        return;
+    }
+
+    const scriptPath = editor.document.fileName;
+    const defaultUri = vscode.Uri.file(scriptPath.replace(/\.rptsql$/, `.report.${extensions[0]}`));
+    
+    const filters: Record<string, string[]> = {};
+    filters[`${label} Files`] = extensions;
+
+    const uri = await vscode.window.showSaveDialog({
+        defaultUri,
+        filters,
+        title: `Export Report as ${label}`
+    });
+
+    if (uri) {
+        const reportExe = getReportExecutablePath(context);
+        const args = [...reportExe.baseArgs];
+        
+        if (format === 'text') {
+            args.push('print', scriptPath, '--output', uri.fsPath);
+        } else {
+            args.push('build', scriptPath, '--output', uri.fsPath, '--format', format);
+        }
+
+        vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: `Exporting ${label}...`,
+            cancellable: false
+        }, async () => {
+            return new Promise<void>((resolve, reject) => {
+                cp.execFile(reportExe.exe, args, { shell: true }, (err, stdout, stderr) => {
+                    if (err) {
+                        vscode.window.showErrorMessage(`Export failed: ${stderr || err.message}`);
+                        reject(err);
+                    } else {
+                        vscode.window.showInformationMessage(`Export successful: ${uri.fsPath}`);
+                        resolve();
+                    }
+                });
+            });
+        });
+    }
 }

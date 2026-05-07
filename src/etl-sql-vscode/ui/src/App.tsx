@@ -59,6 +59,7 @@ function App() {
                 <ReportTab 
                     manifest={reportManifest} 
                     onRefresh={(params) => postMessage({ type: 'refreshReport', parameters: params })} 
+                    onExport={(format) => postMessage({ type: 'exportReport', format })}
                 />
             ) : (
                 <div className="flex-1 flex items-center justify-center bg-[var(--bg-dark)] h-full">

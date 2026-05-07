@@ -25,7 +25,7 @@ namespace ETL_SQL.Core.Parser.Components
             string? title = null, subtitle = null;
             bool titleMd = false, subtitleMd = false;
             string? defaultValue = null;
-            string? styleName = null;
+            string? styleName = null, placeholder = null;
             TooltipDefinition? tooltip = null;
             var mappings        = new List<VisualMapping>();
             var options         = new List<VisualOption>();
@@ -36,6 +36,9 @@ namespace ETL_SQL.Core.Parser.Components
             var formattingRules = new List<FormattingRule>();
             var overlays        = new List<VisualOverlay>();
             var summaries       = new List<TableSummaryItem>();
+            string? labelPosition = null;
+            double? min = null, max = null;
+            int? decimals = null;
             TableSummaryOptions? summaryOptions = null;
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
@@ -101,6 +104,31 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     defaultValue = ParseVisualProperty("DEFAULT");
                 }
+                else if (Match(TokenType.LABEL_POSITION))
+                {
+                    Match(TokenType.EQUALS);
+                    labelPosition = ConsumeReportOptionValue();
+                }
+                else if (Match(TokenType.MIN))
+                {
+                    Match(TokenType.EQUALS);
+                    if (double.TryParse(ConsumeReportOptionValue(), out var minVal)) min = minVal;
+                }
+                else if (Match(TokenType.MAX))
+                {
+                    Match(TokenType.EQUALS);
+                    if (double.TryParse(ConsumeReportOptionValue(), out var maxVal)) max = maxVal;
+                }
+                else if (Match(TokenType.DECIMALS))
+                {
+                    Match(TokenType.EQUALS);
+                    if (int.TryParse(ConsumeReportOptionValue(), out var decVal)) decimals = decVal;
+                }
+                else if (Match(TokenType.PLACEHOLDER))
+                {
+                    Match(TokenType.EQUALS);
+                    placeholder = ConsumeReportOptionValue();
+                }
                 else if (Match(TokenType.SUMMARY))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after SUMMARY");
@@ -128,6 +156,9 @@ namespace ETL_SQL.Core.Parser.Components
                     || visualType == VisualType.Search
                     || visualType == VisualType.Slicer
                     || visualType == VisualType.MultiSelect
+                    || visualType == VisualType.Checkbox
+                    || visualType == VisualType.Textbox
+                    || visualType == VisualType.Numberbox
                     || visualType == VisualType.Image)
                     source = new VisualSourceExpression();
                 else
@@ -143,6 +174,11 @@ namespace ETL_SQL.Core.Parser.Components
                 Subtitle        = subtitle,
                 SubtitleIsMarkdown = subtitleMd,
                 DefaultValue    = defaultValue,
+                LabelPosition   = labelPosition,
+                Min             = min,
+                Max             = max,
+                Decimals        = decimals,
+                Placeholder     = placeholder,
                 Source          = source,
                 Mappings        = mappings,
                 Options         = options,
@@ -868,6 +904,10 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.BUBBLE))       return VisualType.Bubble;
             if (Match(TokenType.RADAR))        return VisualType.Radar;
             if (Match(TokenType.CANDLESTICK))  return VisualType.Candlestick;
+            if (Match(TokenType.CHECKBOX))     return VisualType.Checkbox;
+            if (Match(TokenType.TEXTBOX))      return VisualType.Textbox;
+            if (Match(TokenType.NUMBERBOX))    return VisualType.Numberbox;
+
             // MAP token already exists for container MAP() clauses; match it here only when
             // ParseVisualType() is called (i.e. after AS in CREATE VISUAL ... AS MAP).
             if (Match(TokenType.MAP))          return VisualType.Map;
@@ -904,6 +944,9 @@ namespace ETL_SQL.Core.Parser.Components
                     "RADAR"        => VisualType.Radar,
                     "CANDLESTICK"  => VisualType.Candlestick,
                     "MAP"          => VisualType.Map,
+                    "CHECKBOX"     => VisualType.Checkbox,
+                    "TEXTBOX"      => VisualType.Textbox,
+                    "NUMBERBOX"    => VisualType.Numberbox,
                     _ => throw new SyntaxException(
                              $"Unknown visual type '{val}'.",
                              _parser.Previous.Line, _parser.Previous.Column)
@@ -911,7 +954,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             throw new SyntaxException(
-                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, RELDATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP) but got '{_parser.Current.Value}'",
+                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, RELDATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP, CHECKBOX, TEXTBOX, NUMBERBOX) but got '{_parser.Current.Value}'",
                 _parser.Current.Line, _parser.Current.Column);
         }
 
@@ -1115,7 +1158,7 @@ namespace ETL_SQL.Core.Parser.Components
                         Consume(TokenType.LPAREN, "Expected '(' after WITH in DATA_LABELS");
                         while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
                         {
-                            var subKey = ConsumeIdentifier("Expected data labels option key").Value.ToUpperInvariant();
+                            var subKey = _parser.Advance().Value.ToUpperInvariant();
                             Match(TokenType.EQUALS);
                             // Standard numeric/string values for sub-options
                             var subVal = ConsumeReportOptionValue();
@@ -1166,7 +1209,10 @@ namespace ETL_SQL.Core.Parser.Components
         {
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
-                var key = ConsumeIdentifier("Expected axis option key").Value.ToUpperInvariant();
+                if (_parser.Current.Type == TokenType.RPAREN || _parser.Current.Type == TokenType.EOF)
+                    break;
+                var keyToken = _parser.Advance();
+                var key = keyToken.Value.ToUpperInvariant();
                 Match(TokenType.EQUALS);
                 var val = ParseExpression();
                 opts.Add(new VisualOption { Key = key, Value = val is LiteralExpression lit ? lit.Value?.ToString() ?? "" : val.ToSql() });
@@ -1266,6 +1312,22 @@ namespace ETL_SQL.Core.Parser.Components
                     var valueExpr = ConsumeIdentifier("Expected value expression").Value;
                     Consume(TokenType.RPAREN, "Expected ')' to close SET_PARAMETER");
                     action = new SetParameterAction { Trigger = trigger, ParameterName = paramName, ValueExpression = valueExpr };
+                }
+                else if (Match(TokenType.RUN_SCRIPT))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after RUN_SCRIPT");
+                    var scriptPath = Consume(TokenType.STRING_LITERAL, "Expected script path string").Value;
+                    var actionParams = new Dictionary<string, string>();
+                    while (Match(TokenType.COMMA))
+                    {
+                        var pName = ConsumeIdentifier("Expected parameter name").Value;
+                        if (!pName.StartsWith("@")) pName = "@" + pName;
+                        Consume(TokenType.EQUALS, "Expected '=' after parameter name");
+                        var pVal = ConsumeIdentifier("Expected column name or expression").Value;
+                        actionParams[pName] = pVal;
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close RUN_SCRIPT");
+                    action = new RunScriptAction { Trigger = trigger, ScriptPath = scriptPath, Parameters = actionParams };
                 }
                 else
                 {

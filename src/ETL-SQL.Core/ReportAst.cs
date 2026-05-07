@@ -71,7 +71,8 @@ namespace ETL_SQL.Core
         DatePicker, RelDatePicker, Slider, MultiSelect, Search,
         Gauge, Funnel, Waterfall, Image,
         Bubble, Radar, Candlestick,
-        Map
+        Map,
+        Checkbox, Textbox, Numberbox
     }
 
     public enum DatasetEncryptionMode
@@ -137,6 +138,13 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
+    public record RunScriptAction : VisualAction
+    {
+        public required string ScriptPath { get; init; }
+        public Dictionary<string, string> Parameters { get; init; } = new();
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
     public record TableSummaryItem(string Aggregate, string Column, string? Alias);
 
     public record TableSummaryOptions : AstNode
@@ -194,6 +202,11 @@ namespace ETL_SQL.Core
         public bool SubtitleIsMarkdown               { get; init; }
         public TooltipDefinition? Tooltip             { get; init; }
         public string? DefaultValue                   { get; init; }
+        public string? LabelPosition                  { get; init; }
+        public double? Min                            { get; init; }
+        public double? Max                            { get; init; }
+        public int? Decimals                          { get; init; }
+        public string? Placeholder                    { get; init; }
         public required VisualSourceExpression Source  { get; init; }
         public List<VisualMapping> Mappings            { get; init; } = new();
         public List<VisualOption> Options              { get; init; } = new();

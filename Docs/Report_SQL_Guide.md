@@ -288,6 +288,9 @@ All clauses inside the outer `( )` are separated by commas. The closing `)` ends
 | `SLIDER` | Numeric range slider. No SOURCE required. | `<input type="range">` |
 | `MULTISELECT` | Multi-value checkbox list. SOURCE provides the option list. | Checkbox list |
 | `SEARCH` | Free-text search box with debounce. No SOURCE required. | `<input type="text">` |
+| `CHECKBOX` | Boolean toggle. No SOURCE required. | `<input type="checkbox">` |
+| `TEXTBOX` | Text input field. No SOURCE required. | `<input type="text">` |
+| `NUMBERBOX` | Numeric input with validation. No SOURCE required. | `<input type="number">` |
 
 ### SOURCE
 
@@ -303,7 +306,7 @@ SOURCE = (SELECT region, SUM(revenue) AS rev FROM #summary GROUP BY region)
 
 Inline SELECTs are evaluated at build time and their results are snapshotted into the manifest. If you need the visual to refresh independently, use `CREATE DATASET` and reference the dataset by name.
 
-`TEXT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, and `SEARCH` visuals do not require `SOURCE`. `MULTISELECT` requires a `SOURCE` to populate the option list.
+`TEXT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, and `NUMBERBOX` visuals do not require `SOURCE`. `MULTISELECT` requires a `SOURCE` to populate the option list.
 
 ### TITLE and SUBTITLE
 
@@ -576,6 +579,43 @@ CREATE VISUAL ProductSearch AS SEARCH (
 |------------|-------------|
 | `PLACEHOLDER` | Ghost text shown when the box is empty. |
 | `DEFAULT` | Initial text value when the page loads. |
+
+#### CHECKBOX, TEXTBOX, and NUMBERBOX (Input Visuals)
+
+These visuals provide standard form-like inputs for parameter control. Unlike charts, they use dedicated top-level properties for validation and layout.
+
+```sql
+CREATE VISUAL ShowActive AS CHECKBOX (
+  TITLE = 'Show Active Only',
+  LABEL_POSITION = 'LEFT',
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@active_only, value))
+);
+
+CREATE VISUAL UserName AS TEXTBOX (
+  TITLE = 'User Filter',
+  LABEL_POSITION = 'TOP',
+  OPTIONS (PLACEHOLDER = 'Enter name...'),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@user, value))
+);
+
+CREATE VISUAL PriceThreshold AS NUMBERBOX (
+  TITLE = 'Min Price',
+  LABEL_POSITION = 'LEFT',
+  MIN = 0,
+  MAX = 10000,
+  DECIMALS = 2,
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@min_price, value))
+);
+```
+
+| Property | Applies to | Description |
+| :--- | :--- | :--- |
+| `LABEL_POSITION` | All three | `TOP` (default), `LEFT` (compact), or `HIDDEN`. |
+| `MIN` | `NUMBERBOX` | Minimum allowed value. |
+| `MAX` | `NUMBERBOX` | Maximum allowed value. |
+| `DECIMALS` | `NUMBERBOX` | Number of decimal places to allow/enforce. |
+
+Input visuals are typically placed in a `SCROLL` container or a dedicated sidebar/header row on a `PAGE`.
 
 #### How Parameter Binding Works
 

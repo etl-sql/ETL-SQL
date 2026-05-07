@@ -172,6 +172,7 @@ namespace ETL_SQL.Core.Common
         public IDictionary<string, CreateThemeStatement> ThemeDefinitions { get; } = new Dictionary<string, CreateThemeStatement>(StringComparer.OrdinalIgnoreCase);
         public string TemplatePath { get; set; } = "./Templates";
         public string? ReportTitle { get; set; }
+        public IDictionary<string, string> BaselineParameters { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         public bool ReportTitleIsMarkdown { get; set; }
         public string? ReportDescription { get; set; }
         public string? ReportCss { get; set; }

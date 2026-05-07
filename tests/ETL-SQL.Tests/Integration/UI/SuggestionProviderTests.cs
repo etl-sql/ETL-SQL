@@ -90,7 +90,7 @@ namespace ETL_SQL.Tests.Integration
             };
             var results2 = await engine.GetSuggestionsAsync(context2);
             // Verify path suggestions are returned
-            Assert.NotEmpty(results2.Where(s => s.Type == SuggestionType.FilePath));
+            Assert.Contains(results2, s => s.Type == SuggestionType.FilePath);
         }
 
         [Fact]

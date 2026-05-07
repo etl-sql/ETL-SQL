@@ -128,6 +128,7 @@ namespace ETL_SQL.Core.Parser
             dict["CANDLESTICK"]  = TokenType.CANDLESTICK;
             dict["FORMATTING"]  = TokenType.FORMATTING;
             dict["EXPECT"]      = TokenType.EXPECT;
+            dict["PLACEHOLDER"] = TokenType.PLACEHOLDER;
 
             // ── Overlay keywords (Phase 9F) ────────────────────────────────
             dict["OVERLAYS"]    = TokenType.OVERLAYS;
@@ -156,6 +157,8 @@ namespace ETL_SQL.Core.Parser
             dict["FONT_WEIGHT"]          = TokenType.FONT_WEIGHT;
             dict["GAUGE_STYLE"]          = TokenType.GAUGE_STYLE;
             dict["SHOW_NO_DATA_PLACEHOLDER"] = TokenType.SHOW_NO_DATA_PLACEHOLDER;
+            dict["CROSS_VISUAL_ACTION"]  = TokenType.CROSS_VISUAL_ACTION;
+            dict["HIGHLIGHT"]            = TokenType.HIGHLIGHT;
             dict["CENTER"]        = TokenType.CENTER;
             dict["FONT_SIZE"]     = TokenType.FONT_SIZE;
             dict["INSIDE"]        = TokenType.INSIDE;

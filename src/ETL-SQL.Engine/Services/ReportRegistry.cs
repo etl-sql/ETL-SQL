@@ -23,6 +23,7 @@ namespace ETL_SQL.Engine.Services
 
         public string TemplatePath { get; set; } = "./Templates";
         public string? ReportTitle { get; set; }
+        public IDictionary<string, string> BaselineParameters { get; private set; }
         public bool ReportTitleIsMarkdown { get; set; }
         public string? ReportDescription { get; set; }
         public string? ReportCss { get; set; }
@@ -47,6 +48,7 @@ namespace ETL_SQL.Engine.Services
             ButtonDefinitions = new Dictionary<string, CreateButtonStatement>(StringComparer.OrdinalIgnoreCase);
             TemplateDefinitions = new Dictionary<string, CreateTemplateStatement>(StringComparer.OrdinalIgnoreCase);
             ThemeDefinitions = new Dictionary<string, CreateThemeStatement>(StringComparer.OrdinalIgnoreCase);
+            BaselineParameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
         /// <summary>Creates a thread-safe shallow clone of the registry for parallel execution branches.</summary>
@@ -63,6 +65,7 @@ namespace ETL_SQL.Engine.Services
                 ButtonDefinitions = new Dictionary<string, CreateButtonStatement>(ButtonDefinitions, StringComparer.OrdinalIgnoreCase),
                 TemplateDefinitions = new Dictionary<string, CreateTemplateStatement>(TemplateDefinitions, StringComparer.OrdinalIgnoreCase),
                 ThemeDefinitions = new Dictionary<string, CreateThemeStatement>(ThemeDefinitions, StringComparer.OrdinalIgnoreCase),
+                BaselineParameters = new Dictionary<string, string>(BaselineParameters, StringComparer.OrdinalIgnoreCase),
                 TemplatePath = this.TemplatePath,
                 ReportTitle = this.ReportTitle,
                 ReportDescription = this.ReportDescription,
