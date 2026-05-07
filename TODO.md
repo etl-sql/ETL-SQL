@@ -2,7 +2,7 @@
 ## Up Next
 - [ ] **Styles are not being used** Using the kitchen sink report in report portal C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\report_kitchen_sink.rptsql BarByRegion and others have a dark theme going and the theme set on the chart has a white background
 
-- [ ] **Cross fltering isn't working correctly** 
+- [ ] **Cross highlight/filtering isn't working correctly** 
   What should happen using kitchen sink example: C:\Users\chuck\scratch\ETL-SQL\Reports\report_kitchen_sink.rptsql
     1. When you left click on a bar in a bar chart it maintains its color while all the other bars are dulled
     2. All other charts that have CROSS_FILTER = ON should change their colors to align with the filter.  For example using the kitchen sink report you click on North in the BarByRegion chart then DrillRegionDetail should change the bars so that whatever parts are represented by North are normal colored and those not are dimmed.  The different categories in DrillRegionDetail could have half the bar be normal color and the other half dimmed showing how much of that category is represented by North.
