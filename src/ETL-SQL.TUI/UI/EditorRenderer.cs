@@ -505,7 +505,6 @@ namespace ETL_SQL.TUI.UI
             Row("Ctrl+Shift+S",            "Save As");
             Row("Ctrl+O",                  "Open (with file autocomplete)");
             Row("Ctrl+N",                  "New script");
-            Row("Ctrl+P",                  "Export results to CSV");
 
             Section("Editing");
             Row("Ctrl+Z / Ctrl+Y",        "Undo / Redo");

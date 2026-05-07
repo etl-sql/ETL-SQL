@@ -1,32 +1,14 @@
 # ETL-SQL Development Roadmap
 ## Up Next
-- [ ] **Portal 
+- [ ] **Styles are not being used** Using the kitchen sink report in report portal C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\report_kitchen_sink.rptsql BarByRegion and others have a dark theme going and the theme set on the chart has a white background
 
-- [ ] **Persistence awesome and not awesome**  Persistence can be great especially if you're working with a big query and you want to run just parts of it and you have variables and temp tables up high.  But its not great a lot of the time.  I think we need to make it work like this.  If the user has SET PERSIST ON; then everything works like it does right now saving sessions ect.  If the has SET PERSIST OFF; or nothing this will be the default then every time you execute it will be from scratch.  Nothing is saved and the session is completely blank.
+- [ ] **Cross fltering isn't working correctly** 
+  What should happen using kitchen sink example: C:\Users\chuck\scratch\ETL-SQL\Reports\report_kitchen_sink.rptsql
+    1. When you left click on a bar in a bar chart it maintains its color while all the other bars are dulled
+    2. All other charts that have CROSS_FILTER = ON should change their colors to align with the filter.  For example using the kitchen sink report you click on North in the BarByRegion chart then DrillRegionDetail should change the bars so that whatever parts are represented by North are normal colored and those not are dimmed.  The different categories in DrillRegionDetail could have half the bar be normal color and the other half dimmed showing how much of that category is represented by North.
+    3. If the user clicks the North bar a second time the CROSS_FILTERed charts return to normal with normal colors (unfiltering)
 
-- [ ] **Need to add VISUALS** We need to add some visuals to the reports that are not charts
-CHECKBOX (true/false)  
-TEXTBOX (string/numbers)  
-
-```sql
-CREATE VISUAL chk AS CHECKBOX (
-  TITLE = 'My Checkbox',
-  VALUE = true,
-  TOOLTIP = 'A simple checkbox'
-);
-
-CREATE VISUAL txbox AS TEXTBOX (
-  TITLE = 'My Textbox',
-  VALUE = 'Hello World',
-  TOOLTIP = 'A simple textbox'
-  FORMAT = '{0}'  
-);
-
-```
-
-- [ ] **Button Visual custom actions** The button visual currently has back, refresh and export.  We need to add the ability for it to run an ETL-SQL script.  The script can be either code or a RUN SCRIPT command that runs a script file.  The script can also use input parameters that are passed to it from the report.
-
-- [ ] **Kitchen Sink report**  We need to add CHECKBOX, TEXTBOX, and Conditional formatting to the TABLE for the kitchen sink report: C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\report_kitchen_sink.rptsql.
+- [x] **Header is wrong**  The report-runtime.js header first is only supposed to appear when using VS Code and hidden in portal or serve.  Second its supposed to be rocket icon (launch) which launches into serve mode so the user who is developing the dashboard can see what it will look like.  Next should be a markdown icon to publish to markdown.  The functionality already exists just needs to call it.  Next publish to PDF icon, same as Markdown it already exists just needs to call it.  Finally a txt icon which will call report print which prints an ascii of the charges in text format. Once again it already exists just need to call it.
 
 - [ ] **Script issue**  The following script works fine in TUI and VS Code but does not show the table in the report portal: C:\Users\chuck\scratch\ETL-SQL\samples\sales table.rptsql
 

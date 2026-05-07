@@ -473,48 +473,6 @@ namespace ETL_SQL.TUI.UI
             _renderer.ShowStatus(string.IsNullOrEmpty(_renderer.FilterText) ? "Filter cleared." : $"Filtering: {_renderer.FilterText}");
         }
 
-        /// <summary>Exports the active result set to a CSV file using the prompt system.</summary>
-        public async Task ExportResults()
-        {
-            if (_evaluator.LastResultSets.Count == 0) { _renderer.ShowStatus("No results to export."); return; }
-
-            var res = _evaluator.LastResultSets[Math.Clamp(_renderer.ActiveResultSetIndex, 0, _evaluator.LastResultSets.Count - 1)];
-            string defaultPath = string.IsNullOrEmpty(_filePath)
-                ? Path.Combine(Directory.GetCurrentDirectory(), "export.csv")
-                : Path.ChangeExtension(_filePath, ".csv");
-
-            var path = await ShowPrompt("Export CSV path", defaultPath);
-            if (string.IsNullOrWhiteSpace(path)) { _renderer.ShowStatus("Export cancelled."); return; }
-
-            path = path.Trim('"');
-
-            try
-            {
-                await using var writer = new System.IO.StreamWriter(path, append: false, encoding: System.Text.Encoding.UTF8);
-
-                // Header row
-                var cols = res.ColumnNames;
-                await writer.WriteLineAsync(string.Join(",", cols.Select(CsvEscape)));
-
-                // Data rows
-                foreach (var row in res.Rows)
-                    await writer.WriteLineAsync(string.Join(",", cols.Select(c => CsvEscape(row[c]?.ToString() ?? ""))));
-
-                _renderer.ShowStatus($"Exported {res.Rows.Count} rows → {Path.GetFileName(path)}");
-            }
-            catch (Exception ex)
-            {
-                _renderer.ShowStatus($"Export failed: {ex.Message}");
-            }
-        }
-
-        private static string CsvEscape(string value)
-        {
-            if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
-                return $"\"{value.Replace("\"", "\"\"")}\"";
-            return value;
-        }
-
         /// <summary>Copies the current selection (or results) to the clipboard.</summary>
         /// <summary>Copies the current selection (or results) to the clipboard.</summary>
         public async Task Copy()
