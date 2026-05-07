@@ -12,6 +12,10 @@
     // Web mode  (single or multi-report server): window.__IS_WEB__ = true
     // VS Code mode (webview preview):           window.__MANIFEST__ set, no __IS_WEB__
     const isWebMode = window.__IS_WEB__ || window.location.protocol.startsWith('http');
+    const vscode    = (typeof acquireVsCodeApi === 'function') ? acquireVsCodeApi() : null;
+    const isInteractive = isWebMode || vscode;
+    
+    let baselineManifest = null;
     
     function getOption(options, key) {
         if (!options) return null;
@@ -92,6 +96,7 @@
         const root = document.getElementById('root');
         if (!root) return;
         root.innerHTML = ''; // Clear for full rebuild
+        renderHeader(root, manifest);
 
         // Register custom themes before any echarts.init() calls
         if (typeof echarts !== 'undefined' && manifest.customThemes) {
@@ -99,6 +104,12 @@
                 if (t.name && t.config) echarts.registerTheme(t.name, t.config);
             });
         }
+
+        // Cache baseline manifest (the first one with no parameters set)
+        if (!baselineManifest && (!manifest.parameters || Object.keys(manifest.parameters).length === 0)) {
+            baselineManifest = JSON.parse(JSON.stringify(manifest));
+        }
+        window.__CURRENT_MANIFEST__ = manifest;
 
         // Update local parameters from manifest
         if (manifest.parameters) {
@@ -120,7 +131,7 @@
 
             manifest.pages.forEach(page => {
                 const pageStyles = page.styles || {};
-                const pageTheme = pageStyles['THEME'] || pageStyles['theme'] || null;
+                const pageTheme = pageStyles['THEME'] || pageStyles['theme'] || manifest.theme || null;
                 const section = renderPage(manifest, page, pageSections, pageTheme);
                 root.appendChild(section);
 
@@ -134,7 +145,7 @@
                 renderNavBar(root, navDef, pageSections, manifest.pages);
             }
         } else {
-            (manifest.visuals || []).forEach(v => renderVisual(root, v, null));
+            (manifest.visuals || []).forEach(v => renderVisual(root, v, manifest.theme, manifest));
         }
 
         // Synchronize parameter values to any newly rendered controls
@@ -161,6 +172,56 @@
 
         renderFooter(root, manifest);
         renderPipelineConsole(root, manifest);
+    }
+
+    // ── Header & Actions ──────────────────────────────────────────────────
+
+    function renderHeader(container, manifest) {
+        const header = document.createElement('header');
+        header.className = 'report-header';
+
+        const left = document.createElement('div');
+        left.className = 'header-left';
+        left.innerHTML = `
+            <div class="header-title">${escHtml(manifest.title || 'ETL-SQL Report')}</div>
+            <div class="header-subtitle">${escHtml(manifest.description || 'Interactive Data Insight')}</div>
+        `;
+
+        const actions = document.createElement('div');
+        actions.className = 'header-actions';
+
+        const clearBtn = document.createElement('button');
+        clearBtn.className = 'header-btn danger';
+        clearBtn.innerHTML = '<span>&#x21BB;</span> Clear Filters';
+        clearBtn.addEventListener('click', () => {
+            if (vscode) vscode.postMessage({ type: 'refreshReport', parameters: {} });
+            else postParameters({}).then(m => { if (m) renderManifest(m); });
+        });
+
+        const serveBtn = document.createElement('button');
+        serveBtn.className = 'header-btn primary';
+        serveBtn.innerHTML = '<span>&#x2601;</span> Serve';
+        serveBtn.addEventListener('click', () => {
+            if (vscode) vscode.postMessage({ type: 'serve' });
+            else alert('Serve is only available in VS Code mode.');
+        });
+
+        const exportBtn = document.createElement('button');
+        exportBtn.className = 'header-btn';
+        exportBtn.innerHTML = '<span>&#x2913;</span> Export CSV';
+        exportBtn.addEventListener('click', () => {
+             const firstVisual = manifest.visuals.find(v => v.visualType === 'TABLE' || v.visualType === 'BAR' || v.visualType === 'LINE');
+             if (firstVisual) exportCsv(firstVisual);
+             else alert('No exportable data found.');
+        });
+
+        actions.appendChild(clearBtn);
+        actions.appendChild(serveBtn);
+        actions.appendChild(exportBtn);
+
+        header.appendChild(left);
+        header.appendChild(actions);
+        container.appendChild(header);
     }
 
     function renderNavBar(container, navDef, pageSections, pages) {
@@ -369,7 +430,7 @@
     }
 
     // Filter types that render without requiring rows
-    const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH']);
+    const FILTER_TYPES = new Set(['SLICER', 'TABLE', 'CARD', 'TEXT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX']);
 
     function renderVisual(container, visual, pageTheme, manifest) {
         const card = document.createElement('div');
@@ -417,17 +478,21 @@
 
         // Resolve effective theme: visual-level overrides page-level
         const effectiveTheme = vstyles['THEME'] || vstyles['theme'] || pageTheme || null;
+        if (effectiveTheme) card.classList.add('theme-' + effectiveTheme.toLowerCase());
 
         switch (type) {
             case 'TABLE':       renderTable(card, visual);                        break;
             case 'CARD':        renderCard(card, visual);                         break;
-            case 'SLICER':      renderSlicer(card, visual, manifest);             break;
+            case 'SLICER':      
+            case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
             case 'TEXT':        renderText(card, visual);                         break;
             case 'DATEPICKER':    renderDatePicker(card, visual, manifest);        break;
             case 'RELDATEPICKER': renderRelDatePicker(card, visual, manifest);     break;
             case 'SLIDER':      renderSlider(card, visual, manifest);             break;
-            case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
             case 'SEARCH':      renderSearch(card, visual, manifest);             break;
+            case 'CHECKBOX':    renderCheckbox(card, visual, manifest);           break;
+            case 'TEXTBOX':     renderTextbox(card, visual, manifest);            break;
+            case 'NUMBERBOX':   renderNumberbox(card, visual, manifest);          break;
             case 'IMAGE':       renderImage(card, visual);                        break;
             default:            renderChart(card, visual, effectiveTheme);        break;
         }
@@ -446,38 +511,56 @@
         return el._crossFilterState;
     }
 
-    function applyPageCrossFilter(container, filterValue, filterColumn) {
+    function applyPageCrossFilter(container, filterValue, filterColumn, sourceVisualName) {
         let pageEl = container;
         while (pageEl && !pageEl.classList.contains('page')) pageEl = pageEl.parentElement;
         if (!pageEl) return;
         const state = pageEl._crossFilterState || (pageEl._crossFilterState = {});
+        
         // Toggle: clicking same value clears filter
-        if (state.filterValue === filterValue && state.filterColumn === filterColumn) {
+        if (state.filterValue === filterValue && state.filterColumn === filterColumn && state.sourceVisual === sourceVisualName) {
             state.filterValue  = null;
             state.filterColumn = null;
+            state.sourceVisual = null;
         } else {
             state.filterValue  = filterValue;
             state.filterColumn = filterColumn;
+            state.sourceVisual = sourceVisualName;
         }
-        // Re-render all cross-filter TABLE visuals on this page
-        pageEl.querySelectorAll('[data-cross-filter]').forEach(el => {
-            const visual = el._visualData;
+
+        // 1. Visual Dimming Feedback for OTHER visuals
+        pageEl.querySelectorAll('.visual-card').forEach(card => {
+            const visual = card._visualData;
             if (!visual) return;
-            const wrapper = el.querySelector('.table-wrapper');
-            if (!wrapper) return;
-            const tbody = wrapper.querySelector('tbody');
-            if (!tbody) return;
-            const ci = (visual.columns || []).findIndex(
-                c => c.toLowerCase() === (state.filterColumn || '').toLowerCase());
-            Array.from(tbody.rows).forEach(tr => {
-                if (!state.filterValue || ci < 0) {
-                    tr.style.display = '';
-                } else {
-                    const cellVal = tr.cells[ci] ? tr.cells[ci].textContent : '';
-                    tr.style.display = cellVal === state.filterValue ? '' : 'none';
+            const type = (visual.visualType || '').toUpperCase();
+            const isFilter = ['SLICER', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'].includes(type);
+            
+            if (state.sourceVisual) {
+                if (visual.name === state.sourceVisual) {
+                    card.classList.add('cross-filter-source');
+                    card.classList.remove('dimmed');
+                } else if (!isFilter) {
+                    card.classList.add('dimmed');
+                    card.classList.remove('cross-filter-source');
                 }
-            });
+            } else {
+                card.classList.remove('dimmed');
+                card.classList.remove('cross-filter-source');
+                // Clear chart highlights if we cleared the filter
+                const wrapper = card.querySelector('.chart-wrapper');
+                if (wrapper && wrapper._echartsInst) {
+                    wrapper._echartsInst.dispatchAction({ type: 'downplay' });
+                }
+            }
         });
+
+        // 2. Trigger parameter update
+        const batch = { ['@' + filterColumn]: state.filterValue || '' };
+        if (vscode) {
+            vscode.postMessage({ type: 'refreshReport', parameters: batch });
+        } else {
+            postParameters(batch).then(m => { if (m) renderManifest(m); });
+        }
     }
 
     function registerMapThenRender(mapKey, mapFile, onReady, wrapper) {
@@ -585,27 +668,72 @@
             }
 
             const chart = echarts.init(wrapper, effectiveTheme || null);
+            
+            // Enable universal highlight/downplay support for cross-filtering
+            if (option.series) {
+                option.series.forEach(s => {
+                    if (!s.emphasis) s.emphasis = {};
+                    // Disable hover focus/dimming as per user request
+                    s.emphasis.focus = 'none'; 
+                });
+            }
+
+            // Cross-Highlighting logic: Merge Baseline totals with current Filtered values
+            const isFiltered = baselineManifest && manifest.parameters && Object.values(manifest.parameters).some(v => v);
+            if (isFiltered && baselineManifest) {
+                mergeHighlightData(visual, option);
+            }
+
             chart.setOption(option);
             wrapper._echartsInst = chart;
 
-            const clickActions = actionsFor(visual, 'ON_CLICK');
-            const crossFilter  = isOn((visual.options || {})['CROSS_FILTER']);
-            const xMappingCol  = (visual.options || {})['mapping:x'];
+            let lastHoveredRow = null;
+            chart.on('mousemove', params => {
+                const idx = params.dataIndex != null ? params.dataIndex : -1;
+                lastHoveredRow = (visual.rows || [])[idx] || null;
+            });
 
             if (clickActions.length > 0 || crossFilter) {
                 chart.on('click', params => {
                     const idx     = params.dataIndex != null ? params.dataIndex : -1;
-                    const rowData = idx >= 0 ? (visual.rows || [])[idx] || [] : [];
-                    clickActions.forEach(action => executeAction(action, rowData, visual.columns || []));
+                    let rowData   = (visual.rows || [])[idx] || [];
+
+                    // Robust row lookup for charts
+                    if (params.name && visual.rows && visual.rows.length > 0) {
+                        const xIdx = xMappingCol ? (visual.columns || []).findIndex(c => c.toLowerCase() === xMappingCol.toLowerCase()) : 0;
+                        const match = visual.rows.find(r => String(r[xIdx] || '') === String(params.name));
+                        if (match) rowData = match;
+                    }
+
+                    // CROSS_FILTER handling
                     if (crossFilter) {
                         const clickedValue = params.name || params.value || (rowData.length > 0 ? rowData[0] : null);
                         const colName = xMappingCol || (visual.columns && visual.columns[0]);
                         if (clickedValue != null && colName) {
-                            applyPageCrossFilter(container, String(clickedValue), colName);
+                            applyPageCrossFilter(container, String(clickedValue), colName, visual.name);
+                            
+                            // Visual feedback: clear existing highlights and highlight ONLY the clicked bar
+                            chart.dispatchAction({ type: 'downplay' });
+                            chart.dispatchAction({
+                                type: 'highlight',
+                                seriesIndex: params.seriesIndex,
+                                dataIndex: params.dataIndex
+                            });
                         }
+                    } else {
+                        // ON_CLICK actions (Drill Down, etc)
+                        clickActions.forEach(action => executeAction(action, rowData, visual.columns || []));
                     }
                 });
             }
+            
+            wrapper.addEventListener('contextmenu', e => {
+                const drillDowns = (visual.actions || []).filter(a => a.type === 'DRILL_DOWN');
+                if (drillDowns.length > 0) {
+                    e.preventDefault();
+                    showCtxMenu(e.clientX, e.clientY, visual, lastHoveredRow);
+                }
+            });
         }
 
         if (mapKey) {
@@ -662,29 +790,45 @@
         return el ? el._visualData : null;
     }
 
-    // Lightweight singleton context menu for table right-click export
+    // Lightweight singleton context menu for DRILL_DOWN and Export
     let _ctxMenu = null;
-    function showCtxMenu(x, y, visual) {
+    function showCtxMenu(x, y, visual, rowData) {
         hideCtxMenu();
         const menu = document.createElement('div');
-        menu.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1px solid #ccc;' +
-            'border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.18);padding:4px 0;font-size:13px;';
+        menu.className = 'report-ctx-menu';
         menu.style.left = x + 'px';
         menu.style.top  = y + 'px';
 
-        const item = document.createElement('div');
-        item.textContent = '⬇ Export to CSV';
-        item.style.cssText = 'padding:6px 16px;cursor:pointer;white-space:nowrap;';
-        item.addEventListener('mouseenter', () => item.style.background = '#f0f4ff');
-        item.addEventListener('mouseleave', () => item.style.background = '');
-        item.addEventListener('click', () => { exportCsv(visual); hideCtxMenu(); });
-        menu.appendChild(item);
+        const drillDowns = (visual.actions || []).filter(a => a.type === 'DRILL_DOWN');
+        drillDowns.forEach(action => {
+            const item = document.createElement('div');
+            item.className = 'ctx-item';
+            const target = action.targetVisual || action.targetPage || 'Details';
+            item.innerHTML = `<span>&#x21AA;</span> Drill down to <b>${escHtml(target)}</b>`;
+            item.addEventListener('click', () => {
+                executeAction(action, rowData || [], visual.columns || []);
+                hideCtxMenu();
+            });
+            menu.appendChild(item);
+        });
+
+        if (drillDowns.length > 0) {
+            const sep = document.createElement('div');
+            sep.className = 'ctx-sep';
+            menu.appendChild(sep);
+        }
+
+        const exportItem = document.createElement('div');
+        exportItem.className = 'ctx-item';
+        exportItem.innerHTML = `<span>&#x2913;</span> Export to CSV`;
+        exportItem.addEventListener('click', () => { exportCsv(visual); hideCtxMenu(); });
+        menu.appendChild(exportItem);
 
         document.body.appendChild(menu);
         _ctxMenu = menu;
 
         // Close on any outside click
-        setTimeout(() => document.addEventListener('click', hideCtxMenu, { once: true }), 0);
+        setTimeout(() => document.addEventListener('click', hideCtxMenu, { once: true }), 10);
     }
 
     function hideCtxMenu() {
@@ -764,13 +908,72 @@
         table.appendChild(tbody);
         wrapper.appendChild(table);
 
-        // Right-click → Export to CSV
+        // Right-click → Drill Down & Export
         wrapper.addEventListener('contextmenu', e => {
             e.preventDefault();
-            showCtxMenu(e.clientX, e.clientY, visual);
+            const tr = e.target.closest('tr');
+            const idx = tr ? Array.from(tbody.rows).indexOf(tr) : -1;
+            const rowData = idx >= 0 ? (visual.rows || [])[idx] : null;
+            showCtxMenu(e.clientX, e.clientY, visual, rowData);
         });
 
         container.appendChild(wrapper);
+    }
+
+    function mergeHighlightData(currentVisual, option) {
+        if (!baselineManifest) return;
+        const baselineVisual = baselineManifest.visuals.find(v => v.name === currentVisual.name);
+        if (!baselineVisual) return;
+
+        const type = (currentVisual.visualType || '').toUpperCase();
+        if (type !== 'BAR' && type !== 'HBAR' && type !== 'HORIZONTALBAR' && type !== 'LINE') return;
+
+        // Ensure we have mappings
+        const xCol = (currentVisual.options || {})['mapping:x'] || currentVisual.columns[0];
+        const yCol = (currentVisual.options || {})['mapping:y'] || currentVisual.columns[1];
+        const xIdx = currentVisual.columns.indexOf(xCol);
+        const yIdx = currentVisual.columns.indexOf(yCol);
+
+        if (xIdx < 0 || yIdx < 0) return;
+
+        // Map baseline values by X
+        const baselineMap = {};
+        baselineVisual.rows.forEach(r => { baselineMap[String(r[xIdx])] = parseFloat(r[yIdx]) || 0; });
+
+        // Map current values by X
+        const currentMap = {};
+        currentVisual.rows.forEach(r => { currentMap[String(r[xIdx])] = parseFloat(r[yIdx]) || 0; });
+
+        // Rebuild series to be stacked
+        if (!option.series || option.series.length === 0) return;
+
+        const primarySeries = option.series[0];
+        const filteredData = [];
+        const remainingData = [];
+        const categories = option.xAxis?.data || option.yAxis?.data || [];
+
+        categories.forEach(cat => {
+            const total = baselineMap[String(cat)] || 0;
+            const filtered = currentMap[String(cat)] || 0;
+            filteredData.push(filtered);
+            remainingData.push(Math.max(0, total - filtered));
+        });
+
+        primarySeries.data = filteredData;
+        primarySeries.stack = 'highlight';
+        primarySeries.name = 'Filtered';
+
+        const remainingSeries = JSON.parse(JSON.stringify(primarySeries));
+        remainingSeries.name = 'Total';
+        remainingSeries.data = remainingData;
+        remainingSeries.itemStyle = { opacity: 0.2, color: '#888' };
+        remainingSeries.emphasis = { disabled: true };
+        remainingSeries.tooltip = { show: false };
+
+        option.series.push(remainingSeries);
+        
+        // Ensure stack is active
+        option.series.forEach(s => s.stack = 'highlight');
     }
 
     // ── Card ────────────────────────────────────────────────────────────────
@@ -809,69 +1012,105 @@
         const wrapper = document.createElement('div');
         wrapper.className = 'slicer-wrapper';
         
-        // Find the parameter name from actions
         const action = visual.actions.find(a => a.type === 'SET_PARAMETER');
         const paramName = action ? action.parameterName : null;
-
-        const select = document.createElement('select');
-        // Attach parameter info to the interactive element for syncParameters
-        if (paramName) select.setAttribute('data-parameter', paramName);
         
-        // Optional: Multi-select support
-        if (visual.visualType.toLowerCase() === 'multiselect') {
-            select.multiple = true;
+        const typeStr = visual.visualType.toLowerCase();
+        const isMulti = typeStr === 'multiselect' || isOn(visual.options['MULTIPLE'] || visual.options['multiple']);
+
+        const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+        const isInteractive = (isWebMode || vscode) && changeActions.length > 0;
+
+        if (isMulti && isInteractive) {
+            renderMultiSelectCheckboxes(wrapper, visual, manifest, paramName, changeActions);
+        } else {
+            const select = document.createElement('select');
+            if (paramName) select.setAttribute('data-parameter', paramName);
+            if (isMulti) select.multiple = true;
+
+            const valCol = (visual.options['mapping:value'] || visual.columns[0] || 'value').toLowerCase();
+            const lblCol = (visual.options['mapping:label'] || visual.columns[1] || visual.columns[0] || 'label').toLowerCase();
+            const valIdx = visual.columns.findIndex(c => c.toLowerCase() === valCol);
+            const lblIdx = visual.columns.findIndex(c => c.toLowerCase() === lblCol);
+            const finalValIdx = valIdx >= 0 ? valIdx : 0;
+            const finalLblIdx = lblIdx >= 0 ? lblIdx : (visual.columns.length > 1 ? 1 : 0);
+
+            visual.rows.forEach(row => {
+                const opt = document.createElement('option');
+                opt.value = row[finalValIdx];
+                opt.textContent = row[finalLblIdx];
+                select.appendChild(opt);
+            });
+
+            if (paramName && manifest && manifest.parameters) {
+                const current = getParam(manifest.parameters, paramName);
+                if (current !== undefined) select.value = current;
+            }
+
+            if (isInteractive) {
+                select.addEventListener('change', () => {
+                    let val = select.value;
+                    if (select.multiple) {
+                        val = Array.from(select.selectedOptions).map(o => o.value).join(',');
+                    }
+                    changeActions.forEach(action => {
+                        postParameter(action.parameterName, val)
+                            .then(m => { if (m) renderManifest(m); });
+                    });
+                });
+                wrapper.appendChild(select);
+            } else {
+                const note = document.createElement('p');
+                note.className = 'slicer-note';
+                note.textContent = '[Slicer \u2014 interactive in ReportPlayer only]';
+                wrapper.appendChild(note);
+            }
         }
+        container.appendChild(wrapper);
+    }
 
-        // Add options
-        const valCol = (visual.options['mapping:value'] || 'value').toLowerCase();
-        const lblCol = (visual.options['mapping:label'] || 'label').toLowerCase();
-        
+    function renderMultiSelectCheckboxes(container, visual, manifest, paramName, changeActions) {
+        const list = document.createElement('div');
+        list.className = 'multiselect-list';
+        if (paramName) list.setAttribute('data-parameter', paramName);
+
+        const valCol = (visual.options['mapping:value'] || visual.columns[0] || 'value').toLowerCase();
         const valIdx = visual.columns.findIndex(c => c.toLowerCase() === valCol);
-        const lblIdx = visual.columns.findIndex(c => c.toLowerCase() === lblCol);
-        
         const finalValIdx = valIdx >= 0 ? valIdx : 0;
-        const finalLblIdx = lblIdx >= 0 ? lblIdx : (visual.columns.length > 1 ? 1 : 0);
 
-        visual.rows.forEach(row => {
-            const opt = document.createElement('option');
-            opt.value = row[finalValIdx];
-            opt.textContent = row[finalLblIdx];
-            select.appendChild(opt);
-        });
+        const currentVal = getParam(manifest.parameters, paramName) || '';
+        const selected = new Set(String(currentVal).split(',').map(v => v.trim()).filter(Boolean));
 
-        // Set initial value from manifest parameters (case-insensitive)
-        if (paramName && manifest && manifest.parameters) {
-            const current = getParam(manifest.parameters, paramName);
-            if (current !== undefined) select.value = current;
-        }
+        const uniqueOptions = [...new Set(visual.rows.map(r => String(r[finalValIdx])))].sort();
 
-        const changeActions = actionsFor(visual, 'ON_CHANGE')
-            .filter(a => a.type === 'SET_PARAMETER');
-
-        if (isWebMode && changeActions.length > 0) {
-            select.addEventListener('change', () => {
-                let val = select.value;
-                if (select.multiple) {
-                    val = Array.from(select.selectedOptions).map(o => o.value).join(',');
-                }
-                changeActions.forEach(action => {
-                    postParameter(action.parameterName, val)
-                        .then(manifest => { if (manifest) renderManifest(manifest); });
+        uniqueOptions.forEach(optVal => {
+            const item = document.createElement('label');
+            item.className = 'multiselect-item';
+            
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = optVal;
+            cb.checked = selected.has(optVal);
+            
+            cb.addEventListener('change', () => {
+                if (cb.checked) selected.add(optVal);
+                else selected.delete(optVal);
+                
+                const val = Array.from(selected).join(',');
+                changeActions.forEach(a => {
+                    postParameter(a.parameterName, val).then(m => { if (m) renderManifest(m); });
                 });
             });
 
-            wrapper.appendChild(select);
-        } else {
-            const note = document.createElement('p');
-            note.className = 'slicer-note';
-            const paramNames = changeActions.map(a => a.parameterName).filter(Boolean).join(', ');
-            note.textContent = paramNames
-                ? '[Slicer \u2192 ' + paramNames + ' \u2014 interactive in ReportPlayer only]'
-                : '[Slicer \u2014 interactive in ReportPlayer only]';
-            wrapper.appendChild(note);
-        }
+            const span = document.createElement('span');
+            span.textContent = optVal;
 
-        container.appendChild(wrapper);
+            item.appendChild(cb);
+            item.appendChild(span);
+            list.appendChild(item);
+        });
+
+        container.appendChild(list);
     }
 
     // ── Text ────────────────────────────────────────────────────────────────
@@ -889,16 +1128,59 @@
         container.appendChild(div);
     }
 
-    // Minimal markdown → HTML: bold, italic, inline code, headers, line breaks.
+    // Minimal markdown → HTML: bold, italic, inline code, headers, line breaks, tables.
     function simpleMarkdown(src) {
-        return escHtml(src)
+        if (!src) return '';
+        // 1. Unescape escaped newlines from ETL-SQL
+        const raw = String(src).replace(/\\n/g, '\n');
+        
+        // 2. Escape HTML then restore formatting
+        let html = escHtml(raw)
             .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.+?)\*/g,     '<em>$1</em>')
             .replace(/`(.+?)`/g,       '<code>$1</code>')
             .replace(/^### (.+)$/gm,   '<h3>$1</h3>')
             .replace(/^## (.+)$/gm,    '<h2>$1</h2>')
-            .replace(/^# (.+)$/gm,     '<h1>$1</h1>')
-            .replace(/\n/g,            '<br>');
+            .replace(/^# (.+)$/gm,     '<h1>$1</h1>');
+
+        // 3. Table support
+        const lines = html.split('\n');
+        let inTable = false;
+        let tableLines = [];
+        let resultLines = [];
+
+        function flushTable() {
+            if (tableLines.length === 0) return;
+            let tableHtml = '<div class="md-table-wrapper"><table class="md-table">';
+            tableLines.forEach((line, idx) => {
+                if (line.includes('---') && idx === 1) return; // separator
+                const cells = line.split('|').map(s => s.trim()).filter((_, i, a) => i > 0 && i < a.length - 1);
+                const tag = idx === 0 ? 'th' : 'td';
+                tableHtml += '<tr>' + cells.map(c => `<${tag}>${c}</${tag}>`).join('') + '</tr>';
+            });
+            tableHtml += '</table></div>';
+            resultLines.push(tableHtml);
+            tableLines = [];
+        }
+
+        lines.forEach(line => {
+            const trimmed = line.trim();
+            if (trimmed.startsWith('|') && trimmed.includes('|', 1)) {
+                inTable = true;
+                tableLines.push(line);
+            } else {
+                if (inTable) flushTable();
+                inTable = false;
+                resultLines.push(line);
+            }
+        });
+        if (inTable) flushTable();
+
+        // 4. Smart join: only add <br> if the line isn't a block tag
+        return resultLines.map(l => {
+            const isBlock = /^<(h[1-6]|div|table|ul|ol|li|blockquote|pre)/i.test(l.trim());
+            return isBlock ? l : l + '<br>';
+        }).join('\n');
     }
 
     // ── DatePicker ──────────────────────────────────────────────────────────
@@ -929,6 +1211,9 @@
         datePicker.type = 'date';
         if (min) datePicker.min = min;
         if (max) datePicker.max = max;
+        // Synchronize initial value and parameter name for tests/sync
+        if (def && /^\d{4}-\d{2}-\d{2}$/.test(def)) datePicker.value = def;
+        if (param) datePicker.setAttribute('data-parameter', param);
         datePicker.style.cssText = 'position:absolute; opacity:0; width:0; height:0; pointer-events:none;';
 
         const btn = document.createElement('button');
@@ -990,6 +1275,9 @@
         hiddenDate.type = 'date';
         if (min) hiddenDate.min = min;
         if (max) hiddenDate.max = max;
+        // Synchronize initial value and parameter name for tests/sync
+        if (def && /^\d{4}-\d{2}-\d{2}$/.test(def)) hiddenDate.value = def;
+        if (param) hiddenDate.setAttribute('data-parameter', param);
         hiddenDate.style.cssText = 'position:absolute; opacity:0; width:0; height:0; pointer-events:none;';
 
         const calBtn = document.createElement('button');
@@ -1098,33 +1386,53 @@
 
     // ── MultiSelect ─────────────────────────────────────────────────────────
 
-    function renderMultiSelect(container, visual) {
+    // ── MultiSelect ─────────────────────────────────────────────────────────
+
+    function renderMultiSelect(container, visual, manifest) {
         const opts  = visual.options || {};
-        const param = opts['PARAMETER'] || opts['parameter'] || null;
+        const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+        const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
 
         const wrapper = document.createElement('div');
-        wrapper.className = 'filter-wrapper';
+        wrapper.className = 'filter-wrapper multiselect-wrapper';
 
-        const select = document.createElement('select');
-        select.multiple = true;
+        const list = document.createElement('div');
+        list.className = 'checkbox-list';
+
+        let currentValues = [];
+        if (param && manifest && manifest.parameters) {
+            const current = getParam(manifest.parameters, param);
+            if (current) currentValues = String(current).split(',').map(v => v.trim());
+        }
 
         (visual.rows || []).forEach(row => {
-            const opt = document.createElement('option');
-            opt.value       = String(row[0] ?? '');
-            opt.textContent = String(row[0] ?? '');
-            select.appendChild(opt);
+            const val = String(row[0] ?? '');
+            const label = document.createElement('label');
+            label.className = 'checkbox-item';
+            
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.value = val;
+            cb.checked = currentValues.includes(val);
+            cb.className = 'multiselect-cb';
+            
+            label.appendChild(cb);
+            label.appendChild(document.createTextNode(' ' + val));
+            list.appendChild(label);
         });
 
-        wrapper.appendChild(select);
+        wrapper.appendChild(list);
 
         if (isWebMode && param) {
             const applyBtn = document.createElement('button');
             applyBtn.className   = 'filter-apply';
             applyBtn.textContent = 'Apply';
             applyBtn.addEventListener('click', () => {
-                const selected = Array.from(select.selectedOptions).map(o => o.value).join(',');
-                postParameter(param, selected)
-                    .then(m => { if (m) renderManifest(m); });
+                const selected = Array.from(list.querySelectorAll('.multiselect-cb:checked')).map(cb => cb.value).join(',');
+                changeActions.forEach(action => {
+                    postParameter(action.parameterName, selected)
+                        .then(m => { if (m) renderManifest(m); });
+                });
             });
             wrapper.appendChild(applyBtn);
         }
@@ -1139,7 +1447,7 @@
         // Parameter binding comes from ACTIONS (ON_CHANGE = SET_PARAMETER), not from OPTIONS
         const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
         const param         = changeActions.length > 0 ? changeActions[0].parameterName : null;
-        const placeholder   = opts['PLACEHOLDER'] || opts['placeholder'] || 'Search…';
+        const placeholder   = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || 'Search…';
 
         const wrapper = document.createElement('div');
         wrapper.className = 'filter-wrapper';
@@ -1168,6 +1476,134 @@
             });
         }
 
+        container.appendChild(wrapper);
+    }
+
+    // ── Checkbox ────────────────────────────────────────────────────────────
+
+    function renderCheckbox(container, visual, manifest) {
+        const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+        const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
+        const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
+
+        let def = visual.defaultValue || 'FALSE';
+        if (param && manifest && manifest.parameters) {
+            const current = getParam(manifest.parameters, param);
+            if (current !== undefined) def = current;
+        }
+        const checked = isOn(def);
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'filter-wrapper checkbox-wrapper pos-' + labelPos.toLowerCase();
+
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = checked;
+        if (param) input.setAttribute('data-parameter', param);
+
+        const label = document.createElement('label');
+        label.textContent = visual.name;
+
+        if (labelPos === 'TOP' || labelPos === 'LEFT') {
+             wrapper.appendChild(label);
+        }
+        wrapper.appendChild(input);
+
+        if (isWebMode && changeActions.length > 0) {
+            input.addEventListener('change', () => {
+                const val = input.checked ? 'TRUE' : 'FALSE';
+                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = val; return o; }, {});
+                postParameters(batch).then(m => { if (m) renderManifest(m); });
+            });
+        }
+        container.appendChild(wrapper);
+    }
+
+    // ── Textbox ─────────────────────────────────────────────────────────────
+
+    function renderTextbox(container, visual, manifest) {
+        const opts = visual.options || {};
+        const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+        const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
+        const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
+        const placeholder = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || '';
+
+        let def = visual.defaultValue || '';
+        if (param && manifest && manifest.parameters) {
+            const current = getParam(manifest.parameters, param);
+            if (current !== undefined) def = current;
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'filter-wrapper textbox-wrapper pos-' + labelPos.toLowerCase();
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = def;
+        input.placeholder = placeholder;
+        if (param) input.setAttribute('data-parameter', param);
+
+        const label = document.createElement('label');
+        label.textContent = visual.name;
+
+        if (labelPos === 'TOP' || labelPos === 'LEFT') {
+             wrapper.appendChild(label);
+        }
+        wrapper.appendChild(input);
+
+        if (isWebMode && changeActions.length > 0) {
+            input.addEventListener('change', () => {
+                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = input.value; return o; }, {});
+                postParameters(batch).then(m => { if (m) renderManifest(m); });
+            });
+        }
+        container.appendChild(wrapper);
+    }
+
+    // ── Numberbox ───────────────────────────────────────────────────────────
+
+    function renderNumberbox(container, visual, manifest) {
+        const opts = visual.options || {};
+        const changeActions = actionsFor(visual, 'ON_CHANGE').filter(a => a.type === 'SET_PARAMETER');
+        const param = changeActions.length > 0 ? changeActions[0].parameterName : null;
+        const labelPos = (visual.labelPosition || 'TOP').toUpperCase();
+        const min = visual.min;
+        const max = visual.max;
+        const decimals = visual.decimals || 0;
+        const step = decimals > 0 ? Math.pow(10, -decimals).toFixed(decimals) : '1';
+
+        let def = visual.defaultValue || '0';
+        if (param && manifest && manifest.parameters) {
+            const current = getParam(manifest.parameters, param);
+            if (current !== undefined) def = current;
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'filter-wrapper numberbox-wrapper pos-' + labelPos.toLowerCase();
+
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.value = def;
+        input.placeholder = visual.placeholder || opts['PLACEHOLDER'] || opts['placeholder'] || '';
+        if (min !== undefined && min !== null) input.min = min;
+        if (max !== null && max !== undefined) input.max = max;
+        input.step = step;
+        if (param) input.setAttribute('data-parameter', param);
+
+        const label = document.createElement('label');
+        label.textContent = visual.name;
+
+        if (labelPos === 'TOP' || labelPos === 'LEFT') {
+             wrapper.appendChild(label);
+        }
+        wrapper.appendChild(input);
+
+        if (isWebMode && changeActions.length > 0) {
+            input.addEventListener('change', () => {
+                const batch = changeActions.reduce((o, a) => { o[a.parameterName] = input.value; return o; }, {});
+                postParameters(batch).then(m => { if (m) renderManifest(m); });
+            });
+        }
         container.appendChild(wrapper);
     }
 
@@ -1229,11 +1665,17 @@
                 if (type === 'EXPORT_CSV') exportCsv(visual);
                 else exportExcel(visual);
             } else if (type === 'REFRESH') {
-                if (isWebMode) {
+                if (isInteractive) {
                     fetch(apiBase + '/manifest')
                         .then(r => r.json())
                         .then(m => renderManifest(m))
                         .catch(e => console.error('Refresh failed:', e));
+                }
+            } else if (type === 'CLEAR_FILTERS') {
+                if (vscode) {
+                    vscode.postMessage({ type: 'refreshReport', parameters: {} });
+                } else if (isWebMode) {
+                    postParameters({}).then(m => { if (m) renderManifest(m); });
                 }
             } else {
                 // Custom button — execute ON_CLICK actions
@@ -1289,6 +1731,31 @@
         container.appendChild(btnEl);
     }
 
+    function applyPageCrossFilter(sourceCard, value, column) {
+        const page = getPageState(sourceCard);
+        if (!page) return;
+
+        // Visual feedback: dim all other charts on the page
+        const allCards = page.querySelectorAll('.visual-card');
+        allCards.forEach(card => {
+            if (card === sourceCard) {
+                card.classList.remove('cross-filtered-dimmed');
+                card.classList.add('cross-filtered-source');
+            } else {
+                card.classList.add('cross-filtered-dimmed');
+                card.classList.remove('cross-filtered-source');
+            }
+        });
+
+        // Trigger parameter update
+        const batch = { ['@' + column]: value };
+        if (vscode) {
+            vscode.postMessage({ type: 'refreshReport', parameters: batch });
+        } else {
+            postParameters(batch).then(m => { if (m) renderManifest(m); });
+        }
+    }
+
     // ── Footer ──────────────────────────────────────────────────────────────
 
     function renderFooter(container, manifest) {
@@ -1299,7 +1766,7 @@
     }
 
     function renderPipelineConsole(root, manifest) {
-        if (window.__IS_PREVIEW__) return;
+        if (window.__IS_PREVIEW__ || vscode) return;
         if (!manifest.messages?.length && !manifest.executionTree?.length && !manifest.error) return;
 
         const consoleWrapper = document.createElement('div');
@@ -1452,19 +1919,73 @@
                 c => c.toLowerCase() === (action.keyColumn || '').toLowerCase());
             const value  = colIdx >= 0 ? rowData[colIdx] : null;
             if (value == null) return;
-            postParameter('@' + action.keyColumn, String(value))
-                .then(manifest => { if (manifest) renderManifest(manifest); });
+            
+            const params = { ['@' + action.keyColumn]: String(value) };
+            
+            // Visual feedback: pulse target or entire page if navigating
+            const targetName = action.target || action.targetVisual || action.targetPage;
+            if (targetName) {
+                const targetEl = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`) 
+                              || document.getElementById('page-' + targetName.toLowerCase());
+                if (targetEl) {
+                    targetEl.classList.add('drilled-down');
+                    setTimeout(() => targetEl.classList.remove('drilled-down'), 1500);
+                    
+                    // If it's on the same page, scroll to it
+                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                    // If it's a page, navigate to it
+                    const navBtn = document.querySelector(`.nav-tab[data-page="${CSS.escape(targetName)}"]`);
+                    if (navBtn) navBtn.click();
+                }
+            }
+
+            if (vscode) {
+                vscode.postMessage({ type: 'refreshReport', parameters: params });
+            } else {
+                postParameters(params).then(manifest => { if (manifest) renderManifest(manifest); });
+            }
 
         } else if (action.type === 'SET_PARAMETER') {
             const expr   = action.valueExpression || '';
             const colIdx = columns.findIndex(c => c.toLowerCase() === expr.toLowerCase());
             const value  = colIdx >= 0 ? rowData[colIdx] : expr;
-            postParameter(action.parameterName, String(value ?? ''))
-                .then(manifest => { if (manifest) renderManifest(manifest); });
+            
+            const params = { [action.parameterName]: String(value ?? '') };
+            if (vscode) {
+                vscode.postMessage({ type: 'refreshReport', parameters: params });
+            } else {
+                postParameters(params).then(manifest => { if (manifest) renderManifest(manifest); });
+            }
+        } else if (action.type === 'RUN_SCRIPT') {
+            const scriptPath = action.scriptPath;
+            const actionParams = action.parameters || {};
+            const finalParams = {};
+            
+            for (const [pName, colName] of Object.entries(actionParams)) {
+                const colIdx = columns.findIndex(c => c.toLowerCase() === colName.toLowerCase());
+                const val = colIdx >= 0 ? rowData[colIdx] : colName;
+                finalParams[pName] = String(val ?? '');
+            }
+
+            if (isInteractive) {
+                postRunScript(scriptPath, finalParams).then(res => {
+                    if (res && res.message) alert(res.message);
+                    if (res && res.refresh) {
+                        fetchManifest().then(m => { if (m) renderManifest(m); });
+                    }
+                });
+            } else {
+                console.warn('RUN_SCRIPT is only supported in web mode.');
+            }
         }
     }
 
     async function postParameter(name, value) {
+        if (vscode) {
+            vscode.postMessage({ type: 'refreshReport', parameters: { [name]: value } });
+            return null;
+        }
         try {
             const res = await fetch(apiBase + '/parameter', {
                 method:  'POST',
@@ -1480,6 +2001,10 @@
 
     // Batch-update multiple parameters in a single server round-trip.
     async function postParameters(params) {
+        if (vscode) {
+            vscode.postMessage({ type: 'refreshReport', parameters: params });
+            return null;
+        }
         try {
             const res = await fetch(apiBase + '/parameters', {
                 method:  'POST',
@@ -1490,6 +2015,20 @@
             return await res.json();
         } catch {
             return null;
+        }
+    }
+
+    async function postRunScript(scriptPath, parameters) {
+        try {
+            const res = await fetch(apiBase + '/run-script', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ scriptPath, parameters })
+            });
+            if (!res.ok) return { message: `Server error: ${res.status}` };
+            return await res.json();
+        } catch (e) {
+            return { message: `Request failed: ${e.message}` };
         }
     }
 
@@ -1559,6 +2098,16 @@
         document.addEventListener('DOMContentLoaded', boot);
     } else {
         boot();
+    }
+
+    // VS Code message listener
+    if (vscode) {
+        window.addEventListener('message', event => {
+            const message = event.data;
+            if (message.type === 'reportManifest') {
+                renderManifest(message);
+            }
+        });
     }
 
     // Test escape hatch: exposes pure functions for automated testing.
