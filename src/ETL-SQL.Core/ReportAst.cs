@@ -150,6 +150,11 @@ namespace ETL_SQL.Core
         public override string ToSql() => "CLEAR_FILTERS";
     }
 
+    public record ApplyParametersAction : VisualAction
+    {
+        public override string ToSql() => "APPLY_PARAMETERS";
+    }
+
     public record TableSummaryItem(string Aggregate, string Column, string? Alias);
 
     public record TableSummaryOptions : AstNode

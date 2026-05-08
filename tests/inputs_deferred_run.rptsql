@@ -1,0 +1,27 @@
+SET REPORT TITLE = 'Deferred Execution Test';
+
+DECLARE @text_val STRING INPUT = 'Change Me';
+
+CREATE VISUAL txt AS TEXTBOX (
+    TITLE = 'Deferred Text Input',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@text_val, VALUE))
+);
+
+CREATE BUTTON run_btn AS RUN (
+    TITLE = 'Run Report',
+    STYLE (BACKGROUND = '#28a745', COLOR = 'white', PADDING = '10px 20px')
+);
+
+CREATE VISUAL out_table AS TABLE (
+    SOURCE = (SELECT @text_val AS [Final Value]),
+    TITLE = 'Results (Only updates after Run)'
+);
+
+CREATE PAGE Main AS LAYOUT (
+    STRUCTURE = 'A B / C',
+    MAP (
+        'A' = txt,
+        'B' = run_btn,
+        'C' = out_table
+    )
+);

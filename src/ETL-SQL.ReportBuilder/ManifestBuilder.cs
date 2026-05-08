@@ -162,6 +162,8 @@ namespace ETL_SQL.ReportBuilder
                             bm.Actions.Add(new VisualActionManifest { Type = "REFRESH", Trigger = "ON_CLICK" });
                         else if (type == "BACK")
                             bm.Actions.Add(new VisualActionManifest { Type = "BACK", Trigger = "ON_CLICK" });
+                        else if (type == "RUN")
+                            bm.Actions.Add(new VisualActionManifest { Type = "APPLY_PARAMETERS", Trigger = "ON_CLICK" });
                     }
 
                     foreach (var action in bStmt.Actions)
@@ -286,6 +288,11 @@ namespace ETL_SQL.ReportBuilder
                     Trigger    = rs.Trigger,
                     ScriptPath = rs.ScriptPath,
                     Parameters = rs.Parameters
+                },
+                ApplyParametersAction ap => new VisualActionManifest
+                {
+                    Type    = "APPLY_PARAMETERS",
+                    Trigger = ap.Trigger
                 },
                 _ => new VisualActionManifest { Type = "UNKNOWN", Trigger = action.Trigger }
             };
