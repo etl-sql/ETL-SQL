@@ -1,0 +1,49 @@
+-- ETL-SQL Interaction Phase 4: Advanced Support
+-- Tests: Pie, Scatter, and Multi-series Line ghosting/dimming.
+
+DECLARE @region VARCHAR = NULL;
+DECLARE @category VARCHAR = NULL;
+
+-- Mock Data
+CREATE CONNECTION mock ON MOCKDB();
+CREATE TABLE #sales (region VARCHAR, category VARCHAR, sales DECIMAL, growth DECIMAL);
+INSERT INTO #sales VALUES 
+  ('North', 'Electronics', 100, 5.2), ('North', 'Furniture', 50, -1.1),
+  ('South', 'Electronics', 200, 8.5), ('South', 'Furniture', 50, 2.3),
+  ('East', 'Electronics', 300, 12.0), ('East', 'Furniture', 150, 4.5);
+
+-- Visual 1: Sales by Region (Pie)
+CREATE VISUAL PieByRegion AS PIE (
+  SOURCE = (SELECT region, SUM(sales) AS total FROM #sales WHERE category = ISNULL(@category, category) GROUP BY region),
+  MAPPINGS (LABEL = region, VALUE = total),
+  OPTIONS (CROSS_FILTER = ON, TITLE = 'Revenue share by Region')
+);
+
+-- Visual 2: Sales vs Growth (Scatter)
+CREATE VISUAL ScatterSalesGrowth AS SCATTER (
+  SOURCE = (SELECT sales, growth, category, region FROM #sales WHERE region = ISNULL(@region, region)),
+  MAPPINGS (X = sales, Y = growth, SERIES = category, TOOLTIP = region),
+  OPTIONS (CROSS_FILTER = ON, TITLE = 'Sales vs Growth Correlation')
+);
+
+-- Visual 3: Sales Trend (Multi-series Line)
+-- Note: In this simple mock, we use category as the trend line
+CREATE VISUAL LineByCategory AS LINE (
+  SOURCE = (SELECT category, SUM(sales) AS total, region FROM #sales GROUP BY category, region),
+  MAPPINGS (X = region, Y = total, SERIES = category),
+  OPTIONS (CROSS_FILTER = ON, TITLE = 'Sales by Category & Region')
+);
+
+-- Slicer
+CREATE VISUAL CategorySlicer AS SLICER (
+  SOURCE = (SELECT DISTINCT category FROM #sales),
+  MAPPINGS (VALUE = category),
+  ACTIONS (ON_CHANGE = SET_PARAMETER(@category, category))
+);
+
+-- Page Layout
+CREATE PAGE Dashboard AS LAYOUT (
+  STRUCTURE = 'A B / C C / D D',
+  MAP ('A' = CategorySlicer, 'B' = PieByRegion, 'C' = ScatterSalesGrowth, 'D' = LineByCategory),
+  STYLE (THEME = dark)
+);

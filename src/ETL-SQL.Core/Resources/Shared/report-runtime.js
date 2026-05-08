@@ -976,64 +976,130 @@
         }
 
         const type = (currentVisual.visualType || '').toUpperCase();
-        if (type !== 'BAR' && type !== 'HBAR' && type !== 'HORIZONTALBAR' && type !== 'LINE') return;
+        const isCartesian = ['BAR', 'HBAR', 'HORIZONTALBAR', 'LINE', 'COMBO'].includes(type);
+        const isCircular  = ['PIE', 'DONUT'].includes(type);
+        const isScatter   = ['SCATTER', 'BUBBLE'].includes(type);
+
+        if (!isCartesian && !isCircular && !isScatter) return;
 
         // Ensure we have mappings
         const xCol = (currentVisual.options || {})['mapping:x'] || currentVisual.columns[0];
-        const yCol = (currentVisual.options || {})['mapping:y'] || currentVisual.columns[1];
+        const yCol = (currentVisual.options || {})['mapping:y'] || (currentVisual.columns.length > 1 ? currentVisual.columns[1] : null);
+        const seriesCol = (currentVisual.options || {})['mapping:series'];
+        
         const xIdx = currentVisual.columns.indexOf(xCol);
-        const yIdx = currentVisual.columns.indexOf(yCol);
+        const yIdx = yCol ? currentVisual.columns.indexOf(yCol) : -1;
+        const sIdx = seriesCol ? currentVisual.columns.indexOf(seriesCol) : -1;
 
-        console.debug(`[Ghost] ${currentVisual.name} | Type: ${type} | X: ${xCol}(${xIdx}) | Y: ${yCol}(${yIdx})`);
-
-        if (xIdx < 0 || yIdx < 0) {
-            console.warn(`[Ghost] Mappings not found for ${currentVisual.name}`);
-            return;
-        }
+        if (xIdx < 0) return;
 
         // Map "Universe" values by X
         const universeMap = {};
-        currentVisual.rows.forEach(r => { universeMap[String(r[xIdx])] = parseFloat(r[yIdx]) || 0; });
+        currentVisual.rows.forEach(r => { universeMap[String(r[xIdx])] = yIdx >= 0 ? (parseFloat(r[yIdx]) || 0) : 1; });
 
         // Map "Selection" values by X
         const selectionMap = {};
-        currentVisual.highlightRows.forEach(r => { selectionMap[String(r[xIdx])] = parseFloat(r[yIdx]) || 0; });
-
-        console.debug(`[Ghost] ${currentVisual.name} | Universe keys:`, Object.keys(universeMap));
-        console.debug(`[Ghost] ${currentVisual.name} | Selection keys:`, Object.keys(selectionMap));
+        currentVisual.highlightRows.forEach(r => { selectionMap[String(r[xIdx])] = yIdx >= 0 ? (parseFloat(r[yIdx]) || 0) : 1; });
 
         if (!option.series || option.series.length === 0) return;
 
-        // ECharts might have categories in xAxis.data or yAxis.data
-        const categories = (option.xAxis && option.xAxis.data) || (option.yAxis && option.yAxis.data) || [];
-        if (categories.length === 0) {
-             console.warn(`[Ghost] No categories found in chart option for ${currentVisual.name}`);
-             return;
+        // ── Strategy A: Cartesian Overlay (Bar / Single-Series Line) ──────────
+        if (isCartesian && option.series.length === 1 && (type === 'BAR' || type === 'HBAR' || type === 'HORIZONTALBAR')) {
+            const categories = (option.xAxis && option.xAxis.data) || (option.yAxis && option.yAxis.data) || [];
+            if (categories.length > 0) {
+                const universeData = categories.map(cat => universeMap[String(cat)] || 0);
+                const ghostSeries = JSON.parse(JSON.stringify(option.series[0]));
+                ghostSeries.name = 'Total (Universe)';
+                ghostSeries.data = universeData;
+                ghostSeries.itemStyle = { color: '#e0e0e0', opacity: 0.8 };
+                ghostSeries.emphasis = { disabled: true };
+                ghostSeries.z = 1;
+
+                const selectionData = categories.map(cat => selectionMap[String(cat)] || 0);
+                const activeSeries = option.series[0];
+                activeSeries.name = 'Filtered';
+                activeSeries.data = selectionData;
+                activeSeries.barGap = '-100%';
+                activeSeries.z = 2;
+
+                option.series = [ghostSeries, activeSeries];
+                if (!option.legend) option.legend = { show: true };
+                return;
+            }
         }
 
-        // 1. Create the "Ghost" background series (Universe)
-        const universeData = categories.map(cat => universeMap[String(cat)] || 0);
-        const ghostSeries = JSON.parse(JSON.stringify(option.series[0]));
-        ghostSeries.name = 'Total (Universe)';
-        ghostSeries.data = universeData;
-        ghostSeries.itemStyle = { color: '#e0e0e0', opacity: 0.8 }; // Light grey background
-        ghostSeries.emphasis = { disabled: true };
-        ghostSeries.tooltip = { show: true };
-        ghostSeries.z = 1; // Behind
+        // ── Strategy B: Dimming (Pie / Scatter / Multi-Series Line) ──────────
+        // Instead of new series, we modify the existing ones to dim non-selected items.
+        
+        // Build a Set of selected X values for fast lookup
+        const selectedKeys = new Set(currentVisual.highlightRows.map(r => String(r[xIdx])));
 
-        // 2. Update the "Active" series (Selection)
-        const selectionData = categories.map(cat => selectionMap[String(cat)] || 0);
-        const activeSeries = option.series[0];
-        activeSeries.name = 'Filtered';
-        activeSeries.data = selectionData;
-        activeSeries.barGap = '-100%'; // Overlap!
-        activeSeries.z = 2; // In front
-
-        console.debug(`[Ghost] ${currentVisual.name} | Universe Data:`, universeData);
-        console.debug(`[Ghost] ${currentVisual.name} | Selection Data:`, selectionData);
-
-        // Replace series: Ghost first, then Active
-        option.series = [ghostSeries, activeSeries];
+        if (isCircular) {
+            // For Pie/Donut, items are in series[0].data: [{name, value}, ...]
+            (option.series || []).forEach(s => {
+                if (s.type !== 'pie') return;
+                s.data.forEach(item => {
+                    if (!selectedKeys.has(String(item.name))) {
+                        item.itemStyle = Object.assign({}, item.itemStyle, { 
+                            color: '#e0e0e0', 
+                            opacity: 0.2 
+                        });
+                        item.label = { show: false };
+                    }
+                });
+            });
+        } 
+        else if (isScatter) {
+            // For Scatter, data is usually [x, y, ...]
+            // This is harder because we don't have item names. 
+            // We'll rely on dataIndex if rows match exactly, or just dim everything not in selectionMap.
+            (option.series || []).forEach(s => {
+                s.data = s.data.map((point, idx) => {
+                    const row = (currentVisual.rows || [])[idx];
+                    const isMatch = row && selectedKeys.has(String(row[xIdx]));
+                    if (!isMatch) {
+                        return {
+                            value: point,
+                            itemStyle: { color: '#e0e0e0', opacity: 0.1 }
+                        };
+                    }
+                    return point;
+                });
+            });
+        }
+        else if (isCartesian) {
+            // Multi-series Bar or Line
+            // Dim entire series that have no intersection with highlightRows
+            (option.series || []).forEach(s => {
+                const sName = s.name;
+                const hasMatch = currentVisual.highlightRows.some(r => sIdx >= 0 && String(r[sIdx]) === sName);
+                
+                // If we don't have a series mapping, or if this series is NOT the one selected
+                if (sIdx >= 0 && !hasMatch) {
+                    if (s.type === 'line') {
+                        s.lineStyle = { color: '#ccc', opacity: 0.2 };
+                        s.itemStyle = { opacity: 0 };
+                    } else {
+                        s.itemStyle = { color: '#e0e0e0', opacity: 0.2 };
+                    }
+                } else {
+                    // For the active series (or all series if no sIdx), dim individual points that don't match X
+                    const categories = (option.xAxis && option.xAxis.data) || (option.yAxis && option.yAxis.data) || [];
+                    if (categories.length > 0) {
+                        s.data = s.data.map((val, idx) => {
+                            const cat = String(categories[idx]);
+                            if (!selectedKeys.has(cat)) {
+                                return {
+                                    value: val,
+                                    itemStyle: { color: '#e0e0e0', opacity: 0.2 }
+                                };
+                            }
+                            return val;
+                        });
+                    }
+                }
+            });
+        }
     }
 
     // ── Card ────────────────────────────────────────────────────────────────

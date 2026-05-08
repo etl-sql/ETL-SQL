@@ -19,10 +19,10 @@
         - [x] **Test Report**: `tests/interaction_p3_slicers.rptsql` (Slicer + Multiple Charts).
         - [x] Slicer changes must reset any visual-level highlights.
         - [x] **Legend Highlighting**: Implement click listeners on Chart Legends to trigger cross-visual actions.
-    - [ ] **Phase 4: Advanced Support**
-        - [ ] **Test Report**: `tests/interaction_p4_advanced.rptsql` (Line, Scatter, Combo).
-        - [ ] Support highlighting in LINE (ghost other lines) and SCATTER (dim non-matching points).
-        - [ ] Support "Ghosting" in PIE and DONUT (dimming non-selected slices).
+    - [x] **Phase 4: Advanced Support**
+        - [x] **Test Report**: `tests/interaction_p4_advanced.rptsql` (Line, Scatter, Combo).
+        - [x] Support highlighting in LINE (ghost other lines) and SCATTER (dim non-matching points).
+        - [x] Support "Ghosting" in PIE and DONUT (dimming non-selected slices).
 
 - [x] **Header is wrong**  The report-runtime.js header first is only supposed to appear when using VS Code and hidden in portal or serve.  Second its supposed to be rocket icon (launch) which launches into serve mode so the user who is developing the dashboard can see what it will look like.  Next should be a markdown icon to publish to markdown.  The functionality already exists just needs to call it.  Next publish to PDF icon, same as Markdown it already exists just needs to call it.  Finally a txt icon which will call report print which prints an ascii of the charges in text format. Once again it already exists just need to call it.
 
