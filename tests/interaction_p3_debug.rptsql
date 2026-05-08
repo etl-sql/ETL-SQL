@@ -1,0 +1,33 @@
+-- Simplified Phase 3 Test: Visuals only
+DECLARE @region VARCHAR = NULL;
+DECLARE @category VARCHAR = NULL;
+
+-- Mock Data
+SELECT 'North' AS region, 'Electronics' AS category, 100 AS sales
+INTO #sales
+UNION ALL SELECT 'North' AS region, 'Furniture' AS category, 150 AS sales
+UNION ALL SELECT 'South' AS region, 'Electronics' AS category, 200 AS sales
+UNION ALL SELECT 'South' AS region, 'Furniture' AS category, 50 AS sales
+UNION ALL SELECT 'East' AS region, 'Electronics' AS category, 300 AS sales
+UNION ALL SELECT 'East' AS region, 'Furniture' AS category, 100 AS sales;
+
+-- Slicer
+CREATE VISUAL RegionSlicer AS SLICER (
+    SOURCE = (SELECT DISTINCT region FROM #sales),
+    MAPPINGS (VALUE = region),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region))
+);
+
+-- Visual 1: Sales by Region
+CREATE VISUAL BarByRegion AS BAR (
+  SOURCE = (SELECT region, SUM(sales) AS total FROM #sales WHERE region = ISNULL(@region, region) GROUP BY region),
+  MAPPINGS (X = region, Y = total),
+  OPTIONS (CROSS_FILTER = ON)
+);
+
+-- Visual 2: Sales by Category
+CREATE VISUAL BarByCategory AS BAR (
+  SOURCE = (SELECT category, SUM(sales) AS total FROM #sales WHERE region = ISNULL(@region, region) AND category = ISNULL(@category, category) GROUP BY category),
+  MAPPINGS (X = category, Y = total),
+  OPTIONS (CROSS_FILTER = ON)
+);
