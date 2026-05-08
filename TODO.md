@@ -1,5 +1,56 @@
 # ETL-SQL Development Roadmap
 ## Up Next
+- [ ] **Review Follow-Up: Stabilize the Product Surface Before More Feature Expansion**
+    These items came out of the May 2026 project/code review. The core goal is on track: a SQL-familiar language for ETL scripts, jobs, and reporting. The next priority is making the existing surface dependable and consistent across CLI, TUI, VS Code, standalone report serve, and Report Portal.
+
+    - [ ] **Priority 1: Unify security boundaries across all hosts**
+        - [ ] Replace portal path containment checks that use `StartsWith` with a shared safe-path helper based on `Path.GetRelativePath` or equivalent canonical containment.
+        - [ ] Add regression tests for sibling-path bypasses such as `C:\Reports2` passing a `C:\Reports` check.
+        - [ ] Route Report Portal and ReportPlayer file/script access through the same safe-zone model used by the engine.
+        - [ ] Make report `RUN_SCRIPT` actions resolve through `IExecutionContext.ResolvePath()` or an equivalent report-safe execution context.
+        - [ ] Restrict portal-published scripts, snapshots, maps, exports, and datasets to configured roots.
+        - [ ] Revisit `GET /api/maps/custom`: it is currently anonymous and reads map files after path validation; make sure this cannot leak script-root files.
+
+    - [ ] **Priority 2: Report consistency across VS Code, serve, and portal**
+        - [ ] Establish one canonical report runtime source for `report-runtime.js` and `report-runtime.css`.
+        - [ ] Stop manually editing multiple runtime copies under ReportPlayer, ReportPortal, VS Code media, and shared resources.
+        - [ ] Add a build/sync/check step so host runtime copies cannot drift from the canonical runtime.
+        - [ ] Define the contract: host chrome may differ, but the report canvas must use the same manifest, JS, CSS, themes, and interaction model everywhere.
+        - [ ] Fix named style resolution in `StyleBuilder`: it should read `ctx.ReportContext.StyleDefinitions`, not test `ctx is IReportContext`.
+        - [ ] Implement and document a single style cascade: built-in theme defaults -> report-level -> page-level -> container-level -> visual named style -> visual inline style -> runtime state.
+        - [ ] Emit fully resolved style objects in the manifest so the browser runtime does not need to guess where styles came from.
+        - [ ] Remove browser-side ETL-SQL expression evaluation for report behavior. C# should evaluate report logic; JS should render resolved manifest state.
+        - [ ] Replace client-side table conditional formatting via `new Function(...)` with server-computed `rowStyles`.
+        - [ ] Initialize `VisualManifest.RowStyles` when formatting rules exist so server-side formatting is actually serialized.
+        - [ ] Align scalar input controls (`TEXTBOX`, `NUMBERBOX`, `CHECKBOX`), slicers, and deferred `RUN` behavior across all report hosts.
+        - [ ] Replace the hard-coded 30-second `DashboardService.RebuildAsync()` timeout with the configured portal/report execution timeout.
+        - [ ] Add manifest snapshot tests for representative reports: basic chart, table with formatting, slicers, scalar inputs, deferred run, multi-page report, and kitchen sink.
+
+    - [ ] **Priority 3: Create one golden workflow**
+        - [ ] Build one excellent sample that demonstrates extract -> stage -> validate -> report visuals -> publish to portal -> execute -> interact -> export.
+        - [ ] Use the same sample as a README walkthrough, integration test, portal demo, and regression target.
+        - [ ] Ensure the sample behaves identically in VS Code preview, standalone serve, and Report Portal.
+
+    - [ ] **Priority 4: Add fast smoke test lanes**
+        - [ ] Add a smoke test command/filter for core language behavior.
+        - [ ] Add a smoke test command/filter for security/path guardrails.
+        - [ ] Add a smoke test command/filter for reporting manifest/runtime behavior.
+        - [ ] Add a smoke test command/filter for Report Portal publish/execute/snapshot basics.
+        - [ ] Target each smoke lane at roughly 30-60 seconds; keep the full suite for CI/nightly/release validation.
+
+    - [ ] **Priority 5: Portal permissions before dataset expansion**
+        - [ ] Finish dataset ACL filtering in `DatasetRegistryService.ListAll`.
+        - [ ] Define dataset ownership and access rules clearly: public, private, owner, viewer, editor, admin.
+        - [ ] Add tests proving private datasets cannot leak through list, lookup, search, snapshot, export, or API endpoints.
+        - [ ] Keep cross-report persisted datasets marked experimental until ACL enforcement is complete.
+
+    - [ ] **Priority 6: Source structure refinement**
+        - [ ] Avoid a giant restructure until runtime consistency and security issues are fixed.
+        - [ ] Consider extracting `ETL-SQL.Analysis` for linting, lineage, explain, dialect checks, doc verification, and language diagnostics.
+        - [ ] Consider renaming/reshaping `ETL-SQL.ReportBuilder` into `ETL-SQL.Reporting` for manifest, visual, style, page, dataset, and chart rendering contracts.
+        - [ ] Consider a dedicated `ETL-SQL.ReportRuntime` area for shared JS/CSS/themes/assets.
+        - [ ] Keep host projects thin: `ReportPlayer`, `ReportPortal`, and VS Code should host reports, not fork report semantics.
+
 - [ ] **Styles are not being used** Using the kitchen sink report in report portal C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\report_kitchen_sink.rptsql BarByRegion and others have a dark theme going and the theme set on the chart has a white background
 
 - [x] **Cross highlight/filtering (Power BI Parity)** 
@@ -37,14 +88,14 @@
         - [ ] **Validation**: Implement `MIN`, `MAX`, and `DECIMALS` for `NUMBERBOX`.
         - [ ] **Verify**: Run `tests/inputs_scalar_basic.rptsql` via `serve` and confirm UI rendering.
         - [ ] **Commit**: `git commit -m "Phase 1: Scalar Input Visuals complete."`
-    - [ ] **Phase 2: Deferred Execution (The "Run" Button)**
-        - [ ] **Engine**: Update `ManifestBuilder.cs` to recognize `CREATE BUTTON ... AS RUN` and auto-inject the `APPLY_PARAMETERS` action.
-        - [ ] **Runtime**: Implement "Deferred Mode" in `report-runtime.js`. 
-            - If an `APPLY_PARAMETERS` action exists on the page, all `SET_PARAMETER` calls switch to "Staged Mode".
-            - The `APPLY_PARAMETERS` button sends the entire batch to the server.
-        - [ ] **Visual Feedback**: Add a visual indicator (e.g., a "Pending Changes" badge) when in Staged Mode.
-        - [ ] **Verify**: Run `tests/inputs_deferred_run.rptsql` via `serve` and confirm batching logic.
-        - [ ] **Commit**: `git commit -m "Phase 2: Deferred Execution support complete."`
+    - [x] **Phase 2: Deferred Execution (The "Run" Button)**
+        - [x] **Engine**: Update `ManifestBuilder.cs` to recognize `CREATE BUTTON ... AS RUN` and auto-inject the `APPLY_PARAMETERS` action.
+        - [x] **Runtime**: Implement "Deferred Mode" in `report-runtime.js`. 
+            - [x] If an `APPLY_PARAMETERS` action exists on the page, all `SET_PARAMETER` calls switch to "Staged Mode".
+            - [x] The `APPLY_PARAMETERS` button sends the entire batch to the server.
+        - [x] **Visual Feedback**: Add a visual indicator (e.g., a "Pending Changes" badge) when in Staged Mode.
+        - [x] **Verify**: Run `tests/inputs_deferred_run.rptsql` via `serve` and confirm batching logic.
+        - [x] **Commit**: `git commit -m "Phase 2: Deferred Execution support complete."`
     - [ ] **Phase 3: Export, Metadata & Sample Report**
         - [ ] **Defaults**: Set `STYLE(EXPORT = OFF)` as default for all slicers/pickers/buttons.
         - [ ] **Metadata**: Update `ManifestBuilder.cs` to capture `INPUT` variable metadata (Name, Type, DefaultValue, IsRequired).

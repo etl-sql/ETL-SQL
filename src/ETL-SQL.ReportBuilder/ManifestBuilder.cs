@@ -193,7 +193,7 @@ namespace ETL_SQL.ReportBuilder
                 manifest.Datasets.Add(dm);
             }
 
-            // ── Parameters ──────────────────────────────────────────────────
+            // ── Parameters & Metadata ────────────────────────────────────────
             var vctx = _ctx.VarContext;
             if (vctx != null)
             {
@@ -201,7 +201,20 @@ namespace ETL_SQL.ReportBuilder
                 var variablesWithMetadata = vctx.GetVariablesWithMetadata();
                 foreach (var kvp in variablesWithMetadata)
                 {
-                    manifest.Parameters[kvp.Key] = kvp.Value.Value?.ToString() ?? "";
+                    var valStr = kvp.Value.Value?.ToString() ?? "";
+                    manifest.Parameters[kvp.Key] = valStr;
+
+                    // Phase 3: Capture metadata for INPUT variables
+                    if (kvp.Value.Metadata.IsInput)
+                    {
+                        manifest.ParameterMetadata[kvp.Key] = new ParameterMetadataManifest
+                        {
+                            Name = kvp.Key,
+                            Type = kvp.Value.Metadata.DataType ?? "STRING",
+                            DefaultValue = valStr,
+                            IsRequired = false
+                        };
+                    }
                 }
 
                 // Fallback for variables without metadata or if scope-aware fetching missed something

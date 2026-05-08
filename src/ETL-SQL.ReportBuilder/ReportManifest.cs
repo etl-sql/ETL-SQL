@@ -105,9 +105,13 @@ namespace ETL_SQL.ReportBuilder
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<ButtonManifest>? Buttons { get; set; }
 
-        /// <summary>Current parameter values (Phase 9D interactivity).</summary>
+        /// <summary>Global parameter values (active session state).</summary>
         [JsonPropertyName("parameters")]
         public Dictionary<string, string> Parameters { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Metadata for report parameters (Phase 3).</summary>
+        [JsonPropertyName("parameterMetadata")]
+        public Dictionary<string, ParameterMetadataManifest> ParameterMetadata { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
         [JsonPropertyName("customThemes")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -517,5 +521,13 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("subquerySpillCount")] public int SubquerySpillCount { get; set; }
         [JsonPropertyName("subquerySpilledBytes")] public long SubquerySpilledBytes { get; set; }
         [JsonPropertyName("executionTimeMs")] public long ExecutionTimeMs { get; set; }
+    }
+
+    public class ParameterMetadataManifest
+    {
+        [JsonPropertyName("name")]         public string Name         { get; set; } = string.Empty;
+        [JsonPropertyName("type")]         public string Type         { get; set; } = string.Empty;
+        [JsonPropertyName("defaultValue")] public string? DefaultValue { get; set; }
+        [JsonPropertyName("isRequired")]   public bool IsRequired     { get; set; }
     }
 }

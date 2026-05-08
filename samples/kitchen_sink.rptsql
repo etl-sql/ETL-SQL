@@ -1,0 +1,88 @@
+SET REPORT TITLE = 'ETL-SQL Kitchen Sink Report';
+SET REPORT DESCRIPTION = 'Demonstrating interactive filters, scalar inputs, and deferred execution.';
+
+-- 1. Declare Input Parameters
+DECLARE @Region STRING INPUT = 'North';
+DECLARE @MinSales DECIMAL INPUT = 1000;
+DECLARE @ShowTarget BIT INPUT = 1;
+DECLARE @CustomNote STRING INPUT = 'Review required';
+DECLARE @DateRange STRING INPUT = 'LAST 30 DAYS';
+
+-- 2. Mock Data with Filter logic
+SELECT * 
+INTO #sales_raw
+FROM (
+    SELECT 'North' AS Region, 1200 AS Amount, '2024-05-01' AS SaleDate
+    UNION ALL SELECT 'North', 800, '2024-05-02'
+    UNION ALL SELECT 'South', 2500, '2024-05-01'
+    UNION ALL SELECT 'East', 1500, '2024-05-03'
+    UNION ALL SELECT 'West', 3000, '2024-05-02'
+    UNION ALL SELECT 'North', 1900, '2024-05-04'
+) AS T;
+
+-- 3. Prepare Visuals
+CREATE VISUAL reg_filter AS SLICER (
+    SOURCE = (SELECT DISTINCT Region FROM #sales_raw),
+    MAPPINGS (VALUE = Region),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@Region, VALUE)),
+    TITLE = 'Select Region'
+);
+
+CREATE VISUAL min_sales_box AS NUMBERBOX (
+    TITLE = 'Min Sales Threshold',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@MinSales, VALUE)),
+    STYLE (WIDTH = '200px')
+);
+
+CREATE VISUAL target_toggle AS CHECKBOX (
+    TITLE = 'Show Target Column',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@ShowTarget, VALUE))
+);
+
+CREATE VISUAL note_box AS TEXTBOX (
+    TITLE = 'Execution Note',
+    PLACEHOLDER = 'Enter a note for this run...',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@CustomNote, VALUE))
+);
+
+CREATE VISUAL date_range AS RELDATEPICKER (
+    TITLE = 'Date Range',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@DateRange, VALUE))
+);
+
+CREATE BUTTON run_report AS RUN (
+    TITLE = 'Apply & Run',
+    STYLE (BACKGROUND = '#007bff', COLOR = 'white', PADDING = '10px 30px')
+);
+
+CREATE VISUAL sales_summary AS TABLE (
+    SOURCE = (
+        SELECT Region, Amount, SaleDate, 
+               CASE WHEN @ShowTarget = 1 THEN 2000 ELSE NULL END AS [Target],
+               @CustomNote AS [Note]
+        FROM #sales_raw
+        WHERE Region = @Region AND Amount >= @MinSales
+    ),
+    TITLE = 'Filtered Sales Results'
+);
+
+CREATE VISUAL sales_chart AS BAR (
+    SOURCE = (SELECT Region, SUM(Amount) as Total FROM #sales_raw GROUP BY Region),
+    MAPPINGS (X = Region, Y = Total),
+    TITLE = 'Total Sales by Region (Reference)'
+);
+
+-- 4. Layout
+CREATE PAGE Dashboard AS LAYOUT (
+    STRUCTURE = 'A B C / D E F / G G / H H',
+    MAP (
+        'A' = reg_filter,
+        'B' = min_sales_box,
+        'C' = target_toggle,
+        'D' = date_range,
+        'E' = note_box,
+        'F' = run_report,
+        'G' = sales_summary,
+        'H' = sales_chart
+    )
+);
