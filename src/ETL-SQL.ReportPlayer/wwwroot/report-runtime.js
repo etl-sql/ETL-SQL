@@ -1198,10 +1198,11 @@
                     if (select.multiple) {
                         val = Array.from(select.selectedOptions).map(o => o.value).join(',');
                     }
+                    const batch = {};
                     changeActions.forEach(action => {
-                        postParameter(action.parameterName, val)
-                            .then(m => { if (m) renderManifest(m); });
+                        batch[action.parameterName] = val;
                     });
+                    postParameters(batch).then(m => { if (m) renderManifest(m); });
                 });
                 wrapper.appendChild(select);
             } else {
@@ -1243,7 +1244,7 @@
                 
                 const val = Array.from(selected).join(',');
                 changeActions.forEach(a => {
-                    postParameter(a.parameterName, val).then(m => { if (m) renderManifest(m); });
+                    postParameters({ [a.parameterName]: val }).then(m => { if (m) renderManifest(m); });
                 });
             });
 
@@ -1575,7 +1576,7 @@
             applyBtn.addEventListener('click', () => {
                 const selected = Array.from(list.querySelectorAll('.multiselect-cb:checked')).map(cb => cb.value).join(',');
                 changeActions.forEach(action => {
-                    postParameter(action.parameterName, selected)
+                    postParameters({ [action.parameterName]: selected })
                         .then(m => { if (m) renderManifest(m); });
                 });
             });

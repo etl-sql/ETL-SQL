@@ -1,6 +1,7 @@
 {
   "Portal": {
     "DatabasePath": "data/portal.db",
+    "MapRootPath": "data/maps",
     "Jwt": {
       "Secret": "ENC:GENERATED_SECRET_HERE",
       "ExpiryMinutes": 60

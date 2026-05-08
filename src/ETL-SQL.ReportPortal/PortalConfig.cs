@@ -5,6 +5,7 @@ public class PortalConfig
     public string DatabasePath    { get; set; } = "./portal.db";
     public string ScriptRootPath  { get; set; } = "./Reports";
     public string SnapshotDirectory { get; set; } = "./Snapshots";
+    public string MapRootPath { get; set; } = "./data/maps";
     public ResourcesConfig Resources { get; set; } = new();
     public JwtConfig       Jwt       { get; set; } = new();
     public FirstRunConfig  FirstRun  { get; set; } = new();

@@ -55,6 +55,8 @@
 
     // Current report parameters (for interactive controls)
     const parameters = {};
+    const pendingParameters = {}; // Phase 2: Staged Mode
+    let isStagedMode = false;     // Phase 2: Staged Mode
     let _refreshTimers = [];
     let _lastActivePage = null;
     const _registeredMaps = new Set();
@@ -89,6 +91,19 @@
     }
 
     function renderManifest(manifest) {
+        // Phase 2: Detect Staged Mode (presence of APPLY_PARAMETERS action)
+        isStagedMode = false;
+        (manifest.buttons || []).forEach(b => {
+            if ((b.actions || []).some(a => a.type === 'APPLY_PARAMETERS')) isStagedMode = true;
+        });
+        (manifest.visuals || []).forEach(v => {
+            if ((v.actions || []).some(a => a.type === 'APPLY_PARAMETERS')) isStagedMode = true;
+        });
+        if (!isStagedMode) {
+             // Clear pending if we exited staged mode (unlikely but safe)
+             for (let k in pendingParameters) delete pendingParameters[k];
+        }
+
         // Cancel any running per-page auto-refresh timers before rebuilding.
         _refreshTimers.forEach(id => clearInterval(id));
         _refreshTimers = [];
@@ -381,16 +396,20 @@
             container.style.display = 'grid';
             // CSS grid-template-areas needs each row quoted: "A A" "B C"
             const rows = layoutDef.structure.split('/')
-                .map(r => r.trim().split(/\s+/).filter(s => s).join(' '))
+                .map(r => r.trim().split(/\s+/).filter(s => s))
                 .filter(r => r.length > 0);
             
-            container.style.gridTemplateAreas = rows.map(r => `"${r}"`).join(' ');
+            const maxCols = Math.max(...rows.map(r => r.length));
+            const normalizedRows = rows.map(r => {
+                while (r.length < maxCols) r.push('.');
+                return r.join(' ');
+            });
+            
+            container.style.gridTemplateAreas = normalizedRows.map(r => `"${r}"`).join(' ');
 
             if (rows.length > 0) {
-                const rows = (layoutDef.structure.split('/') || []).map(r => r.trim()).filter(r => r.length > 0);
-                const rowCount = rows.length;
-                container.style.gridTemplateRows = `repeat(${rowCount}, auto)`;
-                container.style.gridTemplateColumns = `repeat(${rows[0].split(/\s+/).length}, 1fr)`;
+                container.style.gridTemplateRows = `repeat(${rows.length}, auto)`;
+                container.style.gridTemplateColumns = `repeat(${maxCols}, 1fr)`;
             }
 
             const slotMap = layoutDef.slotMap || {};
@@ -1807,9 +1826,13 @@
                 // Custom button — execute ON_CLICK actions
                 const clickActions = actionsFor(btn, 'ON_CLICK');
                 
-                // Special check for CLEAR_FILTERS action
+                // Special check for CLEAR_FILTERS / APPLY_PARAMETERS actions
                 if (clickActions.some(a => a.type === 'CLEAR_FILTERS')) {
                     executeAction({ type: 'CLEAR_FILTERS' }, null, []);
+                    return;
+                }
+                if (clickActions.some(a => a.type === 'APPLY_PARAMETERS')) {
+                    executeAction({ type: 'APPLY_PARAMETERS' }, null, []);
                     return;
                 }
 
@@ -2110,6 +2133,14 @@
                 if (vscode) vscode.postMessage({ type: 'refreshReport', parameters: {} });
                 else postParameters({}).then(m => { if (m) renderManifest(m); });
             }
+        } else if (action.type === 'APPLY_PARAMETERS') {
+            const batch = { ...pendingParameters };
+            // Clear pending
+            for (let k in pendingParameters) delete pendingParameters[k];
+            updateStagedUI();
+            
+            // Flush to server (forcing bypass of staged mode via a internal call or flag)
+            _postParametersInternal(batch).then(m => { if (m) renderManifest(m); });
         }
     }
 
@@ -2135,6 +2166,16 @@
     // Batch-update multiple parameters in a single server round-trip.
     // Batch-update multiple parameters in a single server round-trip.
     async function postParameters(params, isInteraction = false) {
+        if (isStagedMode && !isInteraction) {
+            // Stage the change
+            Object.assign(pendingParameters, params);
+            updateStagedUI();
+            return Promise.resolve(null);
+        }
+        return _postParametersInternal(params, isInteraction);
+    }
+
+    async function _postParametersInternal(params, isInteraction = false) {
         // Convert dictionary to required List<ParameterUpdateRequest> format
         const paramList = Object.entries(params).map(([name, value]) => ({
             name: name,
@@ -2246,6 +2287,46 @@
             }
         } catch (e) {
             return value;
+        }
+    }
+
+    function updateStagedUI() {
+        const hasPending = Object.keys(pendingParameters).length > 0;
+        
+        // 1. Update "RUN" buttons to show they are active/needed
+        document.querySelectorAll('.report-btn').forEach(btn => {
+            // Find if this button has an APPLY_PARAMETERS action
+            const name = btn.textContent; // approximate lookup or we could add data-name
+            // Better: use the card's data-visual-name if buttons were in cards, 
+            // but buttons currently are just elements in layout.
+            // For now, we'll look for buttons with a specific class or just all buttons.
+            if (hasPending) {
+                btn.classList.add('pending-changes');
+            } else {
+                btn.classList.remove('pending-changes');
+            }
+        });
+
+        // 2. Add/Update a "Pending" badge in the header if it exists
+        const header = document.querySelector('.report-header');
+        if (header) {
+            let badge = header.querySelector('.pending-badge');
+            if (hasPending) {
+                if (!badge) {
+                    badge = document.createElement('div');
+                    badge.className = 'pending-badge';
+                    badge.innerHTML = '&#x26A0; Changes Pending';
+                    badge.style.background = '#fff3cd';
+                    badge.style.color = '#856404';
+                    badge.style.padding = '4px 8px';
+                    badge.style.borderRadius = '4px';
+                    badge.style.fontSize = '0.8em';
+                    badge.style.fontWeight = 'bold';
+                    header.appendChild(badge);
+                }
+            } else if (badge) {
+                badge.remove();
+            }
         }
     }
 

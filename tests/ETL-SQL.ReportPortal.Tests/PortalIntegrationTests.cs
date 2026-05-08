@@ -286,6 +286,57 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Contains("Id,Timestamp,UserId", csv);
     }
 
+    // ── 7. Custom maps ───────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CustomMap_RequiresAuthentication()
+    {
+        var res = await _client.GetAsync("/api/maps/custom?path=test.geojson");
+        Assert.Equal(HttpStatusCode.Unauthorized, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task CustomMap_ReadsOnlyFromMapRoot()
+    {
+        var token = await GetAdminTokenAsync();
+        var mapPath = Path.Combine(_factory.TempDir, "maps", "test.geojson");
+        await File.WriteAllTextAsync(mapPath, """{"type":"FeatureCollection","features":[]}""");
+
+        var res = await AuthGet(token, "/api/maps/custom?path=test.geojson");
+
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        Assert.Equal("application/geo+json", res.Content.Headers.ContentType?.MediaType);
+        var json = await res.Content.ReadAsStringAsync();
+        Assert.Contains("FeatureCollection", json);
+    }
+
+    [Fact]
+    public async Task CustomMap_DoesNotReadFromScriptRoot()
+    {
+        var token = await GetAdminTokenAsync();
+        var scriptMapPath = Path.Combine(_factory.TempDir, "scripts", "script-root-map.geojson");
+        await File.WriteAllTextAsync(scriptMapPath, """{"type":"FeatureCollection","features":[]}""");
+
+        var res = await AuthGet(token, "/api/maps/custom?path=script-root-map.geojson");
+
+        Assert.Equal(HttpStatusCode.NotFound, res.StatusCode);
+    }
+
+    [Fact]
+    public async Task CustomMap_RejectsTraversalAndUnsupportedExtensions()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var traversal = await AuthGet(token, "/api/maps/custom?path=../portal.db");
+        Assert.Equal(HttpStatusCode.BadRequest, traversal.StatusCode);
+
+        var geoJsonTraversal = await AuthGet(token, "/api/maps/custom?path=../outside.geojson");
+        Assert.Equal(HttpStatusCode.Forbidden, geoJsonTraversal.StatusCode);
+
+        var unsupported = await AuthGet(token, "/api/maps/custom?path=notes.txt");
+        Assert.Equal(HttpStatusCode.BadRequest, unsupported.StatusCode);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     /// <summary>

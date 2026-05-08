@@ -9,6 +9,7 @@ DECLARE @CustomNote STRING INPUT = 'Review required';
 DECLARE @DateRange STRING INPUT = 'LAST 30 DAYS';
 
 -- 2. Mock Data with Filter logic
+DROP TABLE IF EXISTS #sales_raw;
 SELECT * 
 INTO #sales_raw
 FROM (

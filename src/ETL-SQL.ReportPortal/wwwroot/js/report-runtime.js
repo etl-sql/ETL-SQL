@@ -396,16 +396,20 @@
             container.style.display = 'grid';
             // CSS grid-template-areas needs each row quoted: "A A" "B C"
             const rows = layoutDef.structure.split('/')
-                .map(r => r.trim().split(/\s+/).filter(s => s).join(' '))
+                .map(r => r.trim().split(/\s+/).filter(s => s))
                 .filter(r => r.length > 0);
             
-            container.style.gridTemplateAreas = rows.map(r => `"${r}"`).join(' ');
+            const maxCols = Math.max(...rows.map(r => r.length));
+            const normalizedRows = rows.map(r => {
+                while (r.length < maxCols) r.push('.');
+                return r.join(' ');
+            });
+            
+            container.style.gridTemplateAreas = normalizedRows.map(r => `"${r}"`).join(' ');
 
             if (rows.length > 0) {
-                const rows = (layoutDef.structure.split('/') || []).map(r => r.trim()).filter(r => r.length > 0);
-                const rowCount = rows.length;
-                container.style.gridTemplateRows = `repeat(${rowCount}, auto)`;
-                container.style.gridTemplateColumns = `repeat(${rows[0].split(/\s+/).length}, 1fr)`;
+                container.style.gridTemplateRows = `repeat(${rows.length}, auto)`;
+                container.style.gridTemplateColumns = `repeat(${maxCols}, 1fr)`;
             }
 
             const slotMap = layoutDef.slotMap || {};
@@ -1194,10 +1198,11 @@
                     if (select.multiple) {
                         val = Array.from(select.selectedOptions).map(o => o.value).join(',');
                     }
+                    const batch = {};
                     changeActions.forEach(action => {
-                        postParameter(action.parameterName, val)
-                            .then(m => { if (m) renderManifest(m); });
+                        batch[action.parameterName] = val;
                     });
+                    postParameters(batch).then(m => { if (m) renderManifest(m); });
                 });
                 wrapper.appendChild(select);
             } else {
@@ -1239,7 +1244,7 @@
                 
                 const val = Array.from(selected).join(',');
                 changeActions.forEach(a => {
-                    postParameter(a.parameterName, val).then(m => { if (m) renderManifest(m); });
+                    postParameters({ [a.parameterName]: val }).then(m => { if (m) renderManifest(m); });
                 });
             });
 
@@ -1571,7 +1576,7 @@
             applyBtn.addEventListener('click', () => {
                 const selected = Array.from(list.querySelectorAll('.multiselect-cb:checked')).map(cb => cb.value).join(',');
                 changeActions.forEach(action => {
-                    postParameter(action.parameterName, selected)
+                    postParameters({ [action.parameterName]: selected })
                         .then(m => { if (m) renderManifest(m); });
                 });
             });
@@ -1822,9 +1827,13 @@
                 // Custom button — execute ON_CLICK actions
                 const clickActions = actionsFor(btn, 'ON_CLICK');
                 
-                // Special check for CLEAR_FILTERS action
+                // Special check for CLEAR_FILTERS / APPLY_PARAMETERS actions
                 if (clickActions.some(a => a.type === 'CLEAR_FILTERS')) {
                     executeAction({ type: 'CLEAR_FILTERS' }, null, []);
+                    return;
+                }
+                if (clickActions.some(a => a.type === 'APPLY_PARAMETERS')) {
+                    executeAction({ type: 'APPLY_PARAMETERS' }, null, []);
                     return;
                 }
 

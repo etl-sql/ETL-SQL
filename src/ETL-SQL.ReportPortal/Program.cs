@@ -46,6 +46,7 @@ builder.Services.AddSingleton(portalConfig);
 Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(portalConfig.DatabasePath))!);
 Directory.CreateDirectory(Path.GetFullPath(portalConfig.ScriptRootPath));
 Directory.CreateDirectory(Path.GetFullPath(portalConfig.SnapshotDirectory));
+Directory.CreateDirectory(Path.GetFullPath(portalConfig.MapRootPath));
 
 // ── EF Core / SQLite ──────────────────────────────────────────────────────────
 var dbPath = Path.GetFullPath(portalConfig.DatabasePath);

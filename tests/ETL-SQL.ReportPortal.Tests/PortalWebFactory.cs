@@ -30,6 +30,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
         Directory.CreateDirectory(TempDir);
         Directory.CreateDirectory(Path.Combine(TempDir, "scripts"));
         Directory.CreateDirectory(Path.Combine(TempDir, "snapshots"));
+        Directory.CreateDirectory(Path.Combine(TempDir, "maps"));
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -37,6 +38,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
         var dbPath       = Path.Combine(TempDir, "portal.db");
         var scriptRoot   = Path.Combine(TempDir, "scripts");
         var snapshotDir  = Path.Combine(TempDir, "snapshots");
+        var mapRoot      = Path.Combine(TempDir, "maps");
         const string jwtSecret = "integration-test-secret-key-1234567890";
 
         builder.UseEnvironment("Testing");
@@ -48,6 +50,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 ["Portal:DatabasePath"]           = dbPath,
                 ["Portal:ScriptRootPath"]         = scriptRoot,
                 ["Portal:SnapshotDirectory"]      = snapshotDir,
+                ["Portal:MapRootPath"]            = mapRoot,
                 ["Portal:Jwt:Secret"]             = jwtSecret,
                 ["Portal:Jwt:ExpiryMinutes"]      = "60",
                 ["Portal:Jwt:RefreshExpiryDays"]  = "7",
@@ -74,6 +77,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 DatabasePath      = dbPath,
                 ScriptRootPath    = scriptRoot,
                 SnapshotDirectory = snapshotDir,
+                MapRootPath       = mapRoot,
                 Jwt = new JwtConfig { Secret = jwtSecret, ExpiryMinutes = 60, RefreshExpiryDays = 7 },
                 FirstRun          = new FirstRunConfig { AdminUsername = "admin" },
             };

@@ -81,13 +81,13 @@
 
 - [ ] **Reports with Input Parameters & Scalar Visuals**  
     Add support for operational reporting where parameters can be batched and applied before execution (SSRS style).
-    - [ ] **Phase 1: Scalar Input Visuals (C# & JS)**
-        - [ ] **Engine**: Ensure `TEXTBOX`, `NUMBERBOX`, and `CHECKBOX` are correctly parsed and serialized in `VisualBuilder.cs`.
-        - [ ] **Runtime**: Implement renderers for these scalar types in `report-runtime.js`.
-        - [ ] **Standard Styles**: Implement `LABEL_POSITION` (TOP, LEFT, HIDDEN) for all scalar inputs.
-        - [ ] **Validation**: Implement `MIN`, `MAX`, and `DECIMALS` for `NUMBERBOX`.
-        - [ ] **Verify**: Run `tests/inputs_scalar_basic.rptsql` via `serve` and confirm UI rendering.
-        - [ ] **Commit**: `git commit -m "Phase 1: Scalar Input Visuals complete."`
+    - [x] **Phase 1: Scalar Input Visuals (C# & JS)**
+        - [x] **Engine**: Ensure `TEXTBOX`, `NUMBERBOX`, and `CHECKBOX` are correctly parsed and serialized in `VisualBuilder.cs`.
+        - [x] **Runtime**: Implement renderers for these scalar types in `report-runtime.js`.
+        - [x] **Standard Styles**: Implement `LABEL_POSITION` (TOP, LEFT, HIDDEN) for all scalar inputs.
+        - [x] **Validation**: Implement `MIN`, `MAX`, and `DECIMALS` for `NUMBERBOX`.
+        - [x] **Verify**: Run `tests/inputs_scalar_basic.rptsql` via `serve` and confirm UI rendering.
+        - [x] **Commit**: `git commit -m "Phase 1: Scalar Input Visuals complete."`
     - [x] **Phase 2: Deferred Execution (The "Run" Button)**
         - [x] **Engine**: Update `ManifestBuilder.cs` to recognize `CREATE BUTTON ... AS RUN` and auto-inject the `APPLY_PARAMETERS` action.
         - [x] **Runtime**: Implement "Deferred Mode" in `report-runtime.js`. 
@@ -96,12 +96,12 @@
         - [x] **Visual Feedback**: Add a visual indicator (e.g., a "Pending Changes" badge) when in Staged Mode.
         - [x] **Verify**: Run `tests/inputs_deferred_run.rptsql` via `serve` and confirm batching logic.
         - [x] **Commit**: `git commit -m "Phase 2: Deferred Execution support complete."`
-    - [ ] **Phase 3: Export, Metadata & Sample Report**
-        - [ ] **Defaults**: Set `STYLE(EXPORT = OFF)` as default for all slicers/pickers/buttons.
-        - [ ] **Metadata**: Update `ManifestBuilder.cs` to capture `INPUT` variable metadata (Name, Type, DefaultValue, IsRequired).
-        - [ ] **Sample Report**: Create `samples/inputs_kitchen_sink.rptsql` incorporating all input types + RUN button.
-        - [ ] **Verify**: Run `samples/inputs_kitchen_sink.rptsql` via `serve` and confirm end-to-end functionality.
-        - [ ] **Commit**: `git commit -m "Phase 3: Export logic and Kitchen Sink sample complete."`
+    - [x] **Phase 3: Export, Metadata & Sample Report**
+        - [x] **Defaults**: Set `STYLE(EXPORT = OFF)` as default for all slicers/pickers/buttons.
+        - [x] **Metadata**: Update `ManifestBuilder.cs` to capture `INPUT` variable metadata (Name, Type, DefaultValue, IsRequired).
+        - [x] **Sample Report**: Create `samples/inputs_kitchen_sink.rptsql` incorporating all input types + RUN button.
+        - [x] **Verify**: Run `samples/inputs_kitchen_sink.rptsql` via `serve` and confirm end-to-end functionality.
+        - [x] **Commit**: `git commit -m "Phase 3: Export logic and Kitchen Sink sample complete."`
     - [ ] **Phase 4: Portal-Level Integration**
         - [ ] **Pre-Run Prompting**: If a report has `REQUIRED` parameters that are missing, show a "Required Parameters" modal.
         - [ ] **Auto-Panel**: Auto-generate parameter sidebar if visuals are missing.

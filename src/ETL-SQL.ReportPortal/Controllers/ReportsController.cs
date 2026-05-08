@@ -290,27 +290,42 @@ public class ReportsController : ControllerBase
     // ── GET /api/maps/custom ─────────────────────────────────────────────────
 
     [HttpGet("maps/custom")]
-    [AllowAnonymous] // Maps are public assets like CSS/JS once the portal is accessible
     public async Task<IActionResult> GetCustomMap([FromQuery] string path)
     {
-        if (string.IsNullOrWhiteSpace(path)) return BadRequest("Path is required");
+        if (string.IsNullOrWhiteSpace(path))
+            return BadRequest(new { error = "Path is required." });
 
-        // Zero-trust check: path must be within ScriptRootPath or the local maps folder
-        var rootPath = Path.GetFullPath(portalConfig.ScriptRootPath);
-        var resolved = Path.GetFullPath(path, rootPath);
+        if (Path.IsPathRooted(path))
+            return BadRequest(new { error = "Map path must be relative." });
 
-        if (!resolved.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase))
+        var ext = Path.GetExtension(path);
+        if (!ext.Equals(".geojson", StringComparison.OrdinalIgnoreCase) &&
+            !ext.Equals(".json", StringComparison.OrdinalIgnoreCase))
         {
-            // Fallback: check the local wwwroot/maps directory
-            var localMaps = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "maps");
-            resolved = Path.GetFullPath(path, localMaps);
-            if (!resolved.StartsWith(localMaps, StringComparison.OrdinalIgnoreCase))
-                return Forbid();
+            return BadRequest(new { error = "Only .json and .geojson map files are supported." });
         }
 
-        if (!System.IO.File.Exists(resolved)) return NotFound("Map file not found: " + path);
+        var mapRoot = Path.GetFullPath(portalConfig.MapRootPath);
+        var resolved = Path.GetFullPath(path, mapRoot);
+        if (!IsWithinRoot(mapRoot, resolved))
+            return Forbid();
+
+        if (!System.IO.File.Exists(resolved))
+            return NotFound(new { error = "Map file not found." });
 
         var json = await System.IO.File.ReadAllTextAsync(resolved);
         return Content(json, "application/geo+json");
+    }
+
+    private static bool IsWithinRoot(string root, string candidate)
+    {
+        var rootFull = Path.GetFullPath(root);
+        var candidateFull = Path.GetFullPath(candidate);
+        var relative = Path.GetRelativePath(rootFull, candidateFull);
+
+        return !Path.IsPathRooted(relative)
+            && !relative.Equals("..", StringComparison.Ordinal)
+            && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
+            && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
     }
 }
