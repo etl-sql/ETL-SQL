@@ -143,6 +143,14 @@
 
             if (navDef) {
                 renderNavBar(root, navDef, pageSections, manifest.pages);
+            } else if (manifest.pages.length > 0) {
+                // No navigation — show the first page by default
+                const firstPage = manifest.pages.find(p => !p.isHidden) || manifest.pages[0];
+                const section = pageSections[firstPage.name];
+                if (section) {
+                    section.style.display = 'block';
+                    resizeChartsIn(section);
+                }
             }
         } else {
             (manifest.visuals || []).forEach(v => renderVisual(root, v, manifest.theme, manifest));
@@ -192,42 +200,44 @@
         const actions = document.createElement('div');
         actions.className = 'header-actions';
 
+        // 1. Refresh Button (VS Code Only)
+        const refreshBtn = document.createElement('button');
+        refreshBtn.className = 'header-btn';
+        refreshBtn.title = 'Refresh Report Data';
+        refreshBtn.innerHTML = '<span>&#x21BB;</span> Refresh';
+        refreshBtn.addEventListener('click', () => {
+            location.reload();
+        });
+        actions.appendChild(refreshBtn);
+
+        // 2. Serve Button (VS Code Only)
         const serveBtn = document.createElement('button');
-        serveBtn.className = 'header-btn';
+        serveBtn.className = 'header-btn primary';
         serveBtn.title = 'Launch into Browser (Serve Mode)';
-        serveBtn.innerHTML = '<span>&#x1F680;</span>';
+        serveBtn.innerHTML = '<span>&#x1F680;</span> Serve';
         serveBtn.addEventListener('click', () => {
             vscode.postMessage({ type: 'serve' });
         });
+        actions.appendChild(serveBtn);
+
+        // 3. PDF/MD Export Buttons (VS Code Only)
+        const pdfBtn = document.createElement('button');
+        pdfBtn.className = 'header-btn';
+        pdfBtn.title = 'Publish to PDF';
+        pdfBtn.innerHTML = '<span>&#x1F4DC;</span> PDF';
+        pdfBtn.addEventListener('click', () => {
+            vscode.postMessage({ type: 'exportReport', format: 'pdf' });
+        });
+        actions.appendChild(pdfBtn);
 
         const mdBtn = document.createElement('button');
         mdBtn.className = 'header-btn';
         mdBtn.title = 'Publish to Markdown';
-        mdBtn.innerHTML = '<span>&#x2133;</span>';
+        mdBtn.innerHTML = '<span>&#x2133;</span> MD';
         mdBtn.addEventListener('click', () => {
             vscode.postMessage({ type: 'exportReport', format: 'markdown' });
         });
-
-        const pdfBtn = document.createElement('button');
-        pdfBtn.className = 'header-btn';
-        pdfBtn.title = 'Publish to PDF';
-        pdfBtn.innerHTML = '<span>&#x1F4DC;</span>';
-        pdfBtn.addEventListener('click', () => {
-            vscode.postMessage({ type: 'exportReport', format: 'pdf' });
-        });
-
-        const txtBtn = document.createElement('button');
-        txtBtn.className = 'header-btn';
-        txtBtn.title = 'Export as Plain Text (ASCII Charts)';
-        txtBtn.innerHTML = '<span>&#x1F4D4;</span>';
-        txtBtn.addEventListener('click', () => {
-            vscode.postMessage({ type: 'exportReport', format: 'text' });
-        });
-
-        actions.appendChild(serveBtn);
         actions.appendChild(mdBtn);
-        actions.appendChild(pdfBtn);
-        actions.appendChild(txtBtn);
 
         header.appendChild(left);
         header.appendChild(actions);
@@ -521,32 +531,38 @@
         return el._crossFilterState;
     }
 
-    function applyPageCrossFilter(container, filterValue, filterColumn, sourceVisualName) {
+    function applyPageCrossFilter(container, filterValue, filterColumn, sourceVisualName, event) {
         let pageEl = container;
         while (pageEl && !pageEl.classList.contains('page')) pageEl = pageEl.parentElement;
         if (!pageEl) return;
-        const state = pageEl._crossFilterState || (pageEl._crossFilterState = {});
         
-        // Toggle: clicking same value clears filter
-        if (state.filterValue === filterValue && state.filterColumn === filterColumn && state.sourceVisual === sourceVisualName) {
-            state.filterValue  = null;
-            state.filterColumn = null;
-            state.sourceVisual = null;
+        const state = pageEl._crossFilterState || (pageEl._crossFilterState = { selections: [] });
+        const isMulti = event && (event.ctrlKey || event.metaKey);
+        
+        // Update state
+        if (isMulti) {
+            const idx = state.selections.findIndex(s => s.value === filterValue && s.column === filterColumn);
+            if (idx >= 0) state.selections.splice(idx, 1);
+            else state.selections.push({ value: filterValue, column: filterColumn, visual: sourceVisualName });
         } else {
-            state.filterValue  = filterValue;
-            state.filterColumn = filterColumn;
-            state.sourceVisual = sourceVisualName;
+            if (state.selections.length === 1 && state.selections[0].value === filterValue && state.selections[0].visual === sourceVisualName) {
+                state.selections = [];
+            } else {
+                state.selections = [{ value: filterValue, column: filterColumn, visual: sourceVisualName }];
+            }
         }
 
-        // 1. Visual Dimming Feedback for OTHER visuals
+        const activeVisuals = new Set(state.selections.map(s => s.visual));
+
+        // 1. Visual Dimming Feedback
         pageEl.querySelectorAll('.visual-card').forEach(card => {
             const visual = card._visualData;
             if (!visual) return;
             const type = (visual.visualType || '').toUpperCase();
             const isFilter = ['SLICER', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'].includes(type);
             
-            if (state.sourceVisual) {
-                if (visual.name === state.sourceVisual) {
+            if (state.selections.length > 0) {
+                if (activeVisuals.has(visual.name)) {
                     card.classList.add('cross-filter-source');
                     card.classList.remove('dimmed');
                 } else if (!isFilter) {
@@ -556,7 +572,6 @@
             } else {
                 card.classList.remove('dimmed');
                 card.classList.remove('cross-filter-source');
-                // Clear chart highlights if we cleared the filter
                 const wrapper = card.querySelector('.chart-wrapper');
                 if (wrapper && wrapper._echartsInst) {
                     wrapper._echartsInst.dispatchAction({ type: 'downplay' });
@@ -564,11 +579,24 @@
             }
         });
 
-        // 2. Trigger parameter update
-        const batch = { ['@' + filterColumn]: state.filterValue || '' };
-        if (vscode) {
-            vscode.postMessage({ type: 'refreshReport', parameters: batch });
-        } else {
+        // 2. Parameter Updates
+        const batch = {};
+        // Clear columns that are no longer selected
+        const prevCols = new Set(Object.keys(state.lastBatch || {}));
+        const currCols = new Set(state.selections.map(s => '@' + s.column));
+        prevCols.forEach(c => { if (!currCols.has(c)) batch[c] = ''; });
+
+        // Build new values (CSV for multi-select)
+        const groups = {};
+        state.selections.forEach(s => {
+            const k = '@' + s.column;
+            if (!groups[k]) groups[k] = [];
+            groups[k].push(s.value);
+        });
+        Object.keys(groups).forEach(k => { batch[k] = groups[k].join(','); });
+        state.lastBatch = batch;
+
+        if (Object.keys(batch).length > 0) {
             postParameters(batch).then(m => { if (m) renderManifest(m); });
         }
     }
@@ -591,7 +619,9 @@
             });
     }
 
-    function renderChart(container, visual, effectiveTheme) {
+    function renderChart(container, visual, manifest) {
+        console.debug(`[Chart] Rendering ${visual.name} (HighlightRows: ${visual.highlightRows?.length || 0})`);
+        const effectiveTheme = manifest.theme || window.__THEME__ || 'light';
         if (!visual.chartConfig) {
             container.appendChild(noDataEl('No chart config available'));
             return;
@@ -613,7 +643,8 @@
         }
 
         const clickActions = actionsFor(visual, 'ON_CLICK');
-        const crossFilter  = isOn((visual.options || {})['CROSS_FILTER']);
+        const crossFilter  = isOn((visual.options || {})['CROSS_FILTER']) 
+                           || !!(visual.options || {})['CROSS_VISUAL_ACTION'];
         const xMappingCol  = (visual.options || {})['mapping:x'];
 
         const wrapper = document.createElement('div');
@@ -722,15 +753,16 @@
                     if (crossFilter) {
                         const clickedValue = params.name || params.value || (rowData.length > 0 ? rowData[0] : null);
                         const colName = xMappingCol || (visual.columns && visual.columns[0]);
+                        console.debug(`[Chart] Click on ${visual.name} | Value: ${clickedValue} | Col: ${colName}`);
                         if (clickedValue != null && colName) {
-                            applyPageCrossFilter(container, String(clickedValue), colName, visual.name);
+                            applyPageCrossFilter(container, String(clickedValue), colName, visual.name, params.event?.event);
                             
-                            // Visual feedback: clear existing highlights and highlight ONLY the clicked bar
+                            // Visual feedback: immediate highlight while waiting for re-query
                             chart.dispatchAction({ type: 'downplay' });
                             chart.dispatchAction({
                                 type: 'highlight',
-                                seriesIndex: params.seriesIndex,
-                                dataIndex: params.dataIndex
+                                seriesIndex: params.seriesIndex || 0,
+                                dataIndex: idx
                             });
                         }
                     } else {
@@ -911,9 +943,16 @@
                 tr.appendChild(td);
 
             });
-            if (isClickable) {
-                tr.addEventListener('click', () => {
-                    clickActions.forEach(action => executeAction(action, row, visual.columns));
+            if (isClickable || crossFilter) {
+                tr.addEventListener('click', (e) => {
+                    if (crossFilter) {
+                        const xMappingCol = (visual.options || {})['mapping:x'] || (visual.columns && visual.columns[0]);
+                        const xIdx = xMappingCol ? (visual.columns || []).findIndex(c => c.toLowerCase() === xMappingCol.toLowerCase()) : 0;
+                        const clickedValue = row[xIdx];
+                        applyPageCrossFilter(container, String(clickedValue), xMappingCol, visual.name, e);
+                    } else {
+                        clickActions.forEach(action => executeAction(action, row, visual.columns));
+                    }
                 });
             }
             tbody.appendChild(tr);
@@ -934,7 +973,10 @@
     }
 
     function mergeHighlightData(currentVisual, option) {
-        if (!currentVisual.highlightRows || currentVisual.highlightRows.length === 0) return;
+        if (!currentVisual.highlightRows || currentVisual.highlightRows.length === 0) {
+            console.debug(`[Ghost] No highlightRows for ${currentVisual.name}`);
+            return;
+        }
 
         const type = (currentVisual.visualType || '').toUpperCase();
         if (type !== 'BAR' && type !== 'HBAR' && type !== 'HORIZONTALBAR' && type !== 'LINE') return;
@@ -945,48 +987,56 @@
         const xIdx = currentVisual.columns.indexOf(xCol);
         const yIdx = currentVisual.columns.indexOf(yCol);
 
-        if (xIdx < 0 || yIdx < 0) return;
+        console.debug(`[Ghost] ${currentVisual.name} | Type: ${type} | X: ${xCol}(${xIdx}) | Y: ${yCol}(${yIdx})`);
 
-        // Map "Universe" values by X (currentVisual.rows)
+        if (xIdx < 0 || yIdx < 0) {
+            console.warn(`[Ghost] Mappings not found for ${currentVisual.name}`);
+            return;
+        }
+
+        // Map "Universe" values by X
         const universeMap = {};
         currentVisual.rows.forEach(r => { universeMap[String(r[xIdx])] = parseFloat(r[yIdx]) || 0; });
 
-        // Map "Selection" values by X (currentVisual.highlightRows)
+        // Map "Selection" values by X
         const selectionMap = {};
         currentVisual.highlightRows.forEach(r => { selectionMap[String(r[xIdx])] = parseFloat(r[yIdx]) || 0; });
 
-        // Rebuild series to be stacked
+        console.debug(`[Ghost] ${currentVisual.name} | Universe keys:`, Object.keys(universeMap));
+        console.debug(`[Ghost] ${currentVisual.name} | Selection keys:`, Object.keys(selectionMap));
+
         if (!option.series || option.series.length === 0) return;
 
-        const primarySeries = option.series[0];
-        const filteredData = [];
-        const remainingData = [];
-        
         // ECharts might have categories in xAxis.data or yAxis.data
         const categories = (option.xAxis && option.xAxis.data) || (option.yAxis && option.yAxis.data) || [];
+        if (categories.length === 0) {
+             console.warn(`[Ghost] No categories found in chart option for ${currentVisual.name}`);
+             return;
+        }
 
-        categories.forEach(cat => {
-            const total    = universeMap[String(cat)] || 0;
-            const filtered = selectionMap[String(cat)] || 0;
-            filteredData.push(filtered);
-            remainingData.push(Math.max(0, total - filtered));
-        });
+        // 1. Create the "Ghost" background series (Universe)
+        const universeData = categories.map(cat => universeMap[String(cat)] || 0);
+        const ghostSeries = JSON.parse(JSON.stringify(option.series[0]));
+        ghostSeries.name = 'Total (Universe)';
+        ghostSeries.data = universeData;
+        ghostSeries.itemStyle = { color: '#e0e0e0', opacity: 0.8 }; // Light grey background
+        ghostSeries.emphasis = { disabled: true };
+        ghostSeries.tooltip = { show: true };
+        ghostSeries.z = 1; // Behind
 
-        primarySeries.data = filteredData;
-        primarySeries.stack = 'highlight';
-        primarySeries.name = 'Filtered';
+        // 2. Update the "Active" series (Selection)
+        const selectionData = categories.map(cat => selectionMap[String(cat)] || 0);
+        const activeSeries = option.series[0];
+        activeSeries.name = 'Filtered';
+        activeSeries.data = selectionData;
+        activeSeries.barGap = '-100%'; // Overlap!
+        activeSeries.z = 2; // In front
 
-        const remainingSeries = JSON.parse(JSON.stringify(primarySeries));
-        remainingSeries.name = 'Total';
-        remainingSeries.data = remainingData;
-        remainingSeries.itemStyle = { opacity: 0.2, color: '#888' };
-        remainingSeries.emphasis = { disabled: true };
-        remainingSeries.tooltip = { show: false };
+        console.debug(`[Ghost] ${currentVisual.name} | Universe Data:`, universeData);
+        console.debug(`[Ghost] ${currentVisual.name} | Selection Data:`, selectionData);
 
-        option.series.push(remainingSeries);
-        
-        // Ensure stack is active
-        option.series.forEach(s => s.stack = 'highlight');
+        // Replace series: Ghost first, then Active
+        option.series = [ghostSeries, activeSeries];
     }
 
     // ── Card ────────────────────────────────────────────────────────────────
@@ -1693,6 +1743,13 @@
             } else {
                 // Custom button — execute ON_CLICK actions
                 const clickActions = actionsFor(btn, 'ON_CLICK');
+                
+                // Special check for CLEAR_FILTERS action
+                if (clickActions.some(a => a.type === 'CLEAR_FILTERS')) {
+                    executeAction({ type: 'CLEAR_FILTERS' }, null, []);
+                    return;
+                }
+
                 if (clickActions.length === 0) return;
 
                 const setParamActions  = clickActions.filter(a => a.type === 'SET_PARAMETER');
@@ -1744,29 +1801,63 @@
         container.appendChild(btnEl);
     }
 
-    function applyPageCrossFilter(sourceCard, value, column) {
+    function applyPageCrossFilter(sourceCard, value, column, visualName, event) {
         const page = getPageState(sourceCard);
         if (!page) return;
 
-        // Visual feedback: dim all other charts on the page
+        if (!page._crossFilterState) {
+            page._crossFilterState = { selections: [] };
+        }
+
+        const state = page._crossFilterState;
+        const isMulti = event && (event.ctrlKey || event.metaKey);
+
+        if (isMulti) {
+            const existingIdx = state.selections.findIndex(s => s.value === value && s.column === column);
+            if (existingIdx >= 0) {
+                state.selections.splice(existingIdx, 1);
+            } else {
+                state.selections.push({ visualName, column, value });
+            }
+        } else {
+            // Single select — clear others or toggle if same
+            if (state.selections.length === 1 && state.selections[0].value === value) {
+                state.selections = [];
+            } else {
+                state.selections = [{ visualName, column, value }];
+            }
+        }
+
+        // Visual feedback: dim all visuals, then highlight sources
         const allCards = page.querySelectorAll('.visual-card');
         allCards.forEach(card => {
-            if (card === sourceCard) {
-                card.classList.remove('cross-filtered-dimmed');
-                card.classList.add('cross-filtered-source');
-            } else {
-                card.classList.add('cross-filtered-dimmed');
-                card.classList.remove('cross-filtered-source');
+            card.classList.remove('cross-filter-source');
+            card.classList.toggle('dimmed', state.selections.length > 0);
+        });
+
+        state.selections.forEach(s => {
+            const card = page.querySelector(`[data-visual-name="${CSS.escape(s.visualName)}"]`);
+            if (card) {
+                card.classList.add('cross-filter-source');
+                card.classList.remove('dimmed');
             }
         });
 
-        // Trigger parameter update
-        const batch = { ['@' + column]: value };
-        if (vscode) {
-            vscode.postMessage({ type: 'refreshReport', parameters: batch });
-        } else {
-            postParameters(batch).then(m => { if (m) renderManifest(m); });
+        // Trigger batch parameter update
+        const batch = {};
+        state.selections.forEach(s => {
+            const key = '@' + s.column;
+            if (!batch[key]) batch[key] = [];
+            batch[key].push(s.value);
+        });
+
+        // Flatten multi-values to comma-separated strings
+        const flattened = {};
+        for (const [k, v] of Object.entries(batch)) {
+            flattened[k] = v.join(',');
         }
+
+        postParameters(flattened, true).then(m => { if (m) renderManifest(m); });
     }
 
     // ── Footer ──────────────────────────────────────────────────────────────
@@ -1991,6 +2082,29 @@
             } else {
                 console.warn('RUN_SCRIPT is only supported in web mode.');
             }
+        } else if (action.type === 'CLEAR_FILTERS') {
+            // Reset all cross-filter states on all pages
+            document.querySelectorAll('.page').forEach(pageEl => {
+                pageEl._crossFilterState = { selections: [] };
+                pageEl.querySelectorAll('.visual-card').forEach(card => {
+                    card.classList.remove('dimmed', 'cross-filter-source');
+                    const wrapper = card.querySelector('.chart-wrapper');
+                    if (wrapper && wrapper._echartsInst) {
+                        wrapper._echartsInst.dispatchAction({ type: 'downplay' });
+                    }
+                });
+            });
+            // Reset parameters to baseline
+            if (baselineManifest && baselineManifest.parameters) {
+                const resetBatch = {};
+                Object.keys(baselineManifest.parameters).forEach(k => {
+                    resetBatch[k] = baselineManifest.parameters[k];
+                });
+                postParameters(resetBatch).then(m => { if (m) renderManifest(m); });
+            } else {
+                if (vscode) vscode.postMessage({ type: 'refreshReport', parameters: {} });
+                else postParameters({}).then(m => { if (m) renderManifest(m); });
+            }
         }
     }
 
@@ -2013,20 +2127,44 @@
     }
 
     // Batch-update multiple parameters in a single server round-trip.
-    async function postParameters(params) {
+    // Batch-update multiple parameters in a single server round-trip.
+    // Batch-update multiple parameters in a single server round-trip.
+    async function postParameters(params, isInteraction = false) {
+        // Convert dictionary to required List<ParameterUpdateRequest> format
+        const paramList = Object.entries(params).map(([name, value]) => ({
+            name: name,
+            value: String(value ?? '')
+        }));
+
+        console.debug('[ParameterUpdate] Sending:', { params: paramList, isInteraction });
+
         if (vscode) {
-            vscode.postMessage({ type: 'refreshReport', parameters: params });
+            vscode.postMessage({ 
+                type: 'refreshReport', 
+                parameters: params, // VS Code extension handles the dictionary
+                isInteraction: isInteraction 
+            });
             return null;
         }
+
         try {
             const res = await fetch(apiBase + '/parameters', {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ params })
+                body:    JSON.stringify({ 
+                    params: paramList,
+                    isInteraction: isInteraction
+                })
             });
-            if (!res.ok) return null;
-            return await res.json();
-        } catch {
+            if (!res.ok) {
+                console.error('Parameter update failed:', res.status, await res.text());
+                return null;
+            }
+            const manifest = await res.json();
+            console.debug('[ParameterUpdate] Received new manifest');
+            return manifest;
+        } catch (e) {
+            console.error('Parameter update request failed:', e);
             return null;
         }
     }

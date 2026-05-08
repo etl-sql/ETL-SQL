@@ -24,7 +24,8 @@ namespace ETL_SQL.Core.Linting.Rules
             var objectNames = new HashSet<string>(
                 script.Statements.OfType<CreateVisualStatement>().Select(v => v.Name)
                 .Concat(script.Statements.OfType<CreateContainerStatement>().Select(c => c.Name))
-                .Concat(script.Statements.OfType<CreateNavigationStatement>().Select(n => n.Name)),
+                .Concat(script.Statements.OfType<CreateNavigationStatement>().Select(n => n.Name))
+                .Concat(script.Statements.OfType<CreateButtonStatement>().Select(b => b.Name)),
                 System.StringComparer.OrdinalIgnoreCase);
 
             foreach (var stmt in script.Statements)

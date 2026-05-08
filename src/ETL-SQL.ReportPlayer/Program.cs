@@ -208,12 +208,11 @@ else
     app.MapPost("/api/parameters", async (HttpContext ctx, DashboardService svc) =>
     {
         var body = await JsonSerializer.DeserializeAsync<ParameterBatchRequest>(ctx.Request.Body, webOptions);
-        if (body?.Params == null || body.Params.Count == 0)
-            return Results.BadRequest("params array is required");
-        var updates = body.Params
+        if (body == null) return Results.BadRequest("body is required");
+        var updates = (body.Params ?? new List<ParameterUpdateRequest>())
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name!, p.Value ?? ""));
-        return Results.Json(await svc.SetParametersAsync(updates), noCache);
+        return Results.Json(await svc.SetParametersAsync(updates, body.IsInteraction), noCache);
     });
 
     app.MapGet("/", async (DashboardService svc) =>
@@ -410,9 +409,8 @@ static string GetDashboardHtml(ReportManifest manifest, string staleBanner)
         "<meta charset=\"UTF-8\">\n" +
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
         "<title>" + title + "</title>\n" +
+        "<title>" + title + "</title>\n" +
         "<link rel=\"stylesheet\" href=\"/report-runtime.css\">\n</head>\n<body>\n" +
-        "<h1>" + title + "</h1>\n" +
-        (manifest.Description != null ? "<p class=\"report-desc\">" + manifest.Description + "</p>\n" : "") +
         staleBanner + "\n" +
         "<div id=\"root\"></div>\n" +
         "<footer>Powered by ETL-SQL ReportPlayer</footer>\n\n" +
@@ -431,10 +429,8 @@ static string GetDashboardShellHtml(string reportName, string? description, stri
         "<meta charset=\"UTF-8\">\n" +
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n" +
         "<title>" + reportName + " — ETL-SQL</title>\n" +
+        "<title>" + reportName + " — ETL-SQL</title>\n" +
         "<link rel=\"stylesheet\" href=\"/report-runtime.css\">\n</head>\n<body>\n" +
-        "<p><a href=\"/\">&larr; All reports</a></p>\n" +
-        "<h1>" + reportName + "</h1>\n" +
-        (description != null ? "<p class=\"report-desc\">" + description + "</p>\n" : "") +
         staleBanner + "\n" +
         "<div id=\"root\"></div>\n" +
         "<footer>Powered by ETL-SQL ReportPlayer</footer>\n\n" +

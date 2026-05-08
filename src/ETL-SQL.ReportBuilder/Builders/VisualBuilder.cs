@@ -127,6 +127,11 @@ namespace ETL_SQL.ReportBuilder.Builders
                         ScriptPath = rs.ScriptPath,
                         Parameters = rs.Parameters
                     },
+                    ClearFiltersAction cf => new VisualActionManifest
+                    {
+                        Type    = "CLEAR_FILTERS",
+                        Trigger = cf.Trigger
+                    },
                     _ => throw new NotSupportedException($"Action type {action.GetType().Name} not supported in manifest.")
                 });
             }

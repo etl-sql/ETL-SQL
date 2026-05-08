@@ -59,6 +59,10 @@ namespace ETL_SQL.Core.Linting.Rules
                         definedDashboardObjects.Add(container.Name);
                         break;
 
+                    case CreateButtonStatement btn:
+                        definedDashboardObjects.Add(btn.Name);
+                        break;
+
                     case CreateNavigationStatement nav:
                         definedDashboardObjects.Add(nav.Name);
                         break;

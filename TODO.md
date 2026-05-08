@@ -2,11 +2,27 @@
 ## Up Next
 - [ ] **Styles are not being used** Using the kitchen sink report in report portal C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\report_kitchen_sink.rptsql BarByRegion and others have a dark theme going and the theme set on the chart has a white background
 
-- [ ] **Cross highlight/filtering isn't working correctly** 
-  What should happen using kitchen sink example: C:\Users\chuck\scratch\ETL-SQL\Reports\report_kitchen_sink.rptsql
-    1. When you left click on a bar in a bar chart it maintains its color while all the other bars are dulled
-    2. All other charts that have CROSS_FILTER = ON should change their colors to align with the filter.  For example using the kitchen sink report you click on North in the BarByRegion chart then DrillRegionDetail should change the bars so that whatever parts are represented by North are normal colored and those not are dimmed.  The different categories in DrillRegionDetail could have half the bar be normal color and the other half dimmed showing how much of that category is represented by North.
-    3. If the user clicks the North bar a second time the CROSS_FILTERed charts return to normal with normal colors (unfiltering)
+- [ ] **Cross highlight/filtering (Power BI Parity)** 
+    Follow Power BI interactions: [End-user interactions](https://learn.microsoft.com/en-us/power-bi/explore-reports/end-user-interactions)
+    - [ ] **Phase 1: Basic Interaction Test & Feedback**
+        - [ ] **Test Report**: `tests/interaction_p1_feedback.rptsql` (Two simple Bar charts).
+        - [ ] Update `report-runtime.js` to use `chart.dispatchAction({ type: 'highlight' })` for immediate feedback.
+        - [ ] Support multi-select via `Ctrl+Click`.
+        - [ ] **CLEAR_FILTERS Action**: Implement a new action type that can be bound to any visual or button: `ACTIONS (ON_CLICK = CLEAR_FILTERS)`. This will be the primary way users reset visual filters.
+    - [ ] **Phase 2: "Ghost" Chart Rendering (C#)**
+        - [ ] **Test Report**: `tests/interaction_p2_ghosting.rptsql` (Bar, HBar, Pie).
+        - [ ] Update `CartesianRenderer.cs` to render "Selection" + "Remainder" stacked series.
+        - [ ] Remainder series opacity: 20-30%.
+        - [ ] **Selection-Aware Tooltips**: Combined tooltips showing "X of Y" data.
+        - [ ] **Alignment Strategy**: Universe defines buckets; Selection is mapped onto them.
+    - [ ] **Phase 3: Slicer & Global Filter Coordination**
+        - [ ] **Test Report**: `tests/interaction_p3_slicers.rptsql` (Slicer + Multiple Charts).
+        - [ ] Slicer changes must reset any visual-level highlights.
+        - [ ] **Legend Highlighting**: Implement click listeners on Chart Legends to trigger cross-visual actions.
+    - [ ] **Phase 4: Advanced Support**
+        - [ ] **Test Report**: `tests/interaction_p4_advanced.rptsql` (Line, Scatter, Combo).
+        - [ ] Support highlighting in LINE (ghost other lines) and SCATTER (dim non-matching points).
+        - [ ] Support "Ghosting" in PIE and DONUT (dimming non-selected slices).
 
 - [x] **Header is wrong**  The report-runtime.js header first is only supposed to appear when using VS Code and hidden in portal or serve.  Second its supposed to be rocket icon (launch) which launches into serve mode so the user who is developing the dashboard can see what it will look like.  Next should be a markdown icon to publish to markdown.  The functionality already exists just needs to call it.  Next publish to PDF icon, same as Markdown it already exists just needs to call it.  Finally a txt icon which will call report print which prints an ascii of the charges in text format. Once again it already exists just need to call it.
 

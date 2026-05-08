@@ -149,6 +149,18 @@ namespace ETL_SQL.ReportBuilder
                     foreach (var opt in bStmt.Options)
                         bm.Options[opt.Key] = opt.Value;
 
+                    // Implied actions for special types if none specified
+                    if (bStmt.Actions.Count == 0)
+                    {
+                        var type = bStmt.ButtonType.ToUpperInvariant();
+                        if (type == "CLEAR_FILTERS")
+                            bm.Actions.Add(new VisualActionManifest { Type = "CLEAR_FILTERS", Trigger = "ON_CLICK" });
+                        else if (type == "REFRESH")
+                            bm.Actions.Add(new VisualActionManifest { Type = "REFRESH", Trigger = "ON_CLICK" });
+                        else if (type == "BACK")
+                            bm.Actions.Add(new VisualActionManifest { Type = "BACK", Trigger = "ON_CLICK" });
+                    }
+
                     foreach (var action in bStmt.Actions)
                     {
                         bm.Actions.Add(TranslateAction(action));
@@ -259,6 +271,18 @@ namespace ETL_SQL.ReportBuilder
                     Trigger         = sp.Trigger,
                     ParameterName   = sp.ParameterName,
                     ValueExpression = sp.ValueExpression
+                },
+                ClearFiltersAction cf => new VisualActionManifest
+                {
+                    Type    = "CLEAR_FILTERS",
+                    Trigger = cf.Trigger
+                },
+                RunScriptAction rs => new VisualActionManifest
+                {
+                    Type       = "RUN_SCRIPT",
+                    Trigger    = rs.Trigger,
+                    ScriptPath = rs.ScriptPath,
+                    Parameters = rs.Parameters
                 },
                 _ => new VisualActionManifest { Type = "UNKNOWN", Trigger = action.Trigger }
             };

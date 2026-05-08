@@ -1,0 +1,49 @@
+-- Interaction Test Harness: Phase 1 (Feedback & Clear)
+-- This script tests multi-select cross-filtering and the CLEAR_FILTERS action.
+
+-- Visual 1: Mock Data
+SELECT 'North' AS region, 100 AS sales, 'Hardware' AS category INTO #sales
+UNION ALL SELECT 'North', 150, 'Software'
+UNION ALL SELECT 'South', 200, 'Hardware'
+UNION ALL SELECT 'South', 50, 'Software'
+UNION ALL SELECT 'East', 300, 'Hardware'
+UNION ALL SELECT 'East', 400, 'Software'
+UNION ALL SELECT 'West', 250, 'Hardware'
+UNION ALL SELECT 'West', 150, 'Software';
+
+
+DECLARE @region VARCHAR = NULL;
+DECLARE @category VARCHAR = NULL;
+
+-- Visual 1: Sales by Region (Source for cross-filtering)
+CREATE VISUAL BarByRegion AS BAR (
+  SOURCE = (SELECT region, SUM(sales) AS total FROM #sales WHERE region = ISNULL(@region, region) GROUP BY region),
+  MAPPINGS (X = region, Y = total),
+  OPTIONS (TITLE = 'Revenue by Region', CROSS_FILTER = 'True', CROSS_VISUAL_ACTION = 'HIGHLIGHT')
+);
+
+-- Visual 2: Category Details (Should dim when region is selected)
+CREATE VISUAL BarByCategory AS BAR (
+  SOURCE = (SELECT category, SUM(sales) AS total FROM #sales WHERE region = ISNULL(@region, region) AND category = ISNULL(@category, category) GROUP BY category),
+  MAPPINGS (X = category, Y = total),
+  OPTIONS (TITLE = 'Revenue by Category', CROSS_VISUAL_ACTION = 'HIGHLIGHT')
+);
+
+-- Visual 3: Clear Filters Button
+CREATE BUTTON ResetBtn AS CLEAR_FILTERS (
+    TITLE = 'Clear All Filters',
+    STYLE (
+        BACKGROUND = '#e74c3c',
+        COLOR = '#ffffff'
+    )
+);
+
+-- Layout
+CREATE PAGE TestPage AS LAYOUT (
+    STRUCTURE = 'A A / B C',
+    MAP (
+        'A' = BarByRegion,
+        'B' = BarByCategory,
+        'C' = ResetBtn
+    )
+);

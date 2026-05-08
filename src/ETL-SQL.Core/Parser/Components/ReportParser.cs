@@ -714,6 +714,7 @@ namespace ETL_SQL.Core.Parser.Components
             string buttonType;
             if (Match(TokenType.BACK))         buttonType = "BACK";
             else if (Match(TokenType.REFRESH)) buttonType = "REFRESH";
+            else if (Match(TokenType.CLEAR_FILTERS)) buttonType = "CLEAR_FILTERS";
             else if (_parser.Current.Type != TokenType.LPAREN && _parser.Current.Type != TokenType.EOF)
                 buttonType = _parser.Advance().Value.ToUpperInvariant(); // accept any keyword as custom button type
             else throw new SyntaxException("Expected button type (BACK, REFRESH, or custom identifier) after AS", _parser.Current.Line, _parser.Current.Column);
@@ -1329,10 +1330,14 @@ namespace ETL_SQL.Core.Parser.Components
                     Consume(TokenType.RPAREN, "Expected ')' to close RUN_SCRIPT");
                     action = new RunScriptAction { Trigger = trigger, ScriptPath = scriptPath, Parameters = actionParams };
                 }
+                else if (Match(TokenType.CLEAR_FILTERS))
+                {
+                    action = new ClearFiltersAction { Trigger = trigger };
+                }
                 else
                 {
                     throw new SyntaxException(
-                        $"Expected DRILL_DOWN or SET_PARAMETER after {trigger} =",
+                        $"Expected DRILL_DOWN, SET_PARAMETER, or CLEAR_FILTERS after {trigger} =",
                         _parser.Current.Line, _parser.Current.Column);
                 }
 

@@ -1,0 +1,242 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\tests\\interaction_p1_feedback.rptsql",
+  "builtAt": "2026-05-08T01:01:17.4032604Z",
+  "visuals": [
+    {
+      "name": "BarByRegion",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022BarByRegion\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022East\u0022,\u0022North\u0022,\u0022South\u0022,\u0022West\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022total\u0022,\u0022data\u0022:[700,250,250,400]}]}",
+      "columns": [
+        "region",
+        "total"
+      ],
+      "rows": [
+        [
+          "West",
+          "400"
+        ],
+        [
+          "North",
+          "250"
+        ],
+        [
+          "East",
+          "700"
+        ],
+        [
+          "South",
+          "250"
+        ]
+      ],
+      "options": {
+        "CROSS_FILTER": "True",
+        "CROSS_VISUAL_ACTION": "HIGHLIGHT",
+        "mapping:x": "region",
+        "mapping:y": "total"
+      },
+      "error": null,
+      "actions": []
+    },
+    {
+      "name": "BarByCategory",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022BarByCategory\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Hardware\u0022,\u0022Software\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022total\u0022,\u0022data\u0022:[850,750]}]}",
+      "columns": [
+        "category",
+        "total"
+      ],
+      "rows": [
+        [
+          "Software",
+          "750"
+        ],
+        [
+          "Hardware",
+          "850"
+        ]
+      ],
+      "options": {
+        "CROSS_VISUAL_ACTION": "HIGHLIGHT",
+        "mapping:x": "category",
+        "mapping:y": "total"
+      },
+      "error": null,
+      "actions": []
+    }
+  ],
+  "pages": [
+    {
+      "name": "TestPage",
+      "structure": "A A / B C",
+      "slotMap": {
+        "A": "BarByRegion",
+        "B": "BarByCategory",
+        "C": "ResetBtn"
+      }
+    }
+  ],
+  "datasets": [],
+  "buttons": [
+    {
+      "name": "ResetBtn",
+      "buttonType": "CLEAR_FILTERS",
+      "title": "Clear All Filters",
+      "options": {},
+      "actions": [
+        {
+          "type": "CLEAR_FILTERS",
+          "trigger": "ON_CLICK",
+          "targetVisual": null,
+          "keyColumn": null,
+          "parameterName": null,
+          "valueExpression": null,
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "BACKGROUND": "#e74c3c",
+        "COLOR": "#ffffff"
+      }
+    }
+  ],
+  "parameters": {
+    "@region": "",
+    "@category": ""
+  },
+  "telemetry": {
+    "rowsProcessed": 8,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[2d6067d7] [SELECT] Executing SelectStatement. Session: 2d6067d7",
+      "color": "white",
+      "timestamp": "2026-05-08T01:01:17.3676345Z"
+    },
+    {
+      "message": "[2d6067d7] Visual \u0027BarByRegion\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T01:01:17.3942432Z"
+    },
+    {
+      "message": "[2d6067d7] Visual \u0027BarByCategory\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T01:01:17.3968527Z"
+    },
+    {
+      "message": "[2d6067d7] Button \u0027ResetBtn\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T01:01:17.3973427Z"
+    },
+    {
+      "message": "[2d6067d7] Page \u0027TestPage\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T01:01:17.3984845Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "00368dd8-a14d-4204-8a5d-ac10e9a62fca",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 38.9098,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "09428c16-14b1-47d7-b162-143e407e5ecb",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 16,
+          "durationMs": 26.1208,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 612.538666503323,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "6a9d6d20-8842-4bf5-aa21-83a002fff19b",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.1191,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "1116e4b4-94fd-43b7-8e39-efab28841d62",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0212,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "956327e9-238c-42c4-8328-c59f0d17fdad",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.1514,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "94b3d8d5-2198-4272-814c-90f87800fe45",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.5434,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d8dab8a9-89f8-4c6b-b477-86e6bc88d91e",
+          "name": "CreateButton",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.3081,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "79575cd6-a0f1-4203-b10d-69bd87bf75c7",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9716,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

@@ -54,7 +54,12 @@ namespace ETL_SQL.ReportPlayer
 
         public async ValueTask DisposeAsync()
         {
-            _currentScope?.Dispose();
+            if (_currentScope is IAsyncDisposable asyncScope)
+                await asyncScope.DisposeAsync();
+            else
+                _currentScope?.Dispose();
+            
+            _currentScope = null;
             
             if (_evaluator != null)
             {
@@ -257,7 +262,11 @@ namespace ETL_SQL.ReportPlayer
 
                 if (_currentScope != null)
                 {
-                    _currentScope.Dispose();
+                    if (_currentScope is IAsyncDisposable ad)
+                        await ad.DisposeAsync();
+                    else
+                        _currentScope.Dispose();
+                        
                     _currentScope = null;
                 }
 

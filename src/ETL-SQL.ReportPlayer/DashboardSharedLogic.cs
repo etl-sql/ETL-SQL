@@ -51,8 +51,12 @@ namespace ETL_SQL.ReportPlayer
             foreach (var visualDef in evaluator.ReportContext.VisualDefinitions.Values)
             {
                 // Visual is affected if it directly uses the variable.
-                // For interactions (Highlight), we ALWAYS refresh visuals that are marked for it.
-                bool isAffected = affectedNames.Any(n => DependsOnVariable(visualDef, n));
+                // For interactions (Highlight), we refresh all visuals that have an interaction mode enabled
+                // to ensure cross-filtering/ghosting is applied correctly across the page.
+                var action = visualDef.Options.FirstOrDefault(o => string.Equals(o.Key, "CROSS_VISUAL_ACTION", StringComparison.OrdinalIgnoreCase))?.Value;
+                bool hasInteraction = action != null && !string.Equals(action, "NONE", StringComparison.OrdinalIgnoreCase);
+                
+                bool isAffected = (isInteraction && hasInteraction) || affectedNames.Any(n => DependsOnVariable(visualDef, n));
                 
                 if (isAffected)
                 {

@@ -145,6 +145,11 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
+    public record ClearFiltersAction : VisualAction
+    {
+        public override string ToSql() => "CLEAR_FILTERS";
+    }
+
     public record TableSummaryItem(string Aggregate, string Column, string? Alias);
 
     public record TableSummaryOptions : AstNode

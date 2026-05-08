@@ -1,12 +1,12 @@
 {
   "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\sales report.rptsql",
-  "builtAt": "2026-05-03T15:48:02.3945069Z",
+  "builtAt": "2026-05-08T12:16:09.6057462Z",
   "title": "Sales Dashboard",
   "description": "Regional and product-level revenue by month.",
   "visuals": [
     {
       "name": "RegionFilter",
-      "visualType": "Slicer",
+      "visualType": "SLICER",
       "chartConfig": null,
       "defaultValue": "All",
       "columns": [
@@ -28,13 +28,15 @@
           "targetVisual": null,
           "keyColumn": null,
           "parameterName": "@region",
-          "valueExpression": "region"
+          "valueExpression": "region",
+          "scriptPath": null,
+          "parameters": null
         }
       ]
     },
     {
       "name": "TotalRevenue",
-      "visualType": "Card",
+      "visualType": "CARD",
       "chartConfig": null,
       "columns": [
         "val",
@@ -57,7 +59,7 @@
     },
     {
       "name": "RevenueByRegion",
-      "visualType": "Bar",
+      "visualType": "BAR",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Revenue by Region\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[],\u0022name\u0022:\u0022Region\u0022},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022,\u0022name\u0022:\u0022Revenue ($)\u0022,\u0022min\u0022:0},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022revenue\u0022,\u0022data\u0022:[]}]}",
       "columns": [
         "region",
@@ -77,7 +79,7 @@
     },
     {
       "name": "RevenueByRegionMonth",
-      "visualType": "Bar",
+      "visualType": "BAR",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Revenue by Region (Monthly)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[],\u0022name\u0022:\u0022Month\u0022},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022,\u0022name\u0022:\u0022Revenue ($)\u0022,\u0022min\u0022:0},\u0022series\u0022:[]}",
       "columns": [
         "month",
@@ -100,7 +102,7 @@
     },
     {
       "name": "RevenueByProduct",
-      "visualType": "Donut",
+      "visualType": "DONUT",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Revenue by Product\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022pie\u0022,\u0022name\u0022:\u0022RevenueByProduct\u0022,\u0022radius\u0022:[\u002240%\u0022,\u002270%\u0022],\u0022data\u0022:[]}]}",
       "columns": [
         "product",
@@ -117,7 +119,7 @@
     },
     {
       "name": "UnitsByMonth",
-      "visualType": "Line",
+      "visualType": "LINE",
       "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Units Sold by Month\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[],\u0022name\u0022:\u0022Month\u0022},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022,\u0022name\u0022:\u0022Units Sold\u0022,\u0022min\u0022:0},\u0022series\u0022:[{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022units\u0022,\u0022data\u0022:[],\u0022smooth\u0022:true}]}",
       "columns": [
         "month",
@@ -138,7 +140,7 @@
     },
     {
       "name": "SalesTable",
-      "visualType": "Table",
+      "visualType": "TABLE",
       "chartConfig": null,
       "columns": [
         "month",
@@ -209,5 +211,309 @@
     "subquerySpillCount": 0,
     "subquerySpilledBytes": 0,
     "executionTimeMs": 0
-  }
+  },
+  "messages": [
+    {
+      "message": "[6eb763c6] Connection c created.",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.5161961Z"
+    },
+    {
+      "message": "[6eb763c6] [SELECT] Executing SelectStatement. Session: 6eb763c6",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.5252284Z"
+    },
+    {
+      "message": "[6eb763c6] Dataset \u0027\u0026summary\u0027 created (refresh every 1h).",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.5902966Z"
+    },
+    {
+      "message": "[6eb763c6] Visual \u0027RegionFilter\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.5922185Z"
+    },
+    {
+      "message": "[6eb763c6] Visual \u0027TotalRevenue\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.5945675Z"
+    },
+    {
+      "message": "[6eb763c6] Visual \u0027RevenueByRegion\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.5947564Z"
+    },
+    {
+      "message": "[6eb763c6] Visual \u0027RevenueByRegionMonth\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.5949283Z"
+    },
+    {
+      "message": "[6eb763c6] Visual \u0027RevenueByProduct\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.594965Z"
+    },
+    {
+      "message": "[6eb763c6] Visual \u0027UnitsByMonth\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.5949912Z"
+    },
+    {
+      "message": "[6eb763c6] Visual \u0027SalesTable\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.5950187Z"
+    },
+    {
+      "message": "[6eb763c6] Container \u0027KpiRow\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.5956758Z"
+    },
+    {
+      "message": "[6eb763c6] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.5968183Z"
+    },
+    {
+      "message": "[6eb763c6] Page \u0027Overview\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.598201Z"
+    },
+    {
+      "message": "[6eb763c6] Page \u0027Trends\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T12:16:09.5982645Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "ca9a132a-6812-4894-b6ba-533ce89bc474",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 101.5328,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "5be9587d-f950-4f53-9ad1-d7990d745587",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.4056,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "352fed4d-c793-49af-8228-021a39c18707",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0348,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "44890328-7d74-45b1-91cf-a86ba25b1ccf",
+          "name": "DropConnection",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.4764,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d99b619d-3c21-4d4c-9fe8-2b6e47771e26",
+          "name": "CreateConnection",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 14.3248,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7381190c-8061-4a90-a4cf-79b09cfac529",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.1885,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "897db8d3-d322-4eb6-9cf9-95d9ba1a59a3",
+          "name": "CreateDataset",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 67.4649,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": [
+            {
+              "id": "10b66186-e29c-486e-b141-064163e0ae3b",
+              "name": "Select",
+              "status": "Completed",
+              "rowsProcessed": 0,
+              "durationMs": 64.9833,
+              "iterationCount": 1,
+              "isParallelBlock": false,
+              "velocity": 0,
+              "error": null,
+              "children": []
+            }
+          ]
+        },
+        {
+          "id": "6006b392-bc2b-4f04-9665-cddf078d7ddc",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.6196,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "089a03a6-9aca-4835-adff-4f4dc6f90f73",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.1124,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "131a27f6-8e08-4da6-bb0c-f15500d7a0b4",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0461,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "683c1e15-95dc-40d4-b189-33dd24127419",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0521,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "73ffc55e-7acb-4970-b400-01b44ccabadc",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0204,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5a0ba5fc-012d-4a4e-93ec-1405e5810b01",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0166,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7cba2a67-7518-424c-aa97-84a89b3220b9",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0174,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "df1052b6-b89e-403a-83c3-1d151ef75b8a",
+          "name": "CreateContainer",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.4667,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "156dcdce-1cfc-491e-958c-432a6b6e5103",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.347,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5ab79314-856b-4e11-a4d9-110386ddc162",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.1434,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "0f3928cd-7802-4e29-82eb-538b93442161",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0489,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
 }
