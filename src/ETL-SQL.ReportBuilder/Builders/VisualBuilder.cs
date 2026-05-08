@@ -66,6 +66,15 @@ namespace ETL_SQL.ReportBuilder.Builders
             if (resolvedStyles.Count > 0)
                 vm.Styles = resolvedStyles;
 
+            // Extract from styles if missing
+            vm.Styles ??= new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (vm.LabelPosition == null && vm.Styles.TryGetValue("LABEL_POSITION", out var lp))
+                vm.LabelPosition = lp;
+
+            // Default EXPORT=OFF for controls
+            if (!vm.Styles.ContainsKey("EXPORT") && IsControlVisual(vStmt.VisualType))
+                vm.Styles["EXPORT"] = "OFF";
+
             // Typed series (COMBO)
             if (vStmt.TypedSeries.Count > 0)
                 vm.SeriesDefs = vStmt.TypedSeries.Select(ts => new SeriesDefManifest { SeriesType = ts.SeriesType, Column = ts.Column }).ToList();
@@ -366,6 +375,19 @@ namespace ETL_SQL.ReportBuilder.Builders
         {
             var sample = rows.Take(10).Select(r => r[colIndex]).FirstOrDefault(v => !string.IsNullOrEmpty(v));
             return decimal.TryParse(sample, out _);
+        }
+
+        private bool IsControlVisual(VisualType type)
+        {
+            return type == VisualType.Slicer || 
+                   type == VisualType.DatePicker || 
+                   type == VisualType.RelDatePicker || 
+                   type == VisualType.Slider || 
+                   type == VisualType.MultiSelect || 
+                   type == VisualType.Search || 
+                   type == VisualType.Checkbox || 
+                   type == VisualType.Textbox || 
+                   type == VisualType.Numberbox;
         }
 
         private (string? Value, bool IsMarkdown) ResolveMarkdown(string? input, bool parserFlag) => styleBuilder.ResolveMarkdown(input, parserFlag);

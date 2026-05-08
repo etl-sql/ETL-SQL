@@ -26,16 +26,36 @@
 
 - [x] **Header is wrong**  The report-runtime.js header first is only supposed to appear when using VS Code and hidden in portal or serve.  Second its supposed to be rocket icon (launch) which launches into serve mode so the user who is developing the dashboard can see what it will look like.  Next should be a markdown icon to publish to markdown.  The functionality already exists just needs to call it.  Next publish to PDF icon, same as Markdown it already exists just needs to call it.  Finally a txt icon which will call report print which prints an ascii of the charges in text format. Once again it already exists just need to call it.
 
-- [ ] **Script issue**  The following script works fine in TUI and VS Code but does not show the table in the report portal: C:\Users\chuck\scratch\ETL-SQL\samples\sales table.rptsql
+- [x] **Script issue**  The following script works fine in TUI and VS Code but does not show the table in the report portal: C:\Users\chuck\scratch\ETL-SQL\samples\sales table.rptsql
 
-- [ ] **Reports with input parameters**  We already have this in subscriptions but we'll need to add this to regular reports too.  If they have input parameters they should be shown and need to be entered before the user can run the report.  
-The input parameters based on type will have these default controls:
-Dates = DATEPICKER
-RELDATE = RELDATEPICKER (e.g. -2 days)
-BOOL = CHECKBOX (true/false)
-TEXT = TEXTBOX with format option
-NUM = TEXTBOX with number format option
-LIST = MULTISELECT (list of values)
+- [ ] **Reports with Input Parameters & Scalar Visuals**  
+    Add support for operational reporting where parameters can be batched and applied before execution (SSRS style).
+    - [ ] **Phase 1: Scalar Input Visuals (C# & JS)**
+        - [ ] **Engine**: Ensure `TEXTBOX`, `NUMBERBOX`, and `CHECKBOX` are correctly parsed and serialized in `VisualBuilder.cs`.
+        - [ ] **Runtime**: Implement renderers for these scalar types in `report-runtime.js`.
+        - [ ] **Standard Styles**: Implement `LABEL_POSITION` (TOP, LEFT, HIDDEN) for all scalar inputs.
+        - [ ] **Validation**: Implement `MIN`, `MAX`, and `DECIMALS` for `NUMBERBOX`.
+        - [ ] **Verify**: Run `tests/inputs_scalar_basic.rptsql` via `serve` and confirm UI rendering.
+        - [ ] **Commit**: `git commit -m "Phase 1: Scalar Input Visuals complete."`
+    - [ ] **Phase 2: Deferred Execution (The "Run" Button)**
+        - [ ] **Engine**: Update `ManifestBuilder.cs` to recognize `CREATE BUTTON ... AS RUN` and auto-inject the `APPLY_PARAMETERS` action.
+        - [ ] **Runtime**: Implement "Deferred Mode" in `report-runtime.js`. 
+            - If an `APPLY_PARAMETERS` action exists on the page, all `SET_PARAMETER` calls switch to "Staged Mode".
+            - The `APPLY_PARAMETERS` button sends the entire batch to the server.
+        - [ ] **Visual Feedback**: Add a visual indicator (e.g., a "Pending Changes" badge) when in Staged Mode.
+        - [ ] **Verify**: Run `tests/inputs_deferred_run.rptsql` via `serve` and confirm batching logic.
+        - [ ] **Commit**: `git commit -m "Phase 2: Deferred Execution support complete."`
+    - [ ] **Phase 3: Export, Metadata & Sample Report**
+        - [ ] **Defaults**: Set `STYLE(EXPORT = OFF)` as default for all slicers/pickers/buttons.
+        - [ ] **Metadata**: Update `ManifestBuilder.cs` to capture `INPUT` variable metadata (Name, Type, DefaultValue, IsRequired).
+        - [ ] **Sample Report**: Create `samples/inputs_kitchen_sink.rptsql` incorporating all input types + RUN button.
+        - [ ] **Verify**: Run `samples/inputs_kitchen_sink.rptsql` via `serve` and confirm end-to-end functionality.
+        - [ ] **Commit**: `git commit -m "Phase 3: Export logic and Kitchen Sink sample complete."`
+    - [ ] **Phase 4: Portal-Level Integration**
+        - [ ] **Pre-Run Prompting**: If a report has `REQUIRED` parameters that are missing, show a "Required Parameters" modal.
+        - [ ] **Auto-Panel**: Auto-generate parameter sidebar if visuals are missing.
+        - [ ] **Verify**: Confirm portal behavior with a required-parameter script.
+        - [ ] **Commit**: `git commit -m "Phase 4: Portal-level parameter prompting complete."`
 
 
 - [ ] **Lineage & Data Governance — Full Feature Set** *(priority — core selling feature)* — See `Docs/Strategy/Lineage_Strategy.md` for the complete design. Reference documentation for standard tags and usage: `Docs/Reference/Lineage.md`.

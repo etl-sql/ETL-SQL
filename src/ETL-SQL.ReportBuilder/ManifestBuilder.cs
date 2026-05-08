@@ -143,8 +143,11 @@ namespace ETL_SQL.ReportBuilder
                         ButtonType = bStmt.ButtonType,
                         Title      = bStmt.Title,
                         Tooltip    = _styleBuilder.BuildTooltipManifest(bStmt.Tooltip),
-                        Styles     = resolvedStyles.Count > 0 ? resolvedStyles : null
+                        Styles     = resolvedStyles.Count > 0 ? resolvedStyles : new Dictionary<string, string>()
                     };
+
+                    if (!bm.Styles!.ContainsKey("EXPORT"))
+                        bm.Styles["EXPORT"] = "OFF";
 
                     foreach (var opt in bStmt.Options)
                         bm.Options[opt.Key] = opt.Value;

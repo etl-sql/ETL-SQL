@@ -1,0 +1,42 @@
+SET REPORT TITLE = 'Scalar Inputs Test';
+
+DECLARE @text_val STRING INPUT = 'Hello World';
+DECLARE @num_val INT INPUT = 42;
+DECLARE @check_val BIT INPUT = 1;
+
+-- Dummy data for tables
+SELECT 'Category A' AS Category, 100 AS Value INTO #data;
+
+CREATE VISUAL txt AS TEXTBOX (
+    TITLE = 'Text Input',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@text_val, VALUE)),
+    STYLE (LABEL_POSITION = 'TOP')
+);
+
+CREATE VISUAL num AS NUMBERBOX (
+    TITLE = 'Number Input',
+    MIN = 0, MAX = 100, DECIMALS = 0,
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@num_val, VALUE)),
+    STYLE (LABEL_POSITION = 'LEFT')
+);
+
+CREATE VISUAL chk AS CHECKBOX (
+    TITLE = 'Checkbox Input',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@check_val, VALUE)),
+    STYLE (LABEL_POSITION = 'LEFT')
+);
+
+CREATE VISUAL out_table AS TABLE (
+    SOURCE = (SELECT @text_val AS [Text], @num_val AS [Number], @check_val AS [Check]),
+    TITLE = 'Live Parameter Values'
+);
+
+CREATE PAGE Main AS LAYOUT (
+    STRUCTURE = 'A B / C D',
+    MAP (
+        'A' = txt,
+        'B' = num,
+        'C' = chk,
+        'D' = out_table
+    )
+);
