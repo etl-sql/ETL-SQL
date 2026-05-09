@@ -1,62 +1,6 @@
 # ETL-SQL Development Roadmap
 ## Up Next
-- [x] **Review Follow-Up: Stabilize the Product Surface Before More Feature Expansion**
-    These items came out of the May 2026 project/code review. The core goal is on track: a SQL-familiar language for ETL scripts, jobs, and reporting. The next priority is making the existing surface dependable and consistent across CLI, TUI, VS Code, standalone report serve, and Report Portal.
-
-    - [x] **Priority 1: Unify security boundaries across all hosts**
-        - [x] Replace portal path containment checks that use `StartsWith` with a shared safe-path helper based on `Path.GetRelativePath` or equivalent canonical containment.
-        - [x] Add regression tests for sibling-path bypasses such as `C:\Reports2` passing a `C:\Reports` check.
-        - [x] Route Report Portal and ReportPlayer file/script access through the same safe-zone model used by the engine.
-        - [x] Make report `RUN_SCRIPT` actions resolve through `IExecutionContext.ResolvePath()` or an equivalent report-safe execution context.
-        - [x] Restrict portal-published scripts, snapshots, maps, exports, and datasets to configured roots.
-        - [x] Revisit `GET /api/maps/custom`: it is currently anonymous and reads map files after path validation; make sure this cannot leak script-root files.
-
-    - [x] **Priority 2: Report consistency across VS Code, serve, and portal**
-        - [x] Establish one canonical report runtime source for `report-runtime.js` and `report-runtime.css`.
-        - [x] Stop manually editing multiple runtime copies under ReportPlayer, ReportPortal, VS Code media, and shared resources.
-        - [x] Add a build/sync/check step so host runtime copies cannot drift from the canonical runtime.
-        - [x] Define the contract: host chrome may differ, but the report canvas must use the same manifest, JS, CSS, themes, and interaction model everywhere.
-        - [x] Fix named style resolution in `StyleBuilder`: it should read `ctx.ReportContext.StyleDefinitions`, not test `ctx is IReportContext`.
-        - [x] Implement and document a single style cascade: built-in theme defaults -> report-level -> page-level -> container-level -> visual named style -> visual inline style -> runtime state.
-        - [x] Emit fully resolved style objects in the manifest so the browser runtime does not need to guess where styles came from.
-        - [x] Remove browser-side ETL-SQL expression evaluation for report behavior. C# should evaluate report logic; JS should render resolved manifest state.
-        - [x] Replace client-side table conditional formatting via `new Function(...)` with server-computed `rowStyles`.
-        - [x] Initialize `VisualManifest.RowStyles` when formatting rules exist so server-side formatting is actually serialized.
-        - [x] Align scalar input controls (`TEXTBOX`, `NUMBERBOX`, `CHECKBOX`), slicers, and deferred `RUN` behavior across all report hosts.
-        - [x] Add Portal-level required-parameter prompting for reports with missing `REQUIRED` inputs.
-        - [x] Auto-generate a Portal parameter panel when required inputs exist but the report does not provide matching input visuals.
-        - [x] Replace the hard-coded 30-second `DashboardService.RebuildAsync()` timeout with the configured portal/report execution timeout.
-        - [x] Add manifest snapshot tests for representative reports: basic chart, table with formatting, slicers, scalar inputs, deferred run, multi-page report, and kitchen sink.
-
-    - [x] **Priority 3: Create one golden workflow**
-        - [x] Build one excellent sample that demonstrates extract -> stage -> validate -> report visuals -> publish to portal -> execute -> interact -> export.
-        - [x] Use the same sample as a README walkthrough, integration test, portal demo, and regression target.
-        - [x] Ensure the sample behaves identically in VS Code preview, standalone serve, and Report Portal.
-
-    - [x] **Priority 4: Add fast smoke test lanes**
-        - [x] Add a smoke test command/filter for core language behavior.
-        - [x] Add a smoke test command/filter for security/path guardrails.
-        - [x] Add a smoke test command/filter for reporting manifest/runtime behavior.
-        - [x] Add a smoke test command/filter for Report Portal publish/execute/snapshot basics.
-        - [x] Target each smoke lane at roughly 30-60 seconds; keep the full suite for CI/nightly/release validation.
-
-    - [x] **Priority 5: Portal permissions before dataset expansion**
-        - [x] Finish dataset ACL filtering in `DatasetRegistryService.ListAll`.
-        - [x] Define dataset ownership and access rules clearly: public, private, owner, viewer, editor, admin.
-        - [x] Add tests proving private datasets cannot leak through list, lookup, search, snapshot, export, or API endpoints.
-        - [x] Keep cross-report persisted datasets marked experimental until ACL enforcement is complete.
-
-    - [x] **Priority 6: Clarify source boundaries and keep hosts thin**
-        - [x] Avoid a giant restructure until runtime consistency, security boundaries, and report semantics are stable.
-        - [x] Define project ownership boundaries: Core language contracts, Engine execution, Connectors, Analysis, Reporting semantics, ReportRuntime assets, and host shells.
-        - [x] Move linting, lineage, explain, dialect checks, documentation/help verification, and language diagnostics toward a dedicated `ETL-SQL.Analysis` area.
-        - [x] Rename/reshape `ETL-SQL.ReportBuilder` into `ETL-SQL.Reporting` once manifest, style, visual, page, dataset, and chart semantics are stable.
-        - [x] Create a dedicated `ETL-SQL.ReportRuntime` source area for canonical JS/CSS/themes/assets and runtime debugging.
-        - [x] Keep ReportPlayer, ReportPortal, and VS Code thin: they should host reports, not fork report semantics.
-        - [x] Preserve VS Code's ecosystem-friendly folder/package naming while aligning internal shared contracts.
-        - [x] Document an incremental migration plan so source-tree cleanup happens in small, testable moves.
-
-- [x] **Cross highlight/filtering (Power BI Parity)** 
+- [ ] **Cross highlight/filtering (Power BI Parity)** 
     Follow Power BI interactions: [End-user interactions](https://learn.microsoft.com/en-us/power-bi/explore-reports/end-user-interactions)
     - [x] **Phase 1: Basic Interaction Test & Feedback**
         - [x] **Test Report**: `tests/interaction_p1_feedback.rptsql` (Two simple Bar charts).
@@ -77,6 +21,13 @@
         - [x] **Test Report**: `tests/interaction_p4_advanced.rptsql` (Line, Scatter, Combo).
         - [x] Support highlighting in LINE (ghost other lines) and SCATTER (dim non-matching points).
         - [x] Support "Ghosting" in PIE and DONUT (dimming non-selected slices).
+    - [ ] **Issues**
+        - [ ] I'll refer to the chart being clicked on as the parent, and the charts reacting to the click as the child (could be multiple charts but I'll use the singular word.)  When clicking the parent it often takes two clicks to work.  I suspect this is a time for operation to complete and not a two clicks needed issue.  Can you verify?  How can we make it faster and tell the user we are working on it?
+        - [ ] Chart colors are not respected on parent or child.  When clicking the parent all bars turn blue.  They should remain the same color the clicked or ctrl+clicked bars should remain their original color whereas the non-click bars should turn 30% opaque.  Likewise the child chart turns blue rather than staying the same colors with the selected portion of the chart staying the same color and the ghosted part staying the same color just having 30% opaque.
+        - [ ] Second click on the parent bar should remove that from the selection.  If its the only bar selected then all charts return to normal.  If its a ctrl+click situation the charts adjust to what is left.
+        - [ ] Changing SLICERs (or any other filtering components) should cause this effect to reset.  Currently it does nothing.
+
+  - [ ] **Input variables/Run report button click** The Run report button click does not work.  Using this report as an example: C:\Users\chuck\scratch\ETL-SQL\tests\inputs_deferred_run.rptsql.  My expectations are the report loads showing the parameters and the run button.  The user then sets the parameters or takes the defaults and clicks the run button.  At that time the report should run and get the data and then display the table.  This needs some work.
 
 - [ ] **TUI hardening and long-script ergonomics**
     - [ ] Review long-script navigation, search, folding, diagnostics, and output handling in the TUI.

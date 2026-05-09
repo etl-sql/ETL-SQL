@@ -1,6 +1,6 @@
 # Testing
 
-For the overall lane model and cleanup roadmap, see [Test_Strategy.md](Test_Strategy.md).
+For the overall lane model and cleanup roadmap, see [Test_Strategy.md](/Docs/Test_Strategy.md).
 
 ## Smoke Lanes
 

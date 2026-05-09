@@ -1,0 +1,221 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\tests\\inputs_deferred_run.rptsql",
+  "builtAt": "2026-05-09T22:50:04.0574218Z",
+  "title": "Deferred Execution Test",
+  "visuals": [
+    {
+      "name": "txt",
+      "visualType": "TEXTBOX",
+      "isMarkdown": true,
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Deferred Text Input"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumn": null,
+          "parameterName": "@text_val",
+          "valueExpression": "VALUE",
+          "valueSource": "CONTROL_VALUE",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "out_table",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "Final Value"
+      ],
+      "rows": [
+        [
+          "Change Me"
+        ]
+      ],
+      "options": {
+        "title": "Results (Only updates after Run)"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "Main",
+      "structure": "A B / C",
+      "slotMap": {
+        "A": "txt",
+        "B": "run_btn",
+        "C": "out_table"
+      }
+    }
+  ],
+  "datasets": [],
+  "buttons": [
+    {
+      "name": "run_btn",
+      "buttonType": "RUN",
+      "title": "Run Report",
+      "options": {},
+      "actions": [
+        {
+          "type": "APPLY_PARAMETERS",
+          "trigger": "ON_CLICK",
+          "targetVisual": null,
+          "keyColumn": null,
+          "parameterName": null,
+          "valueExpression": null,
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "BACKGROUND": "#28a745",
+        "COLOR": "white",
+        "PADDING": "10px 20px",
+        "EXPORT": "OFF"
+      }
+    }
+  ],
+  "parameters": {
+    "@text_val": "Change Me"
+  },
+  "parameterMetadata": {
+    "@text_val": {
+      "name": "@text_val",
+      "type": "STRING",
+      "defaultValue": "Change Me",
+      "isRequired": false
+    }
+  },
+  "telemetry": {
+    "rowsProcessed": 0,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[8ed1034a] Visual \u0027txt\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-09T22:50:04.0488049Z"
+    },
+    {
+      "message": "[8ed1034a] Button \u0027run_btn\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-09T22:50:04.0511502Z"
+    },
+    {
+      "message": "[8ed1034a] Visual \u0027out_table\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-09T22:50:04.0515528Z"
+    },
+    {
+      "message": "[8ed1034a] Page \u0027Main\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-09T22:50:04.0526519Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "61778d90-1674-46b6-afd6-d96ffab705aa",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 15.1646,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "01fc5259-97fd-4532-ab2a-e61c86afccca",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.4275,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "471bd3a3-4130-4ce1-a86c-073ae925c7f4",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.7902,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "3354986e-1d27-4d7e-9487-695ce4cf945b",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.3026,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ae5d0b05-764f-420a-b454-01148ba49853",
+          "name": "CreateButton",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.4938,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "a39157c6-eabb-490c-bcda-a9aa29bfb757",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0623,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "15d79ad6-12c6-444b-ab76-99624ed841e0",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9486,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}
