@@ -5,7 +5,6 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
-using ETL_SQL.Engine.Handlers;
 using ETL_SQL.ReportBuilder.Builders;
 
 namespace ETL_SQL.ReportBuilder
@@ -238,7 +237,7 @@ namespace ETL_SQL.ReportBuilder
                 manifest.CustomThemes = new();
                 foreach (var (themeName, themeStmt) in _ctx.ReportContext.ThemeDefinitions)
                 {
-                    var themeJson = CreateThemeStatementHandler.BuildEChartsTheme(themeStmt.Properties);
+                    var themeJson = ThemeBuilder.BuildEChartsTheme(themeStmt.Properties);
                     using var doc = JsonDocument.Parse(themeJson.ToJsonString());
                     manifest.CustomThemes.Add(new ThemeManifest
                     {

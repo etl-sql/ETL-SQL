@@ -4,7 +4,7 @@ BEGIN
     PRINT 'Hello, ' + @Name;
 END;
 
-EXECUTE SayHello 'Chuck';
+EXECUTE SayHello 'Alex';
 
 -- Test Function
 CREATE FUNCTION AddTen(@Val NUMERIC) RETURNS NUMERIC AS

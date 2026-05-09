@@ -247,7 +247,7 @@ For full engine coding standards, see **[Standards/Connectors_Standards.md](file
 The report browser runtime has exactly one source of truth:
 
 ```
-src/ETL-SQL.Core/Resources/Shared/
+src/ETL-SQL.ReportRuntime/Resources/Shared/
 ```
 
 Files copied under these host folders are generated sync outputs and must not be edited directly:
@@ -259,7 +259,7 @@ Files copied under these host folders are generated sync outputs and must not be
 
 When changing report runtime JavaScript, CSS, themes, or shared browser dependencies:
 
-1. Edit the canonical file in `src/ETL-SQL.Core/Resources/Shared/`.
+1. Edit the canonical file in `src/ETL-SQL.ReportRuntime/Resources/Shared/`.
 2. Run `.\scripts\sync-assets.ps1`.
 3. Run `.\scripts\sync-assets.ps1 -Check`.
 

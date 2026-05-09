@@ -5,7 +5,7 @@
 --         FILE_LIST, REMOTE_FILE_LIST (SFTP skipped — no live conn)
 SET WHAT_IF OFF;
 
-DECLARE @base  STRING = 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\';
+DECLARE @base  STRING = 'samples/kitchen_sinks/';
 DECLARE @src   STRING = @base + 'adv_src.txt';
 DECLARE @dst   STRING = @base + 'adv_dst.txt';
 DECLARE @moved STRING = @base + 'adv_moved.txt';

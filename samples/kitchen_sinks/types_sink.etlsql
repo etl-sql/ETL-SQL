@@ -17,7 +17,7 @@ PRINT 'The secret is: ' + @secret;
 
 -- 3. Path & Lists
 DECLARE @l LIST = (1, 2, 3);
-DECLARE @p = 'C:\Temp\test.csv'; -- ANY
+DECLARE @p = 'samples/output/test.csv'; -- ANY
 PRINT 'List Length: ' + LENGTH(@l);
 PRINT 'Path (ANY): ' + @p;
 PRINT 'Casted Path: ' + CAST(@p AS PATH);

@@ -164,7 +164,7 @@ export class ReportPreviewPanel {
             cancellable: false
         }, async () => {
             return new Promise<void>((resolve, reject) => {
-                const proc = cp.spawn(exe, args, { shell: false });
+                const proc = cp.spawn(exe, args, { shell: false, cwd: this._resolveExecutionCwd() });
                 let stderr = '';
                 proc.stderr.on('data', d => stderr += d.toString());
                 proc.on('close', code => {
@@ -219,7 +219,7 @@ export class ReportPreviewPanel {
             }
         }
 
-        const proc = cp.spawn(exe, args, { shell: false });
+        const proc = cp.spawn(exe, args, { shell: false, cwd: this._resolveExecutionCwd() });
         let stderr = '';
         proc.stderr.on('data', d => { stderr += d.toString(); });
         proc.on('close', code => {
@@ -275,6 +275,16 @@ export class ReportPreviewPanel {
         }
 
         return { exe: 'ETL-SQL-Report', baseArgs: [] };
+    }
+
+    private _resolveExecutionCwd(): string {
+        const scriptUri = vscode.Uri.file(this._scriptPath);
+        const workspaceFolder = vscode.workspace.getWorkspaceFolder(scriptUri);
+        if (workspaceFolder) {
+            return workspaceFolder.uri.fsPath;
+        }
+
+        return path.dirname(this._scriptPath);
     }
 
     private _getReportHtml(manifest: any): string {

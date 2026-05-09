@@ -1,5 +1,5 @@
 {
-  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\sales table.rptsql",
+  "source": "samples/sales table.rptsql",
   "builtAt": "2026-05-08T12:01:48.248091Z",
   "title": "Sales Table",
   "description": "Demonstrate how to\nUSE input parameters",

@@ -31,6 +31,7 @@
     <ProjectReference Include="..\ETL-SQL.Connectors\ETL-SQL.Connectors.csproj" />
     <ProjectReference Include="..\ETL-SQL.Orchestrator\ETL-SQL.Orchestrator.csproj" />
     <ProjectReference Include="..\ETL-SQL.ReportBuilder\ETL-SQL.ReportBuilder.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Reporting\ETL-SQL.Reporting.csproj" />
   </ItemGroup>
 
   <ItemGroup>

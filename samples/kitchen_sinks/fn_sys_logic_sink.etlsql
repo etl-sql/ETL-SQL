@@ -18,8 +18,8 @@ SELECT
     @@VERSION AS [VERSION],
     @@TRANCOUNT AS [TRAN],
     @@ERROR AS [ERR],
-    FILE_EXISTS('c:\Users\chuck\scratch\ETL-SQL\README.md') AS [FE],
-    DIRECTORY_EXISTS('c:\Users\chuck\scratch\ETL-SQL\Docs\') AS [DE];
+    FILE_EXISTS('README.md') AS [FE],
+    DIRECTORY_EXISTS('Docs/') AS [DE];
 
 -- Hashing
 SELECT 

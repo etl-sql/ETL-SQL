@@ -110,7 +110,7 @@ SELECT * FROM #GenData;
 PRINT 'Testing BULK INSERT (may fail if CSV not present)...';
 BEGIN TRY
     BULK INSERT #GenData (id, category, price, qty)
-    FROM 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\std.csv'
+    FROM 'samples/output/std.csv'
     WITH (FORMAT = 'CSV', FIRSTROW = 2, BATCHSIZE = 1000, MAXERRORS = 0);
     PRINT 'BULK INSERT succeeded.';
 END TRY

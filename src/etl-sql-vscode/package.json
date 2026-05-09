@@ -280,7 +280,7 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "npm run sync-assets && tsc -p ./",
-    "sync-assets": "powershell -NoProfile -Command \"Copy-Item ../ETL-SQL.Core/Resources/Shared/* ./media/ -Recurse -Force\"",
+    "sync-assets": "powershell -ExecutionPolicy Bypass -NoProfile -File ../../scripts/sync-assets.ps1",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",

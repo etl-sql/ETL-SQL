@@ -1,5 +1,5 @@
 {
-  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\kitchen_sinks\\report_kitchen_sink.rptsql",
+  "source": "samples/kitchen_sinks/report_kitchen_sink.rptsql",
   "builtAt": "2026-05-08T00:19:05.6048356Z",
   "title": "ETL-SQL Kitchen Sink v2",
   "description": "Comprehensive reference demonstrating every visual type, filter, layout, and styling feature in the Report-SQL suite.",

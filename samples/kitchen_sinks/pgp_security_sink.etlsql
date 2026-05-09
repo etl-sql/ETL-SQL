@@ -3,7 +3,7 @@
 
 BEGIN TRY
     -- 1. Setup paths
-    DECLARE @outputDir NVARCHAR(MAX) = 'C:\Users\chuck\scratch\ETL-SQL\samples\output';
+    DECLARE @outputDir NVARCHAR(MAX) = 'samples/output';
     DECLARE @keyDir NVARCHAR(MAX) = @outputDir + '\pgp_keys';
     DECLARE @dataFile NVARCHAR(MAX) = @outputDir + '\pgp_test_data.csv';
     DECLARE @encryptedFile NVARCHAR(MAX) = @outputDir + '\pgp_test_data.csv.pgp';

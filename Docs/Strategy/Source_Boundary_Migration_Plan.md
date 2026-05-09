@@ -12,7 +12,6 @@ This plan is intentionally conservative: document the target boundaries first, k
 
 - AST records, parser/lexer contracts, language metadata, shared expression and report model contracts.
 - Cross-cutting value objects and interfaces that do not execute scripts or depend on a specific host.
-- Temporary location for canonical shared report runtime assets until a dedicated ReportRuntime source area exists.
 
 Core should not depend on host shells such as ReportPlayer, ReportPortal, VS Code, the TUI, or CLI apps.
 
@@ -58,15 +57,15 @@ The rename should happen after compatibility shims are planned. A package/projec
 
 ### Report Runtime Assets
 
-The canonical browser runtime currently lives in:
+The canonical browser runtime lives in:
 
 ```text
-src/ETL-SQL.Core/Resources/Shared/
+src/ETL-SQL.ReportRuntime/Resources/Shared/
 ```
 
 Generated host copies live under ReportPlayer, ReportPortal, and the VS Code extension. Do not edit those copies directly; use `scripts/sync-assets.ps1`.
 
-The target shape is a dedicated `ETL-SQL.ReportRuntime` source area for canonical JavaScript, CSS, themes, browser dependencies, runtime fixtures, and runtime debugging utilities. Until that exists, the contract in `Docs/Report_Runtime_Contract.md` is the source of truth.
+`ETL-SQL.ReportRuntime` is the dedicated source area for canonical JavaScript, CSS, themes, browser dependencies, runtime fixtures, and runtime debugging utilities. The contract in `Docs/Report_Runtime_Contract.md` is the source of truth.
 
 ### Host Shells
 
@@ -117,22 +116,38 @@ Move canonical browser assets out of Core only after the sync check is stable.
 
 Recommended steps:
 
-1. Add the new runtime source area with the same canonical files.
-2. Update `scripts/sync-assets.ps1` and `Docs/Report_Runtime_Contract.md`.
-3. Run the runtime sync check.
-4. Verify ReportPlayer, ReportPortal, and VS Code still consume generated copies.
+1. Add the new runtime source area with the same canonical files. *(Done: canonical assets moved to `src/ETL-SQL.ReportRuntime/Resources/Shared` and represented by `ETL-SQL.ReportRuntime.csproj`.)*
+2. Update `scripts/sync-assets.ps1` and `Docs/Report_Runtime_Contract.md`. *(Done: sync/check tooling now reads from ReportRuntime and covers nested map assets.)*
+3. Run the runtime sync check. *(Done: `scripts/sync-assets.ps1 -Check` passes from the ReportRuntime source.)*
+4. Verify ReportPlayer, ReportPortal, and VS Code still consume generated copies. *(Done: ReportPlayer and ReportPortal build from generated host copies; VS Code compile runs the canonical sync script.)*
+
+Phase 3 is complete. Keep canonical browser runtime changes in `ETL-SQL.ReportRuntime`, run the sync script after edits, and treat host runtime files as generated outputs.
 
 ### Phase 4: Reshape `ReportBuilder` into `Reporting`
 
 Do this after report manifests and style/runtime behavior settle.
 
+Current progress:
+
+- `src/ETL-SQL.Reporting` exists as the reporting semantics boundary.
+- Serializable report manifest contracts now live in `ETL-SQL.Reporting` while retaining the existing `ETL_SQL.ReportBuilder` namespace for compatibility.
+- Manifest and visual builders now live in `ETL-SQL.Reporting`; they still operate over `IExecutionContext` and do not move script execution ownership out of Engine.
+- Style, page, and dataset builder semantics now live in `ETL-SQL.Reporting`; this project references Core for report AST/context contracts.
+- Theme-to-ECharts JSON translation now lives in `ETL-SQL.Reporting`; the Engine `CREATE THEME` handler remains the execution entry point and forwards to the reporting helper.
+- Shared report snapshot persistence now lives in `ETL-SQL.Reporting`.
+- Markdown, SVG, PDF, and terminal rendering now live in `ETL-SQL.Reporting`.
+- Shared ECharts chart rendering semantics now live in `ETL-SQL.Reporting` with namespace compatibility retained.
+- `ETL-SQL.ReportBuilder` references `ETL-SQL.Reporting` and continues to own the engine-facing `EXPORT REPORT` statement handler until package/project renaming is planned.
+
 Recommended steps:
 
-1. Introduce the new project or namespace boundary.
-2. Move manifest, style, visual, page, container, dataset, chart, and action semantics.
-3. Leave compatibility references or forwarding types while hosts migrate.
-4. Update each host separately with smoke coverage.
+1. Introduce the new project or namespace boundary. *(Done: project boundary created; namespace compatibility retained for now.)*
+2. Move manifest, style, visual, page, container, dataset, chart, and action semantics. *(Done for the first-pass boundary: manifest/visual builders, manifest contracts, style/page/dataset builders, theme translation, Markdown/SVG/PDF/terminal rendering, snapshot persistence, and shared ECharts chart semantics moved.)*
+3. Leave compatibility references or forwarding types while hosts migrate. *(Done: existing `ETL_SQL.ReportBuilder` namespaces and the `CreateThemeStatementHandler.BuildEChartsTheme` forwarding API are retained.)*
+4. Update each host separately with smoke coverage. *(Done for current hosts: ReportPlayer, ReportPortal, CLI, Engine, ReportBuilder, and focused reporting/snapshot tests pass.)*
 5. Rename packages/projects only after references are clean.
+
+Phase 4 is functionally complete for the first-pass boundary. Keep `ETL-SQL.ReportBuilder` as the compatibility assembly for the engine-facing `EXPORT REPORT` handler until a release-safe package/project rename is planned.
 
 ### Phase 5: Thin Host Cleanup
 

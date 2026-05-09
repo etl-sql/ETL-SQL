@@ -13,6 +13,7 @@
    <ItemGroup>
      <ProjectReference Include="..\ETL-SQL.Analysis\ETL-SQL.Analysis.csproj" />
      <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
+     <ProjectReference Include="..\ETL-SQL.Reporting\ETL-SQL.Reporting.csproj" />
    </ItemGroup>
  
    <ItemGroup>

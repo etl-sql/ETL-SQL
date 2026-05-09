@@ -5,7 +5,7 @@ USE input parameters';
 
 DECLARE @start datetime INPUT = '2024-01-01';
 
-CREATE CONNECTION c ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\TestData\test_sales.csv');
+CREATE CONNECTION c ON FLATFILE('TestData/test_sales.csv');
 
 SELECT
      c.FILE.region

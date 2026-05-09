@@ -13,7 +13,7 @@ import { resolve } from 'path';
 
 const RUNTIME_PATH = resolve(
     __dirname,
-    '../../../../src/ETL-SQL.Core/Resources/Shared/report-runtime.js'
+    '../../../../src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js'
 );
 const RUNTIME_SRC = readFileSync(RUNTIME_PATH, 'utf8');
 

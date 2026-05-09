@@ -37,7 +37,7 @@ SELECT * FROM #Profile_Test WHERE Amount > 100 ORDER BY Amount;
 -- 4. LINT
 PRINT 'Testing LINT (current buffer has no file path, expect graceful handling)...';
 BEGIN TRY
-    LINT 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\select_sink.etlsql';
+    LINT 'samples/kitchen_sinks/select_sink.etlsql';
     PRINT 'LINT completed.';
 END TRY
 BEGIN CATCH
@@ -88,7 +88,7 @@ SELECT * FROM #lin_check;
 
 -- Export to markdown (write to temp file)
 BEGIN TRY
-    LINEAGE(#Tagged) TO 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\lineage_output.md';
+    LINEAGE(#Tagged) TO 'samples/kitchen_sinks/lineage_output.md';
     PRINT 'Lineage exported to file.';
 END TRY
 BEGIN CATCH
@@ -98,7 +98,7 @@ END CATCH
 -- 8. CREATE SSH_KEY_PAIR
 PRINT 'Testing CREATE SSH_KEY_PAIR...';
 BEGIN TRY
-    CREATE SSH_KEY_PAIR 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\test_key'
+    CREATE SSH_KEY_PAIR 'samples/kitchen_sinks/test_key'
         WITH (BITS = 2048, ALGORITHM = 'RSA', COMMENT = 'Kitchen Sink Test Key');
     PRINT 'SSH key pair created.';
 END TRY
@@ -107,7 +107,7 @@ BEGIN CATCH
 END CATCH
 
 BEGIN TRY
-    CREATE SSH_KEY_PAIR 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\test_ed_key'
+    CREATE SSH_KEY_PAIR 'samples/kitchen_sinks/test_ed_key'
         WITH (ALGORITHM = 'ED25519', COMMENT = 'ED25519 Test');
     PRINT 'ED25519 key pair created.';
 END TRY

@@ -1,5 +1,5 @@
 {
-  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\sales report.rptsql",
+  "source": "samples/sales report.rptsql",
   "builtAt": "2026-05-08T12:16:09.6057462Z",
   "title": "Sales Dashboard",
   "description": "Regional and product-level revenue by month.",

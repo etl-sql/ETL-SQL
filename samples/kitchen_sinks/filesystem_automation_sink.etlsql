@@ -22,8 +22,8 @@ PRINT 'Wait Done.';
 
 -- 5. File Ops
 PRINT 'Testing FILE Ops...';
-DECLARE @tf = 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\smoke.txt';
-DECLARE @cp = 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\smoke_copy.txt';
+DECLARE @tf = 'samples/kitchen_sinks/smoke.txt';
+DECLARE @cp = 'samples/kitchen_sinks/smoke_copy.txt';
 
 CREATE CONNECTION s_src ON FLATFILE(@tf);
 INSERT INTO s_src.FILE (Line) VALUES ('Smoke');
@@ -36,7 +36,7 @@ DELETE FILE @tf;
 PRINT 'DELETE FILE: Pass';
 
 -- 6. Directory Ops
-CREATE DIRECTORY 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\smoke_dir\';
-IF DIRECTORY_EXISTS('c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\smoke_dir\') PRINT 'CREATE DIRECTORY: Pass';
-DELETE DIRECTORY 'c:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\smoke_dir\';
+CREATE DIRECTORY 'samples/kitchen_sinks/smoke_dir\';
+IF DIRECTORY_EXISTS('samples/kitchen_sinks/smoke_dir\') PRINT 'CREATE DIRECTORY: Pass';
+DELETE DIRECTORY 'samples/kitchen_sinks/smoke_dir\';
 PRINT 'DELETE DIRECTORY: Pass';

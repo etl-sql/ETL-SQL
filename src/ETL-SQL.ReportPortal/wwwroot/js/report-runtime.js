@@ -1,3 +1,7 @@
+/* GENERATED FILE - DO NOT EDIT.
+ * Source: src/ETL-SQL.ReportRuntime/Resources/Shared/report-runtime.js
+ * Edit the canonical source, then run: .\scripts\sync-assets.ps1
+ */
 /**
  * report-runtime.js — Phase 9E
  *

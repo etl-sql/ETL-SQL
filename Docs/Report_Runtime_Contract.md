@@ -4,11 +4,12 @@ The report canvas is shared infrastructure. ReportPlayer, Report Portal, and the
 
 ## Canonical Assets
 
-The canonical browser runtime files live in `src/ETL-SQL.Core/Resources/Shared/`:
+The canonical browser runtime files live in `src/ETL-SQL.ReportRuntime/Resources/Shared/`:
 
 - `report-runtime.js`
 - `report-runtime.css`
 - bundled shared browser dependencies used by the runtime
+- map fixtures and other browser runtime data under `maps/`
 
 Host copies are generated artifacts:
 
