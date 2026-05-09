@@ -324,7 +324,17 @@ namespace ETL_SQL.Core.Parser.Components
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                 return new UsePasswordStatement(password) { Line = startToken.Line, Column = startToken.Column };
             }
-            throw new SyntaxException("Expected DOCKER, SETS, or PASSWORD after USE", _parser.Current.Line, _parser.Current.Column);
+            if (Match(TokenType.DATASET))
+            {
+                // &name tokenised as a single IDENTIFIER (Lexer includes & in identifier reads)
+                var tok = ConsumeIdentifier("Expected &datasetName after USE DATASET");
+                var dsName = tok.Value.StartsWith("&") || tok.Value.StartsWith("#")
+                    ? tok.Value
+                    : "&" + tok.Value;
+                if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+                return new UseDatasetStatement { DatasetName = dsName, Line = startToken.Line, Column = startToken.Column };
+            }
+            throw new SyntaxException("Expected DOCKER, SETS, PASSWORD, or DATASET after USE", _parser.Current.Line, _parser.Current.Column);
         }
 
         public Statement ParseClear(Token startToken)
@@ -484,9 +494,11 @@ namespace ETL_SQL.Core.Parser.Components
                 else
                     throw new ETL_SQL.Core.Common.Exceptions.SyntaxException("Expected SESSIONS after SHOW ACTIVE", _parser.Current.Line, _parser.Current.Column);
             }
+            else if (Match(TokenType.DATASET) || MatchIdentifier("DATASETS"))
+                stmt = new ShowDatasetsStatement();
 
             if (stmt == null)
-                throw new SyntaxException("Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, VARIABLES, SCRIPT TAGS, TAGS, VERSION or LINEAGE after SHOW", _parser.Current.Line, _parser.Current.Column);
+                throw new SyntaxException("Expected PROFILE, JOBS, JOB HISTORY, CONNECTIONS, TABLES, COLUMNS, VARIABLES, SCRIPT TAGS, TAGS, VERSION, LINEAGE, or DATASETS after SHOW", _parser.Current.Line, _parser.Current.Column);
 
             if (Match(TokenType.INTO))
             {
@@ -510,6 +522,7 @@ namespace ETL_SQL.Core.Parser.Components
                     ShowVersionStatement svs     => svs with { IntoTable = tempTable },
                     ShowSafeZonesStatement ssz   => ssz with { IntoTable = tempTable },
                     ShowSessionsStatement sess   => sess with { IntoTable = tempTable },
+                    ShowDatasetsStatement sds    => sds with { IntoTable = tempTable },
                     _                            => stmt
                 };
             }

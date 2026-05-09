@@ -319,6 +319,17 @@ namespace ETL_SQL.Core.Parser.Components
             return new KillJobStatement(jobIdExpr) { Line = startToken.Line, Column = startToken.Column };
         }
 
+        public Statement ParseRefreshDataset(Token startToken)
+        {
+            Consume(TokenType.DATASET, "Expected DATASET after REFRESH");
+            var tok = ConsumeIdentifier("Expected &datasetName after REFRESH DATASET");
+            var dsName = tok.Value.StartsWith("&") || tok.Value.StartsWith("#")
+                ? tok.Value
+                : "&" + tok.Value;
+            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
+            return new RefreshDatasetStatement { DatasetName = dsName, Line = startToken.Line, Column = startToken.Column };
+        }
+
         public Statement ParseTruncate(Token startToken)
         {
             Consume(TokenType.TABLE, "Expected 'TABLE' after 'TRUNCATE'");

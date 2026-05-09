@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Formatting;
 
@@ -312,8 +313,38 @@ namespace ETL_SQL.Core
         public DatasetEncryptionMode EncryptionMode   { get; init; }
         public string? EncryptionPassword             { get; init; }
         public string? KeyFile                        { get; init; }
+        public DatasetAccessLevel AccessLevel         { get; init; } = DatasetAccessLevel.Private;
         public required Statement SourceQuery         { get; init; }
         public ObjectCreationMode Mode                { get; init; } = ObjectCreationMode.Create;
+    }
+
+    /// <summary>
+    /// USE DATASET &amp;name — loads a named dataset from the portal registry into the
+    /// calling script's temp-table namespace. In non-portal mode, verifies the dataset
+    /// was already created in the current script (no-op if already loaded).
+    /// </summary>
+    public record UseDatasetStatement : Statement
+    {
+        public required string DatasetName { get; init; }
+    }
+
+    /// <summary>
+    /// SHOW DATASETS [INTO #temp] — lists all datasets visible to the calling context.
+    /// Columns: Name, FolderPath, AccessLevel, RowCount, LastRefresh, IsStale, RefreshInterval, Ttl.
+    /// </summary>
+    public record ShowDatasetsStatement : Statement
+    {
+        public string? IntoTable { get; init; }
+    }
+
+    /// <summary>
+    /// REFRESH DATASET &amp;name — forces re-execution of the stored source query,
+    /// re-writes the Parquet file, and updates LastRefresh in the registry.
+    /// Requires editor/owner permission in portal context.
+    /// </summary>
+    public record RefreshDatasetStatement : Statement
+    {
+        public required string DatasetName { get; init; }
     }
 
     /// <summary>

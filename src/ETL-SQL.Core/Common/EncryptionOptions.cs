@@ -13,6 +13,8 @@ namespace ETL_SQL.Core.Common
     public class EncryptionOptions
     {
         public bool Enabled { get; }
+        /// <summary>True when ENCRYPT = MACHINE; data is bound to this machine via DPAPI (Windows) or a machine-unique key (Linux/macOS).</summary>
+        public bool IsMachineBound { get; }
         public HashAlgorithmName Algorithm { get; }
         public string? KeyFile { get; }
         public string? Passphrase { get; }
@@ -28,7 +30,9 @@ namespace ETL_SQL.Core.Common
 
             if (options.TryGetValue("ENCRYPT", out var enc))
             {
-                Enabled = enc.ToUpperInvariant() == "ON" || enc.ToUpperInvariant() == "TRUE";
+                var mode = enc.ToUpperInvariant();
+                IsMachineBound = mode == "MACHINE";
+                Enabled = mode is "ON" or "TRUE" or "MACHINE" or "PASSWORD" or "KEYFILE";
             }
 
             if (options.TryGetValue("ALGORITHM", out var algo))
@@ -61,7 +65,11 @@ namespace ETL_SQL.Core.Common
                 return;
             }
 
-            if (!string.IsNullOrEmpty(KeyFile))
+            if (IsMachineBound)
+            {
+                MachineBoundCrypto.DecryptFile(inputFile, outputFile);
+            }
+            else if (!string.IsNullOrEmpty(KeyFile))
             {
                 CryptoUtils.DecryptFileWithSsh(inputFile, outputFile, KeyFile, true, Passphrase);
             }
@@ -84,7 +92,11 @@ namespace ETL_SQL.Core.Common
                 return;
             }
 
-            if (!string.IsNullOrEmpty(KeyFile))
+            if (IsMachineBound)
+            {
+                MachineBoundCrypto.EncryptFile(inputFile, outputFile);
+            }
+            else if (!string.IsNullOrEmpty(KeyFile))
             {
                 CryptoUtils.EncryptFileWithSsh(inputFile, outputFile, KeyFile, true);
             }

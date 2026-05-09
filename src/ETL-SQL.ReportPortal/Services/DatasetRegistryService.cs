@@ -4,7 +4,11 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace ETL_SQL.ReportPortal.Services
@@ -114,6 +118,20 @@ namespace ETL_SQL.ReportPortal.Services
                 await _db.SaveChangesAsync();
                 _log.LogInformation("Dataset deleted: {FolderPath}/{Name}", folderPath, name);
             }
+        }
+
+        public string BuildDatasetFilePath(string name, string folderPath)
+        {
+            var safeName = Regex.Replace(
+                name.TrimStart('&', '#'), @"[^\w\-]", "_", RegexOptions.None).ToLowerInvariant();
+
+            var hashInput = $"{folderPath}|{name}".ToLowerInvariant();
+            var hash = Convert.ToHexString(
+                SHA256.HashData(Encoding.UTF8.GetBytes(hashInput)))[..8].ToLowerInvariant();
+
+            var rootPath = Path.GetFullPath(_config.DatasetRootPath);
+            Directory.CreateDirectory(rootPath);
+            return Path.Combine(rootPath, $"{safeName}_{hash}.parquet");
         }
 
         private string ResolveDatasetPathOrThrow(string path)

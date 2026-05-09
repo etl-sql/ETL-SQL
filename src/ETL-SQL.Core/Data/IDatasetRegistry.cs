@@ -32,5 +32,11 @@ namespace ETL_SQL.Core.Data
         Task SetStale(string name, string folderPath);
         Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions);
         Task Delete(string name, string folderPath);
+
+        /// <summary>
+        /// Computes the absolute Parquet file path for a dataset within the registry's
+        /// configured storage root. Deterministic: same inputs always produce the same path.
+        /// </summary>
+        string BuildDatasetFilePath(string name, string folderPath);
     }
 }

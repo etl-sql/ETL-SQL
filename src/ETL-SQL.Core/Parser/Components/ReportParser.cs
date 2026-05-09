@@ -321,6 +321,7 @@ namespace ETL_SQL.Core.Parser.Components
             var     encryptionMode     = DatasetEncryptionMode.None;
             string? encryptionPassword = null;
             string? keyFile            = null;
+            var     accessLevel        = ETL_SQL.Core.Data.DatasetAccessLevel.Private;
 
             while (!ReportCheck(TokenType.AS) && !ReportAtEnd())
             {
@@ -363,6 +364,18 @@ namespace ETL_SQL.Core.Parser.Components
                     Match(TokenType.EQUALS);
                     keyFile = Consume(TokenType.STRING_LITERAL, "Expected key file path after KEYFILE").Value;
                 }
+                else if (MatchIdentifier("ACCESS"))
+                {
+                    var val = _parser.Current.Value.ToUpperInvariant();
+                    if (val != "PUBLIC" && val != "PRIVATE")
+                        throw new SyntaxException(
+                            $"Expected PUBLIC or PRIVATE after ACCESS, got '{_parser.Current.Value}'",
+                            _parser.Current.Line, _parser.Current.Column);
+                    Advance();
+                    accessLevel = val == "PUBLIC"
+                        ? ETL_SQL.Core.Data.DatasetAccessLevel.Public
+                        : ETL_SQL.Core.Data.DatasetAccessLevel.Private;
+                }
                 else
                 {
                     throw new SyntaxException(
@@ -372,7 +385,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             Consume(TokenType.AS, "Expected AS before source query");
-            
+
             Statement sourceSelect;
             if (Match(TokenType.LPAREN))
             {
@@ -399,6 +412,7 @@ namespace ETL_SQL.Core.Parser.Components
                 EncryptionMode     = encryptionMode,
                 EncryptionPassword = encryptionPassword,
                 KeyFile            = keyFile,
+                AccessLevel        = accessLevel,
                 SourceQuery        = sourceSelect,
                 Mode               = mode,
                 Line               = startToken.Line,
