@@ -26,13 +26,15 @@ namespace ETL_SQL.LSP
         private readonly DocumentStateStore _store;
         private readonly Core.Functions.IFunctionRegistry _functionRegistry;
         private readonly Core.Interfaces.ILanguageHelpRegistry _languageHelp;
+        private readonly DatasetStore _datasets;
 
-        public HoverProvider(ILogger<HoverProvider> logger, DocumentStateStore store, Core.Functions.IFunctionRegistry functionRegistry, Core.Interfaces.ILanguageHelpRegistry languageHelp)
+        public HoverProvider(ILogger<HoverProvider> logger, DocumentStateStore store, Core.Functions.IFunctionRegistry functionRegistry, Core.Interfaces.ILanguageHelpRegistry languageHelp, DatasetStore datasets)
         {
             _logger = logger;
             _store = store;
             _functionRegistry = functionRegistry;
             _languageHelp = languageHelp;
+            _datasets = datasets;
         }
 
         public Task<Hover?> Handle(HoverParams request, CancellationToken cancellationToken)
@@ -60,17 +62,22 @@ namespace ETL_SQL.LSP
                 int start = (int)request.Position.Character;
                 if (start < currentLine.Length)
                 {
-                    while (start > 0 && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '_' || currentLine[start - 1] == '@' || currentLine[start - 1] == '#')) start--;
+                    while (start > 0 && (char.IsLetterOrDigit(currentLine[start - 1]) || currentLine[start - 1] == '_' || currentLine[start - 1] == '@' || currentLine[start - 1] == '#' || currentLine[start - 1] == '&')) start--;
                     int end = (int)request.Position.Character;
-                    while (end < currentLine.Length && (char.IsLetterOrDigit(currentLine[end]) || currentLine[end] == '_' || currentLine[end] == '@' || currentLine[end] == '#')) end++;
+                    while (end < currentLine.Length && (char.IsLetterOrDigit(currentLine[end]) || currentLine[end] == '_' || currentLine[end] == '@' || currentLine[end] == '#' || currentLine[end] == '&')) end++;
                     if (start < end) word = currentLine.Substring(start, end - start);
                 }
             }
 
             string? functionHelp = word != null ? _functionRegistry.GetHelp(word) : null;
-            string? keywordHelp = (word != null && functionHelp == null) ? _languageHelp.GetHelp(word) : null;
+            string? keywordHelp  = (word != null && functionHelp == null) ? _languageHelp.GetHelp(word) : null;
 
-            if (entry == null && functionHelp == null && keywordHelp == null)
+            // Dataset hover: word starts with & — look up in portal registry
+            DatasetStore.DatasetEntry? datasetEntry = null;
+            if (word != null && word.StartsWith('&'))
+                datasetEntry = _datasets.Find(word);
+
+            if (entry == null && functionHelp == null && keywordHelp == null && datasetEntry == null)
                 return Task.FromResult<Hover?>(null);
 
             var md = new List<string>();
@@ -100,6 +107,23 @@ namespace ETL_SQL.LSP
                 string graph = renderer.Render(state.Lineage, entry.TargetTable, entry.TargetColumn);
                 md.Add("### Lineage Graph");
                 md.Add($"```text\n{graph.TrimEnd()}\n```");
+            }
+
+            if (datasetEntry != null)
+            {
+                if (md.Count > 0) md.Add("---");
+                md.Add($"### Dataset `{datasetEntry.Name}`");
+                md.Add($"- **Folder**: `{datasetEntry.FolderPath}`");
+                md.Add($"- **Access**: {datasetEntry.AccessLevel}");
+                md.Add($"- **Rows**: {datasetEntry.RowCount:N0}");
+                if (datasetEntry.LastRefresh.HasValue)
+                    md.Add($"- **Last Refresh**: {datasetEntry.LastRefresh.Value:u}");
+                else
+                    md.Add("- **Last Refresh**: _never_");
+                if (!string.IsNullOrWhiteSpace(datasetEntry.Ttl))
+                    md.Add($"- **TTL**: {datasetEntry.Ttl}");
+                if (datasetEntry.IsStale)
+                    md.Add("> ⚠ This dataset is stale and will re-materialise on next script execution.");
             }
 
             if (functionHelp != null)

@@ -116,6 +116,7 @@ namespace ETL_SQL.LSP
                             }
                         }
 
+                        services.AddSingleton<DatasetStore>();
                         services.AddSingleton<CustomMethodsHandler>();
                         services.AddSingleton<RefreshMetadataHandler>();
                     })

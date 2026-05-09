@@ -65,15 +65,30 @@ namespace ETL_SQL.LSP
     public interface ISetDebugModeHandler : IJsonRpcNotificationHandler<SetDebugModeParams> { }
 
     /// <summary>
+    /// LSP Notification Handler: client sends the portal.db path so the server can offer
+    /// dataset name completions and hover metadata without a network round-trip.
+    /// </summary>
+    [Method("etlsql/setPortalDbPath", Direction.ClientToServer)]
+    public interface ISetPortalDbPathHandler : IJsonRpcNotificationHandler<SetPortalDbPathParams> { }
+
+    /// <summary>
     /// Implementation of specialized ETL-SQL Language Server methods for metadata discovery and configuration.
     /// </summary>
-    public class CustomMethodsHandler(IMetadataManager metadata, ILogger<CustomMethodsHandler> logger, IServiceScopeFactory scopeFactory) : ISetConnectionsHandler, IGetTablesHandler, IGetColumnsHandler, ISetDebugModeHandler, IGetViewsHandler, IGetTempTablesHandler, IEncryptScriptHandler, IGetReportManifestHandler
+    public class CustomMethodsHandler(IMetadataManager metadata, ILogger<CustomMethodsHandler> logger, IServiceScopeFactory scopeFactory, DatasetStore datasetStore) : ISetConnectionsHandler, IGetTablesHandler, IGetColumnsHandler, ISetDebugModeHandler, IGetViewsHandler, IGetTempTablesHandler, IEncryptScriptHandler, IGetReportManifestHandler, ISetPortalDbPathHandler
     {
         /// <summary>Handles toggle debug mode notification.</summary>
         public Task<Unit> Handle(SetDebugModeParams request, CancellationToken cancellationToken)
         {
             metadata.DebugMode = request.debugMode;
             logger.LogInformation("LSP: DebugMode set to {Value}", request.debugMode);
+            return Task.FromResult(Unit.Value);
+        }
+
+        /// <summary>Stores the portal.db path and refreshes the dataset cache.</summary>
+        public Task<Unit> Handle(SetPortalDbPathParams request, CancellationToken cancellationToken)
+        {
+            logger.LogInformation("LSP: etlsql/setPortalDbPath received: {Path}", request.path);
+            datasetStore.SetPortalDbPath(request.path);
             return Task.FromResult(Unit.Value);
         }
 

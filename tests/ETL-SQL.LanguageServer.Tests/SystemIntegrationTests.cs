@@ -44,8 +44,8 @@ namespace ETL_SQL.LanguageServer.Tests
             var languageService = new LanguageService(metadataManager, helpRegistry);
             var store = new DocumentStateStore();
             var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
-            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, languageService);
-            var hoverHandler = new HoverProvider(loggerFactory.CreateLogger<HoverProvider>(), store, functionRegistry, helpRegistry);
+            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, languageService, new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()));
+            var hoverHandler = new HoverProvider(loggerFactory.CreateLogger<HoverProvider>(), store, functionRegistry, helpRegistry, new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()));
             
             var uri = DocumentUri.From("untitled:Untitled-1");
             var normalizedUri = uri.ToString(); 
@@ -129,7 +129,7 @@ namespace ETL_SQL.LanguageServer.Tests
             var languageService = new LanguageService(metadataManager, helpRegistry);
             var store = new DocumentStateStore();
             var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
-            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, languageService);
+            var completionProvider = new CompletionProvider(loggerFactory.CreateLogger<CompletionProvider>(), store, languageService, new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()));
             
             var uri = DocumentUri.From("untitled:Untitled-2");
             
@@ -186,7 +186,7 @@ namespace ETL_SQL.LanguageServer.Tests
             ETL_SQL.Engine.Services.LanguageHelpService.Initialize(helpRegistry);
             
             var handler = new TextDocumentHandler(loggerFactory, metadataManager, store);
-            var hoverProvider = new HoverProvider(loggerFactory.CreateLogger<HoverProvider>(), store, functionRegistry, helpRegistry);
+            var hoverProvider = new HoverProvider(loggerFactory.CreateLogger<HoverProvider>(), store, functionRegistry, helpRegistry, new DatasetStore(loggerFactory.CreateLogger<DatasetStore>()));
             
             var uri = DocumentUri.From("untitled:Untitled-3");
             var script = "SELECT * FROM CONNECTION MSSQL;";

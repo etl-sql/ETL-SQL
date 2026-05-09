@@ -144,6 +144,10 @@ The completion engine resolves context from the cursor position:
 | After `.` on `conn.table` | Columns of that table |
 | After `FROM`, `JOIN`, `INTO` | Known connections + default table list |
 | After `*` or `alias.*` | Full column expansion (replaces `*` with comma-separated list) |
+| After `SHOW` | `DATASETS`, `JOBS`, `CONNECTIONS`, `TABLES`, `COLUMNS`, `VARIABLES`, `VERSION`, `LINEAGE`, `TAGS`, `PROFILE`, `ACTIVE` |
+| After `USE` | `DATASET`, `DOCKER`, `SETS`, `PASSWORD` |
+| After `USE DATASET` or prefix starts with `&` | Dataset names from `DatasetStore` — `&name`, with folder/row count/access level detail |
+| After `SOURCE =` or prefix `&` | Dataset names from `DatasetStore` |
 | Otherwise | Keywords (~50), built-in functions (~51), in-scope `@variables` |
 
 **Variable discovery:** `CollectAvailableVariables()` walks the AST above the cursor position, collecting `DECLARE`, `SET`, `FOR`, and `FOREACH` variable bindings, respecting scope boundaries.
@@ -152,12 +156,15 @@ The completion engine resolves context from the cursor position:
 
 **Star expansion:** When `*` is typed after an alias, the provider fetches all columns for all tables in the current statement and generates a single `CompletionItem` whose `TextEdit` replaces `*` with the full column list.
 
+**Dataset name completions:** `DatasetStore` holds a snapshot of portal datasets (loaded from portal.db via `etlsql/setPortalDbPath`). When active, dataset `&name` suggestions include a detail line showing folder path, row count, access level, and a staleness indicator.
+
 ### 5.2 Hover (`HoverProvider`)
 
 Uses the `ILineageTracker` stored in `DocumentStateStore` to render a lineage graph at the hovered position.
 
 - Hover over a `#temp` table → shows its lineage (source tables, transformations applied)
 - Hover over a connection → shows its type and registered aliases
+- Hover over `&datasetName` → shows a metadata card: folder, access level, row count, last refresh timestamp, TTL, and a staleness warning if applicable
 - Rendering via `ETL_SQL.Analysis.Lineage.LineageGraphRenderer` (produces Markdown for the hover tooltip)
 
 ### 5.3 Go-to-Definition (`DefinitionProvider`)
@@ -219,6 +226,7 @@ Beyond the standard LSP protocol, the server exposes custom requests and notific
 | `etlsql/setConnections` | `Connection[]` | Register global connections in `MetadataManager` |
 | `etlsql/setDebugMode` | `{ enabled: bool }` | Toggle verbose protocol logging |
 | `etlsql/refreshMetadata` | `{ uri: string }` | Clear metadata cache for document; re-trigger analysis |
+| `etlsql/setPortalDbPath` | `{ path: string \| null }` | Set path to portal.db; triggers a synchronous refresh of the `DatasetStore` cache. Send `null` or empty string to disable dataset awareness. |
 
 ### Requests (Client → Server)
 

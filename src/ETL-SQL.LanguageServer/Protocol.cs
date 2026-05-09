@@ -82,4 +82,10 @@ namespace ETL_SQL.LSP
         public string? manifestJson { get; set; }
         public List<string> errors { get; set; } = new();
     }
+
+    public class SetPortalDbPathParams : IRequest
+    {
+        /// <summary>Absolute path to portal.db. Null or empty disables dataset awareness.</summary>
+        public string? path { get; set; }
+    }
 }
