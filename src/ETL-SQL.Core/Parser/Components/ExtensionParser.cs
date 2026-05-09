@@ -429,15 +429,48 @@ namespace ETL_SQL.Core.Parser.Components
 
         public Statement ParseLineage(Token startToken)
         {
+            // LINEAGE EXPORT AS OPENLINEAGE TO 'file' — whole-session export, no target table
+            if (_parser.Current.Type == TokenType.EXPORT)
+            {
+                Advance(); // consume EXPORT
+                Consume(TokenType.AS, "Expected AS after EXPORT");
+                var olTok = _parser.Current;
+                if (!olTok.Value.Equals("OPENLINEAGE", StringComparison.OrdinalIgnoreCase))
+                    throw new SyntaxException("Expected OPENLINEAGE after AS", olTok.Line, olTok.Column);
+                Advance();
+                Consume(TokenType.TO, "Expected TO after OPENLINEAGE");
+                var path = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
+                Match(TokenType.SEMICOLON);
+                return new LineageStatement(null, null, path, exportAsOpenLineage: true) { Line = startToken.Line, Column = startToken.Column };
+            }
+
             Match(TokenType.LPAREN);
-            var targetTable = _parser.ParseTableReference();
+            var targetTable = _parser.ParseTableReference(allowAlias: false);
             string? columnName = null;
             if (Match(TokenType.COMMA)) columnName = ConsumeIdentifier("Expected column name after comma").Value;
             Match(TokenType.RPAREN);
+
             string? exportPath = null;
-            if (Match(TokenType.TO)) exportPath = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
-            if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
-            return new LineageStatement(targetTable, columnName, exportPath) { Line = startToken.Line, Column = startToken.Column };
+            bool asOpenLineage = false;
+            if (_parser.Current.Type == TokenType.EXPORT)
+            {
+                Advance(); // consume EXPORT
+                Consume(TokenType.AS, "Expected AS after EXPORT");
+                var olTok = _parser.Current;
+                if (!olTok.Value.Equals("OPENLINEAGE", StringComparison.OrdinalIgnoreCase))
+                    throw new SyntaxException("Expected OPENLINEAGE after AS", olTok.Line, olTok.Column);
+                Advance();
+                Consume(TokenType.TO, "Expected TO after OPENLINEAGE");
+                exportPath = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
+                asOpenLineage = true;
+            }
+            else if (Match(TokenType.TO))
+            {
+                exportPath = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
+            }
+
+            Match(TokenType.SEMICOLON);
+            return new LineageStatement(targetTable, columnName, exportPath, asOpenLineage) { Line = startToken.Line, Column = startToken.Column };
         }
 
         public Statement ParseLint(Token startToken)

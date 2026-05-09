@@ -99,5 +99,8 @@ namespace ETL_SQL.Connectors.Postgres
             }
             catch { return null; }
         }
+
+        public ETL_SQL.Data.ICatalogMetadataProvider? GetCatalogProvider(string connectionString)
+            => new PostgresCatalogProvider(connectionString);
     }
 }

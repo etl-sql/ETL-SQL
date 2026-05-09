@@ -531,9 +531,13 @@ namespace ETL_SQL.Core.Formatting
 
         private static string FormatLineage(LineageStatement s)
         {
-            var sql = $"LINEAGE {s.TargetTable.ToSql()}";
-            if (s.ColumnName  != null) sql += $", {s.ColumnName}";
-            if (s.ExportPath  != null) sql += $" TO '{s.ExportPath}'";
+            if (s.ExportAsOpenLineage && s.TargetTable == null)
+                return $"LINEAGE EXPORT AS OPENLINEAGE TO '{s.ExportPath}';";
+            var sql = s.TargetTable != null ? $"LINEAGE {s.TargetTable.ToSql()}" : "LINEAGE";
+            if (s.ColumnName       != null) sql += $", {s.ColumnName}";
+            if (s.ExportAsOpenLineage && s.ExportPath != null)
+                sql += $" EXPORT AS OPENLINEAGE TO '{s.ExportPath}'";
+            else if (s.ExportPath  != null) sql += $" TO '{s.ExportPath}'";
             return sql;
         }
 

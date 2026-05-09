@@ -49,6 +49,7 @@ namespace ETL_SQL.Connectors.Postgres
         public bool SupportsSqlPushdown => true;
         public Dictionary<string, string>? Options => _options;
         public string ConnectorType => "POSTGRES";
+        public ETL_SQL.Data.ICatalogMetadataProvider? GetCatalogProvider() => new PostgresCatalogProvider(_connectionString);
 
         public IDataSource WithTable(string tableName) => new PostgresDataSource(_context!, _connectionString, tableName, _options);
 

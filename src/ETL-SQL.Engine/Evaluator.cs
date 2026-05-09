@@ -519,6 +519,99 @@ namespace ETL_SQL.Engine
             IsPersistentSession = DefaultThresholds.PersistenceDefault(config);
         }
 
+        private async Task AutoExportOpenLineageAsync(System.Threading.CancellationToken ct)
+        {
+            var config = _serviceProvider?.GetService<Microsoft.Extensions.Configuration.IConfiguration>();
+            if (config == null) return;
+
+            // Phase 6: import database catalog metadata into lineage tags before export
+            if (config.GetValue<bool>("Lineage:ImportCatalogMetadata"))
+                await ImportCatalogMetadataAsync(ct);
+
+            var scriptName = LineageTracker.GlobalMetadata.TryGetValue("author", out var a) ? a : null;
+            var sid = SessionId ?? "session";
+
+            var olFile = config.GetValue<string>("Lineage:OpenLineageFile");
+            if (!string.IsNullOrWhiteSpace(olFile))
+            {
+                var resolved = ResolvePath(olFile);
+                await Engine.Lineage.OpenLineageExporter.ExportToFileAsync(LineageTracker, sid, scriptName, resolved, _logger, ct);
+            }
+
+            var olEndpoint = config.GetValue<string>("Lineage:OpenLineageEndpoint");
+            if (!string.IsNullOrWhiteSpace(olEndpoint))
+                await Engine.Lineage.OpenLineageExporter.ExportToHttpAsync(LineageTracker, sid, scriptName, olEndpoint, _logger, ct);
+        }
+
+        private async Task ImportCatalogMetadataAsync(System.Threading.CancellationToken ct)
+        {
+            var allEntries = LineageTracker.GetFullLineage().ToList();
+            var imported = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var entry in allEntries)
+            {
+                foreach (var src in entry.SourceTables)
+                {
+                    // Skip temp tables, report nodes, variables, already-processed
+                    if (src.StartsWith('#') || src.StartsWith('@') ||
+                        src.StartsWith("report:", StringComparison.OrdinalIgnoreCase) ||
+                        src.StartsWith("dataset:", StringComparison.OrdinalIgnoreCase) ||
+                        !imported.Add(src))
+                        continue;
+
+                    // Parse: connectionAlias.schema.table  or  connectionAlias.table
+                    var parts = src.Split('.', 3);
+                    if (parts.Length < 2) continue;
+
+                    var connAlias = parts[0];
+                    string schema, table;
+                    if (parts.Length == 3) { schema = parts[1]; table = parts[2]; }
+                    else { schema = "dbo"; table = parts[1]; }
+
+                    if (!_connections.TryGetValue(connAlias, out var ds)) continue;
+                    var provider = ds.GetCatalogProvider();
+                    if (provider == null) continue;
+
+                    try
+                    {
+                        var columns = await provider.GetColumnMetadataAsync(schema, table, ct);
+                        var rels = await provider.GetRelationshipsAsync(schema, table, ct);
+
+                        foreach (var col in columns)
+                        {
+                            var meta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                ["db_type"]     = col.DataType,
+                                ["db_nullable"] = col.IsNullable ? "true" : "false",
+                                ["db_is_pk"]    = col.IsPrimaryKey ? "true" : "false",
+                            };
+                            if (!string.IsNullOrEmpty(col.Description))
+                                meta["db_description"] = col.Description;
+                            foreach (var kv in col.ExtraProperties)
+                                meta[$"db_{kv.Key}"] = kv.Value;
+
+                            LineageTracker.Record(src, Array.Empty<string>(), "DB_CATALOG",
+                                targetColumn: col.ColumnName, metadata: meta);
+                        }
+
+                        // FK relationships → @db_referenced_by tag on the referenced table's column
+                        foreach (var rel in rels)
+                        {
+                            var refMeta = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                            {
+                                ["db_referenced_by"] = $"{src}.{rel.ForeignKeyColumn}"
+                            };
+                            LineageTracker.Record(rel.ReferencedTable, Array.Empty<string>(), "DB_CATALOG",
+                                targetColumn: rel.ReferencedColumn, metadata: refMeta);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.Warning("Catalog import failed for {Table}: {Message}", src, ex.Message);
+                    }
+                }
+            }
+        }
 
         public async Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default)
         {
@@ -596,6 +689,10 @@ namespace ETL_SQL.Engine
 
                 scriptNode.Status = ExecutionStatus.Completed;
                 scriptNode.EndTicks = Stopwatch.GetTimestamp();
+
+                // Auto-export OpenLineage at top-level script completion
+                if (CurrentRecursiveDepth == 0)
+                    await AutoExportOpenLineageAsync(cancellationToken);
             }
             catch (ReturnException ex)
             {

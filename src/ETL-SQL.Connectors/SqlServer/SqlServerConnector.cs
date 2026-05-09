@@ -105,5 +105,8 @@ namespace ETL_SQL.Connectors.SqlServer
             }
             catch { return null; }
         }
+
+        public ETL_SQL.Data.ICatalogMetadataProvider? GetCatalogProvider(string connectionString)
+            => new SqlServerCatalogProvider(connectionString);
     }
 }

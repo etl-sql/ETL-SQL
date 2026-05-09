@@ -1,12 +1,45 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
 
 namespace ETL_SQL.Data
 {
+    /// <summary>
+    /// Metadata about a single database column imported from the connector's catalog system.
+    /// Tags are stored as <c>@db_*</c> prefixed entries in the lineage tracker.
+    /// </summary>
+    public record CatalogColumn(
+        string ColumnName,
+        string DataType,
+        bool IsNullable,
+        bool IsPrimaryKey,
+        string? Description,
+        IReadOnlyDictionary<string, string> ExtraProperties);
+
+    /// <summary>Foreign-key relationship between two columns in the same database.</summary>
+    public record CatalogRelationship(
+        string ForeignKeyColumn,
+        string ReferencedTable,
+        string ReferencedColumn);
+
+    /// <summary>
+    /// Optional interface that a connector can implement to supply database-catalog metadata
+    /// (column descriptions, PK/FK relationships, nullability) for lineage tag enrichment.
+    /// </summary>
+    public interface ICatalogMetadataProvider
+    {
+        Task<IReadOnlyList<CatalogColumn>> GetColumnMetadataAsync(
+            string schema, string tableName, CancellationToken ct = default);
+
+        Task<IReadOnlyList<CatalogRelationship>> GetRelationshipsAsync(
+            string schema, string tableName, CancellationToken ct = default);
+    }
+
+
     /// <summary>
     /// Defines the contract for external database connectors (SQL Server, PostgreSql, etc.).
     /// Each connector provides metadata and data source creation capabilities.
@@ -68,6 +101,13 @@ namespace ETL_SQL.Data
         /// Tools may also surface a warning when writing to a warehouse-typed connection.
         /// </summary>
         bool IsDataWarehouse => false;
+
+        /// <summary>
+        /// Returns a catalog metadata provider for the given connection string, or <c>null</c> if
+        /// the connector does not support catalog metadata import.
+        /// Enabled when <c>Lineage:ImportCatalogMetadata = true</c> in appsettings.
+        /// </summary>
+        ICatalogMetadataProvider? GetCatalogProvider(string connectionString) => null;
     }
 
 

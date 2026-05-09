@@ -1540,15 +1540,17 @@ namespace ETL_SQL.Core
 
     public record LineageStatement : Statement
     {
-        public TableReference TargetTable { get; }
+        public TableReference? TargetTable { get; }
         public string? ColumnName { get; }
         public string? ExportPath { get; set; }
+        public bool ExportAsOpenLineage { get; init; }
 
-        public LineageStatement(TableReference targetTable, string? columnName = null, string? exportPath = null)
+        public LineageStatement(TableReference? targetTable = null, string? columnName = null, string? exportPath = null, bool exportAsOpenLineage = false)
         {
             TargetTable = targetTable;
             ColumnName = columnName;
             ExportPath = exportPath;
+            ExportAsOpenLineage = exportAsOpenLineage;
         }
     }
 

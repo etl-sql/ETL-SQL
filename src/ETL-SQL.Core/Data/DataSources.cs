@@ -86,6 +86,8 @@ namespace ETL_SQL.Data
         IDataSource WithTable(string tableName);
         /// <summary>The physical or logical path to the data source.</summary>
         string Path { get; }
+        /// <summary>Returns a catalog metadata provider for this connection, or <c>null</c> if not supported.</summary>
+        ICatalogMetadataProvider? GetCatalogProvider() => null;
         /// <summary>The options used to create this data source.</summary>
         Dictionary<string, string>? Options { get; }
         /// <summary>The type name of the connector that created this data source (e.g., MSSQL, FLATFILE).</summary>

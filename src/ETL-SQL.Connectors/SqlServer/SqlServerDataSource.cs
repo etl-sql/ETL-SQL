@@ -49,6 +49,7 @@ namespace ETL_SQL.Connectors.SqlServer
         public bool SupportsSqlPushdown => true;
         public string ConnectorType => "MSSQL";
         public Dictionary<string, string>? Options => _options;
+        public ETL_SQL.Data.ICatalogMetadataProvider? GetCatalogProvider() => new SqlServerCatalogProvider(_connectionString);
 
         public IDataSource WithTable(string tableName) => new SqlServerDataSource(_context!, _connectionString, tableName, _options);
 

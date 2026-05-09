@@ -2,6 +2,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
+using ETL_SQL.Engine.Lineage;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -28,11 +29,28 @@ namespace ETL_SQL.Engine.Handlers
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (LineageStatement)statement;
-            
-            string targetName = stmt.TargetTable.ConnectionName != null ? stmt.TargetTable.ConnectionName + "." + stmt.TargetTable.TableName : stmt.TargetTable.TableName;
-            var entries = (stmt.ColumnName != null 
-                ? context.LineageTracker.GetColumnLineage(targetName, stmt.ColumnName) 
-                : context.LineageTracker.GetLineage(targetName)).ToList();
+
+            // OpenLineage export mode
+            if (stmt.ExportAsOpenLineage && !string.IsNullOrEmpty(stmt.ExportPath))
+            {
+                var fullPath = context.ResolvePath(stmt.ExportPath);
+                var scriptName = context.LineageTracker.GlobalMetadata.TryGetValue("author", out var a) ? a : null;
+                await OpenLineageExporter.ExportToFileAsync(
+                    context.LineageTracker, context.SessionId ?? "session", scriptName, fullPath, _logger);
+                _logger.WriteLine($"OpenLineage export written to: {fullPath}", ConsoleColor.Green);
+                return;
+            }
+
+            string? targetName = stmt.TargetTable == null ? null :
+                stmt.TargetTable.ConnectionName != null
+                    ? stmt.TargetTable.ConnectionName + "." + stmt.TargetTable.TableName
+                    : stmt.TargetTable.TableName;
+
+            var entries = (targetName != null
+                ? (stmt.ColumnName != null
+                    ? context.LineageTracker.GetColumnLineage(targetName, stmt.ColumnName)
+                    : context.LineageTracker.GetLineage(targetName))
+                : context.LineageTracker.GetFullLineage()).ToList();
 
             if (!entries.Any())
             {
