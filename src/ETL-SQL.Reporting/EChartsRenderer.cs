@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using ETL_SQL.ReportBuilder.Renderers;
+using ETL_SQL.Reporting.Renderers;
 
-namespace ETL_SQL.ReportBuilder
+namespace ETL_SQL.Reporting
 {
     /// <summary>
     /// Converts a <see cref="VisualManifest"/> into an Apache ECharts option JSON string.

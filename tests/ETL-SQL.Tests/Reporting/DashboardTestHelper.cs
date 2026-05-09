@@ -16,6 +16,7 @@ using ETL_SQL.Core.Execution;
 using ETL_SQL.Engine.Services;
 using ETL_SQL.Engine.Functions;
 using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 using ETL_SQL.Connectors.MockDb;
 using ETL_SQL.Connectors.FlatFile;
 using ILogger = ETL_SQL.Common.ILogger;

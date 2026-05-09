@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
-namespace ETL_SQL.ReportBuilder
+namespace ETL_SQL.Reporting
 {
     /// <summary>Embeds an SVG chart as an HTML img with a base-64 data URI.</summary>
     file static class SvgEmbed

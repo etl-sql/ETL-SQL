@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace ETL_SQL.ReportBuilder.Renderers
+namespace ETL_SQL.Reporting.Renderers
 {
     internal abstract class RendererBase
     {

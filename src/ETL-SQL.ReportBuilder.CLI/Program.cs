@@ -8,8 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.App;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
-using ETL_SQL.ReportBuilder;
-using ETL_SQL.ReportBuilder.Renderers;
+using ETL_SQL.Reporting;
+using ETL_SQL.Reporting.Renderers;
 using ETL_SQL.Data;
 using Spectre.Console;
 

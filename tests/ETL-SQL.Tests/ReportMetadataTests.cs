@@ -2,7 +2,7 @@ using Xunit;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Parser.Components;
 using ETL_SQL.Core.Common;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 using ETL_SQL.Engine;
 using Moq;
 using System.Collections.Generic;

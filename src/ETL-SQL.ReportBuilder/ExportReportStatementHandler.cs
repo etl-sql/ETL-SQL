@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
@@ -8,6 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
+using ETL_SQL.Reporting;
 
 namespace ETL_SQL.ReportBuilder
 {
@@ -73,7 +73,7 @@ namespace ETL_SQL.ReportBuilder
                     break;
 
                 case "CSV":
-                    await File.WriteAllTextAsync(outputPath, BuildCsv(manifest), Encoding.UTF8);
+                    await File.WriteAllTextAsync(outputPath, new CsvRenderer().Render(manifest), Encoding.UTF8);
                     break;
 
                 case "MARKDOWN":
@@ -85,29 +85,6 @@ namespace ETL_SQL.ReportBuilder
             }
 
             logger.Debug("EXPORT REPORT: wrote {Format} to '{Output}'", stmt.Format, outputPath);
-        }
-
-        private static string BuildCsv(ReportManifest manifest)
-        {
-            var sb = new StringBuilder();
-            foreach (var v in manifest.Visuals)
-            {
-                if (!string.Equals(v.VisualType, "TABLE", StringComparison.OrdinalIgnoreCase)) continue;
-                if (v.Columns.Count == 0) continue;
-                sb.AppendLine(string.Join(",", v.Columns.Select(CsvField)));
-                foreach (var row in v.Rows)
-                    sb.AppendLine(string.Join(",", v.Columns.Select((_, ci) =>
-                        CsvField(ci < row.Count ? row[ci] : null))));
-            }
-            return sb.ToString();
-        }
-
-        private static string CsvField(string? value)
-        {
-            if (value is null) return string.Empty;
-            if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
-                return $"\"{value.Replace("\"", "\"\"")}\"";
-            return value;
         }
     }
 }

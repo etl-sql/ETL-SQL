@@ -5,7 +5,7 @@ using Spectre.Console;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Metadata;
 using ETL_SQL.Core.Services;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 
 namespace ETL_SQL.TUI.UI
 {

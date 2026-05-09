@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ETL_SQL.Core;
 
-namespace ETL_SQL.ReportBuilder.Builders
+namespace ETL_SQL.Reporting.Builders
 {
     public class PageBuilder(StyleBuilder styleBuilder)
     {

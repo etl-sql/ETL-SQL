@@ -222,7 +222,7 @@ namespace ETL_SQL.App
                     if (!string.IsNullOrEmpty(scriptDir))
                     {
                         // Rpt-2: Cleanup orphaned snapshot temp files from previous failed runs
-                        ETL_SQL.ReportBuilder.SnapshotStore.CleanupOrphanedSnapshots(scriptDir);
+                        ETL_SQL.Reporting.SnapshotStore.CleanupOrphanedSnapshots(scriptDir);
 
                         if (!evaluator.SecurityService.IsSystemPath(scriptDir))
                         {

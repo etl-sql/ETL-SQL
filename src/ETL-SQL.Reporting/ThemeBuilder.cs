@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Nodes;
 
-namespace ETL_SQL.ReportBuilder
+namespace ETL_SQL.Reporting
 {
     public static class ThemeBuilder
     {

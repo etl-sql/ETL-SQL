@@ -5,24 +5,21 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.ReportBuilder;
-using ETL_SQL.Engine;
 
-namespace ETL_SQL.ReportPlayer
+namespace ETL_SQL.Reporting
 {
     /// <summary>
     /// Shared logic for updating report parameters and refreshing affected visuals.
-    /// This eliminates code duplication between SetParameter and SetParameters.
     /// </summary>
-    public static class DashboardSharedLogic
+    public static class ReportInteractionRefresher
     {
         public static async Task<int> RefreshAffectedVisualsAsync(
-            Evaluator evaluator, 
+            IExecutionContext context, 
             ReportManifest manifest, 
             IEnumerable<(string Name, string Value)> updates,
             bool isInteraction = false)
         {
-            var logger = evaluator.Logger;
+            var logger = context.Logger;
             var affectedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var interactionValues = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -38,17 +35,17 @@ namespace ETL_SQL.ReportPlayer
                 else
                 {
                     // Global Update: Apply permanently to Evaluator and Manifest
-                    evaluator.DeclareVariable(varName, value, new VariableMetadata { IsInput = true });
+                    context.VarContext.DeclareVariable(varName, value, new VariableMetadata { IsInput = true });
                     manifest.Parameters[varName] = value;
                 }
             }
 
-            logger.Debug($"[DashboardSharedLogic] Refreshing visuals affected by: {string.Join(", ", affectedNames)} (Interaction: {isInteraction})");
+            logger.Debug($"[ReportInteractionRefresher] Refreshing visuals affected by: {string.Join(", ", affectedNames)} (Interaction: {isInteraction})");
 
-            var builder = new ManifestBuilder(evaluator);
+            var builder = new ManifestBuilder(context);
             int refreshCount = 0;
 
-            foreach (var visualDef in evaluator.ReportContext.VisualDefinitions.Values)
+            foreach (var visualDef in context.ReportContext.VisualDefinitions.Values)
             {
                 // Visual is affected if it directly uses the variable.
                 // For interactions (Highlight), we refresh all visuals that have an interaction mode enabled
@@ -63,7 +60,7 @@ namespace ETL_SQL.ReportPlayer
                     var existingVm = manifest.Visuals.FirstOrDefault(v => v.Name == visualDef.Name);
                     if (existingVm != null)
                     {
-                        logger.Debug($"[DashboardSharedLogic] Refreshing visual: {visualDef.Name}");
+                        logger.Debug($"[ReportInteractionRefresher] Refreshing visual: {visualDef.Name}");
                         
                         // If it's an interaction, we need to pass the selection values down to the visual builder
                         // for the double-fetch logic.
@@ -79,21 +76,17 @@ namespace ETL_SQL.ReportPlayer
                     }
                     else
                     {
-                        logger.Warning($"[DashboardSharedLogic] Found dependency but visual manifest entry missing: {visualDef.Name}");
+                        logger.Warning($"[ReportInteractionRefresher] Found dependency but visual manifest entry missing: {visualDef.Name}");
                     }
                 }
             }
 
-            logger.Debug($"[DashboardSharedLogic] Refresh complete. {refreshCount} visuals updated.");
+            logger.Debug($"[ReportInteractionRefresher] Refresh complete. {refreshCount} visuals updated.");
             return refreshCount;
         }
 
         private static async Task RefreshVisualWithInteractionAsync(ManifestBuilder builder, CreateVisualStatement visualDef, VisualManifest vm, Dictionary<string, string> interactionValues)
         {
-            // We reuse the existing builder but we need it to be interaction-aware.
-            // Since ManifestBuilder is a facade, we can use a temporary side-channel or 
-            // a dedicated method if we added one. 
-            // Let's add an overload to RefreshVisualAsync.
             await builder.RefreshVisualAsync(visualDef, vm, interactionValues);
         }
 

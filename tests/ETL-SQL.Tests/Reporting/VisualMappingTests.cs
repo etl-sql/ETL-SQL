@@ -8,7 +8,7 @@ using ETL_SQL.Data;
 using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Engine;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 
 namespace ETL_SQL.Tests.Reporting.Reporting
 {

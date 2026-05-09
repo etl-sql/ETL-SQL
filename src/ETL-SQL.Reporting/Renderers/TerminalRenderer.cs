@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using Spectre.Console;
 using Spectre.Console.Rendering;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 
-namespace ETL_SQL.ReportBuilder.Renderers
+namespace ETL_SQL.Reporting.Renderers
 {
     /// <summary>
     /// Converts a <see cref="ReportManifest"/> into Spectre.Console renderable objects.

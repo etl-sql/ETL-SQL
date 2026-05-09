@@ -12,7 +12,7 @@ using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Data;
 
 using ETL_SQL.Engine;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.ReportPlayer
@@ -26,8 +26,8 @@ namespace ETL_SQL.ReportPlayer
     ///   2. Calls <see cref="ManifestBuilder.BuildAsync"/> to snapshot all visual data
     ///   3. Caches the manifest so subsequent HTTP requests can return it cheaply
     ///
-    /// Parameter changes from slicer interactions call <see cref="RebuildAsync"/>
-    /// to re-evaluate only the affected visuals (Phase 9D simplified: full rebuild).
+    /// Parameter changes from slicer interactions re-evaluate affected visuals
+    /// and fall back to <see cref="RebuildAsync"/> when selective refresh cannot apply.
     /// </summary>
     public class DashboardService : IAsyncDisposable
     {
@@ -119,7 +119,7 @@ namespace ETL_SQL.ReportPlayer
                         }
                     }
 
-                    int refreshCount = await DashboardSharedLogic.RefreshAffectedVisualsAsync(_evaluator, _manifest, updates, isInteraction);
+                    int refreshCount = await ReportInteractionRefresher.RefreshAffectedVisualsAsync(_evaluator, _manifest, updates, isInteraction);
                     if (refreshCount > 0)
                     {
                         _manifest.BuiltAt = DateTime.UtcNow;
@@ -155,7 +155,7 @@ namespace ETL_SQL.ReportPlayer
                         _evaluator.ReportContext.BaselineParameters[varName] = value;
                     }
 
-                    int refreshCount = await DashboardSharedLogic.RefreshAffectedVisualsAsync(_evaluator, _manifest, new[] { (name, value) }, isInteraction);
+                    int refreshCount = await ReportInteractionRefresher.RefreshAffectedVisualsAsync(_evaluator, _manifest, new[] { (name, value) }, isInteraction);
                     if (refreshCount > 0)
                     {
                         _manifest.BuiltAt = DateTime.UtcNow;
@@ -240,11 +240,6 @@ namespace ETL_SQL.ReportPlayer
             {
                 _lock.Release();
             }
-        }
-
-        private bool DependsOnVariable(CreateVisualStatement visual, string variableName)
-        {
-            return DashboardSharedLogic.DependsOnVariable(visual, variableName);
         }
 
         /// <summary>Full rebuild: re-evaluate the script and re-snapshot all visuals.</summary>

@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 
 namespace ETL_SQL.Tests.Integration.Misc
 {

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace ETL_SQL.ReportBuilder
+namespace ETL_SQL.Reporting
 {
     // ════════════════════════════════════════════════════════════════════════
     // ReportManifest — Phase 9B

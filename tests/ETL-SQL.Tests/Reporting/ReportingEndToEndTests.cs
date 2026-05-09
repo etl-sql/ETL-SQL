@@ -419,7 +419,7 @@ CREATE BUTTON SearchButton AS RUN (
         [Theory]
         [Trait("Category", "Smoke.Reporting")]
         [MemberData(nameof(RepresentativeReportScripts))]
-        public async Task ManifestBuilder_RepresentativeReports_EmitExpectedManifestShape(string scenario, string script, Action<ETL_SQL.ReportBuilder.ReportManifest> assertManifest)
+        public async Task ManifestBuilder_RepresentativeReports_EmitExpectedManifestShape(string scenario, string script, Action<ETL_SQL.Reporting.ReportManifest> assertManifest)
         {
             string scriptPath = Path.Combine(Path.GetTempPath(), $"manifest_snapshot_{scenario}_{Guid.NewGuid()}.rptsql");
             File.WriteAllText(scriptPath, script);
@@ -453,7 +453,7 @@ CREATE VISUAL SalesChart AS BAR (
     SOURCE = (SELECT Month, Sales FROM #Sales),
     MAPPINGS (X = Month, Y = Sales)
 );",
-                new Action<ETL_SQL.ReportBuilder.ReportManifest>(m =>
+                new Action<ETL_SQL.Reporting.ReportManifest>(m =>
                 {
                     var visual = m.Visuals.Single(v => v.Name == "SalesChart");
                     Assert.Equal("BAR", visual.VisualType);
@@ -471,7 +471,7 @@ CREATE VISUAL SalesTable AS TABLE (
     SOURCE = (SELECT Region, Sales FROM #Sales),
     FORMATTING (Sales < 0 THEN '#ef4444')
 );",
-                new Action<ETL_SQL.ReportBuilder.ReportManifest>(m =>
+                new Action<ETL_SQL.Reporting.ReportManifest>(m =>
                 {
                     var visual = m.Visuals.Single(v => v.Name == "SalesTable");
                     Assert.Equal("TABLE", visual.VisualType);
@@ -492,7 +492,7 @@ CREATE VISUAL RegionFilter AS SLICER (
     MAPPINGS (VALUE = Region),
     ACTIONS (ON_CHANGE = SET_PARAMETER(@Region, VALUE))
 );",
-                new Action<ETL_SQL.ReportBuilder.ReportManifest>(m =>
+                new Action<ETL_SQL.Reporting.ReportManifest>(m =>
                 {
                     var visual = m.Visuals.Single(v => v.Name == "RegionFilter");
                     var action = visual.Actions.Single();
@@ -525,7 +525,7 @@ CREATE VISUAL ActiveOnly AS CHECKBOX (
 CREATE BUTTON RunReport AS RUN (
     TITLE 'Run'
 );",
-                new Action<ETL_SQL.ReportBuilder.ReportManifest>(m =>
+                new Action<ETL_SQL.Reporting.ReportManifest>(m =>
                 {
                     Assert.Contains(m.Visuals, v => v.VisualType == "TEXTBOX");
                     Assert.Contains(m.Visuals, v => v.VisualType == "NUMBERBOX");
@@ -555,7 +555,7 @@ CREATE PAGE Details AS LAYOUT (
     STRUCTURE = 'A',
     MAP('A' = SalesTable)
 );",
-                new Action<ETL_SQL.ReportBuilder.ReportManifest>(m =>
+                new Action<ETL_SQL.Reporting.ReportManifest>(m =>
                 {
                     Assert.Equal(2, m.Pages.Count);
                     Assert.Equal(2, m.Visuals.Count);
@@ -594,7 +594,7 @@ CREATE PAGE Dashboard AS LAYOUT (
     STRUCTURE = 'A / B C',
     MAP('A' = Filters, 'B' = BarByRegion, 'C' = SalesTable)
 );",
-                new Action<ETL_SQL.ReportBuilder.ReportManifest>(m =>
+                new Action<ETL_SQL.Reporting.ReportManifest>(m =>
                 {
                     Assert.Equal("dark", m.Styles!["THEME"]);
                     Assert.NotNull(m.Containers);

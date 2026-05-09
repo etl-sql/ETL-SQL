@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.Orchestrator.Channels;
 using Microsoft.EntityFrameworkCore;

@@ -386,7 +386,7 @@ namespace ETL_SQL.TUI.UI
                 {
                     try
                     {
-                        var manifestBuilder = new ETL_SQL.ReportBuilder.ManifestBuilder(_evaluator);
+                        var manifestBuilder = new ETL_SQL.Reporting.ManifestBuilder(_evaluator);
                         _renderer.CurrentReportManifest = await manifestBuilder.BuildAsync(_filePath);
                         _renderer.ActiveReportPageIndex = 0;
                         _renderer.ShowStatus($"Query finished. Report built with {_renderer.CurrentReportManifest.Visuals.Count} visuals.");

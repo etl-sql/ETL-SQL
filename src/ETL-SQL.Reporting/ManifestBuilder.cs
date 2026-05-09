@@ -5,9 +5,9 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
-using ETL_SQL.ReportBuilder.Builders;
+using ETL_SQL.Reporting.Builders;
 
-namespace ETL_SQL.ReportBuilder
+namespace ETL_SQL.Reporting
 {
     /// <summary>
     /// Walks the post-execution context to collect visual/page/dataset definitions

@@ -130,7 +130,7 @@ Do this after report manifests and style/runtime behavior settle.
 Current progress:
 
 - `src/ETL-SQL.Reporting` exists as the reporting semantics boundary.
-- Serializable report manifest contracts now live in `ETL-SQL.Reporting` while retaining the existing `ETL_SQL.ReportBuilder` namespace for compatibility.
+- Serializable report manifest contracts now live in `ETL-SQL.Reporting` under the `ETL_SQL.Reporting` namespace.
 - Manifest and visual builders now live in `ETL-SQL.Reporting`; they still operate over `IExecutionContext` and do not move script execution ownership out of Engine.
 - Style, page, and dataset builder semantics now live in `ETL-SQL.Reporting`; this project references Core for report AST/context contracts.
 - Theme-to-ECharts JSON translation now lives in `ETL-SQL.Reporting`; the Engine `CREATE THEME` handler remains the execution entry point and forwards to the reporting helper.
@@ -143,15 +143,26 @@ Recommended steps:
 
 1. Introduce the new project or namespace boundary. *(Done: project boundary created; namespace compatibility retained for now.)*
 2. Move manifest, style, visual, page, container, dataset, chart, and action semantics. *(Done for the first-pass boundary: manifest/visual builders, manifest contracts, style/page/dataset builders, theme translation, Markdown/SVG/PDF/terminal rendering, snapshot persistence, and shared ECharts chart semantics moved.)*
-3. Leave compatibility references or forwarding types while hosts migrate. *(Done: existing `ETL_SQL.ReportBuilder` namespaces and the `CreateThemeStatementHandler.BuildEChartsTheme` forwarding API are retained.)*
+3. Leave compatibility references or forwarding types while hosts migrate. *(Done: `ETL-SQL.ReportBuilder` remains for the engine-facing export handler, and `CreateThemeStatementHandler.BuildEChartsTheme` forwards to the reporting helper.)*
 4. Update each host separately with smoke coverage. *(Done for current hosts: ReportPlayer, ReportPortal, CLI, Engine, ReportBuilder, and focused reporting/snapshot tests pass.)*
 5. Rename packages/projects only after references are clean.
 
 Phase 4 is functionally complete for the first-pass boundary. Keep `ETL-SQL.ReportBuilder` as the compatibility assembly for the engine-facing `EXPORT REPORT` handler until a release-safe package/project rename is planned.
 
+Phase 4b progress:
+
+- Shared reporting source now uses the `ETL_SQL.Reporting` namespace.
+- Repo callers have migrated from shared `ETL_SQL.ReportBuilder` types to `ETL_SQL.Reporting` types.
+- `ETL_SQL.ReportBuilder.ExportReportStatementHandler` remains as the compatibility entry point for handler discovery.
+
 ### Phase 5: Thin Host Cleanup
 
 After Analysis, ReportRuntime, and Reporting boundaries exist, remove any remaining duplicated semantics from hosts. Keep host changes focused on shell behavior: auth, routing, protocol, process lifetime, UX, and persistence.
+
+Current progress:
+
+- Report interaction refresh/dependency semantics moved from ReportPlayer into `ETL-SQL.Reporting` as `ReportInteractionRefresher`; ReportPlayer now delegates parameter-driven visual refresh behavior to Reporting.
+- Report CSV rendering moved from ReportBuilder/ReportPortal host code into `ETL-SQL.Reporting` as `CsvRenderer`; export hosts now share the same table selection and CSV escaping behavior.
 
 ## Move Checklist
 

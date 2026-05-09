@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace ETL_SQL.ReportBuilder.Renderers
+namespace ETL_SQL.Reporting.Renderers
 {
     /// <summary>
     /// Renders MAP visuals as Apache ECharts map/geo option JSON.

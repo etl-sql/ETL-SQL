@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Xunit;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 
 namespace ETL_SQL.Tests.Reporting.Reporting
 {
@@ -264,6 +264,68 @@ namespace ETL_SQL.Tests.Reporting.Reporting
 
             Assert.Contains(">", md);
             Assert.Contains("1,234,567", md);
+        }
+
+        // ── CsvRenderer ─────────────────────────────────────────────────────
+
+        [Fact]
+        public void CsvRenderer_Render_EscapesQuotedAndDelimitedFields()
+        {
+            var manifest = new ReportManifest
+            {
+                Source = "test.rptsql",
+                Visuals = new List<VisualManifest>
+                {
+                    new VisualManifest
+                    {
+                        Name = "CsvTable",
+                        VisualType = "TABLE",
+                        Columns = new List<string> { "Name", "Notes" },
+                        Rows = new List<List<string?>>
+                        {
+                            new List<string?> { "Alpha, Inc.", "Said \"hello\"" }
+                        }
+                    }
+                }
+            };
+
+            var csv = new CsvRenderer().Render(manifest);
+
+            Assert.Contains("Name,Notes", csv);
+            Assert.Contains("\"Alpha, Inc.\",\"Said \"\"hello\"\"\"", csv);
+        }
+
+        [Fact]
+        public void CsvRenderer_Render_LabelsMultiplePortalTables()
+        {
+            var manifest = new ReportManifest
+            {
+                Source = "test.rptsql",
+                Visuals = new List<VisualManifest>
+                {
+                    new VisualManifest
+                    {
+                        Name = "FirstTable",
+                        VisualType = "TABLE",
+                        Columns = new List<string> { "Name" },
+                        Rows = new List<List<string?>> { new List<string?> { "Alpha" } }
+                    },
+                    new VisualManifest
+                    {
+                        Name = "SecondTable",
+                        VisualType = "TABLE",
+                        Columns = new List<string> { "Name" },
+                        Rows = new List<List<string?>> { new List<string?> { "Beta" } }
+                    }
+                }
+            };
+
+            var csv = new CsvRenderer().Render(manifest, visualName: null, includeVisualNamesWhenMultiple: true);
+
+            Assert.Contains("FirstTable", csv);
+            Assert.Contains("SecondTable", csv);
+            Assert.Contains("Alpha", csv);
+            Assert.Contains("Beta", csv);
         }
 
         // ── SnapshotStore ────────────────────────────────────────────────────

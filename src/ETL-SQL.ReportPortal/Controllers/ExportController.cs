@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Services;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -76,44 +76,18 @@ public class ExportController(
         if (forbidden) return Forbid();
         if (manifest is null) return NotFound(new { error = err });
 
-        // Choose visuals: specific one, or all TABLE visuals if none specified
-        var visuals = string.IsNullOrWhiteSpace(visual)
-            ? manifest.Visuals
-                .Where(v => string.Equals(v.VisualType, "TABLE", StringComparison.OrdinalIgnoreCase)
-                         && v.Error is null && v.Columns.Count > 0)
-                .ToList()
-            : manifest.Visuals
-                .Where(v => string.Equals(v.Name, visual, StringComparison.OrdinalIgnoreCase))
-                .Take(1)
-                .ToList();
+        var renderer = new CsvRenderer();
+        var visuals = renderer.SelectExportVisuals(manifest, visual);
 
         if (visuals.Count == 0)
             return NotFound(new { error = "No exportable visuals found" });
 
-        var sb   = new StringBuilder();
-        bool first = true;
-
-        foreach (var v in visuals)
-        {
-            if (!first) sb.AppendLine().AppendLine();
-            first = false;
-
-            if (visuals.Count > 1)
-                sb.AppendLine(CsvField(v.Name));
-
-            // Header row
-            sb.AppendLine(string.Join(",", v.Columns.Select(CsvField)));
-
-            // Data rows
-            foreach (var row in v.Rows)
-                sb.AppendLine(string.Join(",", v.Columns.Select((_, ci) =>
-                    CsvField(ci < row.Count ? row[ci] : null))));
-        }
+        var csv = renderer.Render(manifest, visual, includeVisualNamesWhenMultiple: true);
 
         var reportName = manifest.Title ?? System.IO.Path.GetFileNameWithoutExtension(manifest.Source);
         var filename   = $"{SanitizeFilename(reportName)}_{DateTime.UtcNow:yyyyMMdd}.csv";
 
-        return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray(),
+        return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv)).ToArray(),
                     "text/csv; charset=utf-8",
                     filename);
     }
@@ -162,15 +136,6 @@ public class ExportController(
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
-
-    private static string CsvField(string? value)
-    {
-        if (value is null) return string.Empty;
-        // RFC 4180: quote if contains comma, quote, or newline
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n') || value.Contains('\r'))
-            return $"\"{value.Replace("\"", "\"\"")}\"";
-        return value;
-    }
 
     private static string SanitizeFilename(string name)
     {

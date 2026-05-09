@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using ETL_SQL.Core;
 
-namespace ETL_SQL.ReportBuilder.Builders
+namespace ETL_SQL.Reporting.Builders
 {
     public class StyleBuilder(IExecutionContext ctx)
     {

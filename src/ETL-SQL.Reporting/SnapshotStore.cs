@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ETL_SQL.ReportBuilder
+namespace ETL_SQL.Reporting
 {
     /// <summary>
     /// Persists and loads a <see cref="ReportManifest"/> snapshot to/from disk.

@@ -7,7 +7,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
-namespace ETL_SQL.ReportBuilder.Builders
+namespace ETL_SQL.Reporting.Builders
 {
     public class VisualBuilder(IExecutionContext ctx, EChartsRenderer renderer, StyleBuilder styleBuilder)
     {

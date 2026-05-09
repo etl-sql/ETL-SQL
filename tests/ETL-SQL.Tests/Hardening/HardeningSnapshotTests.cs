@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 using Xunit;
 
 namespace ETL_SQL.Tests.Hardening

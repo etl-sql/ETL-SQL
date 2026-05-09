@@ -4,8 +4,8 @@ using System.Linq;
 using Spectre.Console;
 using Spectre.Console.Rendering;
 using ETL_SQL.Core;
-using ETL_SQL.ReportBuilder;
-using ETL_SQL.ReportBuilder.Renderers;
+using ETL_SQL.Reporting;
+using ETL_SQL.Reporting.Renderers;
 
 namespace ETL_SQL.TUI.UI
 {
@@ -45,7 +45,7 @@ namespace ETL_SQL.TUI.UI
             var activePageIndex = Math.Clamp(_renderer.ActiveReportPageIndex, 0, manifest.Pages.Count - 1);
             var page = manifest.Pages[activePageIndex];
 
-            // Render the page using our TerminalRenderer (from ReportBuilder)
+            // Render the page using the shared reporting terminal renderer.
             var reportContent = TerminalRenderer.RenderPage(page, manifest);
 
             // ── Scrolling Implementation ──

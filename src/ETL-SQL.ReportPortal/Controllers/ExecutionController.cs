@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 

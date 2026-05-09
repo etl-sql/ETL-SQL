@@ -10,7 +10,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator.Execution;
 using ETL_SQL.Orchestrator.Scheduling;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 
 namespace ETL_SQL.Orchestrator.Service
 {

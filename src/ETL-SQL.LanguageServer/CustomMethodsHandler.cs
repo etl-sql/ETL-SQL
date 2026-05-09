@@ -9,6 +9,7 @@ using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
+using ETL_SQL.Reporting;
 
 namespace ETL_SQL.LSP
 {
@@ -164,7 +165,7 @@ namespace ETL_SQL.LSP
                 await evaluator.Evaluate(script, cancellationToken);
 
                 // Build the manifest
-                var manifestBuilder = new ReportBuilder.ManifestBuilder(evaluator);
+                var manifestBuilder = new ManifestBuilder(evaluator);
                 var manifest = await manifestBuilder.BuildAsync(request.text);
 
                 response.manifestJson = System.Text.Json.JsonSerializer.Serialize(manifest, new System.Text.Json.JsonSerializerOptions 

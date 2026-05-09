@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
-using ETL_SQL.ReportBuilder;
+using ETL_SQL.Reporting;
 using ETL_SQL.Orchestrator;
 using ETL_SQL.ReportPlayer;
 using ETL_SQL.Core;

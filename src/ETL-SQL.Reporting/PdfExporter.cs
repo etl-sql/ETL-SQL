@@ -6,7 +6,7 @@ using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 
-namespace ETL_SQL.ReportBuilder
+namespace ETL_SQL.Reporting
 {
     /// <summary>
     /// Exports a <see cref="ReportManifest"/> to a PDF byte array using QuestPDF.
