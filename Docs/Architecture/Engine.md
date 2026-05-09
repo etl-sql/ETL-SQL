@@ -140,7 +140,7 @@ Each `IStatementHandler` advertises exactly one `Type SupportedStatementType { g
 ```
 Evaluator.Evaluate(Script, CancellationToken)   // ~line 318
   1. Clear LastResultSets, reset counters
-  2. Run LineageAnalyzer on the script
+  2. Run `ETL_SQL.Analysis.Lineage.LineageAnalyzer` on the script
   3. Throw ExecutionException if any Error-severity diagnostics
   4. Create root ExecutionNode, add to ExecutionTree
   5. foreach statement in script.Statements:
@@ -381,7 +381,7 @@ SQL connectors additionally implement this interface, which unlocks pushdown.
 
 ### Rule discovery
 
-`LinterFactory.CreateWithAllRules()` uses reflection to find all non-abstract `ILintRule` implementations in the `ETL-SQL.Core` assembly and instantiates them with `Activator.CreateInstance`. This means adding a new rule requires only creating a class in `ETL-SQL.Core/Linting/Rules/` — no registration needed.
+`LinterFactory.CreateWithAllRules()` uses reflection to find all non-abstract `ILintRule` implementations in the `ETL-SQL.Analysis` assembly and instantiates them with `Activator.CreateInstance`. This means adding a new rule requires only creating a class in `ETL-SQL.Analysis/Linting/Rules/` — no registration needed.
 
 Currently 18 rules:
 

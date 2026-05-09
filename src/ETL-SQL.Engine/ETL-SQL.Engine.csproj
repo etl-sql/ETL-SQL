@@ -11,6 +11,7 @@
    </ItemGroup>
  
    <ItemGroup>
+     <ProjectReference Include="..\ETL-SQL.Analysis\ETL-SQL.Analysis.csproj" />
      <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
    </ItemGroup>
  

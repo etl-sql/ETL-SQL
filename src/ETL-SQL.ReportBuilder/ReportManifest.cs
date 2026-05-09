@@ -77,6 +77,10 @@ namespace ETL_SQL.ReportBuilder
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Theme { get; set; }
 
+        [JsonPropertyName("styles")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? Styles { get; set; }
+
         [JsonPropertyName("navigation")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Navigation { get; set; }
@@ -290,12 +294,32 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("valueExpression")]
         public string? ValueExpression { get; set; }
 
+        [JsonPropertyName("valueSource")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ValueSource { get; set; }
+
+        [JsonPropertyName("valueColumn")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? ValueColumn { get; set; }
+
+        [JsonPropertyName("literalValue")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? LiteralValue { get; set; }
+
         // RUN_SCRIPT fields
         [JsonPropertyName("scriptPath")]
         public string? ScriptPath { get; set; }
 
         [JsonPropertyName("parameters")]
         public Dictionary<string, string>? Parameters { get; set; }
+
+        [JsonPropertyName("parameterColumns")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? ParameterColumns { get; set; }
+
+        [JsonPropertyName("literalParameters")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? LiteralParameters { get; set; }
     }
 
     /// <summary>A layout page with its slot→visual mapping.</summary>

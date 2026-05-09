@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Common;
 using ETL_SQL.Core.Common;
-using ETL_SQL.Core.Linting;
+using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Engine;
 using ETL_SQL.Engine.Services;

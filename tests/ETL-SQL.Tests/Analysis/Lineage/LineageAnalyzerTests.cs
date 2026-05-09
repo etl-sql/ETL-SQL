@@ -2,6 +2,7 @@ using Xunit;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Common;

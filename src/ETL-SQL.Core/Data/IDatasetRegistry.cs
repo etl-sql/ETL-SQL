@@ -27,7 +27,7 @@ namespace ETL_SQL.Core.Data
     public interface IDatasetRegistry
     {
         Task RegisterOrUpdate(DatasetMetadata metadata);
-        Task<DatasetMetadata?> Lookup(string name, string folderPath);
+        Task<DatasetMetadata?> Lookup(string name, string folderPath, string callerPermissions = "");
         Task<bool> Exists(string name, string folderPath);
         Task SetStale(string name, string folderPath);
         Task<IEnumerable<DatasetMetadata>> ListAll(string callerPermissions);

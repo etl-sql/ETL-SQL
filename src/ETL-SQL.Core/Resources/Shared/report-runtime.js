@@ -26,6 +26,15 @@
         return null;
     }
 
+    function getStyle(styles, key) {
+        if (!styles) return null;
+        const lookup = key.toLowerCase();
+        for (let k in styles) {
+            if (k.toLowerCase() === lookup) return styles[k];
+        }
+        return null;
+    }
+
     function getParam(params, name) {
         if (!params || !name) return undefined;
         const lookup = name.toLowerCase();
@@ -47,6 +56,20 @@
         if (!val) return false;
         const v = String(val).toUpperCase();
         return v === 'ON' || v === 'TRUE' || v === '1';
+    }
+
+    function inputTypeForParameter(meta) {
+        const type = (meta && meta.type ? String(meta.type) : '').toUpperCase();
+        if (['INT', 'INTEGER', 'BIGINT', 'SMALLINT', 'TINYINT', 'DECIMAL', 'NUMERIC', 'FLOAT', 'DOUBLE', 'REAL', 'MONEY'].includes(type)) {
+            return 'number';
+        }
+        if (['BOOL', 'BOOLEAN', 'BIT'].includes(type)) {
+            return 'checkbox';
+        }
+        if (['DATE', 'DATETIME', 'DATETIME2', 'DATETIMEOFFSET'].includes(type)) {
+            return 'date';
+        }
+        return 'text';
     }
 
     // In multi-report mode the server injects window.__API_BASE__ = '/reports/{name}/api'.
@@ -105,7 +128,7 @@
             const meta = manifest.parameterMetadata[name];
             if (meta.isRequired) {
                 required.push(meta);
-                const val = manifest.parameters[name];
+                const val = getParam(manifest.parameters, name);
                 if (val === undefined || val === null || val === "" || val === "null") {
                     missing.push(meta);
                 }
@@ -145,8 +168,10 @@
             label.textContent = meta.name.startsWith('@') ? meta.name.substring(1) : meta.name;
             
             const input = document.createElement('input');
-            input.type = meta.type === 'INT' || meta.type === 'DECIMAL' ? 'number' : 'text';
-            input.value = manifest.parameters[meta.name] || '';
+            input.type = inputTypeForParameter(meta);
+            const currentValue = getParam(manifest.parameters, meta.name) || '';
+            if (input.type === 'checkbox') input.checked = isOn(currentValue);
+            else input.value = currentValue;
             input.placeholder = meta.defaultValue || '';
             input.className = 'modal-input';
             
@@ -166,13 +191,16 @@
             const updates = { ...parameters }; // Start with current global state
             let allOk = true;
             for (const name in inputs) {
-                const val = inputs[name].value;
+                const input = inputs[name];
+                const val = input.type === 'checkbox'
+                    ? (input.checked ? 'TRUE' : 'FALSE')
+                    : input.value;
                 const meta = manifest.parameterMetadata[name];
                 if (meta.isRequired && !val) {
-                    inputs[name].classList.add('error');
+                    input.classList.add('error');
                     allOk = false;
                 } else {
-                    inputs[name].classList.remove('error');
+                    input.classList.remove('error');
                     updates[name] = val;
                 }
             }
@@ -246,8 +274,9 @@
                 : (firstVisible && firstVisible.name);
 
             manifest.pages.forEach(page => {
+                const reportStyles = manifest.styles || {};
                 const pageStyles = page.styles || {};
-                const pageTheme = pageStyles['THEME'] || pageStyles['theme'] || manifest.theme || null;
+                const pageTheme = getStyle(pageStyles, 'THEME') || getStyle(reportStyles, 'THEME') || manifest.theme || null;
                 const section = renderPage(manifest, page, pageSections, pageTheme);
                 root.appendChild(section);
 
@@ -304,23 +333,28 @@
         
         // Identify parameters that are marked as INPUT but don't have a corresponding visual SLICER
         const visuals = manifest.visuals || [];
-        const slicerParams = new Set();
+        const visualParams = new Set();
         visuals.forEach(v => {
             const type = (v.visualType || '').toUpperCase();
-            if (['SLICER', 'MULTISELECT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'SEARCH'].includes(type)) {
+            if ([
+                'SLICER', 'MULTISELECT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER',
+                'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'
+            ].includes(type)) {
                 const p = v.options && (v.options['data-parameter'] || v.options['PARAMETER'] || v.options['parameter']);
-                if (p) slicerParams.add(p.toLowerCase());
+                if (p) visualParams.add(p.toLowerCase());
                 
                 // Also check ACTIONS for SET_PARAMETER
                 (v.actions || []).forEach(a => {
-                    if (a.type === 'SET_PARAMETER' && a.target) slicerParams.add(a.target.toLowerCase());
+                    if (a.type === 'SET_PARAMETER' && a.parameterName) {
+                        visualParams.add(a.parameterName.toLowerCase());
+                    }
                 });
             }
         });
 
         const autoParams = [];
         for (const name in manifest.parameterMetadata) {
-            if (!slicerParams.has(name.toLowerCase())) {
+            if (!visualParams.has(name.toLowerCase())) {
                 autoParams.push(manifest.parameterMetadata[name]);
             }
         }
@@ -358,8 +392,10 @@
             inputGroup.className = 'input-group';
             
             const input = document.createElement('input');
-            input.type = 'text';
-            input.value = manifest.parameters[meta.name] || '';
+            input.type = inputTypeForParameter(meta);
+            const currentValue = getParam(manifest.parameters, meta.name) || '';
+            if (input.type === 'checkbox') input.checked = isOn(currentValue);
+            else input.value = currentValue;
             input.placeholder = meta.defaultValue || '';
             inputGroup.appendChild(input);
             
@@ -367,7 +403,9 @@
             applyBtn.innerHTML = '&#x2713;';
             applyBtn.onclick = () => {
                 const updates = { ...parameters }; // Batch everything
-                updates[meta.name] = input.value;
+                updates[meta.name] = input.type === 'checkbox'
+                    ? (input.checked ? 'TRUE' : 'FALSE')
+                    : input.value;
                 postParameters(updates, false).then(m => {
                     if (m) renderManifest(m);
                 });
@@ -566,14 +604,15 @@
         const div = document.createElement('div');
         const isScroll = (containerDef.containerType || '').toUpperCase() === 'SCROLL';
         div.className = isScroll ? 'container-scroll' : 'container-box';
+        const styles = containerDef.styles || {};
+        const containerTheme = getStyle(styles, 'THEME') || pageTheme;
 
         if (isScroll) {
-            const styles = containerDef.styles || {};
-            const height = styles['HEIGHT'] || styles['height'] || '400px';
+            const height = getStyle(styles, 'HEIGHT') || '400px';
             div.style.maxHeight = height;
         }
 
-        renderLayout(div, containerDef, manifest, pageTheme);
+        renderLayout(div, containerDef, manifest, containerTheme);
         container.appendChild(div);
     }
 
@@ -621,6 +660,8 @@
         // 3. Create Drawer
         const drawer = document.createElement('div');
         drawer.className = 'collapsible-drawer';
+        const styles = containerDef.styles || {};
+        const containerTheme = getStyle(styles, 'THEME') || pageTheme;
         
         const header = document.createElement('div');
         header.className = 'drawer-header';
@@ -669,7 +710,7 @@
         
         const content = document.createElement('div');
         content.className = 'drawer-content';
-        renderLayout(content, containerDef, manifest, pageTheme);
+        renderLayout(content, containerDef, manifest, containerTheme);
         drawer.appendChild(content);
         
         page.appendChild(drawer);
@@ -771,9 +812,9 @@
 
         // Apply WIDTH / HEIGHT / TOOLTIP from styles
         const vstyles = visual.styles || {};
-        const width   = vstyles['WIDTH'] || vstyles['width'];
-        const height  = vstyles['HEIGHT'] || vstyles['height'];
-        const tooltip = vstyles['TOOLTIP'] || vstyles['tooltip'] || visual.tooltip;
+        const width   = getStyle(vstyles, 'WIDTH');
+        const height  = getStyle(vstyles, 'HEIGHT');
+        const tooltip = getStyle(vstyles, 'TOOLTIP') || visual.tooltip;
 
         if (width)   card.style.width  = width;
         if (height)  card.style.height = height;
@@ -808,7 +849,7 @@
         }
 
         // Resolve effective theme: visual-level overrides page-level
-        const effectiveTheme = vstyles['THEME'] || vstyles['theme'] || pageTheme || null;
+        const effectiveTheme = getStyle(vstyles, 'THEME') || pageTheme || null;
         if (effectiveTheme) card.classList.add('theme-' + effectiveTheme.toLowerCase());
 
         switch (type) {
@@ -1211,7 +1252,6 @@
 
         const clickActions  = actionsFor(visual, 'ON_CLICK');
         const isClickable   = clickActions.length > 0;
-        const fmtRules      = visual.formattingRules || [];
         const crossFilter   = isOn((visual.options || {})['CROSS_FILTER']);
 
         // Register as a cross-filter target so applyPageCrossFilter can find it
@@ -1238,22 +1278,10 @@
         table.appendChild(thead);
 
         const tbody = document.createElement('tbody');
-        (visual.rows || []).forEach(row => {
+        (visual.rows || []).forEach((row, rowIndex) => {
             const tr = document.createElement('tr');
             if (isClickable) tr.style.cursor = 'pointer';
-            // Evaluate table conditional formatting per row
-            let rowColor = null;
-            for (const rule of fmtRules) {
-                if (!rule.condition) continue;
-                try {
-                    const fn = new Function(...visual.columns, "return " + rule.condition + ";");
-                    const parsedRow = row.map(v => isNaN(parseFloat(v)) ? v : parseFloat(v));
-                    if (fn(...parsedRow)) {
-                        rowColor = rule.color;
-                        break;
-                    }
-                } catch(e) {}
-            }
+            const rowColor = Array.isArray(visual.rowStyles) ? visual.rowStyles[rowIndex] : null;
             if (rowColor) { tr.style.color = rowColor; }
 
             visual.columns.forEach((col, ci) => {
@@ -2094,9 +2122,9 @@
         if (btn.tooltip && btn.tooltip.text) btnEl.title = btn.tooltip.text;
 
         // Apply inline styles from STYLE definition
-        const bg  = styles['BACKGROUND'] || styles['background'];
-        const fg  = styles['COLOR']      || styles['color'];
-        const pad = styles['PADDING']    || styles['padding'];
+        const bg  = getStyle(styles, 'BACKGROUND');
+        const fg  = getStyle(styles, 'COLOR');
+        const pad = getStyle(styles, 'PADDING');
         if (bg)  btnEl.style.background = bg;
         if (fg)  btnEl.style.color      = fg;
         if (pad) btnEl.style.padding    = pad;
@@ -2162,7 +2190,7 @@
                     if (a.keyColumn) batch['@' + a.keyColumn] = '';
                 });
                 setParamActions.forEach(a => {
-                    if (a.parameterName) batch[a.parameterName] = a.valueExpression || '';
+                    if (a.parameterName) batch[a.parameterName] = resolveActionValue(a, [], []);
                 });
 
                 if (Object.keys(batch).length > 0 && isWebMode) {
@@ -2351,6 +2379,35 @@
         return (visual.actions || []).filter(a => a.trigger === trigger);
     }
 
+    function resolveActionValue(action, rowData, columns, controlValue) {
+        const source = (action.valueSource || '').toUpperCase();
+        if (source === 'CONTROL_VALUE') return controlValue ?? '';
+        if (source === 'COLUMN') {
+            const colIdx = columns.findIndex(
+                c => c.toLowerCase() === (action.valueColumn || '').toLowerCase());
+            return colIdx >= 0 ? rowData[colIdx] : '';
+        }
+        if (source === 'LITERAL') return action.literalValue ?? '';
+        return action.literalValue ?? '';
+    }
+
+    function resolveActionParameters(action, rowData, columns) {
+        const result = {};
+        const columnParams = action.parameterColumns || {};
+        const literalParams = action.literalParameters || {};
+
+        Object.entries(columnParams).forEach(([name, column]) => {
+            const colIdx = columns.findIndex(c => c.toLowerCase() === String(column).toLowerCase());
+            result[name] = colIdx >= 0 ? String(rowData[colIdx] ?? '') : '';
+        });
+
+        Object.entries(literalParams).forEach(([name, value]) => {
+            result[name] = String(value ?? '');
+        });
+
+        return result;
+    }
+
     function executeAction(action, rowData, columns) {
         if (action.type === 'DRILL_DOWN') {
             const colIdx = columns.findIndex(
@@ -2385,10 +2442,7 @@
             }
 
         } else if (action.type === 'SET_PARAMETER') {
-            const expr   = action.valueExpression || '';
-            const colIdx = columns.findIndex(c => c.toLowerCase() === expr.toLowerCase());
-            const value  = colIdx >= 0 ? rowData[colIdx] : expr;
-            
+            const value = resolveActionValue(action, rowData, columns);
             const params = { [action.parameterName]: String(value ?? '') };
             if (vscode) {
                 vscode.postMessage({ type: 'refreshReport', parameters: params });
@@ -2397,14 +2451,7 @@
             }
         } else if (action.type === 'RUN_SCRIPT') {
             const scriptPath = action.scriptPath;
-            const actionParams = action.parameters || {};
-            const finalParams = {};
-            
-            for (const [pName, colName] of Object.entries(actionParams)) {
-                const colIdx = columns.findIndex(c => c.toLowerCase() === colName.toLowerCase());
-                const val = colIdx >= 0 ? rowData[colIdx] : colName;
-                finalParams[pName] = String(val ?? '');
-            }
+            const finalParams = resolveActionParameters(action, rowData, columns);
 
             if (isInteractive) {
                 postRunScript(scriptPath, finalParams).then(res => {

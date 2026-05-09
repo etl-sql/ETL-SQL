@@ -3,6 +3,10 @@ using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.Core.Data;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace ETL_SQL.ReportPortal.Tests;
 
@@ -194,6 +198,80 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
+    public async Task GoldenWorkflow_PublishExecuteInteractAndExport_RoundTrips()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Golden Workflow", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", "golden_workflow.rptsql");
+        var exportPath = Path.Combine(_factory.TempDir, "scripts", "golden_orders_export.csv");
+        File.Copy(GetGoldenWorkflowPath(), scriptPath, overwrite: true);
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = "Golden Workflow",
+            description = "End-to-end smoke target",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var executeRes = await AuthPost(token, $"/api/reports/{reportId}/execute", new
+        {
+            parameters = new Dictionary<string, string>
+            {
+                ["Region"] = "All",
+                ["MinMargin"] = "0",
+                ["ShowIssues"] = "1",
+                ["ExportPath"] = exportPath
+            }
+        });
+        Assert.Equal(HttpStatusCode.Accepted, executeRes.StatusCode);
+        var executeBody = await executeRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var jobId = executeBody!["jobId"]!.GetValue<string>();
+
+        var job = await WaitForJobAsync(token, jobId);
+        Assert.Equal("Completed", job["status"]!.GetValue<string>());
+
+        var snapshotRes = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=true");
+        Assert.Equal(HttpStatusCode.OK, snapshotRes.StatusCode);
+        var snapshot = await snapshotRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var manifest = snapshot!["manifest"]!.AsObject();
+        Assert.Equal("Golden Sales Operations Workflow", manifest["title"]!.GetValue<string>());
+        Assert.Equal(3, manifest["pages"]!.AsArray().Count);
+
+        var interactRes = await AuthPost(token, $"/api/reports/{reportId}/parameters", new
+        {
+            @params = new[]
+            {
+                new { name = "Region", value = "EMEA" },
+                new { name = "MinMargin", value = "500" },
+                new { name = "ExportPath", value = exportPath }
+            }
+        });
+        Assert.Equal(HttpStatusCode.OK, interactRes.StatusCode);
+        var filteredManifest = await interactRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var orderDetail = filteredManifest!["visuals"]!.AsArray()
+            .Select(v => v!.AsObject())
+            .Single(v => v["name"]!.GetValue<string>() == "OrderDetail");
+        Assert.NotEmpty(orderDetail["rows"]!.AsArray());
+
+        var exportRes = await AuthGet(token, $"/api/reports/{reportId}/export/csv?visual=OrderDetail");
+        Assert.Equal(HttpStatusCode.OK, exportRes.StatusCode);
+        Assert.StartsWith("text/csv", exportRes.Content.Headers.ContentType?.MediaType);
+        var csv = await exportRes.Content.ReadAsStringAsync();
+        Assert.Contains("OrderId,OrderDate,Region,CustomerID,ProductID,Quantity,UnitPrice,Revenue,Cost,Margin,Status", csv);
+        Assert.Contains("EMEA", csv);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task Report_ExecuteAndSnapshot_RoundTrips()
     {
         var token = await GetAdminTokenAsync();
@@ -312,6 +390,256 @@ CREATE VISUAL Total AS CARD (
         Assert.Equal(HttpStatusCode.BadRequest, updateRes.StatusCode);
     }
 
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task Report_ParametersRejectsPersistedSiblingScriptRootBypass()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Tampered Script", parentId = (int?)null });
+        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId  = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", "inside_params.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "DECLARE @Region STRING INPUT = 'All';");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = "Inside Params",
+            description = "",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var siblingRoot = Path.Combine(_factory.TempDir, "scripts2");
+        Directory.CreateDirectory(siblingRoot);
+        var siblingScript = Path.Combine(siblingRoot, "outside_params.rptsql");
+        await File.WriteAllTextAsync(siblingScript, "DECLARE @Region STRING INPUT = 'All';");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var entity = await db.Reports.FindAsync(reportId);
+            Assert.NotNull(entity);
+            entity!.ScriptPath = siblingScript;
+            await db.SaveChangesAsync();
+        }
+
+        var parametersRes = await AuthGet(token, $"/api/reports/{reportId}/parameters");
+
+        Assert.Equal(HttpStatusCode.Forbidden, parametersRes.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task SnapshotEndpointsRejectPersistedSiblingSnapshotRootBypass()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Tampered Snapshot", parentId = (int?)null });
+        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId  = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", "inside_snapshot.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "-- snapshot tamper test\n");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = "Snapshot Tamper",
+            description = "",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var siblingRoot = Path.Combine(_factory.TempDir, "snapshots2");
+        Directory.CreateDirectory(siblingRoot);
+        var siblingSnapshot = Path.Combine(siblingRoot, "outside.snapshot.json");
+        await File.WriteAllTextAsync(siblingSnapshot, "{}");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.ReportSnapshots.Add(new ReportSnapshot
+            {
+                ReportId = reportId,
+                ManifestPath = siblingSnapshot,
+                BuiltAt = DateTime.UtcNow,
+                BuiltBy = 1
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var snapshotRes = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=true");
+        var manifestRes = await AuthGet(token, $"/api/reports/{reportId}/snapshot/manifest");
+        var exportRes   = await AuthGet(token, $"/api/reports/{reportId}/export/csv");
+
+        Assert.Equal(HttpStatusCode.Forbidden, snapshotRes.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, manifestRes.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, exportRes.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task DatasetRegistry_RejectsSiblingDatasetRootBypass()
+    {
+        var siblingRoot = Path.Combine(_factory.TempDir, "datasets2");
+        Directory.CreateDirectory(siblingRoot);
+        var siblingDataset = Path.Combine(siblingRoot, "outside.parquet");
+
+        using var scope = _factory.Services.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            registry.RegisterOrUpdate(new DatasetMetadata
+            {
+                Name = "#outside",
+                FolderPath = "/reports",
+                ParquetFilePath = siblingDataset,
+                SourceQuery = "SELECT 1"
+            }));
+
+        Assert.Contains("DatasetRootPath", ex.Message);
+
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        Assert.False(await db.Datasets.AnyAsync(d => d.Name == "#outside"));
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task DatasetRegistry_StoresResolvedPathInsideDatasetRoot()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+
+        await registry.RegisterOrUpdate(new DatasetMetadata
+        {
+            Name = "#inside",
+            FolderPath = "/reports",
+            ParquetFilePath = "inside.parquet",
+            SourceQuery = "SELECT 1"
+        });
+
+        var metadata = await registry.Lookup("#inside", "/reports", "Admin");
+
+        Assert.NotNull(metadata);
+        Assert.Equal(Path.Combine(_factory.TempDir, "datasets", "inside.parquet"), metadata!.ParquetFilePath);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task DatasetRegistry_FiltersPrivateDatasetsByOwnerAclAndAdmin()
+    {
+        using var scope = _factory.Services.CreateScope();
+        var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var owner = new PortalUser { UserName = $"ds_owner_{suffix}", Email = $"ds_owner_{suffix}@test.local" };
+        var viewer = new PortalUser { UserName = $"ds_viewer_{suffix}", Email = $"ds_viewer_{suffix}@test.local" };
+        var outsider = new PortalUser { UserName = $"ds_outsider_{suffix}", Email = $"ds_outsider_{suffix}@test.local" };
+        db.Users.AddRange(owner, viewer, outsider);
+        await db.SaveChangesAsync();
+
+        var folder = new Folder { Name = $"Datasets {suffix}", Path = $"/datasets-{suffix}", OwnerId = owner.Id };
+        db.Folders.Add(folder);
+        await db.SaveChangesAsync();
+
+        var ownerReport = new Report
+        {
+            FolderId = folder.Id,
+            Name = $"Owner Report {suffix}",
+            ScriptPath = Path.Combine(_factory.TempDir, "scripts", $"owner_{suffix}.rptsql"),
+            CreatedBy = owner.Id
+        };
+        var otherReport = new Report
+        {
+            FolderId = folder.Id,
+            Name = $"Other Report {suffix}",
+            ScriptPath = Path.Combine(_factory.TempDir, "scripts", $"other_{suffix}.rptsql"),
+            CreatedBy = outsider.Id
+        };
+        db.Reports.AddRange(ownerReport, otherReport);
+        await db.SaveChangesAsync();
+
+        await registry.RegisterOrUpdate(new DatasetMetadata
+        {
+            Name = $"#public_{suffix}",
+            FolderPath = folder.Path,
+            ParquetFilePath = $"public_{suffix}.parquet",
+            SourceQuery = "SELECT 1",
+            AccessLevel = DatasetAccessLevel.Public,
+            OwningReportId = otherReport.Id
+        });
+        await registry.RegisterOrUpdate(new DatasetMetadata
+        {
+            Name = $"#owner_{suffix}",
+            FolderPath = folder.Path,
+            ParquetFilePath = $"owner_{suffix}.parquet",
+            SourceQuery = "SELECT 1",
+            AccessLevel = DatasetAccessLevel.Private,
+            OwningReportId = ownerReport.Id
+        });
+        await registry.RegisterOrUpdate(new DatasetMetadata
+        {
+            Name = $"#acl_{suffix}",
+            FolderPath = folder.Path,
+            ParquetFilePath = $"acl_{suffix}.parquet",
+            SourceQuery = "SELECT 1",
+            AccessLevel = DatasetAccessLevel.Private,
+            OwningReportId = otherReport.Id
+        });
+        await registry.RegisterOrUpdate(new DatasetMetadata
+        {
+            Name = $"#other_{suffix}",
+            FolderPath = folder.Path,
+            ParquetFilePath = $"other_{suffix}.parquet",
+            SourceQuery = "SELECT 1",
+            AccessLevel = DatasetAccessLevel.Private,
+            OwningReportId = otherReport.Id
+        });
+
+        var group = new Group { Name = $"dataset-viewers-{suffix}" };
+        db.Groups.Add(group);
+        await db.SaveChangesAsync();
+        db.UserGroups.Add(new UserGroup { UserId = viewer.Id, GroupId = group.Id });
+        var aclDataset = await db.Datasets.SingleAsync(d => d.Name == $"#acl_{suffix}" && d.FolderPath == folder.Path);
+        db.DatasetAcls.Add(new DatasetAcl
+        {
+            DatasetId = aclDataset.Id,
+            GroupId = group.Id,
+            Permission = DatasetPermission.Viewer
+        });
+        await db.SaveChangesAsync();
+
+        var anonymousList = (await registry.ListAll("")).Select(d => d.Name).ToHashSet();
+        Assert.Contains($"#public_{suffix}", anonymousList);
+        Assert.DoesNotContain($"#owner_{suffix}", anonymousList);
+        Assert.DoesNotContain($"#acl_{suffix}", anonymousList);
+        Assert.DoesNotContain($"#other_{suffix}", anonymousList);
+
+        var ownerList = (await registry.ListAll($"UserId={owner.Id}")).Select(d => d.Name).ToHashSet();
+        Assert.Contains($"#public_{suffix}", ownerList);
+        Assert.Contains($"#owner_{suffix}", ownerList);
+        Assert.DoesNotContain($"#acl_{suffix}", ownerList);
+        Assert.DoesNotContain($"#other_{suffix}", ownerList);
+
+        var viewerList = (await registry.ListAll($"UserId={viewer.Id}")).Select(d => d.Name).ToHashSet();
+        Assert.Contains($"#public_{suffix}", viewerList);
+        Assert.Contains($"#acl_{suffix}", viewerList);
+        Assert.DoesNotContain($"#owner_{suffix}", viewerList);
+        Assert.DoesNotContain($"#other_{suffix}", viewerList);
+
+        Assert.Null(await registry.Lookup($"#owner_{suffix}", folder.Path, $"UserId={outsider.Id}"));
+        Assert.NotNull(await registry.Lookup($"#owner_{suffix}", folder.Path, $"UserId={owner.Id}"));
+        Assert.Equal(4, (await registry.ListAll("Admin")).Count(d => d.FolderPath == folder.Path));
+    }
+
     // ── 5. Subscription CRUD ──────────────────────────────────────────────────
 
     [Fact]
@@ -375,6 +703,68 @@ CREATE VISUAL Total AS CARD (
         // Confirm gone
         var gone = await AuthGet(token, $"/api/subscriptions/{subId}");
         Assert.Equal(HttpStatusCode.NotFound, gone.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task Subscription_DeleteRejectsPersistedSiblingScriptRootBypass()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Sub Tamper", parentId = (int?)null });
+        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId  = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", "sub_tamper_report.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "-- sub tamper report\n");
+
+        var reportRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = "Sub Tamper Report",
+            description = "",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, reportRes.StatusCode);
+        var report   = await reportRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var subRes = await AuthPost(token, "/api/subscriptions", new
+        {
+            reportId,
+            schedule = "Daily",
+            format = "Link",
+            recipientEmail = "subscriber@test.local",
+            atTime = "08:00"
+        });
+        Assert.Equal(HttpStatusCode.Created, subRes.StatusCode);
+        var sub   = await subRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var subId = sub!["id"]!.GetValue<int>();
+
+        var siblingRoot = Path.Combine(_factory.TempDir, "scripts2");
+        Directory.CreateDirectory(siblingRoot);
+        var siblingScript = Path.Combine(siblingRoot, "outside_subscription.etlsql");
+        await File.WriteAllTextAsync(siblingScript, "PRINT 'outside';");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var entity = await db.Subscriptions.FindAsync(subId);
+            Assert.NotNull(entity);
+            entity!.ScriptPath = siblingScript;
+            await db.SaveChangesAsync();
+        }
+
+        var delRes = await AuthDelete(token, $"/api/subscriptions/{subId}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, delRes.StatusCode);
+        Assert.True(File.Exists(siblingScript));
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            Assert.True(await db.Subscriptions.AnyAsync(s => s.Id == subId));
+        }
     }
 
     // ── 6. Audit log ──────────────────────────────────────────────────────────
@@ -555,5 +945,48 @@ CREATE VISUAL Total AS CARD (
         var req = new HttpRequestMessage(HttpMethod.Delete, url);
         req.Headers.Authorization = new("Bearer", token);
         return _client.SendAsync(req);
+    }
+
+    private async Task<JsonObject> WaitForJobAsync(string token, string jobId)
+    {
+        JsonObject? job = null;
+        for (var i = 0; i < 50; i++)
+        {
+            var jobRes = await AuthGet(token, $"/api/jobs/{jobId}");
+            Assert.Equal(HttpStatusCode.OK, jobRes.StatusCode);
+            job = await jobRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var status = job!["status"]!.GetValue<string>();
+            if (status is "Completed" or "Failed" or "Cancelled")
+                return job;
+
+            await Task.Delay(100);
+        }
+
+        Assert.NotNull(job);
+        return job!;
+    }
+
+    private static string GetGoldenWorkflowPath()
+    {
+        var candidates = new[]
+        {
+            Directory.GetCurrentDirectory(),
+            AppContext.BaseDirectory
+        };
+
+        foreach (var start in candidates)
+        {
+            var dir = new DirectoryInfo(start);
+            while (dir is not null)
+            {
+                var candidate = Path.Combine(dir.FullName, "samples", "golden_workflow", "golden_workflow.rptsql");
+                if (File.Exists(candidate))
+                    return candidate;
+
+                dir = dir.Parent;
+            }
+        }
+
+        throw new FileNotFoundException("Could not locate samples/golden_workflow/golden_workflow.rptsql.");
     }
 }

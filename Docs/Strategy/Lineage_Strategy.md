@@ -122,7 +122,7 @@ Enforcement (type-checking, required-field validation) comes in Phase 3.
 
 **Priority: High — start after Phase 1**  
 **Effort: Medium (1–2 weeks)**  
-**Files:** `LineageTracker.cs` (LineageEntry), `LineageAnalyzer.cs`, `LineageGraphRenderer.cs`, `LineageDataSource.cs`
+**Files:** `ETL-SQL.Core/LineageTracker.cs` (LineageEntry and runtime state), `ETL-SQL.Analysis/Lineage/LineageAnalyzer.cs`, `ETL-SQL.Analysis/Lineage/LineageGraphRenderer.cs`, `ETL-SQL.Engine/Storage/LineageDataSource.cs`
 
 ### New Fields on LineageEntry
 

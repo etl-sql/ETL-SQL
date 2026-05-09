@@ -90,7 +90,7 @@ Document text
     │       Notify client: etlsql/scriptConnections
     │
     ├─ 4. Lineage Analysis
-    │       LineageAnalyzer(tracker).Analyze(script)
+    │       ETL_SQL.Analysis.Lineage.LineageAnalyzer(tracker).Analyze(script)
     │       Store tracker in DocumentStateStore
     │
     ├─ 5. Parser Diagnostics → LSP Diagnostics
@@ -158,7 +158,7 @@ Uses the `ILineageTracker` stored in `DocumentStateStore` to render a lineage gr
 
 - Hover over a `#temp` table → shows its lineage (source tables, transformations applied)
 - Hover over a connection → shows its type and registered aliases
-- Rendering via `LineageGraphRenderer` (produces Markdown for the hover tooltip)
+- Rendering via `ETL_SQL.Analysis.Lineage.LineageGraphRenderer` (produces Markdown for the hover tooltip)
 
 ### 5.3 Go-to-Definition (`DefinitionProvider`)
 
@@ -190,7 +190,7 @@ Delegates to `SqlFormatter.Format()` from `ETL_SQL.Core.Formatting`. Applies key
 
 **Bridge class:** `LanguageServerMetadataProvider`
 
-Implements `IMetadataProvider` (the interface expected by all `ILintRule` implementations in `ETL_SQL.Core.Linting.Rules`). Delegates every metadata query to `MetadataManager` with the document URI for connection scoping.
+Implements `IMetadataProvider` (the interface expected by all `ILintRule` implementations in `ETL_SQL.Analysis.Linting.Rules`). Delegates every metadata query to `MetadataManager` with the document URI for connection scoping.
 
 This means every linter rule that checks column existence, source table availability, or connection validity automatically benefits from the server's cached schema without any rule-level changes.
 

@@ -242,6 +242,24 @@ Edit the `.rptsql` file on disk. The portal detects the modification timestamp a
 
 Soft-delete via the report's **Delete** button. The record is marked `IsDeleted = true` and hidden from users; snapshots are retained on disk. Hard deletion requires removing the database record and snapshot files manually.
 
+### 6.4 Dataset Permissions
+
+Cross-report persisted datasets are still experimental. Until the dataset explorer and refresh APIs are complete, the registry enforces conservative access rules so private datasets cannot leak through list or lookup operations.
+
+| Dataset state | Who can see or use it |
+| :--- | :--- |
+| `Public` | Any authenticated portal caller. |
+| `Private` with owning report | Admins and the user who published the owning report. |
+| `Private` with dataset ACL | Admins and members of groups granted `Viewer`, `Editor`, or `Owner` on that dataset. |
+| `Private` with no owner or ACL | Admins only. |
+
+Dataset permissions are independent of folder ACLs. Folder permissions control report browsing and execution; dataset ACLs control cross-report dataset reuse. A user who can run a report does not automatically gain access to every private dataset in the portal.
+
+All dataset file paths are also constrained to `Portal:DatasetRootPath`. ACLs cannot grant access to a dataset record whose backing file is outside that configured root.
+
+> [!IMPORTANT]
+> Keep cross-report persisted datasets marked experimental until private dataset enforcement exists on every future dataset-facing endpoint: list, lookup, search, snapshot-backed reads, export, refresh, and API browsing.
+
 ---
 
 ## 7. SMTP Connections

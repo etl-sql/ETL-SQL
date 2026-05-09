@@ -69,6 +69,7 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        [Trait("Category", "Integration")]
         public async Task HashMatch_JobRuns_HistoryRecordsHashMatchedTrue()
         {
             var hash = ComputeHash(Script);
@@ -87,6 +88,7 @@ namespace ETL_SQL.Tests.Orchestration
         }
 
         [Fact]
+        [Trait("Category", "Integration")]
         public async Task HashMismatch_WarnPolicy_JobRunsAndRecordsHashMatchedFalse()
         {
             const string storedHash = "sha256:0000000000000000000000000000000000000000000000000000000000000000";

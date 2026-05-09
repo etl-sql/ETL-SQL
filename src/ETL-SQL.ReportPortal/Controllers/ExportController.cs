@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ETL_SQL.ReportPortal.Data;
+using ETL_SQL.ReportPortal.Services;
 using ETL_SQL.ReportBuilder;
 
 namespace ETL_SQL.ReportPortal.Controllers;
@@ -13,7 +14,8 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [Route("api/reports/{id:int}/export")]
 [Authorize]
 public class ExportController(
-    PortalDbContext  db) : ControllerBase
+    PortalDbContext  db,
+    PortalConfig     portalConfig) : ControllerBase
 {
     // ── Per-user PDF rate limit (tokens per minute) ────────────────────────────
     private static readonly ConcurrentDictionary<int, (int Count, DateTime WindowStart)> _pdfBucket = new();
@@ -40,22 +42,28 @@ public class ExportController(
     }
 
     // ── Load manifest from latest snapshot ────────────────────────────────────
-    private async Task<(ReportManifest? manifest, string? error)> LoadManifestAsync(int reportId)
+    private async Task<(ReportManifest? manifest, string? error, bool forbidden)> LoadManifestAsync(int reportId)
     {
         var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted);
-        if (report is null) return (null, "Report not found");
+        if (report is null) return (null, "Report not found", false);
 
         var snapshot = await db.ReportSnapshots
             .Where(s => s.ReportId == reportId)
             .OrderByDescending(s => s.BuiltAt)
             .FirstOrDefaultAsync();
 
-        if (snapshot is null || !System.IO.File.Exists(snapshot.ManifestPath))
-            return (null, "No snapshot available");
+        if (snapshot is null)
+            return (null, "No snapshot available", false);
+
+        if (!PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath))
+            return (null, "Snapshot path is outside the configured snapshot directory", true);
+
+        if (!System.IO.File.Exists(resolvedManifestPath))
+            return (null, "No snapshot available", false);
 
         var store    = new SnapshotStore();
-        var manifest = await store.LoadAsync(snapshot.ManifestPath);
-        return manifest is null ? (null, "Failed to load snapshot") : (manifest, null);
+        var manifest = await store.LoadAsync(resolvedManifestPath);
+        return manifest is null ? (null, "Failed to load snapshot", false) : (manifest, null, false);
     }
 
     // ── 4.1  GET /api/reports/{id}/export/csv?visual=<name> ──────────────────
@@ -64,7 +72,8 @@ public class ExportController(
     {
         if (!await CanReadAsync(id)) return Forbid();
 
-        var (manifest, err) = await LoadManifestAsync(id);
+        var (manifest, err, forbidden) = await LoadManifestAsync(id);
+        if (forbidden) return Forbid();
         if (manifest is null) return NotFound(new { error = err });
 
         // Choose visuals: specific one, or all TABLE visuals if none specified
@@ -131,7 +140,8 @@ public class ExportController(
             _pdfBucket[userId] = (bucket.Count + 1, bucket.WindowStart);
         }
 
-        var (manifest, err) = await LoadManifestAsync(id);
+        var (manifest, err, forbidden) = await LoadManifestAsync(id);
+        if (forbidden) return Forbid();
         if (manifest is null) return NotFound(new { error = err });
 
         byte[] pdfBytes;

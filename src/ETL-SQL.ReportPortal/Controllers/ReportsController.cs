@@ -54,14 +54,18 @@ public class ReportsController : ControllerBase
     private ReportDto ToDto(Report r, ReportSnapshot? snap)
     {
         bool isStale = false;
-        if (snap is not null && System.IO.File.Exists(r.ScriptPath))
-            isStale = System.IO.File.GetLastWriteTimeUtc(r.ScriptPath) > snap.BuiltAt;
+        if (snap is not null
+            && PortalPathGuard.TryResolveScript(portalConfig, r.ScriptPath, out var resolvedScriptPath)
+            && System.IO.File.Exists(resolvedScriptPath))
+            isStale = System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath) > snap.BuiltAt;
 
         bool scriptChanged = false;
-        if (r.PublishedScriptHash is not null && System.IO.File.Exists(r.ScriptPath))
+        if (r.PublishedScriptHash is not null
+            && PortalPathGuard.TryResolveScript(portalConfig, r.ScriptPath, out resolvedScriptPath)
+            && System.IO.File.Exists(resolvedScriptPath))
         {
             var currentHash = "sha256:" + Convert.ToHexString(
-                SHA256.HashData(System.IO.File.ReadAllBytes(r.ScriptPath))).ToLowerInvariant();
+                SHA256.HashData(System.IO.File.ReadAllBytes(resolvedScriptPath))).ToLowerInvariant();
             scriptChanged = !string.Equals(currentHash, r.PublishedScriptHash, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -105,7 +109,7 @@ public class ReportsController : ControllerBase
         if (!await db.Folders.AnyAsync(f => f.Id == req.FolderId))
             return NotFound("Folder not found");
 
-        if (!SafePath.TryResolveWithinRoot(portalConfig.ScriptRootPath, req.ScriptPath, out var resolved))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, req.ScriptPath, out var resolved))
             return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
 
         var lastModified = System.IO.File.Exists(resolved)
@@ -182,7 +186,7 @@ public class ReportsController : ControllerBase
             if (string.IsNullOrWhiteSpace(scriptRoot))
                 return BadRequest(new { error = "ScriptRootPath is not configured." });
 
-            if (!SafePath.TryResolveWithinRoot(scriptRoot, req.ScriptPath, out var resolved))
+            if (!PortalPathGuard.TryResolveScript(portalConfig, req.ScriptPath, out var resolved))
                 return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
 
             if (!System.IO.File.Exists(resolved))
@@ -216,10 +220,13 @@ public class ReportsController : ControllerBase
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null) return Forbid();
 
-        if (!System.IO.File.Exists(report.ScriptPath))
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
+        if (!System.IO.File.Exists(resolvedScriptPath))
             return Ok(Array.Empty<ReportParameterDto>());
 
-        var scriptText = await System.IO.File.ReadAllTextAsync(report.ScriptPath);
+        var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);
         var tokens     = new Lexer(scriptText).Tokenize();
         var parser     = new CoreParser(tokens, scriptText);
         var script     = parser.Parse();
@@ -301,7 +308,7 @@ public class ReportsController : ControllerBase
             return BadRequest(new { error = "Only .json and .geojson map files are supported." });
         }
 
-        if (!SafePath.TryResolveWithinRoot(portalConfig.MapRootPath, path, out var resolved))
+        if (!PortalPathGuard.TryResolveMap(portalConfig, path, out var resolved))
             return Forbid();
 
         if (!System.IO.File.Exists(resolved))

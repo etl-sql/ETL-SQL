@@ -62,6 +62,10 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Resolve port: CLI arg > appsettings > default 0 (ephemeral). Port 0 = OS-assigned dynamic port.
 int port = portArg ?? builder.Configuration.GetValue<int>("ReportPlayer:Port", 0);
+int executionTimeoutSeconds = builder.Configuration.GetValue<int?>("ReportPlayer:ExecutionTimeoutSeconds")
+    ?? builder.Configuration.GetValue<int?>("Portal:Resources:ExecutionTimeoutSeconds")
+    ?? 30;
+var executionTimeout = TimeSpan.FromSeconds(Math.Max(1, executionTimeoutSeconds));
 
 // We need a ServiceProvider to build the services, but we also want to register them.
 // In Phase 9F, these are effectively singletons.
@@ -71,13 +75,13 @@ if (multiMode)
 {
     // For Multi-mode, we register the factory itself.
     builder.Services.AddSingleton<DashboardServiceFactory>(sp => 
-        new DashboardServiceFactory(Path.GetFullPath(manifestPath!), sp.GetRequiredService<IServiceScopeFactory>()));
+        new DashboardServiceFactory(Path.GetFullPath(manifestPath!), sp.GetRequiredService<IServiceScopeFactory>(), executionTimeout));
 }
 else
 {
     // For Single-mode, we register the service.
     builder.Services.AddSingleton<DashboardService>(sp => 
-        new DashboardService(Path.GetFullPath(scriptPath!), sp.GetRequiredService<IServiceScopeFactory>()));
+        new DashboardService(Path.GetFullPath(scriptPath!), sp.GetRequiredService<IServiceScopeFactory>(), executionTimeout));
 }
 
 // ── Logging via LoggerService ──────────────────────────────────────
@@ -246,9 +250,9 @@ app.MapGet("/maps/custom", async (HttpContext ctx) =>
     if (string.IsNullOrWhiteSpace(rawPath))
         return Results.BadRequest("path query parameter is required");
 
-    // Resolve relative paths against the script directory (single-mode) or CWD (multi-mode).
+    // Resolve relative paths against the script directory (single-mode) or manifest directory (multi-mode).
     string baseDir = multiMode
-        ? Directory.GetCurrentDirectory()
+        ? ctx.RequestServices.GetRequiredService<DashboardServiceFactory>().ManifestDirectory
         : Path.GetDirectoryName(Path.GetFullPath(scriptPath!)) ?? Directory.GetCurrentDirectory();
 
     if (Path.IsPathRooted(rawPath))

@@ -1262,7 +1262,7 @@ Removes the theme from memory and deletes the `.json` file from disk.
 
 ## CREATE STYLE
 
-Defines a named, reusable style that can be applied to any `CREATE VISUAL`, `CREATE PAGE`, or `CREATE CONTAINER` statement. Properties defined in the named style act as defaults; any inline `STYLE (...)` block on the target overrides them.
+Defines a named, reusable style that can be applied to `CREATE VISUAL`, `CREATE PAGE`, `CREATE CONTAINER`, and `CREATE BUTTON` statements. Properties defined in the named style act as defaults; any inline `STYLE (...)` block on the target overrides them.
 
 ```
 CREATE STYLE <name> (
@@ -1325,6 +1325,20 @@ CREATE PAGE Main AS LAYOUT (
 ```
 
 > Named styles are resolved at manifest build time and merged into the target's final style map. They are not emitted as a separate entity in the manifest.
+
+### Style Cascade
+
+Report manifests use one cascade everywhere. Later layers override earlier layers:
+
+1. Built-in runtime and chart theme defaults.
+2. Report-level defaults from `SET REPORT`, including `SET REPORT THEME`.
+3. Page-level named and inline styles.
+4. Container-level named and inline styles.
+5. Visual/button named style.
+6. Visual/button inline `STYLE (...)`.
+7. Runtime interaction state such as hover, selection, and pending parameters.
+
+The manifest contains resolved `styles` objects for report, page, container, button, and visual objects. Browser hosts render those resolved objects instead of re-reading `CREATE STYLE` definitions.
 
 ---
 

@@ -18,6 +18,7 @@ namespace ETL_SQL.Tests.Orchestration
     public class SchedulerRetryTests
     {
         [Fact]
+        [Trait("Category", "Integration")]
         public async Task ExecuteJobAsync_RetriesOnFailure_ExponentialBackoff()
         {
             // Arrange

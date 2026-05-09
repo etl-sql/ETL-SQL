@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Linting;
+using ETL_SQL.Analysis.Linting;
 
 namespace ETL_SQL.LSP
 {

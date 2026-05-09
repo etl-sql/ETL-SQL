@@ -8,6 +8,12 @@ namespace ETL_SQL.ReportBuilder.Builders
     public class PageBuilder(StyleBuilder styleBuilder)
     {
         public PageManifest Build(string name, CreatePageStatement pStmt)
+            => Build(name, pStmt, null);
+
+        public PageManifest Build(
+            string name,
+            CreatePageStatement pStmt,
+            IReadOnlyDictionary<string, string>? inheritedStyles)
         {
             var (title, titleMd) = styleBuilder.ResolveMarkdown(pStmt.Title, pStmt.TitleIsMarkdown);
             var (subtitle, subtitleMd) = styleBuilder.ResolveMarkdown(pStmt.Subtitle, pStmt.SubtitleIsMarkdown);
@@ -28,7 +34,7 @@ namespace ETL_SQL.ReportBuilder.Builders
 
 
             // Styles
-            var resolvedStyles = styleBuilder.ResolveStyles(pStmt.StyleName, pStmt.Styles);
+            var resolvedStyles = styleBuilder.ResolveStyles(pStmt.StyleName, pStmt.Styles, inheritedStyles);
             if (resolvedStyles.Count > 0)
                 pm.Styles = resolvedStyles;
 

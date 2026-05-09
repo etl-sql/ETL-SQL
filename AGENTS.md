@@ -242,7 +242,44 @@ For full engine coding standards, see **[Standards/Connectors_Standards.md](file
 
 ---
 
-## 9. Common Mistakes to Avoid
+## 9. Shared Report Runtime Assets
+
+The report browser runtime has exactly one source of truth:
+
+```
+src/ETL-SQL.Core/Resources/Shared/
+```
+
+Files copied under these host folders are generated sync outputs and must not be edited directly:
+
+- `src/ETL-SQL.ReportPlayer/wwwroot/`
+- `src/ETL-SQL.ReportPortal/wwwroot/js/`
+- `src/ETL-SQL.ReportPortal/wwwroot/css/`
+- `src/etl-sql-vscode/media/`
+
+When changing report runtime JavaScript, CSS, themes, or shared browser dependencies:
+
+1. Edit the canonical file in `src/ETL-SQL.Core/Resources/Shared/`.
+2. Run `.\scripts\sync-assets.ps1`.
+3. Run `.\scripts\sync-assets.ps1 -Check`.
+
+Do not "fix" drift by editing generated host copies. The check step compares host copies to the canonical shared source and will fail if they diverge.
+
+---
+
+## 10. Source Boundary Rules for Agents
+
+Before moving source files, projects, report runtime assets, or host-owned behavior, read **[Source_Boundary_Migration_Plan.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Strategy/Source_Boundary_Migration_Plan.md)**.
+
+- Keep Core focused on shared language contracts, Engine focused on execution, Connectors focused on provider I/O, and host shells focused on hosting.
+- Move linting, lineage, explain, dialect checks, help verification, and diagnostics toward `ETL-SQL.Analysis` in small, testable steps.
+- Keep report semantics in the reporting layer; ReportPlayer, ReportPortal, and VS Code should host reports, not fork manifest, style, visual, page, dataset, or chart behavior.
+- Preserve the VS Code extension's ecosystem-facing `src/etl-sql-vscode` folder/package naming unless there is a deliberate release plan.
+- Do not start source cleanup with a broad restructure. Prefer one ownership boundary at a time, update docs/tests with the move, and leave compatibility shims while hosts migrate.
+
+---
+
+## 11. Common Mistakes to Avoid
 
 | Mistake | Correct pattern |
 | :--- | :--- |

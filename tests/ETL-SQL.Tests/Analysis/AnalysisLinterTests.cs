@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Linting;
-using ETL_SQL.Core.Linting.Rules;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Analysis.Linting.Rules;
 
 
 namespace ETL_SQL.Tests.Analysis

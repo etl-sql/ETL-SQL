@@ -14,6 +14,7 @@ using ETL_SQL.Orchestrator.Channels;
 using ETL_SQL.Orchestrator;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Data;
 using ETL_SQL.Engine.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -47,6 +48,7 @@ Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(portalConfig.Da
 Directory.CreateDirectory(Path.GetFullPath(portalConfig.ScriptRootPath));
 Directory.CreateDirectory(Path.GetFullPath(portalConfig.SnapshotDirectory));
 Directory.CreateDirectory(Path.GetFullPath(portalConfig.MapRootPath));
+Directory.CreateDirectory(Path.GetFullPath(portalConfig.DatasetRootPath));
 
 // ── EF Core / SQLite ──────────────────────────────────────────────────────────
 var dbPath = Path.GetFullPath(portalConfig.DatabasePath);
@@ -119,6 +121,7 @@ builder.Services.AddSwaggerGen(c =>
 
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.TokenService>();
 builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
+builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SmtpPasswordProtector>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorDbLocator>();
 

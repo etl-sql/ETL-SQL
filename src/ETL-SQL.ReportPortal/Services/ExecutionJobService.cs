@@ -104,6 +104,16 @@ public class ExecutionJobService : IDisposable
 
         try
         {
+            if (!PortalPathGuard.TryResolveScript(_config, scriptPath, out var resolvedScriptPath))
+                throw new UnauthorizedAccessException("Report script path is outside the configured script root.");
+            scriptPath = resolvedScriptPath;
+
+            if (!PortalPathGuard.TryResolveSnapshot(
+                    _config,
+                    $"report_{job.ReportId}_{job.Id}.snapshot.json",
+                    out var manifestPath))
+                throw new UnauthorizedAccessException("Snapshot path is outside the configured snapshot directory.");
+
             // Hash the script file at execution time for integrity tracking
             string? runTimeHash = null;
             bool? hashMatched = null;
@@ -113,7 +123,6 @@ public class ExecutionJobService : IDisposable
                     SHA256.HashData(System.IO.File.ReadAllBytes(scriptPath))).ToLowerInvariant();
             }
 
-            string? manifestPath = null;
             if (_channel is HttpJobChannelClient)
             {
                 _log.LogInformation("Submitting execution job {JobId} to remote orchestrator", job.Id);
@@ -140,23 +149,21 @@ public class ExecutionJobService : IDisposable
                     await Task.Delay(1000, cts.Token);
                 }
                 
-                // Orchestrator saved it to the shared volume; path is deterministic
-                manifestPath = Path.Combine(Path.GetFullPath(_config.SnapshotDirectory), $"report_{job.ReportId}_{job.Id}.snapshot.json");
+                // Orchestrator saved it to the shared volume; path is deterministic and already root-checked.
             }
             else
             {
                 // Use an independent DashboardService for snapshots (not the session cache)
-                await using var svc = new ETL_SQL.ReportPlayer.DashboardService(scriptPath, _scopeFactory);
+                var dashboardTimeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
+                await using var svc = new ETL_SQL.ReportPlayer.DashboardService(scriptPath, _scopeFactory, dashboardTimeout);
 
                 if (parameters is { Count: > 0 })
                     await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));
 
                 var manifest = await svc.RebuildAsync().WaitAsync(cts.Token);
 
-                // Save manifest to portal's SnapshotDirectory
-                var snapshotDir = Path.GetFullPath(_config.SnapshotDirectory);
-                Directory.CreateDirectory(snapshotDir);
-                manifestPath = Path.Combine(snapshotDir, $"report_{job.ReportId}_{job.Id}.snapshot.json");
+                // Save manifest to portal's SnapshotDirectory.
+                Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);
 
                 var store = new SnapshotStore();
                 await store.SaveAsync(manifest, manifestPath);

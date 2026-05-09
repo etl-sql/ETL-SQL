@@ -1,4 +1,5 @@
 using ETL_SQL.Common;
+using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using System;

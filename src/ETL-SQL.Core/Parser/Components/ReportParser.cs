@@ -574,7 +574,7 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.COLLAPSIBLE))
                 {
                     Consume(TokenType.EQUALS, "Expected '=' after COLLAPSIBLE");
-                    isCollapsible = _parser.IsOn();
+                    isCollapsible = ParseOnOffValue();
                 }
                 else if (Match(TokenType.ICON))
                 {
@@ -584,7 +584,7 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.PINNABLE))
                 {
                     Consume(TokenType.EQUALS, "Expected '=' after PINNABLE");
-                    isPinnable = _parser.IsOn();
+                    isPinnable = ParseOnOffValue();
                 }
                 else
                 {

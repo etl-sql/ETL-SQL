@@ -33,6 +33,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
         Directory.CreateDirectory(Path.Combine(TempDir, "scripts"));
         Directory.CreateDirectory(Path.Combine(TempDir, "snapshots"));
         Directory.CreateDirectory(Path.Combine(TempDir, "maps"));
+        Directory.CreateDirectory(Path.Combine(TempDir, "datasets"));
         Directory.CreateDirectory(Path.Combine(TempDir, "keys"));
         File.WriteAllBytes(Path.Combine(TempDir, "etlsql.db"), []);
     }
@@ -43,6 +44,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
         var scriptRoot   = Path.Combine(TempDir, "scripts");
         var snapshotDir  = Path.Combine(TempDir, "snapshots");
         var mapRoot      = Path.Combine(TempDir, "maps");
+        var datasetRoot  = Path.Combine(TempDir, "datasets");
         var orchDbPath   = Path.Combine(TempDir, "etlsql.db");
         const string jwtSecret = "integration-test-secret-key-1234567890";
 
@@ -57,6 +59,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 ["Portal:ScriptRootPath"]         = scriptRoot,
                 ["Portal:SnapshotDirectory"]      = snapshotDir,
                 ["Portal:MapRootPath"]            = mapRoot,
+                ["Portal:DatasetRootPath"]         = datasetRoot,
                 ["Portal:Jwt:Secret"]             = jwtSecret,
                 ["Portal:Jwt:ExpiryMinutes"]      = "60",
                 ["Portal:Jwt:RefreshExpiryDays"]  = "7",
@@ -85,6 +88,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 ScriptRootPath    = scriptRoot,
                 SnapshotDirectory = snapshotDir,
                 MapRootPath       = mapRoot,
+                DatasetRootPath   = datasetRoot,
                 Jwt = new JwtConfig { Secret = jwtSecret, ExpiryMinutes = 60, RefreshExpiryDays = 7 },
                 FirstRun          = new FirstRunConfig { AdminUsername = "admin" },
                 Orchestrator      = new OrchestratorConfig { DatabasePath = orchDbPath },

@@ -158,10 +158,16 @@ public class SubscriptionsController(
         if (req.IsActive.HasValue)            sub.IsActive         = req.IsActive.Value;
         if (parametersChanged)               sub.ParametersJson    = SerializeParams(req.Parameters);
 
-        if (scriptNeedsRewrite && !string.IsNullOrEmpty(sub.ScriptPath) && System.IO.File.Exists(sub.ScriptPath))
+        if (scriptNeedsRewrite && !string.IsNullOrEmpty(sub.ScriptPath))
         {
-            var newParams = req.Parameters ?? DeserializeParams(sub.ParametersJson);
-            RewriteScriptParameters(sub.ScriptPath, newParams, formatChanged ? sub.Format : null);
+            if (!TryResolveSubscriptionScript(sub.ScriptPath, out var resolvedScriptPath))
+                return Forbid();
+
+            if (System.IO.File.Exists(resolvedScriptPath))
+            {
+                var newParams = req.Parameters ?? DeserializeParams(sub.ParametersJson);
+                RewriteScriptParameters(resolvedScriptPath, newParams, formatChanged ? sub.Format : null);
+            }
         }
 
         // Sync the Orchestrator job if schedule or active state changed
@@ -199,6 +205,10 @@ public class SubscriptionsController(
         if (!IsAdmin && sub.UserId != CurrentUserId) return Forbid();
 
         var jobName = $"{SubPrefix}{sub.Id}:{sub.Report?.Name}";
+        string? resolvedScriptPath = null;
+        if (!string.IsNullOrEmpty(sub.ScriptPath)
+            && !TryResolveSubscriptionScript(sub.ScriptPath, out resolvedScriptPath))
+            return Forbid();
 
         var orchDbPath = dbLocator.Resolve();
         if (orchDbPath is not null)
@@ -208,8 +218,8 @@ public class SubscriptionsController(
             await store.DeleteJobAsync(jobName);
         }
 
-        if (!string.IsNullOrEmpty(sub.ScriptPath) && System.IO.File.Exists(sub.ScriptPath))
-            System.IO.File.Delete(sub.ScriptPath);
+        if (!string.IsNullOrEmpty(resolvedScriptPath) && System.IO.File.Exists(resolvedScriptPath))
+            System.IO.File.Delete(resolvedScriptPath);
 
         db.Subscriptions.Remove(sub);
         await db.SaveChangesAsync();
@@ -318,9 +328,10 @@ public class SubscriptionsController(
         string recipientEmail, string? atTime,
         Dictionary<string, string>? parameters)
     {
-        var scriptDir  = System.IO.Path.GetFullPath(config.ScriptRootPath);
         var scriptName = $"sub_{sub.Id}_{SanitizeName(report.Name)}.etlsql";
-        var scriptPath = System.IO.Path.Combine(scriptDir, "subscriptions", scriptName);
+        if (!PortalPathGuard.TryResolveScript(config, System.IO.Path.Combine("subscriptions", scriptName), out var scriptPath))
+            throw new InvalidOperationException("Subscription script path must be within the configured script root.");
+
         System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(scriptPath)!);
 
         var reportTitle = report.Name;
@@ -445,6 +456,13 @@ public class SubscriptionsController(
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
+
+    private bool TryResolveSubscriptionScript(string? scriptPath, out string resolved)
+    {
+        resolved = string.Empty;
+        return !string.IsNullOrWhiteSpace(scriptPath)
+            && PortalPathGuard.TryResolveScript(config, scriptPath, out resolved);
+    }
 
     private static (int interval, string unit) ParseSchedule(string? schedule) =>
         schedule?.ToUpperInvariant() switch

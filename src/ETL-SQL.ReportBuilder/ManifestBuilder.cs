@@ -68,6 +68,9 @@ namespace ETL_SQL.ReportBuilder
                     ExecutionTimeMs     = _ctx.Telemetry.LastExecutionTimeMs
                 }
             };
+            var reportStyles = _styleBuilder.ResolveReportStyles();
+            if (reportStyles.Count > 0)
+                manifest.Styles = reportStyles;
 
             // ── Visuals ──────────────────────────────────────────────────────
             foreach (var (name, vStmt) in _ctx.ReportContext.VisualDefinitions)
@@ -78,7 +81,7 @@ namespace ETL_SQL.ReportBuilder
             // ── Pages ────────────────────────────────────────────────────────
             foreach (var (name, pStmt) in _ctx.ReportContext.PageDefinitions)
             {
-                manifest.Pages.Add(_pageBuilder.Build(name, pStmt));
+                manifest.Pages.Add(_pageBuilder.Build(name, pStmt, reportStyles));
             }
 
             // ── Containers ───────────────────────────────────────────────────
@@ -87,7 +90,7 @@ namespace ETL_SQL.ReportBuilder
                 manifest.Containers = new();
                 foreach (var (name, cStmt) in _ctx.ReportContext.ContainerDefinitions)
                 {
-                    var resolvedStyles = _styleBuilder.ResolveStyles(cStmt.StyleName, cStmt.Styles);
+                    var resolvedStyles = _styleBuilder.ResolveStyles(cStmt.StyleName, cStmt.Styles, reportStyles);
                     var (title, titleMd) = _styleBuilder.ResolveMarkdown(cStmt.Title, cStmt.TitleIsMarkdown);
                     var (subtitle, subtitleMd) = _styleBuilder.ResolveMarkdown(cStmt.Subtitle, cStmt.SubtitleIsMarkdown);
 
@@ -140,7 +143,7 @@ namespace ETL_SQL.ReportBuilder
                 manifest.Buttons = new();
                 foreach (var (name, bStmt) in _ctx.ReportContext.ButtonDefinitions)
                 {
-                    var resolvedStyles = _styleBuilder.ResolveStyles(bStmt.StyleName, bStmt.Styles);
+                    var resolvedStyles = _styleBuilder.ResolveStyles(bStmt.StyleName, bStmt.Styles, reportStyles);
                     var bm = new ButtonManifest
                     {
                         Name       = name,
@@ -272,6 +275,7 @@ namespace ETL_SQL.ReportBuilder
             vm.Styles = newVm.Styles;
             vm.SeriesDefs = newVm.SeriesDefs;
             vm.FormattingRules = newVm.FormattingRules;
+            vm.RowStyles = newVm.RowStyles;
             vm.Overlays = newVm.Overlays;
             vm.HighlightRows = newVm.HighlightRows;
         }
@@ -292,7 +296,9 @@ namespace ETL_SQL.ReportBuilder
                     Type            = "SET_PARAMETER",
                     Trigger         = sp.Trigger,
                     ParameterName   = sp.ParameterName,
-                    ValueExpression = sp.ValueExpression
+                    ValueExpression = sp.ValueExpression,
+                    ValueSource     = "LITERAL",
+                    LiteralValue    = sp.ValueExpression
                 },
                 ClearFiltersAction cf => new VisualActionManifest
                 {

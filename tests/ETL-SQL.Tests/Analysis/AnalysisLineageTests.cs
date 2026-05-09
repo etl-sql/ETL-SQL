@@ -1,4 +1,5 @@
 using ETL_SQL.Core;
+using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Engine;
 using ETL_SQL.Data;
 using ETL_SQL.App;

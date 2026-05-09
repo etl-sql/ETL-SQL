@@ -26,17 +26,20 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore ETL-SQL.slnx
 
+      - name: Check shared report runtime assets
+        shell: pwsh
+        run: .\scripts\sync-assets.ps1 -Check
+
       - name: Build
         run: dotnet build ETL-SQL.slnx --no-restore --configuration Release
 
+      - name: Run smoke lanes
+        shell: pwsh
+        run: .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
+
       - name: Run tests with coverage
-        run: >
-          dotnet test ETL-SQL.slnx
-          --no-build
-          --configuration Release
-          --collect:"XPlat Code Coverage"
-          --results-directory ./coverage
-          --filter "Category!=Integration"
+        shell: pwsh
+        run: .\scripts\test-lane.ps1 -Lane fast -Configuration Release -NoRestore -NoBuild -CollectCoverage -ResultsDirectory coverage
         continue-on-error: false
 
       - name: Generate coverage report

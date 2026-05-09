@@ -30,6 +30,7 @@ brain/
 # Ignore local Claude context files
 CLAUDE.local.md
 CLAUDE.md
+GEMINI.md
 
 # Optional: Ignore the entire .claude directory
 .claude/
@@ -54,6 +55,7 @@ Snapshots/
 Reports/
 publish_test/
 data/
+sdk_test_output/
 
 ## OS
 Thumbs.db

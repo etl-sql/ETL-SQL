@@ -1,0 +1,237 @@
+-- Golden Workflow Report
+-- Purpose: one self-contained sample for preview, portal demo, export, and regression tests.
+
+SET REPORT TITLE = 'Golden Sales Operations Workflow';
+SET REPORT DESCRIPTION = 'Extracts orders, stages and validates them, then publishes an interactive operations report.';
+SET REPORT THEME = 'light';
+
+DECLARE @Region STRING INPUT = 'All';
+DECLARE @MinMargin INT INPUT = 0;
+DECLARE @ShowIssues INT INPUT = 1;
+DECLARE @ExportPath STRING INPUT = 'samples/golden_workflow/output/orders_stage.csv';
+
+-- Extract: operational source rows come from MOCKDB, and target thresholds
+-- come from a small flat-file lookup committed beside this sample.
+CREATE CONNECTION source_db ON MOCKDB();
+CREATE CONNECTION region_targets ON FLATFILE('samples/golden_workflow/data/region_targets.csv') WITH(HEADER=ON);
+
+SELECT *
+INTO #orders_raw
+FROM source_db.Sales;
+
+SELECT *
+INTO #targets_raw
+FROM region_targets.FILE;
+
+-- Stage: normalize reusable fields and keep only records fit for analytics.
+SELECT
+    SaleID AS OrderId,
+    OrderDate,
+    Region,
+    CustomerID,
+    ProductID,
+    Quantity,
+    UnitPrice,
+    Total AS Revenue,
+    Total / 2 AS Cost,
+    Total - (Total / 2) AS Margin,
+    'Complete' AS Status
+INTO #orders_stage
+FROM #orders_raw
+WHERE Region <> '' AND Total >= 100;
+
+-- Validate: keep rejected records visible instead of silently losing them.
+SELECT
+    SaleID AS OrderId,
+    CustomerID,
+    ProductID,
+    Total AS Revenue,
+    Quantity,
+    CASE
+        WHEN Region = '' THEN 'Missing region'
+        WHEN Total < 100 THEN 'Below reporting threshold'
+        WHEN Quantity <= 0 THEN 'Invalid quantity'
+        ELSE 'Review required'
+    END AS Issue
+INTO #quality_issues
+FROM #orders_raw
+WHERE Region = '' OR Total < 100 OR Quantity <= 0;
+
+-- Export: persist the staged dataset to CSV, then read it back to prove the
+-- file boundary works before report visuals consume the data.
+CREATE CONNECTION stage_export ON FLATFILE(@ExportPath) WITH(HEADER=ON, ROW_DELIMITER='CRLF');
+
+SELECT
+    OrderId,
+    OrderDate,
+    Region,
+    CustomerID,
+    ProductID,
+    Quantity,
+    UnitPrice,
+    Revenue,
+    Cost,
+    Margin,
+    Status
+INTO stage_export.FILE
+FROM #orders_stage;
+
+CREATE CONNECTION exported_orders ON FLATFILE(@ExportPath) WITH(HEADER=ON);
+
+SELECT *
+INTO #orders_exported
+FROM exported_orders.FILE;
+
+SELECT
+    Region,
+    SUM(Revenue) AS Revenue,
+    SUM(Cost) AS Cost,
+    SUM(Margin) AS Margin,
+    COUNT(*) AS Orders
+INTO #region_summary
+FROM #orders_exported
+GROUP BY Region;
+
+SELECT 'All' AS Region
+INTO #region_options
+UNION ALL SELECT Region FROM #targets_raw;
+
+-- Controls: these are intentionally portal-friendly and use deferred execution.
+CREATE VISUAL RegionFilter AS SLICER (
+    TITLE = 'Region',
+    SOURCE = (SELECT Region FROM #region_options),
+    MAPPINGS (VALUE = Region),
+    DEFAULT = 'All',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@Region, VALUE))
+);
+
+CREATE VISUAL MarginThreshold AS NUMBERBOX (
+    TITLE = 'Minimum Margin',
+    MIN = 0,
+    MAX = 10000,
+    DECIMALS = 0,
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@MinMargin, VALUE))
+);
+
+CREATE VISUAL IssueToggle AS CHECKBOX (
+    TITLE = 'Show Validation Issues',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@ShowIssues, VALUE))
+);
+
+CREATE BUTTON ApplyWorkflow AS RUN (
+    TITLE = 'Apply Workflow'
+);
+
+CREATE CONTAINER WorkflowControls AS BOX (
+    STRUCTURE = 'A B C D',
+    MAP (
+        'A' = RegionFilter,
+        'B' = MarginThreshold,
+        'C' = IssueToggle,
+        'D' = ApplyWorkflow
+    ),
+    STYLE (HEIGHT = '120px')
+);
+
+-- Overview visuals.
+CREATE VISUAL RevenueCard AS CARD (
+    TITLE = 'Revenue',
+    SOURCE = (SELECT SUM(Revenue) AS Value FROM #orders_exported WHERE (@Region = 'All' OR Region = @Region) AND Margin >= @MinMargin),
+    MAPPINGS (VALUE = Value),
+    STYLE (FORMAT = '$#,##0')
+);
+
+CREATE VISUAL MarginCard AS CARD (
+    TITLE = 'Margin',
+    SOURCE = (SELECT SUM(Margin) AS Value FROM #orders_exported WHERE (@Region = 'All' OR Region = @Region) AND Margin >= @MinMargin),
+    MAPPINGS (VALUE = Value),
+    STYLE (FORMAT = '$#,##0')
+);
+
+CREATE VISUAL IssueCard AS CARD (
+    TITLE = 'Rejected Rows',
+    SOURCE = (SELECT COUNT(*) AS Value FROM #quality_issues),
+    MAPPINGS (VALUE = Value)
+);
+
+CREATE VISUAL RevenueByRegion AS BAR (
+    TITLE = 'Revenue by Region',
+    SOURCE = (SELECT Region, Revenue FROM #region_summary WHERE (@Region = 'All' OR Region = @Region) AND Margin >= @MinMargin),
+    MAPPINGS (X = Region, Y = Revenue),
+    STYLE (HEIGHT = '320px')
+);
+
+CREATE VISUAL TargetGapTable AS TABLE (
+    TITLE = 'Target Gap',
+    SOURCE = (
+        SELECT s.Region, s.Revenue, t.RevenueTarget, s.Revenue - t.RevenueTarget AS Gap
+        FROM #region_summary s
+        INNER JOIN #targets_raw t ON s.Region = t.Region
+        WHERE (@Region = 'All' OR s.Region = @Region) AND s.Margin >= @MinMargin
+    ),
+    FORMATTING (
+        Gap < 0 THEN '#fecaca',
+        Gap >= 0 THEN '#bbf7d0'
+    )
+);
+
+-- Validation and detail visuals.
+CREATE VISUAL QualityIssues AS TABLE (
+    TITLE = 'Validation Issues',
+    SOURCE = (
+        SELECT OrderId, Customer, Revenue, Cost, Issue
+        FROM #quality_issues
+        WHERE @ShowIssues = 1
+    ),
+    FORMATTING (
+        Revenue < 0 THEN '#fecaca',
+        Cost < 0 THEN '#fecaca'
+    )
+);
+
+CREATE VISUAL OrderDetail AS TABLE (
+    TITLE = 'Exportable Order Detail',
+    SOURCE = (
+        SELECT OrderId, OrderDate, Region, CustomerID, ProductID, Quantity, UnitPrice, Revenue, Cost, Margin, Status
+        FROM #orders_exported
+        WHERE (@Region = 'All' OR Region = @Region) AND Margin >= @MinMargin
+    ),
+    FORMATTING (
+        Margin < 3000 THEN '#fef3c7',
+        Margin >= 5000 THEN '#bbf7d0'
+    )
+);
+
+CREATE PAGE Overview AS LAYOUT (
+    STRUCTURE = 'A A A / B C D / E E F',
+    MAP (
+        'A' = WorkflowControls,
+        'B' = RevenueCard,
+        'C' = MarginCard,
+        'D' = IssueCard,
+        'E' = RevenueByRegion,
+        'F' = TargetGapTable
+    )
+);
+
+CREATE PAGE Quality AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = WorkflowControls,
+        'B' = QualityIssues
+    )
+);
+
+CREATE PAGE Export AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = WorkflowControls,
+        'B' = OrderDetail
+    )
+);
+
+CREATE NAVIGATION GoldenNav AS TAB (
+    ORIENTATION = HORIZONTAL,
+    DEFAULT = Overview
+)
+WITH PAGES (Overview, Quality, Export);

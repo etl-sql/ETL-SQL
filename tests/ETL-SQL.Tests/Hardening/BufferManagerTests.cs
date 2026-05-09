@@ -59,6 +59,7 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        [Trait("Category", "Integration")]
         public async Task SessionCompression_ShouldSaveWithPrefix()
         {
             // Arrange

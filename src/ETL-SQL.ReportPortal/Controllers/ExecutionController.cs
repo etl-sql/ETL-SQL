@@ -18,7 +18,8 @@ public class ExecutionController(
     PortalDbContext     db,
     ExecutionJobService jobService,
     SessionCache        sessions,
-    AuditService        audit) : ControllerBase
+    AuditService        audit,
+    PortalConfig        portalConfig) : ControllerBase
 {
     private int CurrentUserId =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -53,14 +54,17 @@ public class ExecutionController(
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null || perm < FolderPermission.Execute) return Forbid();
 
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
         string? scriptHash = null;
-        if (System.IO.File.Exists(report.ScriptPath))
+        if (System.IO.File.Exists(resolvedScriptPath))
         {
-            var bytes = await System.IO.File.ReadAllBytesAsync(report.ScriptPath);
+            var bytes = await System.IO.File.ReadAllBytesAsync(resolvedScriptPath);
             scriptHash = "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         }
 
-        var jobId = jobService.EnqueueExecution(id, CurrentUserId, report.ScriptPath, req?.Parameters);
+        var jobId = jobService.EnqueueExecution(id, CurrentUserId, resolvedScriptPath, req?.Parameters);
         await audit.LogAsync(CurrentUserId, "EXECUTE_REPORT", "Report", id.ToString(), scriptHash);
 
         return Accepted(new { jobId });
@@ -92,6 +96,9 @@ public class ExecutionController(
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null) return Forbid();
 
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
         var snapshot = await db.ReportSnapshots
             .Where(s => s.ReportId == id)
             .OrderByDescending(s => s.BuiltAt)
@@ -100,14 +107,17 @@ public class ExecutionController(
         if (snapshot is null)
             return NotFound(new { error = "No snapshot available. Execute the report first." });
 
+        if (!PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath))
+            return Forbid();
+
         bool isStale = false;
-        if (System.IO.File.Exists(report.ScriptPath))
-            isStale = System.IO.File.GetLastWriteTimeUtc(report.ScriptPath) > snapshot.BuiltAt;
+        if (System.IO.File.Exists(resolvedScriptPath))
+            isStale = System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath) > snapshot.BuiltAt;
 
         object? manifest = null;
-        if (includeManifest && System.IO.File.Exists(snapshot.ManifestPath))
+        if (includeManifest && System.IO.File.Exists(resolvedManifestPath))
         {
-            var json = await System.IO.File.ReadAllTextAsync(snapshot.ManifestPath);
+            var json = await System.IO.File.ReadAllTextAsync(resolvedManifestPath);
             manifest = JsonDocument.Parse(json).RootElement;
         }
 
@@ -132,15 +142,24 @@ public class ExecutionController(
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null) return Forbid();
 
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out _))
+            return Forbid();
+
         var snapshot = await db.ReportSnapshots
             .Where(s => s.ReportId == id)
             .OrderByDescending(s => s.BuiltAt)
             .FirstOrDefaultAsync();
 
-        if (snapshot is null || !System.IO.File.Exists(snapshot.ManifestPath))
+        if (snapshot is null)
             return NotFound(new { error = "No snapshot available." });
 
-        var json = await System.IO.File.ReadAllTextAsync(snapshot.ManifestPath);
+        if (!PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath))
+            return Forbid();
+
+        if (!System.IO.File.Exists(resolvedManifestPath))
+            return NotFound(new { error = "No snapshot available." });
+
+        var json = await System.IO.File.ReadAllTextAsync(resolvedManifestPath);
         return Content(json, "application/json");
     }
 
@@ -155,12 +174,15 @@ public class ExecutionController(
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null || perm < FolderPermission.Execute) return Forbid();
 
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
         string? existingJobId = jobService.GetActiveRefreshJobId(id);
         bool alreadyRunning   = existingJobId is not null;
 
         var jobId = alreadyRunning
             ? existingJobId!
-            : jobService.EnqueueRefresh(id, CurrentUserId, report.ScriptPath);
+            : jobService.EnqueueRefresh(id, CurrentUserId, resolvedScriptPath);
 
         if (!alreadyRunning)
             await audit.LogAsync(CurrentUserId, "REFRESH_REPORT", "Report", id.ToString());
@@ -183,7 +205,10 @@ public class ExecutionController(
         if (string.IsNullOrWhiteSpace(req.Name))
             return BadRequest(new { error = "name is required" });
 
-        var svc      = await GetOrRebuildSessionAsync(id, report.ScriptPath);
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
+        var svc      = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
         var manifest = await svc.SetParameterAsync(req.Name, req.Value ?? string.Empty, req.IsInteraction);
         return Ok(manifest);
     }
@@ -202,7 +227,10 @@ public class ExecutionController(
         if (req.Params is not { Count: > 0 })
             return BadRequest(new { error = "params array is required" });
 
-        var svc      = await GetOrRebuildSessionAsync(id, report.ScriptPath);
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
+        var svc      = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
         var updates  = req.Params
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name, p.Value));
@@ -226,10 +254,12 @@ public class ExecutionController(
                 .OrderByDescending(s => s.BuiltAt)
                 .FirstOrDefaultAsync();
 
-            if (snapshot is not null && System.IO.File.Exists(snapshot.ManifestPath))
+            if (snapshot is not null
+                && PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath)
+                && System.IO.File.Exists(resolvedManifestPath))
             {
                 var store    = new SnapshotStore();
-                var manifest = await store.LoadAsync(snapshot.ManifestPath);
+                var manifest = await store.LoadAsync(resolvedManifestPath);
                 // DashboardService doesn't expose a direct "seed from manifest" API, so
                 // if there's a saved snapshot we just let the first real interaction trigger
                 // a rebuild — the session will be warm after the first call.

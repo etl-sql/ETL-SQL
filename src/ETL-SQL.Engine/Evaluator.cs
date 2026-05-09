@@ -9,6 +9,7 @@ using System.Collections.Concurrent;
 using System.Threading;
 
 using ETL_SQL.Common;
+using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Handlers;
 using Microsoft.Extensions.DependencyInjection;

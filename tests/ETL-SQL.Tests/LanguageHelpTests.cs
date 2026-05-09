@@ -1,3 +1,4 @@
+using ETL_SQL.Analysis.Documentation;
 using ETL_SQL.Core.Metadata;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Common;
@@ -13,15 +14,14 @@ namespace ETL_SQL.Tests
         public void Verify_CoreKeywords_HaveHelpDocumentation()
         {
             var registry = new LanguageHelpRegistry();
+            var verifier = new HelpDocumentationVerifier(registry);
             
             // Testing a subset of core keywords to verify the resource loading works
             string[] coreKeywords = { "SELECT", "INSERT", "UPDATE", "DELETE", "MERGE", "DECLARE", "SET", "IF", "WHILE", "FOR", "FOREACH" };
             
-            foreach (var kw in coreKeywords)
+            foreach (var check in verifier.VerifyRequiredTopics(coreKeywords))
             {
-                var help = registry.GetHelp(kw);
-                Assert.NotNull(help);
-                Assert.True(help.Length > 10, $"Documentation for {kw} is too short.");
+                Assert.True(check.Found, check.Message);
             }
         }
 
@@ -29,12 +29,12 @@ namespace ETL_SQL.Tests
         public void Verify_MajorConnectors_HaveHelpDocumentation()
         {
             var registry = new LanguageHelpRegistry();
+            var verifier = new HelpDocumentationVerifier(registry);
             string[] connectors = { "MSSQL", "POSTGRES", "FLATFILE", "API" };
             
-            foreach (var conn in connectors)
+            foreach (var check in verifier.VerifyRequiredSubTopics("CONNECTION", connectors))
             {
-                var help = registry.GetHelp("CONNECTION", conn);
-                Assert.NotNull(help);
+                Assert.True(check.Found, check.Message);
             }
         }
 
@@ -42,12 +42,12 @@ namespace ETL_SQL.Tests
         public void Verify_SystemVariables_HaveHelpDocumentation()
         {
             var registry = new LanguageHelpRegistry();
+            var verifier = new HelpDocumentationVerifier(registry);
             string[] sysVars = { "@@ROWCOUNT", "@@ERROR", "@@VERSION" };
             
-            foreach (var v in sysVars)
+            foreach (var check in verifier.VerifyRequiredSubTopics("VARIABLES", sysVars))
             {
-                var help = registry.GetHelp("VARIABLES", v);
-                Assert.NotNull(help);
+                Assert.True(check.Found, check.Message);
             }
         }
 
@@ -55,12 +55,12 @@ namespace ETL_SQL.Tests
         public void Verify_ReportComponents_HaveHelpDocumentation()
         {
             var registry = new LanguageHelpRegistry();
+            var verifier = new HelpDocumentationVerifier(registry);
             string[] components = { "DATASET", "PAGE", "STYLE", "VISUAL" };
             
-            foreach (var comp in components)
+            foreach (var check in verifier.VerifyRequiredSubTopics("REPORT", components))
             {
-                var help = registry.GetHelp("REPORT", comp);
-                Assert.NotNull(help);
+                Assert.True(check.Found, check.Message);
             }
         }
     }

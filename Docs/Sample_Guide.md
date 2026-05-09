@@ -1,9 +1,18 @@
 # ETL-SQL Sample Guide
 
-This guide describes the provided sample scripts in the `samples/` folder. These samples are designed to demonstrate the various capabilities of the ETL-SQL engine. The folder contains **64 scripts** in total (60 `.etlsql` + 4 `.rptsql`). The 34 numbered scripts below are the primary demonstrations; additional utility, test, and sub-scripts exist in the folder for advanced exploration.
+This guide describes the provided sample scripts in the `samples/` folder. These samples are designed to demonstrate the various capabilities of the ETL-SQL engine. The folder contains **100+ scripts** across engine, connector, reporting, test, and real-world scenarios. The 34 numbered scripts below are the primary demonstrations; additional utility, test, report, and sub-scripts exist in the folder for advanced exploration.
 
 > [!TIP]
 > **Running the samples safely**: All scripts in the **Core Samples** section use `MOCKDB` and require no external connections. Scripts in the **Enterprise Real-World Scenarios** section reference external databases — replace the connection details with your own before running. Use `SET WHAT_IF ON;` at the top of any script to do a dry-run before executing destructive operations.
+
+## Golden Workflow
+
+### [golden_workflow/golden_workflow.rptsql](file:///c:/Users/chuck/scratch/ETL-SQL/samples/golden_workflow/golden_workflow.rptsql)
+**Purpose**: End-to-end Report-SQL workflow used as a walkthrough, portal demo, and regression target.
+- Demonstrates extract -> stage -> validate -> report visuals -> publish -> execute -> interact -> export.
+- Extracts from `MOCKDB`, reads flat-file targets, writes a staged CSV, and reports from the reloaded export.
+- Runs without external services or machine-specific credentials.
+- Shares one script across VS Code preview, standalone serve, Report Portal, and automated tests.
 
 ## Core Samples
 

@@ -595,7 +595,7 @@ This phase must be completed before Phase 9 begins. CQ-3 and CQ-4 are explicit P
 **Step 5.1 — Split `Ast.cs` into a visitor-based formatter (CQ-3)**  
 `Ast.cs` is 2100+ LOC. It defines 200+ AST node classes AND implements `ToSql()` serialization, `GetSourceTables()`, `GetSourceColumns()`, visitor logic, and SQL formatting inline on every node.
 
-- Extract `ToSql()` from every AST node into a separate `SqlFormatter` visitor class in `ETL-SQL.Core/Linting/SqlFormatter.cs` (or `ETL-SQL.Core/Formatting/SqlFormatter.cs`).
+- Extract `ToSql()` from every AST node into a separate `SqlFormatter` visitor class in `ETL-SQL.Analysis/Formatting/SqlFormatter.cs` (or `ETL-SQL.Core/Formatting/SqlFormatter.cs` if it must remain a shared language contract).
 - The visitor pattern: `SqlFormatter` implements a `Visit(AstNode node)` method tree; each node type has a corresponding `VisitXxx` method that emits the SQL text for that node type.
 - After extraction, each AST node's `ToSql()` should be a one-liner that delegates to the formatter: `public string ToSql() => new SqlFormatter().Format(this);` — or remove `ToSql()` from the interface entirely and call the formatter directly from callers.
 - All existing tests that call `.ToSql()` must continue to pass. This is a pure refactor — no behavior change.
@@ -982,7 +982,7 @@ SetParameterAction : VisualAction   // parameter name, value expression (column 
 
 ---
 
-### 9.5 New Linter Rules (add to Core/Linting/Rules)
+### 9.5 New Linter Rules (add to ETL-SQL.Analysis/Linting/Rules)
 
 | Rule class | What it checks |
 |---|---|

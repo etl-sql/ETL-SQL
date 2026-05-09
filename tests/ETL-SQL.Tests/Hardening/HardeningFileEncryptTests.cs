@@ -7,8 +7,8 @@ using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.Core.Linting;
-using ETL_SQL.Core.Linting.Rules;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.Tests.Hardening

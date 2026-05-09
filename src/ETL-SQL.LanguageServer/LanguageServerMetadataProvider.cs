@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Linting;
+using ETL_SQL.Analysis.Linting;
 
 namespace ETL_SQL.LSP
 {

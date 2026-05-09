@@ -33,6 +33,7 @@ namespace ETL_SQL.ReportPlayer
     {
         private readonly string _scriptPath;
         private readonly IServiceScopeFactory _scopeFactory;
+        private readonly TimeSpan _executionTimeout;
         private readonly SemaphoreSlim _lock = new(1, 1);
 
         private IServiceScope? _currentScope;
@@ -46,10 +47,11 @@ namespace ETL_SQL.ReportPlayer
 
         public string ScriptDirectory => Path.GetDirectoryName(_scriptPath) ?? Directory.GetCurrentDirectory();
 
-        public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory)
+        public DashboardService(string scriptPath, IServiceScopeFactory scopeFactory, TimeSpan? executionTimeout = null)
         {
             _scriptPath = scriptPath ?? throw new ArgumentNullException(nameof(scriptPath));
             _scopeFactory = scopeFactory ?? throw new ArgumentNullException(nameof(scopeFactory));
+            _executionTimeout = executionTimeout ?? TimeSpan.FromSeconds(30);
         }
 
         public async ValueTask DisposeAsync()
@@ -174,10 +176,8 @@ namespace ETL_SQL.ReportPlayer
             await _lock.WaitAsync();
             try
             {
-                // Resolve path relative to report script directory
-                var fullPath = Path.IsPathRooted(scriptPath) 
-                    ? scriptPath 
-                    : Path.Combine(ScriptDirectory, scriptPath);
+                if (!SafePath.TryResolveWithinRoot(ScriptDirectory, scriptPath, out var fullPath))
+                    return ($"Script path is outside the report directory: {scriptPath}", false);
 
                 if (!File.Exists(fullPath))
                     return ($"Script file not found: {scriptPath}", false);
@@ -292,8 +292,7 @@ namespace ETL_SQL.ReportPlayer
                     evaluator.ReportContext.BaselineParameters[varName] = value;
                 }
 
-                // 30s timeout prevents infinite loops from deadlocking the lock forever
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+                using var cts = new CancellationTokenSource(_executionTimeout);
                 
                 try
                 {

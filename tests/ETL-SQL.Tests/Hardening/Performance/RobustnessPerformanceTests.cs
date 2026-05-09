@@ -10,8 +10,8 @@ using ETL_SQL.Core.Common;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Handlers;
 using ETL_SQL.Common;
-using ETL_SQL.Core.Linting;
-using ETL_SQL.Core.Linting.Rules;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Analysis.Linting.Rules;
 using Microsoft.Extensions.DependencyInjection;
 using Moq;
 

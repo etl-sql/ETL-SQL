@@ -9,8 +9,9 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
+using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Core;
-using ETL_SQL.Core.Linting;
+using ETL_SQL.Analysis.Linting;
 using LSPRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 using TextDocumentSelector = OmniSharp.Extensions.LanguageServer.Protocol.Models.TextDocumentSelector;
 

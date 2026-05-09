@@ -10,7 +10,7 @@ using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using ETL_SQL.Common;
 using ETL_SQL.Engine.Spill;
-using ETL_SQL.Core.Linting;
+using ETL_SQL.Analysis.Linting;
 
 namespace ETL_SQL.Tests.Hardening.Performance
 {

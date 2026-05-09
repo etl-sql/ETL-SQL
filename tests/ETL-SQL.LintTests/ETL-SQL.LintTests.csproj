@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\ETL-SQL.Analysis\ETL-SQL.Analysis.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Core\ETL-SQL.Core.csproj" />
   </ItemGroup>
 

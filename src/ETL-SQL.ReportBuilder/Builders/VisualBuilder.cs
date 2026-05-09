@@ -92,11 +92,9 @@ namespace ETL_SQL.ReportBuilder.Builders
 
             // Conditional formatting rules (TABLE)
             if (vStmt.FormattingRules.Count > 0)
-                vm.FormattingRules = vStmt.FormattingRules.Select(r => new FormattingRuleManifest
-                {
-                    Condition = r.Condition.ToSql(),
-                    Color     = r.Color
-                }).ToList();
+            {
+                vm.RowStyles = new List<string?>();
+            }
 
             // Axis options
             foreach (var axis in vStmt.AxisOptions)
@@ -167,6 +165,7 @@ namespace ETL_SQL.ReportBuilder.Builders
                 try
                 {
                     await FetchDataAsync(vStmt, vm, interactionValues);
+                    ResolveActionValues(vm);
                     CalculateSummaries(vStmt, vm);
                     vm.ChartConfig = renderer.Render(vm);
                 }
@@ -178,6 +177,55 @@ namespace ETL_SQL.ReportBuilder.Builders
 
             return vm;
         }
+
+        private void ResolveActionValues(VisualManifest vm)
+        {
+            foreach (var action in vm.Actions)
+            {
+                if (action.Type == "SET_PARAMETER")
+                {
+                    ResolveSetParameterAction(action, vm.Columns);
+                }
+                else if (action.Type == "RUN_SCRIPT" && action.Parameters is { Count: > 0 })
+                {
+                    action.ParameterColumns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                    action.LiteralParameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var (name, expression) in action.Parameters)
+                    {
+                        var matchingColumn = FindColumn(vm.Columns, expression);
+                        if (matchingColumn != null)
+                            action.ParameterColumns[name] = matchingColumn;
+                        else
+                            action.LiteralParameters[name] = expression;
+                    }
+                }
+            }
+        }
+
+        private static void ResolveSetParameterAction(VisualActionManifest action, List<string> columns)
+        {
+            var expression = action.ValueExpression ?? string.Empty;
+            if (expression.Equals("VALUE", StringComparison.OrdinalIgnoreCase))
+            {
+                action.ValueSource = "CONTROL_VALUE";
+                return;
+            }
+
+            var matchingColumn = FindColumn(columns, expression);
+            if (matchingColumn != null)
+            {
+                action.ValueSource = "COLUMN";
+                action.ValueColumn = matchingColumn;
+                return;
+            }
+
+            action.ValueSource = "LITERAL";
+            action.LiteralValue = expression;
+        }
+
+        private static string? FindColumn(List<string> columns, string columnName)
+            => columns.FirstOrDefault(c => c.Equals(columnName, StringComparison.OrdinalIgnoreCase));
 
         private async Task FetchDataAsync(CreateVisualStatement vStmt, VisualManifest vm, Dictionary<string, string>? interactionValues)
         {

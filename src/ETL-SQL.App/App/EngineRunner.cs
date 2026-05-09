@@ -12,8 +12,8 @@ using ETL_SQL.Data;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.Core.Linting;
-using ETL_SQL.Core.Linting.Rules;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Services;
 

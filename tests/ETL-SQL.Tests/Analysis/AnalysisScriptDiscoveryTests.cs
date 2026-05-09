@@ -1,7 +1,7 @@
 using Xunit;
 using ETL_SQL.Core.Parser;
-using ETL_SQL.Core.Linting;
-using ETL_SQL.Core.Linting.Rules;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Analysis.Linting.Rules;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;

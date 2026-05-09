@@ -6,28 +6,70 @@ namespace ETL_SQL.ReportBuilder.Builders
 {
     public class StyleBuilder(IExecutionContext ctx)
     {
-        public Dictionary<string, string> ResolveStyles(string? styleName, Dictionary<string, string> inlineStyles)
+        public Dictionary<string, string> ResolveReportStyles()
         {
-            if (string.IsNullOrEmpty(styleName) && inlineStyles.Count == 0)
+            var styles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (!string.IsNullOrWhiteSpace(ctx.ReportContext.ReportTheme))
+                styles["THEME"] = ctx.ReportContext.ReportTheme;
+            return styles;
+        }
+
+        public Dictionary<string, string> ResolveStyles(string? styleName, Dictionary<string, string> inlineStyles)
+            => ResolveStyles(styleName, inlineStyles, null);
+
+        public Dictionary<string, string> ResolveStyles(
+            string? styleName,
+            Dictionary<string, string> inlineStyles,
+            IReadOnlyDictionary<string, string>? inheritedStyles)
+        {
+            if (inheritedStyles == null && string.IsNullOrEmpty(styleName) && inlineStyles.Count == 0)
                 return new Dictionary<string, string>();
 
             var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-            if (!string.IsNullOrEmpty(styleName) &&
-                ctx is IReportContext rc &&
-                rc.StyleDefinitions.TryGetValue(styleName, out var namedStyle))
-            {
-                foreach (var kv in namedStyle.Styles)
-                    merged[kv.Key] = kv.Value;
-            }
+            if (inheritedStyles != null)
+                MergeInto(merged, inheritedStyles);
+
+            if (!string.IsNullOrEmpty(styleName))
+                MergeInto(merged, ResolveNamedStyle(styleName, new HashSet<string>(StringComparer.OrdinalIgnoreCase)));
 
             foreach (var kv in inlineStyles)
-                merged[kv.Key] = kv.Value.StartsWith("@", StringComparison.Ordinal)
-                    ? ctx.VarContext.GetVariable(kv.Value)?.ToString() ?? kv.Value
-                    : kv.Value;
+                merged[kv.Key] = ResolveStyleValue(kv.Value);
 
             return merged;
         }
+
+        private Dictionary<string, string> ResolveNamedStyle(string styleName, HashSet<string> visited)
+        {
+            var resolved = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+            if (!visited.Add(styleName) ||
+                !ctx.ReportContext.StyleDefinitions.TryGetValue(styleName, out var namedStyle))
+            {
+                return resolved;
+            }
+
+            if (!string.IsNullOrEmpty(namedStyle.StyleName))
+                MergeInto(resolved, ResolveNamedStyle(namedStyle.StyleName, visited));
+
+            foreach (var kv in namedStyle.Styles)
+                resolved[kv.Key] = ResolveStyleValue(kv.Value);
+
+            return resolved;
+        }
+
+        private void MergeInto(
+            Dictionary<string, string> target,
+            IReadOnlyDictionary<string, string> source)
+        {
+            foreach (var kv in source)
+                target[kv.Key] = ResolveStyleValue(kv.Value);
+        }
+
+        private string ResolveStyleValue(string value)
+            => value.StartsWith("@", StringComparison.Ordinal)
+                ? ctx.VarContext.GetVariable(value)?.ToString() ?? value
+                : value;
 
         public TooltipManifest? BuildTooltipManifest(TooltipDefinition? tooltip)
         {

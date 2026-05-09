@@ -8,7 +8,7 @@ namespace ETL_SQL.ReportPortal.Services;
 /// Keyed on (reportId, userId) so each user has independent parameter state.
 /// On eviction the user's next interaction transparently rebuilds from the current snapshot.
 /// </summary>
-public class SessionCache : IHostedService, IDisposable
+public class SessionCache : IHostedService, IDisposable, IAsyncDisposable
 {
     private readonly record struct SessionKey(int ReportId, int UserId);
 
@@ -42,7 +42,8 @@ public class SessionCache : IHostedService, IDisposable
             return existing.Service;
         }
 
-        var svc   = new DashboardService(scriptPath, _scopeFactory);
+        var timeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
+        var svc   = new DashboardService(scriptPath, _scopeFactory, timeout);
         var entry = new Entry(svc, scriptPath);
         _sessions[key] = entry;
 
@@ -77,10 +78,19 @@ public class SessionCache : IHostedService, IDisposable
         _evictionTimer?.Dispose();
         foreach (var entry in _sessions.Values)
         {
-            // We are in sync Dispose, so we have to use the sync Dispose fallback or fire-and-forget
-            entry.Service.Dispose();
+            _ = entry.Service.DisposeAsync();
         }
         _sessions.Clear();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _evictionTimer?.Dispose();
+        foreach (var entry in _sessions.Values)
+            await entry.Service.DisposeAsync();
+
+        _sessions.Clear();
+        GC.SuppressFinalize(this);
     }
 
     // ── Eviction ──────────────────────────────────────────────────────────────

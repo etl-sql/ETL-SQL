@@ -11,10 +11,12 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Server;
+using ETL_SQL.Analysis.Diagnostics;
+using ETL_SQL.Analysis.Lineage;
 using ETL_SQL.Core;
 using OmniSharp.Extensions.JsonRpc;
-using ETL_SQL.Core.Linting;
-using ETL_SQL.Core.Linting.Rules;
+using ETL_SQL.Analysis.Linting;
+using ETL_SQL.Analysis.Linting.Rules;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
@@ -169,28 +171,9 @@ namespace ETL_SQL.LSP
                 _store.SetState(uri, text, script, analyzer.Tracker);
                 _logger.LogInformation("Analysis complete for {Uri}. Lineage entries: {Count}", uri, analyzer.Tracker.GetFullLineage().Count());
 
-                // Parser diagnostics
-                foreach (var diag in script.Diagnostics)
-                {
-                    int lineIdx = Math.Max(0, diag.Line - 1);
-                    int colStart = Math.Max(0, diag.Column - 1);
-                    int lineLen = lineIdx < fileLines.Length ? fileLines[lineIdx].Length : 0;
-                    int colEnd = Math.Min(lineLen, colStart + 5);
-                    if (colStart == colEnd && colStart < lineLen) colEnd = colStart + 1;
-
-                    diagnostics.Add(new Diagnostic
-                    {
-                        Range    = new LSPRange(lineIdx, colStart, lineIdx, colEnd),
-                        Severity = diag.Severity switch
-                        {
-                            ETL_SQL.Core.Common.DiagnosticSeverity.Error   => DiagnosticSeverity.Error,
-                            ETL_SQL.Core.Common.DiagnosticSeverity.Warning => DiagnosticSeverity.Warning,
-                            _                                               => DiagnosticSeverity.Information
-                        },
-                        Message = diag.Message,
-                        Source  = "ETL-SQL " + diag.Source
-                    });
-                }
+                diagnostics.AddRange(AnalysisDiagnosticBuilder
+                    .FromParserDiagnostics(script.Diagnostics, fileLines)
+                    .Select(ToLspDiagnostic));
 
                 // Lint diagnostics
                 var lintContext = new DefaultLintContext
@@ -199,44 +182,14 @@ namespace ETL_SQL.LSP
                     DocumentUri = uri.ToString()
                 };
                 var lintResults = await _linter.AnalyzeAsync(script, lintContext);
-                foreach (var res in lintResults)
-                {
-                    int lineIdx  = Math.Max(0, res.LineNumber - 1);
-                    int colStart = Math.Max(0, res.ColumnNumber - 1);
-                    int lineLen  = lineIdx < fileLines.Length ? fileLines[lineIdx].Length : 0;
-                    int colEnd   = Math.Min(lineLen, colStart + 5);
-                    if (colStart == colEnd && colStart < lineLen) colEnd = colStart + 1;
-
-                    diagnostics.Add(new Diagnostic
-                    {
-                        Range    = new LSPRange(lineIdx, colStart, lineIdx, colEnd),
-                        Severity = res.Severity == LintSeverity.Error ? DiagnosticSeverity.Error : DiagnosticSeverity.Warning,
-                        Message  = res.Message,
-                        Code     = res.Code ?? res.RuleName,
-                        Source   = "ETL-SQL Linter"
-                    });
-                }
+                diagnostics.AddRange(AnalysisDiagnosticBuilder
+                    .FromLintResults(lintResults, fileLines)
+                    .Select(ToLspDiagnostic));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error in AnalyzeAsync for {Uri}", uri);
-                int errLine = 0, errCol = 0;
-                if (ex is ETL_SQL.Core.Common.Exceptions.SyntaxException sx)
-                {
-                    errLine = Math.Max(0, sx.Line - 1);
-                    errCol  = Math.Max(0, sx.Column - 1);
-                }
-                int lineLen = errLine < fileLines.Length ? fileLines[errLine].Length : 0;
-                int colEnd  = Math.Min(lineLen, errCol + 5);
-                if (errCol == colEnd && errCol < lineLen) colEnd = errCol + 1;
-
-                diagnostics.Add(new Diagnostic
-                {
-                    Range    = new LSPRange(errLine, errCol, errLine, colEnd),
-                    Severity = DiagnosticSeverity.Error,
-                    Message  = ex.Message,
-                    Source   = "ETL-SQL Parser"
-                });
+                diagnostics.Add(ToLspDiagnostic(AnalysisDiagnosticBuilder.FromException(ex, fileLines)));
             }
 
             _server?.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
@@ -245,6 +198,37 @@ namespace ETL_SQL.LSP
                 Diagnostics = diagnostics
             });
             _logger.LogDebug("Published {Count} diagnostics for {Uri}", diagnostics.Count, uri);
+        }
+
+        private static Diagnostic ToLspDiagnostic(AnalysisDiagnostic diagnostic)
+        {
+            var severity = diagnostic.Severity switch
+            {
+                ETL_SQL.Core.Common.DiagnosticSeverity.Error => DiagnosticSeverity.Error,
+                ETL_SQL.Core.Common.DiagnosticSeverity.Warning => DiagnosticSeverity.Warning,
+                ETL_SQL.Core.Common.DiagnosticSeverity.Hint => DiagnosticSeverity.Hint,
+                _ => DiagnosticSeverity.Information
+            };
+
+            if (diagnostic.Code is not null)
+            {
+                return new Diagnostic
+                {
+                    Range = new LSPRange(diagnostic.StartLine, diagnostic.StartColumn, diagnostic.EndLine, diagnostic.EndColumn),
+                    Severity = severity,
+                    Message = diagnostic.Message,
+                    Code = diagnostic.Code,
+                    Source = diagnostic.Source
+                };
+            }
+
+            return new Diagnostic
+            {
+                Range = new LSPRange(diagnostic.StartLine, diagnostic.StartColumn, diagnostic.EndLine, diagnostic.EndColumn),
+                Severity = severity,
+                Message = diagnostic.Message,
+                Source = diagnostic.Source
+            };
         }
 
         private async Task DiscoverMetadataRecursiveAsync(Statement stmt, string uri)

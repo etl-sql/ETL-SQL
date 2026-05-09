@@ -7,7 +7,7 @@ using ETL_SQL.Common;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Core.Data;
-using ETL_SQL.Core.Linting;
+using ETL_SQL.Analysis.Linting;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Data;
 
