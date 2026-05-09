@@ -443,7 +443,20 @@ namespace ETL_SQL.ReportBuilder
         [JsonPropertyName("tooltip")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public TooltipManifest? Tooltip { get; set; }
+        
+        [JsonPropertyName("isCollapsible")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool IsCollapsible { get; set; }
+
+        [JsonPropertyName("icon")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Icon { get; set; }
+
+        [JsonPropertyName("isPinnable")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool IsPinnable { get; set; } = true;
     }
+
 
     public class NavigationManifest
     {

@@ -911,6 +911,7 @@ namespace ETL_SQL.Core
         public bool IsSecret { get; set; }
         public bool IsInput { get; set; }
         public bool IsOutput { get; set; }
+        public bool IsRequired { get; set; }
         public Dictionary<string, string> Metadata { get; }
         public string? Description => Metadata.TryGetValue("d", out var d) ? d : null;
 
@@ -922,7 +923,7 @@ namespace ETL_SQL.Core
             Metadata = metadata ?? new(StringComparer.OrdinalIgnoreCase);
         }
 
-        public DeclareStatement(string name, string type, Expression? initialValue, bool isSensitive, bool isInput, bool isOutput, Dictionary<string, string>? metadata = null)
+        public DeclareStatement(string name, string type, Expression? initialValue, bool isSensitive, bool isInput, bool isOutput, bool isRequired = false, Dictionary<string, string>? metadata = null)
         {
             VariableName = name;
             DataType = type;
@@ -930,6 +931,7 @@ namespace ETL_SQL.Core
             IsSensitive = isSensitive;
             IsInput = isInput;
             IsOutput = isOutput;
+            IsRequired = isRequired;
             Metadata = metadata ?? new(StringComparer.OrdinalIgnoreCase);
         }
     }

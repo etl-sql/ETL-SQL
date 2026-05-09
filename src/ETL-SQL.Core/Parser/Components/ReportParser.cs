@@ -531,6 +531,9 @@ namespace ETL_SQL.Core.Parser.Components
             string? structure = null;
             var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var styles  = new Dictionary<string, string>();
+            bool isCollapsible = false, isPinnable = true;
+            string? icon = null;
+
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
@@ -568,6 +571,21 @@ namespace ETL_SQL.Core.Parser.Components
                     }
                     Consume(TokenType.RPAREN, "Expected ')' to close MAP");
                 }
+                else if (Match(TokenType.COLLAPSIBLE))
+                {
+                    Consume(TokenType.EQUALS, "Expected '=' after COLLAPSIBLE");
+                    isCollapsible = _parser.IsOn();
+                }
+                else if (Match(TokenType.ICON))
+                {
+                    Consume(TokenType.EQUALS, "Expected '=' after ICON");
+                    icon = Consume(TokenType.STRING_LITERAL, "Expected string literal for ICON").Value;
+                }
+                else if (Match(TokenType.PINNABLE))
+                {
+                    Consume(TokenType.EQUALS, "Expected '=' after PINNABLE");
+                    isPinnable = _parser.IsOn();
+                }
                 else
                 {
                     throw new SyntaxException(
@@ -593,10 +611,14 @@ namespace ETL_SQL.Core.Parser.Components
                 Subtitle           = subtitle,
                 SubtitleIsMarkdown  = subtitleMd,
                 Tooltip            = tooltip,
+                IsCollapsible      = isCollapsible,
+                Icon               = icon,
+                IsPinnable         = isPinnable,
                 Mode               = mode,
                 Line               = startToken.Line,
                 Column             = startToken.Column
             };
+
         }
 
         // ── CREATE NAVIGATION ─────────────────────────────────────────────────

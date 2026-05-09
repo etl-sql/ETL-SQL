@@ -239,3 +239,44 @@
       100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(84,112,198,0); }
   }
 
+  /* Phase 4: Required Parameters Modal */
+  .required-params-modal {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 20000;
+  }
+  .required-params-modal .modal-content {
+    background: #fff; border-radius: 12px; padding: 24px; width: 450px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+  .theme-dark .required-params-modal .modal-content { background: #252526; color: #eee; }
+  .required-params-modal h2 { margin-top: 0; font-size: 1.4em; color: #5470c6; border-bottom: 1px solid #eee; padding-bottom: 12px; }
+  .required-params-modal .params-grid { display: grid; grid-template-columns: 120px 1fr; gap: 16px; margin: 20px 0; align-items: center; }
+  .required-params-modal label { font-weight: 600; font-size: 0.9em; opacity: 0.8; }
+  .required-params-modal input { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; background: #fff; width: 100%; }
+  .theme-dark .required-params-modal input { background: #333; border-color: #444; color: #fff; }
+  .required-params-modal input.error { border-color: #ff4d4f; box-shadow: 0 0 0 2px rgba(255,77,79,0.2); }
+  .required-params-modal .modal-footer { display: flex; justify-content: flex-end; margin-top: 20px; }
+
+  /* Phase 4: Auto-Parameter Panel */
+  .auto-parameter-panel {
+    position: fixed; right: 0; top: 120px; bottom: 60px; width: 280px;
+    background: #fff; border-left: 1px solid #ddd; box-shadow: -2px 0 10px rgba(0,0,0,0.05);
+    transition: transform 0.3s ease; z-index: 5000; display: flex; flex-direction: column;
+  }
+  .theme-dark .auto-parameter-panel { background: #252526; border-color: #454545; }
+  .auto-parameter-panel.collapsed { transform: translateX(100%); }
+  
+  .auto-parameter-panel .panel-toggle {
+    position: absolute; left: -36px; top: 10px; width: 36px; height: 36px;
+    background: #5470c6; color: #fff; border-radius: 8px 0 0 8px;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 20px;
+  }
+  .auto-parameter-panel .panel-content { padding: 16px; flex: 1; overflow-y: auto; }
+  .auto-parameter-panel h4 { margin: 0 0 16px 0; font-size: 1.1em; color: #5470c6; }
+  .panel-item { margin-bottom: 16px; }
+  .panel-item label { display: block; font-size: 0.85em; margin-bottom: 6px; opacity: 0.7; }
+  .panel-item .input-group { display: flex; gap: 4px; }
+  .panel-item input { flex: 1; padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 0.9em; }
+  .theme-dark .panel-item input { background: #333; border-color: #444; color: #fff; }
+  .panel-item button { padding: 4px 10px; background: #5470c6; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+  .panel-item button:hover { background: #4059a9; }
+

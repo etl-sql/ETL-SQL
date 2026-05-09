@@ -45,6 +45,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Reporting")]
         public void EChartsRenderer_Bar_ContainsCorrectChartType()
         {
             var visual   = MakeSampleVisual("BAR");
@@ -268,6 +269,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         // ── SnapshotStore ────────────────────────────────────────────────────
 
         [Fact]
+        [Trait("Category", "Smoke.Reporting")]
         public async Task SnapshotStore_SaveAndLoad_RoundTrips()
         {
             var manifest = MakeSampleManifest("sample.rptsql");

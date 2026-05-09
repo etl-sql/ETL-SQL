@@ -31,6 +31,7 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Core")]
         public async Task TestRightJoin()
         {
             string testDir = Path.Combine(Path.GetTempPath(), "ETL_SQL_Tests", Guid.NewGuid().ToString("N"));

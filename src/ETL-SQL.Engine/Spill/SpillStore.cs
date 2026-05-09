@@ -38,6 +38,7 @@ namespace ETL_SQL.Engine.Spill
         private string? _cachedRootPath;
         private byte[]? _cachedSessionKey;
         private string? _cachedSessionId;
+        private bool _usingTemporaryFallback;
         private readonly SemaphoreSlim _initLock = new(1, 1);
         private readonly IExecutionContext _context;
         private bool _disposed;
@@ -65,9 +66,7 @@ namespace ETL_SQL.Engine.Spill
         private void EnsureInitialized()
         {
             // If already initialized and context hasn't changed its persistent/session state, skip.
-            if (_cachedRootPath != null &&
-                IsPersistent == _context.IsPersistentSession &&
-                (!IsPersistent || _cachedSessionId == _context.SessionId))
+            if (CacheMatchesContext())
             {
                 return;
             }
@@ -75,9 +74,7 @@ namespace ETL_SQL.Engine.Spill
             _initLock.Wait();
             try
             {
-                if (_cachedRootPath != null &&
-                    IsPersistent == _context.IsPersistentSession &&
-                    (!IsPersistent || _cachedSessionId == _context.SessionId))
+                if (CacheMatchesContext())
                 {
                     return;
                 }
@@ -91,24 +88,64 @@ namespace ETL_SQL.Engine.Spill
                     _cachedRootPath = Path.Combine(_context.SessionRoot, "spill");
 
                     // Deterministic Key based on MachineKey + SessionId (Centralized)
-                    _cachedSessionKey = _context.SessionStateManager.GetSpillKey(_context.SessionId ?? "DEFAULT");
+                    _cachedSessionKey = NormalizeAesKey(
+                        _context.SessionStateManager.GetSpillKey(_context.SessionId ?? "DEFAULT"),
+                        _context.SessionId ?? "DEFAULT");
+                    _usingTemporaryFallback = false;
                 }
                 else if (_cachedRootPath == null || IsPersistent != _context.IsPersistentSession)
                 {
                     // Disposable temp path
                     _cachedRootPath = Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill", Guid.NewGuid().ToString("N"));
                     _cachedSessionKey = RandomNumberGenerator.GetBytes(32);
+                    _usingTemporaryFallback = false;
                 }
 
-                if (!Directory.Exists(_cachedRootPath))
+                try
                 {
-                    Directory.CreateDirectory(_cachedRootPath!);
+                    if (!Directory.Exists(_cachedRootPath))
+                    {
+                        Directory.CreateDirectory(_cachedRootPath!);
+                    }
+                }
+                catch (UnauthorizedAccessException ex) when (IsPersistent)
+                {
+                    _context.Logger.Warning("Persistent spill directory is not writable for session {SessionId}: {Message}. Falling back to temporary spill storage.", _context.SessionId, ex.Message);
+                    IsPersistent = false;
+                    _usingTemporaryFallback = true;
+                    _cachedRootPath = Path.Combine(Path.GetTempPath(), "ETL-SQL-Spill", Guid.NewGuid().ToString("N"));
+                    _cachedSessionKey = RandomNumberGenerator.GetBytes(32);
+                    Directory.CreateDirectory(_cachedRootPath);
                 }
             }
             finally
             {
                 _initLock.Release();
             }
+        }
+
+        private bool CacheMatchesContext()
+        {
+            if (_cachedRootPath == null) return false;
+
+            if (_usingTemporaryFallback)
+            {
+                return _context.IsPersistentSession && _cachedSessionId == _context.SessionId;
+            }
+
+            return IsPersistent == _context.IsPersistentSession &&
+                (!IsPersistent || _cachedSessionId == _context.SessionId);
+        }
+
+        private static byte[] NormalizeAesKey(byte[]? key, string sessionId)
+        {
+            if (key is { Length: 16 or 24 or 32 }) return key;
+
+            using var sha256 = SHA256.Create();
+            if (key is { Length: > 0 })
+                return sha256.ComputeHash(key);
+
+            return sha256.ComputeHash(Encoding.UTF8.GetBytes("ETL-SQL-SPILL:" + sessionId));
         }
 
         public async Task<ISpillWriter> CreateWriterAsync(string chunkName)

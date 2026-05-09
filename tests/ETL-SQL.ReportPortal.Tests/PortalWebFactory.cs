@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -8,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using ETL_SQL.ReportPortal;
 using ETL_SQL.ReportPortal.Data;
@@ -31,6 +33,8 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
         Directory.CreateDirectory(Path.Combine(TempDir, "scripts"));
         Directory.CreateDirectory(Path.Combine(TempDir, "snapshots"));
         Directory.CreateDirectory(Path.Combine(TempDir, "maps"));
+        Directory.CreateDirectory(Path.Combine(TempDir, "keys"));
+        File.WriteAllBytes(Path.Combine(TempDir, "etlsql.db"), []);
     }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -39,9 +43,11 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
         var scriptRoot   = Path.Combine(TempDir, "scripts");
         var snapshotDir  = Path.Combine(TempDir, "snapshots");
         var mapRoot      = Path.Combine(TempDir, "maps");
+        var orchDbPath   = Path.Combine(TempDir, "etlsql.db");
         const string jwtSecret = "integration-test-secret-key-1234567890";
 
         builder.UseEnvironment("Testing");
+        builder.ConfigureLogging(logging => logging.ClearProviders());
 
         builder.ConfigureAppConfiguration((_, cfg) =>
         {
@@ -59,6 +65,7 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 ["Portal:Resources:ExecutionTimeoutSeconds"]       = "30",
                 ["Portal:Resources:SessionCacheMaxSize"]           = "10",
                 ["Portal:Resources:SessionCacheTtlMinutes"]        = "5",
+                ["Portal:Orchestrator:DatabasePath"]               = orchDbPath,
             });
         });
 
@@ -80,8 +87,12 @@ public class PortalWebFactory : WebApplicationFactory<PortalMarker>
                 MapRootPath       = mapRoot,
                 Jwt = new JwtConfig { Secret = jwtSecret, ExpiryMinutes = 60, RefreshExpiryDays = 7 },
                 FirstRun          = new FirstRunConfig { AdminUsername = "admin" },
+                Orchestrator      = new OrchestratorConfig { DatabasePath = orchDbPath },
             };
             services.AddSingleton(cfg);
+            services.AddDataProtection()
+                .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(TempDir, "keys")))
+                .SetApplicationName("ETL-SQL.ReportPortal.Tests");
 
             // Override JWT signing key to match our test secret
             services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, opt =>

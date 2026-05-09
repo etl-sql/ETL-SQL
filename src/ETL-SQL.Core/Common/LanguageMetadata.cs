@@ -69,7 +69,7 @@ namespace ETL_SQL.Common
             "SUBJECT", "BODY", "ATTACH", "CC", "BCC", "LINEAGE",
             "SINGLEQUOTE", "DOUBLEQUOTE", "SINGLEQUOTES", "DOUBLEQUOTES", "LF", "CR", "CRLF", "TILDE", "SEMICOLON", "COLON", "COMMA", "TAB", "PIPE",
             "ESCAPE_CHAR", "NULL_AS", "DATE_FORMAT", "STRICT_SCHEMA", "UTF16", "LATIN1", "UNICODE", "BACKSLASH_N", "EMPTY",
-            "PASSWORD", "SHOW_PASSWORD", "OUTPUT", "INPUT", "PARALLEL", "RUN", "SCRIPT", "USE", "START", "STOP", "PAUSE", "KILL",
+            "PASSWORD", "SHOW_PASSWORD", "OUTPUT", "INPUT", "REQUIRED", "PARALLEL", "RUN", "SCRIPT", "USE", "START", "STOP", "PAUSE", "KILL",
             "BULK", "LOAD", "BATCHSIZE", "MAXERRORS", "FIELDTERMINATOR", "ROWTERMINATOR", "FIRSTROW", "DATA_SOURCE",
             "YEAR", "MONTH", "DAY", "HOUR", "MINUTE", "SECOND", "INCLUDE_NULL_VALUES", "WITHOUT_ARRAY_WRAPPER",
             "JOB", "SCHEDULE", "EVERY", "HISTORY", "JOBS", "CRON", "LINT", "VERSION",
@@ -90,8 +90,10 @@ namespace ETL_SQL.Common
             "LINEAGE_TAGS",
             "BAR", "HBAR", "LINE", "SCATTER", "PIE", "DONUT", "TABLE", "CARD", "TEXT", "SLICER", "DATEPICKER", "RELDATEPICKER", "SLIDER", "SEARCH",
             "CHECKBOX", "TEXTBOX", "NUMBERBOX", "LABEL_POSITION", "MIN", "MAX", "DECIMALS", "PLACEHOLDER",
-            "GAUGE", "FUNNEL", "WATERFALL", "BOXPLOT", "TREEMAP", "HEATMAP", "COMBO", "MAP", "STRUCTURE", "MAPPINGS", "ACTIONS", "RUN_SCRIPT", "CLEAR_FILTERS"
+            "GAUGE", "FUNNEL", "WATERFALL", "BOXPLOT", "TREEMAP", "HEATMAP", "COMBO", "MAP", "STRUCTURE", "MAPPINGS", "ACTIONS", "RUN_SCRIPT", "CLEAR_FILTERS",
+            "COLLAPSIBLE", "ICON", "PINNABLE"
         };
+
 
         /// <summary>
         /// Standard governance tag names recognized for intellisense and documentation hints.

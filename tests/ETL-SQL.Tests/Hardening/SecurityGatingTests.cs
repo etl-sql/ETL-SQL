@@ -35,6 +35,7 @@ namespace ETL_SQL.Tests.Hardening
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Security")]
         public async Task CredentialLeakRule_DetectsObfuscatedLeak()
         {
             var rule = new CredentialLeakRule();

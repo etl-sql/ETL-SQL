@@ -25,6 +25,7 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Security")]
         public async Task TestUsePassword_SetsContext()
         {
             var eval = CreateEvaluator();
@@ -60,6 +61,7 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Security")]
         public async Task TestCreateConnection_DecryptsWithScriptPassword()
         {
             var eval = CreateEvaluator();
@@ -103,6 +105,7 @@ namespace ETL_SQL.Tests.Statements.Statements
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Security")]
         public async Task ResolvePath_StripsWindowsCopyAsPathQuotes()
         {
             // Windows "Copy as path" wraps paths in double-quotes: "C:\tmp\file.csv"

@@ -1,0 +1,154 @@
+{
+  "source": "tests\\required_params_test.rptsql",
+  "builtAt": "2026-05-08T21:18:30.5610289Z",
+  "visuals": [
+    {
+      "name": "SalesCard",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "Expr0"
+      ],
+      "rows": [
+        [
+          "0"
+        ]
+      ],
+      "options": {
+        "mapping:value": "column1"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "Main",
+      "structure": "A",
+      "slotMap": {
+        "A": "SalesCard"
+      }
+    }
+  ],
+  "datasets": [],
+  "parameters": {
+    "@Region": "",
+    "@Year": "2024"
+  },
+  "parameterMetadata": {
+    "@Region": {
+      "name": "@Region",
+      "type": "STRING",
+      "defaultValue": "",
+      "isRequired": true
+    },
+    "@Year": {
+      "name": "@Year",
+      "type": "INT",
+      "defaultValue": "2024",
+      "isRequired": true
+    }
+  },
+  "telemetry": {
+    "rowsProcessed": 3,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 1
+  },
+  "messages": [
+    {
+      "message": "[a4ae63da] [SELECT] Executing SelectStatement. Session: a4ae63da",
+      "color": "white",
+      "timestamp": "2026-05-08T21:18:30.502881Z"
+    },
+    {
+      "message": "[a4ae63da] Visual \u0027SalesCard\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T21:18:30.5501982Z"
+    },
+    {
+      "message": "[a4ae63da] Page \u0027Main\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-08T21:18:30.5542701Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "73e4022c-0faf-49c6-b312-eb965ea9ee59",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 68.6246,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "c9f62d03-42d3-456b-879a-44ece498f420",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 5.6933,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "247deca9-b08b-41a8-b3ea-2360e417801c",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.1377,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "95f8a537-368d-4d77-b0a4-49f45e9d0f2e",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 9,
+          "durationMs": 45.9573,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 195.83395891403543,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5d9b3c25-c094-4c80-89d1-9f707c0f4b5f",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.4545,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "22eb536c-d75e-4596-ba7a-84dc5906e54e",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.467,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

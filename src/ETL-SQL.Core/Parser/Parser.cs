@@ -126,6 +126,34 @@ namespace ETL_SQL.Core.Parser
 
         public bool IsIdentifier(Token token)
         {
+            // Context-aware keyword handling for common join/set keywords used as identifiers/aliases.
+            // This allows patterns like "FROM #SmallTable inner" while preserving "INNER JOIN".
+            if ((token.Type >= TokenType.JOIN && token.Type <= TokenType.INTERSECT) || IsJoinOrSetWord(token.Value))
+            {
+                // JOIN, UNION, EXCEPT, INTERSECT are strictly reserved as clause starters.
+                if (token.Type == TokenType.JOIN || token.Type == TokenType.UNION ||
+                    token.Type == TokenType.EXCEPT || token.Type == TokenType.INTERSECT ||
+                    token.Value.Equals("JOIN", StringComparison.OrdinalIgnoreCase) ||
+                    token.Value.Equals("UNION", StringComparison.OrdinalIgnoreCase) ||
+                    token.Value.Equals("EXCEPT", StringComparison.OrdinalIgnoreCase) ||
+                    token.Value.Equals("INTERSECT", StringComparison.OrdinalIgnoreCase))
+                    return false;
+
+                // Join modifiers (INNER, LEFT, etc.) can be aliases if they are not followed
+                // by tokens that unambiguously start a JOIN clause.
+                var next = Peek;
+                if (next.Type == TokenType.JOIN || next.Type == TokenType.HASH ||
+                    next.Type == TokenType.LOOP || next.Type == TokenType.MERGE ||
+                    next.Type == TokenType.APPLY || next.Type == TokenType.OUTER ||
+                    next.Type == TokenType.INNER || next.Type == TokenType.LEFT ||
+                    next.Type == TokenType.RIGHT || next.Type == TokenType.FULL ||
+                    next.Type == TokenType.CROSS ||
+                    IsJoinStarterWord(next.Value))
+                    return false;
+
+                return true;
+            }
+
             if (IdentifierTokens.Contains(token.Type)) return true;
             if (token.Type == TokenType.EOF) return false;
 
@@ -148,34 +176,42 @@ namespace ETL_SQL.Core.Parser
             var val = token.Value;
             if (val.Equals("VALUE", StringComparison.OrdinalIgnoreCase)) return true;
             if (val.Equals("EMAIL", StringComparison.OrdinalIgnoreCase)) return true;
-            
+
             if (!IsKeyword(val)) return true;
-
-            // Context-aware keyword handling for common join/set keywords used as identifiers/aliases.
-            // This allows patterns like "FROM #SmallTable inner" while preserving "INNER JOIN".
-            if (token.Type >= TokenType.JOIN && token.Type <= TokenType.INTERSECT)
-            {
-                // JOIN, UNION, EXCEPT, INTERSECT are strictly reserved as clause starters.
-                if (token.Type == TokenType.JOIN || token.Type == TokenType.UNION || 
-                    token.Type == TokenType.EXCEPT || token.Type == TokenType.INTERSECT)
-                    return false;
-
-                // Join modifiers (INNER, LEFT, etc.) can be aliases if they are not followed 
-                // by tokens that unambiguously start a JOIN clause.
-                var next = Peek;
-                if (next.Type == TokenType.JOIN || next.Type == TokenType.HASH || 
-                    next.Type == TokenType.LOOP || next.Type == TokenType.MERGE || 
-                    next.Type == TokenType.APPLY || next.Type == TokenType.OUTER ||
-                    next.Type == TokenType.INNER || next.Type == TokenType.LEFT ||
-                    next.Type == TokenType.RIGHT || next.Type == TokenType.FULL ||
-                    next.Type == TokenType.CROSS)
-                    return false;
-                
-                return true; 
-            }
 
             return false;
         }
+
+        private static bool IsJoinOrSetWord(string value)
+            => value.Equals("JOIN", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("INNER", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("LEFT", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("RIGHT", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("OUTER", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("FULL", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("CROSS", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("APPLY", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("SEMI", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("ANTI", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("HASH", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("LOOP", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("MERGE", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("UNION", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("EXCEPT", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("INTERSECT", StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsJoinStarterWord(string value)
+            => value.Equals("JOIN", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("INNER", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("LEFT", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("RIGHT", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("OUTER", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("FULL", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("CROSS", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("APPLY", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("HASH", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("LOOP", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("MERGE", StringComparison.OrdinalIgnoreCase);
 
         public bool IsDataType(TokenType type) => DataTypeTokens.Contains(type);
 

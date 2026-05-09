@@ -105,10 +105,7 @@ public class ReportsController : ControllerBase
         if (!await db.Folders.AnyAsync(f => f.Id == req.FolderId))
             return NotFound("Folder not found");
 
-        // Resolve path within ScriptRootPath
-        var resolved = Path.GetFullPath(req.ScriptPath,
-            Path.GetFullPath(portalConfig.ScriptRootPath));
-        if (!resolved.StartsWith(Path.GetFullPath(portalConfig.ScriptRootPath), StringComparison.OrdinalIgnoreCase))
+        if (!SafePath.TryResolveWithinRoot(portalConfig.ScriptRootPath, req.ScriptPath, out var resolved))
             return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
 
         var lastModified = System.IO.File.Exists(resolved)
@@ -185,8 +182,7 @@ public class ReportsController : ControllerBase
             if (string.IsNullOrWhiteSpace(scriptRoot))
                 return BadRequest(new { error = "ScriptRootPath is not configured." });
 
-            var resolved = Path.GetFullPath(req.ScriptPath, Path.GetFullPath(scriptRoot));
-            if (!resolved.StartsWith(Path.GetFullPath(scriptRoot), StringComparison.OrdinalIgnoreCase))
+            if (!SafePath.TryResolveWithinRoot(scriptRoot, req.ScriptPath, out var resolved))
                 return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
 
             if (!System.IO.File.Exists(resolved))
@@ -305,9 +301,7 @@ public class ReportsController : ControllerBase
             return BadRequest(new { error = "Only .json and .geojson map files are supported." });
         }
 
-        var mapRoot = Path.GetFullPath(portalConfig.MapRootPath);
-        var resolved = Path.GetFullPath(path, mapRoot);
-        if (!IsWithinRoot(mapRoot, resolved))
+        if (!SafePath.TryResolveWithinRoot(portalConfig.MapRootPath, path, out var resolved))
             return Forbid();
 
         if (!System.IO.File.Exists(resolved))
@@ -317,15 +311,4 @@ public class ReportsController : ControllerBase
         return Content(json, "application/geo+json");
     }
 
-    private static bool IsWithinRoot(string root, string candidate)
-    {
-        var rootFull = Path.GetFullPath(root);
-        var candidateFull = Path.GetFullPath(candidate);
-        var relative = Path.GetRelativePath(rootFull, candidateFull);
-
-        return !Path.IsPathRooted(relative)
-            && !relative.Equals("..", StringComparison.Ordinal)
-            && !relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)
-            && !relative.StartsWith(".." + Path.AltDirectorySeparatorChar, StringComparison.Ordinal);
-    }
 }

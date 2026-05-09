@@ -1,0 +1,38 @@
+-- Collapsible & Pinnable Container Verification
+-- This script tests the new COLLAPSIBLE, ICON, and PINNABLE options.
+
+CREATE CONNECTION mock ON MOCKDB();
+
+SELECT 'John' as name, 100 as sales, 'East' as region
+INTO #data;
+
+CREATE VISUAL SalesTable AS TABLE (
+    SOURCE = (SELECT * FROM #data)
+);
+
+CREATE VISUAL RegionFilter AS SLICER (
+    SOURCE = (SELECT DISTINCT region FROM #data),
+    MAPPINGS (VALUE = region),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region))
+);
+
+-- Define a collapsible container for filters
+CREATE CONTAINER FilterPanel AS BOX (
+    TITLE = 'Filters',
+    COLLAPSIBLE = ON,
+    ICON = 'FILTER',
+    PINNABLE = ON,
+    STRUCTURE = 'A',
+    MAP ('A' = RegionFilter)
+);
+
+-- Page layout: A is the collapsible filter, B is the main content
+CREATE PAGE MainView AS LAYOUT (
+    STRUCTURE = 'A B',
+    MAP (
+        'A' = FilterPanel,
+        'B' = SalesTable
+    )
+);
+
+SET REPORT TITLE = 'Collapsible Container Test';

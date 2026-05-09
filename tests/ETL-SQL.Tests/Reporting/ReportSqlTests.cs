@@ -11,6 +11,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
     public class ReportSqlTests
     {
         [Fact]
+        [Trait("Category", "Smoke.Reporting")]
         public void TestCreateVisual_SubtitleAndSourceNoEquals()
         {
             var sql = @"
@@ -93,6 +94,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Reporting")]
         public void CreateTheme_BuildEChartsTheme_MapsProperties()
         {
             var props = new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -128,6 +130,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
         // ── MAP visual parse tests (cookbook recipe 11 coverage) ─────────────
 
         [Fact]
+        [Trait("Category", "Smoke.Reporting")]
         public void MapVisual_Choropleth_ParsesBasicOptions()
         {
             var sql = @"

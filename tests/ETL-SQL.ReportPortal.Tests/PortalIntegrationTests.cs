@@ -31,6 +31,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     // ── 1. Health endpoint ─────────────────────────────────────────────────────
 
     [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task Health_ReturnsOkWithStatus()
     {
         var res = await _client.GetAsync("/health");
@@ -158,6 +159,7 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     // ── 4. Report publish ──────────────────────────────────────────────────────
 
     [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task Report_PublishAndGet_RoundTrips()
     {
         var token = await GetAdminTokenAsync();
@@ -188,6 +190,126 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.OK, getRes.StatusCode);
         var reports = await getRes.Content.ReadFromJsonAsync<JsonArray>(_json);
         Assert.Contains(reports!, r => r!["id"]!.GetValue<int>() == reportId);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task Report_ExecuteAndSnapshot_RoundTrips()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Exec Folder", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", "execute_report.rptsql");
+        await File.WriteAllTextAsync(scriptPath, @"
+CREATE VISUAL Total AS CARD (
+    SOURCE = (SELECT 42 AS Answer),
+    MAPPINGS (VALUE = Answer)
+);
+");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = "Executable Report",
+            description = "Smoke test report",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var executeRes = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
+        Assert.Equal(HttpStatusCode.Accepted, executeRes.StatusCode);
+        var executeBody = await executeRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var jobId = executeBody!["jobId"]!.GetValue<string>();
+
+        JsonObject? job = null;
+        for (var i = 0; i < 50; i++)
+        {
+            var jobRes = await AuthGet(token, $"/api/jobs/{jobId}");
+            Assert.Equal(HttpStatusCode.OK, jobRes.StatusCode);
+            job = await jobRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+            var status = job!["status"]!.GetValue<string>();
+            if (status is "Completed" or "Failed" or "Cancelled")
+                break;
+
+            await Task.Delay(100);
+        }
+
+        Assert.NotNull(job);
+        Assert.Equal("Completed", job!["status"]!.GetValue<string>());
+
+        var snapshotRes = await AuthGet(token, $"/api/reports/{reportId}/snapshot?includeManifest=true");
+        Assert.Equal(HttpStatusCode.OK, snapshotRes.StatusCode);
+        var snapshot = await snapshotRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.NotNull(snapshot!["manifest"]);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task Report_PublishRejectsSiblingScriptRootBypass()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Sibling Publish", parentId = (int?)null });
+        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId  = folder!["id"]!.GetValue<int>();
+
+        var siblingRoot = Path.Combine(_factory.TempDir, "scripts2");
+        Directory.CreateDirectory(siblingRoot);
+        var siblingScript = Path.Combine(siblingRoot, "outside.rptsql");
+        await File.WriteAllTextAsync(siblingScript, "-- outside script root\n");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name        = "Outside Report",
+            description = "Should be rejected",
+            scriptPath  = siblingScript
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, publishRes.StatusCode);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task Report_UpdateRejectsSiblingScriptRootBypass()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Sibling Update", parentId = (int?)null });
+        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId  = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", "inside_update.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "-- inside script root\n");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name        = "Inside Report",
+            description = "",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var siblingRoot = Path.Combine(_factory.TempDir, "scripts2");
+        Directory.CreateDirectory(siblingRoot);
+        var siblingScript = Path.Combine(siblingRoot, "outside_update.rptsql");
+        await File.WriteAllTextAsync(siblingScript, "-- outside script root\n");
+
+        var updateRes = await AuthPut(token, $"/api/reports/{reportId}", new
+        {
+            scriptPath = siblingScript
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, updateRes.StatusCode);
     }
 
     // ── 5. Subscription CRUD ──────────────────────────────────────────────────
@@ -337,6 +459,22 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
         Assert.Equal(HttpStatusCode.BadRequest, unsupported.StatusCode);
     }
 
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task CustomMap_RejectsSiblingMapRootBypass()
+    {
+        var token = await GetAdminTokenAsync();
+        var siblingRoot = Path.Combine(_factory.TempDir, "maps2");
+        Directory.CreateDirectory(siblingRoot);
+        await File.WriteAllTextAsync(
+            Path.Combine(siblingRoot, "outside.geojson"),
+            """{"type":"FeatureCollection","features":[]}""");
+
+        var res = await AuthGet(token, "/api/maps/custom?path=../maps2/outside.geojson");
+
+        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -399,6 +537,14 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     private Task<HttpResponseMessage> AuthPost(string token, string url, object body)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, url);
+        req.Headers.Authorization = new("Bearer", token);
+        req.Content = JsonContent.Create(body);
+        return _client.SendAsync(req);
+    }
+
+    private Task<HttpResponseMessage> AuthPut(string token, string url, object body)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Put, url);
         req.Headers.Authorization = new("Bearer", token);
         req.Content = JsonContent.Create(body);
         return _client.SendAsync(req);

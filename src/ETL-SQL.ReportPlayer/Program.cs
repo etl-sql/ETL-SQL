@@ -14,6 +14,7 @@ using Microsoft.Extensions.Hosting;
 using ETL_SQL.ReportBuilder;
 using ETL_SQL.Orchestrator;
 using ETL_SQL.ReportPlayer;
+using ETL_SQL.Core;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ReportPlayer — Phase 9F (multi-report hosting)
@@ -236,8 +237,8 @@ else
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Custom GeoJSON file route — shared across single and multi-report modes.
-// Serves a user-supplied MAP_FILE path safely from the server's filesystem.
-// The client sends: GET /maps/custom?path=<url-encoded-absolute-path>
+// Serves a user-supplied MAP_FILE path safely from the current report's script directory.
+// The client sends: GET /maps/custom?path=<url-encoded-relative-path>
 // ─────────────────────────────────────────────────────────────────────────────
 app.MapGet("/maps/custom", async (HttpContext ctx) =>
 {
@@ -250,9 +251,11 @@ app.MapGet("/maps/custom", async (HttpContext ctx) =>
         ? Directory.GetCurrentDirectory()
         : Path.GetDirectoryName(Path.GetFullPath(scriptPath!)) ?? Directory.GetCurrentDirectory();
 
-    string fullPath = Path.IsPathRooted(rawPath)
-        ? Path.GetFullPath(rawPath)
-        : Path.GetFullPath(rawPath, baseDir);
+    if (Path.IsPathRooted(rawPath))
+        return Results.BadRequest("Map path must be relative");
+
+    if (!SafePath.TryResolveWithinRoot(baseDir, rawPath, out var fullPath))
+        return Results.Forbid();
 
     if (!File.Exists(fullPath))
         return Results.NotFound($"Map file not found: {Path.GetFileName(fullPath)}");
@@ -280,9 +283,11 @@ if (multiMode)
         if (string.IsNullOrWhiteSpace(rawPath))
             return Results.BadRequest("path query parameter is required");
 
-        string fullPath = Path.IsPathRooted(rawPath)
-            ? Path.GetFullPath(rawPath)
-            : Path.GetFullPath(rawPath, svc.ScriptDirectory);
+        if (Path.IsPathRooted(rawPath))
+            return Results.BadRequest("Map path must be relative");
+
+        if (!SafePath.TryResolveWithinRoot(svc.ScriptDirectory, rawPath, out var fullPath))
+            return Results.Forbid();
 
         if (!File.Exists(fullPath))
             return Results.NotFound($"Map file not found: {Path.GetFileName(fullPath)}");

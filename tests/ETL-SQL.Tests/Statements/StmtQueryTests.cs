@@ -15,6 +15,7 @@ namespace ETL_SQL.Tests.Statements
     public class QueryTests
     {
         [Fact]
+        [Trait("Category", "Smoke.Core")]
         public async Task TestStandaloneSelect()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -54,6 +55,7 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Core")]
         public async Task TestQualifiedSelect()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -74,6 +76,7 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Core")]
         public async Task TestJoins()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -90,6 +93,7 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Core")]
         public async Task TestWindowFunctions()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
@@ -101,6 +105,7 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Core")]
         public async Task TestExistsSubquery()
         {
             var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();

@@ -87,7 +87,108 @@
                 '<p class="error">No manifest available.</p>';
             return;
         }
+
+        // Phase 4: Intercept execution if required parameters are missing
+        if (!checkRequiredParameters(manifest)) {
+            return; // Modal is showing, wait for user input
+        }
+
         renderManifest(manifest);
+    }
+
+    function checkRequiredParameters(manifest) {
+        if (!manifest.parameterMetadata) return true;
+        
+        const missing = [];
+        const required = [];
+        for (const name in manifest.parameterMetadata) {
+            const meta = manifest.parameterMetadata[name];
+            if (meta.isRequired) {
+                required.push(meta);
+                const val = manifest.parameters[name];
+                if (val === undefined || val === null || val === "" || val === "null") {
+                    missing.push(meta);
+                }
+            }
+        }
+
+        if (missing.length > 0) {
+            // Show all REQUIRED parameters in the modal, not just the missing ones,
+            // to provide full context to the user.
+            showRequiredParametersModal(required, manifest);
+            return false;
+        }
+        return true;
+    }
+
+    function showRequiredParametersModal(requiredList, manifest) {
+        const modal = document.createElement('div');
+        modal.className = 'required-params-modal';
+        
+        const content = document.createElement('div');
+        content.className = 'modal-content';
+        
+        const title = document.createElement('h2');
+        title.textContent = 'Required Parameters';
+        content.appendChild(title);
+        
+        const desc = document.createElement('p');
+        desc.textContent = 'Please provide values for the following mandatory fields to run this report:';
+        content.appendChild(desc);
+        
+        const grid = document.createElement('div');
+        grid.className = 'params-grid';
+        
+        const inputs = {};
+        requiredList.forEach(meta => {
+            const label = document.createElement('label');
+            label.textContent = meta.name.startsWith('@') ? meta.name.substring(1) : meta.name;
+            
+            const input = document.createElement('input');
+            input.type = meta.type === 'INT' || meta.type === 'DECIMAL' ? 'number' : 'text';
+            input.value = manifest.parameters[meta.name] || '';
+            input.placeholder = meta.defaultValue || '';
+            input.className = 'modal-input';
+            
+            grid.appendChild(label);
+            grid.appendChild(input);
+            inputs[meta.name] = input;
+        });
+        content.appendChild(grid);
+        
+        const footer = document.createElement('div');
+        footer.className = 'modal-footer';
+        
+        const runBtn = document.createElement('button');
+        runBtn.className = 'header-btn primary';
+        runBtn.textContent = 'Run Report';
+        runBtn.onclick = () => {
+            const updates = { ...parameters }; // Start with current global state
+            let allOk = true;
+            for (const name in inputs) {
+                const val = inputs[name].value;
+                const meta = manifest.parameterMetadata[name];
+                if (meta.isRequired && !val) {
+                    inputs[name].classList.add('error');
+                    allOk = false;
+                } else {
+                    inputs[name].classList.remove('error');
+                    updates[name] = val;
+                }
+            }
+            
+            if (allOk) {
+                modal.remove();
+                postParameters(updates, false).then(m => {
+                    if (m) renderManifest(m);
+                });
+            }
+        };
+        
+        footer.appendChild(runBtn);
+        content.appendChild(footer);
+        modal.appendChild(content);
+        document.body.appendChild(modal);
     }
 
     function renderManifest(manifest) {
@@ -195,6 +296,91 @@
 
         renderFooter(root, manifest);
         renderPipelineConsole(root, manifest);
+        renderAutoPanel(root, manifest);
+    }
+
+    function renderAutoPanel(container, manifest) {
+        if (!manifest.parameterMetadata) return;
+        
+        // Identify parameters that are marked as INPUT but don't have a corresponding visual SLICER
+        const visuals = manifest.visuals || [];
+        const slicerParams = new Set();
+        visuals.forEach(v => {
+            const type = (v.visualType || '').toUpperCase();
+            if (['SLICER', 'MULTISELECT', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'SEARCH'].includes(type)) {
+                const p = v.options && (v.options['data-parameter'] || v.options['PARAMETER'] || v.options['parameter']);
+                if (p) slicerParams.add(p.toLowerCase());
+                
+                // Also check ACTIONS for SET_PARAMETER
+                (v.actions || []).forEach(a => {
+                    if (a.type === 'SET_PARAMETER' && a.target) slicerParams.add(a.target.toLowerCase());
+                });
+            }
+        });
+
+        const autoParams = [];
+        for (const name in manifest.parameterMetadata) {
+            if (!slicerParams.has(name.toLowerCase())) {
+                autoParams.push(manifest.parameterMetadata[name]);
+            }
+        }
+
+        if (autoParams.length === 0) return;
+
+        const panel = document.createElement('div');
+        panel.className = 'auto-parameter-panel collapsed';
+        
+        const toggle = document.createElement('div');
+        toggle.className = 'panel-toggle';
+        toggle.innerHTML = '<span>&#x2699;</span>';
+        toggle.onclick = () => panel.classList.toggle('collapsed');
+        panel.appendChild(toggle);
+        
+        const content = document.createElement('div');
+        content.className = 'panel-content';
+        
+        const title = document.createElement('h4');
+        title.textContent = 'Report Parameters';
+        content.appendChild(title);
+        
+        const list = document.createElement('div');
+        list.className = 'panel-list';
+        
+        autoParams.forEach(meta => {
+            const item = document.createElement('div');
+            item.className = 'panel-item';
+            
+            const label = document.createElement('label');
+            label.textContent = meta.name.startsWith('@') ? meta.name.substring(1) : meta.name;
+            item.appendChild(label);
+            
+            const inputGroup = document.createElement('div');
+            inputGroup.className = 'input-group';
+            
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = manifest.parameters[meta.name] || '';
+            input.placeholder = meta.defaultValue || '';
+            inputGroup.appendChild(input);
+            
+            const applyBtn = document.createElement('button');
+            applyBtn.innerHTML = '&#x2713;';
+            applyBtn.onclick = () => {
+                const updates = { ...parameters }; // Batch everything
+                updates[meta.name] = input.value;
+                postParameters(updates, false).then(m => {
+                    if (m) renderManifest(m);
+                });
+            };
+            inputGroup.appendChild(applyBtn);
+            
+            item.appendChild(inputGroup);
+            list.appendChild(item);
+        });
+        
+        content.appendChild(list);
+        panel.appendChild(content);
+        container.appendChild(panel);
     }
 
     // ── Header & Actions ──────────────────────────────────────────────────
@@ -391,6 +577,115 @@
         container.appendChild(div);
     }
 
+    function getPageContainer(el) {
+        while (el && el !== document.body && !el.classList.contains('page')) el = el.parentElement;
+        return el;
+    }
+
+    function renderCollapsibleContainer(gridContainer, containerDef, manifest, pageTheme, slotWrapper) {
+        const page = getPageContainer(gridContainer);
+        if (!page) {
+            // Fallback: if no page found, render normally
+            renderContainer(slotWrapper, containerDef, manifest, pageTheme);
+            return;
+        }
+
+        // 1. Create Rail if not exists
+        let rail = page.querySelector('.drawer-rail-left');
+        if (!rail) {
+            rail = document.createElement('div');
+            rail.className = 'drawer-rail-left';
+            page.appendChild(rail);
+        }
+
+        // 2. Create Trigger
+        const trigger = document.createElement('div');
+        trigger.className = 'drawer-trigger';
+        trigger.title = containerDef.title || containerDef.name;
+        
+        let iconHtml = '&#x2699;'; // Default GEAR
+        if (containerDef.icon) {
+            const icon = containerDef.icon.toUpperCase();
+            if (icon === 'GEAR') iconHtml = '&#x2699;';
+            else if (icon === 'FILTER') iconHtml = '&#x1F50D;';
+            else if (icon === 'INFO') iconHtml = '&#x2139;';
+            else if (containerDef.icon.includes('.') || containerDef.icon.includes('/')) {
+                iconHtml = `<img src="${containerDef.icon}" style="width:24px;height:24px;">`;
+            } else {
+                iconHtml = containerDef.icon;
+            }
+        }
+        trigger.innerHTML = iconHtml;
+        rail.appendChild(trigger);
+
+        // 3. Create Drawer
+        const drawer = document.createElement('div');
+        drawer.className = 'collapsible-drawer';
+        
+        const header = document.createElement('div');
+        header.className = 'drawer-header';
+        
+        const title = document.createElement('div');
+        title.className = 'drawer-title';
+        title.textContent = containerDef.title || containerDef.name;
+        header.appendChild(title);
+        
+        const actions = document.createElement('div');
+        actions.className = 'drawer-actions';
+        
+        if (containerDef.isPinnable !== false) {
+            const pinBtn = document.createElement('span');
+            pinBtn.className = 'drawer-action-btn';
+            pinBtn.innerHTML = '&#x1F4CC;'; // Pin
+            pinBtn.title = 'Pin Panel';
+            pinBtn.onclick = (e) => {
+                e.stopPropagation();
+                const isPinned = drawer.classList.toggle('pinned');
+                pinBtn.classList.toggle('active');
+                gridContainer.classList.toggle('has-pinned-left');
+                if (isPinned) drawer.classList.add('open');
+                setTimeout(() => resizeChartsIn(gridContainer), 350);
+            };
+            actions.appendChild(pinBtn);
+        }
+        
+        const closeBtn = document.createElement('span');
+        closeBtn.className = 'drawer-action-btn';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.onclick = () => {
+            drawer.classList.remove('open');
+            if (drawer.classList.contains('pinned')) {
+                drawer.classList.remove('pinned');
+                const pinBtn = actions.querySelector('.drawer-action-btn');
+                if (pinBtn) pinBtn.classList.remove('active');
+                gridContainer.classList.remove('has-pinned-left');
+                setTimeout(() => resizeChartsIn(gridContainer), 350);
+            }
+        };
+        actions.appendChild(closeBtn);
+        
+        header.appendChild(actions);
+        drawer.appendChild(header);
+        
+        const content = document.createElement('div');
+        content.className = 'drawer-content';
+        renderLayout(content, containerDef, manifest, pageTheme);
+        drawer.appendChild(content);
+        
+        page.appendChild(drawer);
+
+        trigger.onclick = () => {
+            drawer.classList.toggle('open');
+            if (!drawer.classList.contains('open') && drawer.classList.contains('pinned')) {
+                 // If closing while pinned, unpin
+                 closeBtn.click();
+            }
+        };
+
+        if (slotWrapper) slotWrapper.classList.add('grid-slot-collapsed');
+    }
+
+
     function renderLayout(container, layoutDef, manifest, pageTheme) {
         if (layoutDef.structure) {
             container.style.display = 'grid';
@@ -427,8 +722,13 @@
                 } else {
                     const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
                     if (nested) {
-                        renderContainer(wrapper, nested, manifest, pageTheme);
+                        if (nested.isCollapsible) {
+                            renderCollapsibleContainer(container, nested, manifest, pageTheme, wrapper);
+                        } else {
+                            renderContainer(wrapper, nested, manifest, pageTheme);
+                        }
                     } else {
+
                         const btn = (manifest.buttons || []).find(b => b.name.toLowerCase() === item.toLowerCase());
                         if (btn) renderButton(wrapper, btn);
                     }
@@ -445,8 +745,13 @@
                 } else {
                     const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
                     if (nested) {
-                        renderContainer(container, nested, manifest, pageTheme);
+                        if (nested.isCollapsible) {
+                            renderCollapsibleContainer(container, nested, manifest, pageTheme, null);
+                        } else {
+                            renderContainer(container, nested, manifest, pageTheme);
+                        }
                     } else {
+
                         const btn = (manifest.buttons || []).find(b => b.name.toLowerCase() === item.toLowerCase());
                         if (btn) renderButton(container, btn);
                     }

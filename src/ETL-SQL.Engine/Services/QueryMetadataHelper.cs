@@ -33,7 +33,7 @@ namespace ETL_SQL.Engine.Services
             for (int i = 0; i < final.Count; i++)
             {
                 var col = final[i];
-                names.Add(col.Alias ?? (col.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"Expr{i}"));
+                names.Add(col.Alias ?? (col.Expression is IdentifierExpression id ? id.Name.Split('.').Last() : $"column{i + 1}"));
             }
             return (final, names);
         }

@@ -60,6 +60,7 @@ namespace ETL_SQL.Engine.Handlers
             { 
                 IsInput = stmt.IsInput, 
                 IsOutput = stmt.IsOutput, 
+                IsRequired = stmt.IsRequired,
                 IsSensitive = stmt.IsSensitive,
                 IsSecret = stmt.IsSecret,
                 IsDeclared = true,

@@ -1,0 +1,28 @@
+-- Required Parameter Test Report
+DECLARE @Region STRING INPUT REQUIRED = '';
+DECLARE @Year INT INPUT REQUIRED = 2024;
+
+PRINT '--- Debugging Required Parameters ---';
+PRINT 'Region: ' + ISNULL(@Region, 'NULL');
+PRINT 'Year:   ' + CAST(ISNULL(@Year, 0) AS STRING);
+
+-- Data source (Mock)
+SELECT 'North' AS Region, 2024 AS Year, 1000 AS Sales INTO #sales
+UNION ALL SELECT 'South', 2024, 1500
+UNION ALL SELECT 'North', 2023, 800;
+
+-- Visuals
+CREATE VISUAL SalesCard AS CARD (
+    SOURCE = (SELECT COALESCE(SUM(Sales), 0) AS Val FROM #sales WHERE Region = @Region AND Year = CAST(@Year AS INT)),
+    MAPPINGS (VALUE = Val)
+);
+
+CREATE VISUAL SalesData AS TABLE (
+    SOURCE = (SELECT Region, Year, Sales FROM #sales WHERE Region = @Region OR @Region IS NULL),
+    MAPPINGS (VALUE = Sales)
+);
+
+CREATE PAGE Main AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP ('A' = SalesCard, 'B' = SalesData)
+);

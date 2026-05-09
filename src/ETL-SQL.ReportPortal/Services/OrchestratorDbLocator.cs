@@ -13,9 +13,14 @@ public class OrchestratorDbLocator(PortalConfig config)
             return _cachedPath;
 
         var portalDir = Path.GetDirectoryName(Path.GetFullPath(config.DatabasePath));
+        var configuredPath = string.IsNullOrWhiteSpace(config.Orchestrator.DatabasePath)
+            ? null
+            : Path.GetFullPath(config.Orchestrator.DatabasePath, portalDir ?? Directory.GetCurrentDirectory());
 
         var candidates = new[]
         {
+            // Explicit path for tests and deployments that keep Portal and Orchestrator state together.
+            configuredPath,
             // Global AppData path used by all ETL-SQL instances (preferred).
             SQLiteJobHistoryStore.DefaultDbPath(),
             // Legacy: relative paths near the portal DB (fallback for old deployments).

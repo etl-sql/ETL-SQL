@@ -33,6 +33,7 @@ namespace ETL_SQL.Core.Parser.Components
                 if (Match(TokenType.PASSWORD)) isSensitive = true;
                 bool isInput  = Match(TokenType.INPUT);
                 bool isOutput = Match(TokenType.OUTPUT);
+                bool isRequired = Match(TokenType.REQUIRED);
 
                 Expression? initialValue = null;
                 if (Match(TokenType.EQUALS)) initialValue = ParseExpression();
@@ -40,6 +41,7 @@ namespace ETL_SQL.Core.Parser.Components
                 if (!isSensitive) isSensitive = Match(TokenType.PASSWORD);
                 if (!isInput)  isInput  = Match(TokenType.INPUT);
                 if (!isOutput) isOutput = Match(TokenType.OUTPUT);
+                if (!isRequired) isRequired = Match(TokenType.REQUIRED);
 
                 Dictionary<string, string>? metadata = null;
                 while (Match(TokenType.COLUMN_TAG))
@@ -50,7 +52,7 @@ namespace ETL_SQL.Core.Parser.Components
 
                 bool isSecret = type != null && type.Equals("SECRET", StringComparison.OrdinalIgnoreCase);
 
-                var stmt = new DeclareStatement(varToken.Value, type ?? "", initialValue, isSensitive, isInput, isOutput, metadata)
+                var stmt = new DeclareStatement(varToken.Value, type ?? "", initialValue, isSensitive, isInput, isOutput, isRequired, metadata)
                 {
                     Line        = varToken.Line,
                     Column      = varToken.Column,
@@ -59,7 +61,8 @@ namespace ETL_SQL.Core.Parser.Components
                     IsSensitive = isSensitive,
                     IsSecret    = isSecret,
                     IsInput     = isInput,
-                    IsOutput    = isOutput
+                    IsOutput    = isOutput,
+                    IsRequired  = isRequired
                 };
                 declares.Add(stmt);
             } while (Match(TokenType.COMMA));

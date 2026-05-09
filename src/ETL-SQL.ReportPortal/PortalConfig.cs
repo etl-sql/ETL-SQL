@@ -15,6 +15,7 @@ public class PortalConfig
 public class OrchestratorConfig
 {
     public string? ApiUrl { get; set; }
+    public string? DatabasePath { get; set; }
 }
 
 public class ResourcesConfig

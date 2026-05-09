@@ -102,7 +102,11 @@ namespace ETL_SQL.ReportBuilder
                         Subtitle           = subtitle,
                         SubtitleIsMarkdown = subtitleMd,
                         Tooltip            = _styleBuilder.BuildTooltipManifest(cStmt.Tooltip),
+                        IsCollapsible      = cStmt.IsCollapsible,
+                        Icon               = cStmt.Icon,
+                        IsPinnable         = cStmt.IsPinnable,
                         Styles             = resolvedStyles.Count > 0 ? resolvedStyles : null
+
                     });
                 }
             }
@@ -212,7 +216,7 @@ namespace ETL_SQL.ReportBuilder
                             Name = kvp.Key,
                             Type = kvp.Value.Metadata.DataType ?? "STRING",
                             DefaultValue = valStr,
-                            IsRequired = false
+                            IsRequired = kvp.Value.Metadata.IsRequired
                         };
                     }
                 }

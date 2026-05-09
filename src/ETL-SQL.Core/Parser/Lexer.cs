@@ -129,6 +129,10 @@ namespace ETL_SQL.Core.Parser
             dict["FORMATTING"]  = TokenType.FORMATTING;
             dict["EXPECT"]      = TokenType.EXPECT;
             dict["PLACEHOLDER"] = TokenType.PLACEHOLDER;
+            dict["COLLAPSIBLE"] = TokenType.COLLAPSIBLE;
+            dict["ICON"]        = TokenType.ICON;
+            dict["PINNABLE"]    = TokenType.PINNABLE;
+
 
             // ── Overlay keywords (Phase 9F) ────────────────────────────────
             dict["OVERLAYS"]    = TokenType.OVERLAYS;

@@ -283,7 +283,11 @@ namespace ETL_SQL.Core
         public string? Subtitle { get; init; }
         public bool SubtitleIsMarkdown { get; init; }
         public TooltipDefinition? Tooltip { get; init; }
+        public bool IsCollapsible { get; init; }
+        public string? Icon { get; init; }
+        public bool IsPinnable { get; init; } = true;
         public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
+
     }
 
     public enum NavigationType { Tab, Button, Link }

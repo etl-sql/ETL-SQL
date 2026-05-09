@@ -15,6 +15,7 @@ namespace ETL_SQL.Tests.Hardening
     public class SpillSecurityTests
     {
         [Fact]
+        [Trait("Category", "Smoke.Security")]
         public async Task SpillStore_EncryptedData_IsUnreadableAsJson()
         {
             // Arrange

@@ -14,6 +14,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
     public class ReportingEndToEndTests
     {
         [Fact]
+        [Trait("Category", "Smoke.Reporting")]
         public async Task TestComplexReport_BuildsCompleteManifest()
         {
             // 1. Setup multi-dataset report script
@@ -77,6 +78,7 @@ CREATE PAGE Dashboard AS LAYOUT (
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Reporting")]
         public async Task TestDashboardService_SelectiveRefresh_UpdatesCorrectVisuals()
         {
             string scriptPath = Path.Combine(Path.GetTempPath(), $"selective_refresh_{Guid.NewGuid()}.rptsql");

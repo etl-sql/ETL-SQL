@@ -4,12 +4,12 @@
     These items came out of the May 2026 project/code review. The core goal is on track: a SQL-familiar language for ETL scripts, jobs, and reporting. The next priority is making the existing surface dependable and consistent across CLI, TUI, VS Code, standalone report serve, and Report Portal.
 
     - [ ] **Priority 1: Unify security boundaries across all hosts**
-        - [ ] Replace portal path containment checks that use `StartsWith` with a shared safe-path helper based on `Path.GetRelativePath` or equivalent canonical containment.
-        - [ ] Add regression tests for sibling-path bypasses such as `C:\Reports2` passing a `C:\Reports` check.
+        - [x] Replace portal path containment checks that use `StartsWith` with a shared safe-path helper based on `Path.GetRelativePath` or equivalent canonical containment.
+        - [x] Add regression tests for sibling-path bypasses such as `C:\Reports2` passing a `C:\Reports` check.
         - [ ] Route Report Portal and ReportPlayer file/script access through the same safe-zone model used by the engine.
         - [ ] Make report `RUN_SCRIPT` actions resolve through `IExecutionContext.ResolvePath()` or an equivalent report-safe execution context.
         - [ ] Restrict portal-published scripts, snapshots, maps, exports, and datasets to configured roots.
-        - [ ] Revisit `GET /api/maps/custom`: it is currently anonymous and reads map files after path validation; make sure this cannot leak script-root files.
+        - [x] Revisit `GET /api/maps/custom`: it is currently anonymous and reads map files after path validation; make sure this cannot leak script-root files.
 
     - [ ] **Priority 2: Report consistency across VS Code, serve, and portal**
         - [ ] Establish one canonical report runtime source for `report-runtime.js` and `report-runtime.css`.
@@ -31,12 +31,12 @@
         - [ ] Use the same sample as a README walkthrough, integration test, portal demo, and regression target.
         - [ ] Ensure the sample behaves identically in VS Code preview, standalone serve, and Report Portal.
 
-    - [ ] **Priority 4: Add fast smoke test lanes**
-        - [ ] Add a smoke test command/filter for core language behavior.
-        - [ ] Add a smoke test command/filter for security/path guardrails.
-        - [ ] Add a smoke test command/filter for reporting manifest/runtime behavior.
-        - [ ] Add a smoke test command/filter for Report Portal publish/execute/snapshot basics.
-        - [ ] Target each smoke lane at roughly 30-60 seconds; keep the full suite for CI/nightly/release validation.
+    - [x] **Priority 4: Add fast smoke test lanes**
+        - [x] Add a smoke test command/filter for core language behavior.
+        - [x] Add a smoke test command/filter for security/path guardrails.
+        - [x] Add a smoke test command/filter for reporting manifest/runtime behavior.
+        - [x] Add a smoke test command/filter for Report Portal publish/execute/snapshot basics.
+        - [x] Target each smoke lane at roughly 30-60 seconds; keep the full suite for CI/nightly/release validation.
 
     - [ ] **Priority 5: Portal permissions before dataset expansion**
         - [ ] Finish dataset ACL filtering in `DatasetRegistryService.ListAll`.
@@ -75,9 +75,17 @@
         - [x] Support highlighting in LINE (ghost other lines) and SCATTER (dim non-matching points).
         - [x] Support "Ghosting" in PIE and DONUT (dimming non-selected slices).
 
-- [x] **Header is wrong**  The report-runtime.js header first is only supposed to appear when using VS Code and hidden in portal or serve.  Second its supposed to be rocket icon (launch) which launches into serve mode so the user who is developing the dashboard can see what it will look like.  Next should be a markdown icon to publish to markdown.  The functionality already exists just needs to call it.  Next publish to PDF icon, same as Markdown it already exists just needs to call it.  Finally a txt icon which will call report print which prints an ascii of the charges in text format. Once again it already exists just need to call it.
+- [ ] **TUI & VS Code consistency**  How can we make each environment consistent to each other.  I feel like they are 80% but I would like to make sure nothing is missing or feels off.  How do we harden them to make sure we don't have consistent issues.  VS Code seems to be more fragile to me and it shouldn't be, its my centerpiece.  This is where most of my developers will work.
+   - TUI: Overall feels really nice to me.  What's missing, can we harden it?  Really long scripts seem like they will be a problem, how to fix that.
+   - VS Code:  Seems fragile, getting better.  The centerpiece of the project for developers.  How to make etl, and reporting (reports/dashboards) feel natural.
+   - Do we need something else?  I feel like VS Code and its marketplace will be a huge selling point for the project but sometimes its just not going to work perfectly.  Do we need another cross-platform application more tailored to the project?  My gut says no but sometimes you have to stop fighting it if something else will work better.  
 
-- [x] **Script issue**  The following script works fine in TUI and VS Code but does not show the table in the report portal: C:\Users\chuck\scratch\ETL-SQL\samples\sales table.rptsql
+- [ ] **Review reporting language for consistency**  Need to review the syntax of reporting for consistency across the whole ETL-SQL language and between itself and its objects.  Simplify where possible, add help to bridge the complexity.  
+   - HELP/VS code hover help: The C:\Users\chuck\scratch\ETL-SQL\src\ETL-SQL.Core\Resources\Help add a lot and I would like to make sure these stay up to date and accurate.  How can we make sure of this?  
+   - DOCUMENTATION:  C:\Users\chuck\scratch\ETL-SQL\Docs although I feel the documentation needs some refinement.      
+      - I think each document needs a purpose, stick to the purpose, be a complete source for that purpose.  
+      - Goal: Be both people friendly and agent friendly.
+      - Goal: Point AI agents to AGENT.MD, from that they should be able to write an etl script, write a report or dashboard, answer questions users may have about the syntax.
 
 - [ ] **Reports with Input Parameters & Scalar Visuals**  
     Add support for operational reporting where parameters can be batched and applied before execution (SSRS style).
@@ -107,6 +115,54 @@
         - [ ] **Auto-Panel**: Auto-generate parameter sidebar if visuals are missing.
         - [ ] **Verify**: Confirm portal behavior with a required-parameter script.
         - [ ] **Commit**: `git commit -m "Phase 4: Portal-level parameter prompting complete."`
+
+- [ ] **Cleaner source tree**
+src/
+    ETL-SQL.Core/
+      AST, parser, lexer, language metadata, shared contracts
+
+    ETL-SQL.Engine/
+      evaluator, statement handlers, query execution, functions, security runtime
+
+    ETL-SQL.Connectors/
+      connector implementations
+
+    ETL-SQL.Analysis/
+      linting, lineage, explain, dialect checks
+
+    ETL-SQL.Reporting/
+      report AST helpers, manifest builder, visual/style/page builders
+
+    ETL-SQL.ReportRuntime/
+      shared JS/CSS/assets for rendering manifests
+
+    ETL-SQL.ReportPlayer/
+      standalone serve/build host
+
+    ETL-SQL.ReportPortal/
+      web app, auth, folders, subscriptions, snapshots, portal APIs
+
+    ETL-SQL.Orchestrator/
+      jobs, scheduler, history, process execution
+
+    ETL-SQL.LanguageServer/
+      LSP only
+
+    ETL-SQL.App/
+      CLI entry point
+
+    ETL-SQL.TUI/
+      terminal UI
+
+    etl-sql-vscode/
+      VS Code extension
+
+    Questions:
+    - Should VS Codes name change to match the naming style of the others?
+    - Does the Reporting need to be separated or can it be integrated into ETL-SQL.Core? 
+    - Any issues with the structure above?
+    - How am I better able to debug the JS, does the runtime allow that?  The layers make it difficult
+    - Reporting was implemented later as almost an add-on but that's not the case anymore, should we make changes to that or should it stay separate?
 
 
 - [ ] **Lineage & Data Governance — Full Feature Set** *(priority — core selling feature)* — See `Docs/Strategy/Lineage_Strategy.md` for the complete design. Reference documentation for standard tags and usage: `Docs/Reference/Lineage.md`.
