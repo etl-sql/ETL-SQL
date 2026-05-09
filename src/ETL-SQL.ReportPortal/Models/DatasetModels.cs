@@ -29,3 +29,12 @@ public record UpdateDatasetRequest(string? AccessLevel, string? Ttl);
 public record DatasetAclEntryDto(int GroupId, string GroupName, string Permission);
 
 public record GrantDatasetPermissionRequest(int GroupId, string Permission);
+
+public record DatasetRefreshStatusDto(
+    string    Status,       // Idle | InProgress
+    string?   JobId,
+    DateTime? StartedAt,
+    DateTime? CompletedAt,
+    string?   Error,
+    DateTime? LastRefresh,
+    bool      IsStale);

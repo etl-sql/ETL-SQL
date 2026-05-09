@@ -15,9 +15,11 @@ namespace ETL_SQL.ReportPortal.Controllers;
 [Route("api/datasets")]
 [Authorize]
 public class DatasetController(
-    PortalDbContext db,
-    IDatasetRegistry registry,
-    AuditService audit) : ControllerBase
+    PortalDbContext     db,
+    IDatasetRegistry    registry,
+    AuditService        audit,
+    ExecutionJobService jobService,
+    PortalConfig        portalConfig) : ControllerBase
 {
     private int  CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
     private bool IsAdmin       => User.IsInRole("Admin");
@@ -120,10 +122,62 @@ public class DatasetController(
         var perm = await GetEffectivePermissionAsync(dataset);
         if (!CanEdit(perm)) return Forbid();
 
-        await registry.SetStale(dataset.Name, dataset.FolderPath);
-        await audit.LogAsync(CurrentUserId, "REFRESH_DATASET", "Dataset", id.ToString(), dataset.Name);
+        // Concurrent refresh guard: reject if the owning report is already executing
+        if (dataset.OwningReportId.HasValue)
+        {
+            var existingJobId = jobService.GetActiveRefreshJobId(dataset.OwningReportId.Value);
+            if (existingJobId is not null)
+            {
+                Response.Headers.Append("Location", $"/api/jobs/{existingJobId}");
+                return Conflict(new { error = "Refresh already in progress.", jobId = existingJobId });
+            }
+        }
 
-        return Ok(new { message = $"Dataset '{dataset.Name}' marked for refresh. It will re-materialise on next USE DATASET." });
+        // Mark stale so the engine re-materialises on next CREATE DATASET hit
+        await registry.SetStale(dataset.Name, dataset.FolderPath);
+
+        // If we have an owning report with an accessible script, queue a real engine refresh
+        if (dataset.OwningReport is not null
+            && PortalPathGuard.TryResolveScript(portalConfig, dataset.OwningReport.ScriptPath, out var scriptPath))
+        {
+            var jobId = jobService.EnqueueRefresh(dataset.OwningReport.Id, CurrentUserId, scriptPath);
+            await audit.LogAsync(CurrentUserId, "REFRESH_DATASET", "Dataset", id.ToString(), dataset.Name);
+            Response.Headers.Append("Location", $"/api/jobs/{jobId}");
+            return Accepted(new { triggered = true, jobId });
+        }
+
+        // No owning report (or script inaccessible) — dataset is stale and will refresh on next script run
+        await audit.LogAsync(CurrentUserId, "REFRESH_DATASET", "Dataset", id.ToString(), dataset.Name + " (stale-only)");
+        return Accepted(new { triggered = false, message = $"Dataset '{dataset.Name}' marked stale. It will re-materialise on next script execution." });
+    }
+
+    // ── GET /api/datasets/{id}/refresh-status ────────────────────────────────
+
+    [HttpGet("{id:int}/refresh-status")]
+    public async Task<IActionResult> GetRefreshStatus(int id)
+    {
+        var dataset = await LoadDataset(id);
+        if (dataset is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(dataset);
+        if (!CanView(perm)) return Forbid();
+
+        if (dataset.OwningReportId.HasValue)
+        {
+            var jobId = jobService.GetActiveRefreshJobId(dataset.OwningReportId.Value);
+            if (jobId is not null)
+            {
+                var job = jobService.Get(jobId);
+                return Ok(new DatasetRefreshStatusDto(
+                    "InProgress", jobId,
+                    job?.StartedAt, null, null,
+                    dataset.LastRefresh, IsStale(dataset)));
+            }
+        }
+
+        return Ok(new DatasetRefreshStatusDto(
+            "Idle", null, null, null, null,
+            dataset.LastRefresh, IsStale(dataset)));
     }
 
     // ── PATCH /api/datasets/{id} ──────────────────────────────────────────────

@@ -35,6 +35,8 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     // ── 1. GET /api/datasets — authentication & listing ───────────────────────
 
     [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    [Trait("Category", "Smoke.Security")]
     public async Task GetAll_RequiresAuthentication()
     {
         var res = await _client.GetAsync("/api/datasets");
@@ -93,6 +95,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     // ── 2. GET /api/datasets/{id} — metadata panel ────────────────────────────
 
     [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task GetById_ReturnsCorrectMetadata()
     {
         var token  = await GetAdminTokenAsync();
@@ -116,6 +119,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    [Trait("Category", "Smoke.Security")]
     public async Task GetById_ForbidsPrivateDatasetForUnrelatedUser()
     {
         var token  = await GetAdminTokenAsync();
@@ -187,6 +191,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     // ── 4. POST /api/datasets/{id}/refresh ────────────────────────────────────
 
     [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task Refresh_MarksDatasetStale()
     {
         var token  = await GetAdminTokenAsync();
@@ -204,7 +209,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.False(before!["isStale"]!.GetValue<bool>());
 
         var refreshRes = await AuthPost(token, $"/api/datasets/{id}/refresh", new { });
-        Assert.Equal(HttpStatusCode.OK, refreshRes.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, refreshRes.StatusCode);
 
         // After SetStale(), LastRefresh is null → IsStale = true
         var after = await (await AuthGet(token, $"/api/datasets/{id}")).Content
@@ -213,6 +218,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    [Trait("Category", "Smoke.Security")]
     public async Task Refresh_ForbidsViewerAccess()
     {
         var token  = await GetAdminTokenAsync();
@@ -302,6 +308,7 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    [Trait("Category", "Smoke.Security")]
     public async Task Delete_ForbidsEditorAccess()
     {
         var adminToken = await GetAdminTokenAsync();
@@ -392,28 +399,147 @@ public class DatasetControllerTests : IClassFixture<PortalWebFactory>
         Assert.DoesNotContain(aclList3!, a => a!["groupId"]!.GetValue<int>() == groupId);
     }
 
+    // ── 8. Phase 6 — Portal-Triggered Refresh ────────────────────────────────
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task Refresh_WithOwningReport_Returns202AndJobId()
+    {
+        var token  = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        // Create a folder, report, and script file
+        var folderRes = await AuthPost(token, "/api/folders", new { name = $"rf_{suffix}", parentId = (int?)null });
+        folderRes.EnsureSuccessStatusCode();
+        var folderId = (await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"rf_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, """
+            CREATE VISUAL Total AS CARD (
+                SOURCE = (SELECT 42 AS Answer),
+                MAPPINGS (VALUE = Answer)
+            );
+            """);
+
+        var rptRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId, name = $"rf_{suffix}", description = "", scriptPath
+        });
+        rptRes.EnsureSuccessStatusCode();
+        var reportId = (await rptRes.Content.ReadFromJsonAsync<JsonObject>(_json))!["id"]!.GetValue<int>();
+
+        // Register a dataset owned by that report
+        var dsName   = $"#rf_{suffix}";
+        var dsFolder = $"/rf_{suffix}";
+        await RegisterDatasetAsync(dsName, dsFolder, DatasetAccessLevel.Public, owningReportId: reportId);
+        var dsId = await GetDatasetIdAsync(dsName, dsFolder);
+
+        // POST refresh — should 202 with triggered=true and a jobId
+        var res = await AuthPost(token, $"/api/datasets/{dsId}/refresh", new { });
+        Assert.Equal(HttpStatusCode.Accepted, res.StatusCode);
+
+        var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.True(body!["triggered"]!.GetValue<bool>());
+        var jobId = body["jobId"]!.GetValue<string>();
+        Assert.False(string.IsNullOrWhiteSpace(jobId));
+
+        // The Location header should point to the job
+        Assert.Contains($"/api/jobs/{jobId}", res.Headers.Location?.ToString() ?? "");
+    }
+
+    [Fact]
+    public async Task Refresh_WithoutOwningReport_Returns202AndTriggeredFalse()
+    {
+        var token  = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var name   = $"#noreport_{suffix}";
+        var folder = $"/noreport_{suffix}";
+
+        // Dataset with no owning report
+        await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Public);
+        var id = await GetDatasetIdAsync(name, folder);
+
+        var res = await AuthPost(token, $"/api/datasets/{id}/refresh", new { });
+        Assert.Equal(HttpStatusCode.Accepted, res.StatusCode);
+
+        var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.False(body!["triggered"]!.GetValue<bool>());
+        Assert.Null(body["jobId"]);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task RefreshStatus_ReturnsIdleWhenNoJobRunning()
+    {
+        var token  = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var name   = $"#status_{suffix}";
+        var folder = $"/status_{suffix}";
+
+        await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Public,
+            lastRefresh: DateTime.UtcNow);
+        var id = await GetDatasetIdAsync(name, folder);
+
+        var res = await AuthGet(token, $"/api/datasets/{id}/refresh-status");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+
+        var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal("Idle",  body!["status"]!.GetValue<string>());
+        Assert.Null(body["jobId"]);
+        Assert.False(body["isStale"]!.GetValue<bool>());
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Security")]
+    public async Task RefreshStatus_ForbidsUnauthorizedAccess()
+    {
+        var adminToken = await GetAdminTokenAsync();
+        var suffix     = Guid.NewGuid().ToString("N")[..8];
+        var name       = $"#statusprv_{suffix}";
+        var folder     = $"/statusprv_{suffix}";
+
+        // Private dataset — unrelated user cannot see status
+        await RegisterDatasetAsync(name, folder, DatasetAccessLevel.Private);
+        var id = await GetDatasetIdAsync(name, folder);
+
+        var userRes = await AuthPost(adminToken, "/api/admin/users", new
+        {
+            username = $"statusoutsider_{suffix}",
+            email    = $"statusoutsider_{suffix}@test.local",
+            password = "Out@Status1!",
+            role     = "Viewer"
+        });
+        Assert.Equal(HttpStatusCode.Created, userRes.StatusCode);
+        var outsiderToken = await LoginAndChangePasswordAsync(
+            $"statusoutsider_{suffix}", "Out@Status1!", "Out@Status2!");
+
+        var res = await AuthGet(outsiderToken, $"/api/datasets/{id}/refresh-status");
+        Assert.Equal(HttpStatusCode.Forbidden, res.StatusCode);
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private async Task RegisterDatasetAsync(
         string name, string folder,
         DatasetAccessLevel accessLevel = DatasetAccessLevel.Public,
         long rowCount = 0, string? ttl = null, string? columnSchema = null,
-        DateTime? lastRefresh = null)
+        DateTime? lastRefresh = null, int? owningReportId = null)
     {
         using var scope = _factory.Services.CreateScope();
         var registry = scope.ServiceProvider.GetRequiredService<IDatasetRegistry>();
 
         await registry.RegisterOrUpdate(new DatasetMetadata
         {
-            Name         = name,
-            FolderPath   = folder,
+            Name            = name,
+            FolderPath      = folder,
             ParquetFilePath = $"{name.TrimStart('&', '#')}.parquet",
-            SourceQuery  = "SELECT 1",
-            AccessLevel  = accessLevel,
-            RowCount     = rowCount,
-            Ttl          = ttl,
-            ColumnSchema = columnSchema,
-            LastRefresh  = lastRefresh
+            SourceQuery     = "SELECT 1",
+            AccessLevel     = accessLevel,
+            RowCount        = rowCount,
+            Ttl             = ttl,
+            ColumnSchema    = columnSchema,
+            LastRefresh     = lastRefresh,
+            OwningReportId  = owningReportId
         });
     }
 
