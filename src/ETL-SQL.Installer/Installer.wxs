@@ -50,7 +50,7 @@
         <!-- Orchestrator Components & Service -->
         <ComponentGroup Id="OrchestratorComponents" Directory="OrchestratorDir">
             <Component Id="Orchestrator_EXE" Guid="*">
-                <File Source="publish\win-x64\bin\ETL-SQL.Orchestrator.Service.exe" KeyPath="yes" />
+                <File Source="publish\win-x64\bin\ETL-SQL-Service.exe" KeyPath="yes" />
                 <ServiceInstall Id="ServiceInstaller_Orchestrator" 
                                 Type="ownProcess" 
                                 Name="ETL-SQL-Orchestrator" 
@@ -66,7 +66,7 @@
         <!-- Portal Components & Service -->
         <ComponentGroup Id="PortalComponents" Directory="PortalDir">
             <Component Id="Portal_EXE" Guid="*">
-                <File Source="publish\win-x64\bin\ETL-SQL.ReportPortal.exe" KeyPath="yes" />
+                <File Source="publish\win-x64\bin\ETL-SQL-Portal.exe" KeyPath="yes" />
                 <ServiceInstall Id="ServiceInstaller_Portal" 
                                 Type="ownProcess" 
                                 Name="ETL-SQL-Portal" 

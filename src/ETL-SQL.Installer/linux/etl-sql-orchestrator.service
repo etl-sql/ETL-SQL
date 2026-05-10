@@ -6,7 +6,7 @@ After=network.target
 Type=simple
 User=etlsql
 WorkingDirectory=/usr/lib/etl-sql/orchestrator
-ExecStart=/usr/lib/etl-sql/orchestrator/ETL-SQL.Orchestrator.Service
+ExecStart=/usr/lib/etl-sql/orchestrator/ETL-SQL-Service
 Restart=always
 RestartSec=10
 Environment=ASPNETCORE_URLS=http://*:5001
