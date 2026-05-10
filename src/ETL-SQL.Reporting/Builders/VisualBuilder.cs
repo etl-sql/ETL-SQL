@@ -162,7 +162,7 @@ namespace ETL_SQL.Reporting.Builders
 
             bool deferredHidden = skipDeferredVisuals &&
                 vm.Options.TryGetValue("VISIBLE", out var visOpt) &&
-                visOpt.Equals("OFF", StringComparison.OrdinalIgnoreCase);
+                visOpt.ToUpperInvariant() is "OFF" or "FALSE" or "0";
             vm.IsHidden = deferredHidden;
 
             if (vm.Error == null && !deferredHidden)

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -26,6 +28,7 @@ using ETL_SQL.Core;
 string? scriptPath   = null;
 string? manifestPath = null;
 int?    portArg      = null;
+bool    noBrowser    = false;
 
 for (int i = 0; i < args.Length; i++)
 {
@@ -34,6 +37,8 @@ for (int i = 0; i < args.Length; i++)
     else if ((args[i] == "--port" || args[i] == "-p") && i + 1 < args.Length
              && int.TryParse(args[++i], out int p))
         portArg = p;
+    else if (args[i] == "--no-browser")
+        noBrowser = true;
     else if (!args[i].StartsWith("-"))
         scriptPath = args[i];
 }
@@ -52,8 +57,8 @@ else
 {
     if (scriptPath == null || !File.Exists(scriptPath))
     {
-        Console.Error.WriteLine("Usage: etl-sql-report <script.rptsql>");
-        Console.Error.WriteLine("       etl-sql-report --manifest reports.json");
+        Console.Error.WriteLine("Usage: etl-sql-report <script.rptsql> [--no-browser]");
+        Console.Error.WriteLine("       etl-sql-report --manifest reports.json [--no-browser]");
         return;
     }
 }
@@ -66,6 +71,7 @@ int executionTimeoutSeconds = builder.Configuration.GetValue<int?>("ReportPlayer
     ?? builder.Configuration.GetValue<int?>("Portal:Resources:ExecutionTimeoutSeconds")
     ?? 30;
 var executionTimeout = TimeSpan.FromSeconds(Math.Max(1, executionTimeoutSeconds));
+int idleTimeoutMinutes = builder.Configuration.GetValue<int>("ReportPlayer:IdleTimeoutMinutes", 30);
 
 // We need a ServiceProvider to build the services, but we also want to register them.
 // In Phase 9F, these are effectively singletons.
@@ -105,6 +111,14 @@ app.Use(async (ctx, next) =>
     ctx.Response.Headers["Cache-Control"] = "no-cache, no-store, must-revalidate";
     ctx.Response.Headers["Pragma"] = "no-cache";
     ctx.Response.Headers["Expires"] = "0";
+    await next();
+});
+
+// Track last request time so the idle-timeout timer knows when to shut down.
+long lastActivityTicks = DateTime.UtcNow.Ticks;
+app.Use(async (ctx, next) =>
+{
+    Interlocked.Exchange(ref lastActivityTicks, DateTime.UtcNow.Ticks);
     await next();
 });
 
@@ -330,6 +344,45 @@ else
 
 // Machine-readable line so callers (e.g. VS Code extension) can parse the actual bound URL.
 Console.WriteLine($"REPORT_URL={actualUrl}");
+
+// Idle timeout: each ReportPlayer instance shuts itself down after inactivity so
+// orphaned preview servers don't accumulate. Multiple instances are fine — each gets
+// its own ephemeral port. Pass --no-browser or set IdleTimeoutMinutes=0 to disable.
+if (idleTimeoutMinutes > 0)
+{
+    var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+    var idleTimeout = TimeSpan.FromMinutes(idleTimeoutMinutes);
+    _ = Task.Run(async () =>
+    {
+        try
+        {
+            while (!lifetime.ApplicationStopping.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(60), lifetime.ApplicationStopping);
+                var idle = TimeSpan.FromTicks(DateTime.UtcNow.Ticks - Interlocked.Read(ref lastActivityTicks));
+                if (idle >= idleTimeout)
+                {
+                    Console.WriteLine($"[ReportPlayer] No activity for {idle.TotalMinutes:F0} min — shutting down.");
+                    lifetime.StopApplication();
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+    });
+    Console.WriteLine($"[ReportPlayer] Will auto-shutdown after {idleTimeoutMinutes} min of inactivity.");
+}
+
+// Open the browser automatically so the user can immediately see the report.
+// Pass --no-browser to suppress (e.g. VS Code extension handles its own webview).
+if (!noBrowser)
+{
+    try
+    {
+        System.Diagnostics.Process.Start(
+            new System.Diagnostics.ProcessStartInfo { FileName = actualUrl, UseShellExecute = true });
+    }
+    catch { /* non-critical — user can copy the URL from stdout */ }
+}
 
 await app.WaitForShutdownAsync();
 
