@@ -13,15 +13,18 @@ Chart types:
   BAR, HBAR       — vertical / horizontal bars
   LINE            — line or area trend chart
   PIE, DONUT      — pie and donut charts
-  SCATTER, BUBBLE — scatter plot with optional bubble sizing
+  SCATTER         — scatter plot correlating two numeric dimensions
+  BUBBLE          — scatter with a SIZE column controlling bubble area
   GAUGE           — dial/arc KPI chart
-  RADAR           — spider/radar chart
+  RADAR           — spider/radar chart (no MAPPINGS required; first col = series name)
   HEATMAP         — colour-grid matrix
   FUNNEL          — stage pipeline chart
   WATERFALL       — incremental change / bridge chart
   TREEMAP         — hierarchical rectangle chart
   BOXPLOT         — statistical distribution chart
   COMBO           — bar + line on dual axes
+  CANDLESTICK     — OHLC financial chart (X, OPEN, HIGH, LOW, CLOSE mappings)
+  MAP             — choropleth (REGION mapping) or point overlay (LON/LAT + MODE=POINTS)
 
 Display types:
   CARD            — large KPI tile with optional trend and goal
@@ -33,8 +36,12 @@ Interactive controls:
   SLICER          — dropdown selector
   MULTISELECT     — checkbox list
   DATEPICKER      — date input
+  RELDATEPICKER   — relative-date picker (text + calendar + quick-pick buttons)
   SLIDER          — numeric range slider
   SEARCH          — free-text search input
+  CHECKBOX        — boolean toggle
+  TEXTBOX         — single-line text input
+  NUMBERBOX       — numeric input with validation
 
 ```sql
 CREATE VISUAL SalesBar AS BAR (

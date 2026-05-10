@@ -25,7 +25,16 @@ ON_CHANGE = SET_PARAMETER(@category, value)
 Updates a target visual by passing a filter value.
 ```sql
 ON_CLICK = DRILL_DOWN(Target = DetailChart, Key = Region)
+-- Composite key:
+ON_CLICK = DRILL_DOWN(Target = DetailChart, Key = (Region, Product))
 ```
+
+### DRILL_IN
+Enables in-place hierarchical drill-down on the same visual. Click a bar to go deeper; click a breadcrumb to navigate back up.
+```sql
+ON_CLICK = DRILL_IN(HIERARCHY = (Year, Quarter, Month))
+```
+The SOURCE query must include all hierarchy columns. The runtime regroups and re-aggregates at each level automatically.
 
 ### RUN_SCRIPT
 Executes a custom ETL-SQL script file on the server.
