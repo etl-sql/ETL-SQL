@@ -538,7 +538,7 @@ namespace ETL_SQL.Core.Formatting
             if (s.ExportAsOpenLineage && s.ExportPath != null)
                 sql += $" EXPORT AS OPENLINEAGE TO '{s.ExportPath}'";
             else if (s.ExportPath  != null) sql += $" TO '{s.ExportPath}'";
-            return sql;
+            return sql + ";";
         }
 
         private static string FormatCreateSets(CreateSetsStatement s)

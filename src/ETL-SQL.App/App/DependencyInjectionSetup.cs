@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,13 +43,15 @@ namespace ETL_SQL.App
 {
     public static class DependencyInjectionSetup
     {
-        public static IServiceProvider BuildServiceProvider()
+        public static IServiceProvider BuildServiceProvider(Dictionary<string, string?>? configOverrides = null)
         {
-            var configuration = new ConfigurationBuilder()
+            var builder = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-                .AddEnvironmentVariables()
-                .Build();
+                .AddEnvironmentVariables();
+            if (configOverrides != null)
+                builder.AddInMemoryCollection(configOverrides);
+            var configuration = builder.Build();
 
             var services = new ServiceCollection();
             

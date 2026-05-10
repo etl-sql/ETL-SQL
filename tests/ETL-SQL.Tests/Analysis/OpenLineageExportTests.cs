@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Xunit;
@@ -260,6 +261,126 @@ namespace ETL_SQL.Tests.Analysis
             {
                 File.Delete(tmpFile);
             }
+        }
+
+        // ── HTTP export ─────────────────────────────────────────────────────
+
+        [Fact]
+        public async Task ExportToHttp_PostsValidOpenLineageJson()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            tracker.Record("#t", new[] { "src.Orders" }, "SELECT",
+                targetColumn: "total",
+                sourceColumns: new[] { "amount" },
+                transformationKind: TransformationKind.Aggregation,
+                transformationExpression: "SUM(amount)");
+
+            var port = GetFreePort();
+            var prefix = $"http://localhost:{port}/ol/";
+            var listener = new HttpListener();
+            listener.Prefixes.Add(prefix);
+            listener.Start();
+
+            string? body = null;
+            var serverTask = Task.Run(async () =>
+            {
+                var ctx = await listener.GetContextAsync();
+                using var reader = new StreamReader(ctx.Request.InputStream, ctx.Request.ContentEncoding);
+                body = await reader.ReadToEndAsync();
+                ctx.Response.StatusCode = 200;
+                ctx.Response.Close();
+            });
+
+            await OpenLineageExporter.ExportToHttpAsync(tracker, "sid", "job", prefix, NullLogger.Instance);
+            await serverTask;
+            listener.Stop();
+
+            Assert.NotNull(body);
+            var doc = JsonDocument.Parse(body!);
+            Assert.Equal("COMPLETE", doc.RootElement.GetProperty("eventType").GetString());
+            Assert.Equal("job", doc.RootElement.GetProperty("job").GetProperty("name").GetString());
+        }
+
+        [Fact]
+        public async Task ExportToHttp_UnreachableEndpoint_LogsWarningWithoutThrowing()
+        {
+            var tracker = new LineageTracker(NullLogger.Instance);
+            tracker.Record("#t", new[] { "src.T" }, "SELECT");
+
+            // Port 1 is reserved and will refuse the connection
+            var ex = await Record.ExceptionAsync(() =>
+                OpenLineageExporter.ExportToHttpAsync(tracker, "sid", "job",
+                    "http://localhost:1/ol", NullLogger.Instance));
+
+            Assert.Null(ex); // exception is caught and logged, not re-thrown
+        }
+
+        // ── Auto-export via config ──────────────────────────────────────────
+
+        [Fact]
+        public async Task AutoExport_ViaConfig_OpenLineageFile_WritesOnScriptCompletion()
+        {
+            var tmpFile = Path.GetTempFileName();
+            try
+            {
+                var sp = (ServiceProvider)DependencyInjectionSetup.BuildServiceProvider(
+                    new Dictionary<string, string?> { ["Lineage:OpenLineageFile"] = tmpFile });
+                var eval = sp.GetRequiredService<Evaluator>();
+
+                await TestHelpers.Execute(eval, @"
+                    CREATE TABLE #src (id INT);
+                    INSERT INTO #src VALUES (1);
+                    CREATE TABLE #dst (id INT);
+                    INSERT INTO #dst SELECT id FROM #src;");
+
+                var lines = (await File.ReadAllLinesAsync(tmpFile))
+                    .Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+                Assert.Single(lines);
+                var doc = JsonDocument.Parse(lines[0]);
+                Assert.Equal("COMPLETE", doc.RootElement.GetProperty("eventType").GetString());
+            }
+            finally
+            {
+                File.Delete(tmpFile);
+            }
+        }
+
+        [Fact]
+        public async Task AutoExport_ViaConfig_NestedScript_WritesOnlyOnce()
+        {
+            var tmpFile = Path.GetTempFileName();
+            try
+            {
+                var sp = (ServiceProvider)DependencyInjectionSetup.BuildServiceProvider(
+                    new Dictionary<string, string?> { ["Lineage:OpenLineageFile"] = tmpFile });
+                var eval = sp.GetRequiredService<Evaluator>();
+
+                // Two separate top-level Evaluate calls → two JSONL lines
+                await TestHelpers.Execute(eval, "CREATE TABLE #a (x INT); INSERT INTO #a VALUES (1);");
+                await TestHelpers.Execute(eval, "CREATE TABLE #b (x INT); INSERT INTO #b SELECT x FROM #a;");
+
+                var lines = (await File.ReadAllLinesAsync(tmpFile))
+                    .Where(l => !string.IsNullOrWhiteSpace(l)).ToList();
+                Assert.Equal(2, lines.Count);
+                foreach (var line in lines)
+                {
+                    var doc = JsonDocument.Parse(line);
+                    Assert.Equal("COMPLETE", doc.RootElement.GetProperty("eventType").GetString());
+                }
+            }
+            finally
+            {
+                File.Delete(tmpFile);
+            }
+        }
+
+        private static int GetFreePort()
+        {
+            var l = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0);
+            l.Start();
+            var port = ((System.Net.IPEndPoint)l.LocalEndpoint).Port;
+            l.Stop();
+            return port;
         }
     }
 }
