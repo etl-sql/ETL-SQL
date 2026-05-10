@@ -37,7 +37,7 @@ CREATE VISUAL SalesThreshold AS NUMBERBOX (
 -- 4. Display Visual (conditional on checkbox)
 CREATE VISUAL SalesTable AS TABLE (
     SOURCE = (SELECT * FROM #data WHERE Sales >= @threshold),
-    TITLE = 'Sales for ' + @user_name,
+    TITLE = 'Sales Table',
     STYLE (DISPLAY = @show_details)
 );
 

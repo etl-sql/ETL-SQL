@@ -1,5 +1,6 @@
 -- Main Orchestration: HR Data Conversion (30 Entities)
 -- Path: samples/conversion/main.etlsql
+-- @requires: postgres
 
 -- 1. Setup Environment
 DECLARE @OutputDir PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\output\';

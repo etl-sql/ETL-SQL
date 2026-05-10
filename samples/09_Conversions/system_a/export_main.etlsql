@@ -1,5 +1,6 @@
 -- Main Orchestration: System A Secure Export
 -- Path: samples/conversion/system_a/export_main.etlsql
+-- @requires: postgres
 
 /*
    @author: Chuck

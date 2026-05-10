@@ -30,11 +30,11 @@ SELECT ID, Data, GET_TAGS('#Lineage') AS [Tags] FROM #Lineage;
 -- 3. Run Script with Parameters
 PRINT 'Testing RUN SCRIPT...';
 -- Note: Sub-script must exist
-RUN SCRIPT 'samples\kitchen_sinks\sub_script.etlsql' WITH (@param1 = 'KitchenSinkTest');
+RUN SCRIPT 'samples\10_Kitchen_Sinks\sub_script.etlsql' WITH (@param1 = 'KitchenSinkTest');
 
 -- 4. Job Management (Local)
 PRINT 'Testing Job Creation...';
-CREATE JOB 'KitchenSinkJob' ON SCHEDULE EVERY 5 MINUTES AS RUN SCRIPT 'samples\kitchen_sinks\sub_script.etlsql';
+CREATE JOB 'KitchenSinkJob' ON SCHEDULE EVERY 5 MINUTES AS RUN SCRIPT 'samples\10_Kitchen_Sinks\sub_script.etlsql';
 
 PRINT 'Job Created. Verifying Listing...';
 SHOW JOBS;

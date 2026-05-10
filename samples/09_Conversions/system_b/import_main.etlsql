@@ -1,5 +1,6 @@
 -- Main Orchestration: System B Secure Ingestion
 -- Path: samples/conversion/system_b/import_main.etlsql
+-- @requires: postgres
 
 -- 1. Setup Environment
 -- ### ALLOW_FILE_OPERATIONS = 200

@@ -11,6 +11,18 @@ BEGIN TRY
 
     PRINT 'Starting PGP Security Sink...';
 
+    -- Ensure output directories exist
+    IF NOT DIRECTORY_EXISTS(@outputDir)
+    BEGIN
+        CREATE CONNECTION _out ON DIRECTORY(@outputDir) WITH(CREATE=ON);
+        DROP CONNECTION _out;
+    END
+    IF NOT DIRECTORY_EXISTS(@keyDir)
+    BEGIN
+        CREATE CONNECTION _keys ON DIRECTORY(@keyDir) WITH(CREATE=ON);
+        DROP CONNECTION _keys;
+    END
+
     -- 2. Generate PGP Key Pair
     -- This creates public.asc and private.asc in the target directory
     IF NOT FILE_EXISTS(@keyDir + '\private.asc')
