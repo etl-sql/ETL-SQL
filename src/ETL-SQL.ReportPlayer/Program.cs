@@ -166,12 +166,11 @@ if (multiMode)
         var svc = fac.GetService(name);
         if (svc == null) return Results.NotFound();
         var body = await JsonSerializer.DeserializeAsync<ParameterBatchRequest>(ctx.Request.Body, webOptions);
-        if (body?.Params == null || body.Params.Count == 0)
-            return Results.BadRequest("params array is required");
-        var updates = body.Params
+        if (body == null) return Results.BadRequest("body is required");
+        var updates = (body.Params ?? new List<ParameterUpdateRequest>())
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name!, p.Value ?? ""));
-        return Results.Json(await svc.SetParametersAsync(updates), noCache);
+        return Results.Json(await svc.SetParametersAsync(updates, body.IsInteraction), noCache);
     });
 
     app.MapPost("/reports/{name}/api/run-script",

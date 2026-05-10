@@ -14,7 +14,8 @@ CREATE BUTTON run_btn AS RUN (
 
 CREATE VISUAL out_table AS TABLE (
     SOURCE = (SELECT @text_val AS [Final Value]),
-    TITLE = 'Results (Only updates after Run)'
+    TITLE = 'Results (Only updates after Run)',
+    OPTIONS (VISIBLE = OFF)
 );
 
 CREATE PAGE Main AS LAYOUT (

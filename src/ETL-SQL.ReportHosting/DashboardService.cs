@@ -39,6 +39,7 @@ namespace ETL_SQL.ReportHosting
         private ReportManifest? _manifest;
         private Evaluator? _evaluator;
         private Dictionary<string, string> _parameters = new(StringComparer.OrdinalIgnoreCase);
+        private bool _hasAppliedParameters = false;
 
         // Background auto-refresh state
         private CancellationTokenSource? _refreshCts;
@@ -97,6 +98,17 @@ namespace ETL_SQL.ReportHosting
         /// </summary>
         public async Task<ReportManifest> SetParametersAsync(IEnumerable<(string Name, string Value)> updates, bool isInteraction = false)
         {
+            // First RUN: do a full rebuild so all deferred (VISIBLE=OFF) visuals get data in one pass
+            bool firstRun = !_hasAppliedParameters && !isInteraction;
+            if (!isInteraction) _hasAppliedParameters = true;
+
+            if (firstRun)
+            {
+                foreach (var (name, value) in updates)
+                    _parameters[name] = value;
+                return await RebuildAsync(); // _hasAppliedParameters=true → skipDeferredVisuals=false
+            }
+
             // Only update global context if NOT an interaction
             if (!isInteraction)
             {
@@ -140,7 +152,10 @@ namespace ETL_SQL.ReportHosting
         public async Task<ReportManifest> SetParameterAsync(string name, string value, bool isInteraction = false)
         {
             if (!isInteraction)
+            {
+                _hasAppliedParameters = true;
                 _parameters[name] = value;
+            }
             
             // If we have an active evaluator and manifest from a previous run, try selective refresh
             if (_evaluator != null && _manifest != null)
@@ -304,7 +319,7 @@ namespace ETL_SQL.ReportHosting
 
                 var builder   = new ManifestBuilder(evaluator);
                 _evaluator    = evaluator;
-                _manifest     = await builder.BuildAsync(_scriptPath);
+                _manifest     = await builder.BuildAsync(_scriptPath, skipDeferredVisuals: !_hasAppliedParameters);
 
                 ScheduleRefresh(_manifest);
                 return _manifest;

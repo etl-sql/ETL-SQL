@@ -36,7 +36,7 @@ namespace ETL_SQL.Reporting
         /// Builds the manifest by querying each visual's data source.
         /// Must be called after the script has been fully evaluated.
         /// </summary>
-        public async Task<ReportManifest> BuildAsync(string scriptSource, Dictionary<string, string>? interactionValues = null)
+        public async Task<ReportManifest> BuildAsync(string scriptSource, Dictionary<string, string>? interactionValues = null, bool skipDeferredVisuals = false)
         {
             var manifest = new ReportManifest
             {
@@ -74,7 +74,7 @@ namespace ETL_SQL.Reporting
             // ── Visuals ──────────────────────────────────────────────────────
             foreach (var (name, vStmt) in _ctx.ReportContext.VisualDefinitions)
             {
-                manifest.Visuals.Add(await _visualBuilder.BuildAsync(name, vStmt, interactionValues));
+                manifest.Visuals.Add(await _visualBuilder.BuildAsync(name, vStmt, interactionValues, skipDeferredVisuals));
             }
 
             // ── Pages ────────────────────────────────────────────────────────
@@ -288,6 +288,7 @@ namespace ETL_SQL.Reporting
             vm.RowStyles = newVm.RowStyles;
             vm.Overlays = newVm.Overlays;
             vm.HighlightRows = newVm.HighlightRows;
+            vm.IsHidden = false; // refreshed visuals are always shown regardless of VISIBLE = OFF
         }
 
         private VisualActionManifest TranslateAction(VisualAction action)

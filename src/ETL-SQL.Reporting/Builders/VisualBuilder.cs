@@ -11,7 +11,7 @@ namespace ETL_SQL.Reporting.Builders
 {
     public class VisualBuilder(IExecutionContext ctx, EChartsRenderer renderer, StyleBuilder styleBuilder)
     {
-        public async Task<VisualManifest> BuildAsync(string name, CreateVisualStatement vStmt, Dictionary<string, string>? interactionValues = null)
+        public async Task<VisualManifest> BuildAsync(string name, CreateVisualStatement vStmt, Dictionary<string, string>? interactionValues = null, bool skipDeferredVisuals = false)
         {
             var (title, titleMd) = styleBuilder.ResolveMarkdown(vStmt.Title, vStmt.TitleIsMarkdown);
             var (subtitle, subtitleMd) = styleBuilder.ResolveMarkdown(vStmt.Subtitle, vStmt.SubtitleIsMarkdown);
@@ -160,7 +160,12 @@ namespace ETL_SQL.Reporting.Builders
                 }
             }
 
-            if (vm.Error == null)
+            bool deferredHidden = skipDeferredVisuals &&
+                vm.Options.TryGetValue("VISIBLE", out var visOpt) &&
+                visOpt.Equals("OFF", StringComparison.OrdinalIgnoreCase);
+            vm.IsHidden = deferredHidden;
+
+            if (vm.Error == null && !deferredHidden)
             {
                 try
                 {

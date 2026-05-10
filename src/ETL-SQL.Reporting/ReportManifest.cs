@@ -165,6 +165,12 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool IsMarkdown { get; set; }
 
+        /// <summary>When true, the visual was declared with VISIBLE = OFF and its data was not fetched.
+        /// The runtime renders a placeholder until the user clicks Run.</summary>
+        [JsonPropertyName("isHidden")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool IsHidden { get; set; }
+
         /// <summary>Resolved ECharts option JSON object (as a pre-serialised string).</summary>
         [JsonPropertyName("chartConfig")]
         public string? ChartConfig { get; set; }

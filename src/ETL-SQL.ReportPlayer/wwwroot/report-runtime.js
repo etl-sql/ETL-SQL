@@ -861,6 +861,17 @@
             return;
         }
 
+        // Deferred visuals (VISIBLE = OFF) show a placeholder until the user clicks Run
+        if (visual.isHidden) {
+            card.classList.add('deferred-visual');
+            const ph = document.createElement('div');
+            ph.className = 'deferred-placeholder';
+            ph.textContent = 'Configure parameters above and click Run to load data.';
+            card.appendChild(ph);
+            container.appendChild(card);
+            return;
+        }
+
         // Resolve effective theme: visual-level overrides page-level
         const effectiveTheme = getStyle(vstyles, 'THEME') || pageTheme || null;
         if (effectiveTheme) card.classList.add('theme-' + effectiveTheme.toLowerCase());
@@ -2193,6 +2204,10 @@
         btnEl.style.fontWeight   = '600';
 
         const type = (btn.buttonType || '').toUpperCase();
+        // Mark RUN buttons so updateStagedUI can target them precisely
+        if ((btn.actions || []).some(a => a.type === 'APPLY_PARAMETERS')) {
+            btnEl.dataset.isRunBtn = 'true';
+        }
         btnEl.addEventListener('click', () => {
             if (type === 'BACK') {
                 window.history.back();
@@ -2700,14 +2715,9 @@
 
     function updateStagedUI() {
         const hasPending = Object.keys(pendingParameters).length > 0;
-        
-        // 1. Update "RUN" buttons to show they are active/needed
-        document.querySelectorAll('.report-btn').forEach(btn => {
-            // Find if this button has an APPLY_PARAMETERS action
-            const name = btn.textContent; // approximate lookup or we could add data-name
-            // Better: use the card's data-visual-name if buttons were in cards, 
-            // but buttons currently are just elements in layout.
-            // For now, we'll look for buttons with a specific class or just all buttons.
+
+        // 1. Update only RUN buttons (tagged with data-is-run-btn during renderButton)
+        document.querySelectorAll('[data-is-run-btn]').forEach(btn => {
             if (hasPending) {
                 btn.classList.add('pending-changes');
             } else {
