@@ -86,6 +86,7 @@
     let isStagedMode = false;     // Phase 2: Staged Mode
     let _refreshTimers = [];
     let _lastActivePage = null;
+    const _drillHistory = [];
     const _registeredMaps = new Set();
     const _crossFilterStates = {}; // Keyed by page element ID; persists across renderManifest re-builds
 
@@ -879,7 +880,7 @@
         switch (type) {
             case 'TABLE':       renderTable(card, visual);                        break;
             case 'CARD':        renderCard(card, visual);                         break;
-            case 'SLICER':      
+            case 'SLICER':
             case 'MULTISELECT': renderSlicer(card, visual, manifest);             break;
             case 'TEXT':        renderText(card, visual);                         break;
             case 'DATEPICKER':    renderDatePicker(card, visual, manifest);        break;
@@ -891,6 +892,16 @@
             case 'NUMBERBOX':   renderNumberbox(card, visual, manifest);          break;
             case 'IMAGE':       renderImage(card, visual);                        break;
             default:            renderChart(card, visual, manifest, effectiveTheme); break;
+        }
+
+        // Drill-through affordance: cursor + badge when visual has DRILL_DOWN actions
+        if ((visual.actions || []).some(a => a.type === 'DRILL_DOWN')) {
+            card.classList.add('has-drill-down');
+            const badge = document.createElement('span');
+            badge.className = 'drill-badge';
+            badge.title = 'Right-click to drill through';
+            badge.textContent = '⤵';
+            card.appendChild(badge);
         }
 
         container.appendChild(card);
@@ -1156,6 +1167,7 @@
                 const drillDowns = (visual.actions || []).filter(a => a.type === 'DRILL_DOWN');
                 if (drillDowns.length > 0) {
                     e.preventDefault();
+                    if (wrapper._echartsInst) wrapper._echartsInst.dispatchAction({ type: 'hideTip' });
                     showCtxMenu(e.clientX, e.clientY, visual, lastHoveredRow);
                 }
             });
@@ -1226,6 +1238,40 @@
     function findVisualData(targetName) {
         const el = document.querySelector(`[data-visual-name="${CSS.escape(targetName)}"]`);
         return el ? el._visualData : null;
+    }
+
+    // Drill-through back-navigation stack
+    function showDrillBackButton() {
+        let btn = document.getElementById('drill-back-btn');
+        if (!btn) {
+            btn = document.createElement('button');
+            btn.id = 'drill-back-btn';
+            btn.className = 'drill-back-btn';
+            btn.addEventListener('click', () => {
+                if (_drillHistory.length === 0) return;
+                const prevParams = _drillHistory.pop();
+                // Restore all previous params; blank out any keys added by the drill
+                const restoreBatch = Object.assign({}, prevParams);
+                Object.keys(parameters).forEach(k => {
+                    if (!(k in prevParams)) restoreBatch[k] = '';
+                });
+                if (_drillHistory.length === 0) hideDrillBackButton();
+                else btn.innerHTML = '← Back' + (_drillHistory.length > 0 ? ` (${_drillHistory.length})` : '');
+                if (vscode) {
+                    vscode.postMessage({ type: 'refreshReport', parameters: restoreBatch });
+                } else {
+                    postParameters(restoreBatch).then(m => { if (m) renderManifest(m); });
+                }
+            });
+            document.body.appendChild(btn);
+        }
+        btn.innerHTML = '← Back' + (_drillHistory.length > 1 ? ` (${_drillHistory.length})` : '');
+        btn.style.display = 'flex';
+    }
+
+    function hideDrillBackButton() {
+        const btn = document.getElementById('drill-back-btn');
+        if (btn) btn.style.display = 'none';
     }
 
     // Lightweight singleton context menu for DRILL_DOWN and Export
@@ -2488,7 +2534,11 @@
                 c => c.toLowerCase() === (action.keyColumn || '').toLowerCase());
             const value  = colIdx >= 0 ? rowData[colIdx] : null;
             if (value == null) return;
-            
+
+            // Push current parameter snapshot onto back-navigation stack
+            _drillHistory.push(Object.assign({}, parameters));
+            showDrillBackButton();
+
             const params = { ['@' + action.keyColumn]: String(value) };
             
             // Visual feedback: pulse target or entire page if navigating

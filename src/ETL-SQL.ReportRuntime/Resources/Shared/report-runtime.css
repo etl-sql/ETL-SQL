@@ -337,3 +337,25 @@
   
   /* Slot Hiding */
   .grid-slot-collapsed { display: none !important; }
+
+  /* Drill-through affordance */
+  .has-drill-down { cursor: context-menu; }
+  .drill-badge {
+    position: absolute; top: 8px; right: 8px; font-size: 13px;
+    opacity: 0; transition: opacity 0.15s; pointer-events: none;
+    user-select: none; color: #5470c6; line-height: 1;
+  }
+  .theme-dark .drill-badge { color: #7ca1e8; }
+  .has-drill-down:hover .drill-badge { opacity: 0.85; }
+
+  /* Drill-back navigation button */
+  .drill-back-btn {
+    position: fixed; top: 72px; left: 50%; transform: translateX(-50%);
+    display: none; align-items: center; gap: 6px;
+    background: #5470c6; color: #fff; border: none; border-radius: 20px;
+    padding: 7px 18px; font-size: 13px; font-weight: 600;
+    cursor: pointer; z-index: 9000; box-shadow: 0 3px 12px rgba(84,112,198,0.4);
+    transition: background 0.15s, box-shadow 0.15s;
+  }
+  .drill-back-btn:hover { background: #4059a9; box-shadow: 0 4px 16px rgba(84,112,198,0.5); }
+  .theme-dark .drill-back-btn { background: #7ca1e8; color: #1e1e1e; }
