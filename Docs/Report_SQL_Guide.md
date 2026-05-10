@@ -320,6 +320,10 @@ All clauses inside the outer `( )` are separated by commas. The closing `)` ends
 | `GAUGE` | Radial KPI gauge. Single VALUE from first data row against a min/max arc. | ECharts |
 | `FUNNEL` | Conversion funnel. Each row is one stage (LABEL + VALUE). | ECharts |
 | `WATERFALL` | Cumulative change chart. Positive values rise, negative values fall. | ECharts |
+| `RADAR` | Spider/radar chart. First column is the series name; remaining columns become metric axes. No `MAPPINGS` required. | ECharts |
+| `BUBBLE` | Bubble chart. X/Y positions with a `SIZE` column controlling bubble area. | ECharts |
+| `CANDLESTICK` | OHLC financial chart. Requires `X`, `OPEN`, `HIGH`, `LOW`, `CLOSE` mappings. | ECharts |
+| `MAP` | Choropleth map (`MAPPINGS (REGION = col)`) or point map (`OPTIONS (MODE = POINTS)` with `LON`/`LAT` mappings). | ECharts |
 | `TABLE` | Paginated, scrollable data grid. Supports `SUMMARY` for server-side aggregates and `FORMATTING` for conditional cell colors. | HTML `<table>` |
 | `CARD` | Single large KPI number with an optional label. | Styled `<div>` |
 | `IMAGE` | Static or dynamic image rendering from a URL. Supports `FIT` (contain/cover/fill). | `<img>` |
@@ -1010,8 +1014,8 @@ CREATE VISUAL ScoreVsRank AS SCATTER (
 Multiple `GOAL` lines are supported — just add additional `GOAL(n)` entries. `OVERLAYS` applies to BAR, HBAR, LINE, and SCATTER visuals; it is ignored on PIE, DONUT, TABLE, CARD, and filter controls.
 
 
-> [!NOTE]
-> **Cross-filtering is on the roadmap** — the ability to click a chart bar/slice and have it automatically filter TABLE visuals on the same page without parameters or server round-trips. It is not yet implemented. Use `ACTIONS (ON_CLICK = DRILL_DOWN(...))` or `ACTIONS (ON_CHANGE = SET_PARAMETER(...))` for interactive filtering today.
+> [!TIP]
+> **Cross-filtering is live.** Add `OPTIONS (CROSS_VISUAL_ACTION = 'HIGHLIGHT')` to a chart visual and it will respond to click selections on other visuals on the same page — matching data stays solid while non-matching data dims to a ghost. Use `'FILTER'` instead to re-query and hide non-matching rows entirely. See [CROSS_VISUAL_ACTION](#cross_visual_action) below.
 
 
 ### STYLE
@@ -1074,6 +1078,35 @@ ON_CLICK = DRILL_DOWN(Target = <VisualName>, Key = <column>)
 
 When clicked, passes the selected row's value in `Key` as a filter into the target visual's inline SELECT. The target visual is re-queried with the key value injected into the parameter context.
 
+`Key` may be a single column name or a parenthesised list for composite keys:
+
+```sql
+ON_CLICK = DRILL_DOWN(Target = OrderDetail, Key = (region, product))
+```
+
+#### DRILL_IN {#drill_in}
+
+```sql
+ON_CLICK = DRILL_IN(HIERARCHY = (<col1>, <col2>, ...))
+```
+
+Enables **in-place hierarchical drill-down** on chart visuals (BAR, LINE, etc.). When the user clicks a data point the chart re-aggregates at the next level of the hierarchy and shows a breadcrumb trail. Clicking any breadcrumb segment navigates back up.
+
+- The `SOURCE` query must return **all hierarchy columns** plus the Y metric.
+- No hidden page or extra visual is needed — the drill happens inside the same visual slot.
+- The chart title bar automatically renders breadcrumb navigation (e.g. `Year > Q2 > May`).
+
+```sql
+CREATE VISUAL SalesByPeriod AS BAR (
+  SOURCE = (SELECT Year, Quarter, Month, SUM(Revenue) AS Revenue
+            FROM #sales_raw
+            GROUP BY Year, Quarter, Month),
+  MAPPINGS (X = Year, Y = Revenue),
+  OPTIONS  (TITLE = 'Revenue by Period — click to drill'),
+  ACTIONS  (ON_CLICK = DRILL_IN(HIERARCHY = (Year, Quarter, Month)))
+);
+```
+
 #### SET_PARAMETER
 
 ```sql
@@ -1081,6 +1114,62 @@ ON_CHANGE = SET_PARAMETER(@paramName, <columnRef>)
 ```
 
 Sets the named `@param` to the selected value. Any visual whose inline `SELECT` references `@paramName` is automatically re-queried.
+
+#### RUN_SCRIPT
+
+```sql
+ON_CLICK = RUN_SCRIPT('<scriptPath>', @param = <columnRef> [, ...])
+```
+
+Executes a `.etlsql` script as a side-effect when a chart element is clicked. Column values from the clicked row are forwarded as named parameters. Useful for write-back workflows (approve, archive, flag).
+
+```sql
+ACTIONS (ON_CLICK = RUN_SCRIPT('C:\scripts\approve_order.etlsql', @order_id = id))
+```
+
+#### CLEAR_FILTERS
+
+```sql
+ON_CLICK = CLEAR_FILTERS
+```
+
+Resets all parameters on the current page to their declared defaults and re-queries all affected visuals. Typically used on a dedicated reset button:
+
+```sql
+CREATE BUTTON ResetAll AS CUSTOM (
+  TITLE   = 'Clear All Filters',
+  ACTIONS (ON_CLICK = CLEAR_FILTERS)
+);
+```
+
+### CROSS_VISUAL_ACTION {#cross_visual_action}
+
+Controls how a visual responds when the user clicks an element on **another** chart on the same page. Set as an `OPTIONS` key.
+
+```sql
+OPTIONS (
+  CROSS_VISUAL_ACTION = 'HIGHLIGHT' | 'FILTER' | 'NONE'
+)
+```
+
+| Mode | Behaviour |
+|------|-----------|
+| `HIGHLIGHT` | The visual keeps its full shape; the matching subset is highlighted (solid colour) and the rest dims to a ghost. Default for chart types (BAR, LINE, PIE, etc.). |
+| `FILTER` | The visual is re-queried, and rows not matching the selection are removed entirely. Default for TABLE and SLICER. |
+| `NONE` | The visual ignores interactions from other visuals on the page. |
+
+```sql
+CREATE VISUAL CategoryBreakdown AS BAR (
+  SOURCE  = #sales,
+  MAPPINGS (X = Category, Y = Revenue),
+  OPTIONS  (CROSS_VISUAL_ACTION = 'HIGHLIGHT')
+);
+
+CREATE VISUAL SalesTable AS TABLE (
+  SOURCE  = #sales,
+  OPTIONS (CROSS_VISUAL_ACTION = 'FILTER')   -- rows disappear when a bar is clicked
+);
+```
 
 ---
 
@@ -1395,6 +1484,9 @@ CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL (
   [VISUALS (VisualA, VisualB, ...),]
   [STRUCTURE = '<grid-template-areas>',]
   [MAP ('<slot>' = VisualOrContainerName, ...)]
+  [COLLAPSIBLE = ON|OFF,]
+  [PINNABLE = ON|OFF,]
+  [ICON = '<name>']
 );
 ```
 
@@ -1442,6 +1534,44 @@ CREATE PAGE Main AS LAYOUT (
   )
 );
 ```
+
+### Collapsible Drawer Containers
+
+Adding `COLLAPSIBLE = ON` turns a container into an **overlay drawer** — it appears as a floating panel on top of the layout and can be toggled via a trigger icon pinned to the page edge.
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `COLLAPSIBLE` | `OFF` | When `ON`, the container is rendered as a collapsible drawer overlay. |
+| `PINNABLE` | `ON` | When `ON` (and `COLLAPSIBLE = ON`), the user can pin the drawer inline so it pushes the rest of the layout aside rather than floating over it. |
+| `ICON` | _(none)_ | Icon name shown in the trigger button (e.g. `'filter'`, `'settings'`, `'info'`). Supports standard icon set names recognized by the runtime theme. |
+
+```sql
+CREATE CONTAINER FilterDrawer AS BOX (
+  TITLE      = 'Filters',
+  COLLAPSIBLE = ON,
+  PINNABLE   = ON,
+  ICON       = 'filter',
+  STRUCTURE  = 'A / B / C',
+  MAP (
+    'A' = RegionFilter,
+    'B' = YearSlider,
+    'C' = CategoryFilter
+  )
+);
+
+CREATE PAGE Dashboard AS LAYOUT (
+  STRUCTURE = 'A A / B C',
+  MAP (
+    'A' = FilterDrawer,
+    'B' = RevenueChart,
+    'C' = SalesTable
+  )
+);
+```
+
+When `PINNABLE = ON` the drawer has two states:
+- **Overlay (default):** floats on top of the layout; other visuals are not resized.
+- **Pinned:** inserts as an inline column; the grid reflows around it.
 
 ---
 

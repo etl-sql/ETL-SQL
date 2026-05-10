@@ -1941,6 +1941,8 @@ CREATE VISUAL <name> AS <type> (
 **Action forms:**
 ```
 ON_CLICK  = DRILL_DOWN(Target = <VisualName>, Key = <column>)
+ON_CLICK  = DRILL_DOWN(Target = <VisualName>, Key = (<col1>, <col2>))
+ON_CLICK  = DRILL_IN(HIERARCHY = (<col1>, <col2>, ...))
 ON_CHANGE = SET_PARAMETER(@paramName, <columnRef>)
 ON_CLICK  = RUN_SCRIPT('<path>', @param = <columnRef> [, ...])
 ON_CLICK  = CLEAR_FILTERS
