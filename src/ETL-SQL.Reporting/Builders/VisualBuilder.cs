@@ -338,8 +338,16 @@ namespace ETL_SQL.Reporting.Builders
                                 ctx.VarContext.SetVariable(kvp.Key, kvp.Value);
                             }
                         }
-                        vm.HighlightRows = new List<List<string?>>();
-                        await ExecuteAndPopulateRowsAsync(queryStmt, vStmt, vm.HighlightRows, null, vm);
+                        // Only compute HighlightRows when at least one interaction variable was
+                        // actually injected. If none matched, the query would run unchanged and
+                        // return all rows — client would see everything "selected" and apply no
+                        // ghosting. Leaving HighlightRows null signals the client to ghost all
+                        // bars instead (cross-filter active, dimension mismatch).
+                        if (backup.Count > 0)
+                        {
+                            vm.HighlightRows = new List<List<string?>>();
+                            await ExecuteAndPopulateRowsAsync(queryStmt, vStmt, vm.HighlightRows, null, vm);
+                        }
                     }
                     finally
                     {

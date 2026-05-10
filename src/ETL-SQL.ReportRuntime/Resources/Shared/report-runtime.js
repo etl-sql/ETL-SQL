@@ -1164,6 +1164,10 @@
                     applySourceChartOpacity(option, cfState.selections);
                 } else if (visual.highlightRows && visual.highlightRows.length > 0) {
                     mergeHighlightData(visual, option);
+                } else if (cfState && cfState.selections.length > 0 && !visual.highlightRows) {
+                    // Cross-filter active but server returned no highlight (dimension mismatch):
+                    // ghost all bars to show the filter is active on this visual too.
+                    applySourceChartOpacity(option, []);
                 }
             }
 
