@@ -277,6 +277,29 @@ UNION ALL SELECT 'Netherlands',                          CAST(  72000 AS DECIMAL
 UNION ALL SELECT 'Sweden',                               CAST(  65000 AS DECIMAL)
 UNION ALL SELECT 'Spain',                                CAST(  58000 AS DECIMAL);
 
+-- 1w. Category x Region x Salesperson hierarchy (full grain for DRILL_IN demo)
+SELECT
+    'Electronics' AS Category, 'North' AS Region, 'Alice'   AS Salesperson, CAST(320000 AS DECIMAL) AS Revenue INTO #cat_hier
+UNION ALL SELECT 'Electronics', 'North', 'Bob',     CAST(210000 AS DECIMAL)
+UNION ALL SELECT 'Electronics', 'South', 'Carol',   CAST(185000 AS DECIMAL)
+UNION ALL SELECT 'Electronics', 'South', 'Dave',    CAST(140000 AS DECIMAL)
+UNION ALL SELECT 'Electronics', 'East',  'Eve',     CAST(175000 AS DECIMAL)
+UNION ALL SELECT 'Electronics', 'West',  'Frank',   CAST(230000 AS DECIMAL)
+UNION ALL SELECT 'Software',    'North', 'Alice',   CAST(280000 AS DECIMAL)
+UNION ALL SELECT 'Software',    'North', 'Bob',     CAST(195000 AS DECIMAL)
+UNION ALL SELECT 'Software',    'South', 'Grace',   CAST(160000 AS DECIMAL)
+UNION ALL SELECT 'Software',    'East',  'Henry',   CAST(210000 AS DECIMAL)
+UNION ALL SELECT 'Software',    'West',  'Iris',    CAST(245000 AS DECIMAL)
+UNION ALL SELECT 'Services',    'North', 'Jack',    CAST(150000 AS DECIMAL)
+UNION ALL SELECT 'Services',    'South', 'Karen',   CAST(130000 AS DECIMAL)
+UNION ALL SELECT 'Services',    'East',  'Liam',    CAST(175000 AS DECIMAL)
+UNION ALL SELECT 'Services',    'East',  'Mia',     CAST(120000 AS DECIMAL)
+UNION ALL SELECT 'Services',    'West',  'Noah',    CAST(190000 AS DECIMAL)
+UNION ALL SELECT 'Hardware',    'North', 'Olivia',  CAST(260000 AS DECIMAL)
+UNION ALL SELECT 'Hardware',    'South', 'Peter',   CAST(215000 AS DECIMAL)
+UNION ALL SELECT 'Hardware',    'East',  'Quinn',   CAST(180000 AS DECIMAL)
+UNION ALL SELECT 'Hardware',    'West',  'Rachel',  CAST(200000 AS DECIMAL);
+
 -- ============================================================================
 -- Phase 2: Named Shared Styles
 -- ============================================================================
@@ -950,6 +973,32 @@ CREATE VISUAL BarMonthlyByRegion AS BAR (
     STYLE    = ChartPanel
 );
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- PAGE 8 — DRILLDOWN  (DRILL_IN hierarchical in-place drill)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Explainer card
+CREATE VISUAL DrillInExplainer AS TEXT (
+    CONTENT  = 'Click any bar to drill in one level. The same chart re-renders at the next depth with a breadcrumb trail above it. Click a breadcrumb segment to jump back up.',
+    TITLE    = 'How DRILL_IN works',
+    STYLE    = CardGlass
+);
+
+-- Hierarchical bar: Category -> Region -> Salesperson
+CREATE VISUAL DrillInByCategory AS BAR (
+    SOURCE   = (SELECT Category, Region, Salesperson, Revenue FROM #cat_hier),
+    TITLE    = 'Revenue — click to drill Category › Region › Salesperson',
+    MAPPINGS (x = Category, y = Revenue),
+    OPTIONS  (
+        ORIENTATION = VERTICAL,
+        LEGEND      = OFF
+    ),
+    ACTIONS  (
+        ON_CLICK = DRILL_IN(HIERARCHY = (Category, Region, Salesperson))
+    ),
+    STYLE    = ChartPanel
+);
+
 -- ============================================================================
 -- Phase 6: Page Layout Definitions
 -- ============================================================================
@@ -1103,6 +1152,21 @@ CREATE PAGE MapCharts AS LAYOUT (
     STYLE (THEME = dark)
 );
 
+-- ── PAGE 8: Drill-Down Demo ───────────────────────────────────────────────────
+CREATE PAGE Drilldown AS LAYOUT (
+    TITLE     = 'Drilldown',
+    TOOLTIP   = 'DRILL_IN demo — click a bar to drill Category > Region > Salesperson in place.',
+    STRUCTURE = '
+        A /
+        B B
+    ',
+    MAP (
+        'A' = DrillInExplainer,
+        'B' = DrillInByCategory
+    ),
+    STYLE (THEME = dark)
+);
+
 -- ============================================================================
 -- Phase 7: Navigation
 -- ============================================================================
@@ -1111,7 +1175,7 @@ CREATE NAVIGATION MainNav AS TAB (
     ORIENTATION = HORIZONTAL,
     DEFAULT     = Overview
 )
-WITH PAGES (Overview, Trends, Composition, Controls, Detail, NewCharts, MapCharts);
+WITH PAGES (Overview, Trends, Composition, Controls, Detail, NewCharts, MapCharts, Drilldown);
 
 -- ============================================================================
 -- Phase 8: Global Style Override

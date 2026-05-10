@@ -1,5 +1,5 @@
 {
-  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\tests\\inputs_deferred_run.rptsql",
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\inputs_deferred_run.rptsql",
   "builtAt": "2026-05-09T22:50:04.0574218Z",
   "title": "Deferred Execution Test",
   "visuals": [

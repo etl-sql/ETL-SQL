@@ -1,5 +1,5 @@
 {
-  "source": "tests\\required_params_test.rptsql",
+  "source": "samples\\required_params_test.rptsql",
   "builtAt": "2026-05-08T21:18:30.5610289Z",
   "visuals": [
     {

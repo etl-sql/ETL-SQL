@@ -5,6 +5,16 @@ USE input parameters';
 
 DECLARE @start datetime INPUT = '2024-01-01';
 
+/*
+CREATE VISUAL d AS DATEPICKER(
+
+)
+*/
+CREATE BUTTON run_btn AS RUN (
+    TITLE = 'Run Report',
+    STYLE (BACKGROUND = '#28a745', COLOR = 'white', PADDING = '10px 20px')
+);
+
 CREATE CONNECTION c ON FLATFILE('TestData/test_sales.csv');
 
 SELECT

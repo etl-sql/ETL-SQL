@@ -930,6 +930,16 @@
             card.appendChild(badge);
         }
 
+        // Drill-in affordance: cursor + badge when visual has DRILL_IN actions
+        if ((visual.actions || []).some(a => a.type === 'DRILL_IN')) {
+            card.classList.add('has-drill-in');
+            const badge = document.createElement('span');
+            badge.className = 'drill-badge';
+            badge.title = 'Click to drill in';
+            badge.textContent = '↧';
+            card.appendChild(badge);
+        }
+
         container.appendChild(card);
     }
 
