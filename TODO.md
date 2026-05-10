@@ -1,13 +1,5 @@
 # ETL-SQL Development Roadmap
 ## Bugs
-- [x] **CROSS HIGHLIGHT not working both directions**  Using kitchen sink report as reference.  "C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\report_kitchen_sink.rptsql".  Clicking on a bar on BarByRegion works perfectly to highlight against DrillRegionDetail.  But clicking on DrillRegionDetail does nothing to BarByRegion.  Note the users has to have stopped cross highlighting by BarByRegion first its not a both ways at the same time.  So workflow of click East twice on BarByRegion, once for on, once for off.   Then clicking Grocery on DrillRegionDetail should trigger to cross highlight against BarByRegion.  I'm guessing here but it should show about 25% in East and 75% ghosted, 20% in South and 80% ghosted,... 
-
--[x] **Publish failed Login failed: invalid credentials.** When trying to publish to the portal I get a failure for invalid credentials, they are not, I just logged in with those.
-
--[x] **DRILL_IN not working in VS Code** Known limitation: the VS Code preview re-runs the CLI on every interaction and has no persistent session, so stateful drill-in cannot be supported. Drill-in works in the Portal and ReportPlayer. Users are notified via an info message in the preview panel when they click a drill target.
-
--[ ] **Running .\scripts\Test-AllSamples.ps1 returns all as failures?** They all used to work just fine what changed? 
-
 ## Up Next
 - [ ] **Report portal add Active Directory support**  Need to add the ability to hook credentials with active directory.
 
