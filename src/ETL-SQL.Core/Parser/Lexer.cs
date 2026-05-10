@@ -133,6 +133,7 @@ namespace ETL_SQL.Core.Parser
             dict["COLLAPSIBLE"] = TokenType.COLLAPSIBLE;
             dict["ICON"]        = TokenType.ICON;
             dict["PINNABLE"]    = TokenType.PINNABLE;
+            dict["CONTENT"]     = TokenType.CONTENT;
 
 
             // ── Overlay keywords (Phase 9F) ────────────────────────────────

@@ -770,9 +770,8 @@ CREATE VISUAL BrandImage AS IMAGE (
 
 -- TEXT — Rich markdown block explaining the controls page
 CREATE VISUAL ControlsExplainer AS TEXT (
-    SOURCE  = (SELECT 1),
     TITLE   = 'Interactive Controls Reference',
-    DEFAULT = '## Filter Visuals
+    CONTENT = '## Filter Visuals
 
 This page demonstrates **every filter and input control** type available in Report-SQL.
 
@@ -794,9 +793,8 @@ Changes to any control above propagate instantly to all dependent visuals (witho
 
 -- TEXT — Buttons reference (since buttons can't be placed in page slots directly)
 CREATE VISUAL ButtonsText AS TEXT (
-    SOURCE  = (SELECT 1),
     TITLE   = 'Action Buttons (CREATE BUTTON)',
-    DEFAULT = '### Buttons\n`CREATE BUTTON` defines interactive **BACK**, **REFRESH**, and custom action buttons.\n\n| Name | Type | Purpose |\n|------|------|---------|\n| BtnRefresh | `REFRESH` | Force rebuild of all visual snapshots |\n| BtnBack | `BACK` | Navigate to previous browser page |\n| BtnExport | `REFRESH` | Custom export trigger (custom types pending engine support) |\n\n> Buttons cannot currently be placed directly in page `MAP` slots — they require a dedicated button bar component (tracked in TODO.md).'
+    CONTENT = '### Buttons\n`CREATE BUTTON` defines interactive **BACK**, **REFRESH**, and custom action buttons.\n\n| Name | Type | Purpose |\n|------|------|---------|\n| BtnRefresh | `REFRESH` | Force rebuild of all visual snapshots |\n| BtnBack | `BACK` | Navigate to previous browser page |\n| BtnExport | `REFRESH` | Custom export trigger (custom types pending engine support) |\n\n> Buttons cannot currently be placed directly in page `MAP` slots — they require a dedicated button bar component (tracked in TODO.md).'
 );
 
 -- BUTTON — Refresh data
@@ -979,7 +977,7 @@ CREATE VISUAL BarMonthlyByRegion AS BAR (
 
 -- Explainer card
 CREATE VISUAL DrillInExplainer AS TEXT (
-    DEFAULT  = 'Click any bar to drill in one level. The same chart re-renders at the next depth with a breadcrumb trail above it. Click a breadcrumb segment to jump back up.',
+    CONTENT  = 'Click any bar to drill in one level. The same chart re-renders at the next depth with a breadcrumb trail above it. Click a breadcrumb segment to jump back up.',
     TITLE    = 'How DRILL_IN works',
     STYLE    = CardGlass
 );

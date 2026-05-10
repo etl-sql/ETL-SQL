@@ -1759,71 +1759,152 @@
     // ── Text ────────────────────────────────────────────────────────────────
 
     function renderText(container, visual) {
-        const opts  = visual.options || {};
-        const rawValue = opts['VALUE'] || opts['value'] || visual.defaultValue || '';
-        const value = String(rawValue).replace(/\\n/g, '\n');
+        // Static content from CONTENT/DEFAULT clause; fall back to MAPPINGS(CONTENT=col) first row
+        let content = visual.defaultValue || '';
+        if (!content && visual.columns && visual.rows && visual.rows.length > 0) {
+            const idx = visual.columns.findIndex(c => c.toLowerCase() === 'content');
+            if (idx >= 0 && visual.rows[0][idx] != null) content = String(visual.rows[0][idx]);
+        }
+
+        const opts = visual.options || {};
         const align = (opts['ALIGN'] || opts['align'] || 'left').toLowerCase();
+        const useMd = (opts['MARKDOWN'] || opts['markdown'] || 'ON').toUpperCase() !== 'OFF';
 
         const div = document.createElement('div');
         div.className = 'text-visual';
         div.style.textAlign = align;
-        div.innerHTML = simpleMarkdown(value);
+        div.innerHTML = useMd ? simpleMarkdown(content) : escHtml(content).replace(/\n/g, '<br>');
         container.appendChild(div);
     }
 
-    // Minimal markdown → HTML: bold, italic, inline code, headers, line breaks, tables.
+    // Markdown → HTML renderer supporting: headers, bold, italic, inline code, links,
+    // fenced code blocks, blockquotes, unordered/ordered lists, tables, horizontal rules.
     function simpleMarkdown(src) {
         if (!src) return '';
-        // 1. Unescape escaped newlines from ETL-SQL
+
+        // Unescape ETL-SQL escaped newlines
         const raw = String(src).replace(/\\n/g, '\n');
-        
-        // 2. Escape HTML then restore formatting
-        let html = escHtml(raw)
-            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.+?)\*/g,     '<em>$1</em>')
-            .replace(/`(.+?)`/g,       '<code>$1</code>')
-            .replace(/^### (.+)$/gm,   '<h3>$1</h3>')
-            .replace(/^## (.+)$/gm,    '<h2>$1</h2>')
-            .replace(/^# (.+)$/gm,     '<h1>$1</h1>');
 
-        // 3. Table support
-        const lines = html.split('\n');
-        let inTable = false;
-        let tableLines = [];
-        let resultLines = [];
+        // Phase 1: extract fenced code blocks to protect them from other processing
+        const codeBlocks = [];
+        const withoutCode = raw.replace(/```([^\n]*)\n([\s\S]*?)```/g, (_, lang, code) => {
+            const escaped = escHtml(code.replace(/\n$/, ''));
+            const cls = lang.trim() ? ` class="language-${escHtml(lang.trim())}"` : '';
+            codeBlocks.push(`<pre><code${cls}>${escaped}</code></pre>`);
+            return `\x00CODE${codeBlocks.length - 1}\x00`;
+        });
 
-        function flushTable() {
-            if (tableLines.length === 0) return;
-            let tableHtml = '<div class="md-table-wrapper"><table class="md-table">';
-            tableLines.forEach((line, idx) => {
-                if (line.includes('---') && idx === 1) return; // separator
-                const cells = line.split('|').map(s => s.trim()).filter((_, i, a) => i > 0 && i < a.length - 1);
-                const tag = idx === 0 ? 'th' : 'td';
-                tableHtml += '<tr>' + cells.map(c => `<${tag}>${c}</${tag}>`).join('') + '</tr>';
-            });
-            tableHtml += '</table></div>';
-            resultLines.push(tableHtml);
-            tableLines = [];
+        // Phase 2: process line-by-line blocks
+        const lines = withoutCode.split('\n');
+        const out = [];
+        let i = 0;
+
+        function inlineFormat(text) {
+            return escHtml(text)
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g,     '<em>$1</em>')
+                .replace(/`(.+?)`/g,       '<code>$1</code>')
+                .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
+                    // Only allow safe protocols
+                    const safe = /^(https?:|mailto:|\/)/i.test(url.trim());
+                    if (!safe) return escHtml(label);
+                    return `<a href="${escHtml(url)}" target="_blank" rel="noopener noreferrer">${escHtml(label)}</a>`;
+                });
         }
 
-        lines.forEach(line => {
+        while (i < lines.length) {
+            const line = lines[i];
             const trimmed = line.trim();
-            if (trimmed.startsWith('|') && trimmed.includes('|', 1)) {
-                inTable = true;
-                tableLines.push(line);
-            } else {
-                if (inTable) flushTable();
-                inTable = false;
-                resultLines.push(line);
-            }
-        });
-        if (inTable) flushTable();
 
-        // 4. Smart join: only add <br> if the line isn't a block tag
-        return resultLines.map(l => {
-            const isBlock = /^<(h[1-6]|div|table|ul|ol|li|blockquote|pre)/i.test(l.trim());
-            return isBlock ? l : l + '<br>';
-        }).join('\n');
+            // Code block placeholder
+            if (/^\x00CODE\d+\x00$/.test(trimmed)) {
+                const idx = parseInt(trimmed.replace(/\x00CODE(\d+)\x00/, '$1'), 10);
+                out.push(codeBlocks[idx]);
+                i++;
+                continue;
+            }
+
+            // Horizontal rule: --- or *** or ___ (3+ chars, only that char)
+            if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+                out.push('<hr>');
+                i++;
+                continue;
+            }
+
+            // ATX headings
+            const hMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+            if (hMatch) {
+                const level = hMatch[1].length;
+                out.push(`<h${level}>${inlineFormat(hMatch[2])}</h${level}>`);
+                i++;
+                continue;
+            }
+
+            // Blockquote: collect consecutive > lines
+            if (trimmed.startsWith('> ')) {
+                const bqLines = [];
+                while (i < lines.length && lines[i].trim().startsWith('> ')) {
+                    bqLines.push(inlineFormat(lines[i].trim().replace(/^>\s?/, '')));
+                    i++;
+                }
+                out.push(`<blockquote>${bqLines.join('<br>')}</blockquote>`);
+                continue;
+            }
+
+            // Unordered list: collect consecutive - or * lines
+            if (/^[-*]\s/.test(trimmed)) {
+                const items = [];
+                while (i < lines.length && /^[-*]\s/.test(lines[i].trim())) {
+                    items.push(`<li>${inlineFormat(lines[i].trim().replace(/^[-*]\s/, ''))}</li>`);
+                    i++;
+                }
+                out.push(`<ul>${items.join('')}</ul>`);
+                continue;
+            }
+
+            // Ordered list: collect consecutive N. lines
+            if (/^\d+\.\s/.test(trimmed)) {
+                const items = [];
+                while (i < lines.length && /^\d+\.\s/.test(lines[i].trim())) {
+                    items.push(`<li>${inlineFormat(lines[i].trim().replace(/^\d+\.\s/, ''))}</li>`);
+                    i++;
+                }
+                out.push(`<ol>${items.join('')}</ol>`);
+                continue;
+            }
+
+            // Markdown table: lines starting with |
+            if (trimmed.startsWith('|') && trimmed.includes('|', 1)) {
+                const tableLines = [];
+                while (i < lines.length && lines[i].trim().startsWith('|') && lines[i].trim().includes('|', 1)) {
+                    tableLines.push(lines[i]);
+                    i++;
+                }
+                let tableHtml = '<div class="md-table-wrapper"><table class="md-table">';
+                tableLines.forEach((tl, idx) => {
+                    if (/^\s*\|[\s|:-]+\|\s*$/.test(tl)) return; // separator row
+                    const cells = tl.split('|').map(s => s.trim()).filter((_, ci, a) => ci > 0 && ci < a.length - 1);
+                    const tag = idx === 0 ? 'th' : 'td';
+                    tableHtml += '<tr>' + cells.map(c => `<${tag}>${inlineFormat(c)}</${tag}>`).join('') + '</tr>';
+                });
+                tableHtml += '</table></div>';
+                out.push(tableHtml);
+                continue;
+            }
+
+            // Blank line → paragraph break
+            if (trimmed === '') {
+                out.push('<br>');
+                i++;
+                continue;
+            }
+
+            // Plain text line with inline formatting
+            out.push(inlineFormat(trimmed) + '<br>');
+            i++;
+        }
+
+        return out.join('\n');
     }
 
     // ── DatePicker ──────────────────────────────────────────────────────────

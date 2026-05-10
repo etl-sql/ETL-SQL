@@ -65,7 +65,7 @@ CREATE DATASET &ActivityHeatMap AS (
 
 -- 3. Define Visuals
 CREATE VISUAL IntroText AS TEXT (
-    VALUE = '# ETL-SQL TUI Report Preview
+    CONTENT = '# ETL-SQL TUI Report Preview
 This is the **Research Paper View** rendering directly in your terminal.
 - Use `Alt+R` to toggle between Code and Report.
 - Use `Arrows / PgUp / PgDn` to scroll within a page.

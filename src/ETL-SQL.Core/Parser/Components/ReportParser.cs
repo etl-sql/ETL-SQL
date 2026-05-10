@@ -100,6 +100,10 @@ namespace ETL_SQL.Core.Parser.Components
                     overlays.AddRange(ParseOverlays());
                     Consume(TokenType.RPAREN, "Expected ')' to close OVERLAYS");
                 }
+                else if (Match(TokenType.CONTENT))
+                {
+                    defaultValue = ParseVisualProperty("CONTENT");
+                }
                 else if (Match(TokenType.DEFAULT) || Match(TokenType.VALUE))
                 {
                     defaultValue = ParseVisualProperty("DEFAULT");
