@@ -1,3 +1,0 @@
--- A simple cleanup script for demonstration
-PRINT('Running cleanup task at ' + FORMAT(GETDATE(), 'yyyy-MM-dd HH:mm:ss'));
-TRUNCATE TABLE #TempAudit;
