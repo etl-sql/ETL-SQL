@@ -60,6 +60,11 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     tooltip = ParseTooltipDefinition();
                 }
+                else if (Match(TokenType.VISIBLE))
+                {
+                    Match(TokenType.EQUALS);
+                    options.Add(new VisualOption { Key = "VISIBLE", Value = ParseOnOffValue() ? "ON" : "OFF" });
+                }
                 else if (Match(TokenType.MAPPINGS))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after MAPPINGS");
@@ -218,6 +223,7 @@ namespace ETL_SQL.Core.Parser.Components
             TooltipDefinition? tooltip = null;
             var slotMap    = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var pageStyles = new Dictionary<string, string>();
+            bool isHidden  = false;
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
@@ -255,6 +261,11 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     tooltip = ParseTooltipDefinition();
                 }
+                else if (Match(TokenType.VISIBLE))
+                {
+                    Match(TokenType.EQUALS);
+                    isHidden = !ParseOnOffValue();
+                }
                 else
                 {
                     throw new SyntaxException(
@@ -265,8 +276,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
             Consume(TokenType.RPAREN, "Expected ')' to close CREATE PAGE LAYOUT");
 
-            // Optional WITH (HIDDEN = ON, REFRESH = <seconds>) clause
-            bool isHidden = false;
+            // Optional WITH (REFRESH = <seconds>) clause
             int refreshSecs = 0;
             if (Match(TokenType.WITH))
             {
@@ -276,9 +286,9 @@ namespace ETL_SQL.Core.Parser.Components
                     var optKey = _parser.Advance().Value;
                     Consume(TokenType.EQUALS, $"Expected '=' after '{optKey}' in WITH clause");
                     var optVal = _parser.Advance().Value;
-                    if (string.Equals(optKey, "HIDDEN", StringComparison.OrdinalIgnoreCase))
-                        isHidden = string.Equals(optVal, "ON", StringComparison.OrdinalIgnoreCase)
-                                || string.Equals(optVal, "TRUE", StringComparison.OrdinalIgnoreCase);
+                    if (string.Equals(optKey, "VISIBLE", StringComparison.OrdinalIgnoreCase))
+                        isHidden = !(string.Equals(optVal, "ON", StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(optVal, "TRUE", StringComparison.OrdinalIgnoreCase));
                     else if (string.Equals(optKey, "REFRESH", StringComparison.OrdinalIgnoreCase))
                         int.TryParse(optVal, out refreshSecs);
                     Match(TokenType.COMMA);
@@ -550,6 +560,7 @@ namespace ETL_SQL.Core.Parser.Components
             var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var styles  = new Dictionary<string, string>();
             bool isCollapsible = false, isPinnable = true;
+            bool isHidden = false;
             string? icon = null;
 
 
@@ -604,6 +615,11 @@ namespace ETL_SQL.Core.Parser.Components
                     Consume(TokenType.EQUALS, "Expected '=' after PINNABLE");
                     isPinnable = ParseOnOffValue();
                 }
+                else if (Match(TokenType.VISIBLE))
+                {
+                    Match(TokenType.EQUALS);
+                    isHidden = !ParseOnOffValue();
+                }
                 else
                 {
                     throw new SyntaxException(
@@ -630,6 +646,7 @@ namespace ETL_SQL.Core.Parser.Components
                 SubtitleIsMarkdown  = subtitleMd,
                 Tooltip            = tooltip,
                 IsCollapsible      = isCollapsible,
+                IsHidden           = isHidden,
                 Icon               = icon,
                 IsPinnable         = isPinnable,
                 Mode               = mode,
@@ -1288,6 +1305,7 @@ namespace ETL_SQL.Core.Parser.Components
                 t == TokenType.DATA_LABELS_POSITION || t == TokenType.FONT_FAMILY ||
                 t == TokenType.FONT_WEIGHT || t == TokenType.GAUGE_STYLE ||
                 t == TokenType.SHOW_NO_DATA_PLACEHOLDER ||
+                t == TokenType.VISIBLE ||
                 _overlayKeywordTokens.Contains(t))
             {
                 var value = _parser.Current.Value;

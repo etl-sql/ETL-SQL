@@ -116,7 +116,7 @@ namespace ETL_SQL.Core.Parser
         // ── Report-SQL tokens (Phase 9A) ───────────────────────────────────
         // All are non-reserved: only treated as keywords inside CREATE VISUAL /
         // CREATE DASHBOARD / CREATE PAGE context.
-        VISUAL, DASHBOARD, THEME, LAYOUT, REFRESH,
+        VISUAL, DASHBOARD, THEME, LAYOUT, REFRESH, VISIBLE,
         BAR, LINE, PIE, GAUGE, RADAR, SCATTER, HEATMAP, TABLE_VISUAL, FUNNEL, WATERFALL, FORMATTING,
         DONUT, HBAR, BOXPLOT, TREEMAP, COLORS, BUBBLE, CANDLESTICK,
         BOTTOM,  // position keyword (TOP/LEFT/RIGHT already registered via LanguageMetadata)

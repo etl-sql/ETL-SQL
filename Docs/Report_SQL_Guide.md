@@ -289,6 +289,7 @@ CREATE [OR ALTER] VISUAL <name> AS <TYPE> (
   [TITLE = '<string>',]
   [SUBTITLE = '<string>',]
   [TOOLTIP = '<string>',]
+  [VISIBLE = ON|OFF,]
   [SUMMARY (
     [GRAND_TOTAL = ON|OFF,]
     [aggregate(column) [AS alias], ...]
@@ -302,6 +303,26 @@ CREATE [OR ALTER] VISUAL <name> AS <TYPE> (
 ```
 
 All clauses inside the outer `( )` are separated by commas. The closing `)` ends the statement. `SOURCE` is required for all types except `TEXT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, and `SEARCH`.
+
+### VISIBLE
+
+`VISIBLE = OFF` defers the visual's data fetch until the first user interaction (parameter change, slicer selection, or manual refresh). The visual renders a placeholder card in the browser until data arrives. `VISIBLE = ON` is the default and fetches data immediately at build time.
+
+```sql
+-- Expensive chart — skip on first load, fetch when the user picks a region
+CREATE VISUAL ExpensiveBreakdown AS BAR (
+  SOURCE  = (SELECT category, SUM(revenue) AS revenue
+             FROM #sales WHERE region = @region GROUP BY category),
+  VISIBLE = OFF,
+  MAPPINGS (X = category, Y = revenue)
+);
+```
+
+Accepted values: `ON` (default), `OFF`, `TRUE`, `FALSE`, `1`, `0`.
+
+> [!TIP]
+> Use `VISIBLE = OFF` on heavy visuals that depend on a parameter the user must set first (e.g. a date range or region filter). They are included in the manifest and page layout but their `SOURCE` query is skipped until the first rebuild triggered by a parameter change.
+
 
 ### Visual types
 
@@ -888,6 +909,7 @@ OPTIONS (
 | `LEGEND_POSITION` | All chart types | `TOP` / `BOTTOM` / `LEFT` / `RIGHT` | Legend placement. Default `BOTTOM`. |
 | `SHOW_NO_DATA_PLACEHOLDER` | BAR, LINE, AREA | `ON` / `OFF` | Fill gaps with `0` for categorical/time-series data instead of leaving breaks. Default `OFF`. |
 | `GRID` | TABLE | `ALL`, `NONE`, or list of `HEADER`, `FOOTER`, `LEFT`, `RIGHT`, `TOP`, `BOTTOM` | Control data grid line visibility. Single value or list `(HEADER, FOOTER)`. Default `ALL`. |
+| `VISIBLE` | All types | `ON` / `OFF` | When `OFF`, the visual's SOURCE query is skipped at build time and the visual renders a placeholder until the first user interaction triggers a rebuild. Default `ON`. Prefer the top-level `VISIBLE` clause over this OPTIONS key. |
 | `DATA_LABELS` | BAR, LINE, PIE | `ON` / `OFF` | Show values directly on data points. Supports `WITH` configuration. |
 | `DATA_LABELS:POSITION` | BAR, LINE | `TOP`, `BOTTOM`, `LEFT`, `RIGHT`, `CENTER`, `INSIDE`, `INSIDE_TOP`, `INSIDE_BOTTOM`, `INSIDE_LEFT`, `INSIDE_RIGHT`, `INSIDE_TOP_LEFT`, `INSIDE_TOP_RIGHT`, `INSIDE_BOTTOM_LEFT`, `INSIDE_BOTTOM_RIGHT` | Data label placement. |
 | `DATA_LABELS:COLOR` | BAR, LINE | CSS Color | Data label text color. |
@@ -1251,19 +1273,21 @@ CREATE [OR ALTER] PAGE <name> AS LAYOUT (
     ...
   )
   [, STYLE = <styleName> | STYLE (key = value, ...)]
+  [, VISIBLE = ON|OFF]
 )
-[WITH (HIDDEN = ON)];
+[WITH (REFRESH = <seconds>)];
 ```
 
-#### Hidden Pages
+#### VISIBLE
 
-Adding `WITH (HIDDEN = ON)` after the LAYOUT body hides the page from the navigation bar while still rendering it in the DOM. Hidden pages are only reachable via `DRILL_DOWN` or programmatic navigation.
+`VISIBLE = OFF` hides the page from the navigation bar while still rendering it in the DOM. Hidden pages are only reachable via `DRILL_DOWN` or programmatic navigation.
 
 ```sql
 CREATE PAGE DetailView AS LAYOUT (
   STRUCTURE = 'A',
-  MAP ('A' = DetailTable)
-) WITH (HIDDEN = ON);
+  MAP ('A' = DetailTable),
+  VISIBLE = OFF
+);
 ```
 
 A button or chart click action can navigate to a hidden page:
@@ -1483,9 +1507,10 @@ CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL (
   [STYLE = <styleName> | STYLE (key = value, ...),]
   [VISUALS (VisualA, VisualB, ...),]
   [STRUCTURE = '<grid-template-areas>',]
-  [MAP ('<slot>' = VisualOrContainerName, ...)]
+  [MAP ('<slot>' = VisualOrContainerName, ...),]
   [COLLAPSIBLE = ON|OFF,]
   [PINNABLE = ON|OFF,]
+  [VISIBLE = ON|OFF,]
   [ICON = '<name>']
 );
 ```
@@ -1494,6 +1519,10 @@ CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL (
 |------|-------------|
 | `BOX` | Layout region. If `VISUALS` is used, they are stacked. If `STRUCTURE` is used, it follows the grid layout. |
 | `SCROLL` | Scrollable region. Overflow content scrolls within fixed container height. |
+
+### VISIBLE
+
+`VISIBLE = OFF` on a container hides the entire container (and all its children) until toggled via an action. For `COLLAPSIBLE = ON` containers, this controls whether the drawer starts opened or closed.
 
 ### Layout
 

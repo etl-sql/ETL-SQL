@@ -107,6 +107,7 @@ namespace ETL_SQL.Reporting
                         IsCollapsible      = cStmt.IsCollapsible,
                         Icon               = cStmt.Icon,
                         IsPinnable         = cStmt.IsPinnable,
+                        IsHidden           = cStmt.IsHidden,
                         Styles             = resolvedStyles.Count > 0 ? resolvedStyles : null
 
                     });

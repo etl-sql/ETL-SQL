@@ -517,6 +517,10 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("isPinnable")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
         public bool IsPinnable { get; set; } = true;
+
+        [JsonPropertyName("isHidden")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool IsHidden { get; set; }
     }
 
 
