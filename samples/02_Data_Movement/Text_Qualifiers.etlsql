@@ -4,7 +4,7 @@
 CREATE CONNECTION src ON FLATFILE('TestData/test_qualified.csv') WITH (TEXT_QUALIFIER = DOUBLEQUOTE);
 
 -- Write the data back out with the same qualifier so embedded commas are preserved
-CREATE CONNECTION dst ON FLATFILE('TestData/test_qualified_output.csv') WITH (TEXT_QUALIFIER = DOUBLEQUOTE);
+CREATE CONNECTION dst ON FLATFILE('samples/output/test_qualified_output.csv') WITH (TEXT_QUALIFIER = DOUBLEQUOTE);
 
 -- Stream from source to destination
 INSERT INTO dst

@@ -21,7 +21,7 @@ SELECT * INTO #RawStage FROM InboundFeed.FILE;
 SELECT TransactionID, Amount, Status, CreatedAt INTO #CleanData FROM #RawStage
 WHERE Amount > 0 AND STATUS IN ('PAID', 'PENDING', 'FAILED');
 
-CREATE CONNECTION QuarantineFile ON FLATFILE('TestData/out/quarantine_log.csv') WITH(HEADER='ON');
+CREATE CONNECTION QuarantineFile ON FLATFILE('samples/output/quarantine_log.csv') WITH(HEADER='ON');
 
 SELECT TransactionID, Amount, Status, CreatedAt, 'Validation Failure' AS Reason INTO QuarantineFile.FILE
 FROM #RawStage

@@ -29,7 +29,7 @@ FROM #Employees e
 INNER JOIN #Departments d ON e.DeptID = d.DeptID
 WHERE e.IsActive = 1;
 
-CREATE CONNECTION LocalJsonDump ON FLATFILE('TestData/out/masked_profiles.json');
+CREATE CONNECTION LocalJsonDump ON FLATFILE('samples/output/masked_profiles.json');
 
 -- 2. Format to Enterprise JSON Spec
 SELECT 

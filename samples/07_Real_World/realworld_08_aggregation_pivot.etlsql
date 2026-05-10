@@ -16,7 +16,7 @@ INSERT INTO #Transactions VALUES (3, 'SOUTH', 'Furniture', '2026-08-10', 25000.0
 INSERT INTO #Transactions VALUES (4, 'NORTH', 'Electronics', '2026-11-20', 30000.00);
 INSERT INTO #Transactions VALUES (5, 'SOUTH', 'Furniture', '2026-12-05', 40000.00);
 
-CREATE CONNECTION BoardReport ON FLATFILE('TestData/out/Quarterly_Board_Report_2026.csv') WITH (HEADER='ON');
+CREATE CONNECTION BoardReport ON FLATFILE('samples/output/Quarterly_Board_Report_2026.csv') WITH (HEADER='ON');
 
 -- Use native PIVOT to rotate quarterly revenue into columns
 -- 1. Prepare data with a subquery

@@ -140,3 +140,12 @@ tests_list.txt
 
 # Sample Output
 samples/output/
+
+# Ignore large stress test data
+TestData/test_stress_BigTable.csv
+TestData/test_StressResult.csv
+samples/output/*.csv
+samples/output/*.json
+samples/output/*.zip
+samples/output/*.enc
+

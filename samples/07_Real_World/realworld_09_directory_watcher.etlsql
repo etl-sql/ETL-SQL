@@ -5,15 +5,15 @@
 */
 
 -- Create the required sandbox directories
-CREATE_DIRECTORY('TestData/out/pickup/');
-CREATE_DIRECTORY('TestData/out/archive/');
+CREATE_DIRECTORY('samples/output/pickup/');
+CREATE_DIRECTORY('samples/output/archive/');
 
 -- Drop the mock trigger file
-CREATE CONNECTION TriggerDrop ON FLATFILE('TestData/out/pickup/trigger_data.csv');
+CREATE CONNECTION TriggerDrop ON FLATFILE('samples/output/pickup/trigger_data.csv');
 INSERT INTO TriggerDrop.FILE (ID) VALUES (1);
 INSERT INTO TriggerDrop.FILE (ID) VALUES (2);
 
-CREATE CONNECTION IncomingFtpFolder ON DIRECTORY('TestData/out/pickup/');
+CREATE CONNECTION IncomingFtpFolder ON DIRECTORY('samples/output/pickup/');
 DECLARE @fileFound INT = 0;
 DECLARE @iterations INT = 0;
 
@@ -43,7 +43,7 @@ BEGIN
         PRINT 'Payload Ingested successfully. Triggering archival...';
 
         -- Archive and release directory state
-        MOVE_FILE('TestData/out/pickup/' + @targetName, 'TestData/out/archive/' + @targetName);
+        MOVE_FILE('samples/output/pickup/' + @targetName, 'samples/output/archive/' + @targetName);
         SET @fileFound = 1;
 
         PRINT 'Data inside Stage:';

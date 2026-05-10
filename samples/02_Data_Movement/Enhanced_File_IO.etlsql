@@ -4,9 +4,9 @@
 -- 1. File Operations (Verbose Syntax)
 -- Syntax: COPY FILE '<src>' TO '<dest>' [WITH(OVERWRITE=ON|OFF)]
 PRINT 'Demonstrating Verbose File Syntax';
-COPY FILE 'TestData/test_source.csv' TO 'TestData/out/io_demo_copy.csv' WITH(OVERWRITE=ON);
-MOVE FILE 'TestData/out/io_demo_copy.csv' TO 'TestData/out/io_demo_moved.csv';
-DELETE FILE 'TestData/out/io_demo_moved.csv';
+COPY FILE 'TestData/test_source.csv' TO 'samples/output/io_demo_copy.csv' WITH(OVERWRITE=ON);
+MOVE FILE 'samples/output/io_demo_copy.csv' TO 'samples/output/io_demo_moved.csv';
+DELETE FILE 'samples/output/io_demo_moved.csv';
 
 -- 2. SFTP Operations (Verbose Syntax)
 -- Syntax: SEND FILE '<local>' TO '<remote>' AT <connection>

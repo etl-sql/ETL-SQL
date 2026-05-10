@@ -2,10 +2,10 @@
 $regions = @("North", "South", "East", "West", "Central")
 $products = @("Widget A", "Widget B", "Widget C", "Widget D")
 $rowCount = 5000
-$outputPath = "TestData/test_sales.csv"
+$outputPath = "samples/data/test_sales.csv"
 
-# Ensure TestData exists
-if (!(Test-Path "TestData")) { New-Item -ItemType Directory "TestData" | Out-Null }
+# Ensure samples/data exists
+if (!(Test-Path "samples/data")) { New-Item -ItemType Directory "samples/data" | Out-Null }
 
 $csv = New-Object System.Collections.Generic.List[string]
 $csv.Add("region,product,units,revenue,month,date")

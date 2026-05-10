@@ -12,14 +12,11 @@ CREATE TABLE #Layout (
 
 -- 2. Define the fixed-width connection
 -- FORMAT='FIXED' instructs the engine to use the TEMPLATE for offsets.
-CREATE CONNECTION fw_source ON FLATFILE WITH (
+CREATE CONNECTION fw_source ON FLATFILE 'TestData/fixed_employees.txt' WITH (
     FORMAT = 'FIXED',
     TEMPLATE = #Layout,
-    TRIM = 'ON' -- Automatically removes padding whitespace
+    TRIM = 'ON'
 );
-
--- Note: In a real scenario, you would point to a physical file:
--- CREATE CONNECTION fw_source ON FLATFILE 'data/fixed_employees.txt' ...
 
 -- 3. Ingestion Logic
 -- The engine will slice each line at offsets (0, 5, 25, 35) based on #Layout.

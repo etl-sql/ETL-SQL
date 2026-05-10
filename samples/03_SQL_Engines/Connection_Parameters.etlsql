@@ -6,10 +6,10 @@ INSERT INTO #temp_out (Col1, Col2) VALUES ('value1', 'value2');
 INSERT INTO #temp_out (Col1, Col2) VALUES ('value3', 'value4');
 
 -- Write out pipe delimited no headers
-CREATE CONNECTION pipe_out ON FLATFILE('TestData/pipe.csv') WITH(HEADER=OFF, DELIMITER=PIPE);
+CREATE CONNECTION pipe_out ON FLATFILE('samples/output/pipe.csv') WITH(HEADER=OFF, DELIMITER=PIPE);
 INSERT INTO pipe_out SELECT * FROM #temp_out;
 
 -- Read from pipe delimited no headers and ensure columns auto generated to Col1, Col2 and values are right
-CREATE CONNECTION pipe_in ON FLATFILE('TestData/pipe.csv') WITH(HEADER=OFF, DELIMITER=PIPE);
+CREATE CONNECTION pipe_in ON FLATFILE('samples/output/pipe.csv') WITH(HEADER=OFF, DELIMITER=PIPE);
 
 SELECT * FROM pipe_in;

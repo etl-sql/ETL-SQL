@@ -15,7 +15,7 @@ INSERT INTO #FulfillmentActive VALUES (1001, GETDATE(), 'Active');
 INSERT INTO #FulfillmentActive VALUES (1003, GETDATE(), 'Active');
 
 -- Anti-Join: Find Accounts in Billing that are MISSING in Fulfillment
-CREATE CONNECTION ReconReport ON FLATFILE('TestData/out/reconciliation_audit.csv') WITH (HEADER='ON');
+CREATE CONNECTION ReconReport ON FLATFILE('samples/output/reconciliation_audit.csv') WITH (HEADER='ON');
 
 SELECT 
     b.AccountID,

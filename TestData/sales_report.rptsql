@@ -3,7 +3,7 @@
 --       etl-sql-report serve sales_report.rptsql
 
 DROP CONNECTION IF EXISTS c;
-CREATE CONNECTION c ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\TestData\test_sales.csv');
+CREATE CONNECTION c ON FLATFILE('C:\Users\chuck\scratch\ETL-SQL\samples/data/test_sales.csv');
 
 -- ── Base dataset ──────────────────────────────────────────────────────────────
 SELECT month, region, product, SUM(units) AS units, SUM(revenue) AS revenue
