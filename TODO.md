@@ -4,7 +4,7 @@
 
 -[x] **Publish failed Login failed: invalid credentials.** When trying to publish to the portal I get a failure for invalid credentials, they are not, I just logged in with those.
 
--[ ] **DRILL_IN not working in VS Code** This may be a VS Code limitation but drill in does not work in the preview sidebar but works fine in Portal and report player
+-[x] **DRILL_IN not working in VS Code** Known limitation: the VS Code preview re-runs the CLI on every interaction and has no persistent session, so stateful drill-in cannot be supported. Drill-in works in the Portal and ReportPlayer. Users are notified via an info message in the preview panel when they click a drill target.
 
 -[ ] **Running .\scripts\Test-AllSamples.ps1 returns all as failures?** They all used to work just fine what changed? 
 

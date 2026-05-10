@@ -59,6 +59,17 @@ export class ReportPreviewPanel {
                     case 'exportReport':
                         this._handleExport(message.format);
                         break;
+                    case 'drillIn':
+                    case 'drillUp':
+                        vscode.window.showInformationMessage(
+                            'Drill-in is not supported in the VS Code preview — it requires a live session. Use the Open button to view this report in the browser.',
+                            'Open in Browser'
+                        ).then(choice => {
+                            if (choice === 'Open in Browser') {
+                                vscode.commands.executeCommand('etlsql.launchInBrowser', vscode.Uri.file(this._scriptPath));
+                            }
+                        });
+                        break;
                     case 'serve':
                         vscode.commands.executeCommand('etlsql.launchInBrowser', vscode.Uri.file(this._scriptPath));
                         break;
