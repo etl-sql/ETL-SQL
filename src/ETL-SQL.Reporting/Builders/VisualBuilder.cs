@@ -11,7 +11,7 @@ namespace ETL_SQL.Reporting.Builders
 {
     public class VisualBuilder(IExecutionContext ctx, EChartsRenderer renderer, StyleBuilder styleBuilder)
     {
-        public async Task<VisualManifest> BuildAsync(string name, CreateVisualStatement vStmt, Dictionary<string, string>? interactionValues = null, bool skipDeferredVisuals = false)
+        public async Task<VisualManifest> BuildAsync(string name, CreateVisualStatement vStmt, Dictionary<string, string>? interactionValues = null, bool skipDeferredVisuals = false, VisualDrillState? drillState = null)
         {
             var (title, titleMd) = styleBuilder.ResolveMarkdown(vStmt.Title, vStmt.TitleIsMarkdown);
             var (subtitle, subtitleMd) = styleBuilder.ResolveMarkdown(vStmt.Subtitle, vStmt.SubtitleIsMarkdown);
@@ -139,6 +139,12 @@ namespace ETL_SQL.Reporting.Builders
                         Type    = "CLEAR_FILTERS",
                         Trigger = cf.Trigger
                     },
+                    DrillInAction di => new VisualActionManifest
+                    {
+                        Type      = "DRILL_IN",
+                        Trigger   = di.Trigger,
+                        Hierarchy = di.Hierarchy
+                    },
                     _ => throw new NotSupportedException($"Action type {action.GetType().Name} not supported in manifest.")
                 });
             }
@@ -170,6 +176,21 @@ namespace ETL_SQL.Reporting.Builders
                 try
                 {
                     await FetchDataAsync(vStmt, vm, interactionValues);
+
+                    if (drillState != null && drillState.Path.Count < drillState.Hierarchy.Length)
+                    {
+                        var currentLevel = drillState.Hierarchy[drillState.Path.Count];
+                        (vm.Rows, vm.Columns) = ApplyDrillAggregation(vm.Rows, vm.Columns, drillState);
+                        vm.Options["mapping:x"] = currentLevel;
+                        vm.DrillState = new VisualDrillStateManifest
+                        {
+                            Hierarchy    = drillState.Hierarchy,
+                            Path         = drillState.Path.Select(s => new DrillPathSegment { Column = s.Column, Value = s.Value }).ToList(),
+                            CurrentLevel = currentLevel,
+                            CanDrillUp   = drillState.Path.Count > 0
+                        };
+                    }
+
                     ResolveActionValues(vm);
                     CalculateSummaries(vStmt, vm);
                     vm.ChartConfig = renderer.Render(vm);
@@ -206,6 +227,52 @@ namespace ETL_SQL.Reporting.Builders
                     }
                 }
             }
+        }
+
+        private static (List<List<string?>> rows, List<string> columns) ApplyDrillAggregation(
+            List<List<string?>> rows, List<string> columns, VisualDrillState state)
+        {
+            var hierarchy    = state.Hierarchy;
+            var path         = state.Path;
+            var currentLevel = hierarchy[path.Count];
+
+            // Filter: keep only rows matching the full drill path
+            var filtered = rows.Where(r => path.All(seg =>
+            {
+                var idx = columns.FindIndex(c => c.Equals(seg.Column, StringComparison.OrdinalIgnoreCase));
+                return idx >= 0 && (r[idx] ?? "") == seg.Value;
+            })).ToList();
+
+            // Group by the current level column
+            var levelIdx = columns.FindIndex(c => c.Equals(currentLevel, StringComparison.OrdinalIgnoreCase));
+            if (levelIdx < 0) return (filtered, columns);
+
+            var hierSet    = new HashSet<string>(hierarchy, StringComparer.OrdinalIgnoreCase);
+            var measureIdx = columns.Select((c, i) => (c, i))
+                                    .Where(t => !hierSet.Contains(t.c))
+                                    .Select(t => t.i)
+                                    .ToList();
+
+            var grouped = filtered
+                .GroupBy(r => r[levelIdx] ?? "")
+                .Select(g =>
+                {
+                    var row = new List<string?>(new string?[columns.Count]);
+                    row[levelIdx] = g.Key;
+                    foreach (var mi in measureIdx)
+                    {
+                        var sum = g.Sum(r =>
+                        {
+                            var v = r[mi];
+                            return decimal.TryParse(v, out var d) ? d : 0m;
+                        });
+                        row[mi] = sum.ToString();
+                    }
+                    return row;
+                })
+                .ToList();
+
+            return (grouped, columns);
         }
 
         private static void ResolveSetParameterAction(VisualActionManifest action, List<string> columns)

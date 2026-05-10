@@ -204,6 +204,19 @@ if (multiMode)
         return Results.Json(new { message = result.Message, refresh = result.Refresh }, noCache);
     });
 
+    app.MapPost("/reports/{name}/api/drill",
+        async (string name, HttpContext ctx, DashboardServiceFactory fac) =>
+    {
+        var svc = fac.GetService(name);
+        if (svc == null) return Results.NotFound();
+        var body = await JsonSerializer.DeserializeAsync<DrillRequest>(ctx.Request.Body, webOptions);
+        if (body == null || string.IsNullOrWhiteSpace(body.VisualName)) return Results.BadRequest("visualName is required");
+        var manifest = body.Direction?.ToUpperInvariant() == "UP"
+            ? await svc.DrillUpAsync(body.VisualName, body.TargetDepth)
+            : await svc.DrillInAsync(body.VisualName, body.ClickedValue ?? "");
+        return manifest is null ? Results.NotFound() : Results.Json(manifest, noCache);
+    });
+
     app.MapGet("/reports/{name}/api/refresh", async (string name, DashboardServiceFactory fac) =>
     {
         var svc = fac.GetService(name);
@@ -237,6 +250,16 @@ else
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name!, p.Value ?? ""));
         return Results.Json(await svc.SetParametersAsync(updates, body.IsInteraction), noCache);
+    });
+
+    app.MapPost("/api/drill", async (HttpContext ctx, DashboardService svc) =>
+    {
+        var body = await JsonSerializer.DeserializeAsync<DrillRequest>(ctx.Request.Body, webOptions);
+        if (body == null || string.IsNullOrWhiteSpace(body.VisualName)) return Results.BadRequest("visualName is required");
+        var manifest = body.Direction?.ToUpperInvariant() == "UP"
+            ? await svc.DrillUpAsync(body.VisualName, body.TargetDepth)
+            : await svc.DrillInAsync(body.VisualName, body.ClickedValue ?? "");
+        return manifest is null ? Results.NotFound() : Results.Json(manifest, noCache);
     });
 
     app.MapGet("/", async (DashboardService svc) =>
@@ -569,4 +592,12 @@ public class RunScriptRequest
 {
     public string? ScriptPath { get; set; }
     public Dictionary<string, string>? Parameters { get; set; }
+}
+
+public class DrillRequest
+{
+    public string? VisualName   { get; set; }
+    public string? Direction    { get; set; }  // "IN" or "UP"
+    public string? ClickedValue { get; set; }
+    public int     TargetDepth  { get; set; }
 }

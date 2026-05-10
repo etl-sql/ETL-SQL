@@ -238,6 +238,30 @@ public class ExecutionController(
         return Ok(manifest);
     }
 
+    // ── 2.4  POST /api/reports/{id}/drill ────────────────────────────────────
+
+    [HttpPost("reports/{id:int}/drill")]
+    public async Task<IActionResult> Drill(int id, [FromBody] DrillRequest req)
+    {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null) return Forbid();
+
+        if (string.IsNullOrWhiteSpace(req.VisualName))
+            return BadRequest(new { error = "visualName is required" });
+
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
+        var svc      = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
+        var manifest = req.Direction?.ToUpperInvariant() == "UP"
+            ? await svc.DrillUpAsync(req.VisualName, req.TargetDepth)
+            : await svc.DrillInAsync(req.VisualName, req.ClickedValue ?? "");
+        return manifest is null ? NotFound() : Ok(manifest);
+    }
+
     // ── Session helper ────────────────────────────────────────────────────────
 
     private async Task<ETL_SQL.ReportHosting.DashboardService> GetOrRebuildSessionAsync(

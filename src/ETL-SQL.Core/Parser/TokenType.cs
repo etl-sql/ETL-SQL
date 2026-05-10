@@ -122,7 +122,7 @@ namespace ETL_SQL.Core.Parser
         BOTTOM,  // position keyword (TOP/LEFT/RIGHT already registered via LanguageMetadata)
         TITLE, SUBTITLE, DESCRIPTION,
         MAPPINGS, OPTIONS, ACTIONS, STRUCTURE, MAP, SERIES,
-        SLICER, CARD, ON_CLICK, DRILL_DOWN, SET_PARAMETER, ON_CHANGE,
+        SLICER, CARD, ON_CLICK, DRILL_DOWN, DRILL_IN, SET_PARAMETER, ON_CHANGE,
         TTL, KEYFILE, X_AXIS, Y_AXIS,
         PAGE, PAGES, DATASET,
         REPORT,

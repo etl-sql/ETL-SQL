@@ -363,3 +363,16 @@
   }
   .drill-back-btn:hover { background: #4059a9; box-shadow: 0 4px 16px rgba(84,112,198,0.5); }
   .theme-dark .drill-back-btn { background: #7ca1e8; color: #1e1e1e; }
+
+  /* DRILL_IN breadcrumb */
+  .drill-breadcrumb {
+    display: flex; align-items: center; flex-wrap: wrap;
+    padding: 4px 10px 2px; font-size: 12px; gap: 2px; min-height: 24px;
+  }
+  .bc-seg { padding: 1px 4px; border-radius: 3px; }
+  .bc-seg-link { color: #5470c6; cursor: pointer; }
+  .bc-seg-link:hover { text-decoration: underline; }
+  .bc-seg-active { color: #333; font-weight: 600; }
+  .theme-dark .bc-seg-link { color: #7ca1e8; }
+  .theme-dark .bc-seg-active { color: #e0e0e0; }
+  .bc-sep { color: #aaa; }

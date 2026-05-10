@@ -23,3 +23,5 @@ public record SnapshotResponse(
 public record ParameterUpdateRequest(string Name, string Value, bool IsInteraction = false);
 
 public record BatchParameterRequest(List<ParameterUpdateRequest> Params, bool IsInteraction = false);
+
+public record DrillRequest(string VisualName, string Direction, string? ClickedValue, int TargetDepth = 0);

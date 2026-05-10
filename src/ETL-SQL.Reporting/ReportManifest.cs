@@ -262,6 +262,33 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("dataLabels")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public DataLabelsManifest? DataLabels { get; set; }
+
+        /// <summary>Active DRILL_IN state, if any. Null when the chart is at root level.</summary>
+        [JsonPropertyName("drillState")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public VisualDrillStateManifest? DrillState { get; set; }
+    }
+
+    /// <summary>Sent to the browser for a visual that has an active DRILL_IN state.</summary>
+    public class VisualDrillStateManifest
+    {
+        [JsonPropertyName("hierarchy")]
+        public string[] Hierarchy { get; set; } = [];
+
+        [JsonPropertyName("path")]
+        public List<DrillPathSegment> Path { get; set; } = [];
+
+        [JsonPropertyName("currentLevel")]
+        public string CurrentLevel { get; set; } = "";
+
+        [JsonPropertyName("canDrillUp")]
+        public bool CanDrillUp { get; set; }
+    }
+
+    public class DrillPathSegment
+    {
+        [JsonPropertyName("column")] public string Column { get; set; } = "";
+        [JsonPropertyName("value")]  public string Value  { get; set; } = "";
     }
 
     public class DataLabelsManifest
@@ -292,6 +319,11 @@ namespace ETL_SQL.Reporting
 
         [JsonPropertyName("keyColumns")]
         public string[]? KeyColumns { get; set; }
+
+        // DRILL_IN fields
+        [JsonPropertyName("hierarchy")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string[]? Hierarchy { get; set; }
 
         // SET_PARAMETER fields
         [JsonPropertyName("parameterName")]

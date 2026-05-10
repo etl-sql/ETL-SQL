@@ -894,6 +894,32 @@
             default:            renderChart(card, visual, manifest, effectiveTheme); break;
         }
 
+        // DRILL_IN breadcrumb: shown when visual has an active drill state
+        if (visual.drillState?.hierarchy?.length > 0) {
+            const bc = document.createElement('div');
+            bc.className = 'drill-breadcrumb';
+            // Segments: root label (hierarchy[0]) + each path segment
+            const segs = [{ label: visual.drillState.hierarchy[0], depth: 0 }]
+                .concat((visual.drillState.path || []).map((s, i) => ({ label: s.value, depth: i + 1 })));
+            segs.forEach((seg, i) => {
+                const sp = document.createElement('span');
+                const isActive = i === segs.length - 1;
+                sp.className = 'bc-seg' + (isActive ? ' bc-seg-active' : ' bc-seg-link');
+                sp.textContent = seg.label;
+                if (!isActive) {
+                    sp.addEventListener('click', () => postDrillUp(visual.name, seg.depth));
+                }
+                bc.appendChild(sp);
+                if (!isActive) {
+                    const sep = document.createElement('span');
+                    sep.className = 'bc-sep';
+                    sep.textContent = ' › ';
+                    bc.appendChild(sep);
+                }
+            });
+            card.insertBefore(bc, card.firstChild);
+        }
+
         // Drill-through affordance: cursor + badge when visual has DRILL_DOWN actions
         if ((visual.actions || []).some(a => a.type === 'DRILL_DOWN')) {
             card.classList.add('has-drill-down');
@@ -1158,7 +1184,7 @@
                         }
                     } else {
                         // ON_CLICK actions (Drill Down, etc)
-                        clickActions.forEach(action => executeAction(action, rowData, visual.columns || []));
+                        clickActions.forEach(action => executeAction(action, rowData, visual.columns || [], visual.name, visual));
                     }
                 });
             }
@@ -1290,7 +1316,7 @@
             const target = action.targetVisual || action.targetPage || 'Details';
             item.innerHTML = `<span>&#x21AA;</span> Drill down to <b>${escHtml(target)}</b>`;
             item.addEventListener('click', () => {
-                executeAction(action, rowData || [], visual.columns || []);
+                executeAction(action, rowData || [], visual.columns || [], visual.name, visual);
                 hideCtxMenu();
             });
             menu.appendChild(item);
@@ -1377,7 +1403,7 @@
                         const clickedValue = row[xIdx];
                         applyPageCrossFilter(container, String(clickedValue), xMappingCol, visual.name, e);
                     } else {
-                        clickActions.forEach(action => executeAction(action, row, visual.columns));
+                        clickActions.forEach(action => executeAction(action, row, visual.columns, visual.name, visual));
                     }
                 });
             }
@@ -2528,7 +2554,18 @@
         return result;
     }
 
-    function executeAction(action, rowData, columns) {
+    function executeAction(action, rowData, columns, visualName, visualCtx) {
+        if (action.type === 'DRILL_IN') {
+            const hierarchy = action.hierarchy || [];
+            if (!hierarchy.length || !visualName) return;
+            // Current level comes from the server-stamped drillState; fall back to hierarchy root.
+            const curLevel = visualCtx?.drillState?.currentLevel || hierarchy[0];
+            const colIdx   = columns.findIndex(c => c.toLowerCase() === curLevel.toLowerCase());
+            const clicked  = colIdx >= 0 ? String(rowData?.[colIdx] ?? '') : '';
+            if (!clicked) return;
+            postDrillIn(visualName, clicked);
+            return;
+        }
         if (action.type === 'DRILL_DOWN') {
             const keyColumns = action.keyColumns || [];
             const params = {};
@@ -2617,6 +2654,30 @@
             // Flush to server (forcing bypass of staged mode via a internal call or flag)
             _postParametersInternal(batch).then(m => { if (m) renderManifest(m); });
         }
+    }
+
+    function postDrillIn(visualName, clickedValue) {
+        if (vscode) {
+            vscode.postMessage({ type: 'drillIn', visualName, clickedValue });
+            return;
+        }
+        fetch(apiBase + '/drill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visualName, direction: 'IN', clickedValue })
+        }).then(r => r.ok ? r.json() : null).then(m => { if (m) renderManifest(m); });
+    }
+
+    function postDrillUp(visualName, targetDepth) {
+        if (vscode) {
+            vscode.postMessage({ type: 'drillUp', visualName, targetDepth });
+            return;
+        }
+        fetch(apiBase + '/drill', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ visualName, direction: 'UP', targetDepth })
+        }).then(r => r.ok ? r.json() : null).then(m => { if (m) renderManifest(m); });
     }
 
     async function postParameter(name, value) {

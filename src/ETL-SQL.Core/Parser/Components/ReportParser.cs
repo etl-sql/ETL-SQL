@@ -1353,6 +1353,20 @@ namespace ETL_SQL.Core.Parser.Components
                     Consume(TokenType.RPAREN, "Expected ')' to close DRILL_DOWN");
                     action = new DrillDownAction { Trigger = trigger, TargetVisual = target, KeyColumns = keys };
                 }
+                else if (Match(TokenType.DRILL_IN))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after DRILL_IN");
+                    Advance(); // skip "HIERARCHY" identifier
+                    Consume(TokenType.EQUALS, "Expected '=' after HIERARCHY");
+                    Consume(TokenType.LPAREN, "Expected '(' to open hierarchy list");
+                    var hierarchy = new List<string>();
+                    hierarchy.Add(ConsumeIdentifier("Expected column name").Value);
+                    while (Match(TokenType.COMMA))
+                        hierarchy.Add(ConsumeIdentifier("Expected column name").Value);
+                    Consume(TokenType.RPAREN, "Expected ')' to close hierarchy list");
+                    Consume(TokenType.RPAREN, "Expected ')' to close DRILL_IN");
+                    action = new DrillInAction { Trigger = trigger, Hierarchy = hierarchy.ToArray() };
+                }
                 else if (Match(TokenType.SET_PARAMETER))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after SET_PARAMETER");
@@ -1386,7 +1400,7 @@ namespace ETL_SQL.Core.Parser.Components
                 else
                 {
                     throw new SyntaxException(
-                        $"Expected DRILL_DOWN, SET_PARAMETER, or CLEAR_FILTERS after {trigger} =",
+                        $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, or CLEAR_FILTERS after {trigger} =",
                         _parser.Current.Line, _parser.Current.Column);
                 }
 

@@ -272,10 +272,10 @@ namespace ETL_SQL.Reporting
         /// Re-queries the data for a specific visual and updates its Row/Column collections.
         /// Also regenerates the ChartConfig.
         /// </summary>
-        public async Task RefreshVisualAsync(CreateVisualStatement vStmt, VisualManifest vm, Dictionary<string, string>? interactionValues = null)
+        public async Task RefreshVisualAsync(CreateVisualStatement vStmt, VisualManifest vm, Dictionary<string, string>? interactionValues = null, VisualDrillState? drillState = null)
         {
             // Refresh logic is now shared via VisualBuilder
-            var newVm = await _visualBuilder.BuildAsync(vm.Name, vStmt, interactionValues);
+            var newVm = await _visualBuilder.BuildAsync(vm.Name, vStmt, interactionValues, drillState: drillState);
             vm.Rows = newVm.Rows;
             vm.Columns = newVm.Columns;
             vm.Error = newVm.Error;
@@ -288,6 +288,7 @@ namespace ETL_SQL.Reporting
             vm.RowStyles = newVm.RowStyles;
             vm.Overlays = newVm.Overlays;
             vm.HighlightRows = newVm.HighlightRows;
+            vm.DrillState = newVm.DrillState;
             vm.IsHidden = false; // refreshed visuals are always shown regardless of VISIBLE = OFF
         }
 
@@ -327,6 +328,12 @@ namespace ETL_SQL.Reporting
                 {
                     Type    = "APPLY_PARAMETERS",
                     Trigger = ap.Trigger
+                },
+                DrillInAction di => new VisualActionManifest
+                {
+                    Type      = "DRILL_IN",
+                    Trigger   = di.Trigger,
+                    Hierarchy = di.Hierarchy
                 },
                 _ => new VisualActionManifest { Type = "UNKNOWN", Trigger = action.Trigger }
             };

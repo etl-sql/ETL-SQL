@@ -40,6 +40,7 @@ namespace ETL_SQL.ReportHosting
         private Evaluator? _evaluator;
         private Dictionary<string, string> _parameters = new(StringComparer.OrdinalIgnoreCase);
         private bool _hasAppliedParameters = false;
+        private readonly Dictionary<string, VisualDrillState> _drillStates = new(StringComparer.OrdinalIgnoreCase);
 
         // Background auto-refresh state
         private CancellationTokenSource? _refreshCts;
@@ -262,6 +263,7 @@ namespace ETL_SQL.ReportHosting
             await _lock.WaitAsync();
             try
             {
+                _drillStates.Clear();
                 var source = await File.ReadAllTextAsync(_scriptPath);
 
                 var lexer    = new Lexer(source);
@@ -328,6 +330,73 @@ namespace ETL_SQL.ReportHosting
             {
                 _lock.Release();
             }
+        }
+
+        /// <summary>
+        /// Drills into the next hierarchy level for a DRILL_IN visual.
+        /// Filters rows to those matching <paramref name="clickedValue"/> at the current level,
+        /// then re-renders the visual grouped by the next level column.
+        /// </summary>
+        public async Task<ReportManifest?> DrillInAsync(string visualName, string clickedValue)
+        {
+            if (_manifest == null || _evaluator == null) return null;
+
+            var vm     = _manifest.Visuals.FirstOrDefault(v => v.Name.Equals(visualName, StringComparison.OrdinalIgnoreCase));
+            var action = vm?.Actions?.FirstOrDefault(a => a.Type == "DRILL_IN");
+            if (vm == null || action?.Hierarchy == null) return null;
+
+            var hierarchy = action.Hierarchy;
+            _drillStates.TryGetValue(visualName, out var existing);
+            var path     = existing?.Path.ToList() ?? new List<(string, string)>();
+            var curLevel = hierarchy[path.Count];
+            path.Add((curLevel, clickedValue));
+
+            if (path.Count >= hierarchy.Length) return _manifest; // already at leaf
+
+            _drillStates[visualName] = new VisualDrillState(hierarchy, path);
+
+            await _lock.WaitAsync();
+            try
+            {
+                if (!_evaluator.ReportContext.VisualDefinitions.TryGetValue(visualName, out var vStmt))
+                    return _manifest;
+                var builder = new ManifestBuilder(_evaluator);
+                await builder.RefreshVisualAsync(vStmt, vm, null, _drillStates[visualName]);
+                _manifest.BuiltAt = DateTime.UtcNow;
+            }
+            finally { _lock.Release(); }
+
+            return _manifest;
+        }
+
+        /// <summary>
+        /// Drills up to <paramref name="targetDepth"/> (0 = root) for a DRILL_IN visual.
+        /// </summary>
+        public async Task<ReportManifest?> DrillUpAsync(string visualName, int targetDepth)
+        {
+            if (_manifest == null || _evaluator == null) return null;
+
+            var vm = _manifest.Visuals.FirstOrDefault(v => v.Name.Equals(visualName, StringComparison.OrdinalIgnoreCase));
+            if (vm == null) return null;
+
+            if (targetDepth <= 0)
+                _drillStates.Remove(visualName);
+            else if (_drillStates.TryGetValue(visualName, out var existing))
+                _drillStates[visualName] = existing with { Path = existing.Path.Take(targetDepth).ToList() };
+
+            await _lock.WaitAsync();
+            try
+            {
+                if (!_evaluator.ReportContext.VisualDefinitions.TryGetValue(visualName, out var vStmt))
+                    return _manifest;
+                _drillStates.TryGetValue(visualName, out var newState);
+                var builder = new ManifestBuilder(_evaluator);
+                await builder.RefreshVisualAsync(vStmt, vm, null, newState);
+                _manifest.BuiltAt = DateTime.UtcNow;
+            }
+            finally { _lock.Release(); }
+
+            return _manifest;
         }
 
         /// <summary>

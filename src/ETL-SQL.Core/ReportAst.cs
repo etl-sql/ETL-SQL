@@ -139,6 +139,12 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
+    public record DrillInAction : VisualAction
+    {
+        public required string[] Hierarchy { get; init; }
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
     public record RunScriptAction : VisualAction
     {
         public required string ScriptPath { get; init; }

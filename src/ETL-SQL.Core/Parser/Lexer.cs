@@ -90,6 +90,7 @@ namespace ETL_SQL.Core.Parser
             dict["BOTTOM"]        = TokenType.BOTTOM;   // position keyword; TOP/LEFT/RIGHT come from LanguageMetadata
             dict["ON_CLICK"]      = TokenType.ON_CLICK;
             dict["DRILL_DOWN"]    = TokenType.DRILL_DOWN;
+            dict["DRILL_IN"]      = TokenType.DRILL_IN;
             dict["SET_PARAMETER"] = TokenType.SET_PARAMETER;
             dict["ON_CHANGE"]     = TokenType.ON_CHANGE;
             dict["REFRESH"]       = TokenType.REFRESH;

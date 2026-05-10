@@ -212,6 +212,27 @@ AS (SELECT Date, SUM(Amount) AS Total FROM orders GROUP BY Date);";
             Assert.Equal(DatasetEncryptionMode.None, stmt.EncryptionMode);
         }
         [Fact]
+        public void ParseCreateVisual_WithActions_ParsesDrillIn()
+        {
+            var sql = @"
+CREATE VISUAL SalesChart AS BAR (
+    SOURCE = #data,
+    ACTIONS (
+        ON_CLICK = DRILL_IN(HIERARCHY = (Year, Quarter, Month))
+    )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().FirstOrDefault();
+
+            Assert.NotNull(stmt);
+            Assert.Single(stmt!.Actions);
+            var action = stmt.Actions[0] as DrillInAction;
+            Assert.NotNull(action);
+            Assert.Equal("ON_CLICK", action!.Trigger);
+            Assert.Equal(new[] { "Year", "Quarter", "Month" }, action.Hierarchy);
+        }
+
+        [Fact]
         public void ParseSetReport_TitleAndDescription_ReturnsMetadataStatements()
         {
             var sql = @"
