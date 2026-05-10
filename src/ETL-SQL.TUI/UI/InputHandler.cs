@@ -130,10 +130,7 @@ namespace ETL_SQL.TUI.UI
             // ── Global Bottom Panel Scrolling ──
             if (key.Modifiers.HasFlag(ConsoleModifiers.Control))
             {
-                if (key.Key == ConsoleKey.UpArrow) { _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 1); return; }
-                if (key.Key == ConsoleKey.DownArrow) { _renderer.ResultScrollRow++; return; }
-                if (key.Key == ConsoleKey.PageUp) { _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow - 10); return; }
-                if (key.Key == ConsoleKey.PageDown) { _renderer.ResultScrollRow += 10; return; }
+                if (TryScrollCurrentPanel(key)) return;
 
                 // Word jump — editor only (results focus handles Ctrl+Left/Right separately)
                 if (!_renderer.ResultsFocus && key.Key == ConsoleKey.LeftArrow)
@@ -236,6 +233,12 @@ namespace ETL_SQL.TUI.UI
             {
                 _renderer.CompareFocusIndex = (_renderer.CompareFocusIndex + 1) % _editor._evaluator.LastResultSets.Count;
                 _renderer.ShowStatus($"Compare: pane {_renderer.CompareFocusIndex + 1} active");
+                return;
+            }
+
+            if (key.Key == ConsoleKey.F8)
+            {
+                _editor.NavigateDiagnostic(key.Modifiers.HasFlag(ConsoleModifiers.Shift) ? -1 : 1);
                 return;
             }
 
@@ -352,6 +355,43 @@ namespace ETL_SQL.TUI.UI
                     }
                     break;
             }
+        }
+
+        private bool TryScrollCurrentPanel(ConsoleKeyInfo key)
+        {
+            int delta = key.Key switch
+            {
+                ConsoleKey.UpArrow => -1,
+                ConsoleKey.DownArrow => 1,
+                ConsoleKey.PageUp => -10,
+                ConsoleKey.PageDown => 10,
+                _ => 0
+            };
+
+            if (delta == 0) return false;
+
+            void ScrollResult() => _renderer.ResultScrollRow = Math.Max(0, _renderer.ResultScrollRow + delta);
+            void ScrollTree() => _renderer.TreeScrollRow = Math.Max(0, _renderer.TreeScrollRow + delta);
+            void ScrollMessages() => _renderer.MessageScrollRow = Math.Max(0, _renderer.MessageScrollRow + delta);
+
+            switch (_renderer.Focus)
+            {
+                case EditorFocus.Results:
+                case EditorFocus.Performance:
+                    ScrollResult();
+                    return true;
+                case EditorFocus.ExecutionTree:
+                    ScrollTree();
+                    return true;
+                case EditorFocus.Messages:
+                    ScrollMessages();
+                    return true;
+            }
+
+            if (_renderer.PerformanceVisible || _renderer.ResultsVisible) ScrollResult();
+            else ScrollMessages();
+
+            return true;
         }
 
         private void HandleCompareKey(ConsoleKeyInfo key)

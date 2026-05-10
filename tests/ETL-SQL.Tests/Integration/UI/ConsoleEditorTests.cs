@@ -203,6 +203,162 @@ namespace ETL_SQL.Tests.Integration
         }
 
         [Fact]
+        public async Task TestLongBufferNavigationKeepsCursorVisible()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._buffer.Load(Enumerable.Range(1, 500).Select(i => $"Line {i}"));
+            editor._renderer.Headless = true;
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.End, false, false, true));
+            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 100, 24);
+
+            Assert.Equal(499, editor._buffer.CursorLine);
+            Assert.True(editor._renderer.ScrollLine <= editor._buffer.CursorLine);
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.Home, false, false, true));
+            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 100, 24);
+
+            Assert.Equal(0, editor._buffer.CursorLine);
+            Assert.Equal(0, editor._renderer.ScrollLine);
+        }
+
+        [Fact]
+        public void TestLongBufferFindWrapsToNextMatch()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            var lines = Enumerable.Range(1, 250).Select(i => i == 25 || i == 240 ? $"SELECT {i} AS Needle;" : $"SELECT {i};");
+            editor._buffer.Load(lines);
+            editor._buffer.CursorLine = 200;
+            editor._buffer.CursorColumn = 0;
+
+            Assert.True(editor.TryFindNext("needle"));
+            Assert.Equal(239, editor._buffer.CursorLine);
+
+            Assert.True(editor.TryFindNext("needle"));
+            Assert.Equal(24, editor._buffer.CursorLine);
+
+            Assert.False(editor.TryFindNext("missing"));
+            Assert.Equal(24, editor._buffer.CursorLine);
+        }
+
+        [Fact]
+        public async Task TestControlPanelScrollTargetsFocusedOutputPanel()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._buffer.Load(new[] { "SELECT 1" });
+            editor._renderer.Headless = true;
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // Execution tree
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // Messages
+            editor._renderer.ResultScrollRow = 7;
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.PageDown, false, false, true));
+
+            Assert.Equal(EditorFocus.Messages, editor._renderer.Focus);
+            Assert.Equal(10, editor._renderer.MessageScrollRow);
+            Assert.Equal(7, editor._renderer.ResultScrollRow);
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F6, false, false, false)); // Results
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.PageDown, false, false, true));
+
+            Assert.Equal(17, editor._renderer.ResultScrollRow);
+            Assert.Equal(10, editor._renderer.MessageScrollRow);
+        }
+
+        [Fact]
+        public async Task TestDiagnosticsNavigationJumpsBetweenLintFindings()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._buffer.Load(new[]
+            {
+                "SELECT 1;",
+                "SELECT @first;",
+                "SELECT 2;",
+                "SELECT @second;"
+            });
+            editor._renderer.Headless = true;
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F5, false, false, false));
+
+            Assert.True(editor.Diagnostics.Count >= 2);
+            Assert.Contains(editor.Diagnostics, d => d.Message.Contains("@first"));
+            Assert.Contains(editor.Diagnostics, d => d.Message.Contains("@second"));
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F8, false, false, false));
+            Assert.Equal(1, editor._buffer.CursorLine);
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F8, false, false, false));
+            Assert.Equal(3, editor._buffer.CursorLine);
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F8, true, false, false));
+            Assert.Equal(1, editor._buffer.CursorLine);
+        }
+
+        [Fact]
+        public async Task TestDiagnosticsNavigationWithNoFindingsKeepsCursorPosition()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._buffer.Load(new[] { "SELECT 1;" });
+            editor._buffer.CursorLine = 0;
+            editor._buffer.CursorColumn = 4;
+            editor._renderer.Headless = true;
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F8, false, false, false));
+
+            Assert.Empty(editor.Diagnostics);
+            Assert.Equal(0, editor._buffer.CursorLine);
+            Assert.Equal(4, editor._buffer.CursorColumn);
+        }
+
+        [Fact]
+        public async Task TestRepeatedHeadlessRunsResetDiagnostics()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._renderer.Headless = true;
+
+            editor._buffer.Load(new[] { "SELECT @missing;" });
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F5, false, false, false));
+            Assert.NotEmpty(editor.Diagnostics);
+
+            editor._buffer.Load(new[] { "SELECT 1;" });
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.F5, false, false, false));
+            Assert.Empty(editor.Diagnostics);
+        }
+
+        [Fact]
+        public void TestLargeMessageAndResultOutputScrollStateIsClamped()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._buffer.Load(new[] { "SELECT 1;" });
+            editor._renderer.Headless = true;
+
+            for (int i = 0; i < 500; i++)
+            {
+                editor._evaluator.Log($"Message {i}: {new string('x', 80)}", ConsoleColor.White);
+            }
+
+            editor._renderer.MessageScrollRow = int.MaxValue;
+            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 100, 24);
+            Assert.InRange(editor._renderer.MessageScrollRow, 0, 500 * 8);
+
+            var table = new DataTable();
+            table.SetColumns(new[] { "Id", "Name" });
+            for (int i = 0; i < 500; i++)
+            {
+                table.Rows.Add(new Row(table.Schema, new object?[] { i, $"Name {i}" }));
+            }
+
+            editor._evaluator.LastResult = table;
+            editor._evaluator.LastResultSets.Add(table);
+            editor._renderer.ResultsVisible = true;
+            editor._renderer.MessageScrollRow = 0;
+            editor._renderer.ResultScrollRow = int.MaxValue;
+
+            editor._renderer.Render(editor._buffer, editor._evaluator, "test.etlsql", false, 100, 24);
+            Assert.InRange(editor._renderer.ResultScrollRow, 0, table.Rows.Count);
+        }
+
+        [Fact]
         public async Task TestMultiCursor()
         {
             var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
@@ -220,6 +376,28 @@ namespace ETL_SQL.Tests.Integration
             var text = editor._buffer.GetText();
             Assert.Contains("AX", text);
             Assert.Contains("BX", text);
+        }
+
+        [Fact]
+        public async Task TestMultiCursorBoundaryDoesNotThrow()
+        {
+            var editor = new ConsoleEditor("test.etlsql", new Dictionary<string, IDataSource>());
+            editor._buffer.Load(new[] { "Only line" });
+            editor._buffer.CursorLine = 0;
+            editor._buffer.CursorColumn = 4;
+            editor._renderer.Headless = true;
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.UpArrow, false, true, false));
+            Assert.Equal(0, editor._buffer.CursorLine);
+            Assert.Equal(4, editor._buffer.CursorColumn);
+            Assert.False(editor._buffer.IsMultiLineMode);
+            Assert.Empty(editor._buffer.SecondaryCursors);
+
+            await editor.HandleKey(new ConsoleKeyInfo('\0', ConsoleKey.DownArrow, false, true, false));
+            Assert.Equal(0, editor._buffer.CursorLine);
+            Assert.Equal(4, editor._buffer.CursorColumn);
+            Assert.False(editor._buffer.IsMultiLineMode);
+            Assert.Empty(editor._buffer.SecondaryCursors);
         }
     }
 }

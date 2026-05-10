@@ -161,6 +161,11 @@ namespace ETL_SQL.TUI.UI
         public void AddMultiCursor(int dy)
         {
             int targetLine = CursorLine + dy;
+            if (targetLine < 0 || targetLine >= Lines.Count)
+            {
+                return;
+            }
+
             if (SecondaryCursors.Count > 0 && SecondaryCursors.Last().Line == targetLine)
             {
                 SecondaryCursors.RemoveAt(SecondaryCursors.Count - 1);

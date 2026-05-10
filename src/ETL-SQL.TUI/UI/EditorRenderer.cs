@@ -492,6 +492,7 @@ namespace ETL_SQL.TUI.UI
             Row("Ctrl+M",                  "Maximize / Restore lower panel");
             Row("F7",                      "Enter / exit Compare mode (2+ result sets)");
             Row("F8",                      "Cycle active pane  [grey](Compare mode)[/]");
+            Row("F8 / Shift+F8",           "Next / previous parser or linter diagnostic");
             Row("F1",                      "Close this help screen");
             Row("Escape",                  "Clear filter / Exit focus or Compare mode");
 

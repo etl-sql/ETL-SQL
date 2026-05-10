@@ -20,6 +20,8 @@ using ETL_SQL.Core.Services;
 
 namespace ETL_SQL.TUI.UI
 {
+    public record EditorDiagnostic(string Source, string Severity, string Message, int Line, int Column);
+
     /// <summary>
     /// Represents the main interactive console editor for ETL-SQL scripts.
     /// Manages the buffer, rendering, input handling, and execution context.
@@ -36,6 +38,8 @@ namespace ETL_SQL.TUI.UI
         internal readonly InputHandler _input;
         private readonly ILanguageService _languageService;
         private readonly Dictionary<string, IDataSource> _connections;
+        private readonly List<EditorDiagnostic> _diagnostics = new();
+        private int _activeDiagnosticIndex = -1;
 
         private readonly Services.IClipboardService _clipboard;
         private readonly SecurityService _security;
@@ -48,6 +52,8 @@ namespace ETL_SQL.TUI.UI
 
         /// <summary>Dispatches a key press to the input handler.</summary>
         public async Task HandleKey(ConsoleKeyInfo key) => await _input.HandleKey(key);
+
+        public IReadOnlyList<EditorDiagnostic> Diagnostics => _diagnostics;
 
         /// <summary>Initializes a new instance of the <see cref="ConsoleEditor"/> class.</summary>
         /// <param name="filePath">Initial file path to open.</param>
@@ -178,7 +184,7 @@ namespace ETL_SQL.TUI.UI
 
             while (!_promptResolved && !_isExiting)
             {
-                _renderer.Render(_buffer, _evaluator, _filePath, _isDirty, Console.WindowWidth, Console.WindowHeight);
+                RenderCurrent();
                 var key = Console.ReadKey(true);
                 await _input.HandlePromptKey(key);
             }
@@ -238,7 +244,16 @@ namespace ETL_SQL.TUI.UI
         {
             var target = await ShowPrompt("Find", "");
             if (string.IsNullOrEmpty(target)) return;
+            if (!TryFindNext(target))
+            {
+                _renderer.ShowStatus($"'{target}' not found.");
+            }
+        }
 
+        /// <summary>Moves the cursor to the next case-insensitive match, wrapping to the top when needed.</summary>
+        public bool TryFindNext(string? target)
+        {
+            if (string.IsNullOrEmpty(target)) return false;
             var text = _buffer.GetText();
             int start = _buffer.GetFlatPosition(_buffer.CursorLine, _buffer.CursorColumn);
             int index = text.IndexOf(target, start + 1, StringComparison.OrdinalIgnoreCase);
@@ -249,8 +264,10 @@ namespace ETL_SQL.TUI.UI
                 var pos = _buffer.GetLineColFromFlat(index);
                 _buffer.CursorLine = pos.line;
                 _buffer.CursorColumn = pos.col;
+                return true;
             }
-            else _renderer.ShowStatus($"'{target}' not found.");
+
+            return false;
         }
 
         /// <summary>Prompts for a string replacement and updates the buffer.</summary>
@@ -285,6 +302,28 @@ namespace ETL_SQL.TUI.UI
             }
         }
 
+        public bool NavigateDiagnostic(int direction)
+        {
+            if (_diagnostics.Count == 0)
+            {
+                _renderer.ShowStatus("No diagnostics.");
+                return false;
+            }
+
+            _activeDiagnosticIndex = _activeDiagnosticIndex < 0
+                ? (direction >= 0 ? 0 : _diagnostics.Count - 1)
+                : (_activeDiagnosticIndex + direction + _diagnostics.Count) % _diagnostics.Count;
+
+            var diagnostic = _diagnostics[_activeDiagnosticIndex];
+            _buffer.CursorLine = Math.Clamp(diagnostic.Line - 1, 0, _buffer.Lines.Count - 1);
+            _buffer.CursorColumn = Math.Clamp(diagnostic.Column - 1, 0, _buffer.Lines[_buffer.CursorLine].Length);
+            _renderer.Focus = EditorFocus.Editor;
+            _renderer.AutocompleteVisible = false;
+            _renderer.ReportVisible = false;
+            _renderer.ShowStatus($"Diagnostic {_activeDiagnosticIndex + 1}/{_diagnostics.Count}: {diagnostic.Source} {diagnostic.Severity} - {diagnostic.Message}");
+            return true;
+        }
+
         /// <summary>Executes the entire script or the current selection.</summary>
         public async Task RunScript()
         {
@@ -313,6 +352,8 @@ namespace ETL_SQL.TUI.UI
         {
             try
             {
+                _diagnostics.Clear();
+                _activeDiagnosticIndex = -1;
                 _renderer.IsBottomMaximized = false;
                 var totalSw = System.Diagnostics.Stopwatch.StartNew();
 
@@ -329,6 +370,7 @@ namespace ETL_SQL.TUI.UI
                 // 1. Show Parser Diagnostics
                 foreach (var diag in script.Diagnostics)
                 {
+                    AddDiagnostic("PARSER", diag.Severity.ToString(), diag.Message, diag.Line, diag.Column);
                     _evaluator.Log($"[PARSER {diag.Severity}] {diag.Message} at line {diag.Line}, col {diag.Column}", diag.Severity == DiagnosticSeverity.Error ? ConsoleColor.Red : ConsoleColor.Yellow);
                 }
 
@@ -351,8 +393,11 @@ namespace ETL_SQL.TUI.UI
                 foreach (var res in lintResults)
                 {
                     ConsoleColor color = res.Severity == LintSeverity.Error ? ConsoleColor.Red : ConsoleColor.Yellow;
+                    AddDiagnostic("LINT", res.Severity.ToString(), res.Message, res.LineNumber, res.ColumnNumber);
                     _evaluator.Log($"[LINT {res.Severity}] {res.Message} at line {res.LineNumber}, col {res.ColumnNumber}", color);
                 }
+
+                SortDiagnostics();
 
                 // 3. Execute only if no critical syntax errors? 
                 // Or try to execute what we can? 
@@ -409,8 +454,41 @@ namespace ETL_SQL.TUI.UI
             finally
             {
                 _renderer.MessageScrollRow = int.MaxValue; // Auto-scroll to latest messages
-                _renderer.Render(_buffer, _evaluator, _filePath, _isDirty, Console.WindowWidth, Console.WindowHeight);
+                RenderCurrent();
             }
+        }
+
+        private void RenderCurrent()
+        {
+            if (_renderer.Headless)
+            {
+                _renderer.Render(_buffer, _evaluator, _filePath, _isDirty, 100, 30);
+                return;
+            }
+
+            _renderer.Render(_buffer, _evaluator, _filePath, _isDirty, Console.WindowWidth, Console.WindowHeight);
+        }
+
+        private void AddDiagnostic(string source, string severity, string message, int line, int column)
+        {
+            _diagnostics.Add(new EditorDiagnostic(
+                source,
+                severity,
+                message,
+                Math.Max(1, line),
+                Math.Max(1, column)));
+        }
+
+        private void SortDiagnostics()
+        {
+            _diagnostics.Sort((left, right) =>
+            {
+                int line = left.Line.CompareTo(right.Line);
+                if (line != 0) return line;
+                int col = left.Column.CompareTo(right.Column);
+                if (col != 0) return col;
+                return string.Compare(left.Source, right.Source, StringComparison.Ordinal);
+            });
         }
 
         private class ConsoleMetadataProvider : IMetadataProvider

@@ -34,9 +34,9 @@
 - [ ] **TUI hardening and long-script ergonomics**
     - [x] Add boundary regression coverage for multi-cursor navigation at the top/bottom of the buffer.
     - [x] Add focused long-buffer scenarios for navigation, search, and output scrolling.
-    - [ ] Improve diagnostics navigation so parser/linter messages can jump back to script locations.
-    - [ ] Review whether folding belongs in the TUI now or should wait until diagnostics/navigation are stronger.
-    - [ ] Add scripted scenarios for long-running sessions and large result/message output.
+    - [x] Improve diagnostics navigation so parser/linter messages can jump back to script locations.
+    - [x] Review whether folding belongs in the TUI now or should wait until diagnostics/navigation are stronger. Decision: defer folding until diagnostic navigation has real usage feedback.
+    - [x] Add scripted scenarios for long-running sessions and large result/message output.
     - [ ] Keep VS Code/reporting host consistency under Priority 2 and host-boundary cleanup under Priority 6.
 
 - [x] **Reporting language ergonomics and documentation**
