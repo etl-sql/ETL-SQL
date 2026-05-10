@@ -87,7 +87,7 @@
           "type": "CLEAR_FILTERS",
           "trigger": "ON_CLICK",
           "targetVisual": null,
-          "keyColumn": null,
+          "keyColumns": null,
           "parameterName": null,
           "valueExpression": null,
           "scriptPath": null,

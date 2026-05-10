@@ -290,8 +290,8 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("targetVisual")]
         public string? TargetVisual { get; set; }
 
-        [JsonPropertyName("keyColumn")]
-        public string? KeyColumn { get; set; }
+        [JsonPropertyName("keyColumns")]
+        public string[]? KeyColumns { get; set; }
 
         // SET_PARAMETER fields
         [JsonPropertyName("parameterName")]

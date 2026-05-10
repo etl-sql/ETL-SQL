@@ -118,7 +118,7 @@ namespace ETL_SQL.Reporting.Builders
                         Type         = "DRILL_DOWN",
                         Trigger      = dd.Trigger,
                         TargetVisual = dd.TargetVisual,
-                        KeyColumn    = dd.KeyColumn
+                        KeyColumns   = dd.KeyColumns
                     },
                     SetParameterAction sp => new VisualActionManifest
                     {

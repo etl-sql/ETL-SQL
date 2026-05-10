@@ -134,8 +134,8 @@ namespace ETL_SQL.Core
 
     public record DrillDownAction : VisualAction
     {
-        public required string TargetVisual { get; init; }
-        public required string KeyColumn    { get; init; }
+        public required string   TargetVisual { get; init; }
+        public required string[] KeyColumns   { get; init; }
         public override string ToSql() => AstSerializer.Format(this);
     }
 

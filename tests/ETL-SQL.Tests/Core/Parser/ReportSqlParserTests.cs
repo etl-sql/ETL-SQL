@@ -114,7 +114,7 @@ CREATE VISUAL Chart1 AS BAR (
             Assert.NotNull(action);
             Assert.Equal("ON_CLICK", action!.Trigger);
             Assert.Equal("Chart2", action.TargetVisual);
-            Assert.Equal("Category", action.KeyColumn);
+            Assert.Equal(new[] { "Category" }, action.KeyColumns);
         }
 
         [Fact]

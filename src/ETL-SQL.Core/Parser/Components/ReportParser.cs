@@ -1336,9 +1336,22 @@ namespace ETL_SQL.Core.Parser.Components
                     Match(TokenType.COMMA);
                     Advance();
                     Consume(TokenType.EQUALS, "Expected '=' after Key");
-                    var key = ConsumeIdentifier("Expected key column name").Value;
+                    string[] keys;
+                    if (Match(TokenType.LPAREN))
+                    {
+                        var keyList = new List<string>();
+                        keyList.Add(ConsumeIdentifier("Expected key column name").Value);
+                        while (Match(TokenType.COMMA))
+                            keyList.Add(ConsumeIdentifier("Expected key column name").Value);
+                        Consume(TokenType.RPAREN, "Expected ')' to close key list");
+                        keys = keyList.ToArray();
+                    }
+                    else
+                    {
+                        keys = new[] { ConsumeIdentifier("Expected key column name").Value };
+                    }
                     Consume(TokenType.RPAREN, "Expected ')' to close DRILL_DOWN");
-                    action = new DrillDownAction { Trigger = trigger, TargetVisual = target, KeyColumn = key };
+                    action = new DrillDownAction { Trigger = trigger, TargetVisual = target, KeyColumns = keys };
                 }
                 else if (Match(TokenType.SET_PARAMETER))
                 {

@@ -2303,7 +2303,7 @@
                 // In web mode, batch SET_PARAMETER and DRILL_DOWN parameter updates
                 const batch = {};
                 drillDownActions.forEach(a => {
-                    if (a.keyColumn) batch['@' + a.keyColumn] = '';
+                    (a.keyColumns || []).forEach(k => { batch['@' + k] = ''; });
                 });
                 setParamActions.forEach(a => {
                     if (a.parameterName) batch[a.parameterName] = resolveActionValue(a, [], []);
@@ -2526,16 +2526,18 @@
 
     function executeAction(action, rowData, columns) {
         if (action.type === 'DRILL_DOWN') {
-            const colIdx = columns.findIndex(
-                c => c.toLowerCase() === (action.keyColumn || '').toLowerCase());
-            const value  = colIdx >= 0 ? rowData[colIdx] : null;
-            if (value == null) return;
+            const keyColumns = action.keyColumns || [];
+            const params = {};
+            for (const key of keyColumns) {
+                const colIdx = columns.findIndex(c => c.toLowerCase() === key.toLowerCase());
+                const value  = colIdx >= 0 ? rowData[colIdx] : null;
+                if (value != null) params['@' + key] = String(value);
+            }
+            if (Object.keys(params).length === 0) return;
 
             // Push current parameter snapshot onto back-navigation stack
             _drillHistory.push(Object.assign({}, parameters));
             showDrillBackButton();
-
-            const params = { ['@' + action.keyColumn]: String(value) };
             
             // Visual feedback: pulse target or entire page if navigating
             const targetName = action.target || action.targetVisual || action.targetPage;
