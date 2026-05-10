@@ -51,6 +51,11 @@ namespace ETL_SQL.App
                 return 0;
             }
 
+            if (ctx.Command == "serve")
+            {
+                return await ServeReport(ctx, logger);
+            }
+
             if (ctx.Command == "session-clear")
             {
                 if (string.IsNullOrEmpty(ctx.SessionId))
@@ -624,6 +629,90 @@ namespace ETL_SQL.App
             }
 
             return 0;
+        }
+
+        // ── serve command ────────────────────────────────────────────────────────
+
+        private static async Task<int> ServeReport(CliContext ctx, ILogger logger)
+        {
+            if (ctx.ScriptFile == null && string.IsNullOrWhiteSpace(ctx.ServeManifest))
+            {
+                logger.WriteLine("Usage: etl-sql serve <script.rptsql>", ConsoleColor.Red);
+                logger.WriteLine("       etl-sql serve --manifest reports.json", ConsoleColor.Red);
+                return 1;
+            }
+
+            var (exe, prefixArgs) = FindReportPlayer();
+
+            // Build the argument list passed to the ReportPlayer process
+            var rpArgs = new List<string>(prefixArgs);
+            if (ctx.ScriptFile != null)
+                rpArgs.Add($"\"{ctx.ScriptFile.FullName}\"");
+            if (!string.IsNullOrWhiteSpace(ctx.ServeManifest))
+            {
+                rpArgs.Add("--manifest");
+                rpArgs.Add($"\"{Path.GetFullPath(ctx.ServeManifest)}\"");
+            }
+            if (ctx.ServePort.HasValue)
+            {
+                rpArgs.Add("--port");
+                rpArgs.Add(ctx.ServePort.Value.ToString());
+            }
+            if (ctx.ServeNoBrowser)
+                rpArgs.Add("--no-browser");
+
+            var psi = new ProcessStartInfo(exe, string.Join(" ", rpArgs))
+            {
+                UseShellExecute = false,
+            };
+
+            logger.WriteLine($"Starting report preview server...", ConsoleColor.Cyan);
+
+            using var proc = Process.Start(psi);
+            if (proc == null)
+            {
+                logger.WriteLine("Failed to start the ReportPlayer process.", ConsoleColor.Red);
+                return 1;
+            }
+
+            // Forward Ctrl+C so the child shuts down cleanly
+            Console.CancelKeyPress += (_, e) =>
+            {
+                e.Cancel = true;
+                if (!proc.HasExited) proc.Kill(entireProcessTree: true);
+            };
+
+            await proc.WaitForExitAsync();
+            return proc.ExitCode;
+        }
+
+        private static (string exe, string[] prefixArgs) FindReportPlayer()
+        {
+            var exeName = OperatingSystem.IsWindows() ? "ETL-SQL.ReportPlayer.exe" : "ETL-SQL.ReportPlayer";
+
+            // 1. Sibling executable (production install — both binaries in same directory)
+            var exeDir = Path.GetDirectoryName(Environment.ProcessPath ?? "") ?? ".";
+            var siblingExe = Path.Combine(exeDir, exeName);
+            if (File.Exists(siblingExe))
+                return (siblingExe, Array.Empty<string>());
+
+            // 2. Dev mode — walk up from CWD to find the solution root, then use `dotnet run`
+            var dir = Directory.GetCurrentDirectory();
+            while (true)
+            {
+                if (Directory.GetFiles(dir, "*.slnx").Length > 0 || Directory.GetFiles(dir, "*.sln").Length > 0)
+                {
+                    var projectPath = Path.Combine(dir, "src", "ETL-SQL.ReportPlayer");
+                    if (Directory.Exists(projectPath))
+                        return ("dotnet", new[] { "run", "--project", $"\"{projectPath}\"", "--" });
+                }
+                var parent = Path.GetDirectoryName(dir);
+                if (parent == null || parent == dir) break;
+                dir = parent;
+            }
+
+            throw new InvalidOperationException(
+                "Could not locate ETL-SQL.ReportPlayer. Run from the solution root directory.");
         }
     }
 }

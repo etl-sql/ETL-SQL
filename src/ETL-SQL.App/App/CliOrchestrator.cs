@@ -31,6 +31,11 @@ namespace ETL_SQL.App
         private static readonly Argument<string> EncryptValueArg = new("value", "The string to encrypt.");
         private static readonly Argument<string> TestValArg = new("testVal", () => "unit", "Test category: unit, integration, etc.");
 
+        private static readonly Argument<string?> ServeScriptArg = new("script", "The .rptsql file to serve (omit if using --manifest)") { Arity = ArgumentArity.ZeroOrOne };
+        private static readonly Option<string?> ServeManifestOption = new(new[] { "--manifest", "-m" }, "Serve multiple reports defined in a JSON manifest");
+        private static readonly Option<int?> ServePortOption    = new(new[] { "--port", "-p" }, "Port to listen on (default: auto-assigned ephemeral port)");
+        private static readonly Option<bool>  ServeNoBrowserOption = new("--no-browser", "Do not automatically open the browser on start");
+
         public static RootCommand BuildRootCommand(Func<CliContext, Task<int>> handler)
         {
             var rootCommand = new RootCommand("ETL-SQL Engine - Modern Data Integration Tool");
@@ -119,6 +124,16 @@ namespace ETL_SQL.App
             setupJwtSubcommand.SetHandler(async (context) => await Dispatch(context, "config-setup-jwt", handler));
             configCommand.AddCommand(setupJwtSubcommand);
 
+            // 9. SERVE Command — start live preview server for a Report-SQL script
+            var serveCommand = new Command("serve", "Start a live preview server for a Report-SQL script")
+            {
+                ServeScriptArg,
+                ServeManifestOption,
+                ServePortOption,
+                ServeNoBrowserOption,
+            };
+            serveCommand.SetHandler(async (context) => await Dispatch(context, "serve", handler));
+
             rootCommand.AddCommand(runCommand);
             rootCommand.AddCommand(testCommand);
             rootCommand.AddCommand(encryptCommand);
@@ -127,6 +142,7 @@ namespace ETL_SQL.App
             rootCommand.AddCommand(uiCommand);
             rootCommand.AddCommand(doctorCommand);
             rootCommand.AddCommand(configCommand);
+            rootCommand.AddCommand(serveCommand);
 
             return rootCommand;
         }
@@ -185,6 +201,15 @@ namespace ETL_SQL.App
             {
                 cliContext.UpdateConfig = res.GetValueForOption(UpdateJwtOption);
             }
+            else if (commandName == "serve")
+            {
+                var scriptInput = res.GetValueForArgument(ServeScriptArg);
+                if (!string.IsNullOrWhiteSpace(scriptInput))
+                    cliContext.ScriptFile = new FileInfo(scriptInput.Trim('"', '\'', ' '));
+                cliContext.ServeManifest  = res.GetValueForOption(ServeManifestOption);
+                cliContext.ServePort      = res.GetValueForOption(ServePortOption);
+                cliContext.ServeNoBrowser = res.GetValueForOption(ServeNoBrowserOption);
+            }
 
             var sessionOptVal = res.FindResultFor(SessionOption) != null ? res.GetValueForOption(SessionOption) : null;
             if (sessionOptVal != null) cliContext.SessionId = sessionOptVal;
@@ -225,6 +250,7 @@ namespace ETL_SQL.App
             table.AddColumn("[bold yellow]Command[/]");
             table.AddColumn("[bold white]Description[/]");
             table.AddRow($"run [blue]{Markup.Escape("<script>")}[/]", "Execute an ETL script with options like --perf, --log, --batch-size.");
+            table.AddRow($"serve [blue]{Markup.Escape("<script.rptsql>")}[/]", "Start a live preview server for a Report-SQL script (opens browser automatically).");
             table.AddRow($"test [blue]{Markup.Escape("<category>")}[/]", "Run unit or integration tests (e.g., unit).");
             table.AddRow($"encrypt [blue]{Markup.Escape("<string>")}[/]", "Securely encrypt connection strings.");
             table.AddRow("generate", "Generate large scale mock data for performance validation.");

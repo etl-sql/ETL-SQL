@@ -29,6 +29,7 @@ string? scriptPath   = null;
 string? manifestPath = null;
 int?    portArg      = null;
 bool    noBrowser    = false;
+string  invocationDir = Directory.GetCurrentDirectory(); // capture before ASP.NET Core changes CWD
 
 for (int i = 0; i < args.Length; i++)
 {
@@ -42,6 +43,11 @@ for (int i = 0; i < args.Length; i++)
     else if (!args[i].StartsWith("-"))
         scriptPath = args[i];
 }
+
+// Resolve relative paths against the directory the user ran the command from,
+// not the project/assembly directory (which may differ under `dotnet run`).
+if (scriptPath   != null && !Path.IsPathRooted(scriptPath))   scriptPath   = Path.GetFullPath(scriptPath,   invocationDir);
+if (manifestPath != null && !Path.IsPathRooted(manifestPath)) manifestPath = Path.GetFullPath(manifestPath, invocationDir);
 
 bool multiMode = manifestPath != null;
 

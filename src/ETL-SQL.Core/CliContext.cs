@@ -33,5 +33,10 @@ namespace ETL_SQL.Core
         public string SessionId { get; set; } = System.Guid.NewGuid().ToString("N");
         public bool UpdateConfig { get; set; }
         public Dictionary<string, object?> Variables { get; } = new(System.StringComparer.OrdinalIgnoreCase);
+
+        // serve command
+        public string? ServeManifest { get; set; }
+        public int?    ServePort     { get; set; }
+        public bool    ServeNoBrowser { get; set; }
     }
 }
