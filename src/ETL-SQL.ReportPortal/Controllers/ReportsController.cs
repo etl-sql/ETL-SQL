@@ -272,6 +272,40 @@ public class ReportsController : ControllerBase
         return NoContent();
     }
 
+    // ── POST /api/scripts/upload ──────────────────────────────────────────────
+
+    [HttpPost("scripts/upload")]
+    [Authorize(Roles = "Admin,Publisher")]
+    public async Task<IActionResult> UploadScript([FromBody] UploadScriptRequest req)
+    {
+        if (string.IsNullOrWhiteSpace(req.Filename))
+            return BadRequest(new { error = "Filename is required." });
+
+        // Reject any path separators — filename only, no subdirectory traversal.
+        if (req.Filename.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0
+            || req.Filename.Contains('/') || req.Filename.Contains('\\'))
+            return BadRequest(new { error = "Filename must not contain path separators." });
+
+        if (!req.Filename.EndsWith(".rptsql", StringComparison.OrdinalIgnoreCase))
+            return BadRequest(new { error = "Only .rptsql files may be uploaded." });
+
+        byte[] content;
+        try { content = Convert.FromBase64String(req.ContentBase64); }
+        catch { return BadRequest(new { error = "ContentBase64 is not valid base64." }); }
+
+        var root = portalConfig.ScriptRootPath;
+        if (string.IsNullOrWhiteSpace(root))
+            return StatusCode(503, new { error = "ScriptRootPath is not configured on the portal." });
+
+        Directory.CreateDirectory(root);
+        var destination = System.IO.Path.Combine(root, req.Filename);
+
+        await System.IO.File.WriteAllBytesAsync(destination, content);
+
+        var relativePath = System.IO.Path.GetRelativePath(root, destination).Replace('\\', '/');
+        return Ok(new UploadScriptResponse(relativePath));
+    }
+
     // ── GET /api/reports/available-scripts ───────────────────────────────────
 
     [HttpGet("reports/available-scripts")]

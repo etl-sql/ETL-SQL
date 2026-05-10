@@ -1,5 +1,9 @@
 namespace ETL_SQL.ReportPortal.Models;
 
+public record UploadScriptRequest(string Filename, string ContentBase64);
+
+public record UploadScriptResponse(string Path);
+
 public record PublishReportRequest(
     int FolderId,
     string Name,

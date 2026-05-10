@@ -2,7 +2,7 @@
 ## Bugs
 - [ ] **CROSS HIGHLIGHT not working both directions**  Using kitchen sink report as reference.  "C:\Users\chuck\scratch\ETL-SQL\samples\kitchen_sinks\report_kitchen_sink.rptsql".  Clicking on a bar on BarByRegion works perfectly to highlight against DrillRegionDetail.  But clicking on DrillRegionDetail does nothing to BarByRegion.  Note the users has to have stopped cross highlighting by BarByRegion first its not a both ways at the same time.  So workflow of click East twice on BarByRegion, once for on, once for off.   Then clicking Grocery on DrillRegionDetail should trigger to cross highlight against BarByRegion.  I'm guessing here but it should show about 25% in East and 75% ghosted, 20% in South and 80% ghosted,... 
 
--[ ] **Publish failed Login failed: invalid credentials.** When trying to publish to the portal I get a failure for invalid credentials, they are not, I just logged in with those.
+-[x] **Publish failed Login failed: invalid credentials.** When trying to publish to the portal I get a failure for invalid credentials, they are not, I just logged in with those.
 
 -[ ] **DRILL_IN not working in VS Code** This may be a VS Code limitation but drill in does not work in the preview sidebar but works fine in Portal and report player
 

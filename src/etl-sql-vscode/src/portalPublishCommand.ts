@@ -110,33 +110,23 @@ export async function publishToPortal(context: vscode.ExtensionContext, filePath
     const token = await ensureAuthenticated(context, portalUrl);
     if (!token) return;
 
-    // Resolve the script path relative to the portal's script root.
-    // The portal runs on a different filesystem (e.g. Docker), so we can't
-    // send the local absolute path — we pick from scripts it already knows about.
+    // Upload the local file to the portal's script root so it is accessible
+    // on the portal's filesystem (e.g. inside a Docker container).
     let scriptPath: string;
     try {
-        const res = await httpRequest('GET', `${portalUrl}/api/reports/available-scripts`, null, token);
+        const fs = await import('fs');
+        const contentBase64 = fs.readFileSync(filePath).toString('base64');
+        const filename = path.basename(filePath);
+        const res = await httpRequest('POST', `${portalUrl}/api/scripts/upload`,
+            { filename, contentBase64 }, token);
         if (res.status !== 200) {
-            vscode.window.showErrorMessage(`Could not fetch available scripts: HTTP ${res.status}`);
+            const msg = res.data?.error ?? `HTTP ${res.status}`;
+            vscode.window.showErrorMessage(`Upload failed: ${msg}`);
             return;
         }
-        const available: string[] = Array.isArray(res.data) ? res.data : [];
-        if (available.length === 0) {
-            vscode.window.showErrorMessage(
-                'No scripts found in the portal\'s script directory. ' +
-                'Copy your .rptsql file into the portal\'s configured ScriptRootPath first.');
-            return;
-        }
-        const localName = path.basename(filePath);
-        const preselect = available.find(s => path.basename(s) === localName);
-        const picked = await vscode.window.showQuickPick(
-            available.map(s => ({ label: s, description: s === preselect ? '(matches open file)' : '' })),
-            { placeHolder: 'Select portal script to publish', ignoreFocusOut: true }
-        );
-        if (!picked) return;
-        scriptPath = picked.label;
+        scriptPath = res.data.path as string;
     } catch (e: any) {
-        vscode.window.showErrorMessage(`Could not fetch available scripts: ${e.message}`);
+        vscode.window.showErrorMessage(`Upload failed: ${e.message}`);
         return;
     }
 
