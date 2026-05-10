@@ -454,21 +454,19 @@
         const actions = document.createElement('div');
         actions.className = 'header-actions';
 
-        // 1. Serve Button (VS Code Only)
-        const serveBtn = document.createElement('button');
-        serveBtn.className = 'header-btn primary';
-        serveBtn.title = 'Launch into Browser (Serve Mode)';
-        serveBtn.innerHTML = '<span>&#x1F680;</span> Serve';
-        serveBtn.addEventListener('click', () => {
+        const openBtn = document.createElement('button');
+        openBtn.className = 'header-btn primary';
+        openBtn.title = 'Open interactive report in browser';
+        openBtn.textContent = 'Open';
+        openBtn.addEventListener('click', () => {
             vscode.postMessage({ type: 'serve' });
         });
-        actions.appendChild(serveBtn);
+        actions.appendChild(openBtn);
 
-        // 2. PDF/MD Export Buttons (VS Code Only)
         const pdfBtn = document.createElement('button');
         pdfBtn.className = 'header-btn';
-        pdfBtn.title = 'Publish to PDF';
-        pdfBtn.innerHTML = '<span>&#x1F4DC;</span> PDF';
+        pdfBtn.title = 'Export to PDF';
+        pdfBtn.textContent = 'PDF';
         pdfBtn.addEventListener('click', () => {
             vscode.postMessage({ type: 'exportReport', format: 'pdf' });
         });
@@ -476,8 +474,8 @@
 
         const mdBtn = document.createElement('button');
         mdBtn.className = 'header-btn';
-        mdBtn.title = 'Publish to Markdown';
-        mdBtn.innerHTML = '<span>&#x2133;</span> MD';
+        mdBtn.title = 'Export to Markdown';
+        mdBtn.textContent = 'MD';
         mdBtn.addEventListener('click', () => {
             vscode.postMessage({ type: 'exportReport', format: 'markdown' });
         });
@@ -918,49 +916,27 @@
             }
         }
 
-        const activeVisuals = new Set(state.selections.map(s => s.visual));
-        const filterTypes = ['SLICER', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'];
-
-        // 1. Visual Dimming Feedback (immediate, before server round-trip)
+        // Mark the source card with a border indicator; strip the marker from all others.
         pageEl.querySelectorAll('.visual-card').forEach(card => {
-            const visual = card._visualData;
-            if (!visual) return;
-            const type = (visual.visualType || '').toUpperCase();
-            const isFilter = filterTypes.includes(type);
-
-            // Remove any prior loading badge
-            card.querySelector('.cross-filter-loading-badge')?.remove();
-
-            if (state.selections.length > 0) {
-                if (activeVisuals.has(visual.name)) {
-                    card.classList.add('cross-filter-source');
-                    card.classList.remove('dimmed');
-                } else if (!isFilter) {
-                    card.classList.add('dimmed');
-                    card.classList.remove('cross-filter-source');
-                    // Loading badge lets the user know a server query is in flight
-                    const badge = document.createElement('div');
-                    badge.className = 'cross-filter-loading-badge';
-                    badge.textContent = '⟳ Filtering…';
-                    card.appendChild(badge);
-                }
+            const v = card._visualData;
+            if (!v) return;
+            if (state.selections.length > 0 && state.selections.some(s => s.visual === v.name)) {
+                card.classList.add('cross-filter-source');
             } else {
-                card.classList.remove('dimmed', 'cross-filter-source');
-                const wrapper = card.querySelector('.chart-wrapper');
-                if (wrapper && wrapper._echartsInst) {
-                    wrapper._echartsInst.dispatchAction({ type: 'downplay' });
-                }
+                card.classList.remove('cross-filter-source');
             }
         });
 
-        // 2. Parameter Updates
-        const batch = {};
-        // Clear columns no longer in the selection
-        const prevCols = new Set(Object.keys(state.lastBatch || {}));
-        const currCols = new Set(state.selections.map(s => '@' + s.column));
-        prevCols.forEach(c => { if (!currCols.has(c)) batch[c] = ''; });
+        if (state.selections.length === 0) {
+            // Deselect: post an empty non-interaction batch to force the server to re-evaluate
+            // without any interactionValues, returning a clean manifest with no highlightRows.
+            state.lastBatch = {};
+            postParameters({}, false).then(m => { if (m) renderManifest(m); });
+            return;
+        }
 
-        // Build new CSV values for each selected column
+        // Build interaction batch for the active selection
+        const batch = {};
         const groups = {};
         state.selections.forEach(s => {
             const k = '@' + s.column;
@@ -970,29 +946,20 @@
         Object.keys(groups).forEach(k => { batch[k] = groups[k].join(','); });
         state.lastBatch = batch;
 
-        if (Object.keys(batch).length > 0) {
-            postParameters(batch, true).then(m => { if (m) renderManifest(m); });
-        }
+        postParameters(batch, true).then(m => { if (m) renderManifest(m); });
     }
 
-    // Re-applies cross-filter CSS classes (dimmed / cross-filter-source) after a DOM rebuild.
-    // Called by renderManifest when isInteraction=true so visual feedback survives the re-render.
     function reApplyCrossFilterStyling() {
-        const filterTypes = ['SLICER', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'];
         document.querySelectorAll('.page').forEach(pageEl => {
             const state = _crossFilterStates[pageEl.id];
             if (!state || state.selections.length === 0) return;
             const activeVisuals = new Set(state.selections.map(s => s.visual));
             pageEl.querySelectorAll('.visual-card').forEach(card => {
-                const visual = card._visualData;
-                if (!visual) return;
-                const type = (visual.visualType || '').toUpperCase();
-                const isFilter = filterTypes.includes(type);
-                if (activeVisuals.has(visual.name)) {
+                const v = card._visualData;
+                if (!v) return;
+                if (activeVisuals.has(v.name)) {
                     card.classList.add('cross-filter-source');
-                    card.classList.remove('dimmed');
-                } else if (!isFilter) {
-                    card.classList.add('dimmed');
+                } else {
                     card.classList.remove('cross-filter-source');
                 }
             });
@@ -1121,9 +1088,21 @@
                 });
             }
 
-            // Cross-Highlighting logic: Use server-provided highlightRows if available
-            if (visual.highlightRows && visual.highlightRows.length > 0) {
-                mergeHighlightData(visual, option);
+            // Cross-highlighting: source chart gets per-item opacity; child HIGHLIGHT charts get ghost overlay.
+            // Note: the card is not yet in the DOM here so getPageState() would fail — iterate all states instead.
+            {
+                let cfState = null;
+                for (const k in _crossFilterStates) {
+                    const s = _crossFilterStates[k];
+                    if (s && s.selections && s.selections.length > 0) { cfState = s; break; }
+                }
+                const isSource = cfState && cfState.selections.some(s => s.visual === visual.name);
+
+                if (isSource) {
+                    applySourceChartOpacity(option, cfState.selections);
+                } else if (visual.highlightRows && visual.highlightRows.length > 0) {
+                    mergeHighlightData(visual, option);
+                }
             }
 
             chart.setOption(option);
@@ -1154,14 +1133,6 @@
                         console.debug(`[Chart] Click on ${visual.name} | Value: ${clickedValue} | Col: ${colName}`);
                         if (clickedValue != null && colName) {
                             applyPageCrossFilter(container, String(clickedValue), colName, visual.name, params.event?.event);
-                            
-                            // Visual feedback: immediate highlight while waiting for re-query
-                            chart.dispatchAction({ type: 'downplay' });
-                            chart.dispatchAction({
-                                type: 'highlight',
-                                seriesIndex: params.seriesIndex || 0,
-                                dataIndex: idx
-                            });
                         }
                     } else {
                         // ON_CLICK actions (Drill Down, etc)
@@ -1425,13 +1396,16 @@
                 ghostSeries.emphasis = { disabled: true };
                 ghostSeries.z = 1;
 
-                // Active = selection bars: selected items keep their original item (color + value),
-                // non-selected items are invisible (value 0, opacity 0)
+                // Active = selection bars: use the selection value (East's portion) so the bar height is
+                // proportional to the selected slice, not the full universe.  Preserve per-item color.
                 const activeSeries = option.series[0];
                 activeSeries.name = 'Filtered';
                 activeSeries.data = categories.map((cat, i) => {
-                    if (selectionMap[String(cat)] !== undefined) {
-                        return origData[i] ?? selectionMap[String(cat)];
+                    const selVal = selectionMap[String(cat)];
+                    if (selVal !== undefined) {
+                        const orig = origData[i];
+                        const color = (typeof orig === 'object' && orig !== null && orig.itemStyle?.color) ? orig.itemStyle.color : null;
+                        return color ? { value: selVal, itemStyle: { color } } : selVal;
                     }
                     return { value: 0, itemStyle: { opacity: 0 } };
                 });
@@ -1519,6 +1493,24 @@
                 }
             });
         }
+    }
+
+    // Dims non-selected bars in the source chart while keeping selected bars at full opacity.
+    // Operates on per-item itemStyle.opacity so original colors are always preserved.
+    function applySourceChartOpacity(option, selections) {
+        const selectedKeys = new Set(selections.map(s => s.value));
+        const categories = (option.xAxis && option.xAxis.data) || (option.yAxis && option.yAxis.data) || [];
+        if (categories.length === 0 || !option.series || option.series.length === 0) return;
+
+        option.series[0].data = (option.series[0].data || []).map((item, i) => {
+            const cat = String(categories[i] || '');
+            const opacity = selectedKeys.has(cat) ? 1.0 : 0.2;
+            if (typeof item === 'object' && item !== null) {
+                const color = item.itemStyle && item.itemStyle.color;
+                return { ...item, itemStyle: color ? { color, opacity } : { opacity } };
+            }
+            return { value: item, itemStyle: { opacity } };
+        });
     }
 
     // ── Card ────────────────────────────────────────────────────────────────
@@ -2535,12 +2527,7 @@
             for (let k in _crossFilterStates) delete _crossFilterStates[k];
             document.querySelectorAll('.page').forEach(pageEl => {
                 pageEl.querySelectorAll('.visual-card').forEach(card => {
-                    card.classList.remove('dimmed', 'cross-filter-source');
-                    card.querySelector('.cross-filter-loading-badge')?.remove();
-                    const wrapper = card.querySelector('.chart-wrapper');
-                    if (wrapper && wrapper._echartsInst) {
-                        wrapper._echartsInst.dispatchAction({ type: 'downplay' });
-                    }
+                    card.classList.remove('cross-filter-source');
                 });
             });
             // Reset parameters to baseline

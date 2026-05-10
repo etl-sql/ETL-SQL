@@ -21,18 +21,19 @@
   .header-subtitle { font-size: 0.85em; color: #666; }
   .theme-dark .header-subtitle { color: #888; }
   
-  .header-actions { display: flex; align-items: center; gap: 8px; }
+  .header-actions { display: flex; align-items: center; gap: 6px; }
   .header-btn {
-    display: flex; align-items: center; gap: 8px; padding: 6px 12px;
-    border: 1px solid #ddd; border-radius: 6px; background: #fff;
-    cursor: pointer; font-size: 0.85em; font-weight: 600; color: #444;
-    transition: all 0.2s;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 44px; padding: 4px 10px;
+    border: 1px solid #d0d0d0; border-radius: 2px; background: #fff;
+    cursor: pointer; font-size: 12px; font-weight: 500; color: #333;
+    line-height: 18px;
   }
   .theme-dark .header-btn { background: #2d2d2d; border-color: #444; color: #ccc; }
-  .header-btn:hover { background: #f8f9fa; border-color: #ccc; color: #000; }
+  .header-btn:hover { background: #f3f3f3; border-color: #b8b8b8; color: #000; }
   .theme-dark .header-btn:hover { background: #37373d; border-color: #555; color: #fff; }
-  .header-btn.primary { background: #5470c6; color: #fff; border-color: #4c66b6; }
-  .header-btn.primary:hover { background: #4c66b6; }
+  .header-btn.primary { background: #0e639c; color: #fff; border-color: #0e639c; }
+  .header-btn.primary:hover { background: #1177bb; border-color: #1177bb; }
   .header-btn.danger { color: #f48771; border-color: rgba(244,135,113,0.3); }
   .header-btn.danger:hover { background: rgba(244,135,113,0.1); border-color: #f48771; }
   
@@ -213,14 +214,6 @@
   /* Cross-filter / Interaction Feedback */
   .dimmed { opacity: 0.35 !important; filter: grayscale(70%) blur(0.5px); transition: opacity 0.4s, filter 0.4s; pointer-events: none; }
   .cross-filter-source { border: 2px solid #5470c6 !important; box-shadow: 0 4px 20px rgba(84,112,198,0.25); transition: border 0.3s, box-shadow 0.3s; z-index: 10; }
-  .cross-filter-loading-badge {
-    position: absolute; top: 8px; right: 8px;
-    background: rgba(84,112,198,0.88); color: #fff;
-    font-size: 11px; padding: 2px 9px; border-radius: 10px;
-    z-index: 20; pointer-events: none; user-select: none;
-    animation: cf-badge-pulse 0.65s ease-in-out infinite alternate;
-  }
-  @keyframes cf-badge-pulse { from { opacity: 0.7; } to { opacity: 1; } }
   
   /* Context Menu */
   .report-ctx-menu {
