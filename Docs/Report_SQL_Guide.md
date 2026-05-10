@@ -84,7 +84,7 @@ GROUP BY region;
 -- 2. Define a visual
 CREATE VISUAL SalesByRegion AS BAR (
   SOURCE = #summary,
-  MAPPINGS (X = region, Y = sales),
+  MAPPINGS (X = region, Y = revenue),
   OPTIONS (
     DATA_LABELS = ON WITH (
       POSITION    = 'INSIDE_TOP',  -- TOP | BOTTOM | LEFT | RIGHT | CENTER | INSIDE | INSIDE_TOP | ...
@@ -101,7 +101,7 @@ CREATE VISUAL SalesByRegion AS BAR (
 -- 3. Arrange on a page (STRUCTURE uses CSS grid-template-areas)
 CREATE PAGE Main AS LAYOUT (
   STRUCTURE = 'A',
-  MAP ('A' = SalesChart)
+  MAP ('A' = SalesByRegion)
 );
 ```
 
@@ -190,13 +190,55 @@ Sets the report title and description displayed in the dashboard header and cata
 ```sql
 SET REPORT TITLE = 'Sales Dashboard';
 SET REPORT DESCRIPTION = 'Regional and product-level revenue analysis for Q1 2026.';
-
--- Enable markdown for the report title
-SET REPORT TITLE = '# Quarterly Revenue';
-STYLE (TITLE_MD = ON);
 ```
 
 Both statements are optional. If omitted the script filename is used as the title.
+
+Markdown flags such as `TITLE_MD`, `SUBTITLE_MD`, and `TOOLTIP_MD` belong on `CREATE VISUAL`, `CREATE PAGE`, `CREATE CONTAINER`, or `CREATE BUTTON` style blocks. `SET REPORT TITLE` and `SET REPORT DESCRIPTION` are plain report metadata strings.
+
+---
+
+## Canonical Report-SQL Syntax
+
+Report-SQL follows normal ETL-SQL statement style: name the object first, use `AS` before the body, and keep object-specific clauses inside the outer parentheses.
+
+Use these forms as the preferred style in docs, samples, and generated scripts:
+
+```sql
+CREATE DATASET &sales_summary AS (
+  SELECT region, SUM(revenue) AS revenue
+  FROM #sales
+  GROUP BY region
+);
+
+CREATE VISUAL RevenueByRegion AS BAR (
+  SOURCE   = &sales_summary,
+  MAPPINGS (X = region, Y = revenue),
+  STYLE    (THEME = light)
+);
+
+CREATE PAGE Overview AS LAYOUT (
+  STRUCTURE = 'A',
+  MAP ('A' = RevenueByRegion),
+  STYLE (GAP = '16px')
+);
+```
+
+Compatibility notes:
+
+- `CREATE PAGE <name> AS (...)` still parses, but `AS LAYOUT (...)` is the canonical form because it makes the page body unambiguous.
+- `CREATE DATASET` accepts either `&dataset` or `#temp_style` names. Prefer `&dataset` for reusable report datasets and `#temp` for intermediate engine tables.
+- `STYLE = StyleName` applies a named style. `STYLE (key = value, ...)` applies inline overrides. A standalone `STYLE (...)` statement is not valid.
+- `SOURCE = #temp`, `SOURCE = &dataset`, and `SOURCE = (SELECT ...)` are the canonical source forms.
+
+### Report documentation roles
+
+Use each report document for a specific job:
+
+- `Docs/Report_SQL_Guide.md` explains how to build reports and should favor complete, readable examples.
+- `Docs/Reference/Grammar.md` is the exact syntax contract and should stay close to parser behavior.
+- `src/ETL-SQL.Core/Resources/Help/Report/*.md` feeds editor help and hover text, so examples must stay short and parser-backed.
+- `samples/**/*.rptsql` files are runnable workflows and should use canonical syntax unless they are intentionally testing compatibility.
 
 ---
 

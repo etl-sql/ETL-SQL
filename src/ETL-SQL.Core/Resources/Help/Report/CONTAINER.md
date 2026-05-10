@@ -5,7 +5,7 @@ Syntax:
   CREATE CONTAINER <name> AS BOX | SCROLL (
     STRUCTURE = '<grid-template-areas>',
     MAP ('<slot>' = <visual_name>, ...),
-    STYLE = (KEY = value, ...)
+    STYLE (KEY = value, ...)
   );
 
 Types:
@@ -23,7 +23,7 @@ CREATE CONTAINER KpiGroup AS BOX (
 CREATE CONTAINER OrderScroll AS SCROLL (
   STRUCTURE = 'A',
   MAP ('A' = OrderTable),
-  STYLE = (MAX_HEIGHT = '400px')
+  STYLE (MAX_HEIGHT = '400px')
 );
 
 CREATE PAGE Dashboard AS LAYOUT (

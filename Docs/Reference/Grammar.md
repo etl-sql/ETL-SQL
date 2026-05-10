@@ -1941,11 +1941,9 @@ CREATE VISUAL <name> AS <type> (
 **Action forms:**
 ```
 ON_CLICK  = DRILL_DOWN(Target = <VisualName>, Key = <column>)
-ON_CLICK  = NAVIGATE(<PageName>)
 ON_CHANGE = SET_PARAMETER(@paramName, <columnRef>)
-ON_CHANGE = REFRESH
-ON_CLICK  = REFRESH
-ON_CLICK  = RESET_PARAMETERS
+ON_CLICK  = RUN_SCRIPT('<path>', @param = <columnRef> [, ...])
+ON_CLICK  = CLEAR_FILTERS
 ```
 
 #### A.3.1 Filter Visuals (`SLICER`, `DATEPICKER`, etc.)
@@ -2013,8 +2011,15 @@ CREATE PAGE <name> AS LAYOUT (
 ### A.5 `CREATE CONTAINER`
 ```sql
 CREATE CONTAINER <name> AS BOX|SCROLL (
-  [STYLE   ( key = value [, ...] ),]
-  VISUALS  ( <VisualName> [, ...] )
+  [TITLE = '<string>',]
+  [SUBTITLE = '<string>',]
+  [TOOLTIP = '<string>' | <ContainerName>,]
+  [STYLE = <styleName> | STYLE ( key = value [, ...] ),]
+  [STRUCTURE = '<css-grid-template-areas>',]
+  [MAP ('<slot>' = <VisualOrContainerName> [, ...] ),]
+  [COLLAPSIBLE = ON|OFF,]
+  [PINNABLE = ON|OFF,]
+  [ICON = '<name>']
 );
 ```
 
@@ -2022,9 +2027,14 @@ CREATE CONTAINER <name> AS BOX|SCROLL (
 ```sql
 CREATE NAVIGATION <name> AS TAB|BUTTON|LINK (
   [ORIENTATION = HORIZONTAL|VERTICAL,]
+  [DEFAULT = <PageName>,]
+  [PAGES ( <PageName> [, ...] )]
+);
+
+CREATE NAVIGATION <name> AS TAB|BUTTON|LINK (
+  [ORIENTATION = HORIZONTAL|VERTICAL,]
   [DEFAULT = <PageName>]
-)
-WITH PAGES ( <PageName> [, ...] );
+) WITH PAGES ( <PageName> [, ...] );
 ```
 
 ### A.7 `CREATE STYLE`
@@ -2046,9 +2056,11 @@ CREATE STYLE <name> (
 
 ### A.8 `CREATE BUTTON`
 ```sql
-CREATE BUTTON <name> (
-  TITLE   = '<string>',
-  [STYLE  = <StyleName> | ( key = value [, ...] ),]
+CREATE BUTTON <name> AS BACK|REFRESH|CLEAR_FILTERS|<customType> (
+  [TITLE   = '<string>',]
+  [TOOLTIP = '<string>' | <ContainerName>,]
+  [OPTIONS ( key = value [, ...] ),]
+  [STYLE = <styleName> | STYLE ( key = value [, ...] ),]
   ACTIONS ( trigger = action [, ...] )
 );
 ```
@@ -2077,9 +2089,9 @@ CREATE OR ALTER VISUAL     <name> AS <type> ( ... );
 CREATE OR ALTER PAGE       <name> AS LAYOUT ( ... );
 CREATE OR ALTER DATASET    &<name> ... AS ( SELECT ... );
 CREATE OR ALTER STYLE      <name> ( ... );
-CREATE OR ALTER BUTTON     <name> ( ... );
+CREATE OR ALTER BUTTON     <name> AS BACK|REFRESH|CLEAR_FILTERS|<customType> ( ... );
 CREATE OR ALTER CONTAINER  <name> AS BOX|SCROLL ( ... );
-CREATE OR ALTER NAVIGATION <name> AS TAB|BUTTON|LINK ( ... ) WITH PAGES ( ... );
+CREATE OR ALTER NAVIGATION <name> AS TAB|BUTTON|LINK ( ... );
 ```
 
 ---

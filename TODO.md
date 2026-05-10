@@ -36,10 +36,12 @@
     - [ ] Add focused tests or scripted scenarios for large scripts and long-running sessions.
     - [ ] Keep VS Code/reporting host consistency under Priority 2 and host-boundary cleanup under Priority 6.
 
-- [ ] **Reporting language ergonomics and documentation**
-    - [ ] Review Report-SQL syntax for consistency with the rest of ETL-SQL and simplify confusing forms where possible.
-    - [ ] Keep help, hover text, and documentation aligned with parser behavior and runnable examples.
-    - [ ] Give each major doc a clear purpose and make the documentation both people-friendly and agent-friendly.
+- [x] **Reporting language ergonomics and documentation**
+    - [x] Canonicalize Report-SQL syntax in docs, help, and samples around parser-backed forms: `CREATE PAGE ... AS LAYOUT`, `SOURCE = ...`, `STYLE = Name`, and `STYLE (...)`.
+    - [x] Add parser smoke coverage for report help SQL examples so hover/help text cannot drift from runnable syntax.
+    - [x] Add linter smoke coverage for report help examples once the parser-backed help guardrail is stable.
+    - [x] Review confusing compatibility forms (`CREATE PAGE ... AS (...)`, `CREATE DATASET #name`) and decide whether to keep, warn, or document as legacy.
+    - [x] Give each major report doc a clear purpose: guide for people, grammar for exact syntax, help resources for editor hovers, samples for runnable workflows.
 
 - [ ] **Fuzzy Matching — Full Feature Set** — See `Docs/Strategy/FuzzyMatching_Strategy.md` for the complete design. Five phases in recommended order:
     - **Phase 1 — `NORMALIZE()` function** *(go first — highest ROI, smallest scope)*: Domain-aware string preprocessing with presets for COMPANY, PERSON, ADDRESS, PHONE, EMAIL. Eliminates surface variation before any similarity algorithm runs.

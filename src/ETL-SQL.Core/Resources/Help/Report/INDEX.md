@@ -17,22 +17,28 @@ Key components:
 -- Minimal two-visual report with a slicer
 DECLARE @region VARCHAR INPUT = 'All';
 
-CREATE DATASET #orders AS (
+SELECT region, product, amount
+INTO #orders_raw
+FROM dbo.Orders;
+
+CREATE DATASET &orders AS (
   SELECT region, product, SUM(amount) AS revenue
-  FROM dbo.Orders
-  WHERE @region = 'All' OR region = @region
+  FROM #orders_raw
   GROUP BY region, product
 );
 
 CREATE VISUAL RegionSlicer AS SLICER (
-  SOURCE   = (SELECT DISTINCT region FROM dbo.Orders INTO #regions),
+  SOURCE   = (SELECT DISTINCT region FROM #orders_raw),
   MAPPINGS (VALUE = region),
-  OPTIONS  (TITLE = 'Region'),
+  TITLE    = 'Region',
   ACTIONS  (ON_CHANGE = SET_PARAMETER(@region, value))
 );
 
 CREATE VISUAL SalesBar AS BAR (
-  SOURCE   = #orders,
+  SOURCE   = (SELECT product, SUM(revenue) AS revenue
+              FROM &orders
+              WHERE @region = 'All' OR region = @region
+              GROUP BY product),
   MAPPINGS (X = product, Y = revenue)
 );
 

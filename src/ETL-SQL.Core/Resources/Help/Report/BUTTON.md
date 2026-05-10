@@ -2,36 +2,37 @@
 An interactive button that triggers a navigation action, page refresh, or parameter update when clicked.
 
 Syntax:
-  CREATE BUTTON <name> AS BACK | REFRESH | LINK (
+  CREATE BUTTON <name> AS BACK | REFRESH | CLEAR_FILTERS | <customType> (
     TITLE   = 'label',
-    ACTIONS = (ON_CLICK = <action>)
+    ACTIONS (ON_CLICK = <action>)
   );
 
 Types:
   BACK     — navigate to the previous page
   REFRESH  — re-evaluate the page's data sources and re-render visuals
-  LINK     — navigate to a named page or set a parameter
+  CLEAR_FILTERS — reset visual selections and cross-filter highlights
+  custom   — behavior driven by ACTIONS or host-specific button handling
 
 Actions:
-  ON_CLICK = NAVIGATE(<page_name>)       — go to a named report page
   ON_CLICK = SET_PARAMETER(@var, value)  — update a variable and re-render
+  ON_CLICK = CLEAR_FILTERS               — clear visual selections
 
 ```sql
 CREATE BUTTON GoBack AS BACK (
-  TITLE = '← Back'
+  TITLE = 'Back'
 );
 
 CREATE BUTTON RefreshData AS REFRESH (
   TITLE = 'Refresh'
 );
 
-CREATE BUTTON GoDrilldown AS LINK (
-  TITLE   = 'View Detail',
-  ACTIONS = (ON_CLICK = NAVIGATE(DetailPage))
+CREATE BUTTON ResetFilters AS CLEAR_FILTERS (
+  TITLE   = 'Reset',
+  ACTIONS (ON_CLICK = CLEAR_FILTERS)
 );
 
 CREATE PAGE Summary AS LAYOUT (
-  STRUCTURE = 'A / B C',
-  MAP ('A' = SalesChart, 'B' = GoBack, 'C' = RefreshData)
+  STRUCTURE = 'A / B C D',
+  MAP ('A' = SalesChart, 'B' = GoBack, 'C' = RefreshData, 'D' = ResetFilters)
 );
 ```

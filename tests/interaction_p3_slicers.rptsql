@@ -33,7 +33,7 @@ CREATE VISUAL BarByCategory AS BAR (
 );
 
 -- Page Layout
-CREATE PAGE Dashboard AS (
+CREATE PAGE Dashboard AS LAYOUT (
     STRUCTURE = 'A A / B C',
     MAP (
         'A' = RegionSlicer,

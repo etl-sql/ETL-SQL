@@ -2,9 +2,9 @@
 Defines a shared, optionally cached data source that can be used by multiple visuals or pages within a report. Datasets are evaluated once and stored; visuals reference them by name.
 
 Syntax:
-  CREATE DATASET #<name>
+  CREATE DATASET &<name>
     [REFRESH EVERY '<interval>']
-    [TTL '<duration>']
+    [TTL = '<duration>']
     [ENCRYPT = MACHINE | PASSWORD | KEYFILE]
   AS (SELECT ...);
 
@@ -15,7 +15,7 @@ Options:
 
 ```sql
 -- Sales dataset refreshed every hour
-CREATE DATASET #sales_summary REFRESH EVERY '1h' AS (
+CREATE DATASET &sales_summary REFRESH EVERY '1h' AS (
   SELECT
     region,
     product_category,
@@ -28,12 +28,14 @@ CREATE DATASET #sales_summary REFRESH EVERY '1h' AS (
 
 -- Reference the same dataset in multiple visuals
 CREATE VISUAL RevBar AS BAR (
-  SOURCE   = #sales_summary,
+  SOURCE   = &sales_summary,
   MAPPINGS (X = region, Y = total_revenue)
 );
 
 CREATE VISUAL CatPie AS PIE (
-  SOURCE   = #sales_summary,
+  SOURCE   = &sales_summary,
   MAPPINGS (LABEL = product_category, VALUE = total_revenue)
 );
 ```
+
+`CREATE DATASET` also accepts `#name` for compatibility, but `&name` is the preferred report-dataset form. Keep heavy preparation in ordinary `#temp` tables, then expose reusable report data through `&dataset` definitions.

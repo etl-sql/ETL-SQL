@@ -11,7 +11,7 @@ Syntax:
     BORDER     = 'css-border-value'
   );
 
-Apply a style with OPTIONS (STYLE = StyleName) on a visual or PAGE STYLE = (STYLE = StyleName).
+Apply a named style with `STYLE = StyleName` on a visual, page, container, or button. Add inline overrides with `STYLE (KEY = value, ...)`.
 
 ```sql
 CREATE STYLE Corporate (
@@ -25,6 +25,7 @@ CREATE STYLE Corporate (
 CREATE VISUAL RevChart AS BAR (
   SOURCE   = #revenue,
   MAPPINGS (X = month, Y = amount),
-  OPTIONS  (TITLE = 'Monthly Revenue', STYLE = Corporate)
+  TITLE    = 'Monthly Revenue',
+  STYLE    = Corporate
 );
 ```

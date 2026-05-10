@@ -2,15 +2,15 @@
 Creates a menu or tab strip that links multiple report pages, providing user navigation between views.
 
 Syntax:
-  CREATE NAVIGATION <name> AS TAB | BUTTON | SIDEBAR (
-    ORIENTATION = 'HORIZONTAL' | 'VERTICAL',
+  CREATE NAVIGATION <name> AS TAB | BUTTON | LINK (
+    ORIENTATION = HORIZONTAL | VERTICAL,
     PAGES       = (<page1>, <page2>, ...)
   );
 
 Types:
   TAB     — horizontal tab strip (default for dashboards)
   BUTTON  — a row of navigation buttons
-  SIDEBAR — vertical navigation panel on the left
+  LINK    — inline text links
 
 ```sql
 CREATE PAGE Overview AS LAYOUT (
@@ -24,7 +24,7 @@ CREATE PAGE Trends AS LAYOUT (
 );
 
 CREATE NAVIGATION MainNav AS TAB (
-  ORIENTATION = 'HORIZONTAL',
+  ORIENTATION = HORIZONTAL,
   PAGES       = (Overview, Detail, Trends)
 );
 ```

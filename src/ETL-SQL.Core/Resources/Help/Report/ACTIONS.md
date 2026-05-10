@@ -33,10 +33,10 @@ Executes a custom ETL-SQL script file on the server.
 ON_CLICK = RUN_SCRIPT('scripts/export_to_csv.etlsql', @p1 = col1, @p2 = 'StaticValue')
 ```
 
-### NAVIGATE
-Navigates to a different page in the report.
+### CLEAR_FILTERS
+Clears visual-level selections and returns cross-filtered visuals to their unfiltered state.
 ```sql
-ON_CLICK = NAVIGATE(DetailPage)
+ON_CLICK = CLEAR_FILTERS
 ```
 
 ## Examples

@@ -5,7 +5,7 @@ Syntax:
   CREATE PAGE <name> AS LAYOUT (
     STRUCTURE = '<grid-template-areas>',
     MAP ('<slot>' = <visual_or_container>, ...),
-    STYLE     = (KEY = value, ...)
+    STYLE (KEY = value, ...)
   );
 
 STRUCTURE uses CSS grid-template-areas syntax. Each quoted string is a row; cells in the same row are separated by spaces. Repeat a slot letter to span columns.
@@ -24,7 +24,7 @@ CREATE PAGE Dashboard AS LAYOUT (
     'L' = RegionChart,
     'R' = OrderTable
   ),
-  STYLE = (GAP = '16px', PADDING = '24px')
+  STYLE (GAP = '16px', PADDING = '24px')
 );
 
 -- Four-slot grid
