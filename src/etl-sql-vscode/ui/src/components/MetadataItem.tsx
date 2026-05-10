@@ -76,34 +76,34 @@ export const MetadataItem: React.FC<MetadataItemProps> = ({
         draggable={type === 'table' || type === 'column' || type === 'variable'}
         onDragStart={handleDragStart}
         className={`
-          group flex items-center py-1 px-1.5 rounded cursor-default transition-all duration-200
-          hover:bg-indigo-500/10 active:bg-indigo-500/20
-          ${isExpanded ? 'bg-indigo-500/5' : ''}
+          group flex items-center h-6 px-2 cursor-default
+          hover:bg-[var(--vscode-list-hoverBackground,rgba(90,93,94,0.18))]
+          ${isExpanded ? 'bg-[var(--vscode-list-inactiveSelectionBackground,rgba(90,93,94,0.22))]' : ''}
         `}
         onClick={toggleExpand}
       >
         <div className="flex items-center gap-1.5 min-w-0 flex-1">
           {hasChildren && (
-            <div className="text-indigo-400 group-hover:text-indigo-300 transition-colors">
+            <div className="text-[var(--muted)]">
               {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             </div>
           )}
           {!hasChildren && <div className="w-3" />}
           
-          <Icon size={14} className={`shrink-0 ${isScript ? 'text-amber-400' : 'text-indigo-400'}`} />
+          <Icon size={13} className={`shrink-0 ${isScript ? 'text-[var(--vscode-gitDecoration-modifiedResourceForeground,#e2c08d)]' : 'text-[var(--muted)]'}`} />
           
-          <span className="truncate text-[11px] font-bold text-[var(--text-primary)] tracking-tight">
+          <span className="truncate text-[12px] text-[var(--text-primary)]">
             {label}
           </span>
 
           {detail && (
-            <span className="text-[10px] text-[var(--text-secondary)] font-mono truncate ml-1 px-1 rounded bg-white/5 border border-white/5">
+            <span className="text-[10px] text-[var(--text-secondary)] font-mono truncate ml-1">
               {detail}
             </span>
           )}
 
           {value && (
-             <span className="text-[10px] text-emerald-400 font-bold truncate ml-auto pl-2">
+             <span className="text-[10px] text-[var(--vscode-debugTokenExpression-value,#89d185)] font-mono truncate ml-auto pl-2">
                 {value}
              </span>
           )}
@@ -115,7 +115,7 @@ export const MetadataItem: React.FC<MetadataItemProps> = ({
       </div>
 
       {isExpanded && children.length > 0 && (
-        <div className="ml-4 border-l border-[var(--border)]/30 mt-0.5">
+        <div className="ml-4 border-l border-[var(--border)]">
           {children.map((child, idx) => (
             <MetadataItem 
               key={`${child.label}-${idx}`}

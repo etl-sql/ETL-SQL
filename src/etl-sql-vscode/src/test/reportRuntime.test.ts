@@ -17,6 +17,39 @@ const RUNTIME_PATH = resolve(
 );
 const RUNTIME_SRC = readFileSync(RUNTIME_PATH, 'utf8');
 
+describe('VS Code preview header chrome', () => {
+    it('does not inject legacy emoji action buttons', () => {
+        expect(RUNTIME_SRC).not.toContain('&#x1F680;');
+        expect(RUNTIME_SRC).not.toContain('&#x1F4DC;');
+        expect(RUNTIME_SRC).not.toContain('&#x2133;');
+        expect(RUNTIME_SRC).not.toContain('Launch into Browser');
+        expect(RUNTIME_SRC).not.toContain('Publish to Markdown');
+    });
+
+    it('renders compact VS Code preview actions without legacy labels', async () => {
+        const win = makeDOM(w => {
+            w.acquireVsCodeApi = () => ({ postMessage: () => {} });
+            w.__MANIFEST__ = {
+                title: 'Preview Report',
+                description: 'Rendered in VS Code',
+                visuals: [],
+                pages: [],
+                buttons: [],
+                navigations: [],
+            };
+        });
+
+        win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+        await new Promise(resolve => setTimeout(resolve, 0));
+
+        expect(win.document.querySelector('.report-header')).not.toBeNull();
+        const actions = win.document.querySelector('.header-actions');
+        expect(actions).not.toBeNull();
+        expect(Array.from(actions!.querySelectorAll('button')).map((b: any) => b.textContent)).toEqual(['Open', 'PDF', 'MD']);
+        expect(win.document.body.textContent).not.toContain('Serve');
+    });
+});
+
 /** Spin up a fresh DOM with the runtime loaded. */
 function makeDOM(extraSetup?: (win: any) => void): any {
     const dom = new JSDOM(

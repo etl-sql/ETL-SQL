@@ -15,9 +15,9 @@ function fmtMs(ms: number): string {
 export const PerformanceTab: React.FC<PerformanceTabProps> = ({ metrics }) => {
   if (!metrics) {
     return (
-      <div className="flex flex-col items-center justify-center h-full opacity-20 space-y-4 font-display">
-        <Activity size={48} strokeWidth={1} />
-        <p className="text-sm font-bold uppercase tracking-widest">No Performance Data</p>
+      <div className="flex flex-col items-center justify-center h-full opacity-50 gap-2 text-[var(--muted)]">
+        <Activity size={32} strokeWidth={1.5} />
+        <p className="text-[12px]">No performance data</p>
       </div>
     );
   }
@@ -32,8 +32,8 @@ export const PerformanceTab: React.FC<PerformanceTabProps> = ({ metrics }) => {
     <div className="h-full flex flex-col overflow-hidden font-mono text-[12px]">
 
       {/* Header */}
-      <div className="px-3 py-1.5 border-b border-[var(--border)] bg-[var(--bg-darker)]/40 shrink-0">
-        <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-yellow-400/80">Performance Dashboard</span>
+      <div className="px-2 py-1 border-b border-[var(--border)] bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))] shrink-0">
+        <span className="text-[11px] font-semibold text-[var(--text)]">Performance</span>
       </div>
 
       {/* Top section: two columns filling full width */}
@@ -41,23 +41,23 @@ export const PerformanceTab: React.FC<PerformanceTabProps> = ({ metrics }) => {
 
         {/* Left: summary metrics */}
         <div className="flex-1 border-r border-[var(--border)]">
-          <div className="px-3 py-1 border-b border-[var(--border)] bg-[var(--bg-darker)]/20">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-[var(--muted)]">Main</span>
+          <div className="px-2 py-1 border-b border-[var(--border)] bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))]">
+            <span className="text-[11px] font-semibold text-[var(--muted)]">Summary</span>
           </div>
           <table className="w-full border-collapse">
             <tbody>
-              <StatRow label="Execution Time" value={fmtMs(metrics.executionMs)}                color="text-green-400" />
-              <StatRow label="Total Rows"     value={metrics.rowsProcessed.toLocaleString()}    color="text-cyan-400" />
-              <StatRow label="Rows/s"         value={rowsPerSec.toLocaleString()}               color="text-green-400" />
-              <StatRow label="Memory (Peak)"  value={`${metrics.memoryMb.toFixed(1)} MB`}       color="text-blue-400" />
+              <StatRow label="Execution Time" value={fmtMs(metrics.executionMs)} />
+              <StatRow label="Total Rows"     value={metrics.rowsProcessed.toLocaleString()} />
+              <StatRow label="Rows/s"         value={rowsPerSec.toLocaleString()} />
+              <StatRow label="Memory (Peak)"  value={`${metrics.memoryMb.toFixed(1)} MB`} />
             </tbody>
           </table>
         </div>
 
         {/* Right: statement breakdown */}
         <div className="flex-1">
-          <div className="px-3 py-1 border-b border-[var(--border)] bg-[var(--bg-darker)]/20">
-            <span className="text-[9px] font-bold uppercase tracking-widest text-[var(--muted)]">Details</span>
+          <div className="px-2 py-1 border-b border-[var(--border)] bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))]">
+            <span className="text-[11px] font-semibold text-[var(--muted)]">Statements</span>
           </div>
           {metrics.statements.length === 0 ? (
             <p className="px-3 py-2 text-[var(--muted)] italic text-[11px]">No statement metrics yet.</p>
@@ -65,18 +65,18 @@ export const PerformanceTab: React.FC<PerformanceTabProps> = ({ metrics }) => {
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b border-[var(--border)] bg-[var(--bg-darker)]/20">
-                  <th className="px-3 py-1 text-left   text-[9px] font-bold uppercase tracking-widest text-indigo-400">Type</th>
-                  <th className="px-3 py-1 text-right  text-[9px] font-bold uppercase tracking-widest text-indigo-400">Duration</th>
-                  <th className="px-3 py-1 text-right  text-[9px] font-bold uppercase tracking-widest text-indigo-400">%</th>
+                  <th className="px-3 py-1 text-left text-[11px] font-semibold text-[var(--text)]">Type</th>
+                  <th className="px-3 py-1 text-right text-[11px] font-semibold text-[var(--text)]">Duration</th>
+                  <th className="px-3 py-1 text-right text-[11px] font-semibold text-[var(--text)]">%</th>
                 </tr>
               </thead>
               <tbody>
                 {metrics.statements.map((s, i) => {
                   const pct = totalStmtMs > 0 ? ((s.totalMs / totalStmtMs) * 100).toFixed(1) : '0.0';
                   return (
-                    <tr key={i} className="border-b border-[var(--border)] last:border-0 hover:bg-white/[0.02]">
+                    <tr key={i} className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--vscode-list-hoverBackground,rgba(90,93,94,0.18))]">
                       <td className="px-3 py-1 text-[var(--text-primary)] opacity-90">{s.type}</td>
-                      <td className="px-3 py-1 text-right text-green-400 tabular-nums">{fmtMs(s.totalMs)}</td>
+                      <td className="px-3 py-1 text-right text-[var(--vscode-debugTokenExpression-value,#89d185)] tabular-nums">{fmtMs(s.totalMs)}</td>
                       <td className="px-3 py-1 text-right text-[var(--muted)] tabular-nums">{pct}%</td>
                     </tr>
                   );
@@ -89,18 +89,18 @@ export const PerformanceTab: React.FC<PerformanceTabProps> = ({ metrics }) => {
 
       {/* Bottom: detailed execution profile — full width, fills remaining height */}
       <div className="flex flex-col flex-1 min-h-0">
-        <div className="px-3 py-1 border-b border-[var(--border)] bg-[var(--bg-darker)]/20 shrink-0">
-          <span className="text-[9px] font-bold uppercase tracking-widest text-[var(--muted)]">Detailed Execution Profile</span>
+        <div className="px-2 py-1 border-b border-[var(--border)] bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))] shrink-0">
+          <span className="text-[11px] font-semibold text-[var(--muted)]">Execution Profile</span>
         </div>
         <div className="flex-1 overflow-auto scrollbar-fancy">
           <table className="w-full border-collapse">
-            <thead className="sticky top-0 bg-[var(--bg-darker)]/90">
+            <thead className="sticky top-0 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))]">
               <tr className="border-b border-[var(--border)]">
-                <th className="px-3 py-1 text-left  text-[9px] font-bold uppercase tracking-widest text-indigo-400 w-24">Time</th>
-                <th className="px-3 py-1 text-left  text-[9px] font-bold uppercase tracking-widest text-indigo-400">Statement</th>
-                <th className="px-3 py-1 text-right text-[9px] font-bold uppercase tracking-widest text-indigo-400 w-20">Rows</th>
-                <th className="px-3 py-1 text-right text-[9px] font-bold uppercase tracking-widest text-indigo-400 w-20">Dur</th>
-                <th className="px-3 py-1 text-right text-[9px] font-bold uppercase tracking-widest text-indigo-400 w-20">Mem</th>
+                <th className="px-3 py-1 text-left text-[11px] font-semibold text-[var(--text)] w-24">Time</th>
+                <th className="px-3 py-1 text-left text-[11px] font-semibold text-[var(--text)]">Statement</th>
+                <th className="px-3 py-1 text-right text-[11px] font-semibold text-[var(--text)] w-20">Rows</th>
+                <th className="px-3 py-1 text-right text-[11px] font-semibold text-[var(--text)] w-20">Dur</th>
+                <th className="px-3 py-1 text-right text-[11px] font-semibold text-[var(--text)] w-20">Mem</th>
               </tr>
             </thead>
             <tbody>
@@ -118,9 +118,9 @@ export const PerformanceTab: React.FC<PerformanceTabProps> = ({ metrics }) => {
   );
 };
 
-const StatRow: React.FC<{ label: string; value: string; color: string }> = ({ label, value, color }) => (
-  <tr className="border-b border-[var(--border)] last:border-0 hover:bg-white/[0.02]">
+const StatRow: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <tr className="border-b border-[var(--border)] last:border-0 hover:bg-[var(--vscode-list-hoverBackground,rgba(90,93,94,0.18))]">
     <td className="px-3 py-1 text-[var(--muted)]">{label}</td>
-    <td className={`px-3 py-1 font-bold tabular-nums ${color}`}>{value}</td>
+    <td className="px-3 py-1 font-semibold tabular-nums text-[var(--vscode-debugTokenExpression-value,#89d185)]">{value}</td>
   </tr>
 );

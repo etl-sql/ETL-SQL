@@ -150,23 +150,19 @@
       },
       {
         "command": "etlsql.launchInBrowser",
-        "title": "🚀 Launch in Browser",
-        "icon": "$(rocket)"
+        "title": "ETL-SQL: Open Report in Browser"
       },
       {
         "command": "etlsql.exportMarkdown",
-        "title": "📝 Export Markdown",
-        "icon": "$(markdown)"
+        "title": "ETL-SQL: Export Markdown"
       },
       {
         "command": "etlsql.exportPdf",
-        "title": "📄 Export PDF",
-        "icon": "$(file-pdf)"
+        "title": "ETL-SQL: Export PDF"
       },
       {
         "command": "etlsql.exportText",
-        "title": "💾 Export Text",
-        "icon": "$(save)"
+        "title": "ETL-SQL: Export Text"
       }
     ],
     "keybindings": [
@@ -241,26 +237,6 @@
           "command": "etlsql.runScript",
           "when": "view == etlsql-sidebar",
           "group": "navigation@2"
-        },
-        {
-          "command": "etlsql.launchInBrowser",
-          "when": "view == etlsql-sidebar && resourceExtname == .rptsql",
-          "group": "navigation@3"
-        },
-        {
-          "command": "etlsql.exportMarkdown",
-          "when": "view == etlsql-sidebar && resourceExtname == .rptsql",
-          "group": "export@1"
-        },
-        {
-          "command": "etlsql.exportPdf",
-          "when": "view == etlsql-sidebar && resourceExtname == .rptsql",
-          "group": "export@2"
-        },
-        {
-          "command": "etlsql.exportText",
-          "when": "view == etlsql-sidebar && resourceExtname == .rptsql",
-          "group": "export@3"
         }
       ],
       "view/item/context": [

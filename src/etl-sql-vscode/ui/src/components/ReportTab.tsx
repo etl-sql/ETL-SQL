@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import * as echarts from 'echarts';
-import { RefreshCw, AlertCircle, Calendar, FileText, File, Download, CheckSquare } from 'lucide-react';
+import { RefreshCw, AlertCircle, Calendar, FileText, File, Download, ExternalLink } from 'lucide-react';
 import type { ReportManifest, VisualManifest, ContainerManifest, PageManifest } from '../types';
 import { clsx } from 'clsx';
 
@@ -65,76 +65,60 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExp
         }, 500);
     };
 
-    const handleClearFilters = () => {
-        setParameters({});
-        setCrossFilterSource(null);
-        setIsRefreshing(true);
-        onRefresh({});
-    };
-
     return (
-        <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg-dark)] text-[var(--text)] overflow-hidden font-display">
+        <div className="flex-1 flex flex-col min-h-0 bg-[var(--bg)] text-[var(--text)] overflow-hidden font-sans">
             {/* Header */}
-            <header className="px-6 py-4 border-b border-[var(--border)] bg-[var(--bg-darker)]/40 backdrop-blur-xl flex items-center justify-between shrink-0">
-                <div className="flex flex-col">
-                    <h1 className="text-xl font-bold tracking-tight text-[var(--text)] flex items-center gap-2">
+            <header className="px-4 py-2.5 border-b border-[var(--border)] bg-[var(--bg-darker)] flex items-center justify-between gap-4 shrink-0">
+                <div className="flex flex-col min-w-0">
+                    <h1 className="text-[13px] font-semibold text-[var(--text)] truncate">
                         {manifest.title || 'Untitled Report'}
                     </h1>
                     {manifest.description && (
-                        <p className="text-xs text-[var(--muted)] line-clamp-1 mt-0.5">{manifest.description}</p>
+                        <p className="text-[11px] text-[var(--muted)] truncate mt-0.5">{manifest.description}</p>
                     )}
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-2 shrink-0">
                     <div className={clsx(
-                        "flex items-center gap-2 px-3 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-widest transition-all duration-500",
+                        "flex items-center gap-1.5 px-2 py-1 border text-[11px] transition-colors",
                         isRefreshing 
-                            ? "bg-blue-500/10 border-blue-500/30 text-blue-400 animate-pulse" 
-                            : "bg-indigo-500/10 border-indigo-500/20 text-indigo-400"
+                            ? "bg-[var(--vscode-progressBar-background,#0e639c)]/10 border-[var(--vscode-progressBar-background,#0e639c)]/40 text-[var(--vscode-progressBar-background,#0e639c)]"
+                            : "bg-[var(--vscode-badge-background,#4d4d4d)]/10 border-[var(--border)] text-[var(--muted)]"
                     )}>
                         {isRefreshing ? <RefreshCw size={12} className="animate-spin" /> : <Calendar size={12} />}
-                        {isRefreshing ? 'Refreshing Report...' : `Built: ${new Date(manifest.builtAt).toLocaleString()}`}
+                        <span>{isRefreshing ? 'Refreshing' : `Built ${new Date(manifest.builtAt).toLocaleTimeString()}`}</span>
                     </div>
                     
-                    <div className="flex items-center gap-1 bg-current/5 p-1 rounded-xl border border-[var(--border)]">
-                        <button 
-                            onClick={handleClearFilters}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-red-500/10 text-[var(--text)] opacity-50 hover:text-red-400 transition-all text-[10px] font-bold uppercase tracking-wider"
-                            title="Clear All Filters"
-                        >
-                            <RefreshCw size={12} className={clsx(isRefreshing && "animate-spin")} />
-                            <span>Clear</span>
-                        </button>
-                        <div className="w-px h-4 bg-[var(--border)] mx-1" />
+                    <div className="flex items-center border border-[var(--border)] bg-[var(--vscode-toolbar-hoverBackground,transparent)]/20">
                         <button 
                             onClick={() => (window as any).vscode?.postMessage({ type: 'serve' })}
-                            className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-current/10 text-[var(--text)] opacity-70 hover:text-green-400 transition-all text-xs font-medium"
-                            title="Serve Live"
+                            className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-[var(--text)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))]"
+                            title="Open interactive report"
                         >
-                            <RefreshCw size={14} className={isRefreshing ? "animate-spin" : ""} />
-                            <span>Serve</span>
+                            <ExternalLink size={13} />
+                            <span>Open</span>
                         </button>
-                        <div className="w-px h-4 bg-[var(--border)] mx-1" />
+                        <div className="w-px h-4 bg-[var(--border)]" />
                         <button 
                             onClick={() => onExport?.('markdown')}
-                            className="p-1.5 rounded-lg hover:bg-current/10 text-[var(--text)] opacity-70 hover:text-indigo-400 transition-all"
+                            className="p-1.5 text-[var(--text)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))]"
                             title="Export to Markdown"
                         >
-                            <FileText size={16} />
+                            <FileText size={14} />
                         </button>
                         <button 
                             onClick={() => onExport?.('pdf')}
-                            className="p-1.5 rounded-lg hover:bg-current/10 text-[var(--text)] opacity-70 hover:text-indigo-400 transition-all"
+                            className="p-1.5 text-[var(--text)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))]"
                             title="Export to PDF"
                         >
-                            <File size={16} />
+                            <File size={14} />
                         </button>
                         <button 
                             onClick={() => onExport?.('text')}
-                            className="p-1.5 rounded-lg hover:bg-current/10 text-[var(--text)] opacity-70 hover:text-indigo-400 transition-all"
+                            className="p-1.5 text-[var(--text)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))]"
                             title="Export to Text"
                         >
-                            <Download size={16} />
+                            <Download size={14} />
                         </button>
                     </div>
 
@@ -145,14 +129,14 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExp
                         }}
                         disabled={isRefreshing}
                         className={clsx(
-                            "p-2 rounded-xl border transition-all duration-300 group shadow-lg",
+                            "p-1.5 border transition-colors",
                             isRefreshing 
-                                ? "bg-current/5 text-[var(--muted)] border-[var(--border)] opacity-50 cursor-not-allowed"
-                                : "bg-current/5 hover:bg-indigo-500/20 text-[var(--muted)] hover:text-indigo-400 border-[var(--border)] hover:border-indigo-500/30"
+                                ? "bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.18))] text-[var(--muted)] border-[var(--border)] opacity-50 cursor-not-allowed"
+                                : "bg-transparent hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))] text-[var(--text)] border-[var(--border)]"
                         )}
                         title="Refresh Report"
                     >
-                        <RefreshCw size={18} className={clsx("transition-transform duration-700", !isRefreshing && "group-hover:rotate-180")} />
+                        <RefreshCw size={14} className={clsx(isRefreshing && "animate-spin")} />
                     </button>
                 </div>
             </header>
@@ -160,21 +144,21 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExp
             {/* Navigation Tabs (if defined or multiple pages) */}
             {(manifest.navigations?.length || manifest.pages.length > 1) && (
                 <div className={clsx(
-                    "px-6 shrink-0 flex gap-2 overflow-x-auto no-scrollbar py-2",
-                    "border-b border-[var(--border)] bg-[var(--bg-darker)]/20 shadow-inner"
+                    "px-2 shrink-0 flex gap-1 overflow-x-auto no-scrollbar py-1",
+                    "border-b border-[var(--border)] bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))]"
                 )}>
                     {/* Render Explicit Navigations if any */}
                     {manifest.navigations?.map(nav => (
-                        <div key={nav.name} className={clsx("flex gap-2", nav.orientation === 'VERTICAL' ? "flex-col" : "flex-row")}>
+                        <div key={nav.name} className={clsx("flex gap-1", nav.orientation === 'VERTICAL' ? "flex-col" : "flex-row")}>
                             {nav.pages.map(pageName => (
                                 <button
                                     key={pageName}
                                     onClick={() => setActivePageName(pageName)}
                                     className={clsx(
-                                        "px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 whitespace-nowrap border",
+                                        "px-2.5 py-1 text-[12px] whitespace-nowrap border border-transparent",
                                         activePageName === pageName 
-                                            ? "bg-indigo-500 text-[var(--text)] border-indigo-400/50 shadow-[0_0_15px_rgba(99,102,241,0.4)]" 
-                                            : "bg-current/5 text-[var(--muted)] border-transparent hover:bg-current/10 hover:text-[var(--text)]"
+                                            ? "bg-[var(--vscode-list-activeSelectionBackground,#094771)] text-[var(--vscode-list-activeSelectionForeground,var(--text))] border-[var(--vscode-focusBorder,#007fd4)]"
+                                            : "text-[var(--muted)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))] hover:text-[var(--text)]"
                                     )}
                                 >
                                     {pageName}
@@ -188,10 +172,10 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExp
                             key={page.name}
                             onClick={() => setActivePageName(page.name)}
                             className={clsx(
-                                "px-4 py-1.5 rounded-lg text-xs font-bold transition-all duration-300 whitespace-nowrap border",
+                                "px-2.5 py-1 text-[12px] whitespace-nowrap border border-transparent",
                                 activePageName === page.name 
-                                    ? "bg-indigo-500 text-white border-indigo-400/50 shadow-[0_0_15px_rgba(99,102,241,0.4)]" 
-                                    : "bg-white/5 text-[var(--muted)] border-transparent hover:bg-white/10"
+                                    ? "bg-[var(--vscode-list-activeSelectionBackground,#094771)] text-[var(--vscode-list-activeSelectionForeground,var(--text))] border-[var(--vscode-focusBorder,#007fd4)]"
+                                    : "text-[var(--muted)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))] hover:text-[var(--text)]"
                             )}
                         >
                             {page.name}
@@ -201,7 +185,7 @@ export const ReportTab: React.FC<ReportTabProps> = ({ manifest, onRefresh, onExp
             )}
 
             {/* Content Area */}
-            <main className="flex-1 overflow-auto p-6 custom-scrollbar relative">
+            <main className="flex-1 overflow-auto p-3 custom-scrollbar relative">
                 {activePage && (
                     <RenderPage 
                         page={activePage} 
@@ -282,11 +266,11 @@ const GenericLayout: React.FC<{
     const gridStyle = {
         gridTemplateAreas: rows.map(r => `'${r}'`).join(' '),
         gridTemplateColumns: `repeat(${colCount}, 1fr)`,
-        gridTemplateRows: `repeat(${rowCount}, minmax(40px, auto))`, 
+        gridTemplateRows: `repeat(${rowCount}, minmax(40px, auto))`,
     };
 
     return (
-        <div className="grid gap-6 animate-in fade-in slide-in-from-bottom-4 duration-700" style={gridStyle}>
+        <div className="grid gap-3" style={gridStyle}>
             {Object.keys(slotMap).map(slot => {
                 const objectName = slotMap[slot];
                 return (
@@ -343,11 +327,11 @@ const RenderObject: React.FC<{
     );
 
     return (
-        <div className="w-full p-8 rounded-3xl bg-red-500/10 border border-red-500/20 flex items-center gap-4 text-red-400">
-            <AlertCircle size={24} />
+        <div className="w-full p-3 border border-[var(--vscode-inputValidation-errorBorder,#be1100)] flex items-center gap-2 text-[var(--color-err)] bg-[var(--vscode-inputValidation-errorBackground,transparent)]">
+            <AlertCircle size={16} />
             <div className="flex flex-col">
-                <span className="font-bold uppercase tracking-widest text-[10px]">Reference Error</span>
-                <span className="text-sm">Object "{name}" not found in manifest.</span>
+                <span className="text-[12px] font-semibold">Reference error</span>
+                <span className="text-[12px]">Object "{name}" not found in manifest.</span>
             </div>
         </div>
     );
@@ -364,10 +348,10 @@ const ContainerView: React.FC<{
 }> = ({ container, manifest, baselineManifest, parameters, onParameterChange, crossFilterSource, onShowContextMenu }) => {
     if (container.structure && container.slotMap) {
         return (
-            <div className="w-full flex flex-col gap-4">
+            <div className="w-full flex flex-col gap-2">
                 {(container.title || container.subtitle) && (
                     <div className="flex flex-col gap-1 px-1">
-                        {container.title && <h2 className="text-sm font-bold text-white/80">{container.title}</h2>}
+                        {container.title && <h2 className="text-[13px] font-semibold text-[var(--text)]">{container.title}</h2>}
                         {container.subtitle && <p className="text-xs text-[var(--muted)]">{container.subtitle}</p>}
                     </div>
                 )}
@@ -390,7 +374,7 @@ const ContainerView: React.FC<{
     
     return (
         <div className={clsx(
-            "w-full flex gap-6",
+            "w-full flex gap-3",
             isRow ? "flex-row flex-wrap" : "flex-col"
         )}>
             {visuals.map(vName => (
@@ -434,28 +418,28 @@ const VisualCard: React.FC<{
         <div 
             style={cardStyle}
             className={clsx(
-                "w-full group/card flex flex-col rounded-3xl border transition-all duration-700 shadow-xl overflow-hidden backdrop-blur-sm",
-                isFilter ? "border-indigo-500/20 hover:border-indigo-500/40 bg-[var(--bg-darker,#050507)]" : "border-[var(--border)] hover:border-indigo-500/30 bg-[var(--bg-darker,#050507)]",
-                isDimmed && "opacity-40 grayscale-[0.7] scale-[0.99] pointer-events-none",
-                isSource && "border-indigo-500 shadow-[0_0_30px_rgba(99,102,241,0.2)]"
+                "w-full group/card flex flex-col border overflow-hidden bg-[var(--vscode-editor-background,var(--bg))]",
+                isFilter ? "border-[var(--vscode-focusBorder,#007fd4)]/60" : "border-[var(--border)]",
+                isDimmed && "opacity-45 grayscale pointer-events-none",
+                isSource && "border-[var(--vscode-focusBorder,#007fd4)]"
             )}
         >
             {/* Component Header */}
-            <div className="px-6 py-4 flex items-center justify-between border-b border-[var(--border)]/30">
-                <h3 className="text-sm font-bold tracking-wide text-white/80 flex items-center gap-2">
+            <div className="px-3 py-2 flex items-center justify-between border-b border-[var(--border)] bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))]">
+                <h3 className="text-[12px] font-semibold text-[var(--text)] flex items-center gap-2">
                     {visual.name}
                 </h3>
-                <span className="text-[10px] font-bold text-[var(--muted)] uppercase tracking-[0.2em]">{type}</span>
+                <span className="text-[11px] text-[var(--muted)]">{type}</span>
             </div>
 
             <div className={clsx(
-                "p-6 flex-1 relative overflow-hidden",
+                "p-3 flex-1 relative overflow-hidden",
                 isFilter ? "min-h-[auto]" : "min-h-[150px]"
             )}>
                 {visual.error ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center p-8 space-y-3 opacity-60">
-                         <AlertCircle className="text-red-400" size={32} />
-                         <p className="text-xs text-red-400/80 font-mono leading-relaxed">{visual.error}</p>
+                    <div className="h-full flex flex-col items-center justify-center text-center p-4 gap-2 text-[var(--color-err)]">
+                         <AlertCircle size={20} />
+                         <p className="text-xs font-mono leading-relaxed">{visual.error}</p>
                     </div>
                 ) : (
                     <div className="h-full w-full">
@@ -670,7 +654,7 @@ const ReportTable: React.FC<{
     return (
         <div className="w-full h-full relative">
             <div
-                className="w-full h-full overflow-auto rounded-xl border border-[var(--border)]/30 bg-black/10 custom-scrollbar"
+                className="w-full h-full overflow-auto border border-[var(--border)] bg-[var(--vscode-editor-background,var(--bg))] custom-scrollbar"
                 onContextMenu={e => { 
                     e.preventDefault(); 
                     const tr = (e.target as HTMLElement).closest('tr');
@@ -683,13 +667,13 @@ const ReportTable: React.FC<{
                     (grid === 'ALL' || grid === 'BOTH' || grid === 'OUTSIDE') && "border border-[var(--border)]/40"
                 )}>
                     <thead className={clsx(
-                        "sticky top-0 bg-[var(--bg-darker)] shadow-md z-10",
+                        "sticky top-0 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))] z-10",
                         (grid === 'HEADER' || grid === 'ALL' || grid === 'ROWS' || grid === 'BOTH') && "border-b border-[var(--border)]"
                     )}>
                         <tr>
                             {visual.columns.map((col, ci) => (
                                 <th key={col} className={clsx(
-                                    "px-4 py-3 font-bold text-indigo-300 uppercase tracking-widest text-[10px]",
+                                    "px-2 py-1.5 font-normal text-[var(--muted)] text-[12px]",
                                     (grid === 'ALL' || grid === 'COLS' || grid === 'BOTH') && ci < visual.columns.length - 1 && "border-r border-[var(--border)]/30",
                                     (grid === 'HEADER' || grid === 'ALL' || grid === 'ROWS' || grid === 'BOTH') && "border-b border-[var(--border)]",
                                     (grid === 'LEFT' && ci === 0) && "border-l border-[var(--border)]",
@@ -708,12 +692,12 @@ const ReportTable: React.FC<{
                             return (
                                 <tr 
                                     key={i} 
-                                    className="hover:bg-white/5 transition-colors"
+                                    className="hover:bg-[var(--vscode-list-hoverBackground,rgba(90,93,94,0.31))]"
                                     style={rowStyle ? { backgroundColor: rowStyle + '33' } : {}}
                                 >
                                     {row.map((cell, ci) => (
                                         <td key={ci} className={clsx(
-                                            "px-4 py-2.5 font-mono text-[var(--muted)]",
+                                            "px-2 py-1.5 font-mono text-[var(--text)]",
                                             (grid === 'ALL' || grid === 'COLS' || grid === 'BOTH') && ci < visual.columns.length - 1 && "border-r border-[var(--border)]/20",
                                             (grid === 'LEFT' && ci === 0) && "border-l border-[var(--border)]",
                                             (grid === 'RIGHT' && ci === visual.columns.length - 1) && "border-r border-[var(--border)]"
@@ -726,31 +710,31 @@ const ReportTable: React.FC<{
                         })}
                         {visual.rows.length > 100 && (
                             <tr>
-                                <td colSpan={visual.columns.length} className="px-4 py-3 text-center text-[var(--muted)] italic opacity-50">
+                                <td colSpan={visual.columns.length} className="px-2 py-2 text-center text-[var(--muted)] italic">
                                     Showing first 100 rows of {visual.rows.length}...
                                 </td>
                             </tr>
                         )}
                     </tbody>
                     {visual.summaryData && (
-                        <tfoot className="sticky bottom-0 bg-[var(--bg-darker)] shadow-[0_-4px_6px_rgba(0,0,0,0.3)] z-10 border-t border-indigo-500/30">
+                        <tfoot className="sticky bottom-0 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))] z-10 border-t border-[var(--border)]">
                             {visual.summaryData.grandTotals && (
-                                <tr className="bg-indigo-500/5">
+                                <tr>
                                     {visual.columns.map((col, ci) => (
-                                        <td key={ci} className="px-4 py-3 font-black text-indigo-400 text-xs border-t border-indigo-500/20">
+                                        <td key={ci} className="px-2 py-1.5 font-semibold text-[var(--text)] text-xs border-t border-[var(--border)]">
                                             {visual.summaryData!.grandTotals![col] ?? ''}
                                         </td>
                                     ))}
                                 </tr>
                             )}
                             {visual.summaryData.aggregates.length > 0 && (
-                                <tr className="bg-black/20">
-                                    <td colSpan={visual.columns.length} className="px-4 py-2">
-                                        <div className="flex flex-wrap gap-x-6 gap-y-2">
+                                <tr>
+                                    <td colSpan={visual.columns.length} className="px-2 py-1.5">
+                                        <div className="flex flex-wrap gap-x-4 gap-y-1">
                                             {visual.summaryData.aggregates.map((agg, ai) => (
                                                 <div key={ai} className="flex items-center gap-2">
-                                                    <span className="text-[9px] font-bold text-[var(--muted)] uppercase tracking-widest">{agg.alias || `${agg.aggregate}(${agg.column})`}</span>
-                                                    <span className="text-xs font-mono text-indigo-300">{agg.value}</span>
+                                                    <span className="text-[11px] text-[var(--muted)]">{agg.alias || `${agg.aggregate}(${agg.column})`}</span>
+                                                    <span className="text-xs font-mono text-[var(--text)]">{agg.value}</span>
                                                 </div>
                                             ))}
                                         </div>
@@ -780,9 +764,9 @@ const ReportCard: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
     const value = visual.rows[0]?.[valueIdx];
 
     return (
-        <div className="h-full flex flex-col justify-center py-6 px-4">
-            <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-indigo-400/70 mb-2">{label}</span>
-            <span className="text-4xl font-black text-[var(--text)] tracking-tight drop-shadow-2xl">
+        <div className="h-full flex flex-col justify-center py-3 px-2">
+            <span className="text-[11px] text-[var(--muted)] mb-1">{label}</span>
+            <span className="text-3xl font-semibold text-[var(--text)]">
                 {value != null ? String(value) : 'No Data'}
             </span>
         </div>
@@ -839,21 +823,24 @@ const ReportSlicer: React.FC<{
             <select
                 value={currentValue}
                 onChange={handleChange}
-                className="w-full border border-white/10 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition-all cursor-pointer appearance-none shadow-inner"
-                style={{ backgroundColor: '#1e1e2e', color: '#e2e8f0' }}
+                className="w-full border border-[var(--vscode-dropdown-border,var(--border))] px-2 py-1.5 text-xs focus:outline-none focus:border-[var(--vscode-focusBorder,#007fd4)] cursor-pointer appearance-none"
+                style={{
+                    backgroundColor: 'var(--vscode-dropdown-background, var(--bg-darker))',
+                    color: 'var(--vscode-dropdown-foreground, var(--text))'
+                }}
             >
-                {!visual.defaultValue && <option value="" style={{ backgroundColor: '#1e1e2e', color: '#e2e8f0' }}>Select...</option>}
+                {!visual.defaultValue && <option value="">Select...</option>}
                 {visual.defaultValue && !defaultIsInOptions && (
-                    <option value={visual.defaultValue} style={{ backgroundColor: '#1e1e2e', color: '#e2e8f0' }}>{visual.defaultValue}</option>
+                    <option value={visual.defaultValue}>{visual.defaultValue}</option>
                 )}
                 {options.map(opt => (
-                    <option key={opt} value={opt} style={{ backgroundColor: '#1e1e2e', color: '#e2e8f0' }}>{opt}</option>
+                    <option key={opt} value={opt}>{opt}</option>
                 ))}
             </select>
             {boundParam && (
-                <div className="mt-2 flex items-center justify-between px-1">
-                    <span className="text-[9px] font-bold text-indigo-400/50 uppercase tracking-widest">Bindings</span>
-                    <span className="text-[9px] font-mono text-indigo-400/50">{boundParam}</span>
+                <div className="mt-1.5 flex items-center justify-between px-1 text-[11px] text-[var(--muted)]">
+                    <span>Binding</span>
+                    <span className="font-mono">{boundParam}</span>
                 </div>
             )}
         </div>
@@ -897,21 +884,18 @@ const ReportMultiSelect: React.FC<{
 
     return (
         <div className="w-full flex flex-col gap-2">
-            <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar border border-[var(--border)] rounded-xl p-3 bg-current/5">
+            <div className="flex flex-col max-h-[200px] overflow-y-auto custom-scrollbar border border-[var(--border)] bg-[var(--vscode-editor-background,var(--bg))]">
                 {options.map(opt => (
-                    <label key={opt} className="flex items-center gap-3 cursor-pointer group py-1">
-                        <div className="relative flex items-center justify-center">
-                            <input
-                                type="checkbox"
-                                checked={currentValues.includes(opt)}
-                                onChange={() => handleToggle(opt)}
-                                className="peer appearance-none w-4 h-4 rounded border border-[var(--border)] bg-current/5 checked:bg-indigo-500 checked:border-indigo-500 transition-all cursor-pointer"
-                            />
-                            <CheckSquare className="absolute w-3 h-3 text-[var(--text)] opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none" />
-                        </div>
+                    <label key={opt} className="flex items-center gap-2 cursor-pointer group px-2 py-1 hover:bg-[var(--vscode-list-hoverBackground,rgba(90,93,94,0.31))]">
+                        <input
+                            type="checkbox"
+                            checked={currentValues.includes(opt)}
+                            onChange={() => handleToggle(opt)}
+                            className="w-3.5 h-3.5 cursor-pointer"
+                        />
                         <span className={clsx(
-                            "text-xs transition-colors",
-                            currentValues.includes(opt) ? "text-indigo-300 font-bold" : "text-[var(--muted)] group-hover:text-[var(--text)]"
+                            "text-xs",
+                            currentValues.includes(opt) ? "text-[var(--text)] font-semibold" : "text-[var(--muted)] group-hover:text-[var(--text)]"
                         )}>
                             {opt}
                         </span>
@@ -919,9 +903,9 @@ const ReportMultiSelect: React.FC<{
                 ))}
             </div>
             {boundParam && (
-                <div className="mt-1 flex items-center justify-between px-1">
-                    <span className="text-[9px] font-bold text-indigo-400/50 uppercase tracking-widest">Multi-Select</span>
-                    <span className="text-[9px] font-mono text-indigo-400/50 italic">{currentValues.length} selected</span>
+                <div className="mt-1 flex items-center justify-between px-1 text-[11px] text-[var(--muted)]">
+                    <span>Multi-select</span>
+                    <span className="font-mono">{currentValues.length} selected</span>
                 </div>
             )}
         </div>
@@ -935,11 +919,11 @@ const ReportImage: React.FC<{ visual: VisualManifest }> = ({ visual }) => {
     if (!src) return <div className="h-full flex items-center justify-center text-[var(--muted)] text-xs italic">No image source provided.</div>;
 
     return (
-        <div className="h-full w-full flex items-center justify-center overflow-hidden rounded-xl">
+        <div className="h-full w-full flex items-center justify-center overflow-hidden">
             <img 
                 src={src} 
                 alt={visual.name}
-                className="max-w-full max-h-full transition-transform duration-500 group-hover:scale-105"
+                className="max-w-full max-h-full"
                 style={{ objectFit: fit as any }}
             />
         </div>
@@ -971,14 +955,14 @@ const SimpleMarkdown: React.FC<{ text: string }> = ({ text }) => {
 
         const flushTable = () => {
             if (tableLines.length === 0) return;
-            let tableHtml = '<div class="my-4 overflow-x-auto rounded-xl border border-[var(--border)] bg-current/5"><table class="w-full text-left text-sm border-collapse">';
+            let tableHtml = '<div class="my-3 overflow-x-auto border border-[var(--border)]"><table class="w-full text-left text-sm border-collapse">';
             tableLines.forEach((line, idx) => {
                 if (line.includes('---') && idx === 1) return;
                 const cells = line.split('|').filter((_, i, a) => i > 0 && i < a.length - 1);
                 const tag = idx === 0 ? 'th' : 'td';
                 const className = idx === 0 
-                    ? "px-4 py-3 bg-current/10 font-bold text-indigo-300 uppercase tracking-widest text-[10px] border-b border-[var(--border)]" 
-                    : "px-4 py-2.5 border-b border-current/5 font-mono text-[var(--text)] opacity-70";
+                    ? "px-2 py-1.5 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))] font-normal text-[var(--muted)] text-[12px] border-b border-[var(--border)]"
+                    : "px-2 py-1.5 border-b border-[var(--border)] font-mono text-[var(--text)]";
                 
                 tableHtml += '<tr>' + cells.map(c => `<${tag} class="${className}">${c.trim()}</${tag}>`).join('') + '</tr>';
             });
@@ -1020,13 +1004,12 @@ const ReportMapPlaceholder: React.FC<{ visual: VisualManifest }> = ({ visual }) 
     const mapKey = (visual.options?.['MAP_NAME'] || visual.options?.['map_name'] || '').toUpperCase();
     const mode   = (visual.options?.['MODE'] || 'CHOROPLETH').toUpperCase();
     return (
-        <div className="h-full w-full flex flex-col items-center justify-center gap-3 text-center p-8 opacity-70">
-            <span className="text-4xl select-none">🗺</span>
-            <p className="text-sm font-bold text-[var(--muted)] tracking-wide">Map preview unavailable</p>
-            <p className="text-xs text-[var(--muted)]/70 max-w-[280px] leading-relaxed">
+        <div className="h-full w-full flex flex-col items-center justify-center gap-2 text-center p-4 text-[var(--muted)]">
+            <p className="text-sm font-semibold">Map preview unavailable</p>
+            <p className="text-xs max-w-[320px] leading-relaxed">
                 {mapKey ? `${mapKey} · ${mode}` : 'MAP'} charts require the HTTP server to load GeoJSON.
-                Open the report in <span className="font-mono text-indigo-400">Report Portal</span> or run the
-                script with <span className="font-mono text-indigo-400">--ui</span> to see the live map.
+                Open the report in <span className="font-mono text-[var(--text)]">Report Portal</span> or run the
+                script with <span className="font-mono text-[var(--text)]">--ui</span> to see the live map.
             </p>
         </div>
     );
@@ -1065,7 +1048,7 @@ const ContextMenu: React.FC<{
 
     return (
         <div 
-            className="fixed z-[9999] bg-[var(--bg-darker)] border border-[var(--border)] rounded-xl shadow-2xl py-2 min-w-[200px] backdrop-blur-xl animate-in fade-in zoom-in duration-150"
+            className="fixed z-[9999] bg-[var(--vscode-menu-background,var(--bg-darker))] border border-[var(--vscode-menu-border,var(--border))] py-1 min-w-[200px] text-[var(--vscode-menu-foreground,var(--text))]"
             style={{ left: x, top: y }}
             onClick={e => e.stopPropagation()}
         >
@@ -1073,7 +1056,7 @@ const ContextMenu: React.FC<{
                 <button 
                     key={i}
                     onClick={() => { onAction(action); onClose(); }}
-                    className="w-full text-left px-4 py-2 text-sm text-[var(--text)] opacity-80 hover:bg-indigo-500/20 hover:text-white transition-colors flex items-center gap-2"
+                    className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-[var(--vscode-menu-selectionBackground,var(--vscode-list-hoverBackground))] hover:text-[var(--vscode-menu-selectionForeground,var(--text))] flex items-center gap-2"
                 >
                     <RefreshCw size={14} className="opacity-50" />
                     <span>Drill down to <b>{action.targetVisual || action.targetPage || 'Details'}</b></span>
@@ -1082,7 +1065,7 @@ const ContextMenu: React.FC<{
             {drillDowns.length > 0 && <div className="h-px bg-[var(--border)] my-1" />}
             <button 
                 onClick={() => { exportCsv(); onClose(); }}
-                className="w-full text-left px-4 py-2 text-sm text-[var(--text)] opacity-80 hover:bg-current/5 transition-colors flex items-center gap-2"
+                className="w-full text-left px-3 py-1.5 text-[12px] hover:bg-[var(--vscode-menu-selectionBackground,var(--vscode-list-hoverBackground))] hover:text-[var(--vscode-menu-selectionForeground,var(--text))] flex items-center gap-2"
             >
                 <Download size={14} className="opacity-50" />
                 <span>Export to CSV</span>

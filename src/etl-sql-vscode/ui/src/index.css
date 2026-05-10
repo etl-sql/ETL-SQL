@@ -1,4 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@400;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -9,16 +8,11 @@
   --muted: var(--vscode-descriptionForeground, #64748b);
   --border: var(--vscode-panel-border, rgba(255, 255, 255, 0.05));
   
-  /* Brand Constants */
-  --primary: #6366f1;
-  --primary-shadow: rgba(99, 102, 241, 0.4);
-  
   /* Fallbacks for Browser Mode */
   --bg-fallback: #0b0b0f;
   --bg-sidebar-fallback: #050507;
   --text-primary: var(--vscode-foreground, #f8fafc);
   --text-secondary: var(--vscode-descriptionForeground, #94a3b8);
-  --accent-glow: 0 0 15px rgba(99, 102, 241, 0.3);
 
   /* Semantic Colors */
   --color-info: var(--vscode-debugIcon-breakpointForeground, #6366f1);
@@ -26,8 +20,7 @@
   --color-err: var(--vscode-problemsErrorIcon-foreground, #f87171);
   --color-sys: var(--vscode-debugIcon-stepOverForeground, #34d399);
 
-  --font-sans: 'Inter', system-ui, sans-serif;
-  --font-display: 'Outfit', sans-serif;
+  --font-sans: var(--vscode-font-family, system-ui, sans-serif);
 }
 
 body, html {
@@ -138,6 +131,4 @@ body, html {
      width: 12px !important;
      height: 12px !important;
    }
-
-   .glass-card { padding: 2px !important; height: auto !important; }
 }

@@ -9,7 +9,7 @@ interface BubbleGraphProps {
 
 export const BubbleGraph: React.FC<BubbleGraphProps> = ({ nodes }) => {
   return (
-    <div className="flex flex-wrap gap-4 p-4 min-h-[100px] items-center justify-center">
+    <div className="flex flex-wrap gap-2 p-2 min-h-[80px] items-center">
       <AnimatePresence mode="popLayout">
         {nodes.map((node) => (
           <motion.div
@@ -18,38 +18,31 @@ export const BubbleGraph: React.FC<BubbleGraphProps> = ({ nodes }) => {
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 260, damping: 20 }}
+            transition={{ duration: 0.12 }}
             className={`
-              relative flex flex-col items-center justify-center 
-              w-16 h-16 rounded-full border-2 transition-all duration-500
-              ${node.status === 'Running' ? 'node-running animate-pulse' : 
-                node.status === 'Completed' ? 'node-completed bg-emerald-500/10' : 
-                node.status === 'Faulted' ? 'node-error bg-red-500/10' : 'node-pending'}
-              glass-panel
+              relative flex flex-col justify-center
+              w-28 h-12 border px-2 bg-[var(--vscode-editor-background,var(--bg))]
+              ${node.status === 'Running' ? 'border-[var(--vscode-progressBar-background,#0e70c0)]' :
+                node.status === 'Completed' ? 'border-[var(--vscode-testing-iconPassed,#73c991)]' :
+                node.status === 'Faulted' ? 'border-[var(--color-err)]' : 'border-[var(--border)]'}
             `}
           >
-            <div className="absolute -top-1 -right-1">
+            <div className="absolute top-1.5 right-1.5">
               {node.status === 'Completed' && (
-                <div className="bg-emerald-500 rounded-full p-1 shadow-lg">
-                  <Check size={10} className="text-white" />
-                </div>
+                <Check size={12} className="text-[var(--vscode-testing-iconPassed,#73c991)]" />
               )}
               {node.status === 'Faulted' && (
-                <div className="bg-red-500 rounded-full p-1 shadow-lg">
-                  <X size={10} className="text-white" />
-                </div>
+                <X size={12} className="text-[var(--color-err)]" />
               )}
               {node.status === 'Running' && (
-                <div className="bg-blue-500 rounded-full p-1 shadow-lg animate-spin">
-                  <Loader2 size={10} className="text-white" />
-                </div>
+                <Loader2 size={12} className="animate-spin text-[var(--vscode-progressBar-background,#0e70c0)]" />
               )}
             </div>
             
-            <span className="text-[10px] font-bold text-center px-1 overflow-hidden text-ellipsis whitespace-nowrap w-full">
+            <span className="text-[11px] font-medium pr-4 overflow-hidden text-ellipsis whitespace-nowrap w-full">
               {node.name}
             </span>
-            <span className="text-[8px] opacity-50">
+            <span className="text-[10px] text-[var(--muted)]">
               {node.rowsProcessed > 0 ? `${(node.rowsProcessed / 1000).toFixed(1)}k` : ''}
             </span>
           </motion.div>

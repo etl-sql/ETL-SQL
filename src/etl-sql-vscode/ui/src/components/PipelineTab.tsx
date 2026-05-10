@@ -173,24 +173,16 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
   if (isEmpty) {
     if (status === 'running') {
       return (
-        <div className="flex flex-col items-center justify-center h-full space-y-4 font-display">
-          <div className="relative">
-            <PlayCircle size={48} strokeWidth={1} className="text-indigo-400 animate-pulse" />
-            <div className="absolute inset-0 rounded-full bg-indigo-500/10 animate-ping" />
-          </div>
-          <p className="text-sm font-bold uppercase tracking-[0.2em] text-indigo-400/60">Executing</p>
-          <div className="flex gap-1.5">
-            {[0, 1, 2].map(i => (
-              <div key={i} className="w-1.5 h-1.5 rounded-full bg-indigo-400/50 animate-bounce" style={{ animationDelay: `${i * 150}ms` }} />
-            ))}
-          </div>
+        <div className="flex flex-col items-center justify-center h-full gap-2 text-[var(--muted)]">
+          <PlayCircle size={32} strokeWidth={1.5} className="text-[var(--vscode-progressBar-background,#0e70c0)] animate-pulse" />
+          <p className="text-[12px]">Executing script...</p>
         </div>
       );
     }
     return (
-      <div className="flex flex-col items-center justify-center h-full opacity-20 space-y-4 font-display">
-        <PlayCircle size={48} strokeWidth={1} />
-        <p className="text-sm font-bold uppercase tracking-[0.2em]">No Active Pipeline</p>
+      <div className="flex flex-col items-center justify-center h-full opacity-50 gap-2 text-[var(--muted)]">
+        <PlayCircle size={32} strokeWidth={1.5} />
+        <p className="text-[12px]">No active pipeline</p>
       </div>
     );
   }
@@ -198,11 +190,11 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
   return (
     <div className="flex flex-row h-full overflow-hidden">
       {/* Left: Execution tree (~40%) */}
-      <div className="w-[40%] min-w-[160px] flex flex-col border-r border-[var(--border)] overflow-hidden">
-        <div className="px-3 py-1.5 border-b border-[var(--border)] shrink-0 bg-[var(--bg-darker)]/40">
-          <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-cyan-400">Pipeline</span>
+      <div className="w-[40%] min-w-[180px] flex flex-col border-r border-[var(--border)] overflow-hidden">
+        <div className="px-2 py-1 border-b border-[var(--border)] shrink-0 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))]">
+          <span className="text-[11px] font-semibold text-[var(--text)]">Pipeline</span>
         </div>
-        <div className="flex-1 overflow-auto scrollbar-fancy p-2 font-mono text-[12px] leading-[1.65]">
+        <div className="flex-1 overflow-auto scrollbar-fancy p-2 font-mono text-[12px] leading-[1.55]">
           {lines.length === 0 ? (
             <p className="text-[var(--muted)] text-[11px] italic px-1">No pipeline data.</p>
           ) : (
@@ -222,7 +214,7 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
                   {line.label}
                 </span>
                 {line.stats && (
-                  <span className="ml-3 text-[var(--muted)] text-[11px] shrink-0">{line.stats}</span>
+                  <span className="ml-2 text-[var(--muted)] text-[11px] shrink-0">{line.stats}</span>
                 )}
                 {line.error && (
                   <span className="ml-2 text-red-400/70 text-[10px] italic truncate" title={line.error}>
@@ -237,10 +229,10 @@ export const PipelineTab: React.FC<PipelineTabProps> = ({ nodes, messages, isFin
 
       {/* Right: Message log */}
       <div ref={logRef} className="flex-1 flex flex-col overflow-hidden">
-        <div className="px-3 py-1.5 border-b border-[var(--border)] shrink-0 bg-[var(--bg-darker)]/40">
-          <span className="text-[9px] font-bold uppercase tracking-[0.25em] text-yellow-400/70">Messages</span>
+        <div className="px-2 py-1 border-b border-[var(--border)] shrink-0 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))]">
+          <span className="text-[11px] font-semibold text-[var(--text)]">Messages</span>
         </div>
-        <div className="flex-1 overflow-auto scrollbar-fancy p-2 font-mono text-[11px] leading-[1.7]">
+        <div className="flex-1 overflow-auto scrollbar-fancy p-2 font-mono text-[11px] leading-[1.55]">
           {logs.length === 0 ? (
             <p className="text-[var(--muted)] italic px-1">No messages.</p>
           ) : (

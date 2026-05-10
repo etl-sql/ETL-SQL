@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import type { ProtocolMessage, Variable } from '../types';
 import { extractVariables } from '../utils/variable_utils';
-import { Variable as VariableIcon, Box, Code2 } from 'lucide-react';
+import { Variable as VariableIcon } from 'lucide-react';
 
 interface VariablesTabProps {
   messages: ProtocolMessage[];
@@ -43,52 +43,46 @@ export const VariablesTab: React.FC<VariablesTabProps> = ({ messages }) => {
 
   if (variables.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full opacity-20 space-y-4">
-        <VariableIcon size={48} strokeWidth={1} />
-        <p className="text-sm font-display font-bold uppercase tracking-widest">No Active Variables</p>
+      <div className="flex flex-col items-center justify-center h-full gap-2 text-[var(--muted)]">
+        <VariableIcon size={28} strokeWidth={1.5} />
+        <p className="text-xs">No active variables</p>
       </div>
     );
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-6 animate-fade-in custom-scrollbar">
-       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div className="flex-1 overflow-auto custom-scrollbar p-2 animate-fade-in">
+      <table className="w-full border-collapse text-[12px]">
+        <thead className="sticky top-0 z-10 bg-[var(--vscode-editor-background,var(--bg))] text-[var(--muted)]">
+          <tr className="border-b border-[var(--border)]">
+            <th className="px-2 py-1.5 text-left font-normal">Name</th>
+            <th className="px-2 py-1.5 text-left font-normal">Type</th>
+            <th className="px-2 py-1.5 text-left font-normal">Scope</th>
+            <th className="px-2 py-1.5 text-left font-normal">Value</th>
+          </tr>
+        </thead>
+        <tbody>
           {variables.map((v: any) => (
-            <div 
+            <tr
               key={v.name}
-              className={`
-                glass-card p-4 rounded-lg flex flex-col gap-2 group transition-all duration-300
-                border ${v.isScriptOnly ? 'border-dashed border-[var(--border)] opacity-80' : 'border-[var(--border)] hover:border-[var(--primary)]/50'}
-              `}
+              className="border-b border-[var(--border)]/70 hover:bg-[var(--vscode-list-hoverBackground,rgba(90,93,94,0.31))]"
             >
-              <div className="flex items-center justify-between border-b border-[var(--border)] pb-2 mb-1">
-                 <div className="flex items-center gap-2">
-                    <div className={`p-1.5 rounded ${v.isScriptOnly ? 'bg-slate-500/10 text-slate-400' : 'bg-indigo-500/10 text-indigo-400'}`}>
-                        {v.isScriptOnly ? <Code2 size={14} /> : <Box size={14} />}
-                    </div>
-                    <span className="font-mono text-sm font-bold text-[var(--text-primary)]">
-                        {v.name.startsWith('@') ? v.name : `@${v.name}`}
-                    </span>
-                 </div>
-                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-tighter ${v.isScriptOnly ? 'bg-slate-500/10 text-slate-400' : 'bg-indigo-500/10 text-indigo-400'}`}>
-                    {v.typeName}
-                 </span>
-              </div>
-              
-              <div className="flex flex-col gap-1">
-                 <span className="text-[10px] uppercase font-bold text-[var(--text-secondary)] tracking-widest opacity-60">
-                    {v.isScriptOnly ? 'Initial/Declared Value' : 'Current Value'}
-                 </span>
-                 <div className={`
-                    rounded p-2 font-mono text-xs break-all border border-white/5
-                    ${v.isScriptOnly ? 'bg-slate-500/5 text-slate-400' : 'bg-emerald-500/10 text-emerald-400 font-bold'}
-                 `}>
-                    {typeof v.value === 'object' ? JSON.stringify(v.value, null, 2) : String(v.value)}
-                 </div>
-              </div>
-            </div>
+              <td className="px-2 py-1.5 font-mono text-[var(--text-primary)] whitespace-nowrap">
+                {v.name.startsWith('@') ? v.name : `@${v.name}`}
+              </td>
+              <td className="px-2 py-1.5 font-mono text-[var(--muted)] whitespace-nowrap">
+                {v.typeName}
+              </td>
+              <td className="px-2 py-1.5 text-[var(--muted)] whitespace-nowrap">
+                {v.isScriptOnly ? 'Declared' : 'Runtime'}
+              </td>
+              <td className="px-2 py-1.5 font-mono text-[var(--text)] break-all">
+                {typeof v.value === 'object' ? JSON.stringify(v.value) : String(v.value)}
+              </td>
+            </tr>
           ))}
-       </div>
+        </tbody>
+      </table>
     </div>
   );
 };

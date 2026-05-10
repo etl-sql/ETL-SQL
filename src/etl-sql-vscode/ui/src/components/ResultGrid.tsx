@@ -72,20 +72,20 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
   if (!columns || columns.length === 0) return null;
 
   return (
-    <div className="flex flex-row h-full min-h-0 animate-fade-in gap-1 p-1">
+    <div className="flex flex-row h-full min-h-0 gap-1">
       {/* Table Main Area */}
-      <div className="flex-1 overflow-auto scrollbar-fancy border border-[var(--border)] rounded bg-[var(--bg)]">
-        <table className="w-full text-left border-collapse text-[14px] font-sans">
-          <thead className="sticky top-0 bg-[var(--bg-darker)]/90 backdrop-blur-md shadow-sm z-10">
+      <div className="flex-1 overflow-auto scrollbar-fancy border border-[var(--border)] bg-[var(--bg)]">
+        <table className="w-full text-left border-collapse text-[13px] font-sans">
+          <thead className="sticky top-0 bg-[var(--vscode-editorGroupHeader-tabsBackground,var(--bg-darker))] z-10">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="px-2 py-1 border-b border-white/10"
+                    className="px-2 py-1 border-b border-[var(--border)]"
                   >
                     <div className="flex flex-col gap-0.5">
-                       <span className="font-bold text-indigo-400 uppercase tracking-widest text-[9px] font-display leading-tight">
+                       <span className="font-semibold text-[var(--text)] text-[11px] leading-tight">
                          {flexRender(header.column.columnDef.header, header.getContext())}
                        </span>
                        {showFilters && <FilterInput column={header.column} />}
@@ -104,11 +104,11 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
               </tr>
             ) : (
               table.getRowModel().rows.map((row) => (
-                <tr key={row.id} className="hover:bg-indigo-500/[0.03] transition-colors group">
+                <tr key={row.id} className="hover:bg-[var(--vscode-list-hoverBackground,rgba(90,93,94,0.18))] group">
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}
-                      className="px-2 py-0.5 border-b border-[var(--border)] whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px] text-[var(--text-primary)] opacity-90 group-hover:opacity-100 transition-opacity"
+                      className="px-2 py-0.5 border-b border-[var(--border)] whitespace-nowrap overflow-hidden text-ellipsis max-w-[300px] text-[var(--text-primary)]"
                     >
                       <span className="font-mono">{flexRender(cell.column.columnDef.cell, cell.getContext())}</span>
                     </td>
@@ -121,10 +121,10 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
       </div>
 
       {/* Side-Aligned Toolbar (Zero-Waste) */}
-      <div className="flex flex-col gap-1 shrink-0 px-0.5 pt-0.5">
+      <div className="flex flex-col gap-1 shrink-0">
         <button 
           onClick={() => setShowFilters(!showFilters)}
-          className={`flex items-center justify-center p-2 rounded border transition-all ${showFilters ? 'bg-indigo-500/20 border-indigo-500/50 text-indigo-400' : 'bg-white/5 border-white/10 text-[var(--muted)] hover:bg-white/10'}`}
+          className={`flex items-center justify-center p-1.5 border ${showFilters ? 'bg-[var(--vscode-list-activeSelectionBackground,rgba(90,93,94,0.31))] border-[var(--vscode-focusBorder,#007fd4)] text-[var(--text)]' : 'bg-transparent border-[var(--border)] text-[var(--muted)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))] hover:text-[var(--text)]'}`}
           title="Toggle Column Filtering"
         >
           <Filter size={12} />
@@ -132,10 +132,10 @@ export const ResultGrid: React.FC<ResultGridProps> = ({ rows, columns }) => {
 
         <button 
           onClick={exportToCSV}
-          className="flex items-center justify-center p-2 rounded bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 hover:bg-indigo-500/20 transition-all group"
+          className="flex items-center justify-center p-1.5 border border-[var(--border)] text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))]"
           title="Export to CSV"
         >
-          <Download size={12} className="group-hover:translate-y-0.5 transition-transform" />
+          <Download size={12} />
         </button>
       </div>
     </div>
@@ -147,13 +147,13 @@ function FilterInput({ column }: { column: Column<any, any> }) {
 
   return (
     <div className="relative group">
-      <Search size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-indigo-400 transition-colors" />
+      <Search size={10} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
       <input
         type="text"
         value={(columnFilterValue ?? '') as string}
         onChange={(e) => column.setFilterValue(e.target.value)}
         placeholder={`Filter...`}
-        className="w-full bg-[var(--bg-darker)]/40 border border-[var(--border)] rounded px-6 py-1 text-[10px] focus:outline-none focus:border-[var(--primary)]/30 focus:bg-[var(--bg-darker)]/60 transition-all placeholder:opacity-20"
+        className="w-full bg-[var(--vscode-input-background,var(--bg-darker))] border border-[var(--vscode-input-border,var(--border))] px-6 py-0.5 text-[11px] text-[var(--vscode-input-foreground,var(--text))] focus:outline-none focus:border-[var(--vscode-focusBorder,#007fd4)] placeholder:opacity-60"
       />
     </div>
   );

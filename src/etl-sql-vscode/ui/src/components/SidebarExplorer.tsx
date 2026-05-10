@@ -54,17 +54,19 @@ useEffect(() => {
   const filteredConnections = connections.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
   const filteredVariables = variables.filter(v => v.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
+  const sectionLabelClass = "flex items-center gap-1.5 px-2 py-1 text-[11px] font-semibold text-[var(--muted)]";
+
   return (
     <div className="flex flex-col h-full bg-[var(--bg,var(--bg-fallback))] text-[var(--text-primary)] overflow-hidden">
       {/* Header & Search */}
-      <div className="p-3 border-b border-[var(--border)] space-y-3 bg-[var(--bg-darker)]/10">
+      <div className="px-2 py-2 border-b border-[var(--border)] space-y-2 bg-[var(--vscode-sideBar-background,var(--bg-darker))]">
         <div className="flex items-center justify-between">
-          <h2 className="text-[11px] font-bold uppercase tracking-[0.15em] text-[var(--primary)] flex items-center gap-2">
-            <RefreshCw size={12} className="text-[var(--primary)]" /> Metadata Explorer
+          <h2 className="text-[12px] font-semibold text-[var(--text-primary)] flex items-center gap-1.5">
+            <Database size={13} className="text-[var(--muted)]" /> Metadata
           </h2>
           <button 
             onClick={() => postMessage({ type: 'refresh' })}
-            className="p-1 hover:bg-white/10 rounded transition-colors text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+            className="p-1 text-[var(--muted)] hover:text-[var(--text-primary)] hover:bg-[var(--vscode-toolbar-hoverBackground,rgba(90,93,94,0.31))]"
             title="Refresh Connections"
           >
             <RefreshCw size={14} />
@@ -72,23 +74,23 @@ useEffect(() => {
         </div>
         
         <div className="relative group">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--primary)]/40 group-focus-within:text-[var(--primary)] transition-colors" />
+          <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
           <input 
             type="text"
             placeholder="Search schema..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-black/5 border border-[var(--border)] rounded-md py-1.5 pl-8 pr-3 text-xs text-[var(--text-primary)] placeholder-[var(--text-secondary)]/30 focus:outline-none focus:border-[var(--primary)]/50 transition-all shadow-inner"
+            className="w-full bg-[var(--vscode-input-background,var(--bg))] border border-[var(--vscode-input-border,var(--border))] py-1 pl-7 pr-2 text-[12px] text-[var(--vscode-input-foreground,var(--text-primary))] placeholder-[var(--vscode-input-placeholderForeground,var(--muted))] focus:outline-none focus:border-[var(--vscode-focusBorder,#007fd4)]"
           />
         </div>
       </div>
 
       {/* Explorer Tree */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar p-2 space-y-1">
+      <div className="flex-1 overflow-y-auto custom-scrollbar py-1">
         
         {/* Connections Section */}
         <section>
-          <div className="flex items-center gap-2 px-1 py-1 mb-1 text-[9px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
+          <div className={sectionLabelClass}>
             <Database size={10} /> Global Connections
           </div>
           {filteredConnections.map(conn => (
@@ -108,8 +110,8 @@ useEffect(() => {
 
         {/* Script Section */}
         {scriptConnections.length > 0 && (
-          <section className="pt-2">
-            <div className="flex items-center gap-2 px-1 py-1 mb-1 text-[9px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
+          <section className="pt-1">
+            <div className={sectionLabelClass}>
               <Layers size={10} /> Script Connections
             </div>
             {scriptConnections.map(conn => (
@@ -131,8 +133,8 @@ useEffect(() => {
 
         {/* Variables Section */}
         {filteredVariables.length > 0 && (
-          <section className="pt-2 border-t border-[var(--border)]/50 mt-2">
-            <div className="flex items-center gap-2 px-1 py-1 mb-1 text-[9px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
+          <section className="pt-1 border-t border-[var(--border)] mt-1">
+            <div className={sectionLabelClass}>
               <Variable size={10} /> Script Variables
             </div>
             {filteredVariables.map(v => (
@@ -152,8 +154,8 @@ useEffect(() => {
 
         {/* Temp Tables Section */}
         {activeUri && (
-             <section className="pt-2 border-t border-[var(--border)]/50 mt-2">
-                <div className="flex items-center gap-2 px-1 py-1 mb-1 text-[9px] font-bold uppercase tracking-widest text-[var(--text-secondary)]">
+             <section className="pt-1 border-t border-[var(--border)] mt-1">
+                <div className={sectionLabelClass}>
                     <Hash size={10} /> Temporary Tables
                 </div>
                 <MetadataItem 
@@ -170,8 +172,8 @@ useEffect(() => {
 
       {/* Footer / Context */}
       {activeUri && (
-        <div className="p-2 border-t border-[var(--border)] bg-black/10">
-          <div className="text-[8px] font-mono opacity-30 truncate" title={activeUri}>
+        <div className="px-2 py-1 border-t border-[var(--border)] bg-[var(--vscode-sideBar-background,var(--bg-darker))]">
+          <div className="text-[10px] font-mono text-[var(--muted)] truncate" title={activeUri}>
             Context: {activeUri.split('/').pop()}
           </div>
         </div>
