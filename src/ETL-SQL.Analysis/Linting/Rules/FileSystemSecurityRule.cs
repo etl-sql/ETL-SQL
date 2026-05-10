@@ -135,6 +135,16 @@ namespace ETL_SQL.Analysis.Linting.Rules
                     break;
                 }
             }
+
+            // 3. Approved Safe Zones reminder (generic)
+            results.Add(new LintResult
+            {
+                RuleName = Name,
+                Severity = LintSeverity.Info,
+                Message = $"Literal path detected: '{path}'. Ensure this directory is listed in your 'Security.ApprovedSafeZones' in appsettings.json or the script will fail at runtime.",
+                LineNumber = line,
+                ColumnNumber = col
+            });
         }
 
         private void AddSecurityWarning(string message, int line, int col, List<LintResult> results)

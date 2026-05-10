@@ -856,7 +856,54 @@ Use `SET WHAT_IF ON` before any destructive operation. See [SECURITY.md](file://
 
 ---
 
-## 13.1 Securing Credentials
+## 13.1 Approved Safe Zones
+
+ETL-SQL operates on a **Whitelisting** principle. By default, the engine is blocked from reading or writing to any directory on your system. To perform file operations, you must authorize specific paths in your `appsettings.json` file.
+
+### 13.1.1 Authorizing a Path
+In your `appsettings.json`, add your project directories to the `Security.ApprovedSafeZones` list:
+
+```json
+{
+  "Security": {
+    "ApprovedSafeZones": [
+      "C:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\",
+      "D:\\Data\\Ingestion\\"
+    ]
+  }
+}
+```
+
+> [!CAUTION]
+> **Trailing Slashes Matter**: Always include a trailing slash (e.g. `C:\Data\`) to ensure the entire directory is whitelisted. Without it, the engine may only authorize the specific file named `Data`.
+
+### 13.1.2 Troubleshooting "Access Denied"
+If you receive an error like `Access to path '...' is denied by security policy`:
+1. Check if the path is inside one of the `ApprovedSafeZones`.
+2. Ensure you are using **Absolute Paths**. The engine cannot validate relative paths against safe zones reliably.
+3. Verify that the file extension is not in the `Security.BlockedExtensions` list.
+
+---
+
+## 13.2 Runaway Protection
+
+To prevent accidental resource exhaustion or malicious behavior, the engine enforces a default cap of **100 filesystem operations** per script run. 
+
+If you are performing a large-scale migration (e.g. moving 1,000 files), you must explicitly override this limit in your script:
+
+```sql
+-- Raise the limit for the current session
+SET ALLOW_FILE_OPERATIONS = 2000;
+
+FOREACH @file IN FILE_LIST('C:\LargeDir\')
+BEGIN
+    COPY FILE @file.PATH TO 'D:\Archive\';
+END
+```
+
+---
+
+## 13.3 Securing Credentials
 
 Never store plaintext passwords in your scripts. ETL-SQL provides automated tools to transform vulnerable scripts into secure ones using `ENC:` (Encrypted) strings.
 
