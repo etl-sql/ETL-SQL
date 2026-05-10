@@ -900,7 +900,7 @@
             const badge = document.createElement('span');
             badge.className = 'drill-badge';
             badge.title = 'Right-click to drill through';
-            badge.textContent = '⤵';
+            badge.textContent = '⬇';
             card.appendChild(badge);
         }
 

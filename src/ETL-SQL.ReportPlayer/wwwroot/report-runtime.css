@@ -345,12 +345,12 @@
   /* Drill-through affordance */
   .has-drill-down { cursor: context-menu; }
   .drill-badge {
-    position: absolute; top: 8px; right: 8px; font-size: 13px;
-    opacity: 0; transition: opacity 0.15s; pointer-events: none;
+    position: absolute; top: 7px; left: 8px; font-size: 17px;
+    opacity: 0.3; transition: opacity 0.15s, transform 0.15s; pointer-events: none;
     user-select: none; color: #5470c6; line-height: 1;
   }
   .theme-dark .drill-badge { color: #7ca1e8; }
-  .has-drill-down:hover .drill-badge { opacity: 0.85; }
+  .has-drill-down:hover .drill-badge { opacity: 1; transform: scale(1.15); }
 
   /* Drill-back navigation button */
   .drill-back-btn {
