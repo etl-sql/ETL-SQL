@@ -1,6 +1,6 @@
 {
   "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\drill_hierarchy.rptsql",
-  "builtAt": "2026-05-10T16:11:39.193363Z",
+  "builtAt": "2026-05-10T20:56:43.398774Z",
   "title": "DRILL_IN Hierarchy Demo",
   "description": "Click a bar to drill Year \u2192 Quarter \u2192 Month. Click breadcrumb to navigate back.",
   "visuals": [
@@ -209,51 +209,51 @@
   },
   "messages": [
     {
-      "message": "[7d69a131] [SELECT] Executing SelectStatement. Session: 7d69a131",
+      "message": "[870fea73] [SELECT] Executing SelectStatement. Session: 870fea73",
       "color": "white",
-      "timestamp": "2026-05-10T16:11:39.1608758Z"
+      "timestamp": "2026-05-10T20:56:43.3648479Z"
     },
     {
-      "message": "[7d69a131] Visual \u0027SalesByPeriod\u0027 created.",
+      "message": "[870fea73] Visual \u0027SalesByPeriod\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-10T16:11:39.1854642Z"
+      "timestamp": "2026-05-10T20:56:43.3905022Z"
     },
     {
-      "message": "[7d69a131] Page \u0027Demo\u0027 created.",
+      "message": "[870fea73] Page \u0027Demo\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-10T16:11:39.1882959Z"
+      "timestamp": "2026-05-10T20:56:43.3934281Z"
     }
   ],
   "executionTree": [
     {
-      "id": "462a8d72-b5ce-4bdc-aa7a-6839b0c72900",
+      "id": "e0858c6a-98fa-491f-8f5f-191f287a5a30",
       "name": "Script Execution",
       "status": "Completed",
       "rowsProcessed": 0,
-      "durationMs": 35.1279,
+      "durationMs": 35.5188,
       "iterationCount": 1,
       "isParallelBlock": false,
       "velocity": 0,
       "error": null,
       "children": [
         {
-          "id": "ef41b085-94fa-48ee-987e-f7adb06375b9",
+          "id": "166dc55e-3dd9-4732-aec4-adf68ab2cf0e",
           "name": "SetOperation",
           "status": "Completed",
           "rowsProcessed": 48,
-          "durationMs": 24.4081,
+          "durationMs": 25.2606,
           "iterationCount": 1,
           "isParallelBlock": false,
-          "velocity": 1966.56028121812,
+          "velocity": 1900.1923944799412,
           "error": null,
           "children": []
         },
         {
-          "id": "700c8503-a782-4c77-8995-04e2fd9fa16e",
+          "id": "82f153b6-add7-41b6-ad08-69f1942c01c7",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2551,
+          "durationMs": 0.2765,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -261,11 +261,11 @@
           "children": []
         },
         {
-          "id": "5041458b-1ff1-4054-9cdf-33e006e5727c",
+          "id": "fb5cc57f-c9c7-4819-9d4e-077c818dd556",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.019,
+          "durationMs": 0.0191,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -273,11 +273,11 @@
           "children": []
         },
         {
-          "id": "60d1eab3-576b-49ca-8694-f95d51caef2d",
+          "id": "c4f6d528-cbc3-4bde-89e9-ff2168d5ce56",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.916,
+          "durationMs": 1.0277,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -285,11 +285,11 @@
           "children": []
         },
         {
-          "id": "290f9073-5155-4048-ad87-268baa502892",
+          "id": "dafa9de9-19dc-4efb-9a33-983c3d52fc1b",
           "name": "CreatePage",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.9009,
+          "durationMs": 0.9662,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,

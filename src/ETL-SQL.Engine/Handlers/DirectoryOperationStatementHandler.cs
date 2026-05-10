@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
+using System.IO.Compression;
 using ETL_SQL.Data;
 using ETL_SQL.Common;
 using ETL_SQL.Core;
@@ -10,7 +11,7 @@ using ETL_SQL.Engine.Services;
 namespace ETL_SQL.Engine.Handlers
 {
     /// <summary>
-    /// Handles directory-related operations such as CREATE, DELETE, MOVE, RENAME, COPY, and DELETE_CONTENTS.
+    /// Handles directory-related operations such as CREATE, DELETE, MOVE, RENAME, COPY, DELETE_CONTENTS, COMPRESS, and DECOMPRESS.
     /// </summary>
     public class DirectoryOperationStatementHandler : IStatementHandler
     {
@@ -77,106 +78,124 @@ namespace ETL_SQL.Engine.Handlers
             {
                 switch (stmt.Type)
                 {
-                case DirectoryOpType.Create:
-                    Directory.CreateDirectory(path);
-                    _logger.WriteLine($"Directory created: {path}", ConsoleColor.Green);
-                    break;
-                case DirectoryOpType.Delete:
-                    // Security Hardening: Block deleting directories containing scripts (or with script extensions)
-                    context.SecurityService.ValidateWriteAccess(path);
+                    case DirectoryOpType.Create:
+                        Directory.CreateDirectory(path);
+                        _logger.WriteLine($"Directory created: {path}", ConsoleColor.Green);
+                        break;
+                    case DirectoryOpType.Delete:
+                        // Security Hardening: Block deleting directories containing scripts (or with script extensions)
+                        context.SecurityService.ValidateWriteAccess(path);
 
-                    if (Directory.Exists(path))
-                    {
-                        Directory.Delete(path, true);
-                        _logger.WriteLine($"Directory deleted: {path}", ConsoleColor.Green);
-                    }
-                    else if (stmt.IfExists)
-                    {
-                        _logger.WriteLine($"DELETE DIRECTORY IF EXISTS: {pathVal} not found. Skipping.", ConsoleColor.Gray);
-                    }
-                    break;
-                case DirectoryOpType.Rename:
-                case DirectoryOpType.Move:
-                    if (dest != null)
-                    {
-                        var target = dest;
-                        if (stmt.Type == DirectoryOpType.Rename)
+                        if (Directory.Exists(path))
                         {
-                            var parent = System.IO.Path.GetDirectoryName(path.TrimEnd('/', '\\')) ?? "";
-                            target = System.IO.Path.Combine(parent, dest);
+                            Directory.Delete(path, true);
+                            _logger.WriteLine($"Directory deleted: {path}", ConsoleColor.Green);
                         }
-                        
-                        // Security Hardening: Validate the target path
-                        context.SecurityService.ValidatePath(target);
-                        context.SecurityService.ValidateWriteAccess(target);
-                        
-                        if (Directory.Exists(target))
+                        else if (stmt.IfExists)
                         {
-                            if (overwrite) Directory.Delete(target, true);
-                            else throw new ExecutionException($"Destination directory already exists and OVERWRITE is OFF: {target}");
+                            _logger.WriteLine($"DELETE DIRECTORY IF EXISTS: {pathVal} not found. Skipping.", ConsoleColor.Gray);
                         }
-                        Directory.Move(path, target);
-                    }
-                    break;
-                case DirectoryOpType.Copy:
-                    if (dest != null)
-                    {
-                        // Security Hardening: Block copying into sensitive script locations
-                        context.SecurityService.ValidateWriteAccess(dest);
-
-                        await fsService.CopyDirectory(path, dest, overwrite, context);
-                        _logger.WriteLine($"Directory copied: {path} -> {dest}", ConsoleColor.Green);
-                    }
-                    break;
-                case DirectoryOpType.DeleteContents:
-                    // Security Hardening: Block deleting contents of directories containing scripts
-                    context.SecurityService.ValidateWriteAccess(path);
-
-                    fsService.DeleteDirectoryContents(path, recursive, context);
-                    _logger.WriteLine($"Directory contents deleted: {path}", ConsoleColor.Green);
-                    break;
-                case DirectoryOpType.Compress:
-                    if (dest != null)
-                    {
-                        // Security Hardening: Block writing to script files
-                        context.SecurityService.ValidateWriteAccess(dest);
-
-                        if (File.Exists(dest) && !overwrite)
+                        break;
+                    case DirectoryOpType.Rename:
+                    case DirectoryOpType.Move:
+                        if (dest != null)
                         {
-                             throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                            var target = dest;
+                            if (stmt.Type == DirectoryOpType.Rename)
+                            {
+                                var parent = System.IO.Path.GetDirectoryName(path.TrimEnd('/', '\\')) ?? "";
+                                target = System.IO.Path.Combine(parent, dest);
+                            }
+                            
+                            // Security Hardening: Validate the target path
+                            context.SecurityService.ValidatePath(target);
+                            context.SecurityService.ValidateWriteAccess(target);
+                            
+                            if (Directory.Exists(target))
+                            {
+                                if (overwrite) Directory.Delete(target, true);
+                                else throw new ExecutionException($"Destination directory already exists and OVERWRITE is OFF: {target}");
+                            }
+                            Directory.Move(path, target);
                         }
-                        System.IO.Compression.ZipFile.CreateFromDirectory(path, dest);
-                        _logger.WriteLine($"Directory compressed: {path} -> {dest}", ConsoleColor.Green);
-                    }
-                    break;
-                case DirectoryOpType.Encrypt:
-                    if (dest != null)
-                    {
-                        // Security Hardening: Block writing to script files
-                        context.SecurityService.ValidateWriteAccess(dest);
+                        break;
+                    case DirectoryOpType.Copy:
+                        if (dest != null)
+                        {
+                            // Security Hardening: Block copying into sensitive script locations
+                            context.SecurityService.ValidateWriteAccess(dest);
 
-                        var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                        pwd ??= context.SecurityService.MasterPassword;
-                        if (pwd == null)
-                            throw new ExecutionException("ENCRYPT_DIRECTORY requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
-                        await fsService.EncryptDirectory(path, dest, pwd, overwrite, context);
-                        _logger.WriteLine($"Directory encrypted: {path} -> {dest}", ConsoleColor.Green);
-                    }
-                    break;
-                case DirectoryOpType.Decrypt:
-                    if (dest != null)
-                    {
-                        // Security Hardening: Block writing to script files
-                        context.SecurityService.ValidateWriteAccess(dest);
+                            await fsService.CopyDirectory(path, dest, overwrite, context);
+                            _logger.WriteLine($"Directory copied: {path} -> {dest}", ConsoleColor.Green);
+                        }
+                        break;
+                    case DirectoryOpType.DeleteContents:
+                        // Security Hardening: Block deleting contents of directories containing scripts
+                        context.SecurityService.ValidateWriteAccess(path);
 
-                        var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
-                        pwd ??= context.SecurityService.MasterPassword;
-                        if (pwd == null)
-                            throw new ExecutionException("DECRYPT_DIRECTORY requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
-                        await fsService.DecryptDirectory(path, dest, pwd, overwrite, context);
-                        _logger.WriteLine($"Directory decrypted: {path} -> {dest}", ConsoleColor.Green);
-                    }
-                    break;
+                        fsService.DeleteDirectoryContents(path, recursive, context);
+                        _logger.WriteLine($"Directory contents deleted: {path}", ConsoleColor.Green);
+                        break;
+                    case DirectoryOpType.Compress:
+                        if (dest != null)
+                        {
+                            // Security Hardening: Block writing to script files
+                            context.SecurityService.ValidateWriteAccess(dest);
+
+                            if (File.Exists(dest))
+                            {
+                                 if (overwrite) File.Delete(dest);
+                                 else throw new ExecutionException($"Destination file already exists and OVERWRITE is OFF: {dest}");
+                            }
+                            System.IO.Compression.ZipFile.CreateFromDirectory(path, dest);
+                            _logger.WriteLine($"Directory compressed: {path} -> {dest}", ConsoleColor.Green);
+                        }
+                        break;
+                    case DirectoryOpType.Decompress:
+                        if (dest != null)
+                        {
+                            // Security Hardening: Block writing to script files
+                            context.SecurityService.ValidateWriteAccess(dest);
+
+                            if (File.Exists(path))
+                            {
+                                ZipFile.ExtractToDirectory(path, dest, overwrite);
+                                _logger.WriteLine($"Directory decompressed: {path} -> {dest}", ConsoleColor.Green);
+                            }
+                            else
+                            {
+                                throw new ExecutionException($"Source for DECOMPRESS_DIRECTORY does not exist: {path}");
+                            }
+                        }
+                        break;
+                    case DirectoryOpType.Encrypt:
+                        if (dest != null)
+                        {
+                            // Security Hardening: Block writing to script files
+                            context.SecurityService.ValidateWriteAccess(dest);
+
+                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
+                            pwd ??= context.SecurityService.MasterPassword;
+                            if (pwd == null)
+                                throw new ExecutionException("ENCRYPT_DIRECTORY requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
+                            await fsService.EncryptDirectory(path, dest, pwd, overwrite, context);
+                            _logger.WriteLine($"Directory encrypted: {path} -> {dest}", ConsoleColor.Green);
+                        }
+                        break;
+                    case DirectoryOpType.Decrypt:
+                        if (dest != null)
+                        {
+                            // Security Hardening: Block writing to script files
+                            context.SecurityService.ValidateWriteAccess(dest);
+
+                            var pwd = stmt.Password != null ? (await context.EvaluateValue(stmt.Password, new Row(), decryptSensitive: true))?.ToString() : null;
+                            pwd ??= context.SecurityService.MasterPassword;
+                            if (pwd == null)
+                                throw new ExecutionException("DECRYPT_DIRECTORY requires a PASSWORD clause or a configured master password.", null, stmt.Line, stmt.Column);
+                            await fsService.DecryptDirectory(path, dest, pwd, overwrite, context);
+                            _logger.WriteLine($"Directory decrypted: {path} -> {dest}", ConsoleColor.Green);
+                        }
+                        break;
                 }
             }
             catch (ExecutionException) { throw; }

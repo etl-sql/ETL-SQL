@@ -169,7 +169,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.KILL)) return DataParser.ParseKillJob(_parser.Previous);
 
             if (type == TokenType.COPY || type == TokenType.MOVE || type == TokenType.RENAME ||
-                type == TokenType.DELETE || type == TokenType.COMPRESS ||
+                type == TokenType.DELETE || type == TokenType.COMPRESS || type == TokenType.DECOMPRESS ||
                 type == TokenType.ENCRYPT || type == TokenType.DECRYPT)
             {
                 var opToken = _parser.Advance();
@@ -180,7 +180,7 @@ namespace ETL_SQL.Core.Parser
 
             if (type == TokenType.COPY_FILE || type == TokenType.MOVE_FILE ||
                 type == TokenType.RENAME_FILE || type == TokenType.DELETE_FILE ||
-                type == TokenType.COMPRESS_FILE || type == TokenType.ENCRYPT_FILE || type == TokenType.DECRYPT_FILE)
+                type == TokenType.COMPRESS_FILE || type == TokenType.DECOMPRESS_FILE || type == TokenType.ENCRYPT_FILE || type == TokenType.DECRYPT_FILE)
             {
                 return ExtensionParser.ParseFileOperation(_parser.Advance());
             }
@@ -253,7 +253,9 @@ namespace ETL_SQL.Core.Parser
                    type == TokenType.START || type == TokenType.STOP || type == TokenType.PAUSE || type == TokenType.CLOSE ||
                    type == TokenType.SEND_EMAIL || type == TokenType.SEND_FILE || type == TokenType.FILE_SEND ||
                    type == TokenType.RECEIVE_FILE || type == TokenType.FILE_RECEIVE || type == TokenType.WITH ||
-                   type == TokenType.STYLE;
+                   type == TokenType.STYLE || type == TokenType.COMPRESS || type == TokenType.DECOMPRESS ||
+                   type == TokenType.COMPRESS_FILE || type == TokenType.DECOMPRESS_FILE ||
+                   type == TokenType.COMPRESS_DIRECTORY || type == TokenType.DECOMPRESS_DIRECTORY;
         }
 
         public ForeignKeyReference ParseForeignKeyReference() => DataParser.ParseForeignKeyReference();

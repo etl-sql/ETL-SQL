@@ -358,6 +358,16 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.exportText', async () => {
         await handleExport(context, 'text', 'Text', ['txt']);
     }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.publishToPortal', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showErrorMessage('ETL-SQL: Open a .rptsql file first.');
+            return;
+        }
+        const { publishToPortal } = await import('./portalPublishCommand');
+        await publishToPortal(context, editor.document.uri.fsPath);
+    }));
 }
 
 function syncConnectionsToLsp() {

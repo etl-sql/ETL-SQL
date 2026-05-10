@@ -1,0 +1,60 @@
+-- Main Orchestration: HR Data Conversion (30 Entities)
+-- Path: samples/conversion/main.etlsql
+
+-- 1. Setup Environment
+DECLARE @OutputDir PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\output\';
+IF NOT DIRECTORY_EXISTS(@OutputDir)
+BEGIN
+    CREATE CONNECTION out_dir ON DIRECTORY(@OutputDir) WITH(CREATE=ON);
+    DROP CONNECTION out_dir;
+END
+
+-- 2. Define System A Connection
+CREATE CONNECTION system_a ON POSTGRES()
+    WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+
+-- 3. Define 30 Topics
+DECLARE @topics LIST = (
+    'hr_01_employees', 'hr_02_demographics', 'hr_03_salary_history', 'hr_04_job_history', 
+    'hr_05_w4_info', 'hr_06_dependents', 'hr_07_performance', 'hr_08_training', 
+    'hr_09_benefits', 'hr_10_contacts', 'hr_11_leave_req', 'hr_12_time_entries', 
+    'hr_13_stock_grants', 'hr_14_skills', 'hr_15_equipment', 'hr_16_locations', 
+    'hr_17_cost_centers', 'hr_18_budgets', 'hr_19_projects', 'hr_20_time_off', 
+    'hr_21_grievances', 'hr_22_health', 'hr_23_background', 'hr_24_visa', 
+    'hr_25_education', 'hr_26_employers', 'hr_27_interviews', 'hr_28_onboarding', 
+    'hr_29_offboarding', 'hr_30_access_logs'
+);
+
+BEGIN TRY
+    PRINT 'Starting Conversion of 30 HR Entities...';
+
+    FOREACH @topic IN @topics
+    BEGIN
+        PRINT 'Processing Topic: ' + @topic;
+        
+        -- Extract data with strict enforcement
+        RUN SCRIPT 'samples/conversion/extract_entity.etlsql' 
+            WITH (@Topic = @topic);
+        
+        -- Define output file
+        DECLARE @filePath = @OutputDir + @topic + '.csv';
+        
+        CREATE CONNECTION export_file ON FLATFILE()
+            WITH(PATH = @filePath, DELIMITER = PIPE, HEADER = ON, ENCODING = 'UTF8');
+            
+        -- Load into file
+        INSERT INTO export_file.FILE SELECT * FROM #ExportSet;
+        
+        PRINT 'Wrote ' + CAST(@@ROWCOUNT AS STRING) + ' rows to ' + @filePath;
+
+        DROP CONNECTION export_file;
+        DROP TABLE #ExportSet;
+    END
+
+    PRINT 'Conversion Complete. 30 files generated in ' + @OutputDir;
+
+END TRY
+BEGIN CATCH
+    PRINT 'Conversion failed: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

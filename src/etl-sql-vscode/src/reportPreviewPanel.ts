@@ -19,6 +19,7 @@ export class ReportPreviewPanel {
 
     private _panel: vscode.WebviewPanel;
     private _extensionUri: vscode.Uri;
+    private _context: vscode.ExtensionContext;
     private _scriptPath: string;
     private _parameters: Record<string, string | null> = {};
     private _disposables: vscode.Disposable[] = [];
@@ -26,11 +27,12 @@ export class ReportPreviewPanel {
 
     private constructor(
         panel: vscode.WebviewPanel,
-        extensionUri: vscode.Uri,
+        context: vscode.ExtensionContext,
         scriptPath: string
     ) {
         this._panel = panel;
-        this._extensionUri = extensionUri;
+        this._extensionUri = context.extensionUri;
+        this._context = context;
         this._scriptPath = scriptPath;
 
         // Initial render
@@ -60,6 +62,11 @@ export class ReportPreviewPanel {
                     case 'serve':
                         vscode.commands.executeCommand('etlsql.launchInBrowser', vscode.Uri.file(this._scriptPath));
                         break;
+                    case 'publish':
+                        import('./portalPublishCommand')
+                            .then(m => m.publishToPortal(this._context, this._scriptPath))
+                            .catch(err => vscode.window.showErrorMessage(`Publish error: ${err.message}`));
+                        break;
                 }
             },
             null,
@@ -87,7 +94,7 @@ export class ReportPreviewPanel {
             }
         );
 
-        return new ReportPreviewPanel(panel, context.extensionUri, scriptPath);
+        return new ReportPreviewPanel(panel, context, scriptPath);
     }
 
     /** Runs the build CLI, parses the manifest JSON, and refreshes the webview.

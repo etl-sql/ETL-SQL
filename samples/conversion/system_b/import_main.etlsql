@@ -1,0 +1,74 @@
+-- Main Orchestration: System B Secure Ingestion
+-- Path: samples/conversion/system_b/import_main.etlsql
+
+-- 1. Setup Environment
+-- ### ALLOW_FILE_OPERATIONS = 200
+SET ALLOW_FILE_OPERATIONS = 200;
+
+DECLARE @InputDir    PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\import_staging\';
+DECLARE @ZipFile     PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\hr_migration.zip';
+DECLARE @KeyPath     PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\keys\private.asc';
+DECLARE @Passphrase  STRING = 'hr-secret';
+
+-- 2. Define System B Connection
+CREATE CONNECTION system_b ON POSTGRES()
+    WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+
+DECLARE @topics LIST = (
+    'hr_01_employees', 'hr_02_demographics', 'hr_03_salary_history', 'hr_04_job_history', 
+    'hr_05_w4_info', 'hr_06_dependents', 'hr_07_performance', 'hr_08_training', 
+    'hr_09_benefits', 'hr_10_contacts', 'hr_11_leave_req', 'hr_12_time_entries', 
+    'hr_13_stock_grants', 'hr_14_skills', 'hr_15_equipment', 'hr_16_locations', 
+    'hr_17_cost_centers', 'hr_18_budgets', 'hr_19_projects', 'hr_20_time_off', 
+    'hr_21_grievances', 'hr_22_health', 'hr_23_background', 'hr_24_visa', 
+    'hr_25_education', 'hr_26_employers', 'hr_27_interviews', 'hr_28_onboarding', 
+    'hr_29_offboarding', 'hr_30_access_logs'
+);
+
+BEGIN TRY
+    PRINT 'Starting Secure Ingestion into System B...';
+
+    -- 3. Unpack the migration package
+    IF FILE_EXISTS(@ZipFile)
+    BEGIN
+        PRINT 'Decompressing migration package...';
+        DECOMPRESS FILE @ZipFile TO @InputDir;
+    END
+    ELSE
+    BEGIN
+        THROW 50001, 'Migration ZIP file not found.', 1;
+    END
+
+    -- 4. Process each topic
+    FOREACH @topic IN @topics
+    BEGIN
+        DECLARE @pgpPath = @InputDir + @topic + '.csv.pgp';
+        DECLARE @csvPath = @InputDir + @topic + '.csv';
+        
+        IF FILE_EXISTS(@pgpPath)
+        BEGIN
+            -- 5. Decrypt the file
+            PRINT 'Decrypting: ' + @topic;
+            DECRYPT FILE @pgpPath TO @csvPath PGP_KEY @KeyPath PASSWORD @Passphrase;
+            
+            -- 6. Run ingestion sub-script
+            RUN SCRIPT 'samples/conversion/system_b/import_entity.etlsql' 
+                WITH (@Topic = @topic, @FilePath = @csvPath);
+                
+            -- 7. Cleanup temp files
+            DELETE FILE @csvPath;
+            DELETE FILE @pgpPath;
+        END
+        ELSE
+        BEGIN
+            PRINT 'Warning: Encrypted file not found: ' + @pgpPath;
+        END
+    END
+
+    PRINT 'Secure Ingestion Complete.';
+
+END TRY
+BEGIN CATCH
+    PRINT 'Secure Ingestion failed: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

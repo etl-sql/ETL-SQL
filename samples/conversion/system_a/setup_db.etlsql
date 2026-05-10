@@ -1,0 +1,86 @@
+-- Setup Script for HR Data Conversion (30 Entities)
+-- Path: samples/conversion/setup_db.etlsql
+
+BEGIN TRY
+    -- 1. Define Connection to System A
+    CREATE CONNECTION system_a ON POSTGRES()
+        WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+
+    -- 2. Define Entity List
+    DECLARE @topics LIST = (
+        'hr_01_employees', 'hr_02_demographics', 'hr_03_salary_history', 'hr_04_job_history', 
+        'hr_05_w4_info', 'hr_06_dependents', 'hr_07_performance', 'hr_08_training', 
+        'hr_09_benefits', 'hr_10_contacts', 'hr_11_leave_req', 'hr_12_time_entries', 
+        'hr_13_stock_grants', 'hr_14_skills', 'hr_15_equipment', 'hr_16_locations', 
+        'hr_17_cost_centers', 'hr_18_budgets', 'hr_19_projects', 'hr_20_time_off', 
+        'hr_21_grievances', 'hr_22_health', 'hr_23_background', 'hr_24_visa', 
+        'hr_25_education', 'hr_26_employers', 'hr_27_interviews', 'hr_28_onboarding', 
+        'hr_29_offboarding', 'hr_30_access_logs'
+    );
+
+    PRINT 'Provisioning 30 HR Entities...';
+
+    FOREACH @topic IN @topics
+    BEGIN
+        PRINT 'Processing: ' + @topic;
+        
+        -- DDL
+        DECLARE @ddl = 'DROP TABLE IF EXISTS ' + @topic + ' CASCADE; ';
+        IF @topic = 'hr_01_employees' 
+            SET @ddl = @ddl + 'CREATE TABLE ' + @topic + ' (emp_id INT PRIMARY KEY, first_name VARCHAR(100), last_name VARCHAR(100), hire_date DATE, status VARCHAR(50));';
+        ELSE IF @topic = 'hr_02_demographics'
+            SET @ddl = @ddl + 'CREATE TABLE ' + @topic + ' (emp_id INT, birth_date DATE, gender VARCHAR(50), marital_status VARCHAR(50));';
+        ELSE
+            SET @ddl = @ddl + 'CREATE TABLE ' + @topic + ' (emp_id INT, entry_date DATE, notes VARCHAR(255));';
+
+        EXECUTE (@ddl) AT system_a;
+        
+        -- Data Generation
+        IF @topic = 'hr_01_employees'
+            GENERATE 100 ROWS INTO #Data AS (emp_id = 'SEQUENCE(1,1)', first_name = 'RANDOM(John,Jane)', last_name = 'RANDOM(Doe,Smith)', hire_date = 'SEQUENCE(2020-01-01,1,DAY)', status = 'Active');
+        ELSE IF @topic = 'hr_02_demographics'
+            GENERATE 100 ROWS INTO #Data AS (emp_id = 'SEQUENCE(1,1)', birth_date = 'SEQUENCE(1980-01-01,10,DAY)', gender = 'RANDOM(M,F)', marital_status = 'Single');
+        ELSE
+            GENERATE 100 ROWS INTO #Data AS (emp_id = 'SEQUENCE(1,1)', entry_date = 'SEQUENCE(2020-01-01,1,DAY)', notes = 'RANDOM(Initial, Updated, Audit)');
+
+        -- Population (Hardcoded mapping for the test)
+        IF @topic = 'hr_01_employees' INSERT INTO system_a.hr_01_employees SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_02_demographics' INSERT INTO system_a.hr_02_demographics SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_03_salary_history' INSERT INTO system_a.hr_03_salary_history SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_04_job_history' INSERT INTO system_a.hr_04_job_history SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_05_w4_info' INSERT INTO system_a.hr_05_w4_info SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_06_dependents' INSERT INTO system_a.hr_06_dependents SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_07_performance' INSERT INTO system_a.hr_07_performance SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_08_training' INSERT INTO system_a.hr_08_training SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_09_benefits' INSERT INTO system_a.hr_09_benefits SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_10_contacts' INSERT INTO system_a.hr_10_contacts SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_11_leave_req' INSERT INTO system_a.hr_11_leave_req SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_12_time_entries' INSERT INTO system_a.hr_12_time_entries SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_13_stock_grants' INSERT INTO system_a.hr_13_stock_grants SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_14_skills' INSERT INTO system_a.hr_14_skills SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_15_equipment' INSERT INTO system_a.hr_15_equipment SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_16_locations' INSERT INTO system_a.hr_16_locations SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_17_cost_centers' INSERT INTO system_a.hr_17_cost_centers SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_18_budgets' INSERT INTO system_a.hr_18_budgets SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_19_projects' INSERT INTO system_a.hr_19_projects SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_20_time_off' INSERT INTO system_a.hr_20_time_off SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_21_grievances' INSERT INTO system_a.hr_21_grievances SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_22_health' INSERT INTO system_a.hr_22_health SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_23_background' INSERT INTO system_a.hr_23_background SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_24_visa' INSERT INTO system_a.hr_24_visa SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_25_education' INSERT INTO system_a.hr_25_education SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_26_employers' INSERT INTO system_a.hr_26_employers SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_27_interviews' INSERT INTO system_a.hr_27_interviews SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_28_onboarding' INSERT INTO system_a.hr_28_onboarding SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_29_offboarding' INSERT INTO system_a.hr_29_offboarding SELECT * FROM #Data;
+        ELSE IF @topic = 'hr_30_access_logs' INSERT INTO system_a.hr_30_access_logs SELECT * FROM #Data;
+
+        DROP TABLE #Data;
+    END
+
+    PRINT 'System A Setup Complete.';
+END TRY
+BEGIN CATCH
+    PRINT 'Setup failed: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

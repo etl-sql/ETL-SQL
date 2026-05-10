@@ -209,6 +209,7 @@ namespace ETL_SQL.Core.Parser.Components
                 TokenType.RENAME_FILE or TokenType.RENAME   => FileOpType.Rename,
                 TokenType.DELETE_FILE or TokenType.DELETE   => FileOpType.Delete,
                 TokenType.COMPRESS_FILE or TokenType.COMPRESS => FileOpType.Compress,
+                TokenType.DECOMPRESS_FILE or TokenType.DECOMPRESS => FileOpType.Decompress,
                 TokenType.ENCRYPT_FILE or TokenType.ENCRYPT => FileOpType.Encrypt,
                 TokenType.DECRYPT_FILE or TokenType.DECRYPT => FileOpType.Decrypt,
                 _ => throw new SyntaxException($"Unexpected file operation: {startToken.Type}", startToken.Line, startToken.Column)
@@ -283,6 +284,7 @@ namespace ETL_SQL.Core.Parser.Components
                 TokenType.COPY_DIRECTORY or TokenType.COPY          => DirectoryOpType.Copy,
                 TokenType.DELETE_DIRECTORY_CONTENTS                 => DirectoryOpType.DeleteContents,
                 TokenType.COMPRESS_DIRECTORY or TokenType.COMPRESS  => DirectoryOpType.Compress,
+                TokenType.DECOMPRESS_DIRECTORY or TokenType.DECOMPRESS => DirectoryOpType.Decompress,
                 TokenType.ENCRYPT_DIRECTORY or TokenType.ENCRYPT    => DirectoryOpType.Encrypt,
                 TokenType.DECRYPT_DIRECTORY or TokenType.DECRYPT    => DirectoryOpType.Decrypt,
                 _ => throw new SyntaxException($"Unexpected directory operation: {startToken.Type}", startToken.Line, startToken.Column)

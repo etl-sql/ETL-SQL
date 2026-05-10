@@ -1,0 +1,85 @@
+-- Main Orchestration: System A Secure Export
+-- Path: samples/conversion/system_a/export_main.etlsql
+
+/*
+   @author: Chuck
+   @description: Secure HR Data Export with PGP and Compression
+*/
+
+-- 1. Setup Environment
+-- ### ALLOW_FILE_OPERATIONS = 200
+SET ALLOW_FILE_OPERATIONS = 200;
+
+DECLARE @OutputDir = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\output\';
+DECLARE @KeyDir    = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\keys\';
+DECLARE @ZipFile   = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\hr_migration.zip';
+
+-- 2. Define Source Connection (Postgres)
+CREATE CONNECTION system_a ON POSTGRES()
+    WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+
+DECLARE @topics LIST = (
+    'hr_01_employees', 'hr_02_demographics', 'hr_03_salary_history', 'hr_04_job_history', 
+    'hr_05_w4_info', 'hr_06_dependents', 'hr_07_performance', 'hr_08_training', 
+    'hr_09_benefits', 'hr_10_contacts', 'hr_11_leave_req', 'hr_12_time_entries', 
+    'hr_13_stock_grants', 'hr_14_skills', 'hr_15_equipment', 'hr_16_locations', 
+    'hr_17_cost_centers', 'hr_18_budgets', 'hr_19_projects', 'hr_20_time_off', 
+    'hr_21_grievances', 'hr_22_health', 'hr_23_background', 'hr_24_visa', 
+    'hr_25_education', 'hr_26_employers', 'hr_27_interviews', 'hr_28_onboarding', 
+    'hr_29_offboarding', 'hr_30_access_logs'
+);
+
+BEGIN TRY
+    PRINT 'Starting Secure Export Process...';
+
+    -- 3. Generate PGP Key Pair (if not exists)
+    IF NOT FILE_EXISTS(@KeyDir + 'public.asc')
+    BEGIN
+        PRINT 'Generating PGP Key Pair...';
+        CREATE PGP_KEY_PAIR @KeyDir 
+            WITH(IDENTITY='HR-Migration <hr@company.com>', PASSPHRASE='hr-secret');
+    END
+
+    -- 4. Process each topic
+    FOREACH @topic IN @topics
+    BEGIN
+        PRINT 'Processing: ' + @topic;
+        
+        -- Extraction logic
+        RUN SCRIPT 'samples/conversion/system_a/export_entity.etlsql' 
+            WITH (@Topic = @topic);
+        
+        -- File Paths
+        DECLARE @csvPath = @OutputDir + @topic + '.csv';
+        DECLARE @pgpPath = @OutputDir + @topic + '.csv.pgp';
+        
+        -- Write CSV
+        CREATE CONNECTION temp_csv ON FLATFILE()
+            WITH(PATH = @csvPath, DELIMITER = PIPE, HEADER = ON, ENCODING = 'UTF8');
+            
+        INSERT INTO temp_csv.FILE SELECT * FROM #ExportSet;
+        DROP CONNECTION temp_csv;
+        DROP TABLE #ExportSet;
+        
+        -- 5. Encrypt each file
+        PRINT 'Encrypting ' + @topic + '...';
+        ENCRYPT FILE @csvPath TO @pgpPath PGP_KEY (@KeyDir + 'public.asc');
+        
+        -- 6. Cleanup plaintext file
+        DELETE FILE @csvPath;
+    END
+
+    -- 7. Compress all encrypted files into one package
+    PRINT 'Packaging encrypted files into ZIP...';
+    COMPRESS DIRECTORY @OutputDir TO @ZipFile WITH(OVERWRITE=ON);
+
+    -- 8. Final Cleanup of staging directory
+    DELETE DIRECTORY_CONTENTS @OutputDir WITH(RECURSIVE=ON);
+
+    PRINT 'Secure Export Complete: ' + @ZipFile;
+
+END TRY
+BEGIN CATCH
+    PRINT 'Secure Export failed: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

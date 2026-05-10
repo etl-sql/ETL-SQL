@@ -131,7 +131,11 @@ namespace ETL_SQL.Engine
         public ITelemetryContext Telemetry => _registry.TelemetryManager;
 
         public long TempTableSpillThresholdRows { get => _options.TempTableSpillThresholdRows; set => _options.TempTableSpillThresholdRows = value; }
-        public int MaxRecursiveDepth { get => _options.MaxRecursiveDepth; set => _options.MaxRecursiveDepth = value; }
+        public int MaxRecursiveDepth 
+        { 
+            get => _options.MaxRecursiveDepth; 
+            set { _options.MaxRecursiveDepth = value; _securityService.MaxRecursiveDepth = value; } 
+        }
         public int CurrentRecursiveDepth { get; set; } = 0;
         public string? LastIndexUsedName { get; set; }
         public ErrorInfo? LastError { get; set; }
@@ -144,12 +148,28 @@ namespace ETL_SQL.Engine
         public bool AllowLargeStringResults { get => _options.AllowLargeStringResults; set => _options.AllowLargeStringResults = value; }
         public HashSet<string> AllowedFileTypeOverrides => _options.AllowedFileTypeOverrides;
 
-        public int MaxParallelDegree { get => _options.MaxParallelDegree; set => _options.MaxParallelDegree = value; }
-        public long MaxStringResultSize { get => _options.MaxStringResultSize; set => _options.MaxStringResultSize = value; }
-        public int RegexMatchTimeoutMs { get => _options.RegexMatchTimeoutMs; set => _options.RegexMatchTimeoutMs = value; }
+        public int MaxParallelDegree 
+        { 
+            get => _options.MaxParallelDegree; 
+            set { _options.MaxParallelDegree = value; _securityService.MaxParallelDegree = value; } 
+        }
+        public long MaxStringResultSize 
+        { 
+            get => _options.MaxStringResultSize; 
+            set { _options.MaxStringResultSize = value; _securityService.MaxStringResultSize = value; } 
+        }
+        public int RegexMatchTimeoutMs 
+        { 
+            get => _options.RegexMatchTimeoutMs; 
+            set { _options.RegexMatchTimeoutMs = value; _securityService.RegexMatchTimeout = TimeSpan.FromMilliseconds(value); } 
+        }
         public string? CurrentScriptPath { get; set; }
         public string WorkingDirectory { get; set; } = Directory.GetCurrentDirectory();
-        public int MaxFileOperations { get => _options.MaxFileOperations; set => _options.MaxFileOperations = value; }
+        public int MaxFileOperations 
+        { 
+            get => _options.MaxFileOperations; 
+            set { _options.MaxFileOperations = value; _securityService.MaxFileOperations = value; } 
+        }
         public int MaxGroupingSets { get => _options.MaxGroupingSets; set => _options.MaxGroupingSets = value; }
         public long MaxSessionSize { get => _options.MaxSessionSize; set => _options.MaxSessionSize = value; }
         public int MaxLastResultRows { get => _options.MaxLastResultRows; set => _options.MaxLastResultRows = value; }

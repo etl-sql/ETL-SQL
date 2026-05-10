@@ -100,6 +100,11 @@
           "type": "boolean",
           "default": false,
           "description": "Enable parameter inlay hints (Ghost Text) in the editor."
+        },
+        "etlsql.portal.url": {
+          "type": "string",
+          "default": "",
+          "description": "Base URL of the ETL-SQL Report Portal (e.g. http://localhost:5001). Used by the Publish button in the report preview panel."
         }
       }
     },
@@ -151,6 +156,10 @@
       {
         "command": "etlsql.launchInBrowser",
         "title": "ETL-SQL: Open Report in Browser"
+      },
+      {
+        "command": "etlsql.publishToPortal",
+        "title": "ETL-SQL: Publish to Report Portal"
       },
       {
         "command": "etlsql.exportMarkdown",

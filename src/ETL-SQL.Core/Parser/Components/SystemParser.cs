@@ -171,28 +171,30 @@ namespace ETL_SQL.Core.Parser.Components
             }
             else if (val == "ALLOW_FILE_OPERATIONS" || (val.StartsWith("ALLOW_GREATER_THAN_") && val.EndsWith("_FILE")))
             {
-                if (Match(TokenType.EQUALS) || val == "ALLOW_FILE_OPERATIONS")
+                if (Match(TokenType.EQUALS))
                 {
-                    if (startToken.Value == "ALLOW_FILE_OPERATIONS" && !Match(TokenType.EQUALS))
-                         throw new SyntaxException("Expected '=' after ALLOW_FILE_OPERATIONS", startToken.Line, startToken.Column);
-                    
                     var expr = ParseExpression();
                     if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                     return new SetThresholdStatement(ThresholdType.MaxFileOperations, expr) { Line = startToken.Line, Column = startToken.Column };
                 }
+                
+                if (startToken.Value == "ALLOW_FILE_OPERATIONS")
+                    throw new SyntaxException("Expected '=' after ALLOW_FILE_OPERATIONS", startToken.Line, startToken.Column);
+                
                 overrideType = SecurityOverride.LargeFileCount;
             }
             else if (val == "ALLOW_RECURSIVE_LAYERS" || (val.StartsWith("ALLOW_RECURSIVE_GREATER_THAN_") && val.EndsWith("_LAYERS")))
             {
-                if (Match(TokenType.EQUALS) || val == "ALLOW_RECURSIVE_LAYERS")
+                if (Match(TokenType.EQUALS))
                 {
-                    if (startToken.Value == "ALLOW_RECURSIVE_LAYERS" && !Match(TokenType.EQUALS))
-                         throw new SyntaxException("Expected '=' after ALLOW_RECURSIVE_LAYERS", startToken.Line, startToken.Column);
-
                     var expr = ParseExpression();
                     if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
                     return new SetThresholdStatement(ThresholdType.MaxRecursiveDepth, expr) { Line = startToken.Line, Column = startToken.Column };
                 }
+
+                if (startToken.Value == "ALLOW_RECURSIVE_LAYERS")
+                    throw new SyntaxException("Expected '=' after ALLOW_RECURSIVE_LAYERS", startToken.Line, startToken.Column);
+
                 overrideType = SecurityOverride.DeepRecursion;
             }
             else if (val == "ALLOW_LARGE_STRING_RESULTS")

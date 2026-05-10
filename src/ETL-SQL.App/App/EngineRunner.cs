@@ -221,6 +221,7 @@ namespace ETL_SQL.App
                     logger.IsVerbose = ctx.IsVerbose;
                     evaluator.MasterPassword = ctx.Password;
                     evaluator.SessionId = ctx.SessionId;
+                    evaluator.CurrentScriptPath = ctx.ScriptFile.FullName;
 
                     // Security Hardening: Register the script directory as an approved safe zone for overrides
                     var scriptDir = Path.GetDirectoryName(ctx.ScriptFile.FullName);

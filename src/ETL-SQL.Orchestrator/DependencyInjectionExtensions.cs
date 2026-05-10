@@ -63,6 +63,7 @@ namespace ETL_SQL.Orchestrator
                 var customDir = cfg["Session:Root"];
                 return new SessionStateManager(log, sec, cfg, customDir);
             });
+            services.AddSingleton<SessionStateManager>(sp => (SessionStateManager)sp.GetRequiredService<ETL_SQL.Core.Execution.ISessionStateManager>());
 
             services.AddSingleton<ETL_SQL.Services.SecurityService>(sp => 
             {

@@ -1,0 +1,76 @@
+-- Sub-script: import_entity.etlsql
+-- Path: samples/conversion/import_entity.etlsql
+-- Inputs: @Topic (STRING), @FilePath (PATH)
+
+DECLARE @Topic    STRING INPUT;
+DECLARE @FilePath PATH   INPUT;
+
+PRINT 'Ingesting ' + @Topic + ' into System B...';
+
+-- 1. Connect to the CSV file
+CREATE CONNECTION csv_source ON FLATFILE()
+    WITH(PATH = @FilePath, DELIMITER = PIPE, HEADER = ON, ENCODING = 'UTF8');
+
+-- 2. Stage data in engine memory
+SELECT * INTO #SourceData FROM csv_source.FILE;
+
+-- 3. Map to System B Schema and Load (Use lowercase for Postgres compatibility)
+DECLARE @targetTable = 'sysb_' + @Topic;
+
+IF @Topic = 'hr_01_employees'
+BEGIN
+    INSERT INTO system_b.sysb_hr_01_employees (eid, staffname, startdt, activestatus)
+    SELECT 
+        CAST(EMPLOYEE_ID AS INT),
+        CAST(FULL_NAME AS VARCHAR(200)),
+        CAST(HIRE_DATE AS DATE),
+        CAST(STATUS AS VARCHAR(50))
+    FROM #SourceData;
+END
+ELSE IF @Topic = 'hr_02_demographics'
+BEGIN
+    INSERT INTO system_b.sysb_hr_02_demographics (eid, dob, sex)
+    SELECT 
+        CAST(EMPLOYEE_ID AS INT),
+        CAST(BIRTH_DATE AS DATE),
+        CAST(GENDER AS VARCHAR(20))
+    FROM #SourceData;
+END
+ELSE
+BEGIN
+    -- Generic Mapping: eid, importdt, payload
+    IF @Topic = 'hr_03_salary_history' INSERT INTO system_b.sysb_hr_03_salary_history (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_04_job_history' INSERT INTO system_b.sysb_hr_04_job_history (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_05_w4_info' INSERT INTO system_b.sysb_hr_05_w4_info (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_06_dependents' INSERT INTO system_b.sysb_hr_06_dependents (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_07_performance' INSERT INTO system_b.sysb_hr_07_performance (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_08_training' INSERT INTO system_b.sysb_hr_08_training (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_09_benefits' INSERT INTO system_b.sysb_hr_09_benefits (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_10_contacts' INSERT INTO system_b.sysb_hr_10_contacts (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_11_leave_req' INSERT INTO system_b.sysb_hr_11_leave_req (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_12_time_entries' INSERT INTO system_b.sysb_hr_12_time_entries (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_13_stock_grants' INSERT INTO system_b.sysb_hr_13_stock_grants (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_14_skills' INSERT INTO system_b.sysb_hr_14_skills (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_15_equipment' INSERT INTO system_b.sysb_hr_15_equipment (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_16_locations' INSERT INTO system_b.sysb_hr_16_locations (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_17_cost_centers' INSERT INTO system_b.sysb_hr_17_cost_centers (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_18_budgets' INSERT INTO system_b.sysb_hr_18_budgets (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_19_projects' INSERT INTO system_b.sysb_hr_19_projects (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_20_time_off' INSERT INTO system_b.sysb_hr_20_time_off (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_21_grievances' INSERT INTO system_b.sysb_hr_21_grievances (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_22_health' INSERT INTO system_b.sysb_hr_22_health (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_23_background' INSERT INTO system_b.sysb_hr_23_background (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_24_visa' INSERT INTO system_b.sysb_hr_24_visa (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_25_education' INSERT INTO system_b.sysb_hr_25_education (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_26_employers' INSERT INTO system_b.sysb_hr_26_employers (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_27_interviews' INSERT INTO system_b.sysb_hr_27_interviews (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_28_onboarding' INSERT INTO system_b.sysb_hr_28_onboarding (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_29_offboarding' INSERT INTO system_b.sysb_hr_29_offboarding (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+    ELSE IF @Topic = 'hr_30_access_logs' INSERT INTO system_b.sysb_hr_30_access_logs (eid, importdt, payload) SELECT CAST(EMPLOYEE_ID AS INT), CAST(ENTRY_DATE AS DATE), CAST(NOTES AS VARCHAR(500)) FROM #SourceData;
+END
+
+DECLARE @rc = @@ROWCOUNT;
+PRINT 'Ingested ' + CAST(@rc AS STRING) + ' rows for ' + @Topic;
+
+DROP CONNECTION csv_source;
+DROP TABLE #SourceData;

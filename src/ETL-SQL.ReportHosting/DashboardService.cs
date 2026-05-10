@@ -99,6 +99,10 @@ namespace ETL_SQL.ReportHosting
         /// </summary>
         public async Task<ReportManifest> SetParametersAsync(IEnumerable<(string Name, string Value)> updates, bool isInteraction = false)
         {
+            // Warm the session on first access so interaction calls have a live evaluator to work with.
+            if (_manifest == null || _evaluator == null)
+                await GetManifestAsync();
+
             // First RUN: do a full rebuild so all deferred (VISIBLE=OFF) visuals get data in one pass
             bool firstRun = !_hasAppliedParameters && !isInteraction;
             if (!isInteraction) _hasAppliedParameters = true;
@@ -339,6 +343,8 @@ namespace ETL_SQL.ReportHosting
         /// </summary>
         public async Task<ReportManifest?> DrillInAsync(string visualName, string clickedValue)
         {
+            if (_manifest == null || _evaluator == null)
+                await GetManifestAsync();
             if (_manifest == null || _evaluator == null) return null;
 
             var vm     = _manifest.Visuals.FirstOrDefault(v => v.Name.Equals(visualName, StringComparison.OrdinalIgnoreCase));
@@ -374,6 +380,8 @@ namespace ETL_SQL.ReportHosting
         /// </summary>
         public async Task<ReportManifest?> DrillUpAsync(string visualName, int targetDepth)
         {
+            if (_manifest == null || _evaluator == null)
+                await GetManifestAsync();
             if (_manifest == null || _evaluator == null) return null;
 
             var vm = _manifest.Visuals.FirstOrDefault(v => v.Name.Equals(visualName, StringComparison.OrdinalIgnoreCase));

@@ -1,0 +1,45 @@
+-- Sub-script: extract_entity.etlsql
+-- Path: samples/conversion/extract_entity.etlsql
+-- Inputs: @Topic (STRING)
+
+DECLARE @Topic STRING INPUT;
+
+PRINT 'Extracting ' + @Topic + ' with strict enforcement...';
+
+-- 1. Fetch data from Postgres
+DECLARE @sql = 'SELECT * FROM ' + @Topic;
+EXECUTE (@sql) AT system_a INTO #Raw;
+
+-- 2. Apply strict enforcement (Type, Length, Format)
+IF @Topic = 'hr_01_employees'
+BEGIN
+    SELECT 
+        CAST(emp_id AS INT) AS EMPLOYEE_ID,
+        CAST(LEFT(first_name + ' ' + last_name, 50) AS VARCHAR(50)) AS FULL_NAME,
+        CAST(FORMAT(hire_date, 'yyyy-MM-dd') AS VARCHAR(10)) AS HIRE_DATE,
+        CAST(LEFT(status, 20) AS VARCHAR(20)) AS STATUS
+    INTO #ExportSet
+    FROM #Raw;
+END
+ELSE IF @Topic = 'hr_02_demographics'
+BEGIN
+    SELECT 
+        CAST(emp_id AS INT) AS EMPLOYEE_ID,
+        CAST(FORMAT(birth_date, 'yyyy-MM-dd') AS VARCHAR(10)) AS BIRTH_DATE,
+        CAST(LEFT(gender, 10) AS VARCHAR(10)) AS GENDER
+    INTO #ExportSet
+    FROM #Raw;
+END
+ELSE
+BEGIN
+    -- Generic Topic Enforcement
+    SELECT 
+        CAST(emp_id AS INT) AS EMPLOYEE_ID,
+        CAST(LEFT(FORMAT(entry_date, 'yyyy-MM-dd'), 10) AS VARCHAR(10)) AS ENTRY_DATE,
+        CAST(LEFT(notes, 100) AS VARCHAR(100)) AS NOTES
+    INTO #ExportSet
+    FROM #Raw;
+END
+
+DECLARE @rc = @@ROWCOUNT;
+PRINT 'Extracted ' + CAST(@rc AS STRING) + ' rows for ' + @Topic;

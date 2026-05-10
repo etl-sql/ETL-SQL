@@ -224,14 +224,15 @@ public class ExecutionController(
         var perm = await GetEffectivePermissionAsync(report.FolderId);
         if (perm is null) return Forbid();
 
-        if (req.Params is not { Count: > 0 })
+        // Empty params is valid for non-interaction calls (cross-filter deselect = reset to clean state).
+        if (req.Params is null && req.IsInteraction)
             return BadRequest(new { error = "params array is required" });
 
         if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
             return Forbid();
 
         var svc      = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
-        var updates  = req.Params
+        var updates  = (req.Params ?? Enumerable.Empty<ParameterUpdateRequest>())
             .Where(p => !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => (p.Name, p.Value));
         var manifest = await svc.SetParametersAsync(updates, req.IsInteraction);

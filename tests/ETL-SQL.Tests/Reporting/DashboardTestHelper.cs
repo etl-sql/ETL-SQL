@@ -25,73 +25,88 @@ namespace ETL_SQL.Tests.Reporting
 {
     public static class DashboardTestHelper
     {
-        public static IServiceScopeFactory CreateMockScopeFactory()
+        // Handler types registered for every scope — kept as a shared list since it never changes.
+        private static readonly List<Type> ReportingHandlers = new()
         {
-            var mockScopeFactory = new Mock<IServiceScopeFactory>();
-            var mockScope = new Mock<IServiceScope>();
-            var mockProvider = new Mock<IServiceProvider>();
-            
-            var logger = NullLogger.Instance;
-            var security = new SecurityService(logger);
-            security.IsTestMode = true;
-            var sessions = new SessionStateManager(logger, security, new Mock<IConfiguration>().Object, null);
-            
-            var services = new ServiceCollection();
-            
-            // Register only handlers needed for reporting to avoid dependency hell
-            var reportingHandlers = new List<Type>
-            {
-                typeof(DeclareStatementHandler),
-                typeof(SetVariableStatementHandler),
-                typeof(SelectStatementHandler),
-                typeof(InsertStatementHandler),
-                typeof(ExecutePushdownStatementHandler),
-                typeof(CreateTableStatementHandler),
-                typeof(CreateConnectionStatementHandler),
-                typeof(CreateVisualStatementHandler),
-                typeof(CreatePageStatementHandler),
-                typeof(CreateDatasetStatementHandler),
-                typeof(CreateContainerStatementHandler),
-                typeof(CreateNavigationStatementHandler),
-                typeof(CreateButtonStatementHandler),
-                typeof(CreateStyleStatementHandler),
-                typeof(CreateThemeStatementHandler),
-                typeof(SetReportMetadataStatementHandler),
-                typeof(ExportReportStatementHandler)
-            };
+            typeof(DeclareStatementHandler),
+            typeof(SetVariableStatementHandler),
+            typeof(SelectStatementHandler),
+            typeof(InsertStatementHandler),
+            typeof(ExecutePushdownStatementHandler),
+            typeof(CreateTableStatementHandler),
+            typeof(CreateConnectionStatementHandler),
+            typeof(CreateVisualStatementHandler),
+            typeof(CreatePageStatementHandler),
+            typeof(CreateDatasetStatementHandler),
+            typeof(CreateContainerStatementHandler),
+            typeof(CreateNavigationStatementHandler),
+            typeof(CreateButtonStatementHandler),
+            typeof(CreateStyleStatementHandler),
+            typeof(CreateThemeStatementHandler),
+            typeof(SetReportMetadataStatementHandler),
+            typeof(ExportReportStatementHandler)
+        };
 
-            foreach (var type in reportingHandlers)
+        /// <summary>
+        /// Builds a fresh <see cref="ServiceProvider"/> for one DI scope.
+        /// Each call produces an independent provider so singletons (EvaluatorComponentRegistry,
+        /// ReportRegistry, FunctionRegistry, …) are never shared across scopes or evaluations.
+        /// </summary>
+        private static ServiceProvider BuildScopeProvider()
+        {
+            var logger   = NullLogger.Instance;
+            var security = new SecurityService(logger) { IsTestMode = true };
+            var sessions = new SessionStateManager(logger, security, new Mock<IConfiguration>().Object, null);
+
+            var services = new ServiceCollection();
+
+            foreach (var type in ReportingHandlers)
             {
                 services.AddTransient(typeof(IStatementHandler), type);
                 services.AddTransient(type);
             }
 
+            var connRegistry = new ConnectorRegistry();
+            connRegistry.Register(new MockDbConnector());
+            connRegistry.Register(new FlatFileConnector());
+
             services.AddSingleton<ILogger>(logger);
             services.AddSingleton(security);
-            var registry = new ConnectorRegistry();
-            registry.Register(new MockDbConnector());
-            registry.Register(new FlatFileConnector());
-            services.AddSingleton<IConnectorRegistry>(registry);
+            services.AddSingleton<IConnectorRegistry>(connRegistry);
             services.AddSingleton<IFunctionRegistry, FunctionRegistry>();
             services.AddSingleton<ILineageTracker, LineageTracker>();
             services.AddSingleton<IDockerManager>(new Mock<IDockerManager>().Object);
             services.AddSingleton<ISessionStateManager>(sessions);
             services.AddSingleton<ILanguageHelpRegistry, LanguageHelpRegistry>();
+            // Fresh per-scope singletons — this is the key isolation guarantee:
+            // EvaluatorComponentRegistry.Initialize() is only ever called by one Evaluator per provider.
             services.AddSingleton<EvaluatorComponentRegistry>();
-            
-            // DashboardService needs a real ReportContext in the provider if it's going to use it
             services.AddSingleton<IReportContext, ReportRegistry>();
-            
             services.AddTransient<Evaluator>();
-            
-            var provider = services.BuildServiceProvider();
-            mockProvider.Setup(x => x.GetService(typeof(Evaluator))).Returns(() => provider.GetRequiredService<Evaluator>());
-            mockProvider.Setup(x => x.GetService(typeof(IEnumerable<IStatementHandler>))).Returns(() => provider.GetRequiredService<IEnumerable<IStatementHandler>>());
-            mockProvider.Setup(x => x.GetService(It.IsAny<Type>())).Returns((Type t) => provider.GetService(t));
-            
-            mockScope.Setup(x => x.ServiceProvider).Returns(mockProvider.Object);
-            mockScopeFactory.Setup(x => x.CreateScope()).Returns(mockScope.Object);
-            
+
+            return services.BuildServiceProvider();
+        }
+
+        /// <summary>
+        /// Returns a scope factory whose <c>CreateScope()</c> produces a brand-new
+        /// <see cref="ServiceProvider"/> on every call, matching real ASP.NET Core scoping
+        /// semantics and preventing singleton state from leaking between evaluations.
+        /// </summary>
+        public static IServiceScopeFactory CreateMockScopeFactory()
+        {
+            var mockScopeFactory = new Mock<IServiceScopeFactory>();
+
+            mockScopeFactory
+                .Setup(x => x.CreateScope())
+                .Returns(() =>
+                {
+                    var provider  = BuildScopeProvider();
+                    var mockScope = new Mock<IServiceScope>();
+                    mockScope.Setup(s => s.ServiceProvider).Returns(provider);
+                    mockScope.Setup(s => s.Dispose()).Callback(() => provider.Dispose());
+                    return mockScope.Object;
+                });
+
             return mockScopeFactory.Object;
         }
     }

@@ -1,0 +1,45 @@
+-- Setup Script for System B (Target)
+-- Path: samples/conversion/setup_sys_b.etlsql
+
+BEGIN TRY
+    -- 1. Define Connection to System B (Postgres)
+    CREATE CONNECTION system_b ON POSTGRES()
+        WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+
+    DECLARE @topics LIST = (
+        'hr_01_employees', 'hr_02_demographics', 'hr_03_salary_history', 'hr_04_job_history', 
+        'hr_05_w4_info', 'hr_06_dependents', 'hr_07_performance', 'hr_08_training', 
+        'hr_09_benefits', 'hr_10_contacts', 'hr_11_leave_req', 'hr_12_time_entries', 
+        'hr_13_stock_grants', 'hr_14_skills', 'hr_15_equipment', 'hr_16_locations', 
+        'hr_17_cost_centers', 'hr_18_budgets', 'hr_19_projects', 'hr_20_time_off', 
+        'hr_21_grievances', 'hr_22_health', 'hr_23_background', 'hr_24_visa', 
+        'hr_25_education', 'hr_26_employers', 'hr_27_interviews', 'hr_28_onboarding', 
+        'hr_29_offboarding', 'hr_30_access_logs'
+    );
+
+    PRINT 'Provisioning 30 System B Tables (Target Schema)...';
+
+    FOREACH @topic IN @topics
+    BEGIN
+        DECLARE @targetTable = 'sysb_' + @topic;
+        PRINT 'Creating target table: ' + @targetTable;
+        
+        DECLARE @ddl = 'DROP TABLE IF EXISTS ' + @targetTable + ' CASCADE; ';
+        
+        -- Different Schema for System B
+        IF @topic = 'hr_01_employees' 
+            SET @ddl = @ddl + 'CREATE TABLE ' + @targetTable + ' (EID INT PRIMARY KEY, StaffName VARCHAR(200), StartDt DATE, ActiveStatus VARCHAR(50));';
+        ELSE IF @topic = 'hr_02_demographics'
+            SET @ddl = @ddl + 'CREATE TABLE ' + @targetTable + ' (EID INT, DOB DATE, Sex VARCHAR(20));';
+        ELSE
+            SET @ddl = @ddl + 'CREATE TABLE ' + @targetTable + ' (EID INT, ImportDt DATE, Payload VARCHAR(500));';
+
+        EXECUTE (@ddl) AT system_b;
+    END
+
+    PRINT 'System B Provisioning Complete.';
+END TRY
+BEGIN CATCH
+    PRINT 'System B Setup failed: ' + ERROR_MESSAGE();
+    THROW;
+END CATCH

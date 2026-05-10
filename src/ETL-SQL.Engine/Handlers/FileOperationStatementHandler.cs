@@ -10,7 +10,7 @@ using ETL_SQL.Core;
 namespace ETL_SQL.Engine.Handlers
 {
     /// <summary>
-    /// Handles various file operations including DELETE, COPY, MOVE, RENAME, COMPRESS, ENCRYPT, and DECRYPT.
+    /// Handles various file operations including DELETE, COPY, MOVE, RENAME, COMPRESS, DECOMPRESS, ENCRYPT, and DECRYPT.
     /// </summary>
     public class FileOperationStatementHandler : IStatementHandler
     {
@@ -71,7 +71,7 @@ namespace ETL_SQL.Engine.Handlers
             {
                 switch (stmt.Type)
                 {
-                        case FileOpType.Delete:
+                    case FileOpType.Delete:
                         // Security Hardening: Block deleting script files and dangerous file types
                         context.SecurityService.ValidateWriteAccess(source);
                         context.SecurityService.ValidateFileType(source);
@@ -92,7 +92,7 @@ namespace ETL_SQL.Engine.Handlers
                             _logger.Warning("File not found for deletion: {Source}", source);
                         }
                         break;
-                        case FileOpType.Copy:
+                    case FileOpType.Copy:
                         if (dest != null)
                         {
                             // Security Hardening: Block writing to script files and dangerous types
@@ -107,7 +107,7 @@ namespace ETL_SQL.Engine.Handlers
                             File.Copy(source, dest, overwrite);
                         }
                         break;
-                        case FileOpType.Move:
+                    case FileOpType.Move:
                         if (dest != null)
                         {
                             // Security Hardening: Block writing to script files and dangerous types
@@ -122,7 +122,7 @@ namespace ETL_SQL.Engine.Handlers
                             File.Move(source, dest);
                         }
                         break;
-                        case FileOpType.Rename:
+                    case FileOpType.Rename:
                         if (dest != null)
                         {
                             var fileName = Path.GetFileName(source);
@@ -145,7 +145,7 @@ namespace ETL_SQL.Engine.Handlers
                             throw new ExecutionException("RENAME FILE requires a destination name.");
                         }
                         break;
-                        case FileOpType.Compress:
+                    case FileOpType.Compress:
                         if (dest != null)
                         {
                             // Security Hardening: Block writing to script files and dangerous types
@@ -173,7 +173,25 @@ namespace ETL_SQL.Engine.Handlers
                             }
                         }
                         break;
-                                            case FileOpType.Encrypt:
+                    case FileOpType.Decompress:
+                        if (dest != null)
+                        {
+                            // Security Hardening: Block writing to script files and dangerous types
+                            context.SecurityService.ValidateWriteAccess(dest);
+                            context.SecurityService.ValidateFileType(dest);
+
+                            if (File.Exists(source))
+                            {
+                                ZipFile.ExtractToDirectory(source, dest, overwrite);
+                                context.Log($"File decompressed: {source} -> {dest}", ConsoleColor.Green);
+                            }
+                            else
+                            {
+                                throw new ExecutionException($"Source for DECOMPRESS_FILE does not exist: {source}");
+                            }
+                        }
+                        break;
+                    case FileOpType.Encrypt:
                         if (dest != null)
                         {
                             // Security Hardening: Block writing to script files and dangerous types
@@ -200,7 +218,7 @@ namespace ETL_SQL.Engine.Handlers
                             }
                         }
                         break;
-                                            case FileOpType.Decrypt:
+                    case FileOpType.Decrypt:
                         if (dest != null)
                         {
                             // Security Hardening: Block writing to script files and dangerous types

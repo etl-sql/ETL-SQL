@@ -1,0 +1,45 @@
+-- Cleanup Script: Post-Migration Cleanup
+-- Path: samples/conversion/cleanup.etlsql
+
+-- ### ALLOW_FILE_OPERATIONS = 100
+SET ALLOW_FILE_OPERATIONS = 100;
+
+DECLARE @StagingDir PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\import_staging\';
+DECLARE @KeyDir     PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\keys\';
+DECLARE @ZipFile    PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\hr_migration.zip';
+DECLARE @OutputDir  PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\output\';
+
+PRINT 'Cleaning up migration artifacts...';
+
+-- 1. Remove staging directory contents and directory itself
+IF DIRECTORY_EXISTS(@StagingDir)
+BEGIN
+    DELETE DIRECTORY_CONTENTS @StagingDir WITH(RECURSIVE=ON);
+    DELETE DIRECTORY @StagingDir;
+    PRINT 'Staging directory removed.';
+END
+
+-- 2. Remove keys
+IF DIRECTORY_EXISTS(@KeyDir)
+BEGIN
+    DELETE DIRECTORY_CONTENTS @KeyDir WITH(RECURSIVE=ON);
+    DELETE DIRECTORY @KeyDir;
+    PRINT 'Keys removed.';
+END
+
+-- 3. Remove output directory (System A export staging)
+IF DIRECTORY_EXISTS(@OutputDir)
+BEGIN
+    DELETE DIRECTORY_CONTENTS @OutputDir WITH(RECURSIVE=ON);
+    DELETE DIRECTORY @OutputDir;
+    PRINT 'Export staging directory removed.';
+END
+
+-- 4. Remove the migration package
+IF FILE_EXISTS(@ZipFile)
+BEGIN
+    DELETE FILE @ZipFile;
+    PRINT 'Migration ZIP removed.';
+END
+
+PRINT 'Cleanup Complete.';

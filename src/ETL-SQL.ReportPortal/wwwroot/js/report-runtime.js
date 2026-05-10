@@ -86,6 +86,7 @@
     let isStagedMode = false;     // Phase 2: Staged Mode
     let _refreshTimers = [];
     let _lastActivePage = null;
+    let _drillInFlight = false;
     const _drillHistory = [];
     const _registeredMaps = new Set();
     const _crossFilterStates = {}; // Keyed by page element ID; persists across renderManifest re-builds
@@ -481,6 +482,13 @@
             vscode.postMessage({ type: 'exportReport', format: 'markdown' });
         });
         actions.appendChild(mdBtn);
+
+        const publishBtn = document.createElement('button');
+        publishBtn.className = 'header-btn';
+        publishBtn.title = 'Publish to Report Portal';
+        publishBtn.textContent = 'Publish';
+        publishBtn.addEventListener('click', () => vscode.postMessage({ type: 'publish' }));
+        actions.appendChild(publishBtn);
 
         header.appendChild(left);
         header.appendChild(actions);
@@ -2667,7 +2675,10 @@
     }
 
     function postDrillIn(visualName, clickedValue) {
+        if (_drillInFlight) return;
+        _drillInFlight = true;
         if (vscode) {
+            _drillInFlight = false;
             vscode.postMessage({ type: 'drillIn', visualName, clickedValue });
             return;
         }
@@ -2675,7 +2686,10 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ visualName, direction: 'IN', clickedValue })
-        }).then(r => r.ok ? r.json() : null).then(m => { if (m) renderManifest(m); });
+        }).then(r => r.ok ? r.json() : null).then(m => {
+            _drillInFlight = false;
+            if (m) renderManifest(m);
+        }).catch(() => { _drillInFlight = false; });
     }
 
     function postDrillUp(visualName, targetDepth) {

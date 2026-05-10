@@ -1,0 +1,16 @@
+-- Verification Script: check_sys_b.etlsql
+-- Path: samples/conversion/check_sys_b.etlsql
+
+CREATE CONNECTION system_b ON POSTGRES()
+    WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+
+PRINT 'Verifying System B Ingestion...';
+
+PRINT 'Sample: sysb_hr_01_employees';
+SELECT * FROM system_b.sysb_hr_01_employees LIMIT 5;
+
+PRINT 'Sample: sysb_hr_02_demographics';
+SELECT * FROM system_b.sysb_hr_02_demographics LIMIT 5;
+
+PRINT 'Total Row Count for Employees:';
+SELECT COUNT(*) AS RowCount FROM system_b.sysb_hr_01_employees;

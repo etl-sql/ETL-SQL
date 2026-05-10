@@ -979,7 +979,7 @@ CREATE VISUAL BarMonthlyByRegion AS BAR (
 
 -- Explainer card
 CREATE VISUAL DrillInExplainer AS TEXT (
-    CONTENT  = 'Click any bar to drill in one level. The same chart re-renders at the next depth with a breadcrumb trail above it. Click a breadcrumb segment to jump back up.',
+    DEFAULT  = 'Click any bar to drill in one level. The same chart re-renders at the next depth with a breadcrumb trail above it. Click a breadcrumb segment to jump back up.',
     TITLE    = 'How DRILL_IN works',
     STYLE    = CardGlass
 );

@@ -56,7 +56,7 @@ CREATE PAGE Dashboard AS LAYOUT (
 
             try
             {
-                var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+                await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
                 var manifest = await service.GetManifestAsync();
 
                 // 2. Verify Manifest Structure
@@ -84,10 +84,11 @@ CREATE PAGE Dashboard AS LAYOUT (
         public async Task GoldenWorkflowSample_BuildsInteractableExportableManifest()
         {
             var scriptPath = GetGoldenWorkflowPath();
-            var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+            await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
 
             var manifest = await service.GetManifestAsync();
 
+            Assert.Null(manifest.Error); // guard: if evaluation failed, Error contains the reason
             Assert.Equal("Golden Sales Operations Workflow", manifest.Title);
             Assert.Equal("light", manifest.Theme);
             Assert.Equal(10, manifest.Visuals.Count);
@@ -151,7 +152,7 @@ CREATE PAGE Main AS LAYOUT (
 
             try
             {
-                var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+                await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
                 
                 // Initial build (All regions)
                 var manifest1 = await service.GetManifestAsync();
@@ -191,7 +192,7 @@ CREATE PAGE Main AS LAYOUT (
 
             try
             {
-                var service = new DashboardService(reportPath, DashboardTestHelper.CreateMockScopeFactory());
+                await using var service = new DashboardService(reportPath, DashboardTestHelper.CreateMockScopeFactory());
 
                 var result = await service.RunScriptAsync(siblingScript, new());
 
@@ -271,7 +272,7 @@ CREATE VISUAL SalesTable AS TABLE (
 
             try
             {
-                var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+                await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
 
                 var manifest = await service.GetManifestAsync();
                 var table = manifest.Visuals.Single(v => v.Name == "SalesTable");
@@ -329,7 +330,7 @@ CREATE PAGE Dashboard AS LAYOUT (
 
             try
             {
-                var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+                await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
 
                 var manifest = await service.GetManifestAsync();
                 var page = manifest.Pages.Single(p => p.Name == "Dashboard");
@@ -387,7 +388,7 @@ CREATE BUTTON SearchButton AS RUN (
 
             try
             {
-                var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+                await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
 
                 var manifest = await service.GetManifestAsync();
                 var pickerAction = manifest.Visuals
@@ -426,7 +427,7 @@ CREATE BUTTON SearchButton AS RUN (
 
             try
             {
-                var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+                await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
 
                 var manifest = await service.GetManifestAsync();
                 var json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = false });

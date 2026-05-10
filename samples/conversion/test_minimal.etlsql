@@ -1,0 +1,7 @@
+CREATE CONNECTION system_a ON POSTGRES() WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
+EXECUTE system_a BEGIN
+    DROP TABLE IF EXISTS test_table;
+    CREATE TABLE test_table (id INT);
+    INSERT INTO test_table VALUES (1);
+END;
+SELECT * FROM system_a.test_table;
