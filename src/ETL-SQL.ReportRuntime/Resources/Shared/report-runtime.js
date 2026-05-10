@@ -1252,7 +1252,7 @@
                     if (!(k in prevParams)) restoreBatch[k] = '';
                 });
                 if (_drillHistory.length === 0) hideDrillBackButton();
-                else btn.innerHTML = '← Back' + (_drillHistory.length > 0 ? ` (${_drillHistory.length})` : '');
+                else btn.innerHTML = '← Back' + (_drillHistory.length > 1 ? ` (${_drillHistory.length})` : '');
                 if (vscode) {
                     vscode.postMessage({ type: 'refreshReport', parameters: restoreBatch });
                 } else {
