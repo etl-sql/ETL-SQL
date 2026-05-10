@@ -35,8 +35,9 @@ namespace ETL_SQL.Analysis.Linting.Rules
             {
                 bool hasGroupBy = (select.GroupBy != null && select.GroupBy.Count > 0) || select.GroupingSet != null;
                 bool hasAggregates = select.Columns.Any(c => ContainsAggregate(c.Expression)) || ContainsAggregate(select.HavingClause);
+                bool allColumnsAreAggregates = select.Columns.All(c => ContainsAggregate(c.Expression));
 
-                if (hasAggregates && !hasGroupBy)
+                if (hasAggregates && !hasGroupBy && !allColumnsAreAggregates)
                 {
                     results.Add(new LintResult
                     {
