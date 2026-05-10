@@ -998,16 +998,18 @@ SetParameterAction : VisualAction   // parameter name, value expression (column 
 ### 9.6 Projects to Create
 
 ```
-ETL-SQL.ReportBuilder          (class lib)   — ReportManifest POCOs, ManifestBuilder, MarkdownRenderer, ChartJsRenderer, SnapshotStore
+ETL-SQL.Reporting              (class lib)   — ReportManifest POCOs, ManifestBuilder, MarkdownRenderer, EChartsRenderer, SnapshotStore
+ETL-SQL.ReportHosting          (class lib)   — DashboardService, DashboardServiceFactory, report session state
 ETL-SQL.ReportBuilder.CLI      (exe)         — `etl-sql-report build/serve/refresh` entry point
-ETL-SQL.ReportPlayer           (ASP.NET Core exe) — DashboardService, minimal API controllers, HTML/Chart.js dashboard host
+ETL-SQL.ReportPlayer           (ASP.NET Core exe) — minimal API routes, HTML/ECharts dashboard host
 ```
 
 **Dependency graph:**
 ```
-ReportBuilder         → Core, Engine, Connectors, Orchestrator
-ReportBuilder.CLI     → ReportBuilder, Core, Engine, Connectors, Orchestrator
-ReportPlayer          → ReportBuilder, Core, Engine, Connectors, Orchestrator
+Reporting             → Core
+ReportHosting         → Reporting, Engine
+ReportBuilder.CLI     → Reporting, Core, Engine, Connectors, Orchestrator
+ReportPlayer          → ReportHosting, Reporting
 ```
 
 ReportPlayer does NOT reference ReportBuilder.CLI. The CLI and the web player are separate hosts that both use the ReportBuilder library.
@@ -1278,7 +1280,7 @@ In deployed cached mode, the script's Layer 1 (`CREATE DATASET` statements) is b
 #### Phase 9B — Research Paper (ReportBuilder + CLI `build` command)
 **Goal:** A data professional can write a `.rptsql` script and produce a shareable `.md` document with embedded charts — the R Markdown experience.
 
-1. Create `ETL-SQL.ReportBuilder` project: `ReportManifest` POCOs, `ManifestBuilder`, `ChartJsRenderer`, `MarkdownRenderer`, `SnapshotStore`
+1. Create reporting library: `ReportManifest` POCOs, `ManifestBuilder`, chart renderer, `MarkdownRenderer`, `SnapshotStore`
 2. `ManifestBuilder`: walks `ISessionState` after script evaluation, collects all `VisualDefinition`/`PageDefinition`/`DatasetDefinition` entries into a `ReportManifest`
 3. `ChartJsRenderer`: converts `VisualDefinition` + data rows → Chart.js config JSON (see 9.7); all chart-shape logic lives here
 4. `MarkdownRenderer`: runs each visual's SOURCE query once, calls `ChartJsRenderer`, embeds config in `<!-- CHART:{...} -->` comments alongside markdown tables
@@ -1302,7 +1304,7 @@ In deployed cached mode, the script's Layer 1 (`CREATE DATASET` statements) is b
 **Goal:** Interactive dashboard accessible in a browser; other users can change parameters, filter with slicers, and drill down. CREATE DATASET provides scheduled refresh for deployed scenarios.
 
 1. Create `ETL-SQL.ReportPlayer` project (ASP.NET Core minimal API)
-2. Implement `DashboardService` (see 9.9) — singleton per process, holds live `Evaluator` + `ISessionState`
+2. Implement `DashboardService` in shared report hosting — singleton per process, holds live `Evaluator` + report session state
 3. Implement minimal API endpoints: `/api/manifest`, `/api/visual/{name}/data`, `/api/parameter/{name}`, `/api/drill-down`, `/api/drill-back` (see 9.9)
 4. Serve `dashboard.html` + `report-runtime.js` as static files from Kestrel
 5. Implement `report-runtime.js` parameter-change flow: POST to `/api/parameter`, then re-fetch and update only affected Chart.js instances

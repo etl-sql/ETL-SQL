@@ -274,6 +274,7 @@ Before moving source files, projects, report runtime assets, or host-owned behav
 - Keep Core focused on shared language contracts, Engine focused on execution, Connectors focused on provider I/O, and host shells focused on hosting.
 - Move linting, lineage, explain, dialect checks, help verification, and diagnostics toward `ETL-SQL.Analysis` in small, testable steps.
 - Keep report semantics in the reporting layer; ReportPlayer, ReportPortal, and VS Code should host reports, not fork manifest, style, visual, page, dataset, or chart behavior.
+- Keep reusable report session hosting in `ETL-SQL.ReportHosting`; ReportPlayer and ReportPortal may consume it, but Portal should not depend on Player for execution/session behavior.
 - Preserve the VS Code extension's ecosystem-facing `src/etl-sql-vscode` folder/package naming unless there is a deliberate release plan.
 - Do not start source cleanup with a broad restructure. Prefer one ownership boundary at a time, update docs/tests with the move, and leave compatibility shims while hosts migrate.
 

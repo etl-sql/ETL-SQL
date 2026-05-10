@@ -33,7 +33,7 @@ For the user-facing syntax reference, see [Docs/Report_SQL_Guide.md](../Report_S
                                 │
                                 ▼
 ┌───────────────────────────────────────────────────────────────┐
-│  ETL-SQL.ReportBuilder                                        │
+│  ETL-SQL.Reporting                                            │
 │  ManifestBuilder   — queries visuals, materializes rows       │
 │  EChartsRenderer   — produces ECharts option JSON             │
 │  SvgChartRenderer  — server-side SVG for PDF export           │
@@ -45,7 +45,7 @@ For the user-facing syntax reference, see [Docs/Report_SQL_Guide.md](../Report_S
    ┌───────┴─────────────────────────────────────┐
    ▼                                             ▼
 ETL-SQL.ReportBuilder.CLI              ETL-SQL.ReportPlayer
-build / refresh / serve                Kestrel HTTP + DashboardService
+build / refresh / serve                Kestrel HTTP + ReportHosting
   .md  .json  .pdf  .snapshot.json    Single-report: GET /
                                       Multi-report:  GET /  (catalog)
                                                      GET /reports/{name}
@@ -60,9 +60,11 @@ build / refresh / serve                Kestrel HTTP + DashboardService
 |---------|------|
 | `ETL-SQL.Core` | Report-SQL lexer tokens, AST nodes (`ReportAst.cs`), parser (`StatementParser.Report.cs`) |
 | `ETL-SQL.Engine` | Statement handlers that register visual/page/dataset/container/navigation definitions into `IExecutionContext` |
-| `ETL-SQL.ReportBuilder` | Manifest building, ECharts rendering, SVG rendering, PDF export, Markdown rendering, snapshot persistence |
+| `ETL-SQL.Reporting` | Manifest building, ECharts rendering, SVG rendering, PDF/CSV/Markdown/terminal rendering, snapshot persistence, shared interaction refresh semantics |
+| `ETL-SQL.ReportHosting` | Reusable report sessions, parameter state, selective refresh, manifest caching, background dataset refresh timers, and multi-report manifest factories |
+| `ETL-SQL.ReportBuilder` | Engine-facing `EXPORT REPORT` statement handler compatibility assembly |
 | `ETL-SQL.ReportBuilder.CLI` | `etl-sql-report` CLI — `build`, `refresh`, `serve` sub-commands |
-| `ETL-SQL.ReportPlayer` | Kestrel web server with live parameter binding, selective rebuild, multi-report hosting |
+| `ETL-SQL.ReportPlayer` | Local Kestrel web server, routes, HTML shell, static asset hosting, and report embedding |
 
 ---
 
@@ -274,7 +276,7 @@ string? ReportDescription { get; set; }
 
 ---
 
-## 5. Manifest Building (`ETL-SQL.ReportBuilder`)
+## 5. Manifest Building (`ETL-SQL.Reporting`)
 
 ### 5.1 Data Flow
 
@@ -445,7 +447,7 @@ Chart visuals use `echarts.init(div)` + `chart.setOption(JSON.parse(config))`. F
 
 ## 7. SnapshotStore
 
-**File:** `ETL-SQL.ReportBuilder/SnapshotStore.cs`  
+**File:** `ETL-SQL.Reporting/SnapshotStore.cs`
 **Format:** indented JSON at `<script-basename>.snapshot.json`
 
 | Method | Behavior |
@@ -477,9 +479,9 @@ WITH PARAMETERS (
 );
 ```
 
-### 8.2 Propagation (DashboardService — web mode)
+### 8.2 Propagation (ReportHosting DashboardService — web mode)
 
-1. `DashboardService` maintains `Dictionary<string, string> _parameters`
+1. `ETL-SQL.ReportHosting.DashboardService` maintains `Dictionary<string, string> _parameters`
 2. Initial defaults are loaded from `PageParameter.DefaultValue`
 3. On filter interaction, browser posts to `POST /api/parameter` (single) or `POST /api/parameters` (batch)
 4. `SetParameterAsync` / `SetParametersAsync` updates the dict
@@ -538,7 +540,7 @@ All filter types use `SET_PARAMETER` in their `ACTIONS` clause to bind the selec
 
 ### 9.3 `DashboardServiceFactory` (multi-report)
 
-`DashboardServiceFactory` maintains a `ConcurrentDictionary<string, DashboardService>` keyed by report name. `GetService(name)` uses `GetOrAdd` for lazy, thread-safe service creation. Relative paths in `reports.json` are resolved against the manifest file's directory.
+`ETL-SQL.ReportHosting.DashboardServiceFactory` maintains a `ConcurrentDictionary<string, DashboardService>` keyed by report name. `GetService(name)` uses `GetOrAdd` for lazy, thread-safe service creation. Relative paths in `reports.json` are resolved against the manifest file's directory.
 
 ### 9.4 Startup
 
@@ -575,7 +577,7 @@ Invoked as `etl-sql-report <command>`.
 | **9A** | `ReportAst.cs` — core AST nodes; `StatementParser.Report.cs` — CREATE VISUAL / PAGE / DATASET |
 | **9B** | `ManifestBuilder`, `EChartsRenderer`, `MarkdownRenderer`, `SnapshotStore`, `ReportManifest` POCOs |
 | **9C** | `report-runtime.js` — dual-mode client runtime for VS Code preview and web |
-| **9D** | `DashboardService`, `ETL-SQL.ReportPlayer` Kestrel server, parameter binding, live rebuild |
+| **9D** | `ETL-SQL.ReportHosting.DashboardService`, `ETL-SQL.ReportPlayer` Kestrel server, parameter binding, live rebuild |
 | **9E** | Filter visual types (DATEPICKER, SLIDER, MULTISELECT, SEARCH), batch parameter endpoint, responsive layout, page-level THEME |
 | **9F** | Multi-report hosting (`DashboardServiceFactory`, `reports.json`, catalog page, per-report API prefix) |
 | **9G** | PDF export (`SvgChartRenderer`, `PdfExporter` via QuestPDF), `--format pdf` CLI flag |

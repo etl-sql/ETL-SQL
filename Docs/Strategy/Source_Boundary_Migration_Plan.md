@@ -174,6 +174,17 @@ Current progress:
 - Report CSV rendering moved from ReportBuilder/ReportPortal host code into `ETL-SQL.Reporting` as `CsvRenderer`; export hosts now share the same table selection and CSV escaping behavior.
 - Reusable report session hosting moved from ReportPlayer into `ETL-SQL.ReportHosting`; ReportPlayer and ReportPortal now consume the same `DashboardService`/`DashboardServiceFactory` without a host-to-host project reference.
 
+Phase 5 is functionally complete for the first-pass boundary. Hosts now delegate shared report session, rendering, snapshot, runtime, and interaction semantics to lower layers.
+
+### Phase 6: Documentation and Handoff Alignment
+
+After source moves land, align architecture, strategy, and agent-facing docs so future work does not reintroduce old ownership assumptions.
+
+Current progress:
+
+- Reporting and Portal architecture docs now describe `ETL-SQL.Reporting`, `ETL-SQL.ReportRuntime`, and `ETL-SQL.ReportHosting` as the shared boundaries.
+- Portal strategy notes now point reusable report sessions at `ReportHosting`, report exporters/snapshot helpers at `Reporting`, and browser assets at `ReportRuntime`.
+
 ## Move Checklist
 
 Before moving files or projects:

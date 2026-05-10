@@ -57,7 +57,8 @@ statements.
 │              └──────────────────────┘                  │
 └──────────┬──────────────────────────────────────────────┘
            │
-           ├── ETL-SQL.ReportBuilder  (script eval + manifest + PdfExporter)
+           ├── ETL-SQL.ReportHosting  (report sessions + parameter state)
+           ├── ETL-SQL.Reporting      (manifest + Csv/Pdf exporters)
            ├── ETL-SQL.Engine         (query execution + SEND EMAIL handler)
            └── ETL-SQL.Orchestrator   (dataset refresh jobs — separate process)
 ```
@@ -69,8 +70,8 @@ statements.
 | Web framework | ASP.NET Core (Kestrel) | Already used by ReportPlayer; no IIS dependency |
 | Portal metadata | SQLite via EF Core | Zero-install, single file, cross-platform |
 | Authentication | ASP.NET Core Identity + JWT | Built-in; bcrypt password hashing by default |
-| PDF export | `PdfExporter` + `SvgChartRenderer` (QuestPDF) | Already built in `ReportBuilder`; no external runtime |
-| CSV export | Manual RFC 4180 writer | Trivial; no additional dependency |
+| PDF export | `PdfExporter` + `SvgChartRenderer` (QuestPDF) | Already built in `ETL-SQL.Reporting`; no external runtime |
+| CSV export | `CsvRenderer` | Shared with engine/portal export paths |
 | Email delivery | Engine `SEND EMAIL` statement | Existing `EmailStatementHandler`; portal generates + executes the script |
 | Deployment | `dotnet publish --self-contained` | Single-folder xcopy deploy |
 
@@ -83,7 +84,7 @@ statements.
    workflow — files are checked in/out normally and the portal detects changes
    automatically (see decision 5).
 
-2. **Session isolation**: Per-user. Each user gets their own `DashboardService`
+2. **Session isolation**: Per-user. Each user gets their own `ETL-SQL.ReportHosting.DashboardService`
    instance per report so parameter state (slicer selections, date ranges, etc.) is
    independent. Implemented as `ConcurrentDictionary<(reportId, userId), DashboardService>`
    with LRU eviction controlled by `SessionCacheMaxSize` (max entries) and
@@ -91,7 +92,7 @@ statements.
    next parameter interaction transparently rebuilds it from the current snapshot.
 
 3. **PDF rendering**: No Chromium. The existing `PdfExporter` + `SvgChartRenderer`
-   in `ETL-SQL.ReportBuilder` renders charts from the `ReportManifest` data directly —
+   in `ETL-SQL.Reporting` renders charts from the `ReportManifest` data directly —
    same pipeline as `etl-sql-report build --format pdf`. All native libs ship
    cross-platform in the QuestPDF NuGet package.
 
@@ -157,7 +158,7 @@ statements.
     the Publisher level — the same model as any ETL-SQL script author.
 
 11. **Snapshot storage**: `ReportManifest` is written to disk via the existing
-    `SnapshotStore` in `ETL-SQL.ReportBuilder`. The `ReportSnapshots` table stores a
+    `SnapshotStore` in `ETL-SQL.Reporting`. The `ReportSnapshots` table stores a
     file path (`ManifestPath`), not the JSON body. This avoids SQLite bloat from
     large manifests (large reports can be megabytes of JSON) and reuses the existing
     snapshot infrastructure.
@@ -389,7 +390,7 @@ frontend yet.
 invalidated on dataset refresh or script change.
 
 ### 2.1 Report Execution
-- `POST /api/reports/{id}/execute` — runs the `.rptsql` script via `DashboardService`.
+- `POST /api/reports/{id}/execute` — runs the `.rptsql` script via `ETL-SQL.ReportHosting.DashboardService`.
   Requires `Execute` permission.
 - Parameters passed in request body; validated against declared page parameters.
 - Async: returns `jobId`; client polls `GET /api/jobs/{jobId}`.
@@ -445,9 +446,9 @@ cleanly into the published artifact. Upgrade to React/Vue in v2 if complexity de
 | `/profile/subscriptions` | User's own subscription list and preferences |
 
 ### 3.3 Report Viewer Reuse
-`report-runtime.js` and the ECharts bundle are copied from `ReportPlayer/wwwroot` at
-**build time** via `.csproj` file copy targets — not a one-time manual copy. This
-ensures the portal always ships the current version of the viewer.
+`report-runtime.js`, CSS, and browser dependencies are synced from
+`src/ETL-SQL.ReportRuntime/Resources/Shared` into ReportPlayer, ReportPortal, and
+the VS Code extension. This ensures every host ships the same report canvas.
 
 ### 3.4 Parameter Interaction
 Slicer and parameter changes POST to the backend, which calls `SetParameterAsync` on
@@ -628,11 +629,12 @@ parallel. Phase 4 is short because `PdfExporter` and CSV generation already exis
 
 | Asset | Location | Reuse |
 | :--- | :--- | :--- |
-| `DashboardService` | `ReportPlayer` | Per-user instance per report, LRU-pooled |
-| `ManifestBuilder` | `ReportBuilder` | Produces the manifest written to disk by `SnapshotStore` |
-| `SnapshotStore` | `ReportBuilder` | Writes/reads manifest files; portal stores the path in SQLite |
-| `PdfExporter` + `SvgChartRenderer` | `ReportBuilder` | Direct call; no changes needed |
-| `report-runtime.js` + ECharts | `ReportPlayer/wwwroot` | Build-time `.csproj` file copy into portal `wwwroot` |
+| `DashboardService` | `ReportHosting` | Per-user instance per report, LRU-pooled |
+| `ManifestBuilder` | `Reporting` | Produces the manifest written to disk by `SnapshotStore` |
+| `SnapshotStore` | `Reporting` | Writes/reads manifest files; portal stores the path in SQLite |
+| `PdfExporter` + `SvgChartRenderer` | `Reporting` | Direct call; no changes needed |
+| `CsvRenderer` | `Reporting` | Shared CSV table export behavior |
+| `report-runtime.js` + ECharts | `ReportRuntime/Resources/Shared` | Canonical assets synced into host `wwwroot`/media folders |
 | `EmailStatementHandler` | `Engine` | Portal generates + executes the `SEND EMAIL` script |
 | `IExecutionContext.ResolvePath` | `Engine` | Script path boundary enforcement |
 | Orchestrator `ExecutionHistory` | `Orchestrator` | Polled every 60s for dataset refresh completions |

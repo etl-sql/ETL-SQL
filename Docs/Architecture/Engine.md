@@ -6,7 +6,7 @@ Engineering reference for contributors. Covers the full project dependency graph
 
 ## Project Dependency Graph
 
-Eleven projects organized into six dependency tiers. Lower-tier projects have no knowledge of higher tiers.
+Projects are organized into dependency tiers. Lower-tier projects have no knowledge of higher tiers.
 
 ```
 Tier 0 — Foundation
@@ -19,17 +19,22 @@ Tier 2 — Connectors & Orchestration
   ETL-SQL.Connectors      → Core, Engine
   ETL-SQL.Orchestrator    → Core, Engine
 
-Tier 3 — Language Server
+Tier 3 — Analysis, Reporting, and Language Services
+  ETL-SQL.Analysis        → Core
+  ETL-SQL.Reporting       → Core
+  ETL-SQL.ReportRuntime   → static browser assets
   ETL-SQL.LanguageServer  → Core, Engine, Connectors
 
 Tier 4 — Application Shells
   ETL-SQL.TUI             → Core, Engine, Connectors, Orchestrator
   ETL-SQL.App             → Core, Engine, Connectors, Orchestrator, TUI
+  ETL-SQL.ReportHosting   → Core, Engine, Reporting
 
 Tier 5 — Report Layer
-  ETL-SQL.Report          → Core, Engine, Connectors
-  ETL-SQL.Report.CLI      → Report, App
-  ETL-SQL.Portal          → Report, App
+  ETL-SQL.ReportBuilder   → Reporting, Core
+  ETL-SQL.ReportBuilder.CLI → Reporting, App
+  ETL-SQL.ReportPlayer    → ReportHosting, Reporting
+  ETL-SQL.ReportPortal    → ReportHosting, Reporting, Engine, Connectors, Orchestrator
 
 Service Host
   ETL-SQL.Service         → Core, Engine, Connectors, Orchestrator
@@ -102,15 +107,16 @@ The primary CLI entry point.
 ### ETL-SQL.TUI
 Spectre.Console terminal IDE. Owns all keyboard navigation, tab management, editor rendering, and TUI-specific keybindings. Uses the same DI container as `App`.
 
-### ETL-SQL.Report
-Report-SQL compilation and dashboard runtime.
+### ETL-SQL.Reporting / ReportHosting / ReportRuntime
+Report-SQL semantics, report sessions, and dashboard runtime.
 
 - Parser extensions for Report-SQL keywords (`CREATE DATASET`, `CREATE PAGE`, `CREATE VISUAL`, etc.).
-- **`DashboardService`** — evaluates a manifest, runs dataset queries via `Evaluator`, manages parameter state.
-- **`SnapshotStore`** — persists rendered dashboard state to disk.
+- **`ETL-SQL.Reporting`** — manifest contracts/builders, renderers, snapshot persistence, visual/page/dataset semantics.
+- **`ETL-SQL.ReportHosting.DashboardService`** — evaluates report scripts via `Evaluator`, caches manifests, and manages parameter state.
+- **`ETL-SQL.ReportRuntime`** — canonical browser JavaScript/CSS assets synced into ReportPlayer, ReportPortal, and VS Code.
 
-### ETL-SQL.Report.CLI / ETL-SQL.Portal
-Thin entry points. CLI compiles a `.rpt.sql` file to a manifest; Portal serves it over HTTP (ASP.NET).
+### ETL-SQL.ReportBuilder.CLI / ReportPlayer / ReportPortal
+Thin entry points. CLI compiles a `.rptsql` file to a manifest; ReportPlayer and ReportPortal host report shells over HTTP (ASP.NET).
 
 ### ETL-SQL.LanguageServer
 Implements the Language Server Protocol using OmniSharp. Provides completions, diagnostics, and hover info for `.etlsql` files in VS Code and JetBrains IDEs.
