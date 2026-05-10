@@ -46,6 +46,7 @@
         <button class="admin-tab" data-tab="reports">Reports</button>
         <button class="admin-tab" data-tab="audit">Audit Log</button>
         <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
+        <button class="admin-tab" data-tab="datasets">Shared Datasets</button>
       </div>
 
       <!-- ── Users panel ─────────────────────────────────────────────── -->
@@ -285,6 +286,68 @@
         </div>
       </div>
 
+      <!-- ── Shared Datasets panel ──────────────────────────────────────── -->
+      <div class="admin-panel" id="panel-datasets">
+        <div class="card">
+          <div class="card-header">
+            <h3>Shared Datasets</h3>
+            <button class="btn btn-outline btn-sm" id="datasetsRefreshBtn">Refresh</button>
+          </div>
+          <div id="datasetsTableWrap"><div class="viewer-loading">Loading…</div></div>
+        </div>
+
+        <!-- Inline edit form -->
+        <div class="card" id="editDatasetForm" style="display:none">
+          <div class="card-header"><h3>Edit Dataset</h3></div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>Access Level</label>
+              <select id="ds-accessLevel">
+                <option value="Public">Public</option>
+                <option value="Private">Private</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>TTL (e.g. 1h, 30m, 7d — blank = no expiry)</label>
+              <input id="ds-ttl" type="text" placeholder="e.g. 1h">
+            </div>
+          </div>
+          <div id="ds-error" class="error-msg"></div>
+          <div style="display:flex; gap:8px">
+            <button class="btn btn-primary btn-sm" id="ds-saveBtn">Save</button>
+            <button class="btn btn-outline btn-sm" id="ds-cancelBtn">Cancel</button>
+          </div>
+          <input type="hidden" id="ds-id">
+        </div>
+
+        <!-- ACL sub-panel -->
+        <div class="card" id="dsAclPanel" style="display:none">
+          <div class="card-header">
+            <h3>Permissions — <span id="dsAclDatasetName"></span></h3>
+            <button class="btn btn-outline btn-sm" id="dsAclCloseBtn">Close</button>
+          </div>
+          <div id="dsAclTableWrap"></div>
+          <div style="margin-top:16px">
+            <h4 style="margin:0 0 8px">Grant Permission</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Group</label>
+                <select id="ds-acl-group"></select>
+              </div>
+              <div class="form-group">
+                <label>Permission</label>
+                <select id="ds-acl-perm">
+                  <option value="Viewer">Viewer</option>
+                  <option value="Editor">Editor</option>
+                  <option value="Owner">Owner</option>
+                </select>
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" id="ds-acl-grantBtn">Grant</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -327,7 +390,7 @@
   .sb-item i { color: #888; font-style: normal; }
 </style>
 <script type="module">
-import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi } from '/js/api.js';
+import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi } from '/js/api.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 
@@ -343,7 +406,7 @@ try {
 document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
-const panels = { users: null, groups: null, folders: null, reports: null, audit: null, subscriptions: null };
+const panels = { users: null, groups: null, folders: null, reports: null, audit: null, subscriptions: null, datasets: null };
 document.querySelectorAll('.admin-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
@@ -358,7 +421,7 @@ document.querySelectorAll('.admin-tab').forEach(btn => {
   });
 });
 
-const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, reports: loadReports, audit: loadAudit, subscriptions: loadSubscriptions };
+const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, reports: loadReports, audit: loadAudit, subscriptions: loadSubscriptions, datasets: loadDatasets };
 // Load the initial tab (users)
 panels.users = true;
 loadUsers();
@@ -1074,6 +1137,139 @@ document.getElementById('editParamsSaveBtn').addEventListener('click', async () 
     $err.textContent = err.message || 'Save failed.';
     $err.classList.add('show');
   }
+});
+
+// ── Shared Datasets ────────────────────────────────────────────────────────────
+let allDatasets = [];
+let selectedDatasetId = null;
+
+async function loadDatasets() {
+  const $wrap = document.getElementById('datasetsTableWrap');
+  try {
+    allDatasets = await datasetsApi.list();
+    if (!allDatasets.length) {
+      $wrap.innerHTML = '<div class="empty-state">No shared datasets registered. Datasets are created by <code>CREATE DATASET</code> statements in report scripts.</div>';
+      return;
+    }
+    const rows = allDatasets.map(d => `
+      <tr>
+        <td><strong>${esc(d.name)}</strong></td>
+        <td class="text-sm text-muted">${esc(d.folderPath || '')}</td>
+        <td><span class="chip chip-${(d.accessLevel || '').toLowerCase()}">${esc(d.accessLevel)}</span></td>
+        <td class="text-sm">${d.rowCount != null ? d.rowCount.toLocaleString() : '—'}</td>
+        <td><span class="chip ${d.isStale ? 'chip-inactive' : 'chip-active'}">${d.isStale ? 'Stale' : 'Fresh'}</span></td>
+        <td class="text-sm text-muted">${d.lastRefresh ? new Date(d.lastRefresh).toLocaleString() : '—'}</td>
+        <td class="text-sm">${esc(d.ttl || '—')}</td>
+        <td class="text-sm text-muted">${esc(d.owningReportName || '—')}</td>
+        <td>
+          <div class="table-actions">
+            <button class="btn btn-outline btn-sm" data-action="refresh" data-id="${d.id}">Refresh</button>
+            <button class="btn btn-outline btn-sm" data-action="edit" data-id="${d.id}">Edit</button>
+            <button class="btn btn-outline btn-sm" data-action="acl" data-id="${d.id}" data-name="${escAttr(d.name)}">Permissions</button>
+            <button class="btn btn-danger btn-sm" data-action="delete" data-id="${d.id}">Delete</button>
+          </div>
+        </td>
+      </tr>`).join('');
+    $wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Folder</th><th>Access</th><th>Rows</th><th>Status</th><th>Last Refresh</th><th>TTL</th><th>Owning Report</th><th>Actions</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    $wrap.querySelectorAll('[data-action]').forEach(btn => {
+      btn.addEventListener('click', () => handleDatasetAction(btn));
+    });
+  } catch { $wrap.innerHTML = '<div class="empty-state">Failed to load datasets.</div>'; }
+}
+
+async function handleDatasetAction(btn) {
+  const id = +btn.dataset.id;
+  const action = btn.dataset.action;
+
+  if (action === 'delete') {
+    if (!confirm('Delete this dataset? This removes the registry entry and cached data.')) return;
+    await datasetsApi.delete(id).catch(alertErr);
+    loadDatasets();
+  } else if (action === 'refresh') {
+    try {
+      const result = await datasetsApi.refresh(id);
+      alert(result.triggered
+        ? `Refresh job queued (job ${result.jobId}).`
+        : result.message || 'Dataset marked stale — will re-materialise on next script run.');
+      loadDatasets();
+    } catch (err) { alertErr(err); }
+  } else if (action === 'edit') {
+    const d = allDatasets.find(x => x.id === id);
+    if (!d) return;
+    document.getElementById('ds-accessLevel').value = d.accessLevel;
+    document.getElementById('ds-ttl').value = d.ttl || '';
+    document.getElementById('ds-id').value = d.id;
+    document.getElementById('ds-error').classList.remove('show');
+    document.getElementById('dsAclPanel').style.display = 'none';
+    document.getElementById('editDatasetForm').style.display = '';
+  } else if (action === 'acl') {
+    selectedDatasetId = id;
+    document.getElementById('dsAclDatasetName').textContent = btn.dataset.name;
+    document.getElementById('editDatasetForm').style.display = 'none';
+    document.getElementById('dsAclPanel').style.display = '';
+    loadDatasetAcl(id);
+    adminApi.listGroups().then(groups => {
+      document.getElementById('ds-acl-group').innerHTML =
+        groups.map(g => `<option value="${g.id}">${esc(g.name)}</option>`).join('');
+    }).catch(() => {});
+  }
+}
+
+async function loadDatasetAcl(datasetId) {
+  const $wrap = document.getElementById('dsAclTableWrap');
+  try {
+    const acls = await datasetsApi.listAcl(datasetId);
+    const rows = acls.map(a => `
+      <tr>
+        <td>${esc(a.groupName)}</td>
+        <td>${esc(a.permission)}</td>
+        <td><button class="btn btn-danger btn-sm" data-gid="${a.groupId}">Revoke</button></td>
+      </tr>`).join('');
+    $wrap.innerHTML = `
+      <table class="data-table">
+        <thead><tr><th>Group</th><th>Permission</th><th></th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="3" class="empty-state">No group ACLs set.</td></tr>'}</tbody>
+      </table>`;
+    $wrap.querySelectorAll('[data-gid]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await datasetsApi.revokeAcl(datasetId, +btn.dataset.gid).catch(alertErr);
+        loadDatasetAcl(datasetId);
+      });
+    });
+  } catch {}
+}
+
+document.getElementById('datasetsRefreshBtn').addEventListener('click', () => loadDatasets());
+
+document.getElementById('ds-cancelBtn').addEventListener('click', () => {
+  document.getElementById('editDatasetForm').style.display = 'none';
+});
+document.getElementById('ds-saveBtn').addEventListener('click', async () => {
+  const id = +document.getElementById('ds-id').value;
+  const accessLevel = document.getElementById('ds-accessLevel').value;
+  const ttl = document.getElementById('ds-ttl').value.trim() || null;
+  const $err = document.getElementById('ds-error');
+  $err.classList.remove('show');
+  try {
+    await datasetsApi.update(id, { accessLevel, ttl });
+    document.getElementById('editDatasetForm').style.display = 'none';
+    loadDatasets();
+  } catch (err) { $err.textContent = err.message; $err.classList.add('show'); }
+});
+
+document.getElementById('dsAclCloseBtn').addEventListener('click', () => {
+  document.getElementById('dsAclPanel').style.display = 'none';
+});
+document.getElementById('ds-acl-grantBtn').addEventListener('click', async () => {
+  const groupId = +document.getElementById('ds-acl-group').value;
+  const permission = document.getElementById('ds-acl-perm').value;
+  if (!groupId) return;
+  await datasetsApi.grantAcl(selectedDatasetId, groupId, permission).catch(alertErr);
+  loadDatasetAcl(selectedDatasetId);
 });
 
 // ── Utilities ──────────────────────────────────────────────────────────────────

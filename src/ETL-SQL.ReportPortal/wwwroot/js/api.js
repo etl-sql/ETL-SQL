@@ -171,6 +171,22 @@ export const subscriptionsApi = {
     smtpAliases: ()         => apiJson('/api/smtp-aliases')
 };
 
+// ── Datasets ───────────────────────────────────────────────────────────────────
+
+export const datasetsApi = {
+    list:          ()                       => apiJson('/api/datasets'),
+    get:           (id)                     => apiJson(`/api/datasets/${id}`),
+    update:        (id, body)               => apiJson(`/api/datasets/${id}`, { method: 'PATCH', body }),
+    delete:        (id)                     => apiJson(`/api/datasets/${id}`, { method: 'DELETE' }),
+    refresh:       (id)                     => apiJson(`/api/datasets/${id}/refresh`, { method: 'POST' }),
+    refreshStatus: (id)                     => apiJson(`/api/datasets/${id}/refresh-status`),
+    listAcl:       (id)                     => apiJson(`/api/datasets/${id}/acl`),
+    grantAcl:      (id, groupId, permission) =>
+        apiJson(`/api/datasets/${id}/acl`, { method: 'POST', body: { groupId, permission } }),
+    revokeAcl:     (id, groupId)            =>
+        apiJson(`/api/datasets/${id}/acl/${groupId}`, { method: 'DELETE' })
+};
+
 // ── Admin — users ──────────────────────────────────────────────────────────────
 
 export const adminApi = {

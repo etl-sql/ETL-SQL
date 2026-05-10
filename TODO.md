@@ -29,11 +29,14 @@
 
   - [ ] **Input variables/Run report button click** The Run report button click does not work.  Using this report as an example: C:\Users\chuck\scratch\ETL-SQL\tests\inputs_deferred_run.rptsql.  My expectations are the report loads showing the parameters and the run button.  The user then sets the parameters or takes the defaults and clicks the run button.  At that time the report should run and get the data and then display the table.  This needs some work.
 
-  - [ ] **Shared Dataset where is the portal menus?**  We just added shared datasets and I was expecting in the portal to have a section in admin dedicated to view the current shared datasets, applying permissions, etc.  What am I missing?  Documentation states they are experimental when they have been fully implemented. C:\Users\chuck\scratch\ETL-SQL\Docs\ReportPortal_Administrators_Guide.md
+  - [x] **Shared Dataset where is the portal menus?**  We just added shared datasets and I was expecting in the portal to have a section in admin dedicated to view the current shared datasets, applying permissions, etc.  What am I missing?  Documentation states they are experimental when they have been fully implemented. C:\Users\chuck\scratch\ETL-SQL\Docs\ReportPortal_Administrators_Guide.md
 
 - [ ] **TUI hardening and long-script ergonomics**
-    - [ ] Review long-script navigation, search, folding, diagnostics, and output handling in the TUI.
-    - [ ] Add focused tests or scripted scenarios for large scripts and long-running sessions.
+    - [x] Add boundary regression coverage for multi-cursor navigation at the top/bottom of the buffer.
+    - [x] Add focused long-buffer scenarios for navigation, search, and output scrolling.
+    - [ ] Improve diagnostics navigation so parser/linter messages can jump back to script locations.
+    - [ ] Review whether folding belongs in the TUI now or should wait until diagnostics/navigation are stronger.
+    - [ ] Add scripted scenarios for long-running sessions and large result/message output.
     - [ ] Keep VS Code/reporting host consistency under Priority 2 and host-boundary cleanup under Priority 6.
 
 - [x] **Reporting language ergonomics and documentation**
