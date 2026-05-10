@@ -18,12 +18,13 @@ function Step($label, [scriptblock]$action) {
         Write-Host "OK: $label" -ForegroundColor Green
     }
 }
+<#
 Step "NPM sync" {
     Push-Location $ext
     npm run sync-assets
     Pop-Location
 }
-
+#>
 Step ".NET build" {
     dotnet build "$root\ETL-SQL.slnx" --nologo -v minimal
 }
