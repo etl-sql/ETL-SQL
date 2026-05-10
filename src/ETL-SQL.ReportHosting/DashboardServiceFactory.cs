@@ -7,7 +7,7 @@ using System.Text.Json;
 using ETL_SQL.Core;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ETL_SQL.ReportPlayer
+namespace ETL_SQL.ReportHosting
 {
     /// <summary>
     /// Reads a reports.json manifest and vends one <see cref="DashboardService"/>

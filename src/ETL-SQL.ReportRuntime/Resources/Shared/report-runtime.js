@@ -83,6 +83,7 @@
     let _refreshTimers = [];
     let _lastActivePage = null;
     const _registeredMaps = new Set();
+    const _crossFilterStates = {}; // Keyed by page element ID; persists across renderManifest re-builds
 
     /**
      * Entry point: obtain manifest and render all visuals + pages.
@@ -304,6 +305,16 @@
         // Synchronize parameter values to any newly rendered controls
         if (manifest.parameters) {
             syncParameters(manifest.parameters);
+        }
+
+        // Cross-filter state management across re-renders:
+        // - Non-interaction rebuild (slicer/param change): clear all selection state.
+        // - Interaction rebuild (chart click): re-apply dimming/source CSS so the visual
+        //   feedback survives the full DOM rebuild that renderManifest does.
+        if (!manifest.isInteraction) {
+            for (let k in _crossFilterStates) delete _crossFilterStates[k];
+        } else {
+            reApplyCrossFilterStyling();
         }
 
         // Set up per-page auto-refresh timers (web mode only; VS Code preview ignores).
@@ -884,10 +895,12 @@
     function applyPageCrossFilter(container, filterValue, filterColumn, sourceVisualName, event) {
         const pageEl = getPageState(container);
         if (!pageEl) return;
-        
-        const state = pageEl._crossFilterState || (pageEl._crossFilterState = { selections: [] });
+
+        // Use module-level state keyed by page ID so it survives renderManifest DOM rebuilds
+        const pageKey = pageEl.id || 'default';
+        const state = _crossFilterStates[pageKey] || (_crossFilterStates[pageKey] = { selections: [] });
         const isMulti = event && (event.ctrlKey || event.metaKey);
-        
+
         // Update state
         if (isMulti) {
             const idx = state.selections.findIndex(s => s.value === filterValue && s.column === filterColumn);
@@ -902,14 +915,18 @@
         }
 
         const activeVisuals = new Set(state.selections.map(s => s.visual));
+        const filterTypes = ['SLICER', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'];
 
-        // 1. Visual Dimming Feedback
+        // 1. Visual Dimming Feedback (immediate, before server round-trip)
         pageEl.querySelectorAll('.visual-card').forEach(card => {
             const visual = card._visualData;
             if (!visual) return;
             const type = (visual.visualType || '').toUpperCase();
-            const isFilter = ['SLICER', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'].includes(type);
-            
+            const isFilter = filterTypes.includes(type);
+
+            // Remove any prior loading badge
+            card.querySelector('.cross-filter-loading-badge')?.remove();
+
             if (state.selections.length > 0) {
                 if (activeVisuals.has(visual.name)) {
                     card.classList.add('cross-filter-source');
@@ -917,10 +934,14 @@
                 } else if (!isFilter) {
                     card.classList.add('dimmed');
                     card.classList.remove('cross-filter-source');
+                    // Loading badge lets the user know a server query is in flight
+                    const badge = document.createElement('div');
+                    badge.className = 'cross-filter-loading-badge';
+                    badge.textContent = '⟳ Filtering…';
+                    card.appendChild(badge);
                 }
             } else {
-                card.classList.remove('dimmed');
-                card.classList.remove('cross-filter-source');
+                card.classList.remove('dimmed', 'cross-filter-source');
                 const wrapper = card.querySelector('.chart-wrapper');
                 if (wrapper && wrapper._echartsInst) {
                     wrapper._echartsInst.dispatchAction({ type: 'downplay' });
@@ -930,12 +951,12 @@
 
         // 2. Parameter Updates
         const batch = {};
-        // Clear columns that are no longer selected
+        // Clear columns no longer in the selection
         const prevCols = new Set(Object.keys(state.lastBatch || {}));
         const currCols = new Set(state.selections.map(s => '@' + s.column));
         prevCols.forEach(c => { if (!currCols.has(c)) batch[c] = ''; });
 
-        // Build new values (CSV for multi-select)
+        // Build new CSV values for each selected column
         const groups = {};
         state.selections.forEach(s => {
             const k = '@' + s.column;
@@ -948,6 +969,30 @@
         if (Object.keys(batch).length > 0) {
             postParameters(batch, true).then(m => { if (m) renderManifest(m); });
         }
+    }
+
+    // Re-applies cross-filter CSS classes (dimmed / cross-filter-source) after a DOM rebuild.
+    // Called by renderManifest when isInteraction=true so visual feedback survives the re-render.
+    function reApplyCrossFilterStyling() {
+        const filterTypes = ['SLICER', 'DATEPICKER', 'RELDATEPICKER', 'SLIDER', 'MULTISELECT', 'SEARCH', 'CHECKBOX', 'TEXTBOX', 'NUMBERBOX'];
+        document.querySelectorAll('.page').forEach(pageEl => {
+            const state = _crossFilterStates[pageEl.id];
+            if (!state || state.selections.length === 0) return;
+            const activeVisuals = new Set(state.selections.map(s => s.visual));
+            pageEl.querySelectorAll('.visual-card').forEach(card => {
+                const visual = card._visualData;
+                if (!visual) return;
+                const type = (visual.visualType || '').toUpperCase();
+                const isFilter = filterTypes.includes(type);
+                if (activeVisuals.has(visual.name)) {
+                    card.classList.add('cross-filter-source');
+                    card.classList.remove('dimmed');
+                } else if (!isFilter) {
+                    card.classList.add('dimmed');
+                    card.classList.remove('cross-filter-source');
+                }
+            });
+        });
     }
 
     function registerMapThenRender(mapKey, mapFile, onReady, wrapper) {
@@ -1359,18 +1404,33 @@
         if (isCartesian && option.series.length === 1 && (type === 'BAR' || type === 'HBAR' || type === 'HORIZONTALBAR')) {
             const categories = (option.xAxis && option.xAxis.data) || (option.yAxis && option.yAxis.data) || [];
             if (categories.length > 0) {
-                const universeData = categories.map(cat => universeMap[String(cat)] || 0);
+                // Snapshot original data items (which carry per-item itemStyle.color from COLORS mapping)
+                const origData = option.series[0].data.slice();
+
+                // Ghost = universe bars: preserve each bar's original color but dim to 30% opacity
                 const ghostSeries = JSON.parse(JSON.stringify(option.series[0]));
                 ghostSeries.name = 'Total (Universe)';
-                ghostSeries.data = universeData;
-                ghostSeries.itemStyle = { color: '#e0e0e0', opacity: 0.8 };
+                ghostSeries.data = ghostSeries.data.map(item => {
+                    if (typeof item === 'object' && item !== null) {
+                        const c = item.itemStyle && item.itemStyle.color;
+                        return { ...item, itemStyle: c ? { color: c, opacity: 0.3 } : { opacity: 0.3 } };
+                    }
+                    return { value: item, itemStyle: { opacity: 0.3 } };
+                });
+                delete ghostSeries.itemStyle; // remove any series-level color override
                 ghostSeries.emphasis = { disabled: true };
                 ghostSeries.z = 1;
 
-                const selectionData = categories.map(cat => selectionMap[String(cat)] || 0);
+                // Active = selection bars: selected items keep their original item (color + value),
+                // non-selected items are invisible (value 0, opacity 0)
                 const activeSeries = option.series[0];
                 activeSeries.name = 'Filtered';
-                activeSeries.data = selectionData;
+                activeSeries.data = categories.map((cat, i) => {
+                    if (selectionMap[String(cat)] !== undefined) {
+                        return origData[i] ?? selectionMap[String(cat)];
+                    }
+                    return { value: 0, itemStyle: { opacity: 0 } };
+                });
                 activeSeries.barGap = '-100%';
                 activeSeries.z = 2;
 
@@ -1388,14 +1448,12 @@
 
         if (isCircular) {
             // For Pie/Donut, items are in series[0].data: [{name, value}, ...]
+            // Dim non-selected slices by reducing opacity only — preserve original slice color
             (option.series || []).forEach(s => {
                 if (s.type !== 'pie') return;
                 s.data.forEach(item => {
                     if (!selectedKeys.has(String(item.name))) {
-                        item.itemStyle = Object.assign({}, item.itemStyle, { 
-                            color: '#e0e0e0', 
-                            opacity: 0.2 
-                        });
+                        item.itemStyle = Object.assign({}, item.itemStyle, { opacity: 0.2 });
                         item.label = { show: false };
                     }
                 });
@@ -1420,30 +1478,35 @@
             });
         }
         else if (isCartesian) {
-            // Multi-series Bar or Line
-            // Dim entire series that have no intersection with highlightRows
+            // Multi-series Bar or Line: dim entire series not in the selection,
+            // and dim individual data points on active series that don't match the X filter.
+            // Preserve original colors throughout — only opacity changes.
             (option.series || []).forEach(s => {
                 const sName = s.name;
                 const hasMatch = currentVisual.highlightRows.some(r => sIdx >= 0 && String(r[sIdx]) === sName);
-                
-                // If we don't have a series mapping, or if this series is NOT the one selected
+
                 if (sIdx >= 0 && !hasMatch) {
+                    // Dim the entire series that isn't selected
                     if (s.type === 'line') {
-                        s.lineStyle = { color: '#ccc', opacity: 0.2 };
-                        s.itemStyle = { opacity: 0 };
+                        s.lineStyle = Object.assign({}, s.lineStyle, { opacity: 0.15 });
+                        s.itemStyle = Object.assign({}, s.itemStyle, { opacity: 0 });
                     } else {
-                        s.itemStyle = { color: '#e0e0e0', opacity: 0.2 };
+                        s.itemStyle = Object.assign({}, s.itemStyle, { opacity: 0.2 });
                     }
                 } else {
-                    // For the active series (or all series if no sIdx), dim individual points that don't match X
+                    // Active series: dim individual points that don't match the selected X values
                     const categories = (option.xAxis && option.xAxis.data) || (option.yAxis && option.yAxis.data) || [];
                     if (categories.length > 0) {
                         s.data = s.data.map((val, idx) => {
                             const cat = String(categories[idx]);
                             if (!selectedKeys.has(cat)) {
+                                // Preserve original per-item color if present, just lower opacity
+                                const origColor = (typeof val === 'object' && val !== null && val.itemStyle?.color)
+                                    ? val.itemStyle.color : null;
+                                const origVal = (typeof val === 'object' && val !== null) ? val.value : val;
                                 return {
-                                    value: val,
-                                    itemStyle: { color: '#e0e0e0', opacity: 0.2 }
+                                    value: origVal,
+                                    itemStyle: origColor ? { color: origColor, opacity: 0.2 } : { opacity: 0.2 }
                                 };
                             }
                             return val;
@@ -2465,10 +2528,11 @@
             }
         } else if (action.type === 'CLEAR_FILTERS') {
             // Reset all cross-filter states on all pages
+            for (let k in _crossFilterStates) delete _crossFilterStates[k];
             document.querySelectorAll('.page').forEach(pageEl => {
-                pageEl._crossFilterState = { selections: [] };
                 pageEl.querySelectorAll('.visual-card').forEach(card => {
                     card.classList.remove('dimmed', 'cross-filter-source');
+                    card.querySelector('.cross-filter-loading-badge')?.remove();
                     const wrapper = card.querySelector('.chart-wrapper');
                     if (wrapper && wrapper._echartsInst) {
                         wrapper._echartsInst.dispatchAction({ type: 'downplay' });

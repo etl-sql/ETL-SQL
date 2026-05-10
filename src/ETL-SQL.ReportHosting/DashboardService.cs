@@ -5,7 +5,6 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-using ETL_SQL.App;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using ETL_SQL.Core.Parser;
@@ -15,7 +14,7 @@ using ETL_SQL.Engine;
 using ETL_SQL.Reporting;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace ETL_SQL.ReportPlayer
+namespace ETL_SQL.ReportHosting
 {
     /// <summary>
     /// Singleton service that owns the script path, parameter state, and

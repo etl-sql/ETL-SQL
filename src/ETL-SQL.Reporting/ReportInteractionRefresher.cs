@@ -81,6 +81,22 @@ namespace ETL_SQL.Reporting
                 }
             }
 
+            // After a non-interaction refresh (slicer / param change), clear any stale HighlightRows
+            // left from a prior cross-filter click on visuals that weren't in the affected set.
+            // This prevents ghost overlays persisting after the user changes a slicer.
+            if (!isInteraction)
+            {
+                foreach (var vm in manifest.Visuals)
+                {
+                    if (vm.HighlightRows != null)
+                    {
+                        builder.ClearHighlightRows(vm);
+                        refreshCount++;
+                        logger.Debug($"[ReportInteractionRefresher] Cleared stale HighlightRows on: {vm.Name}");
+                    }
+                }
+            }
+
             logger.Debug($"[ReportInteractionRefresher] Refresh complete. {refreshCount} visuals updated.");
             return refreshCount;
         }

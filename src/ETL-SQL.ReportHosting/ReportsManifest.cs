@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace ETL_SQL.ReportPlayer
+namespace ETL_SQL.ReportHosting
 {
     /// <summary>Deserialised from reports.json — lists all reports the server will host.</summary>
     public class ReportsManifest

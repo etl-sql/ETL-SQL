@@ -2,7 +2,7 @@ using Xunit;
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using ETL_SQL.ReportPlayer;
+using ETL_SQL.ReportHosting;
 using ETL_SQL.Core.Common.Exceptions;
 
 namespace ETL_SQL.Tests.Integration.Misc

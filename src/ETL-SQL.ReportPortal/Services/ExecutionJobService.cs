@@ -155,7 +155,7 @@ public class ExecutionJobService : IDisposable
             {
                 // Use an independent DashboardService for snapshots (not the session cache)
                 var dashboardTimeout = TimeSpan.FromSeconds(Math.Max(1, _config.Resources.ExecutionTimeoutSeconds));
-                await using var svc = new ETL_SQL.ReportPlayer.DashboardService(scriptPath, _scopeFactory, dashboardTimeout);
+                await using var svc = new ETL_SQL.ReportHosting.DashboardService(scriptPath, _scopeFactory, dashboardTimeout);
 
                 if (parameters is { Count: > 0 })
                     await svc.SetParametersAsync(parameters.Select(kv => (kv.Key, kv.Value)));

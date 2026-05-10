@@ -258,6 +258,17 @@ namespace ETL_SQL.Reporting
         }
 
         /// <summary>
+        /// Clears HighlightRows from a visual and regenerates its ChartConfig without the ghost overlay.
+        /// Does not re-query the data source — uses existing Rows.
+        /// </summary>
+        public void ClearHighlightRows(VisualManifest vm)
+        {
+            if (vm.HighlightRows == null) return;
+            vm.HighlightRows = null;
+            vm.ChartConfig = new EChartsRenderer().Render(vm);
+        }
+
+        /// <summary>
         /// Re-queries the data for a specific visual and updates its Row/Column collections.
         /// Also regenerates the ChartConfig.
         /// </summary>

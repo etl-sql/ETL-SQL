@@ -2,7 +2,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Xunit;
-using ETL_SQL.ReportPlayer;
+using ETL_SQL.ReportHosting;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
 using System.Linq;

@@ -41,7 +41,7 @@
     <ProjectReference Include="..\..\src\ETL-SQL.TUI\ETL-SQL.TUI.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.ReportBuilder\ETL-SQL.ReportBuilder.csproj" />
     <ProjectReference Include="..\..\src\ETL-SQL.Reporting\ETL-SQL.Reporting.csproj" />
-    <ProjectReference Include="..\..\src\ETL-SQL.ReportPlayer\ETL-SQL.ReportPlayer.csproj" />
+    <ProjectReference Include="..\..\src\ETL-SQL.ReportHosting\ETL-SQL.ReportHosting.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -67,6 +67,15 @@ Generated host copies live under ReportPlayer, ReportPortal, and the VS Code ext
 
 `ETL-SQL.ReportRuntime` is the dedicated source area for canonical JavaScript, CSS, themes, browser dependencies, runtime fixtures, and runtime debugging utilities. The contract in `Docs/Report_Runtime_Contract.md` is the source of truth.
 
+### Report Hosting Services
+
+`src/ETL-SQL.ReportHosting` owns reusable report session services that need Engine execution plus Reporting manifest construction, but should not belong to a specific host shell:
+
+- Report script evaluation sessions, parameter state, selective visual refresh, manifest caching, background dataset refresh timers, and multi-report manifest factories.
+- Shared hosting behavior used by ReportPlayer and ReportPortal.
+
+This boundary may depend on Engine and Reporting. ReportPlayer and ReportPortal may depend on ReportHosting, but ReportPortal should not depend on ReportPlayer.
+
 ### Host Shells
 
 Hosts should provide shell behavior and delegate semantics downward:
@@ -163,6 +172,7 @@ Current progress:
 
 - Report interaction refresh/dependency semantics moved from ReportPlayer into `ETL-SQL.Reporting` as `ReportInteractionRefresher`; ReportPlayer now delegates parameter-driven visual refresh behavior to Reporting.
 - Report CSV rendering moved from ReportBuilder/ReportPortal host code into `ETL-SQL.Reporting` as `CsvRenderer`; export hosts now share the same table selection and CSV escaping behavior.
+- Reusable report session hosting moved from ReportPlayer into `ETL-SQL.ReportHosting`; ReportPlayer and ReportPortal now consume the same `DashboardService`/`DashboardServiceFactory` without a host-to-host project reference.
 
 ## Move Checklist
 

@@ -240,7 +240,7 @@ public class ExecutionController(
 
     // ── Session helper ────────────────────────────────────────────────────────
 
-    private async Task<ETL_SQL.ReportPlayer.DashboardService> GetOrRebuildSessionAsync(
+    private async Task<ETL_SQL.ReportHosting.DashboardService> GetOrRebuildSessionAsync(
         int reportId, string scriptPath)
     {
         var svc = sessions.GetOrCreate(reportId, CurrentUserId, scriptPath);
