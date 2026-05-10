@@ -11,13 +11,13 @@
 
   <!-- ── Top bar ─────────────────────────────────────────────────────────── -->
   <header class="topbar">
-    <span class="topbar-brand">ETL-SQL <span>Portal</span></span>
+    <span class="topbar-brand"><span class="brand-mark">E</span> ETL-SQL <span>Portal</span></span>
     <nav class="topbar-nav">
       <a href="/index.html" class="active" id="navReports">Reports</a>
       <a href="#" id="navSubscriptions">My Subscriptions</a>
     </nav>
     <nav class="topbar-nav">
-      <a href="/admin.html">Admin</a>
+      <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
     </nav>
     <span class="topbar-spacer"></span>
     <span class="topbar-user" id="topbarUser"></span>
@@ -28,25 +28,38 @@
   <div class="app-body">
     <!-- Sidebar: folder tree -->
     <aside class="sidebar" id="sidebar">
-      <div class="sidebar-hdr">Folders</div>
+      <div class="sidebar-hdr">
+        <span>Folders</span>
+        <span class="sidebar-hint">Report library</span>
+      </div>
       <div class="sidebar-tree" id="folderTree">
-        <div class="text-muted text-sm" style="padding:8px 16px">Loading…</div>
+        <div class="loading-state loading-state-compact">Loading folders…</div>
       </div>
     </aside>
 
     <!-- Main area: report list or viewer -->
     <main class="main-content" id="mainContent">
-      <div class="empty-state">Select a folder to browse reports.</div>
+      <div class="empty-state empty-state-panel">
+        <div class="empty-state-icon empty-state-icon-folder" aria-hidden="true"></div>
+        <h2>Select a folder</h2>
+        <p>Choose a report folder from the library to view available reports.</p>
+      </div>
     </main>
   </div>
 </div>
 
 <!-- ── Export modal ─────────────────────────────────────────────────────── -->
-<div id="exportModal" class="modal-overlay" style="display:none">
-  <div class="modal-card" style="width:340px">
-    <h3 style="margin:0 0 16px">Export Report</h3>
-    <p class="text-muted text-sm" style="margin:0 0 16px">Choose an export format.</p>
-    <div style="display:flex; gap:8px; justify-content:flex-end">
+<div id="exportModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="exportTitle">
+  <div class="modal-card modal-sm">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Export</span>
+        <h3 class="modal-title" id="exportTitle">Export Report</h3>
+        <p class="modal-subtitle">Choose the file format for this snapshot.</p>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="exportCsvBtn">CSV</button>
       <button class="btn btn-outline" id="exportPdfBtn">PDF</button>
       <button class="btn btn-outline" id="exportCancelBtn">Cancel</button>
     </div>
@@ -54,61 +67,76 @@
 </div>
 
 <!-- ── Subscribe modal ──────────────────────────────────────────────────── -->
-<div id="subscribeModal" class="modal-overlay" style="display:none">
-  <div class="modal-card" style="width:480px; max-height:90vh; overflow-y:auto">
-    <h3 style="margin:0 0 16px">Subscribe to Report</h3>
-
-    <div class="form-row">
-      <div class="form-group">
-        <label>Subscription Name <span class="text-muted text-sm">(optional)</span></label>
-        <input id="sub-name" type="text" placeholder="e.g. Weekly Finance">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Schedule</label>
-        <select id="sub-schedule">
-          <option value="Daily">Daily</option>
-          <option value="Weekly">Weekly</option>
-          <option value="Monthly">Monthly</option>
-          <option value="Hourly">Hourly</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Delivery Time <span class="text-muted text-sm">(HH:MM, optional)</span></label>
-        <input id="sub-attime" type="time">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Format</label>
-        <select id="sub-format">
-          <option value="PDF">PDF</option>
-          <option value="Markdown">Markdown</option>
-          <option value="Link">Link only</option>
-        </select>
-      </div>
-      <div class="form-group" id="sub-smtp-group">
-        <label>SMTP Connection</label>
-        <select id="sub-smtp"></select>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group">
-        <label>Recipient Email <span class="text-muted text-sm">(uses your profile email if blank)</span></label>
-        <input id="sub-email" type="email" placeholder="user@example.com">
+<div id="subscribeModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="subscribeTitle">
+  <div class="modal-card modal-lg modal-workflow">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Subscription</span>
+        <h3 class="modal-title" id="subscribeTitle">Subscribe to Report</h3>
+        <p class="modal-subtitle">Schedule delivery, choose a format, and lock in report parameters.</p>
       </div>
     </div>
 
-    <!-- Dynamic parameter fields injected here -->
-    <div id="sub-params-section" style="display:none">
-      <hr style="margin:12px 0; border:none; border-top:1px solid #e0e0e0">
-      <p style="margin:0 0 10px; font-weight:600; font-size:.9em">Report Parameters</p>
-      <div id="sub-params-fields"></div>
+    <div class="modal-body">
+      <div class="form-section">
+        <p class="section-kicker">Details</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Subscription Name <span class="text-muted text-sm">(optional)</span></label>
+            <input id="sub-name" type="text" placeholder="e.g. Weekly Finance">
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <p class="section-kicker">Delivery</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Schedule</label>
+            <select id="sub-schedule">
+              <option value="Daily">Daily</option>
+              <option value="Weekly">Weekly</option>
+              <option value="Monthly">Monthly</option>
+              <option value="Hourly">Hourly</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Delivery Time <span class="text-muted text-sm">(HH:MM, optional)</span></label>
+            <input id="sub-attime" type="time">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Format</label>
+            <select id="sub-format">
+              <option value="PDF">PDF</option>
+              <option value="CSV">CSV</option>
+              <option value="Markdown">Markdown</option>
+              <option value="Link">Link only</option>
+            </select>
+          </div>
+          <div class="form-group" id="sub-smtp-group">
+            <label>SMTP Connection</label>
+            <select id="sub-smtp"></select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Recipient Email <span class="text-muted text-sm">(uses your profile email if blank)</span></label>
+            <input id="sub-email" type="email" placeholder="user@example.com">
+          </div>
+        </div>
+      </div>
+
+      <!-- Dynamic parameter fields injected here -->
+      <div id="sub-params-section" class="form-section" style="display:none">
+        <p class="section-kicker">Report Parameters</p>
+        <div id="sub-params-fields" class="param-grid"></div>
+      </div>
     </div>
 
     <div id="sub-error" class="error-msg"></div>
-    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px">
+    <div class="modal-actions modal-actions-sticky">
       <button class="btn btn-primary" id="sub-saveBtn">Subscribe</button>
       <button class="btn btn-outline" id="sub-cancelBtn">Cancel</button>
     </div>
@@ -116,39 +144,25 @@
 </div>
 
 <!-- ── Edit Parameters modal ────────────────────────────────────────────── -->
-<div id="editParamsModal" class="modal-overlay" style="display:none">
-  <div class="modal-card" style="width:420px; max-height:90vh; overflow-y:auto">
-    <h3 style="margin:0 0 4px">Edit Parameters</h3>
-    <p id="ep-subtitle" class="text-muted text-sm" style="margin:0 0 16px"></p>
-    <div id="ep-fields"></div>
+<div id="editParamsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="editParamsTitle">
+  <div class="modal-card modal-lg modal-workflow">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Parameters</span>
+        <h3 class="modal-title-tight" id="editParamsTitle">Edit Parameters</h3>
+        <p id="ep-subtitle" class="modal-subtitle"></p>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="ep-fields" class="param-grid"></div>
+    </div>
     <div id="ep-error" class="error-msg"></div>
-    <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:16px">
+    <div class="modal-actions modal-actions-sticky">
       <button class="btn btn-primary" id="ep-saveBtn">Save</button>
       <button class="btn btn-outline" id="ep-cancelBtn">Cancel</button>
     </div>
   </div>
 </div>
-
-<style>
-.modal-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,.45);
-  z-index: 1000; display: flex; align-items: center; justify-content: center;
-}
-.modal-card {
-  background: #fff; border-radius: 8px; padding: 24px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.2);
-}
-.param-row { margin-bottom: 12px; }
-.param-label { font-size: .85em; font-weight: 600; margin-bottom: 4px; display: block; }
-.param-input { width: 100%; box-sizing: border-box; }
-.reldate-quickpicks { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
-.reldate-quickpicks button {
-  padding: 2px 8px; font-size: .78em; border: 1px solid #ccc;
-  border-radius: 4px; background: #f5f5f5; cursor: pointer;
-}
-.reldate-quickpicks button:hover { background: #e8e8e8; }
-.subs-table-wrap { overflow-x: auto; }
-</style>
 
 <script type="module">
 import { auth, authApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
@@ -161,6 +175,9 @@ let currentReportId   = null;
 let currentFolderName = '';
 let currentActivePage = null;  // tracks active report page for back/refresh
 let isAdmin           = false;
+let currentReports    = [];
+let reportSearchTerm  = '';
+let reportSortMode    = 'name';
 
 // Track active page reported by the report iframe.
 // userTriggered=true  → user clicked a tab → push a history entry (enables browser back)
@@ -223,13 +240,13 @@ async function loadFolderTree() {
     const $tree = document.getElementById('folderTree');
     $tree.innerHTML = '';
     if (!folders.length) {
-      $tree.innerHTML = '<div class="text-muted text-sm" style="padding:8px 16px">No folders yet.</div>';
+      $tree.innerHTML = '<div class="sidebar-note">No folders yet.</div>';
       return;
     }
     renderFolderChildren($tree, buildTree(folders), 0);
   } catch {
     document.getElementById('folderTree').innerHTML =
-      `<div class="text-muted text-sm" style="padding:8px 16px">Error loading folders.</div>`;
+      `<div class="sidebar-note sidebar-note-error">Error loading folders.</div>`;
   }
 }
 
@@ -248,7 +265,8 @@ function renderFolderChildren($parent, nodes, depth) {
     const $item = document.createElement('div');
     $item.className = 'folder-item';
     $item.dataset.id = node.id;
-    $item.innerHTML = `<span class="folder-icon">${node.children.length ? '📁' : '📂'}</span>
+    $item.style.marginLeft = `${depth * 10}px`;
+    $item.innerHTML = `<span class="folder-icon ${node.children.length ? 'folder-icon-parent' : 'folder-icon-leaf'}" aria-hidden="true"></span>
                        <span class="folder-name">${esc(node.name)}</span>`;
     $item.addEventListener('click', () => selectFolder(node.id, node.name));
     $parent.appendChild($item);
@@ -277,50 +295,160 @@ async function loadReportList(folderId, folderName, pushState = true) {
     history.pushState({ view: 'folder', folderId, folderName }, '');
   }
   const $main = document.getElementById('mainContent');
-  $main.innerHTML = `<div class="viewer-loading">Loading…</div>`;
+  $main.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading reports…</span></div>`;
   try {
     const reports = await reportsApi.list(folderId);
+    currentReports = reports;
+    reportSearchTerm = '';
+    reportSortMode = 'name';
     renderReportList(reports, folderName);
   } catch {
-    $main.innerHTML = `<div class="empty-state">Failed to load reports.</div>`;
+    $main.innerHTML = `
+      <div class="empty-state empty-state-panel empty-state-error">
+        <div class="empty-state-icon empty-state-icon-alert" aria-hidden="true"></div>
+        <h2>Reports did not load</h2>
+        <p>Refresh this folder or try again after checking your portal connection.</p>
+        <button class="btn btn-outline" id="retryReportsBtn">Retry</button>
+      </div>`;
+    document.getElementById('retryReportsBtn')?.addEventListener('click', () => loadReportList(folderId, folderName));
   }
 }
 
 function renderReportList(reports, folderName) {
   const $main = document.getElementById('mainContent');
+  const filteredReports = sortReports(filterReports(reports));
+
   if (!reports.length) {
     $main.innerHTML = `
-      <div class="report-list-hdr"><h2>${esc(folderName)}</h2></div>
-      <div class="empty-state">No reports in this folder.</div>`;
+      ${renderLibraryToolbar(folderName, reports, false)}
+      <div class="empty-state empty-state-panel">
+        <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
+        <h2>No reports here yet</h2>
+        <p>This folder is ready. Publish a report into it from Admin or the ETL-SQL publish workflow.</p>
+      </div>`;
+    wireLibraryToolbar();
     return;
   }
 
-  const cards = reports.map(r => {
-    const staleBadge = r.isStale ? `<span class="badge badge-stale">Stale</span>` : '';
-    const builtAt    = r.lastBuiltAt ? new Date(r.lastBuiltAt).toLocaleString() : 'Never run';
+  const cards = filteredReports.map(r => {
+    const staleBadge = r.isStale ? `<span class="badge badge-stale">Stale</span>` : `<span class="badge badge-ok">Ready</span>`;
+    const builtAt    = formatBuiltAt(r.lastBuiltAt);
+    const freshness  = r.lastBuiltAt ? timeAgo(r.lastBuiltAt) : 'Awaiting first run';
     const name = r.name || '';
+    const description = r.description || 'No description provided.';
     const previewHtml = buildRuntimeHtml(r.id, true).replace(/"/g, '&quot;');
 
     return `
       <div class="report-card" data-id="${r.id}">
         <div class="report-preview">
-          <iframe srcdoc="${previewHtml}" loading="lazy"></iframe>
+          <iframe title="${escAttr(name)} preview" srcdoc="${previewHtml}" loading="lazy"></iframe>
         </div>
-        <h3>${esc(name)}</h3>
-        <p>${esc(r.description || '')}</p>
-        <div class="report-card-meta"><span>${builtAt}</span>${staleBadge}</div>
+        <div class="report-card-body">
+          <div class="report-card-title-row">
+            <span class="report-glyph" aria-hidden="true"></span>
+            <h3>${esc(name)}</h3>
+          </div>
+          <p>${esc(description)}</p>
+          <div class="report-card-meta">
+            <span title="${escAttr(builtAt)}">${esc(freshness)}</span>
+            ${staleBadge}
+          </div>
+        </div>
       </div>`;
   }).join('');
 
   $main.innerHTML = `
-    <div class="report-list-hdr">
-      <h2>${esc(folderName)}</h2>
-      <span class="badge badge-ok">${reports.length} report${reports.length !== 1 ? 's' : ''}</span>
-    </div>
-    <div class="report-grid">${cards}</div>`;
+    ${renderLibraryToolbar(folderName, reports, true, filteredReports.length)}
+    ${filteredReports.length
+      ? `<div class="report-grid">${cards}</div>`
+      : `<div class="empty-state empty-state-panel">
+          <div class="empty-state-icon empty-state-icon-search" aria-hidden="true"></div>
+          <h2>No matching reports</h2>
+          <p>Clear the search box or try a broader report name or description.</p>
+        </div>`}`;
 
+  wireLibraryToolbar();
   $main.querySelectorAll('.report-card').forEach(el =>
     el.addEventListener('click', () => openReport(+el.dataset.id)));
+}
+
+function renderLibraryToolbar(folderName, reports, showControls, visibleCount = reports.length) {
+  const countText = `${visibleCount} of ${reports.length} report${reports.length !== 1 ? 's' : ''}`;
+  return `
+    <div class="library-toolbar">
+      <div class="library-title">
+        <span class="library-kicker">Folder</span>
+        <h2>${esc(folderName)}</h2>
+      </div>
+      <span class="badge badge-ok">${esc(countText)}</span>
+      <div class="library-toolbar-spacer"></div>
+      ${showControls ? `
+        <label class="library-search">
+          <span class="search-icon" aria-hidden="true"></span>
+          <input id="reportSearchInput" type="search" placeholder="Search reports" value="${escAttr(reportSearchTerm)}">
+        </label>
+        <select id="reportSortSelect" class="library-sort" aria-label="Sort reports">
+          <option value="name"${reportSortMode === 'name' ? ' selected' : ''}>Name</option>
+          <option value="recent"${reportSortMode === 'recent' ? ' selected' : ''}>Last run</option>
+          <option value="stale"${reportSortMode === 'stale' ? ' selected' : ''}>Needs refresh</option>
+        </select>
+      ` : ''}
+      <button class="btn btn-outline" id="refreshReportsBtn" type="button">Refresh</button>
+    </div>`;
+}
+
+function wireLibraryToolbar() {
+  document.getElementById('refreshReportsBtn')?.addEventListener('click', () => {
+    if (currentFolderId) loadReportList(currentFolderId, currentFolderName);
+  });
+  document.getElementById('reportSearchInput')?.addEventListener('input', e => {
+    reportSearchTerm = e.target.value;
+    renderReportList(currentReports, currentFolderName);
+    document.getElementById('reportSearchInput')?.focus();
+  });
+  document.getElementById('reportSortSelect')?.addEventListener('change', e => {
+    reportSortMode = e.target.value;
+    renderReportList(currentReports, currentFolderName);
+  });
+}
+
+function filterReports(reports) {
+  const term = reportSearchTerm.trim().toLowerCase();
+  if (!term) return reports;
+  return reports.filter(r =>
+    String(r.name || '').toLowerCase().includes(term) ||
+    String(r.description || '').toLowerCase().includes(term));
+}
+
+function sortReports(reports) {
+  return [...reports].sort((a, b) => {
+    if (reportSortMode === 'recent') {
+      return new Date(b.lastBuiltAt || 0) - new Date(a.lastBuiltAt || 0);
+    }
+    if (reportSortMode === 'stale') {
+      return Number(b.isStale) - Number(a.isStale) ||
+             new Date(b.lastBuiltAt || 0) - new Date(a.lastBuiltAt || 0);
+    }
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
+}
+
+function formatBuiltAt(value) {
+  return value ? new Date(value).toLocaleString() : 'Never run';
+}
+
+function timeAgo(value) {
+  if (!value) return 'Never run';
+  const ms = Date.now() - new Date(value).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return formatBuiltAt(value);
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 1) return 'Just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+  return formatBuiltAt(value);
 }
 
 // ── Report viewer ──────────────────────────────────────────────────────────────
@@ -333,7 +461,7 @@ async function openReport(id, isPushState = true, initialPage = null) {
       '');
   }
   const $main = document.getElementById('mainContent');
-  $main.innerHTML = `<div class="viewer-loading">Loading report…</div>`;
+  $main.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading report…</span></div>`;
 
   let report, snapshot;
   try {
@@ -349,15 +477,27 @@ async function openReport(id, isPushState = true, initialPage = null) {
 function renderNoSnapshot(id) {
   const $main = document.getElementById('mainContent');
   $main.innerHTML = `
-    <div class="viewer-header">
-      <div class="viewer-header-info"><h2>Report</h2><p>This report has not been executed yet.</p></div>
-      <div class="viewer-actions">
-        <button class="btn btn-primary" id="execBtn">Run Report</button>
-        <button class="btn btn-outline" id="subBtn">Subscribe…</button>
-        <button class="btn btn-outline" id="backBtn">← Back</button>
+    <div class="report-viewer">
+      <div class="viewer-commandbar">
+        <button class="btn btn-ghost btn-sm" id="backBtn">Back</button>
+        <div class="viewer-header-info">
+          <span class="library-kicker">Report</span>
+          <h2>Not run yet</h2>
+          <p>No snapshot is available for this report.</p>
+        </div>
+        <div class="viewer-actions">
+          <button class="btn btn-primary btn-sm" id="execBtn">Run Report</button>
+          <button class="btn btn-outline btn-sm" id="subBtn">Subscribe</button>
+        </div>
       </div>
-    </div>
-    <div class="viewer-body empty-state">No snapshot available. Run the report to generate one.</div>`;
+      <div class="viewer-body viewer-body-empty">
+        <div class="empty-state empty-state-panel">
+          <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
+          <h2>Ready for first run</h2>
+          <p>Run the report to generate the first snapshot and make preview, export, and subscriptions useful.</p>
+        </div>
+      </div>
+    </div>`;
 
   document.getElementById('execBtn').addEventListener('click', () => runAndPoll(id));
   document.getElementById('subBtn').addEventListener('click', () => openSubscribeModal(id));
@@ -367,38 +507,48 @@ function renderNoSnapshot(id) {
 
 function renderViewer(report, snapshot, initialPage = null) {
   const $main = document.getElementById('mainContent');
+  const builtAt = formatBuiltAt(snapshot.builtAt);
   const staleHtml = snapshot.isStale
-    ? `<div class="stale-banner">
-         <span><b>Note:</b> This data is from ${new Date(snapshot.builtAt).toLocaleString()}.</span>
-         <button class="btn btn-sm btn-outline" id="refreshBtn">Refresh Now</button>
+    ? `<div class="status-banner status-banner-warning">
+         <span class="status-dot" aria-hidden="true"></span>
+         <span><b>Needs refresh.</b> This snapshot was built ${esc(timeAgo(snapshot.builtAt))} (${esc(builtAt)}).</span>
+         <button class="btn btn-sm btn-outline" id="staleRefreshBtn">Refresh Now</button>
        </div>` : '';
 
   $main.innerHTML = `
-    <div class="viewer-header">
-      <div class="viewer-header-info">
-        <h2>${esc(report.name)}</h2>
-        <p>${esc(report.description || '')} &nbsp;·&nbsp; Built: ${new Date(snapshot.builtAt).toLocaleString()}</p>
+    <div class="report-viewer">
+      <div class="viewer-commandbar">
+        <button class="btn btn-ghost btn-sm" id="backBtn">Back</button>
+        <div class="viewer-header-info">
+          <span class="library-kicker">Report</span>
+          <h2>${esc(report.name)}</h2>
+          <p>${esc(report.description || 'No description provided.')}</p>
+          <div class="viewer-meta">
+            <span class="viewer-meta-pill">Built ${esc(timeAgo(snapshot.builtAt))}</span>
+            <span class="viewer-meta-pill">${esc(builtAt)}</span>
+            ${snapshot.isStale ? '<span class="viewer-meta-pill viewer-meta-warning">Stale</span>' : '<span class="viewer-meta-pill viewer-meta-ready">Ready</span>'}
+          </div>
+        </div>
+        <div class="viewer-actions">
+          <button class="btn btn-primary btn-sm" id="refreshBtn">Refresh</button>
+          <button class="btn btn-outline btn-sm" id="exportBtn">Export</button>
+          <button class="btn btn-outline btn-sm" id="subBtn">Subscribe</button>
+        </div>
       </div>
-      <div class="viewer-actions">
-        <button class="btn btn-outline btn-sm" id="refreshBtn2">Refresh</button>
-        <button class="btn btn-outline btn-sm" id="exportBtn">Export…</button>
-        <button class="btn btn-outline btn-sm" id="subBtn">Subscribe…</button>
-        <button class="btn btn-outline btn-sm" id="backBtn">← Back</button>
+      ${staleHtml}
+      <div class="viewer-body viewer-frame-shell" id="reportFrame">
+        <div class="loading-state"><span class="spinner"></span><span>Rendering report…</span></div>
       </div>
-    </div>
-    ${staleHtml}
-    <div class="viewer-body" id="reportFrame">
-      <div class="viewer-loading">Rendering…</div>
     </div>`;
 
   document.getElementById('backBtn').addEventListener('click', () => {
     if (currentFolderId) loadReportList(currentFolderId, currentFolderName);
   });
-  document.getElementById('refreshBtn2').addEventListener('click', () => runAndPoll(report.id));
+  document.getElementById('refreshBtn').addEventListener('click', () => runAndPoll(report.id, report));
   document.getElementById('exportBtn').addEventListener('click', () => showExport(report.id));
   document.getElementById('subBtn').addEventListener('click', () => openSubscribeModal(report.id));
-  const staleBtn = document.getElementById('refreshBtn');
-  if (staleBtn) staleBtn.addEventListener('click', () => runAndPoll(report.id));
+  const staleBtn = document.getElementById('staleRefreshBtn');
+  if (staleBtn) staleBtn.addEventListener('click', () => runAndPoll(report.id, report));
 
   loadReportFrame(report.id, initialPage || currentActivePage);
 }
@@ -407,6 +557,7 @@ function loadReportFrame(id, initialPage = null) {
   const $frame = document.getElementById('reportFrame');
   if (!$frame) return;
   const iframe = document.createElement('iframe');
+  iframe.title = 'Report viewer';
   iframe.style.cssText = 'width:100%;height:100%;border:none;';
   iframe.srcdoc = buildRuntimeHtml(id, false, initialPage);
   $frame.innerHTML = '';
@@ -446,21 +597,49 @@ function buildRuntimeHtml(id, isPreview = false, initialPage = null) {
 
 
 // ── Execute / Refresh with polling ────────────────────────────────────────────
-async function runAndPoll(id) {
+async function runAndPoll(id, report = null) {
   const savedPage = currentActivePage;  // remember which tab the user was on
   const $main = document.getElementById('mainContent');
+  const title = report?.name || 'Report';
+  const description = report?.description || 'The report is running. You can leave this view and return when it completes.';
   $main.innerHTML = `
-    <div class="refresh-banner" id="pollBanner">
-      <span class="spinner"></span>&nbsp; Running report…
-    </div>
-    <div class="viewer-body empty-state">Waiting for results…</div>`;
+    <div class="report-viewer">
+      <div class="viewer-commandbar">
+        <button class="btn btn-ghost btn-sm" id="backBtn">Back</button>
+        <div class="viewer-header-info">
+          <span class="library-kicker">Running</span>
+          <h2>${esc(title)}</h2>
+          <p>${esc(description)}</p>
+        </div>
+        <div class="viewer-actions">
+          <button class="btn btn-primary btn-sm" disabled>Running</button>
+          <button class="btn btn-outline btn-sm" disabled>Export</button>
+          <button class="btn btn-outline btn-sm" disabled>Subscribe</button>
+        </div>
+      </div>
+      <div class="status-banner status-banner-info" id="pollBanner">
+        <span class="spinner"></span>
+        <span><b>Running report.</b> Building a fresh snapshot and preserving your current page.</span>
+      </div>
+      <div class="viewer-body viewer-body-empty">
+        <div class="empty-state empty-state-panel">
+          <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
+          <h2>Waiting for results</h2>
+          <p>The viewer will refresh automatically when the run finishes.</p>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('backBtn').addEventListener('click', () => {
+    if (currentFolderId) loadReportList(currentFolderId, currentFolderName);
+  });
 
   let jobId;
   try {
     const res = await reportsApi.refresh(id);
     jobId = res.jobId;
   } catch (err) {
-    $main.innerHTML = `<div class="empty-state">Failed to start job: ${esc(err.message)}</div>`;
+    renderRunFailure(id, report, `Failed to start job: ${err.message}`);
     return;
   }
 
@@ -474,12 +653,48 @@ async function runAndPoll(id) {
         return;
       }
       if (job.status === 'Failed') {
-        $main.innerHTML = `<div class="empty-state">Report execution failed: ${esc(job.error || 'unknown error')}</div>`;
+        renderRunFailure(id, report, `Report execution failed: ${job.error || 'unknown error'}`);
         return;
       }
     } catch {}
   }
-  $main.innerHTML = `<div class="empty-state">Timed out waiting for report execution.</div>`;
+  renderRunFailure(id, report, 'Timed out waiting for report execution.');
+}
+
+function renderRunFailure(id, report, message) {
+  const $main = document.getElementById('mainContent');
+  $main.innerHTML = `
+    <div class="report-viewer">
+      <div class="viewer-commandbar">
+        <button class="btn btn-ghost btn-sm" id="backBtn">Back</button>
+        <div class="viewer-header-info">
+          <span class="library-kicker">Run failed</span>
+          <h2>${esc(report?.name || 'Report')}</h2>
+          <p>${esc(message)}</p>
+        </div>
+        <div class="viewer-actions">
+          <button class="btn btn-primary btn-sm" id="retryRunBtn">Retry</button>
+          <button class="btn btn-outline btn-sm" id="subBtn">Subscribe</button>
+        </div>
+      </div>
+      <div class="status-banner status-banner-danger">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span><b>Run did not complete.</b> Review the message above, then retry when ready.</span>
+      </div>
+      <div class="viewer-body viewer-body-empty">
+        <div class="empty-state empty-state-panel empty-state-error">
+          <div class="empty-state-icon empty-state-icon-alert" aria-hidden="true"></div>
+          <h2>Could not build snapshot</h2>
+          <p>${esc(message)}</p>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('retryRunBtn').addEventListener('click', () => runAndPoll(id, report));
+  document.getElementById('subBtn').addEventListener('click', () => openSubscribeModal(id));
+  document.getElementById('backBtn').addEventListener('click', () => {
+    if (currentFolderId) loadReportList(currentFolderId, currentFolderName);
+  });
 }
 
 // ── Export modal ───────────────────────────────────────────────────────────────
@@ -496,6 +711,20 @@ function showExport(id) {
   };
   document.getElementById('exportCancelBtn').onclick = () => { $modal.style.display = 'none'; };
 }
+
+document.querySelectorAll('.modal-overlay').forEach(modal => {
+  modal.addEventListener('click', e => {
+    if (e.target === modal) modal.style.display = 'none';
+  });
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const openModal = [...document.querySelectorAll('.modal-overlay')]
+    .reverse()
+    .find(m => m.style.display !== 'none');
+  if (openModal) openModal.style.display = 'none';
+});
 
 // ── Subscribe modal ────────────────────────────────────────────────────────────
 let _subReportId = null;
@@ -558,7 +787,13 @@ function wireSubscribeModal() {
     const smtp   = format !== 'Link' ? document.getElementById('sub-smtp').value : null;
 
     // Collect parameters from dynamic fields
-    const parameters = collectParamValues('sub-params-fields', _subParams);
+    const validation = validateParamFields('sub-params-fields', _subParams);
+    if (!validation.ok) {
+      $err.textContent = 'Complete the required report parameters before creating the subscription.';
+      $err.classList.add('show');
+      return;
+    }
+    const parameters = validation.values;
 
     const body = {
       reportId:       _subReportId,
@@ -586,57 +821,87 @@ function wireSubscribeModal() {
 async function showMySubscriptions() {
   document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
   const $main = document.getElementById('mainContent');
-  $main.innerHTML = `<div class="viewer-loading">Loading subscriptions…</div>`;
+  $main.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading subscriptions…</span></div>`;
 
   try {
     const subs = await subscriptionsApi.list();
     renderMySubscriptions(subs);
   } catch {
-    $main.innerHTML = `<div class="empty-state">Failed to load subscriptions.</div>`;
+    $main.innerHTML = `
+      <div class="empty-state empty-state-panel empty-state-error">
+        <div class="empty-state-icon empty-state-icon-alert" aria-hidden="true"></div>
+        <h2>Subscriptions did not load</h2>
+        <p>Refresh the page or try again after checking the portal connection.</p>
+      </div>`;
   }
 }
 
 function renderMySubscriptions(subs) {
   const $main = document.getElementById('mainContent');
+  const activeCount = subs.filter(s => s.isActive).length;
   const rows = subs.map(s => `
     <tr>
-      <td>${esc(s.name || s.reportName)}</td>
-      <td>${esc(s.reportName)}</td>
-      <td>${esc(s.schedule || 'On Refresh')}</td>
-      <td>${esc(s.format)}</td>
-      <td class="text-sm text-muted">${esc(s.parameterSummary || '—')}</td>
-      <td><span class="chip ${s.isActive ? 'chip-active' : 'chip-inactive'}">${s.isActive ? 'Active' : 'Paused'}</span></td>
+      <td>
+        <div class="sub-name">${esc(s.name || s.reportName)}</div>
+        <div class="sub-report">${esc(s.reportName)}</div>
+      </td>
+      <td>
+        <span class="sub-format">${esc(s.format)}</span>
+        <div class="sub-report">${esc(s.recipients || (s.format === 'Link' ? 'Portal link' : 'Profile email'))}</div>
+      </td>
+      <td>
+        <div>${esc(s.schedule || (s.deliverOnRefresh ? 'On refresh' : 'Manual'))}</div>
+        <div class="sub-report">Next: ${esc(formatOptionalDate(s.nextRunAt))}</div>
+      </td>
+      <td class="text-sm text-muted">${esc(s.parameterSummary || 'Default parameters')}</td>
+      <td>
+        <span class="chip ${s.isActive ? 'chip-active' : 'chip-inactive'}">${s.isActive ? 'Active' : 'Paused'}</span>
+        ${s.failCount ? `<div class="sub-warning">${s.failCount} failed send${s.failCount === 1 ? '' : 's'}</div>` : `<div class="sub-report">Last: ${esc(formatOptionalDate(s.lastSentAt))}</div>`}
+      </td>
       <td>
         <div class="table-actions">
           <button class="btn btn-outline btn-sm" data-action="edit-params" data-id="${s.id}"
-                  data-report-id="${s.reportId}" data-name="${esc(s.name || s.reportName)}"
+                  data-report-id="${s.reportId}" data-name="${escAttr(s.name || s.reportName)}"
                   data-params='${escAttr(JSON.stringify(s.parameters || {}))}'>
             Edit Params
           </button>
           <button class="btn btn-outline btn-sm" data-action="toggle" data-id="${s.id}"
                   data-active="${s.isActive}">${s.isActive ? 'Pause' : 'Resume'}</button>
-          <button class="btn btn-danger btn-sm" data-action="delete" data-id="${s.id}">Delete</button>
+          <button class="btn btn-outline btn-sm btn-danger-soft" data-action="delete" data-id="${s.id}">Delete</button>
         </div>
       </td>
     </tr>`).join('');
 
   $main.innerHTML = `
-    <div class="report-list-hdr">
-      <h2>My Subscriptions</h2>
-      <span class="badge badge-ok">${subs.length} subscription${subs.length !== 1 ? 's' : ''}</span>
+    <div class="library-toolbar">
+      <div class="library-title">
+        <span class="library-kicker">Delivery</span>
+        <h2>My Subscriptions</h2>
+      </div>
+      <span class="badge badge-ok">${activeCount} active</span>
+      <span class="badge badge-refresh">${subs.length} total</span>
+      <div class="library-toolbar-spacer"></div>
+      <button class="btn btn-outline" id="refreshSubscriptionsBtn" type="button">Refresh</button>
     </div>
     <div class="subs-table-wrap">
       <table class="data-table">
         <thead>
           <tr>
-            <th>Name</th><th>Report</th><th>Schedule</th><th>Format</th>
+            <th>Subscription</th><th>Delivery</th><th>Schedule</th>
             <th>Parameters</th><th>Status</th><th>Actions</th>
           </tr>
         </thead>
-        <tbody>${rows || '<tr><td colspan="7" class="empty-state">No subscriptions yet.</td></tr>'}</tbody>
+        <tbody>${rows || `<tr><td colspan="6">
+          <div class="empty-state empty-state-table">
+            <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
+            <h2>No subscriptions yet</h2>
+            <p>Open a report and choose Subscribe to schedule delivery.</p>
+          </div>
+        </td></tr>`}</tbody>
       </table>
     </div>`;
 
+  document.getElementById('refreshSubscriptionsBtn')?.addEventListener('click', () => showMySubscriptions());
   $main.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', () => handleSubAction(btn));
   });
@@ -646,7 +911,7 @@ async function handleSubAction(btn) {
   const id     = +btn.dataset.id;
   const action = btn.dataset.action;
   if (action === 'delete') {
-    if (!confirm('Delete this subscription?')) return;
+    if (!confirm('Delete this subscription? This stops future deliveries but does not remove generated report snapshots.')) return;
     try { await subscriptionsApi.delete(id); showMySubscriptions(); }
     catch (err) { alert(err.message); }
   } else if (action === 'toggle') {
@@ -674,7 +939,7 @@ async function openEditParamsModal(subId, reportId, label, currentValues, onSave
   document.getElementById('ep-subtitle').textContent = label;
   document.getElementById('ep-error').textContent    = '';
   document.getElementById('ep-error').classList.remove('show');
-  document.getElementById('ep-fields').innerHTML = '<div class="viewer-loading">Loading…</div>';
+  document.getElementById('ep-fields').innerHTML = '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading parameters…</span></div>';
   document.getElementById('editParamsModal').style.display = 'flex';
 
   try {
@@ -696,7 +961,13 @@ function wireEditParamsModal() {
   document.getElementById('ep-saveBtn').addEventListener('click', async () => {
     const $err = document.getElementById('ep-error');
     $err.classList.remove('show');
-    const parameters = collectParamValues('ep-fields', _epParams);
+    const validation = validateParamFields('ep-fields', _epParams);
+    if (!validation.ok) {
+      $err.textContent = 'Complete the required report parameters before saving.';
+      $err.classList.add('show');
+      return;
+    }
+    const parameters = validation.values;
     try {
       await subscriptionsApi.update(_epSubId, { parameters: Object.keys(parameters).length ? parameters : null });
       document.getElementById('editParamsModal').style.display = 'none';
@@ -715,6 +986,11 @@ function renderParamFields(containerId, params, currentValues) {
   const $container = document.getElementById(containerId);
   $container.innerHTML = '';
 
+  if (!params.length) {
+    $container.innerHTML = '<div class="param-empty">This report does not define subscription parameters.</div>';
+    return;
+  }
+
   params.forEach(p => {
     const inputId = `param-${containerId}-${p.name.replace(/[^a-z0-9]/gi, '_')}`;
     const current = currentValues[p.name] ?? p.default ?? '';
@@ -723,20 +999,23 @@ function renderParamFields(containerId, params, currentValues) {
     const $row = document.createElement('div');
     $row.className = 'param-row';
 
-    const label = `${p.name}${p.required ? ' *' : ''}`;
-    const hint  = p.description ? ` <span class="text-muted text-sm">— ${esc(p.description)}</span>` : '';
+    const required = p.required ? '<span class="required-marker">Required</span>' : '<span class="optional-marker">Optional</span>';
+    const hint  = p.description ? `<div class="param-hint">${esc(p.description)}</div>` : '';
     $row.innerHTML = `
-      <span class="param-label">${esc(label)}${hint}
-        <span class="text-muted text-sm">(${esc(p.type)})</span>
-      </span>
-      <div style="display:flex; gap:0; align-items:stretch">
+      <div class="param-heading">
+        <label class="param-label" for="${inputId}">${esc(p.name)}</label>
+        <span class="param-type">${esc(p.type)}</span>
+        ${required}
+      </div>
+      ${hint}
+      <div class="inline-control">
         <input class="param-input" type="text" id="${inputId}" data-param="${esc(p.name)}"
-               value="${esc(String(current))}" placeholder="${p.required ? 'Required' : 'Optional'}"
-               style="flex:1; border-top-right-radius:0; border-bottom-right-radius:0; border-right:none">
+               data-required="${p.required ? 'true' : 'false'}"
+               value="${esc(String(current))}" placeholder="${p.required ? 'Required value' : 'Optional value'}">
         ${isReldate ? `
-          <button type="button" class="btn btn-outline" style="padding:0 8px; border-top-left-radius:0; border-bottom-left-radius:0" 
+          <button type="button" class="btn btn-outline"
                   onclick="document.getElementById('${inputId}-picker').showPicker()">📅</button>
-          <input type="date" id="${inputId}-picker" style="position:absolute; opacity:0; width:0; height:0; pointer-events:none"
+          <input type="date" id="${inputId}-picker" class="sr-date-input"
                  onchange="document.getElementById('${inputId}').value = this.value">
         ` : ''}
       </div>
@@ -762,6 +1041,24 @@ function collectParamValues(containerId, params) {
     if (val) result[input.dataset.param] = val;
   });
   return result;
+}
+
+function validateParamFields(containerId, params) {
+  const values = collectParamValues(containerId, params);
+  let ok = true;
+  const $container = document.getElementById(containerId);
+  $container.querySelectorAll('[data-param]').forEach(input => {
+    const missing = input.dataset.required === 'true' && !input.value.trim();
+    input.classList.toggle('param-input-error', missing);
+    const row = input.closest('.param-row');
+    row?.classList.toggle('param-row-error', missing);
+    ok = ok && !missing;
+  });
+  return { ok, values };
+}
+
+function formatOptionalDate(value) {
+  return value ? new Date(value).toLocaleString() : 'Not scheduled';
 }
 
 // ── Export modal ───────────────────────────────────────────────────────────────

@@ -5,24 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin — ETL-SQL Report Portal</title>
   <link rel="stylesheet" href="/css/portal.css">
-  <style>
-    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:1000}
-    .modal-card{background:#fff;border-radius:8px;padding:24px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.25);max-height:90vh;overflow-y:auto}
-    .param-row{margin-bottom:12px}
-    .param-label{display:block;font-size:.85em;font-weight:600;margin-bottom:4px;color:#555}
-    .param-input{width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:.9em;box-sizing:border-box}
-    .reldate-quickpicks{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}
-    .reldate-quickpicks button{padding:2px 6px;font-size:.78em;border:1px solid #ccc;border-radius:3px;background:#f5f5f5;cursor:pointer}
-    .reldate-quickpicks button:hover{background:#e8e8e8}
-    .subs-table-wrap{overflow-x:auto}
-  </style>
 </head>
 <body>
 <div class="app-shell">
 
   <!-- ── Top bar ────────────────────────────────────────────────────────── -->
   <header class="topbar">
-    <span class="topbar-brand">ETL-SQL <span>Portal</span></span>
+    <span class="topbar-brand"><span class="brand-mark">E</span> ETL-SQL <span>Portal</span></span>
     <nav class="topbar-nav">
       <a href="/index.html">Reports</a>
       <a href="/admin.html" class="active">Admin</a>
@@ -33,13 +22,19 @@
   </header>
 
   <!-- ── Main body (no sidebar) ─────────────────────────────────────────── -->
-  <div class="app-body" style="display:block; overflow-y:auto">
-    <div class="main-content">
+  <div class="app-body admin-body">
+    <div class="main-content admin-content">
 
-      <h2 style="margin-bottom:20px">Administration</h2>
+      <div class="admin-page-header">
+        <div>
+          <span class="library-kicker">Workspace</span>
+          <h2 class="page-title">Administration</h2>
+          <p class="admin-page-subtitle">Manage portal users, report publishing, subscriptions, audit activity, and shared dataset governance.</p>
+        </div>
+      </div>
 
       <!-- Tab strip -->
-      <div class="admin-tabs">
+      <div class="admin-tabs" aria-label="Administration sections">
         <button class="admin-tab active" data-tab="users">Users</button>
         <button class="admin-tab" data-tab="groups">Groups</button>
         <button class="admin-tab" data-tab="folders">Folders &amp; ACL</button>
@@ -53,10 +48,15 @@
       <div class="admin-panel active" id="panel-users">
         <div class="card">
           <div class="card-header">
-            <h3>Users</h3>
-            <button class="btn btn-outline btn-sm" id="newUserBtn">+ New User</button>
+            <div>
+              <span class="section-kicker">Identity</span>
+              <h3>Users</h3>
+            </div>
+            <div class="admin-action-group">
+              <button class="btn btn-outline btn-sm" id="newUserBtn">New User</button>
+            </div>
           </div>
-          <div id="userTableWrap"><div class="viewer-loading">Loading…</div></div>
+          <div id="userTableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading users…</span></div></div>
         </div>
 
         <!-- Inline new-user form -->
@@ -86,9 +86,9 @@
               </select>
             </div>
           </div>
-          <div id="nu-pass-hint" style="font-size:0.8em; color:#888; margin-bottom:12px; display:none">Leave password blank to keep current.</div>
+          <div id="nu-pass-hint" class="form-hint" style="display:none">Leave password blank to keep current.</div>
           <div id="nu-error" class="error-msg"></div>
-          <div style="display:flex; gap:8px">
+          <div class="form-actions">
             <button class="btn btn-primary" id="nu-saveBtn">Create</button>
             <button class="btn btn-outline" id="nu-cancelBtn">Cancel</button>
           </div>
@@ -100,10 +100,15 @@
       <div class="admin-panel" id="panel-groups">
         <div class="card">
           <div class="card-header">
-            <h3>Groups</h3>
-            <button class="btn btn-outline btn-sm" id="newGroupBtn">+ New Group</button>
+            <div>
+              <span class="section-kicker">Access model</span>
+              <h3>Groups</h3>
+            </div>
+            <div class="admin-action-group">
+              <button class="btn btn-outline btn-sm" id="newGroupBtn">New Group</button>
+            </div>
           </div>
-          <div id="groupTableWrap"><div class="viewer-loading">Loading…</div></div>
+          <div id="groupTableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading groups…</span></div></div>
         </div>
 
         <div class="card" id="newGroupForm" style="display:none">
@@ -121,7 +126,7 @@
             </div>
           </div>
           <div id="ng-error" class="error-msg"></div>
-          <div style="display:flex; gap:8px">
+          <div class="form-actions">
             <button class="btn btn-primary" id="ng-saveBtn">Create</button>
             <button class="btn btn-outline" id="ng-cancelBtn">Cancel</button>
           </div>
@@ -131,18 +136,23 @@
         <!-- Members panel (shown when a group is selected) -->
         <div class="card" id="membersPanel" style="display:none">
           <div class="card-header">
-            <h3>Members of <span id="memberGroupName"></span></h3>
-            <button class="btn btn-outline btn-sm" id="addMemberBtn">+ Add Member</button>
+            <div>
+              <span class="section-kicker">Selected group</span>
+              <h3>Members of <span id="memberGroupName"></span></h3>
+            </div>
+            <div class="admin-action-group">
+              <button class="btn btn-outline btn-sm" id="addMemberBtn">Add Member</button>
+            </div>
           </div>
           <div id="memberTableWrap"></div>
-          <div id="addMemberForm" style="display:none; margin-top:12px">
+          <div id="addMemberForm" class="stacked-form" style="display:none">
             <div class="form-row">
               <div class="form-group">
                 <label>User</label>
                 <select id="addMemberSelect"></select>
               </div>
             </div>
-            <div style="display:flex; gap:8px">
+            <div class="form-actions">
               <button class="btn btn-primary" id="am-saveBtn">Add</button>
               <button class="btn btn-outline" id="am-cancelBtn">Cancel</button>
             </div>
@@ -154,10 +164,15 @@
       <div class="admin-panel" id="panel-folders">
         <div class="card">
           <div class="card-header">
-            <h3>Folders</h3>
-            <button class="btn btn-outline btn-sm" id="newFolderBtn">+ New Folder</button>
+            <div>
+              <span class="section-kicker">Library structure</span>
+              <h3>Folders</h3>
+            </div>
+            <div class="admin-action-group">
+              <button class="btn btn-outline btn-sm" id="newFolderBtn">New Folder</button>
+            </div>
           </div>
-          <div id="folderTableWrap"><div class="viewer-loading">Loading…</div></div>
+          <div id="folderTableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading folders…</span></div></div>
         </div>
 
         <div class="card" id="newFolderForm" style="display:none">
@@ -173,7 +188,7 @@
             </div>
           </div>
           <div id="nf-error" class="error-msg"></div>
-          <div style="display:flex; gap:8px">
+          <div class="form-actions">
             <button class="btn btn-primary" id="nf-saveBtn">Create</button>
             <button class="btn btn-outline" id="nf-cancelBtn">Cancel</button>
           </div>
@@ -183,11 +198,16 @@
         <!-- ACL sub-panel -->
         <div class="card" id="aclPanel" style="display:none">
           <div class="card-header">
-            <h3>Permissions for <span id="aclFolderName"></span></h3>
-            <button class="btn btn-outline btn-sm" id="addAclBtn">+ Grant</button>
+            <div>
+              <span class="section-kicker">Folder permissions</span>
+              <h3>Permissions for <span id="aclFolderName"></span></h3>
+            </div>
+            <div class="admin-action-group">
+              <button class="btn btn-outline btn-sm" id="addAclBtn">Grant</button>
+            </div>
           </div>
           <div id="aclTableWrap"></div>
-          <div id="addAclForm" style="display:none; margin-top:12px">
+          <div id="addAclForm" class="stacked-form" style="display:none">
             <div class="form-row">
               <div class="form-group">
                 <label>Group</label>
@@ -202,7 +222,7 @@
                 </select>
               </div>
             </div>
-            <div style="display:flex; gap:8px">
+            <div class="form-actions">
               <button class="btn btn-primary" id="acl-saveBtn">Grant</button>
               <button class="btn btn-outline" id="acl-cancelBtn">Cancel</button>
             </div>
@@ -214,13 +234,16 @@
       <div class="admin-panel" id="panel-reports">
         <div class="card">
           <div class="card-header">
-            <h3>Published Reports</h3>
-            <div style="display:flex; gap:8px">
-              <button class="btn btn-primary btn-sm" id="openPublishBtn">+ Publish New Report</button>
+            <div>
+              <span class="section-kicker">Catalog</span>
+              <h3>Published Reports</h3>
+            </div>
+            <div class="admin-action-group">
+              <button class="btn btn-primary btn-sm" id="openPublishBtn">Publish Report</button>
               <button class="btn btn-outline btn-sm" id="reportsRefreshBtn">Refresh</button>
             </div>
           </div>
-          <div id="reportsTableWrap"><div class="viewer-loading">Loading…</div></div>
+          <div id="reportsTableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading reports…</span></div></div>
         </div>
 
         <!-- Publish/Edit Report Form -->
@@ -233,8 +256,8 @@
             </div>
             <div class="form-group">
               <label>Script Path (relative to ScriptRoot)</label>
-              <div style="display:flex; gap:8px">
-                <input id="pr-path" type="text" placeholder="sales/daily.rptsql" style="flex:1">
+              <div class="inline-control inline-control-gap">
+                <input id="pr-path" type="text" placeholder="sales/daily.rptsql">
                 <button class="btn btn-outline btn-sm" id="pr-browseBtn" type="button">Browse…</button>
               </div>
             </div>
@@ -247,10 +270,10 @@
           </div>
           <div class="form-group">
             <label>Description</label>
-            <textarea id="pr-desc" rows="2" style="width:100%"></textarea>
+            <textarea id="pr-desc" rows="2"></textarea>
           </div>
           <div id="pr-error" class="error-msg"></div>
-          <div style="display:flex; gap:8px; margin-top:12px">
+          <div class="form-actions mt-4">
             <button class="btn btn-primary btn-sm" id="pr-saveBtn">Publish</button>
             <button class="btn btn-outline btn-sm" id="pr-cancelBtn">Cancel</button>
           </div>
@@ -262,16 +285,19 @@
       <div class="admin-panel" id="panel-audit">
         <div class="card">
           <div class="card-header">
-            <h3>Audit Log</h3>
-            <div style="display:flex; gap:8px; align-items:center">
+            <div>
+              <span class="section-kicker">Activity</span>
+              <h3>Audit Log</h3>
+            </div>
+            <div class="admin-action-group">
               <input id="auditFilter" type="text" placeholder="Filter by action…"
-                     style="padding:4px 8px; border:1px solid #ccc; border-radius:4px; font-size:.85em; width:180px">
+                     class="admin-filter-input">
               <button class="btn btn-outline btn-sm" id="auditRefreshBtn">Refresh</button>
               <button class="btn btn-outline btn-sm" id="auditExportBtn">Export CSV</button>
             </div>
           </div>
-          <div id="auditTableWrap"><div class="viewer-loading">Loading…</div></div>
-          <div id="auditPager" style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px"></div>
+          <div id="auditTableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading audit log…</span></div></div>
+          <div id="auditPager" class="admin-pager"></div>
         </div>
       </div>
 
@@ -279,10 +305,15 @@
       <div class="admin-panel" id="panel-subscriptions">
         <div class="card">
           <div class="card-header">
-            <h3>All Subscriptions</h3>
-            <button class="btn btn-outline btn-sm" id="subsRefreshBtn">Refresh</button>
+            <div>
+              <span class="section-kicker">Delivery</span>
+              <h3>All Subscriptions</h3>
+            </div>
+            <div class="admin-action-group">
+              <button class="btn btn-outline btn-sm" id="subsRefreshBtn">Refresh</button>
+            </div>
           </div>
-          <div class="subs-table-wrap" id="subsTableWrap"><div class="viewer-loading">Loading…</div></div>
+          <div class="subs-table-wrap" id="subsTableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading subscriptions…</span></div></div>
         </div>
       </div>
 
@@ -290,10 +321,15 @@
       <div class="admin-panel" id="panel-datasets">
         <div class="card">
           <div class="card-header">
-            <h3>Shared Datasets</h3>
-            <button class="btn btn-outline btn-sm" id="datasetsRefreshBtn">Refresh</button>
+            <div>
+              <span class="section-kicker">Reusable data assets</span>
+              <h3>Shared Datasets</h3>
+            </div>
+            <div class="admin-action-group">
+              <button class="btn btn-outline btn-sm" id="datasetsRefreshBtn">Refresh</button>
+            </div>
           </div>
-          <div id="datasetsTableWrap"><div class="viewer-loading">Loading…</div></div>
+          <div id="datasetsTableWrap"><div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading datasets…</span></div></div>
         </div>
 
         <!-- Inline edit form -->
@@ -313,7 +349,7 @@
             </div>
           </div>
           <div id="ds-error" class="error-msg"></div>
-          <div style="display:flex; gap:8px">
+          <div class="form-actions">
             <button class="btn btn-primary btn-sm" id="ds-saveBtn">Save</button>
             <button class="btn btn-outline btn-sm" id="ds-cancelBtn">Cancel</button>
           </div>
@@ -327,8 +363,8 @@
             <button class="btn btn-outline btn-sm" id="dsAclCloseBtn">Close</button>
           </div>
           <div id="dsAclTableWrap"></div>
-          <div style="margin-top:16px">
-            <h4 style="margin:0 0 8px">Grant Permission</h4>
+          <div class="stacked-form">
+            <h4 class="section-kicker">Grant Permission</h4>
             <div class="form-row">
               <div class="form-group">
                 <label>Group</label>
@@ -353,12 +389,19 @@
 </div>
 
 <!-- Edit Parameters modal -->
-<div id="editParamsModal" class="modal-overlay" style="display:none">
-  <div class="modal-card" style="max-width:520px">
-    <h3 id="editParamsTitle" style="margin:0 0 16px">Edit Parameters</h3>
-    <div id="editParamsFields"></div>
+<div id="editParamsModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="editParamsTitle">
+  <div class="modal-card modal-lg modal-workflow">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Subscription</span>
+        <h3 id="editParamsTitle" class="modal-title">Edit Parameters</h3>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div id="editParamsFields" class="param-grid"></div>
+    </div>
     <div id="editParamsError" class="error-msg"></div>
-    <div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end">
+    <div class="modal-actions modal-actions-sticky">
       <button class="btn btn-outline" id="editParamsCancelBtn">Cancel</button>
       <button class="btn btn-primary" id="editParamsSaveBtn">Save</button>
     </div>
@@ -367,28 +410,25 @@
   </div>
 </div>
 <!-- Script Browser modal -->
-<div id="scriptBrowserModal" class="modal-overlay" style="display:none">
-  <div class="modal-card" style="width:500px">
-    <div class="card-header" style="padding:0 0 16px">
-      <h3>Select Report Script</h3>
-      <input type="text" id="sb-filter" placeholder="Filter scripts…" style="padding:4px 8px; border:1px solid #ccc; border-radius:4px; font-size:.85em; width:180px">
+<div id="scriptBrowserModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="scriptBrowserTitle">
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">ScriptRoot</span>
+        <h3 id="scriptBrowserTitle" class="modal-title">Select Report Script</h3>
+      </div>
+      <input type="text" id="sb-filter" placeholder="Filter scripts…" class="admin-filter-input">
     </div>
-    <div id="sb-list" style="max-height:400px; overflow-y:auto; border:1px solid #eee; border-radius:4px">
-      <div class="viewer-loading">Loading…</div>
+    <div id="sb-list" class="script-browser-list">
+      <div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading…</span></div>
     </div>
     <div id="sb-error" class="error-msg"></div>
-    <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end">
+    <div class="modal-actions">
       <button class="btn btn-outline" id="sb-cancelBtn">Cancel</button>
     </div>
   </div>
 </div>
 
-<style>
-  .sb-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #f5f5f5; font-size: .9em; font-family: monospace; display: flex; align-items: center; gap: 8px; }
-  .sb-item:hover { background: #f0f7ff; }
-  .sb-item:last-child { border-bottom: none; }
-  .sb-item i { color: #888; font-style: normal; }
-</style>
 <script type="module">
 import { auth, authApi, foldersApi, adminApi, subscriptionsApi, reportsApi, datasetsApi } from '/js/api.js';
 
@@ -907,7 +947,7 @@ document.getElementById('pr-browseBtn').addEventListener('click', async () => {
   const $modal = document.getElementById('scriptBrowserModal');
   const $list  = document.getElementById('sb-list');
   $modal.style.display = 'flex';
-  $list.innerHTML = '<div class="viewer-loading">Loading scripts…</div>';
+  $list.innerHTML = '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading scripts…</span></div>';
   document.getElementById('sb-filter').value = '';
 
   try {
@@ -926,8 +966,8 @@ function renderScriptBrowserList(scripts) {
     return;
   }
   $list.innerHTML = scripts.map(s => `
-    <div class="sb-item" data-path="${esc(s)}">
-      <i>📄</i> ${esc(s)}
+    <div class="sb-item" data-path="${escAttr(s)}">
+      <span class="script-glyph" aria-hidden="true"></span> ${esc(s)}
     </div>`).join('');
 
   $list.querySelectorAll('.sb-item').forEach(el => {
@@ -998,7 +1038,7 @@ document.getElementById('auditFilter').addEventListener('keydown', e => {
 document.getElementById('auditExportBtn').addEventListener('click', () => {
   const action = document.getElementById('auditFilter').value.trim();
   const qs = action ? `?action=${encodeURIComponent(action)}` : '';
-  const token = sessionStorage.getItem('jwt');
+  const token = auth.getToken();
   // Use a hidden <a> with the auth token embedded via fetch + blob URL
   fetch(`/api/admin/audit/export/csv${qs}`, {
     headers: { Authorization: `Bearer ${token}` }
@@ -1062,17 +1102,17 @@ function openEditParamsModal(subId, reportId, label, currentValues, onSaved) {
   document.getElementById('editParamsTitle').textContent = `Edit Parameters — ${label}`;
   document.getElementById('editParamsError').classList.remove('show');
   const $fields = document.getElementById('editParamsFields');
-  $fields.innerHTML = '<div class="viewer-loading">Loading…</div>';
+  $fields.innerHTML = '<div class="loading-state loading-state-compact"><span class="spinner"></span><span>Loading parameters…</span></div>';
   document.getElementById('editParamsModal').style.display = 'flex';
 
   reportsApi.getParameters(reportId).then(params => {
     if (!params.length) {
-      $fields.innerHTML = '<p style="color:#888">This report has no input parameters.</p>';
+      $fields.innerHTML = '<div class="param-empty">This report has no input parameters.</div>';
       return;
     }
     renderParamFields('editParamsFields', params, currentValues);
   }).catch(() => {
-    $fields.innerHTML = '<p style="color:#c00">Failed to load parameters.</p>';
+    $fields.innerHTML = '<div class="param-empty text-danger">Failed to load parameters.</div>';
   });
 }
 
@@ -1089,8 +1129,12 @@ function renderParamFields(containerId, params, currentValues) {
       </div>` : '';
     return `
       <div class="param-row">
-        <label class="param-label">${esc(p.name)}${p.required ? ' *' : ''} <span style="color:#888;font-weight:400">(${esc(p.type || '')})</span></label>
-        ${p.description ? `<div style="font-size:.8em;color:#888;margin-bottom:4px">${esc(p.description)}</div>` : ''}
+        <div class="param-heading">
+          <label class="param-label" for="param-${escAttr(p.name)}">${esc(p.name)}</label>
+          <span class="param-type">${esc(p.type || '')}</span>
+          ${p.required ? '<span class="required-marker">Required</span>' : '<span class="optional-marker">Optional</span>'}
+        </div>
+        ${p.description ? `<div class="param-hint">${esc(p.description)}</div>` : ''}
         <input class="param-input" id="param-${p.name}" type="text" value="${escAttr(String(val))}"
           placeholder="${isReldate ? 'e.g. D-1, M-1, Y-1' : ''}">
         ${quickpicks}
@@ -1148,37 +1192,62 @@ async function loadDatasets() {
   try {
     allDatasets = await datasetsApi.list();
     if (!allDatasets.length) {
-      $wrap.innerHTML = '<div class="empty-state">No shared datasets registered. Datasets are created by <code>CREATE DATASET</code> statements in report scripts.</div>';
+      $wrap.innerHTML = `
+        <div class="empty-state empty-state-panel">
+          <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
+          <h2>No shared datasets registered</h2>
+          <p>Datasets are created by <code>CREATE DATASET</code> statements in report scripts.</p>
+        </div>`;
       return;
     }
     const rows = allDatasets.map(d => `
       <tr>
-        <td><strong>${esc(d.name)}</strong></td>
-        <td class="text-sm text-muted">${esc(d.folderPath || '')}</td>
-        <td><span class="chip chip-${(d.accessLevel || '').toLowerCase()}">${esc(d.accessLevel)}</span></td>
-        <td class="text-sm">${d.rowCount != null ? d.rowCount.toLocaleString() : '—'}</td>
-        <td><span class="chip ${d.isStale ? 'chip-inactive' : 'chip-active'}">${d.isStale ? 'Stale' : 'Fresh'}</span></td>
-        <td class="text-sm text-muted">${d.lastRefresh ? new Date(d.lastRefresh).toLocaleString() : '—'}</td>
-        <td class="text-sm">${esc(d.ttl || '—')}</td>
-        <td class="text-sm text-muted">${esc(d.owningReportName || '—')}</td>
+        <td>
+          <div class="asset-name">${esc(d.name)}</div>
+          <div class="asset-path">${esc(d.folderPath || 'Root')}</div>
+        </td>
+        <td>
+          <span class="chip chip-${(d.accessLevel || '').toLowerCase()}">${esc(d.accessLevel)}</span>
+          ${d.isEncrypted ? '<div class="asset-meta">Encrypted cache</div>' : '<div class="asset-meta">Plain cache</div>'}
+        </td>
+        <td>
+          <div class="asset-count">${d.rowCount != null ? d.rowCount.toLocaleString() : '—'}</div>
+          <div class="asset-meta">rows</div>
+        </td>
+        <td>
+          <span class="chip ${d.isStale ? 'chip-inactive' : 'chip-active'}">${d.isStale ? 'Stale' : 'Fresh'}</span>
+          <div class="asset-meta">TTL ${esc(d.ttl || 'none')}</div>
+        </td>
+        <td>
+          <div class="asset-refresh">
+            <span>${esc(formatOptionalDate(d.lastRefresh))}</span>
+            <span class="asset-meta">${esc(d.refreshInterval ? `Every ${d.refreshInterval}` : 'Manual refresh')}</span>
+          </div>
+        </td>
+        <td>
+          <div class="asset-lineage">${esc(d.owningReportName || 'Unowned dataset')}</div>
+          <div class="asset-meta">${d.owningReportId ? `Report #${d.owningReportId}` : 'No owning report'}</div>
+        </td>
         <td>
           <div class="table-actions">
             <button class="btn btn-outline btn-sm" data-action="refresh" data-id="${d.id}">Refresh</button>
             <button class="btn btn-outline btn-sm" data-action="edit" data-id="${d.id}">Edit</button>
             <button class="btn btn-outline btn-sm" data-action="acl" data-id="${d.id}" data-name="${escAttr(d.name)}">Permissions</button>
-            <button class="btn btn-danger btn-sm" data-action="delete" data-id="${d.id}">Delete</button>
+            <button class="btn btn-outline btn-sm btn-danger-soft" data-action="delete" data-id="${d.id}">Delete</button>
           </div>
         </td>
       </tr>`).join('');
     $wrap.innerHTML = `
-      <table class="data-table">
-        <thead><tr><th>Name</th><th>Folder</th><th>Access</th><th>Rows</th><th>Status</th><th>Last Refresh</th><th>TTL</th><th>Owning Report</th><th>Actions</th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>`;
+      <div class="dataset-table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Dataset</th><th>Access</th><th>Rows</th><th>Status</th><th>Refresh</th><th>Lineage</th><th>Actions</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
     $wrap.querySelectorAll('[data-action]').forEach(btn => {
       btn.addEventListener('click', () => handleDatasetAction(btn));
     });
-  } catch { $wrap.innerHTML = '<div class="empty-state">Failed to load datasets.</div>'; }
+  } catch { $wrap.innerHTML = '<div class="empty-state empty-state-panel empty-state-error">Failed to load datasets.</div>'; }
 }
 
 async function handleDatasetAction(btn) {
@@ -1226,8 +1295,8 @@ async function loadDatasetAcl(datasetId) {
     const rows = acls.map(a => `
       <tr>
         <td>${esc(a.groupName)}</td>
-        <td>${esc(a.permission)}</td>
-        <td><button class="btn btn-danger btn-sm" data-gid="${a.groupId}">Revoke</button></td>
+        <td><span class="chip chip-${(a.permission || '').toLowerCase()}">${esc(a.permission)}</span></td>
+        <td><button class="btn btn-outline btn-sm btn-danger-soft" data-gid="${a.groupId}">Revoke</button></td>
       </tr>`).join('');
     $wrap.innerHTML = `
       <table class="data-table">
@@ -1279,7 +1348,24 @@ function esc(s) {
 function escAttr(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
+function formatOptionalDate(value) {
+  return value ? new Date(value).toLocaleString() : 'Not refreshed';
+}
 function alertErr(err) { alert(err.message || 'An error occurred.'); }
+
+document.querySelectorAll('.modal-overlay').forEach(modal => {
+  modal.addEventListener('click', e => {
+    if (e.target === modal) modal.style.display = 'none';
+  });
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const openModal = [...document.querySelectorAll('.modal-overlay')]
+    .reverse()
+    .find(m => m.style.display !== 'none');
+  if (openModal) openModal.style.display = 'none';
+});
 </script>
 </body>
 </html>
