@@ -34,6 +34,6 @@ PRINT 'Final Audit Lineage for UserId:';
 SELECT * FROM LINEAGE('#FinalAudit', 'UserId');
 
 -- 5. Export lineage to a report
-LINEAGE('#FinalAudit') TO 'LineageReport.md';
+LINEAGE('#FinalAudit') TO 'samples/output/LineageReport.md';
 
-PRINT 'Lineage tracking complete. Check LineageReport.md for the graph.';
+PRINT 'Lineage tracking complete. Check samples/output/LineageReport.md for the graph.';

@@ -88,7 +88,7 @@ SELECT * FROM #lin_check;
 
 -- Export to markdown (write to temp file)
 BEGIN TRY
-    LINEAGE(#Tagged) TO 'samples/kitchen_sinks/lineage_output.md';
+    LINEAGE(#Tagged) TO 'samples/output/lineage_output.md';
     PRINT 'Lineage exported to file.';
 END TRY
 BEGIN CATCH
