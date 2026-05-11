@@ -1,21 +1,17 @@
 -- Main Orchestration: HR Data Conversion (30 Entities)
--- Path: samples/conversion/main.etlsql
+-- Path: samples/09_Conversions/main.etlsql
 -- @requires: postgres
 
 -- 1. Setup Environment
-DECLARE @OutputDir PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\output\';
-IF NOT DIRECTORY_EXISTS(@OutputDir)
-BEGIN
-    CREATE CONNECTION out_dir ON DIRECTORY(@OutputDir) WITH(CREATE=ON);
-    DROP CONNECTION out_dir;
-END
+DECLARE @InputDir   PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\extract_staging\';
+DECLARE @OutputDir  PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\output\';
+DECLARE @ZipFile    PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\hr_migration.zip';
 
 -- 2. Define System A Connection
-CREATE CONNECTION system_a ON POSTGRES()
+CREATE CONNECTION system_a ON POSTGRES() 
     WITH(HOST='localhost', PORT=5432, DATABASE='postgres', USER='postgres', PASSWORD='postgres');
 
--- 3. Define 30 Topics
-DECLARE @topics LIST = (
+DECLARE @entities LIST = (
     'hr_01_employees', 'hr_02_demographics', 'hr_03_salary_history', 'hr_04_job_history', 
     'hr_05_w4_info', 'hr_06_dependents', 'hr_07_performance', 'hr_08_training', 
     'hr_09_benefits', 'hr_10_contacts', 'hr_11_leave_req', 'hr_12_time_entries', 
@@ -29,28 +25,34 @@ DECLARE @topics LIST = (
 BEGIN TRY
     PRINT 'Starting Conversion of 30 HR Entities...';
 
-    FOREACH @topic IN @topics
+    -- 3. Extract and Clean each entity
+    FOREACH @entity IN @entities
     BEGIN
-        PRINT 'Processing Topic: ' + @topic;
+        PRINT 'Processing Topic: ' + @entity;
         
-        -- Extract data with strict enforcement
-        RUN SCRIPT 'samples/conversion/extract_entity.etlsql' 
-            WITH (@Topic = @topic);
-        
-        -- Define output file
-        DECLARE @filePath = @OutputDir + @topic + '.csv';
-        
-        CREATE CONNECTION export_file ON FLATFILE()
-            WITH(PATH = @filePath, DELIMITER = PIPE, HEADER = ON, ENCODING = 'UTF8');
+        -- RUN SCRIPT handles specialized enforcement for each topic
+        RUN SCRIPT 'samples/09_Conversions/system_a/export_entity.etlsql' 
+            WITH (@Topic = @entity);
             
-        -- Load into file
-        INSERT INTO export_file.FILE SELECT * FROM #ExportSet;
+        -- Data is staged in #ExportSet by the sub-script
+        DECLARE @targetPath = @InputDir + @entity + '.csv';
+        SELECT * INTO FLATFILE(@targetPath) FROM #ExportSet;
         
-        PRINT 'Wrote ' + CAST(@@ROWCOUNT AS STRING) + ' rows to ' + @filePath;
-
-        DROP CONNECTION export_file;
-        DROP TABLE #ExportSet;
+        -- 4. Secure the data (Encrypt)
+        DECLARE @pgpPath = @targetPath + '.pgp';
+        ENCRYPT FILE @targetPath TO @pgpPath 
+            PGP_KEY 'samples/09_Conversions/keys/public.asc';
+            
+        DELETE FILE @targetPath;
     END
+
+    -- 5. Bundle for transport
+    PRINT 'Compressing migration package...';
+    COMPRESS DIRECTORY @InputDir TO @ZipFile;
+
+    -- 6. Hand off to System B
+    PRINT 'Handing off to System B...';
+    RUN SCRIPT 'samples/09_Conversions/system_b/import_main.etlsql';
 
     PRINT 'Conversion Complete. 30 files generated in ' + @OutputDir;
 

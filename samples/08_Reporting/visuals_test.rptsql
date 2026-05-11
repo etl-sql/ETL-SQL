@@ -38,11 +38,11 @@ CREATE VISUAL SalesThreshold AS NUMBERBOX (
 CREATE VISUAL SalesTable AS TABLE (
     SOURCE = (SELECT * FROM #data WHERE Sales >= @threshold),
     TITLE = 'Sales Table',
-    STYLE (DISPLAY = @show_details)
+    VISIBLE = @show_details
 );
 
 -- 5. Page Layout
-CREATE PAGE Main (
+CREATE PAGE Main AS (
     STRUCTURE = 'A B C / D D',
     MAP ('A' = ShowDetails, 'B' = UserName, 'C' = SalesThreshold, 'D' = SalesTable)
 );

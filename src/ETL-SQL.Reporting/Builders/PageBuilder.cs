@@ -7,22 +7,38 @@ namespace ETL_SQL.Reporting.Builders
 {
     public class PageBuilder(StyleBuilder styleBuilder)
     {
-        public PageManifest Build(string name, CreatePageStatement pStmt)
-            => Build(name, pStmt, null);
+        public PageManifest Build(string name, CreatePageStatement pStmt, IExecutionContext? ctx = null)
+            => Build(name, pStmt, ctx, null);
 
         public PageManifest Build(
             string name,
             CreatePageStatement pStmt,
+            IExecutionContext? ctx,
             IReadOnlyDictionary<string, string>? inheritedStyles)
         {
             var (title, titleMd) = styleBuilder.ResolveMarkdown(pStmt.Title, pStmt.TitleIsMarkdown);
             var (subtitle, subtitleMd) = styleBuilder.ResolveMarkdown(pStmt.Subtitle, pStmt.SubtitleIsMarkdown);
 
+            bool isHidden = false;
+            if (pStmt.Visibility != null && ctx != null)
+            {
+                if (pStmt.Visibility.StartsWith("@"))
+                {
+                    var val = ctx.VarContext.GetVariable(pStmt.Visibility);
+                    var s = val?.ToString()?.ToUpperInvariant();
+                    isHidden = s is "OFF" or "FALSE" or "0";
+                }
+                else
+                {
+                    isHidden = pStmt.Visibility.ToUpperInvariant() is "OFF" or "FALSE" or "0";
+                }
+            }
+
             var pm = new PageManifest
             {
                 Name               = name,
                 Structure          = pStmt.Structure,
-                IsHidden               = pStmt.IsHidden,
+                IsHidden           = isHidden,
                 RefreshIntervalSeconds = pStmt.RefreshIntervalSeconds,
                 SlotMap            = pStmt.SlotMap.ToDictionary(kv => kv.Key, kv => kv.Value),
                 Title              = title,

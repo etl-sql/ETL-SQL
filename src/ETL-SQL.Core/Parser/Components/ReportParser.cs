@@ -63,7 +63,7 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.VISIBLE))
                 {
                     Match(TokenType.EQUALS);
-                    options.Add(new VisualOption { Key = "VISIBLE", Value = ParseOnOffValue() ? "ON" : "OFF" });
+                    options.Add(new VisualOption { Key = "VISIBLE", Value = ParseOnOffValue() });
                 }
                 else if (Match(TokenType.MAPPINGS))
                 {
@@ -211,19 +211,23 @@ namespace ETL_SQL.Core.Parser.Components
 
         public Statement ParseCreatePage(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
         {
-            var name = ConsumeIdentifier("Expected page name after CREATE PAGE").Value;
-            Consume(TokenType.AS,     "Expected AS after page name");
-            Match(TokenType.LAYOUT); // Optional LAYOUT keyword
+            var name = ConsumeIdentifier("Expected page name").Value;
+            if (!Match(TokenType.AS))
+            {
+                // Backward compatibility: AS is now preferred but we'll accept ( if name is clearly an identifier.
+                if (!ReportCheck(TokenType.LPAREN)) Consume(TokenType.AS, "Expected AS after page name");
+            }
             Consume(TokenType.LPAREN, "Expected '(' after AS");
-
+            
+            string? visibility = "ON";
             string? structure = null;
+            var slotMap    = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var pageStyles = new Dictionary<string, string>();
             string? pageStyleName = null;
             string? title = null, subtitle = null;
             bool titleMd = false, subtitleMd = false;
             TooltipDefinition? tooltip = null;
-            var slotMap    = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var pageStyles = new Dictionary<string, string>();
-            bool isHidden  = false;
+            int refreshSecs = 0;
 
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
             {
@@ -264,7 +268,7 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.VISIBLE))
                 {
                     Match(TokenType.EQUALS);
-                    isHidden = !ParseOnOffValue();
+                    visibility = ParseOnOffValue();
                 }
                 else
                 {
@@ -277,7 +281,6 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.RPAREN, "Expected ')' to close CREATE PAGE LAYOUT");
 
             // Optional WITH (REFRESH = <seconds>) clause
-            int refreshSecs = 0;
             if (Match(TokenType.WITH))
             {
                 Consume(TokenType.LPAREN, "Expected '(' after WITH");
@@ -287,8 +290,7 @@ namespace ETL_SQL.Core.Parser.Components
                     Consume(TokenType.EQUALS, $"Expected '=' after '{optKey}' in WITH clause");
                     var optVal = _parser.Advance().Value;
                     if (string.Equals(optKey, "VISIBLE", StringComparison.OrdinalIgnoreCase))
-                        isHidden = !(string.Equals(optVal, "ON", StringComparison.OrdinalIgnoreCase)
-                                || string.Equals(optVal, "TRUE", StringComparison.OrdinalIgnoreCase));
+                        visibility = optVal.ToUpperInvariant();
                     else if (string.Equals(optKey, "REFRESH", StringComparison.OrdinalIgnoreCase))
                         int.TryParse(optVal, out refreshSecs);
                     Match(TokenType.COMMA);
@@ -313,7 +315,7 @@ namespace ETL_SQL.Core.Parser.Components
                 Subtitle        = subtitle,
                 SubtitleIsMarkdown = subtitleMd,
                 Tooltip         = tooltip,
-                IsHidden               = isHidden,
+                Visibility      = visibility,
                 RefreshIntervalSeconds = refreshSecs,
                 Mode            = mode,
                 Line            = startToken.Line,
@@ -352,13 +354,13 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.COMPRESS))
                 {
                     Match(TokenType.EQUALS);
-                    compress = ParseOnOffValue();
+                    compress = ParseOnOffValue() == "ON";
                 }
                 else if (Match(TokenType.ENCRYPT))
                 {
                     Match(TokenType.EQUALS);
                     var modeVal = _parser.Current.Value.ToUpperInvariant();
-                    Advance();
+                    _parser.Advance();
                     encryptionMode = modeVal switch
                     {
                         "MACHINE"  => DatasetEncryptionMode.MachineBound,
@@ -560,7 +562,7 @@ namespace ETL_SQL.Core.Parser.Components
             var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var styles  = new Dictionary<string, string>();
             bool isCollapsible = false, isPinnable = true;
-            bool isHidden = false;
+            string? visibility = "ON";
             string? icon = null;
 
 
@@ -603,7 +605,7 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.COLLAPSIBLE))
                 {
                     Consume(TokenType.EQUALS, "Expected '=' after COLLAPSIBLE");
-                    isCollapsible = ParseOnOffValue();
+                    isCollapsible = ParseOnOffValue() == "ON";
                 }
                 else if (Match(TokenType.ICON))
                 {
@@ -613,12 +615,12 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.PINNABLE))
                 {
                     Consume(TokenType.EQUALS, "Expected '=' after PINNABLE");
-                    isPinnable = ParseOnOffValue();
+                    isPinnable = ParseOnOffValue() == "ON";
                 }
                 else if (Match(TokenType.VISIBLE))
                 {
                     Match(TokenType.EQUALS);
-                    isHidden = !ParseOnOffValue();
+                    visibility = ParseOnOffValue();
                 }
                 else
                 {
@@ -646,14 +648,13 @@ namespace ETL_SQL.Core.Parser.Components
                 SubtitleIsMarkdown  = subtitleMd,
                 Tooltip            = tooltip,
                 IsCollapsible      = isCollapsible,
-                IsHidden           = isHidden,
+                Visibility         = visibility,
                 Icon               = icon,
                 IsPinnable         = isPinnable,
                 Mode               = mode,
                 Line               = startToken.Line,
                 Column             = startToken.Column
             };
-
         }
 
         // ── CREATE NAVIGATION ─────────────────────────────────────────────────
@@ -1325,13 +1326,21 @@ namespace ETL_SQL.Core.Parser.Components
                 _                       => val
             };
 
-        private bool ParseOnOffValue()
+        private string ParseOnOffValue()
         {
+            if (ReportCheck(TokenType.VARIABLE)) return _parser.Advance().Value;
             var value = _parser.Current.Value;
-            Advance();
-            return value.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
-                   value.Equals("TRUE", StringComparison.OrdinalIgnoreCase) ||
-                   value == "1";
+            _parser.Advance();
+            bool isOn = value.Equals("ON", StringComparison.OrdinalIgnoreCase) ||
+                        value.Equals("TRUE", StringComparison.OrdinalIgnoreCase) ||
+                        value == "1";
+            return isOn ? "ON" : "OFF";
+        }
+
+        private Token ConsumeIdentifierOrVariable(string message)
+        {
+            if (ReportCheck(TokenType.IDENTIFIER) || ReportCheck(TokenType.VARIABLE) || ReportCheck(TokenType.VALUE)) return _parser.Advance();
+            throw new SyntaxException(message, _parser.Current.Line, _parser.Current.Column);
         }
 
         private IEnumerable<VisualAction> ParseActions()
@@ -1392,10 +1401,10 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.SET_PARAMETER))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after SET_PARAMETER");
-                    var paramName = ConsumeIdentifier("Expected parameter name").Value;
+                    var paramName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
                     if (!paramName.StartsWith("@")) paramName = "@" + paramName;
                     Match(TokenType.COMMA);
-                    var valueExpr = ConsumeIdentifier("Expected value expression").Value;
+                    var valueExpr = ConsumeIdentifierOrVariable("Expected value expression").Value;
                     Consume(TokenType.RPAREN, "Expected ')' to close SET_PARAMETER");
                     action = new SetParameterAction { Trigger = trigger, ParameterName = paramName, ValueExpression = valueExpr };
                 }
@@ -1406,10 +1415,10 @@ namespace ETL_SQL.Core.Parser.Components
                     var actionParams = new Dictionary<string, string>();
                     while (Match(TokenType.COMMA))
                     {
-                        var pName = ConsumeIdentifier("Expected parameter name").Value;
+                        var pName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
                         if (!pName.StartsWith("@")) pName = "@" + pName;
                         Consume(TokenType.EQUALS, "Expected '=' after parameter name");
-                        var pVal = ConsumeIdentifier("Expected column name or expression").Value;
+                        var pVal = ConsumeIdentifierOrVariable("Expected column name or expression").Value;
                         actionParams[pName] = pVal;
                     }
                     Consume(TokenType.RPAREN, "Expected ')' to close RUN_SCRIPT");
@@ -1566,28 +1575,28 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     Match(TokenType.EQUALS);
                     var val = ParseOnOffValue();
-                    grandTotalRow = val;
-                    grandTotalCol = val;
+                    grandTotalRow = val == "ON";
+                    grandTotalCol = val == "ON";
                 }
                 else if (Match(TokenType.GRAND_TOTAL_ROW))
                 {
                     Match(TokenType.EQUALS);
-                    grandTotalRow = ParseOnOffValue();
+                    grandTotalRow = ParseOnOffValue() == "ON";
                 }
                 else if (Match(TokenType.GRAND_TOTAL_COLUMN))
                 {
                     Match(TokenType.EQUALS);
-                    grandTotalCol = ParseOnOffValue();
+                    grandTotalCol = ParseOnOffValue() == "ON";
                 }
                 else if (Match(TokenType.SUMMARIZE_ROW))
                 {
                     Match(TokenType.EQUALS);
-                    sumRow = ParseOnOffValue();
+                    sumRow = ParseOnOffValue() == "ON";
                 }
                 else if (Match(TokenType.SUMMARIZE_COLUMN))
                 {
                     Match(TokenType.EQUALS);
-                    sumCol = ParseOnOffValue();
+                    sumCol = ParseOnOffValue() == "ON";
                     if (ReportCheck(TokenType.LPAREN))
                     {
                         Advance();

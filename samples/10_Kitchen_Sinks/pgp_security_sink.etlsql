@@ -4,32 +4,17 @@
 BEGIN TRY
     -- 1. Setup paths
     DECLARE @outputDir NVARCHAR(MAX) = 'samples/output';
-    DECLARE @keyDir NVARCHAR(MAX) = @outputDir + '\pgp_keys';
-    DECLARE @dataFile NVARCHAR(MAX) = @outputDir + '\pgp_test_data.csv';
-    DECLARE @encryptedFile NVARCHAR(MAX) = @outputDir + '\pgp_test_data.csv.pgp';
-    DECLARE @decryptedFile NVARCHAR(MAX) = @outputDir + '\pgp_test_data_decrypted.csv';
+    DECLARE @keyDir    NVARCHAR(MAX) = @outputDir + '/pgp_keys';
+    DECLARE @dataFile   NVARCHAR(MAX) = @outputDir + '/pgp_test_data.csv';
+    DECLARE @encryptedFile NVARCHAR(MAX) = @outputDir + '/pgp_test_data.csv.pgp';
+    DECLARE @decryptedFile NVARCHAR(MAX) = @outputDir + '/pgp_test_data_decrypted.csv';
 
     PRINT 'Starting PGP Security Sink...';
 
-    -- Ensure output directories exist
-    IF NOT DIRECTORY_EXISTS(@outputDir)
-    BEGIN
-        CREATE CONNECTION _out ON DIRECTORY(@outputDir) WITH(CREATE=ON);
-        DROP CONNECTION _out;
-    END
-    IF NOT DIRECTORY_EXISTS(@keyDir)
-    BEGIN
-        CREATE CONNECTION _keys ON DIRECTORY(@keyDir) WITH(CREATE=ON);
-        DROP CONNECTION _keys;
-    END
+    PRINT 'Force generating PGP Key Pair...';
+    CREATE PGP_KEY_PAIR @keyDir 
+        WITH(BITS=2048, IDENTITY='ETL-SQL Test User <test@etl-sql.local>', PASSPHRASE='StrongPassphrase123!');
 
-    -- 2. Generate PGP Key Pair
-    -- This creates public.asc and private.asc in the target directory
-    IF NOT FILE_EXISTS(@keyDir + '\private.asc')
-    BEGIN
-        PRINT 'Generating PGP Key Pair...';
-        CREATE PGP_KEY_PAIR(@keyDir, 2048, 'ETL-SQL Test User <test@etl-sql.local>', 'StrongPassphrase123!');
-    END
 
     -- 3. Create dummy data
     SELECT 1 as id, 'Secret Data' as message INTO #data FROM DUAL;
@@ -43,14 +28,14 @@ BEGIN TRY
     PRINT 'Encrypting file with PGP public key...';
     ENCRYPT FILE @dataFile 
     TO @encryptedFile 
-    PGP_KEY @keyDir + '\public.asc'
+    PGP_KEY @keyDir + '/public.asc'
     WITH(OVERWRITE=ON);
 
     -- 5. Decrypt file using the private key and passphrase
     PRINT 'Decrypting file with PGP private key...';
     DECRYPT FILE @encryptedFile 
     TO @decryptedFile 
-    PGP_KEY @keyDir + '\private.asc'
+    PGP_KEY @keyDir + '/private.asc'
     PASSWORD 'StrongPassphrase123!'
     WITH(OVERWRITE=ON);
 

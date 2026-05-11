@@ -11,9 +11,9 @@
 -- ### ALLOW_FILE_OPERATIONS = 200
 SET ALLOW_FILE_OPERATIONS = 200;
 
-DECLARE @OutputDir = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\output\';
-DECLARE @KeyDir    = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\keys\';
-DECLARE @ZipFile   = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\hr_migration.zip';
+DECLARE @OutputDir = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\output\';
+DECLARE @KeyDir    = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\keys\';
+DECLARE @ZipFile   = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\hr_migration.zip';
 
 -- 2. Define Source Connection (Postgres)
 CREATE CONNECTION system_a ON POSTGRES()
@@ -47,7 +47,7 @@ BEGIN TRY
         PRINT 'Processing: ' + @topic;
         
         -- Extraction logic
-        RUN SCRIPT 'samples/conversion/system_a/export_entity.etlsql' 
+        RUN SCRIPT 'samples/09_Conversions/system_a/export_entity.etlsql' 
             WITH (@Topic = @topic);
         
         -- File Paths

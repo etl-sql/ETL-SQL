@@ -6,9 +6,9 @@
 -- ### ALLOW_FILE_OPERATIONS = 200
 SET ALLOW_FILE_OPERATIONS = 200;
 
-DECLARE @InputDir    PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\import_staging\';
-DECLARE @ZipFile     PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\hr_migration.zip';
-DECLARE @KeyPath     PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\conversion\keys\private.asc';
+DECLARE @InputDir    PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\import_staging\';
+DECLARE @ZipFile     PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\hr_migration.zip';
+DECLARE @KeyPath     PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\09_Conversions\keys\private.asc';
 DECLARE @Passphrase  STRING = 'hr-secret';
 
 -- 2. Define System B Connection
@@ -53,9 +53,9 @@ BEGIN TRY
             DECRYPT FILE @pgpPath TO @csvPath PGP_KEY @KeyPath PASSWORD @Passphrase;
             
             -- 6. Run ingestion sub-script
-            RUN SCRIPT 'samples/conversion/system_b/import_entity.etlsql' 
+            RUN SCRIPT 'samples/09_Conversions/system_b/import_entity.etlsql' 
                 WITH (@Topic = @topic, @FilePath = @csvPath);
-                
+            
             -- 7. Cleanup temp files
             DELETE FILE @csvPath;
             DELETE FILE @pgpPath;

@@ -80,7 +80,7 @@ namespace ETL_SQL.Reporting
             // ── Pages ────────────────────────────────────────────────────────
             foreach (var (name, pStmt) in _ctx.ReportContext.PageDefinitions)
             {
-                manifest.Pages.Add(_pageBuilder.Build(name, pStmt, reportStyles));
+                manifest.Pages.Add(_pageBuilder.Build(name, pStmt, _ctx, reportStyles));
             }
 
             // ── Containers ───────────────────────────────────────────────────
@@ -107,7 +107,7 @@ namespace ETL_SQL.Reporting
                         IsCollapsible      = cStmt.IsCollapsible,
                         Icon               = cStmt.Icon,
                         IsPinnable         = cStmt.IsPinnable,
-                        IsHidden           = cStmt.IsHidden,
+                        IsHidden           = ResolveVisibility(cStmt.Visibility),
                         Styles             = resolvedStyles.Count > 0 ? resolvedStyles : null
 
                     });
@@ -123,7 +123,7 @@ namespace ETL_SQL.Reporting
                     // Hidden pages are not shown in the nav bar (they are still rendered
                     // as sections so DRILL_DOWN can navigate to them programmatically).
                     var visiblePages = nStmt.Pages
-                        .Where(p => !(_ctx.ReportContext.PageDefinitions.TryGetValue(p, out var pd) && pd.IsHidden))
+                        .Where(p => !(_ctx.ReportContext.PageDefinitions.TryGetValue(p, out var pd) && ResolveVisibility(pd.Visibility)))
                         .ToList();
 
                     manifest.Navigations.Add(new NavigationManifest
@@ -338,6 +338,18 @@ namespace ETL_SQL.Reporting
                 },
                 _ => new VisualActionManifest { Type = "UNKNOWN", Trigger = action.Trigger }
             };
+        }
+        private bool ResolveVisibility(string? visibility)
+        {
+            if (string.IsNullOrEmpty(visibility)) return false; // Default is visible (IsHidden=false)
+            if (visibility.StartsWith("@"))
+            {
+                var val = _ctx.VarContext.GetVariable(visibility);
+                if (val == null) return false;
+                var s = val.ToString()?.ToUpperInvariant();
+                return s is "OFF" or "FALSE" or "0";
+            }
+            return visibility.ToUpperInvariant() is "OFF" or "FALSE" or "0";
         }
     }
 }

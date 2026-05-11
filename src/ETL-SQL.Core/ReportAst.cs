@@ -255,7 +255,7 @@ namespace ETL_SQL.Core
         public string? Subtitle                               { get; init; }
         public bool SubtitleIsMarkdown                       { get; init; }
         public TooltipDefinition? Tooltip                     { get; init; }
-        public bool IsHidden                                  { get; init; }
+        public string? Visibility                             { get; init; }
         /// <summary>Auto-refresh interval in seconds (0 = disabled).</summary>
         public int RefreshIntervalSeconds                     { get; init; }
         public ObjectCreationMode Mode                         { get; init; } = ObjectCreationMode.Create;
@@ -291,7 +291,7 @@ namespace ETL_SQL.Core
         public bool SubtitleIsMarkdown { get; init; }
         public TooltipDefinition? Tooltip { get; init; }
         public bool IsCollapsible { get; init; }
-        public bool IsHidden { get; init; }
+        public string? Visibility { get; init; }
         public string? Icon { get; init; }
         public bool IsPinnable { get; init; } = true;
         public ObjectCreationMode Mode { get; init; } = ObjectCreationMode.Create;
