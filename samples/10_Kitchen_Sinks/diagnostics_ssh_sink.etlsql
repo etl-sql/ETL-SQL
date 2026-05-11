@@ -98,7 +98,7 @@ END CATCH
 -- 8. CREATE SSH_KEY_PAIR
 PRINT 'Testing CREATE SSH_KEY_PAIR...';
 BEGIN TRY
-    CREATE SSH_KEY_PAIR 'samples/kitchen_sinks/test_key'
+    CREATE SSH_KEY_PAIR 'samples/output/ssh_keys/test_key'
         WITH (BITS = 2048, ALGORITHM = 'RSA', COMMENT = 'Kitchen Sink Test Key');
     PRINT 'SSH key pair created.';
 END TRY
@@ -107,7 +107,7 @@ BEGIN CATCH
 END CATCH
 
 BEGIN TRY
-    CREATE SSH_KEY_PAIR 'samples/kitchen_sinks/test_ed_key'
+    CREATE SSH_KEY_PAIR 'samples/output/ssh_keys/test_ed_key'
         WITH (ALGORITHM = 'ED25519', COMMENT = 'ED25519 Test');
     PRINT 'ED25519 key pair created.';
 END TRY

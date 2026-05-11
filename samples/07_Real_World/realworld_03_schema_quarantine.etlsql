@@ -6,14 +6,14 @@
 
 CREATE TABLE #FileSpec (TransactionID VARCHAR(50), Amount DECIMAL(18,2), Status VARCHAR(10), CreatedAt DATETIME);
 
-CREATE CONNECTION MockGenerator ON FLATFILE('TestData/inbound/partner_feed.csv') WITH (HEADER='ON');
+CREATE CONNECTION MockGenerator ON FLATFILE('samples/output/partner_feed.csv') WITH (HEADER='ON');
 INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN100', 50.00, 'PAID', GETDATE());
 INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN101', -15.00, 'FAILED', GETDATE());
 INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN102', 0.00, 'INVALID', GETDATE());
 INSERT INTO MockGenerator.FILE (TransactionID, Amount, Status, CreatedAt) VALUES ('TXN103', 100.00, 'PENDING', GETDATE());
 
 -- Force the file to adhere to strict schema
-CREATE CONNECTION InboundFeed ON FLATFILE('TestData/inbound/partner_feed.csv') 
+CREATE CONNECTION InboundFeed ON FLATFILE('samples/output/partner_feed.csv') 
     WITH (HEADER = 'ON', STRICT_SCHEMA = 'ON', ERROR_POLICY = 'IGNORE');
 
 SELECT * INTO #RawStage FROM InboundFeed.FILE;
