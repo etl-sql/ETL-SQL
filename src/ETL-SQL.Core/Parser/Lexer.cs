@@ -188,6 +188,10 @@ namespace ETL_SQL.Core.Parser
             dict["BODY"]          = TokenType.BODY;
             dict["THEME"]         = TokenType.THEME;
             dict["NAVIGATION"]    = TokenType.NAVIGATION;
+            dict["RUN_SCRIPT"]    = TokenType.RUN_SCRIPT;
+            dict["SET_UI_STATE"]  = TokenType.SET_UI_STATE;
+            dict["APPLY_PARAMETERS"] = TokenType.APPLY_PARAMETERS;
+            dict["RUN_REPORT"]    = TokenType.APPLY_PARAMETERS; // Alias
             
 
             return dict;

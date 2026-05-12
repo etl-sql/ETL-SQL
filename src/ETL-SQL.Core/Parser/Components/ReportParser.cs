@@ -1349,7 +1349,9 @@ namespace ETL_SQL.Core.Parser.Components
 
         private Token ConsumeIdentifierOrString(string message)
         {
-            if (ReportCheck(TokenType.IDENTIFIER) || ReportCheck(TokenType.STRING_LITERAL) || ReportCheck(TokenType.VARIABLE) || ReportCheck(TokenType.VALUE)) return _parser.Advance();
+            if (ReportCheck(TokenType.IDENTIFIER) || ReportCheck(TokenType.STRING_LITERAL) || 
+                ReportCheck(TokenType.VARIABLE) || ReportCheck(TokenType.VALUE) ||
+                ReportCheck(TokenType.ON) || ReportCheck(TokenType.OFF)) return _parser.Advance();
             throw new SyntaxException(message, _parser.Current.Line, _parser.Current.Column);
         }
 
@@ -1367,9 +1369,33 @@ namespace ETL_SQL.Core.Parser.Components
 
                 Consume(TokenType.EQUALS, $"Expected '=' after {trigger}");
 
-                VisualAction action;
-                if (Match(TokenType.DRILL_DOWN))
+                if (Match(TokenType.LPAREN))
                 {
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        var action = ParseSingleAction(trigger);
+                        if (action != null) result.Add(action);
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close action list");
+                }
+                else
+                {
+                    var action = ParseSingleAction(trigger);
+                    if (action != null) result.Add(action);
+                }
+
+                Match(TokenType.COMMA);
+            }
+
+            return result;
+        }
+
+        private VisualAction? ParseSingleAction(string trigger)
+        {
+            VisualAction? action = null;
+            if (Match(TokenType.DRILL_DOWN))
+            {
                     Consume(TokenType.LPAREN, "Expected '(' after DRILL_DOWN");
                     Advance();
                     Consume(TokenType.EQUALS, "Expected '=' after Target");
@@ -1438,11 +1464,11 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     action = new ClearFiltersAction { Trigger = trigger };
                 }
-                else if (Match(TokenType.APPLY_PARAMETERS) || (_parser.Current.Value == "RUN_REPORT" && Match(TokenType.IDENTIFIER)))
+                else if (Match(TokenType.APPLY_PARAMETERS))
                 {
                     action = new ApplyParametersAction { Trigger = trigger };
                 }
-                else if (_parser.Current.Value == "SET_UI_STATE" && Match(TokenType.IDENTIFIER))
+                else if (Match(TokenType.SET_UI_STATE))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after SET_UI_STATE");
                     var targets = new List<string>();
@@ -1481,10 +1507,7 @@ namespace ETL_SQL.Core.Parser.Components
                         _parser.Current.Line, _parser.Current.Column);
                 }
 
-                result.Add(action);
-                Match(TokenType.COMMA);
-            }
-            return result;
+                return action;
         }
 
         private IEnumerable<TypedSeries> ParseTypedSeries()
