@@ -254,6 +254,7 @@ namespace ETL_SQL.Engine
                 IsNullExpression isNull => await EvaluateIsNull(isNull, context, decryptSensitive),
                 CaseExpression c => await EvaluateCase(c, context, decryptSensitive),
                 InExpression inExp => await EvaluateIn(inExp, context, decryptSensitive),
+                BetweenExpression bet => await EvaluateBetween(bet, context, decryptSensitive),
                 ExistsExpression ex => await EvaluateExists(ex, context),
                 ListExpression listExpr => await EvaluateList(listExpr, context, decryptSensitive),
                 AtTimeZoneExpression atTz => await EvaluateAtTimeZone(atTz, context, decryptSensitive),
@@ -313,6 +314,20 @@ namespace ETL_SQL.Engine
                 }
             }
             return inExp.IsNot ? !found : found;
+        }
+
+        private async Task<object?> EvaluateBetween(BetweenExpression bet, Row context, bool decryptSensitive = false)
+        {
+            var val = await EvaluateInternal(bet.Left, context, decryptSensitive);
+            if (val.IsNull()) return null;
+
+            var start = await EvaluateInternal(bet.Start, context, decryptSensitive);
+            var end = await EvaluateInternal(bet.End, context, decryptSensitive);
+
+            if (start.IsNull() || end.IsNull()) return null;
+
+            bool isBetween = CompareConstants(val, start) >= 0 && CompareConstants(val, end) <= 0;
+            return bet.IsNot ? !isBetween : isBetween;
         }
     
 

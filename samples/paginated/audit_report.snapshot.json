@@ -1,0 +1,747 @@
+{
+  "source": "samples/paginated/audit_report.rptsql",
+  "builtAt": "2026-05-12T02:24:03.2030854Z",
+  "title": "System Audit Summary",
+  "description": "Comprehensive analysis of report portal usage, security events, and system activity over the last 6 months.",
+  "visuals": [
+    {
+      "name": "EventFilter",
+      "visualType": "MULTISELECT",
+      "chartConfig": null,
+      "columns": [
+        "event_type"
+      ],
+      "rows": [
+        [
+          "ADMIN_CONFIG"
+        ],
+        [
+          "CREATE_USER"
+        ],
+        [
+          "DELETE_USER"
+        ],
+        [
+          "EXPORT_REPORT"
+        ],
+        [
+          "LOGIN"
+        ],
+        [
+          "LOGOUT"
+        ],
+        [
+          "VIEW_REPORT"
+        ]
+      ],
+      "options": {
+        "title": "Event Types",
+        "mapping:value": "event_type"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@events",
+          "valueExpression": "value",
+          "valueSource": "CONTROL_VALUE",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "StartPicker",
+      "visualType": "RELDATEPICKER",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Start Date",
+        "DEFAULT": "M-6"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@start",
+          "valueExpression": "value",
+          "valueSource": "CONTROL_VALUE",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "EndPicker",
+      "visualType": "RELDATEPICKER",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "End Date",
+        "DEFAULT": "D"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@end",
+          "valueExpression": "value",
+          "valueSource": "CONTROL_VALUE",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "UserSlicer",
+      "visualType": "SLICER",
+      "chartConfig": null,
+      "defaultValue": "All",
+      "columns": [
+        "user_id"
+      ],
+      "rows": [
+        [
+          "admin"
+        ],
+        [
+          "jdoe"
+        ],
+        [
+          "clane"
+        ],
+        [
+          "asmith"
+        ],
+        [
+          "bwhite"
+        ],
+        [
+          "davis"
+        ],
+        [
+          "All"
+        ]
+      ],
+      "options": {
+        "title": "Filter by User",
+        "mapping:value": "user_id"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@user_filter",
+          "valueExpression": "value",
+          "valueSource": "CONTROL_VALUE",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "VolumeTrend",
+      "visualType": "LINE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Activity Volume Trend\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022total_events\u0022,\u0022data\u0022:[],\u0022smooth\u0022:true}]}",
+      "columns": [
+        "event_date",
+        "total_events"
+      ],
+      "rows": [],
+      "options": {
+        "title": "Activity Volume Trend",
+        "SMOOTH": "True",
+        "mapping:x": "event_date",
+        "mapping:y": "total_events"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "HourlyHeatmap",
+      "visualType": "HEATMAP",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Activity by Hour and Day (8-5 Profile)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022visualMap\u0022:{\u0022min\u0022:0,\u0022max\u0022:1,\u0022calculable\u0022:true,\u0022orient\u0022:\u0022horizontal\u0022,\u0022left\u0022:\u0022center\u0022,\u0022bottom\u0022:\u002215%\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[]},\u0022series\u0022:[{\u0022type\u0022:\u0022heatmap\u0022,\u0022data\u0022:[],\u0022label\u0022:{\u0022show\u0022:true}}]}",
+      "columns": [
+        "day_of_week",
+        "event_hour",
+        "activity_count"
+      ],
+      "rows": [],
+      "options": {
+        "title": "Activity by Hour and Day (8-5 Profile)",
+        "axis:x:title": "Hour of Day (0-23)",
+        "axis:y:title": "Day of Week",
+        "mapping:x": "event_hour",
+        "mapping:y": "day_of_week",
+        "mapping:value": "activity_count"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "EventDistribution",
+      "visualType": "DONUT",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Event Type Distribution\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022pie\u0022,\u0022name\u0022:\u0022EventDistribution\u0022,\u0022radius\u0022:[\u002240%\u0022,\u002270%\u0022],\u0022data\u0022:[]}]}",
+      "columns": [
+        "event_type",
+        "cnt"
+      ],
+      "rows": [],
+      "options": {
+        "title": "Event Type Distribution",
+        "mapping:label": "event_type",
+        "mapping:value": "cnt"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "TopResources",
+      "visualType": "HORIZONTALBAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Top Resources Accessed\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022yAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[]},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022resource\u0022,\u0022data\u0022:[]}]}",
+      "columns": [
+        "resource",
+        "access_count"
+      ],
+      "rows": [],
+      "options": {
+        "title": "Top Resources Accessed",
+        "mapping:x": "access_count",
+        "mapping:y": "resource"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "AuditTable",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "ts",
+        "user_id",
+        "event_type",
+        "resource",
+        "status",
+        "duration_ms"
+      ],
+      "rows": [],
+      "options": {
+        "title": "Detailed Audit Logs",
+        "PAGINATION": "True",
+        "PAGE_SIZE": "20"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "Main",
+      "structure": "D D / A B / C C",
+      "slotMap": {
+        "D": "FilterDrawer",
+        "A": "EventDistribution",
+        "B": "TopResources",
+        "C": "VolumeTrend"
+      }
+    },
+    {
+      "name": "Details",
+      "structure": "A",
+      "slotMap": {
+        "A": "AuditTable"
+      }
+    }
+  ],
+  "datasets": [],
+  "containers": [
+    {
+      "name": "FilterDrawer",
+      "containerType": "BOX",
+      "title": "Report Parameters",
+      "structure": "A B / C D / E",
+      "slotMap": {
+        "A": "StartPicker",
+        "B": "EndPicker",
+        "C": "EventFilter",
+        "D": "UserSlicer",
+        "E": "RunBtn"
+      },
+      "isCollapsible": true,
+      "icon": "filter",
+      "isPinnable": true
+    }
+  ],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "Main",
+      "pages": [
+        "Main",
+        "Details"
+      ]
+    }
+  ],
+  "buttons": [
+    {
+      "name": "RunBtn",
+      "buttonType": "REFRESH",
+      "title": "Run Report",
+      "options": {},
+      "actions": [
+        {
+          "type": "REFRESH",
+          "trigger": "ON_CLICK",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": null,
+          "valueExpression": null,
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "BACKGROUND-COLOR": "#2563eb",
+        "COLOR": "#ffffff",
+        "PADDING": "10px 20px",
+        "BORDER-RADIUS": "4px",
+        "EXPORT": "OFF"
+      }
+    }
+  ],
+  "parameters": {
+    "@start": "M-6",
+    "@end": "D",
+    "@events": "LOGIN,VIEW_REPORT,EXPORT_REPORT,ADMIN_CONFIG",
+    "@user_filter": "All"
+  },
+  "parameterMetadata": {
+    "@start": {
+      "name": "@start",
+      "type": "RELDATE",
+      "defaultValue": "M-6",
+      "isRequired": false
+    },
+    "@end": {
+      "name": "@end",
+      "type": "RELDATE",
+      "defaultValue": "D",
+      "isRequired": false
+    },
+    "@events": {
+      "name": "@events",
+      "type": "LIST",
+      "defaultValue": "LOGIN,VIEW_REPORT,EXPORT_REPORT,ADMIN_CONFIG",
+      "isRequired": false
+    },
+    "@user_filter": {
+      "name": "@user_filter",
+      "type": "VARCHAR",
+      "defaultValue": "All",
+      "isRequired": false
+    }
+  },
+  "telemetry": {
+    "rowsProcessed": 13872,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[50450257] Connection audit_src created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:02.6677149Z"
+    },
+    {
+      "message": "[50450257] [SELECT] Executing SelectStatement. Session: 50450257",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:02.6775098Z"
+    },
+    {
+      "message": "[50450257] Visual \u0027EventFilter\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1935954Z"
+    },
+    {
+      "message": "[50450257] Visual \u0027StartPicker\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1944723Z"
+    },
+    {
+      "message": "[50450257] Visual \u0027EndPicker\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1946306Z"
+    },
+    {
+      "message": "[50450257] Visual \u0027UserSlicer\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1949244Z"
+    },
+    {
+      "message": "[50450257] Button \u0027RunBtn\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1953873Z"
+    },
+    {
+      "message": "[50450257] Visual \u0027VolumeTrend\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1957863Z"
+    },
+    {
+      "message": "[50450257] Visual \u0027HourlyHeatmap\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1958328Z"
+    },
+    {
+      "message": "[50450257] Visual \u0027EventDistribution\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1959628Z"
+    },
+    {
+      "message": "[50450257] Visual \u0027TopResources\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1960398Z"
+    },
+    {
+      "message": "[50450257] Visual \u0027AuditTable\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.196085Z"
+    },
+    {
+      "message": "[50450257] Container \u0027FilterDrawer\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1965747Z"
+    },
+    {
+      "message": "[50450257] Page \u0027Main\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1975622Z"
+    },
+    {
+      "message": "[50450257] Page \u0027Details\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1976154Z"
+    },
+    {
+      "message": "[50450257] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-12T02:24:03.1982662Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "3d081254-5755-4012-b5ef-4b163dd7cca5",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 549.4076,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "bdc8b45f-0e10-4637-b447-4f7aaf92f7d7",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2676,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "f070b9c0-74e3-4a6d-b66d-5f78d9f3cc49",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.5562,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "2e4a2799-12ee-4805-b5b8-6806c170511a",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 3.2066,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "64ce82a3-cb52-4413-85cd-5eff0c58a6ea",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2368,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "3aab3ef5-691f-44c8-959c-d3ac2ec3ea7a",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.008,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "6efe697d-5f00-4614-bd4c-6889ae498f1b",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0378,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "f75410de-1255-4362-b5dd-02f948453c87",
+          "name": "CreateConnection",
+          "status": "Completed",
+          "rowsProcessed": 20,
+          "durationMs": 15.9535,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 1253.6434011345473,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7a2aa959-4430-485b-ad01-94c662e3a8b8",
+          "name": "Select",
+          "status": "Completed",
+          "rowsProcessed": 27744,
+          "durationMs": 514.3599,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 53938.8859823637,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8ab20e8b-a971-44c8-a5ff-66fd8d492bdb",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.7423,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "9f31447f-cbcb-4493-9ba2-031ccba2928c",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0897,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "406d5320-636e-46fd-9a58-d90170bbe327",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.052,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "46a65ff0-d666-4a44-add7-88eb27db10d4",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0673,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "fbb4a0b5-bf33-4fad-ae57-a0165b7cd1e6",
+          "name": "CreateButton",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.3202,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8115bca9-867b-4b85-a009-05d450a24ba8",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0694,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "33061a5c-03ba-49e1-a44f-dd9498551990",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0292,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "234e2bc4-9e5f-4a35-87b3-485867806ad0",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0474,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ade8c604-510b-46fc-a34a-1e56b0f788a5",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0335,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d6fbb4a8-5074-4384-b3f6-290e4d6ddfcf",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.034,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "b0285a8d-c24b-48d3-91ff-92b9ba0e5934",
+          "name": "CreateContainer",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.298,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "b3dac401-bdcc-4c42-9c50-c9baf54c3600",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8336,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5c2b43da-9c9d-42b0-9d8a-48840355742a",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0402,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d5cb475b-0c67-4b9d-961a-ff34a845d67f",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2806,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

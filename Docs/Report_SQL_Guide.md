@@ -1065,9 +1065,10 @@ STYLE (
 | `BORDER-RADIUS` | `'8px'` | Any | Corner rounding. |
 | `FONT-SIZE` | `'14px'` | Any | Base font size for textual content. |
 | `PADDING` | `'12px'` | Any | Inner spacing. |
+| `LAYOUT` | `'DROPDOWN'` | MULTISELECT | Renders checkboxes inline (default) or inside a collapsible dropdown (`DROPDOWN`). |
 | `HEIGHT` | `400` | Any* | Manual height override in pixels. |
 | `WIDTH` | `'100%'` | Any* | Visual width (e.g., `'100%'`, `'400px'`). |
-| `TOOLTIP` | `'Hover text'` | Visual | Floating help text. Prefer the top-level `TOOLTIP` clause; this key is accepted here for backwards compatibility. |
+| `TOOLTIP` | `'Hover text'` | Visual | Floating help text. Prefer the top-level `TOOLTIP` clause. |
 | `Z-INDEX` | `100` | Any | Layer stacking order. |
 | `SHADOW` | `ON` / `OFF` | Visual | Enable/disable visual card shadow. |
 | `TITLE_MD` | `ON` / `OFF` | Any | Force Markdown resolution for the title. |

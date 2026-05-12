@@ -1,6 +1,6 @@
 # ETL-SQL Grammar & Orchestration Syntax
 
-This document is the authoritative reference for the ETL-SQL scripting language. It defines every statement type, clause, and keyword — everything needed to write, administer, and automate with ETL-SQL.
+This document is the authoritative reference for the ETL-SQL scripting language. It defines every statement type, clause, and keyword â€” everything needed to write, administer, and automate with ETL-SQL.
 
 > This document reflects the current ETL-SQL engine. All syntax shown here is implemented and parseable.
 
@@ -24,10 +24,10 @@ DECLARE @path    PATH          = 'C:\Data\1.csv';
 -- Multiple variables in one statement
 DECLARE @list LIST = (1, 2, 3), @count INT = 0;
 
--- No type — inferred at runtime
+-- No type â€” inferred at runtime
 DECLARE @value = 'hello';
 
--- Table variable — acts as an in-memory temp table
+-- Table variable â€” acts as an in-memory temp table
 DECLARE @inventory TABLE;
 ```
 
@@ -48,15 +48,15 @@ Specialty types carry semantic meaning beyond a plain string or number. They inf
 
 | Type | Stored as | When behavior activates |
 | :--- | :--- | :--- |
-| `PATH` | String | At file I/O — normalizes separators, resolves relative paths, validates security boundaries |
-| `JSON` | String | At assignment — validates well-formedness immediately; enables `JSON_VALUE`, `JSON_QUERY`, etc. |
-| `XML` | String | At assignment — validates well-formedness immediately; enables `XMLVALUE`, `XMLQUERY`, etc. |
-| `MARKDOWN` | String | At render time — Report Portal renders as rich text; CLI treats as plain string |
-| `LIST` | Collection | At iteration — can be strictly typed, e.g. `LIST(INT)` |
-| `MINMAX` | Struct | At declaration — gives a `.MIN` and `.MAX` member; inner type annotation is documentary |
-| `ENCRYPTED` | String | At runtime — masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values when assigned to non-SENSITIVE targets or passed to secure parameters |
-| `SENSITIVE` | Any | At runtime — masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values when assigned to non-SENSITIVE targets or passed to secure parameters |
-| `SECRET` | Any | At session end — nullified in memory automatically; same masking/auto-decryption as `SENSITIVE` |
+| `PATH` | String | At file I/O â€” normalizes separators, resolves relative paths, validates security boundaries |
+| `JSON` | String | At assignment â€” validates well-formedness immediately; enables `JSON_VALUE`, `JSON_QUERY`, etc. |
+| `XML` | String | At assignment â€” validates well-formedness immediately; enables `XMLVALUE`, `XMLQUERY`, etc. |
+| `MARKDOWN` | String | At render time â€” Report Portal renders as rich text; CLI treats as plain string |
+| `LIST` | Collection | At iteration â€” can be strictly typed, e.g. `LIST(INT)` |
+| `MINMAX` | Struct | At declaration â€” gives a `.MIN` and `.MAX` member; inner type annotation is documentary |
+| `ENCRYPTED` | String | At runtime â€” masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values when assigned to non-SENSITIVE targets or passed to secure parameters |
+| `SENSITIVE` | Any | At runtime â€” masked in `SHOW VARIABLES`; auto-decrypts `ENC:` values when assigned to non-SENSITIVE targets or passed to secure parameters |
+| `SECRET` | Any | At session end â€” nullified in memory automatically; same masking/auto-decryption as `SENSITIVE` |
 
 ---
 
@@ -81,7 +81,7 @@ Use `PATH` instead of `STRING` whenever a variable holds a filesystem path. This
 
 #### `JSON`
 
-Validated at assignment — an invalid JSON string raises an `ExecutionException` immediately at the `DECLARE` or `SET` line. Stored as a string internally after passing validation.
+Validated at assignment â€” an invalid JSON string raises an `ExecutionException` immediately at the `DECLARE` or `SET` line. Stored as a string internally after passing validation.
 
 Declaring a variable as `JSON` unlocks the full JSON function set on that value:
 
@@ -105,7 +105,7 @@ SELECT JSON_VALUE(@payload, '$.order.id')    AS id,
 
 #### `XML`
 
-Validated at assignment — an invalid XML string raises an `ExecutionException` immediately at the `DECLARE` or `SET` line. Stored as a string internally after passing validation.
+Validated at assignment â€” an invalid XML string raises an `ExecutionException` immediately at the `DECLARE` or `SET` line. Stored as a string internally after passing validation.
 
 | Function | Purpose |
 | :--- | :--- |
@@ -124,7 +124,7 @@ SELECT XMLVALUE(@doc, '//item[@id=1]') AS name;
 
 #### `MARKDOWN`
 
-Stored as a plain string. No validation is performed at assignment (any string is technically valid markdown). In script execution (CLI, headless), it is treated identically to `STRING`. In the **Report Portal**, a `MARKDOWN` variable bound to a visual component is rendered as HTML-formatted rich text — headers, bold, lists, tables, and code blocks are all interpreted.
+Stored as a plain string. No validation is performed at assignment (any string is technically valid markdown). In script execution (CLI, headless), it is treated identically to `STRING`. In the **Report Portal**, a `MARKDOWN` variable bound to a visual component is rendered as HTML-formatted rich text â€” headers, bold, lists, tables, and code blocks are all interpreted.
 
 ```sql
 DECLARE @summary MARKDOWN = '## Run Complete\n- Records: 1000\n- Errors: 0';
@@ -144,7 +144,7 @@ DECLARE @paths LIST(PATH) = ('C:\a.csv', 'C:\b.csv');
 DECLARE @mixed LIST       = ('hello', 42, NULL);   -- inferred
 ```
 
-The inner type annotation (e.g. `LIST(INT)`) is enforced as a cast — assigning a non-castable value raises an error. `LIST` without a type accepts any value.
+The inner type annotation (e.g. `LIST(INT)`) is enforced as a cast â€” assigning a non-castable value raises an error. `LIST` without a type accepts any value.
 
 ---
 
@@ -162,7 +162,7 @@ SET @range.MIN = 10;
 SET @range.MAX = 90;
 ```
 
-The inner type annotation (`MINMAX(INT)`, `MINMAX(DECIMAL)`, etc.) is documentary — the engine stores `.MIN` and `.MAX` as generic `object` values and does not enforce the inner type at runtime. Use it to communicate intent.
+The inner type annotation (`MINMAX(INT)`, `MINMAX(DECIMAL)`, etc.) is documentary â€” the engine stores `.MIN` and `.MAX` as generic `object` values and does not enforce the inner type at runtime. Use it to communicate intent.
 
 Common uses: date window boundaries, numeric filter ranges, batch size limits.
 
@@ -170,7 +170,7 @@ Common uses: date window boundaries, numeric filter ranges, batch size limits.
 
 #### `ENCRYPTED`
 
-The canonical type for variables that hold an `ENC:...` value — a ciphertext string produced by `ENCRYPT()` or stored in the credentials vault. This type ensures the value is protected throughout its lifecycle in the engine.
+The canonical type for variables that hold an `ENC:...` value â€” a ciphertext string produced by `ENCRYPT()` or stored in the credentials vault. This type ensures the value is protected throughout its lifecycle in the engine.
 
 **Engine Behaviors:**
 - **Runtime Masking:** The variable is marked as sensitive. `SHOW VARIABLES` and `PRINT` output will mask the value (displaying `*******` or `ENC:*******`) unless `SET SHOW_PASSWORD ON` is active.
@@ -196,11 +196,11 @@ PRINT 'The password is: ' + @pwd;
 
 Sets the `IsSensitive` runtime flag on the variable. Three effects activate immediately:
 
-1. **`SHOW VARIABLES` masking** — the value is replaced with `*******` in all variable listing output (unless `SET SHOW_PASSWORD ON` is active).
-2. **`ENC:` auto-decryption** — if the value begins with `ENC:`, the engine automatically decrypts it when the variable is passed to a secure connector parameter (`PASSWORD`, `API_KEY`, `SSH_KEY_PAIR.PASSPHRASE`, etc.). This requires `USE SCRIPT PASSWORD` or a master password to be set.
-3. **Lint taint tracking** — if you assign a `SENSITIVE` variable into a new variable (`SET @other = @pwd`), the linter marks `@other` as sensitive too, propagating SEC-4 warnings forward.
+1. **`SHOW VARIABLES` masking** â€” the value is replaced with `*******` in all variable listing output (unless `SET SHOW_PASSWORD ON` is active).
+2. **`ENC:` auto-decryption** â€” if the value begins with `ENC:`, the engine automatically decrypts it when the variable is passed to a secure connector parameter (`PASSWORD`, `API_KEY`, `SSH_KEY_PAIR.PASSPHRASE`, etc.). This requires `USE SCRIPT PASSWORD` or a master password to be set.
+3. **Lint taint tracking** â€” if you assign a `SENSITIVE` variable into a new variable (`SET @other = @pwd`), the linter marks `@other` as sensitive too, propagating SEC-4 warnings forward.
 
-`SENSITIVE` ensures that the value is protected in output — `PRINT @sensitiveVar` will output `*******` unless `SET SHOW_PASSWORD ON` is active. The SEC-4 lint rule also warns you if you attempt to use these variables in insecure sinks.
+`SENSITIVE` ensures that the value is protected in output â€” `PRINT @sensitiveVar` will output `*******` unless `SET SHOW_PASSWORD ON` is active. The SEC-4 lint rule also warns you if you attempt to use these variables in insecure sinks.
 
 ```sql
 DECLARE @dbPass SENSITIVE = 'ENC:abc123==';  -- masked in SHOW VARIABLES, decrypted at connect time
@@ -223,13 +223,13 @@ DECLARE @bearerToken SECRET    = GetBearerToken(...);  -- purged from RAM on fin
 ```
 
 > [!NOTE]
-> Log scrubbing is always active regardless of variable type. The engine automatically redacts patterns like `password=value`, `token=value`, and any `ENC:...` constant found in log messages or connection string text. Variables are scrubbed by pattern, not by metadata — so `SENSITIVE`/`SECRET` masking applies specifically to `SHOW VARIABLES` output and the auto-decrypt pathway.
+> Log scrubbing is always active regardless of variable type. The engine automatically redacts patterns like `password=value`, `token=value`, and any `ENC:...` constant found in log messages or connection string text. Variables are scrubbed by pattern, not by metadata â€” so `SENSITIVE`/`SECRET` masking applies specifically to `SHOW VARIABLES` output and the auto-decrypt pathway.
 
 ---
 
 #### `RELDATE`
 
-A relative-date expression — a string that the engine resolves to a concrete `DATE` or `DATETIME` value each time the script executes. Storing the expression rather than a fixed date means "yesterday" always means yesterday relative to the run.
+A relative-date expression â€” a string that the engine resolves to a concrete `DATE` or `DATETIME` value each time the script executes. Storing the expression rather than a fixed date means "yesterday" always means yesterday relative to the run.
 
 ```sql
 DECLARE @start RELDATE INPUT = 'M-1';   -- first day of last month
@@ -239,7 +239,7 @@ DECLARE @fixed RELDATE       = '2026-01-01';  -- pinned: never changes
 SELECT * FROM prod.Sales WHERE SaleDate BETWEEN @start AND @end;
 ```
 
-**Expression format:** `<anchor><unit><offset>` — e.g. `D-7`, `W-1`, `ME-1`, `N-2H`.
+**Expression format:** `<anchor><unit><offset>` â€” e.g. `D-7`, `W-1`, `ME-1`, `N-2H`.
 
 | Anchor | Meaning |
 | :--- | :--- |
@@ -250,13 +250,13 @@ SELECT * FROM prod.Sales WHERE SaleDate BETWEEN @start AND @end;
 | `Y` | Start of current year |
 | `N` | Now (current timestamp) |
 | `WE`, `ME`, `QE`, `YE` | End of current week/month/quarter/year |
-| ISO date string | Fixed date — resolves to itself |
+| ISO date string | Fixed date â€” resolves to itself |
 
 Append `-<n>` to shift back n periods, e.g. `M-3` = first day of three months ago. Append `+<n>` for future offsets. For `N` (Now), use inline units: `N-2H` (2 hours), `N-30M` (30 minutes), `N-7D` (7 days).
 
-Week-boundary anchors (`W`, `WE`) use **Monday** as week-start by default; override with `SET WEEK_START_DAY` (§2.6) or the `Engine.StartOfWeek` config key.
+Week-boundary anchors (`W`, `WE`) use **Monday** as week-start by default; override with `SET WEEK_START_DAY` (Â§2.6) or the `Engine.StartOfWeek` config key.
 
-`RELDATE` is most useful combined with `INPUT` so callers can supply expressions at run time without editing the script. See **§1.5 INPUT and OUTPUT Variables**.
+`RELDATE` is most useful combined with `INPUT` so callers can supply expressions at run time without editing the script. See **Â§1.5 INPUT and OUTPUT Variables**.
 
 ---
 
@@ -367,7 +367,7 @@ DROP SETS IF EXISTS !STAGING;
 Halts the script if the engine version does not meet the minimum.
 
 ```sql
-REQUIRE >= '0.5.0';   -- VERSION keyword is optional
+REQUIRE >= '0.7.0';   -- VERSION keyword is optional
 ```
 
 Supported operators: `=`, `>`, `>=`.
@@ -416,7 +416,7 @@ SHOW PROFILE INTO #perf;
 ```
 
 ### 2.3 `SET SHOW_PASSWORD`
-Controls whether variables marked as `SENSITIVE` (see §4.1) are revealed in plain text during `SHOW VARIABLES` or `PRINT` output. Default: `OFF`.
+Controls whether variables marked as `SENSITIVE` (see Â§4.1) are revealed in plain text during `SHOW VARIABLES` or `PRINT` output. Default: `OFF`.
 
 > [!IMPORTANT]
 > For security, the "System Password" set via `USE PASSWORD` is **never** revealed or echoed in any output, even when this setting is `ON`. If you lose this password, any `ENC:` strings or files encrypted with it cannot be recovered.
@@ -497,9 +497,9 @@ Profiling is a high-resolution, opt-in monitoring layer that captures detailed t
 | :--- | :---: | :---: |
 | Default | ON | OFF |
 | Granularity | Session / Last Stmt | Per Statement |
-| `@@variables` | ✓ | ✓ |
-| `SHOW PROFILE` | ✗ | ✓ |
-| Execution Tree | ✗ | ✓ |
+| `@@variables` | âœ“ | âœ“ |
+| `SHOW PROFILE` | âœ— | âœ“ |
+| Execution Tree | âœ— | âœ“ |
 
 **Commands:** `SET TELEMETRY ON` / `SET TELEMETRY OFF` toggle telemetry collection. `SET PROFILING ON` / `SET PROFILING OFF` toggle statement-level profiling.
 
@@ -623,10 +623,10 @@ CREATE CONNECTION mailer ON SMTP(
 **Testing Connectors**
 
 ```sql
--- In-memory mock database — useful for testing without a real database
+-- In-memory mock database â€” useful for testing without a real database
 CREATE CONNECTION testdb ON MOCKDB();
 
--- Local directory connector — treats a folder as a queryable table
+-- Local directory connector â€” treats a folder as a queryable table
 CREATE CONNECTION logs_dir ON DIRECTORY('C:\Logs\') WITH(RECURSIVE=TRUE);
 ```
 
@@ -733,7 +733,7 @@ BEGIN
 END
 ```
 
-### 4.3 `FOR` — Numeric Range
+### 4.3 `FOR` â€” Numeric Range
 
 ```sql
 FOR @idx = 1 TO 10
@@ -747,7 +747,7 @@ BEGIN
 END
 ```
 
-### 4.4 `FOR @row IN` — Query Row Iteration
+### 4.4 `FOR @row IN` â€” Query Row Iteration
 Executes the body once per row returned by the query. `@row` exposes columns via dot notation.
 
 ```sql
@@ -760,7 +760,7 @@ END
 
 > For large result sets, consider using `SET FOREACH_PAGE_SIZE` to control how many rows are loaded at once.
 
-### 4.5 `FOREACH` — Collection Iteration
+### 4.5 `FOREACH` â€” Collection Iteration
 Iterates through each item in a `LIST` variable, JSON array, or the rows of a `#temp` table.
 
 - **Streaming Support**: When used with a subquery or a connection name, `FOREACH` uses a streaming cursor to minimize memory usage.
@@ -803,7 +803,7 @@ END
 
 `PRINT` supports two forms: statement and function.
 
-**Statement form** — writes one or more expressions to the message log:
+**Statement form** â€” writes one or more expressions to the message log:
 ```sql
 PRINT 'Starting nightly load...';
 PRINT 'Processed: ' + @count + ' rows', TRUE;           -- with timestamp
@@ -813,7 +813,7 @@ PRINT GETDATE(), TRUE, 'yyyy-MM-dd HH:mm:ss';           -- formatted date
 PRINT 'User:', @Username, 'Status:', @Status;
 ```
 
-**Function form** — `PRINT(expression)` — evaluates the expression and emits the result, useful inside compound expressions or when the statement form's comma-separation would be ambiguous:
+**Function form** â€” `PRINT(expression)` â€” evaluates the expression and emits the result, useful inside compound expressions or when the statement form's comma-separation would be ambiguous:
 ```sql
 PRINT(@@ROWCOUNT);
 PRINT('Rows: ' + @count);
@@ -960,7 +960,7 @@ FROM <source> [AS alias]
 [FOR XML  AUTO | PATH | RAW [, ROOT('name')] [, ELEMENTS]];
 ```
 
-### 5.2 `INTO` — Write Result to Target
+### 5.2 `INTO` â€” Write Result to Target
 ```sql
 SELECT id, name, category
 INTO #temp_staging
@@ -1084,7 +1084,7 @@ SELECT
 FROM #sales;
 ```
 
-### 5.9.1 `FILTER` — Conditional Aggregation
+### 5.9.1 `FILTER` â€” Conditional Aggregation
 The `FILTER` clause restricts the rows that an aggregate window function considers. It is evaluated within the window frame but only includes rows that satisfy the condition.
 
 ```sql
@@ -1101,7 +1101,7 @@ FROM sales_data;
 | `ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING` | Current row and one row on either side |
 | `ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING` | All rows in the partition |
 
-### 5.10 `QUALIFY` — Filter Window Results
+### 5.10 `QUALIFY` â€” Filter Window Results
 The `QUALIFY` clause filters results based on window function values. It is evaluated after window functions are calculated, avoiding the need for a subquery to filter by a ranked or aggregated window value.
 
 ```sql
@@ -1192,15 +1192,15 @@ WHERE region IS NOT NULL
 ### 8.1 Member Access (Dot Notation)
 Access columns of a row variable, fields of a JSON object, or properties of a system object.
 
-**Resolution order:** Row columns → JSON fields → C# reflection properties (case-insensitive).
+**Resolution order:** Row columns â†’ JSON fields â†’ C# reflection properties (case-insensitive).
 
 | Object | Member | Description |
 | :--- | :--- | :--- |
-| Row variable (`FOR @row IN`) | `.columnName` | Column value during row iteration — see §4.4 |
-| `FILE_LIST` / `REMOTE_FILE_LIST` rows | `.NAME`, `.PATH`, `.SIZE`, etc. | File metadata columns — see §16.6 |
-| `MINMAX` variable | `.MIN`, `.MAX` | Range bounds — see §1.2 |
-| Docker alias | `.CONNECTION_STRING` | Host-mapped connection string — see §18 |
-| JSON variable | `.fieldName` | Dynamic field extraction — see §1.2 |
+| Row variable (`FOR @row IN`) | `.columnName` | Column value during row iteration â€” see Â§4.4 |
+| `FILE_LIST` / `REMOTE_FILE_LIST` rows | `.NAME`, `.PATH`, `.SIZE`, etc. | File metadata columns â€” see Â§16.6 |
+| `MINMAX` variable | `.MIN`, `.MAX` | Range bounds â€” see Â§1.2 |
+| Docker alias | `.CONNECTION_STRING` | Host-mapped connection string â€” see Â§18 |
+| JSON variable | `.fieldName` | Dynamic field extraction â€” see Â§1.2 |
 
 ---
 
@@ -1328,7 +1328,7 @@ DROP INDEX IF EXISTS Customers.IX_Customers_Email;
 
 ## 11. Execution Blocks
 
-### 11.1 EXEC / EXECUTE — Execution & Pushdown
+### 11.1 EXEC / EXECUTE â€” Execution & Pushdown
 
 `EXEC` and `EXECUTE` are functional synonyms in ETL-SQL. They are used for executing dynamic SQL strings, stored procedures, or pushing native SQL blocks directly to a remote connection.
 
@@ -1387,7 +1387,7 @@ EXEC orch BEGIN
 END
 ```
 
-> **Error behavior:** Stop-on-first-error within each block. The block is not transactional — a failure mid-block leaves prior statements applied.
+> **Error behavior:** Stop-on-first-error within each block. The block is not transactional â€” a failure mid-block leaves prior statements applied.
 
 ### 11.2 `PARALLEL`
 ```sql
@@ -1428,8 +1428,23 @@ RUN SCRIPT 'calculate_totals.etlsql' WITH(@category = 'Finance', @total = @count
 PRINT 'Total: ' + CAST(@count AS STRING);
 ```
 
+### 11.4 `GO` — Batch Separator
+The `GO` keyword is a batch separator. It is not an ETL-SQL statement but a signal to the parser to split the script into discrete execution batches. Each batch is compiled and executed completely before the next one begins.
 
+- **Scope**: Variables declared in a previous batch are available in subsequent batches.
+- **Errors**: If a batch fails, execution stops immediately; subsequent batches are not executed.
+- **Interactive Mode**: In the TUI or VS Code, `GO` defines the "executable unit" for partial runs.
 
+```sql
+-- Batch 1: Setup
+CREATE TABLE #temp (id INT, name STRING);
+GO
+
+-- Batch 2: Processing
+INSERT INTO #temp VALUES (1, 'Alice');
+SELECT * FROM #temp;
+GO
+```
 
 ---
 
@@ -1497,7 +1512,15 @@ ROLLBACK;            -- or ROLLBACK TRAN
 `AND`, `OR`, `NOT`
 
 ### 14.3 Comparison Operators
-`=`, `<>`, `!=`, `<`, `<=`, `>`, `>=`
+`=`, `<>`, `!=`, `<`, `<=`, `>`, `>=`, `IN`, `LIKE`, `BETWEEN`
+
+#### `BETWEEN`
+Checks if a value is within an inclusive range (equivalent to `val >= start AND val <= end`).
+
+```sql
+SELECT * FROM #audit WHERE event_date BETWEEN '2024-01-01' AND '2024-06-30';
+SELECT * FROM #data WHERE id NOT BETWEEN @min AND @max;
+```
 
 ### 14.4 Temporal Expressions
 
@@ -1533,7 +1556,7 @@ SELECT SYSDATE AT TIME ZONE @tz;
 
 ## 15. Job Scheduling
 
-### 15.1 `CREATE JOB` — Local Orchestrator
+### 15.1 `CREATE JOB` â€” Local Orchestrator
 Registers a job with the local Orchestrator service.
 
 ```sql
@@ -1555,7 +1578,7 @@ CREATE JOB WeeklyReport WITH (SCHEDULE = '0 8 * * MON') AS
 **Schedule intervals (EVERY form):** `SECONDS`, `MINUTES`, `HOURS`, `DAYS`  
 **Cron syntax:** standard 5-field cron expression in the `WITH (SCHEDULE = '...')` form.
 
-### 15.2 `CREATE JOB` — Remote Orchestrator
+### 15.2 `CREATE JOB` â€” Remote Orchestrator
 Targets a specific remote Orchestrator using `AT <alias>`. The alias must be a connection created with `ON ORCHESTRATOR(...)`.
 
 ```sql
@@ -1594,7 +1617,7 @@ SHOW JOB HISTORY INTO #history;
 
 ## 16. File Operations
 
-All paths are validated against the active Safe Zones before any I/O occurs. See `SET ALLOW_FILE_TYPE_ACCESS` and related overrides in §2.4.
+All paths are validated against the active Safe Zones before any I/O occurs. See `SET ALLOW_FILE_TYPE_ACCESS` and related overrides in Â§2.4.
 
 ### 16.1 File Statements
 ```sql
@@ -1734,14 +1757,14 @@ BEGIN TRY
     -- ... pipeline work ...
     SEND EMAIL
         TO      'ops@company.com'
-        SUBJECT 'Nightly Load — SUCCESS'
+        SUBJECT 'Nightly Load â€” SUCCESS'
         BODY    'All ' + @rowCount + ' rows loaded.'
         AT      mailer;
 END TRY
 BEGIN CATCH
     SEND EMAIL
         TO      'ops@company.com'
-        SUBJECT 'Nightly Load — FAILED'
+        SUBJECT 'Nightly Load â€” FAILED'
         BODY    'Error at step ' + @step + ': ' + ERROR_MESSAGE()
         ATTACH  'C:\Logs\nightly_error.log'
         AT      mailer;
@@ -1923,21 +1946,21 @@ CREATE VISUAL <name> AS <type> (
 | `BAR`, `HBAR`, `LINE` | `X`, `Y` | `SERIES` |
 | `SCATTER` | `X`, `Y` | `COLOR`, `LABEL` |
 | `BUBBLE` | `X`, `Y` | `SIZE`, `LABEL` |
-| `PIE`, `DONUT`, `FUNNEL` | `LABEL`, `VALUE` | — |
+| `PIE`, `DONUT`, `FUNNEL` | `LABEL`, `VALUE` | â€” |
 | `COMBO` | `X` | _(declare each series in `SERIES(BAR col, LINE col)`)_ |
-| `BOXPLOT` | `X`, `LOW`, `Q1`, `MEDIAN`, `Q3`, `HIGH` | — |
+| `BOXPLOT` | `X`, `LOW`, `Q1`, `MEDIAN`, `Q3`, `HIGH` | â€” |
 | `TREEMAP` | `LABEL`, `VALUE` | `PARENT` |
-| `HEATMAP` | `X`, `Y`, `VALUE` | — |
+| `HEATMAP` | `X`, `Y`, `VALUE` | â€” |
 | `GAUGE` | `VALUE` | `LABEL` |
-| `WATERFALL` | `X`, `Y` | — |
-| `RADAR` | _(none — first column = series name, remaining columns = metric axes)_ | — |
-| `CANDLESTICK` | `X`, `OPEN`, `HIGH`, `LOW`, `CLOSE` | — |
+| `WATERFALL` | `X`, `Y` | â€” |
+| `RADAR` | _(none â€” first column = series name, remaining columns = metric axes)_ | â€” |
+| `CANDLESTICK` | `X`, `OPEN`, `HIGH`, `LOW`, `CLOSE` | â€” |
 | `MAP` (choropleth) | `REGION` | `VALUE` |
-| `MAP` (points — `MODE=POINTS`) | `LON`, `LAT` | `VALUE`, `LABEL` |
-| `TABLE` | _(all source columns rendered automatically)_ | — |
+| `MAP` (points â€” `MODE=POINTS`) | `LON`, `LAT` | `VALUE`, `LABEL` |
+| `TABLE` | _(all source columns rendered automatically)_ | â€” |
 | `CARD` | `VALUE` | `LABEL` |
-| `SLICER`, `MULTISELECT` | `VALUE` | — |
-| `TEXT`, `IMAGE`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX` | _(no mappings)_ | — |
+| `SLICER`, `MULTISELECT` | `VALUE` | â€” |
+| `TEXT`, `IMAGE`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX` | _(no mappings)_ | â€” |
 
 **FORMATTING operators:** `<`, `>`, `<=`, `>=`, `=`, `<>`
 
@@ -2150,7 +2173,7 @@ EXECUTE portal BEGIN
 
     -- =========================================================
     -- FOLDERS
-    -- Folders are catalog containers — distinct from filesystem directories.
+    -- Folders are catalog containers â€” distinct from filesystem directories.
     -- =========================================================
     CREATE FOLDER '/Finance';
     CREATE FOLDER '/Finance/Monthly';
@@ -2325,7 +2348,7 @@ END
 
 Orchestrator admin statements execute inside an `EXECUTE orch BEGIN...END` block. The `orch` alias must be a connection created with `ON ORCHESTRATOR(...)`.
 
-For targeting a remote Orchestrator from a standalone `CREATE JOB` statement (outside a block), use the `AT <alias>` form documented in §15.2.
+For targeting a remote Orchestrator from a standalone `CREATE JOB` statement (outside a block), use the `AT <alias>` form documented in Â§15.2.
 
 ```sql
 CREATE CONNECTION orch ON ORCHESTRATOR(
@@ -2418,3 +2441,13 @@ ENCRYPT FILE 'data.csv' TO 'data.pgp' PGP_KEY 'C:\Keys\partner_pub.asc';
 DECRYPT FILE 'secrets.enc' TO 'secrets.csv' 
     KEYFILE 'C:\Keys\id_rsa' PASSWORD 'key-passphrase';
 ```
+
+### 20.4 `GENERATE JWT_SECRET`
+Generates a cryptographically strong random string for use as a JWT signing key in the Report Portal. The generated secret is 256 bits (32 bytes) encoded as a Base64 string.
+
+```sql
+GENERATE JWT_SECRET;                -- Prints to message log
+GENERATE JWT_SECRET INTO @mySecret; -- Store in variable
+```
+
+This is the recommended way to generate keys for the `Portal:JwtSecret` configuration key.

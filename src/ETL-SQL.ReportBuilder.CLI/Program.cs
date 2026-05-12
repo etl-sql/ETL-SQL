@@ -313,8 +313,8 @@ namespace ETL_SQL.ReportBuilder.CLI
 
             // Build the argument string to forward to ReportPlayer
             string playerArg = multiMode
-                ? $"--manifest \"{Path.GetFullPath(manifestPath!)}\""
-                : $"\"{Path.GetFullPath(scriptPath!)}\"";
+                ? $"--manifest \"{Path.GetFullPath(manifestPath!)}\" --no-browser"
+                : $"\"{Path.GetFullPath(scriptPath!)}\" --no-browser";
             
             if (portArg.HasValue) playerArg += $" --port {portArg.Value}";
 

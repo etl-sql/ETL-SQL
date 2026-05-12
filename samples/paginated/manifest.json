@@ -1,0 +1,61 @@
+# System Audit Summary
+
+Comprehensive analysis of report portal usage, security events, and system activity over the last 6 months.
+
+*Source: samples/paginated/audit_report.rptsql | Generated: 2026-05-12 02:24:03 UTC*
+
+## Main
+
+### Event Type Distribution
+
+<!-- ECHART:{"title":{"text":"Event Type Distribution"},"tooltip":{"trigger":"item"},"legend":{"orient":"horizontal","bottom":"bottom"},"series":[{"type":"pie","name":"EventDistribution","radius":["40%","70%"],"data":[]}]} -->
+
+<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc2MDAnIGhlaWdodD0nMzUwJyB2aWV3Qm94PScwIDAgNjAwIDM1MCcgZm9udC1mYW1pbHk9J3NhbnMtc2VyaWYnPjxyZWN0IHdpZHRoPSc2MDAnIGhlaWdodD0nMzUwJyBmaWxsPSd3aGl0ZScvPg0KPHJlY3QgeD0nMScgeT0nMScgd2lkdGg9JzU5OCcgaGVpZ2h0PSczNDgnIGZpbGw9JyNmOGY5ZmEnIHJ4PSc2JyBzdHJva2U9JyNkZWUyZTYnIC8+DQo8dGV4dCB4PSczMDAnIHk9JzE2NycgdGV4dC1hbmNob3I9J21pZGRsZScgZm9udC1zaXplPScxNCcgZmlsbD0nIzg4OCc+RE9OVVQgY2hhcnQ8L3RleHQ+DQo8dGV4dCB4PSczMDAnIHk9JzE4OScgdGV4dC1hbmNob3I9J21pZGRsZScgZm9udC1zaXplPScxMScgZmlsbD0nI2FhYSc+RXZlbnREaXN0cmlidXRpb248L3RleHQ+DQo8L3N2Zz4NCg==" alt="EventDistribution" width="600" height="350" />
+
+### Top Resources Accessed
+
+<!-- ECHART:{"title":{"text":"Top Resources Accessed"},"tooltip":{"trigger":"axis"},"legend":{"orient":"horizontal","bottom":"bottom"},"xAxis":{"type":"value"},"yAxis":{"type":"category","data":[]},"series":[{"type":"bar","name":"resource","data":[]}]} -->
+
+<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc2MDAnIGhlaWdodD0nMzUwJyB2aWV3Qm94PScwIDAgNjAwIDM1MCcgZm9udC1mYW1pbHk9J3NhbnMtc2VyaWYnPjxyZWN0IHdpZHRoPSc2MDAnIGhlaWdodD0nMzUwJyBmaWxsPSd3aGl0ZScvPg0KPHJlY3QgeD0nMScgeT0nMScgd2lkdGg9JzU5OCcgaGVpZ2h0PSczNDgnIGZpbGw9JyNmOGY5ZmEnIHJ4PSc2JyBzdHJva2U9JyNkZWUyZTYnIC8+DQo8dGV4dCB4PSczMDAnIHk9JzE2NycgdGV4dC1hbmNob3I9J21pZGRsZScgZm9udC1zaXplPScxNCcgZmlsbD0nIzg4OCc+SE9SSVpPTlRBTEJBUiBjaGFydDwvdGV4dD4NCjx0ZXh0IHg9JzMwMCcgeT0nMTg5JyB0ZXh0LWFuY2hvcj0nbWlkZGxlJyBmb250LXNpemU9JzExJyBmaWxsPScjYWFhJz5Ub3BSZXNvdXJjZXM8L3RleHQ+DQo8L3N2Zz4NCg==" alt="TopResources" width="600" height="350" />
+
+### Activity Volume Trend
+
+<!-- ECHART:{"title":{"text":"Activity Volume Trend"},"tooltip":{"trigger":"axis"},"legend":{"orient":"horizontal","bottom":"bottom"},"xAxis":{"type":"category","data":[]},"yAxis":{"type":"value"},"series":[{"type":"line","name":"total_events","data":[],"smooth":true}]} -->
+
+<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc2MDAnIGhlaWdodD0nMzUwJyB2aWV3Qm94PScwIDAgNjAwIDM1MCcgZm9udC1mYW1pbHk9J3NhbnMtc2VyaWYnPjxyZWN0IHdpZHRoPSc2MDAnIGhlaWdodD0nMzUwJyBmaWxsPSd3aGl0ZScvPg0KPHJlY3QgeD0nMScgeT0nMScgd2lkdGg9JzU5OCcgaGVpZ2h0PSczNDgnIGZpbGw9JyNmOGY5ZmEnIHJ4PSc2JyBzdHJva2U9JyNkZWUyZTYnIC8+DQo8dGV4dCB4PSczMDAnIHk9JzE2NycgdGV4dC1hbmNob3I9J21pZGRsZScgZm9udC1zaXplPScxNCcgZmlsbD0nIzg4OCc+TElORSBjaGFydDwvdGV4dD4NCjx0ZXh0IHg9JzMwMCcgeT0nMTg5JyB0ZXh0LWFuY2hvcj0nbWlkZGxlJyBmb250LXNpemU9JzExJyBmaWxsPScjYWFhJz5Wb2x1bWVUcmVuZDwvdGV4dD4NCjwvc3ZnPg0K" alt="VolumeTrend" width="600" height="350" />
+
+### Report Parameters
+
+### Start Date
+
+<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc2MDAnIGhlaWdodD0nMzUwJyB2aWV3Qm94PScwIDAgNjAwIDM1MCcgZm9udC1mYW1pbHk9J3NhbnMtc2VyaWYnPjxyZWN0IHdpZHRoPSc2MDAnIGhlaWdodD0nMzUwJyBmaWxsPSd3aGl0ZScvPg0KPHJlY3QgeD0nMScgeT0nMScgd2lkdGg9JzU5OCcgaGVpZ2h0PSczNDgnIGZpbGw9JyNmOGY5ZmEnIHJ4PSc2JyBzdHJva2U9JyNkZWUyZTYnIC8+DQo8dGV4dCB4PSczMDAnIHk9JzE2NycgdGV4dC1hbmNob3I9J21pZGRsZScgZm9udC1zaXplPScxNCcgZmlsbD0nIzg4OCc+UkVMREFURVBJQ0tFUiBjaGFydDwvdGV4dD4NCjx0ZXh0IHg9JzMwMCcgeT0nMTg5JyB0ZXh0LWFuY2hvcj0nbWlkZGxlJyBmb250LXNpemU9JzExJyBmaWxsPScjYWFhJz5TdGFydFBpY2tlcjwvdGV4dD4NCjwvc3ZnPg0K" alt="StartPicker" width="600" height="350" />
+
+### End Date
+
+<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc2MDAnIGhlaWdodD0nMzUwJyB2aWV3Qm94PScwIDAgNjAwIDM1MCcgZm9udC1mYW1pbHk9J3NhbnMtc2VyaWYnPjxyZWN0IHdpZHRoPSc2MDAnIGhlaWdodD0nMzUwJyBmaWxsPSd3aGl0ZScvPg0KPHJlY3QgeD0nMScgeT0nMScgd2lkdGg9JzU5OCcgaGVpZ2h0PSczNDgnIGZpbGw9JyNmOGY5ZmEnIHJ4PSc2JyBzdHJva2U9JyNkZWUyZTYnIC8+DQo8dGV4dCB4PSczMDAnIHk9JzE2NycgdGV4dC1hbmNob3I9J21pZGRsZScgZm9udC1zaXplPScxNCcgZmlsbD0nIzg4OCc+UkVMREFURVBJQ0tFUiBjaGFydDwvdGV4dD4NCjx0ZXh0IHg9JzMwMCcgeT0nMTg5JyB0ZXh0LWFuY2hvcj0nbWlkZGxlJyBmb250LXNpemU9JzExJyBmaWxsPScjYWFhJz5FbmRQaWNrZXI8L3RleHQ+DQo8L3N2Zz4NCg==" alt="EndPicker" width="600" height="350" />
+
+### Event Types
+
+<img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHdpZHRoPSc2MDAnIGhlaWdodD0nMzUwJyB2aWV3Qm94PScwIDAgNjAwIDM1MCcgZm9udC1mYW1pbHk9J3NhbnMtc2VyaWYnPjxyZWN0IHdpZHRoPSc2MDAnIGhlaWdodD0nMzUwJyBmaWxsPSd3aGl0ZScvPg0KPHJlY3QgeD0nMScgeT0nMScgd2lkdGg9JzU5OCcgaGVpZ2h0PSczNDgnIGZpbGw9JyNmOGY5ZmEnIHJ4PSc2JyBzdHJva2U9JyNkZWUyZTYnIC8+DQo8dGV4dCB4PSczMDAnIHk9JzE2NycgdGV4dC1hbmNob3I9J21pZGRsZScgZm9udC1zaXplPScxNCcgZmlsbD0nIzg4OCc+TVVMVElTRUxFQ1QgY2hhcnQ8L3RleHQ+DQo8dGV4dCB4PSczMDAnIHk9JzE4OScgdGV4dC1hbmNob3I9J21pZGRsZScgZm9udC1zaXplPScxMScgZmlsbD0nI2FhYSc+RXZlbnRGaWx0ZXI8L3RleHQ+DQo8L3N2Zz4NCg==" alt="EventFilter" width="600" height="350" />
+
+| event_type |
+| --- |
+| ADMIN_CONFIG |
+| CREATE_USER |
+| DELETE_USER |
+| EXPORT_REPORT |
+| LOGIN |
+| LOGOUT |
+| VIEW_REPORT |
+
+### Filter by User
+
+*\[Slicer — interactive only\]*
+
+## Details
+
+### Detailed Audit Logs
+
+| ts | user_id | event_type | resource | status | duration_ms |
+| --- | --- | --- | --- | --- | --- |
+

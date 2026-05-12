@@ -1538,6 +1538,25 @@ namespace ETL_SQL.Core
         }
     }
 
+    public record BetweenExpression : Expression
+    {
+        public Expression Left { get; }
+        public Expression Start { get; }
+        public Expression End { get; }
+        public bool IsNot { get; }
+
+        public BetweenExpression(Expression left, Expression start, Expression end, bool isNot = false)
+        {
+            Left = left;
+            Start = start;
+            End = end;
+            IsNot = isNot;
+        }
+
+        public override IEnumerable<string> GetSourceTables() => Left.GetSourceTables().Concat(Start.GetSourceTables()).Concat(End.GetSourceTables()).Distinct(StringComparer.OrdinalIgnoreCase);
+        public override IEnumerable<string> GetSourceColumns() => Left.GetSourceColumns().Concat(Start.GetSourceColumns()).Concat(End.GetSourceColumns()).Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
     public record LineageStatement : Statement
     {
         public TableReference? TargetTable { get; }

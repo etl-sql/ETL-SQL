@@ -217,7 +217,11 @@ namespace ETL_SQL.Core.Parser.Components
                 // Backward compatibility: AS is now preferred but we'll accept ( if name is clearly an identifier.
                 if (!ReportCheck(TokenType.LPAREN)) Consume(TokenType.AS, "Expected AS after page name");
             }
-            Consume(TokenType.LPAREN, "Expected '(' after AS");
+
+            // Support the optional LAYOUT keyword before ( (established syntax in established reports)
+            Match(TokenType.LAYOUT);
+
+            Consume(TokenType.LPAREN, "Expected '(' after AS [LAYOUT]");
             
             string? visibility = "ON";
             string? structure = null;

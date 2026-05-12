@@ -1713,8 +1713,10 @@
     }
 
     function renderMultiSelectCheckboxes(container, visual, manifest, paramName, changeActions) {
+        const isDropdown = (getStyle(visual.styles, 'LAYOUT') || '').toUpperCase() === 'DROPDOWN';
+
         const list = document.createElement('div');
-        list.className = 'multiselect-list';
+        list.className = isDropdown ? 'multiselect-popup' : 'multiselect-list';
         if (paramName) list.setAttribute('data-parameter', paramName);
 
         const valCol = (visual.options['mapping:value'] || visual.columns[0] || 'value').toLowerCase();
@@ -1723,6 +1725,8 @@
 
         const currentVal = getParam(manifest.parameters, paramName) || '';
         const selected = new Set(String(currentVal).split(',').map(v => v.trim()).filter(Boolean));
+
+        let updateToggleText = null;
 
         const uniqueOptions = [...new Set(visual.rows.map(r => String(r[finalValIdx])))].sort();
 
@@ -1739,6 +1743,8 @@
                 if (cb.checked) selected.add(optVal);
                 else selected.delete(optVal);
                 
+                if (updateToggleText) updateToggleText();
+
                 const val = Array.from(selected).join(',');
                 changeActions.forEach(a => {
                     postParameters({ [a.parameterName]: val }).then(m => { if (m) renderManifest(m); });
@@ -1753,7 +1759,42 @@
             list.appendChild(item);
         });
 
-        container.appendChild(list);
+        if (isDropdown) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'multiselect-dropdown';
+
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'multiselect-toggle';
+            
+            updateToggleText = () => {
+                if (selected.size === 0) toggle.innerHTML = '<span>All</span>';
+                else if (selected.size === 1) toggle.innerHTML = `<span>${Array.from(selected)[0]}</span>`;
+                else toggle.innerHTML = `<span>${selected.size} selected</span>`;
+                toggle.innerHTML += '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>';
+            };
+            updateToggleText();
+
+            toggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const isOpen = list.classList.contains('open');
+                document.querySelectorAll('.multiselect-popup.open').forEach(p => p.classList.remove('open'));
+                if (!isOpen) list.classList.add('open');
+            });
+
+            list.addEventListener('click', e => e.stopPropagation());
+
+            // Add global click listener once per dropdown
+            document.addEventListener('click', () => {
+                list.classList.remove('open');
+            });
+
+            wrapper.appendChild(toggle);
+            wrapper.appendChild(list);
+            container.appendChild(wrapper);
+        } else {
+            container.appendChild(list);
+        }
     }
 
     // ── Text ────────────────────────────────────────────────────────────────
@@ -1943,7 +1984,7 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'reldate-btn';
-        btn.textContent = '📅';
+        btn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
         btn.addEventListener('click', () => {
             if (typeof datePicker.showPicker === 'function') datePicker.showPicker();
             else datePicker.focus();
@@ -1968,6 +2009,67 @@
     }
 
     // ── RelDatePicker ────────────────────────────────────────────────────────
+
+    function showRelDateHelpModal() {
+        const modal = document.createElement('div');
+        modal.className = 'required-params-modal'; // recycle the overlay styling
+        modal.style.zIndex = '30000'; // above everything
+
+        const content = document.createElement('div');
+        content.className = 'modal-content';
+        content.style.width = '550px';
+
+        const title = document.createElement('h2');
+        title.textContent = 'Relative Date Syntax';
+        title.style.marginTop = '0';
+        
+        const desc = document.createElement('div');
+        desc.style.fontSize = '14px';
+        desc.style.lineHeight = '1.5';
+        desc.innerHTML = `
+            <p><code>RELDATE</code> parameters resolve to the exact local time at the moment of execution.</p>
+            <table class="md-table" style="margin-top: 12px; margin-bottom: 16px;">
+                <tr><th>Anchor</th><th>Resolves to</th></tr>
+                <tr><td><strong>D</strong></td><td>Today at midnight</td></tr>
+                <tr><td><strong>W</strong> / <strong>WS</strong></td><td>Start of current week</td></tr>
+                <tr><td><strong>WE</strong></td><td>Last day of current week</td></tr>
+                <tr><td><strong>M</strong> / <strong>MS</strong></td><td>1st of current month at midnight</td></tr>
+                <tr><td><strong>ME</strong></td><td>Last day of current month at midnight</td></tr>
+                <tr><td><strong>Y</strong> / <strong>YS</strong></td><td>Jan 1 of current year at midnight</td></tr>
+                <tr><td><strong>YE</strong></td><td>Dec 31 of current year at midnight</td></tr>
+                <tr><td><strong>N</strong></td><td>Exact current local datetime</td></tr>
+            </table>
+            <p><strong>Arithmetic:</strong> Append <code>-n</code> or <code>+n</code> to shift by <em>n</em> periods.</p>
+            <ul>
+                <li><code>D-1</code> = Yesterday</li>
+                <li><code>M-1</code> = First day of last month</li>
+                <li><code>ME-1</code> = Last day of last month</li>
+            </ul>
+            <p style="margin-top: 12px; margin-bottom: 8px;"><strong>Time Offsets (from N):</strong> Use <code>H</code> (hours), <code>I</code> (minutes), or <code>S</code> (seconds).</p>
+            <ul style="margin-bottom: 0;">
+                <li><code>N-2H</code> = Exactly 2 hours ago</li>
+                <li><code>N-30I</code> = Exactly 30 minutes ago</li>
+            </ul>
+        `;
+
+        const footer = document.createElement('div');
+        footer.className = 'modal-footer';
+        footer.style.marginTop = '24px';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'header-btn primary';
+        closeBtn.textContent = 'Got it';
+        closeBtn.addEventListener('click', () => {
+            document.body.removeChild(modal);
+        });
+
+        footer.appendChild(closeBtn);
+        content.appendChild(title);
+        content.appendChild(desc);
+        content.appendChild(footer);
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+    }
 
     function renderRelDatePicker(container, visual, manifest) {
         const opts          = visual.options || {};
@@ -2007,12 +2109,24 @@
         const calBtn = document.createElement('button');
         calBtn.type = 'button';
         calBtn.className = 'reldate-btn';
-        calBtn.textContent = '📅';
+        calBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
         calBtn.title = 'Pick a date (writes ISO date)';
         calBtn.addEventListener('click', () => {
             if (typeof hiddenDate.showPicker === 'function') hiddenDate.showPicker();
             else hiddenDate.focus();
         });
+
+        calBtn.style.borderTopRightRadius = '0';
+        calBtn.style.borderBottomRightRadius = '0';
+
+        const infoBtn = document.createElement('button');
+        infoBtn.type = 'button';
+        infoBtn.className = 'reldate-btn';
+        infoBtn.style.borderLeft = 'none';
+        infoBtn.style.color = '#5470c6';
+        infoBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>';
+        infoBtn.title = 'View Relative Date Syntax Help';
+        infoBtn.addEventListener('click', showRelDateHelpModal);
 
         hiddenDate.addEventListener('change', () => {
             textInput.value = hiddenDate.value;
@@ -2022,28 +2136,31 @@
         inputRow.appendChild(textInput);
         inputRow.appendChild(hiddenDate);
         inputRow.appendChild(calBtn);
+        inputRow.appendChild(infoBtn);
 
         // ── Quick-pick buttons ────────────────────────────────────────────
         const quickRow = document.createElement('div');
         quickRow.className = 'reldate-quick';
 
         const quickPicks = [
-            { label: 'Today',  value: 'D-0'  },
-            { label: 'D-1',    value: 'D-1'  },
-            { label: 'D-7',    value: 'D-7'  },
-            { label: 'D-30',   value: 'D-30' },
-            { label: 'M-1',    value: 'M-1'  },
-            { label: 'M-3',    value: 'M-3'  },
-            { label: 'Y-1',    value: 'Y-1'  },
+            { label: 'D',    value: 'D-0'  },
+            { label: 'D-1',  value: 'D-1'  },
+            { label: 'M',    value: 'M-0'  },
+            { label: 'M-1',  value: 'M-1'  },
+            { label: 'Y',    value: 'Y-0'  },
+            { label: 'Y-1',  value: 'Y-1'  },
         ];
 
         quickPicks.forEach(qp => {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.className = 'reldate-quick-btn';
+            btn.className = 'reldate-quick-btn' + (def === qp.value ? ' active' : '');
             btn.textContent = qp.label;
             btn.addEventListener('click', () => {
                 textInput.value = qp.value;
+                // update active state locally
+                Array.from(quickRow.children).forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
                 textInput.dispatchEvent(new Event('change'));
             });
             quickRow.appendChild(btn);

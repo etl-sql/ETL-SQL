@@ -13,12 +13,15 @@ To maintain absolute technical consistency, all implementation work MUST adhere 
 
 ---
 
-## 2. Future Connector Roadmap (Technical Specs)
-
-### 3.1 Cloud Data Warehousing
-- **Snowflake Connector**
+### 2.1 Implemented Connectors (Cloud & Modern)
+- **Snowflake Connector** [v0.7.0]
     - **Patterns**: Standard (`ACCOUNT`, `WAREHOUSE`, `DATABASE`, `SCHEMA`, `USER`, `PASS`) vs. OAuth.
     - **Syntax**: `SELECT * FROM snowflake_conn.FactSales;`
+- **BigQuery Connector** [v0.7.0]
+    - **Patterns**: `PROJECT_ID`, `DATASET_ID`, `KEY_FILE`.
+    - **Syntax**: `SELECT * FROM bq_conn.Events;`
+
+## 3. Future Connector Roadmap (Technical Specs)
 - **Databricks SQL & Spark**
     - **Pattern**: `HOST`, `HTTP_PATH`, `TOKEN` (Personal Access Token).
 - **Delta Sharing**

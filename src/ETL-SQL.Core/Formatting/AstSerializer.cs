@@ -147,6 +147,7 @@ namespace ETL_SQL.Core.Formatting
             ListExpression         e => "(" + string.Join(", ", e.Items.Select(i => i.ToSql())) + ")",
             IsNullExpression       e => $"{e.Expression.ToSql()} IS {(e.Not ? "NOT " : "")}NULL",
             InExpression           e => $"{e.Left.ToSql()} {(e.IsNot ? "NOT " : "")}IN {e.Right.ToSql()}",
+            BetweenExpression      e => FormatBetween(e),
             LikeExpression         e => FormatLike(e),
             ExistsExpression       e => $"{(e.IsNot ? "NOT " : "")}EXISTS ({e.Subquery.ToSql()})",
             CaseExpression         e => FormatCase(e),
@@ -632,6 +633,9 @@ namespace ETL_SQL.Core.Formatting
 
         private static string FormatLike(LikeExpression e)
             => $"{e.Left.ToSql()} {(e.IsNot ? "NOT " : "")}LIKE {e.Pattern.ToSql()}{(e.EscapeChar != null ? " ESCAPE " + e.EscapeChar.ToSql() : "")}";
+
+        private static string FormatBetween(BetweenExpression e)
+            => $"{e.Left.ToSql()} {(e.IsNot ? "NOT " : "")}BETWEEN {e.Start.ToSql()} AND {e.End.ToSql()}";
 
         private static string FormatCase(CaseExpression e)
         {

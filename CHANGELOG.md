@@ -4,43 +4,68 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 ---
 
-## [Unreleased]
+## [0.7.0] — 2026-05-11
 
 ### Added
 
-**Report Portal & Dashboards**
-- **Web-Based Report Portal**: Introduced the primary dashboarding interface (`ETL-SQL.ReportPortal`) for hosting and interacting with compiled reports.
-- **ECharts Integration**: High-performance charting engine with support for 25+ visual types including Sunburst, TreeMap, and Funnel.
-- **Interactive Multi-Select**: New `MULTISELECT` visual type rendering as a checkbox list with automatic parameter synchronization.
+**Reporting & Interactive Dashboards**
+- **Advanced Drill-Down**: Implemented `DRILL_IN` and `DRILL_DOWN` for hierarchical, in-place data exploration across visual layers.
+- **Cross-Visual Highlighting**: Power BI-style interactive filtering where clicking a chart segment highlights related data across all other visuals.
+- **Ghost Rendering**: Enhanced interaction logic with "ghosting" (dimming) support for Line, Scatter, Pie, and Donut charts during highlighting.
+- **New Visual Types**:
+    - **MAP**: Integrated ECharts-based mapping with custom GeoJSON support (`MAP_FILE`).
+    - **Specialized Charts**: Added `GAUGE`, `BOXPLOT`, `WATERFALL`, `BUBBLE`, `RADAR`, and `CANDLESTICK`.
+    - **Input Visuals**: Added `TEXTBOX`, `NUMBERBOX`, and `CHECKBOX` for direct scalar parameter input.
+    - **Interactive Slicers**: Support for `SLIDER` and `SEARCH` visual types with immediate dashboard re-rendering.
+    - **Interactive Multi-Select**: New `MULTISELECT` visual type rendering as a checkbox list with automatic parameter synchronization.
+- **Collapsible Containers**: Support for `COLLAPSABLE = ON`, `ICON`, and pinning logic for overlay drawers and sidebar panels.
+- **Deferred Execution**: Added `RUN` button support with staged parameter batching (prevents report refresh on every slicer change).
+- **Visibility Engine**: Standardized `VISIBLE = ON|OFF` syntax (replacing legacy `HIDDEN`); added support for dynamic visibility via `@variables`.
 - **Enhanced Date Picking**: Native `RELDATEPICKER` (hybrid text + calendar) support.
-- **Interactive Slicers**: Support for `SLIDER` and `SEARCH` visual types with immediate dashboard re-rendering.
 - **Markdown Tables**: Full support for GFM-style tables in `TEXT` visuals via `marked.js` integration.
-- **Portal Responsiveness**: Improved mobile layout and CSS grid stability for complex dashboards.
 
-**Security & Cryptography**
+**Data, Lineage & Orchestration**
+- **Shared Datasets**: Implemented a global dataset registry allowing reports to consume cached, shared data with automated background refreshes and access control.
+- **OpenLineage Integration**: Support for exporting data lineage in OpenLineage-compliant JSON format.
+- **Lineage 2.0 Engine**: 
+    - **Standard Tag Library**: Defined 20 core lineage tags (`@pii`, `@sensitive`, etc.) with `@pii: true-wins` inheritance logic.
+    - **Transformation Tracking**: Automated recording of transformation types (`Cast`, `Aggregation`, etc.) across the pipeline.
+    - **Visualization**: Enhanced Mermaid-based lineage graphs with distinct shapes for Reports and Datasets.
+- **Data Lake Connectors**: Native support for **Snowflake** and **BigQuery**.
+- **Batch Separator**: Added `GO` keyword support for separating execution batches.
+- **Improved Loops**: `FOR` loops now support implicit start values (e.g., `FOR @i = 10` instead of `FOR @i = 1 TO 10`).
+- **QUALIFY Clause**: Added T-SQL/Snowflake-style `QUALIFY` clause for filtering results based on window function values.
+- **Window FILTER**: Support for the `FILTER (WHERE ...)` clause inside aggregate window functions.
+- **@@FETCH_STATUS**: Added support for checking cursor/foreach fetch status.
+
+**Security & Governance**
+- **JWT Secret Generation**: New `GENERATE JWT_SECRET` command for securing report portal communications.
+- **Proactive Guardrails**: Linter now warns on high-risk operations and blocks sensitive directory access more aggressively.
+- **Decompression**: Added `DECOMPRESS FILE` and `DECOMPRESS DIRECTORY` statements to the specialized operations library.
 - **PGP Engine Hardening**: Improved `PGP_KEY_PAIR` generation and validation logic.
-- **Security Guardrails**: Whitelisted PGP-related file extensions in `SecurityService` to allow authorized cryptographic operations.
-- **ACL & Permissions**: Implemented administrative portal ACL assignment logic for granular report visibility.
 
-**Lineage & Governance**
-- **Standard Tag Library**: Defined 20 core lineage tags (`@pii`, `@sensitive`, `@owner`, etc.) with `@pii: true-wins` inheritance logic.
-- **Transformation Tracking**: Automated recording of transformation types (`Cast`, `Aggregation`, `FunctionCall`, etc.) across the evaluation pipeline.
-- **Lineage Visualization**: Enhanced Mermaid-based lineage graphs with distinct shapes for Reports (rounded) and Datasets (cylinder).
-- **Metadata Discovery**: LSP support for `@`-prefix tag completions and documentation hovers.
-
-**Documentation & UX**
-- **Report SQL Audit**: Comprehensive rewrite of `Report_SQL_Guide.md` to match current production engine state.
-- **Grammar & Ops**: Updated `Grammar.md` and `Specialized_Operations.md` to reflect `DIRECTORY` connection alias support in file operations.
-- **LSP Stability**: Finalized purge of unstable semantic features; improved autocomplete reliability for connector options and asterisk expansion.
+**IDE, Tooling & UX**
+- **Terminal IDE (TUI) 2.0**: Massive overhaul of the TUI with scrolling, smart copy, message panel optimization, and specialized visual rendering.
+- **Unified IntelliSense**: 
+    - New dot-aware suggestion engine with priority-based ranking and member-access discovery.
+    - LSP support for `@`-prefix tag completions and documentation hovers.
+    - Finalized purge of unstable semantic features for improved stability.
+- **VS Code Preview**: Support for new chart types (Bubble, Radar, Candlestick, Map) and improved sidebar variable discovery.
+- **Report SQL Audit**: Comprehensive rewrite of `Report_SQL_Guide.md` and inline help files to match current production state.
+- **Deployment Packaging**: Integrated MSI installer, Linux `.tar.gz`, and macOS `.pkg` generation into the release pipeline.
 
 ### Fixed
 - **Multi-Select Regression**: Fixed a duplication bug where legacy dropdown logic was overwriting the new checkbox-list implementation.
 - **Markdown Rendering**: Resolved issues where Markdown tables were displayed as raw text due to library interface mismatches.
-- **IntelliSense Regressions**: Fixed missing connector option suggestions and asterisk expansion failures in `LanguageService.cs`.
+- **IntelliSense Regressions**: Fixed missing connector option suggestions and asterisk expansion failures.
 - **Portal State Bugs**: Resolved "white screen" and state synchronization issues in the report portal.
 - **Slicer Logic**: Fixed null-reference errors in `renderSlicer` when actions were undefined.
+- **Cross-Filesystem Paths**: Fixed portal publish flow failures when handling paths across different drives.
+- **Gauge Rendering**: Resolved template string errors and implemented auto-formatting for decimal values.
 
 ### Changed
+- **Sample Reorganization**: Moved all `TestData` to `samples/data/` and redirected script outputs to `samples/output/` for repository cleanliness.
+- **Visibility Syntax**: Deprecated `HIDDEN = ON` in favor of the unified `VISIBLE` property.
 - **Directory Connections**: Statements like `COPY DIRECTORY` and `FILE_LIST` now natively accept `DIRECTORY` connection aliases as path arguments.
 
 ---
