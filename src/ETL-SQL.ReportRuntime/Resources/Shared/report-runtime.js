@@ -86,6 +86,7 @@
     const _drillHistory = [];
     const _registeredMaps = new Set();
     const _crossFilterStates = {}; // Keyed by page element ID; persists across renderManifest re-builds
+    const _uiStates = {};          // Keyed by object name; persists across re-renders (e.g. collapsed: true)
 
     /**
      * Entry point: obtain manifest and render all visuals + pages.
@@ -650,6 +651,13 @@
             chevron.innerHTML = '&#x25B2;'; // UP
             header.appendChild(chevron);
             
+            const name = containerDef.name;
+            const persisted = _uiStates[name];
+            if (persisted && persisted.collapsed) {
+                div.classList.add('collapsed');
+                chevron.innerHTML = '&#x25BC;'; // DOWN
+            }
+
             header.onclick = () => {
                 const isCollapsed = div.classList.toggle('collapsed');
                 chevron.innerHTML = isCollapsed ? '&#x25BC;' : '&#x25B2;'; // DOWN : UP
@@ -2587,61 +2595,14 @@
                 // Custom button — execute ON_CLICK actions
                 const clickActions = actionsFor(btn, 'ON_CLICK');
                 
-                // Special check for CLEAR_FILTERS / APPLY_PARAMETERS actions
-                if (clickActions.some(a => a.type === 'CLEAR_FILTERS')) {
-                    executeAction({ type: 'CLEAR_FILTERS' }, null, []);
-                    return;
-                }
-                if (clickActions.some(a => a.type === 'APPLY_PARAMETERS')) {
-                    executeAction({ type: 'APPLY_PARAMETERS' }, null, []);
-                    return;
-                }
-
                 if (clickActions.length === 0) return;
 
-                const setParamActions  = clickActions.filter(a => a.type === 'SET_PARAMETER');
-                const drillDownActions = clickActions.filter(a => a.type === 'DRILL_DOWN');
-
-                // Try page navigation first (DRILL_DOWN on a button = navigate to the target page)
-                if (drillDownActions.length > 0 && !isWebMode) {
-                    drillDownActions.forEach(a => {
-                        const navItem = document.querySelector(`[data-page="${a.targetVisual}"]`);
-                        if (navItem) navItem.click();
-                    });
-                    return;
-                }
-
-                // In web mode, batch SET_PARAMETER and DRILL_DOWN parameter updates
-                const batch = {};
-                drillDownActions.forEach(a => {
-                    (a.keyColumns || []).forEach(k => { batch['@' + k] = ''; });
+                // If there are multiple actions, execute them all
+                // Special handling: if we have mixed actions, we execute them in sequence.
+                // Note: APPLY_PARAMETERS and CLEAR_FILTERS trigger async re-renders.
+                clickActions.forEach(action => {
+                    executeAction(action, [], [], btn.name, btn);
                 });
-                setParamActions.forEach(a => {
-                    if (a.parameterName) batch[a.parameterName] = resolveActionValue(a, [], []);
-                });
-
-                if (Object.keys(batch).length > 0 && isWebMode) {
-                    postParameters(batch).then(m => {
-                        if (m) {
-                            renderManifest(m);
-                            // After re-render, navigate to DRILL_DOWN target page if specified
-                            drillDownActions.forEach(a => {
-                                if (a.targetVisual) {
-                                    const navItem = document.querySelector(`[data-page="${a.targetVisual}"]`);
-                                    if (navItem) navItem.click();
-                                }
-                            });
-                        }
-                    });
-                } else if (drillDownActions.length > 0) {
-                    // Navigate without parameter change
-                    drillDownActions.forEach(a => {
-                        if (a.targetVisual) {
-                            const navItem = document.querySelector(`[data-page="${a.targetVisual}"]`);
-                            if (navItem) navItem.click();
-                        }
-                    });
-                }
             }
         });
 
@@ -2958,6 +2919,10 @@
                 } else if (key === 'COLLAPSED') {
                     const isCollapsed = isOn(value);
                     const container = el.closest('.collapsible-drawer') || el.closest('.collapsible-inline') || el.closest('.report-container') || el;
+                    
+                    const name = container.getAttribute('data-name');
+                    if (name) _uiStates[name] = { collapsed: isCollapsed };
+
                     if (isCollapsed) container.classList.add('collapsed');
                     else container.classList.remove('collapsed');
 

@@ -414,7 +414,7 @@
     pointer-events: none;
   }
   .container-box.collapsible-inline.collapsed .container-chevron {
-    transform: rotate(180deg);
+    /* Rotation removed to avoid double-flipping with JS character swap */
   }
   .container-box.collapsible-inline.collapsed {
     margin-bottom: 8px;
