@@ -1156,13 +1156,51 @@ ACTIONS (ON_CLICK = RUN_SCRIPT('C:\scripts\approve_order.etlsql', @order_id = id
 ON_CLICK = CLEAR_FILTERS
 ```
 
-Resets all parameters on the current page to their declared defaults and re-queries all affected visuals. Typically used on a dedicated reset button:
+Resets all active filters and cross-highlighting states on the current page. Typically used on a dedicated reset button:
 
 ```sql
 CREATE BUTTON ResetAll AS CUSTOM (
   TITLE   = 'Clear All Filters',
   ACTIONS (ON_CLICK = CLEAR_FILTERS)
 );
+```
+
+#### APPLY_PARAMETERS / RUN_REPORT
+
+```sql
+ON_CLICK = APPLY_PARAMETERS
+ON_CLICK = RUN_REPORT        -- Alias for APPLY_PARAMETERS
+```
+
+Triggers a full report refresh in **Staged Mode**. Useful for paginated reports where you want the user to set multiple filters and then click "Run" to fetch data once. 
+
+#### SET_UI_STATE
+
+```sql
+ON_CLICK = SET_UI_STATE(<Target>, <Key>, <Value>)
+```
+
+Changes the ephemeral visual state of report objects without triggering a data re-query.
+
+*   **Target**: 
+    *   `'VisualName'`: Target a single visual or container.
+    *   `('V1', 'V2')`: Target multiple objects.
+    *   `'TAG:TagName'`: Target all objects with a specific `TAG` option.
+*   **Key**: `VISIBLE`, `COLLAPSED`, `BACKGROUND-COLOR`, `COLOR`, `CLASS`.
+*   **Value**: `ON`/`OFF`, colors (hex/name), or class names (prefix with `+` to add, `-` to remove).
+
+**Example: Collapse a filter panel after running report**
+```sql
+CREATE BUTTON RunBtn AS BUTTON (
+  TEXT    = 'Run Report',
+  ACTIONS (
+    ON_CLICK = (
+      RUN_REPORT,
+      SET_UI_STATE('FilterPanel', 'COLLAPSED', ON)
+    )
+  )
+);
+```
 ```
 
 ### CROSS_VISUAL_ACTION {#cross_visual_action}

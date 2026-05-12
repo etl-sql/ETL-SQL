@@ -1972,6 +1972,8 @@ ON_CLICK  = DRILL_IN(HIERARCHY = (<col1>, <col2>, ...))
 ON_CHANGE = SET_PARAMETER(@paramName, <columnRef>)
 ON_CLICK  = RUN_SCRIPT('<path>', @param = <columnRef> [, ...])
 ON_CLICK  = CLEAR_FILTERS
+ON_CLICK  = APPLY_PARAMETERS | RUN_REPORT
+ON_CLICK  = SET_UI_STATE(<Target>, <Key>, <Value>)
 ```
 
 #### A.3.1 Filter Visuals (`SLICER`, `DATEPICKER`, etc.)

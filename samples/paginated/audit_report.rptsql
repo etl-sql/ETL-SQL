@@ -1,8 +1,8 @@
-SET REPORT TITLE = 'Simplified Audit Report';
-SET REPORT DESCRIPTION = 'Minimal paginated report demonstration.';
+SET REPORT TITLE = 'System Audit Journal';
+SET REPORT DESCRIPTION = 'Comprehensive audit trail with interactive filter panel.';
 
 -- 1. Parameters
-DECLARE @start RELDATE INPUT = 'D-1000';
+DECLARE @start RELDATE INPUT = 'M-1';
 DECLARE @end   RELDATE INPUT = 'D';
 
 -- 2. Data Ingestion
@@ -12,6 +12,7 @@ CREATE CONNECTION audit_src ON FLATFILE() WITH(
     HAS_HEADER = TRUE
 );
 
+-- Extract and prepare base data
 SELECT 
     TRY_CAST(timestamp AS DATETIME) AS event_time,
     user_id,
@@ -23,48 +24,70 @@ FROM audit_src.FILE;
 
 -- 3. Visuals
 CREATE VISUAL StartPicker AS RELDATEPICKER (
-    TITLE = 'Start Date',
+    TITLE = 'From Date',
     ACTIONS (ON_CHANGE = SET_PARAMETER(@start, value))
 );
 
 CREATE VISUAL EndPicker AS RELDATEPICKER (
-    TITLE = 'End Date',
+    TITLE = 'To Date',
     ACTIONS (ON_CHANGE = SET_PARAMETER(@end, value))
 );
 
-CREATE BUTTON RunBtn AS RUN (
-    TITLE = 'Run Report',
+CREATE BUTTON RunBtn AS BUTTON (
+    TITLE = 'Generate Report',
     STYLE (
         BACKGROUND-COLOR = '#2563eb', 
         COLOR = '#ffffff', 
-        PADDING = '12px 24px', 
+        PADDING = '10px 24px', 
         BORDER-RADIUS = '6px',
         FONT-WEIGHT = 'bold',
-        BOX-SHADOW = '0 2px 4px rgba(0,0,0,0.2)'
+        BOX-SHADOW = '0 2px 4px rgba(0,0,0,0.1)'
+    ),
+    ACTIONS (
+        ON_CLICK = (
+            RUN_REPORT,
+            SET_UI_STATE('FilterPanel', 'COLLAPSED', ON)
+        )
     )
 );
 
 CREATE VISUAL AuditTable AS TABLE (
-    TITLE = 'Audit Details',
-    VISIBLE = OFF,
+    TITLE = 'Filtered Event Logs',
+    VISIBLE = OFF, -- Staged mode: don't run until explicitly requested
     SOURCE = (
         SELECT event_time, user_id, event_type, resource, status
         FROM #audit_base
         WHERE event_time BETWEEN @start AND @end
         ORDER BY event_time DESC
-    )
+    ),
+    STYLE (HEIGHT = '600px')
 );
 
-
-
--- 4. Layout
-CREATE PAGE Main AS (
-    STRUCTURE = 'A B C / D',
+-- 4. Containers
+CREATE CONTAINER FilterPanel AS BOX (
+    TITLE = 'Query Filters',
+    COLLAPSIBLE = ON,
+    ICON = 'FILTER',
+    STRUCTURE = 'A B C',
     MAP (
         'A' = StartPicker,
         'B' = EndPicker,
-        'C' = RunBtn,
-        'D' = AuditTable
+        'C' = RunBtn
     ),
-    STYLE (PADDING = '20px')
+    STYLE (
+        BACKGROUND-COLOR = '#f8fafc',
+        BORDER = '1px solid #e2e8f0',
+        PADDING = '20px',
+        MARGIN-BOTTOM = '20px'
+    )
+);
+
+-- 5. Page Layout
+CREATE PAGE Main AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = FilterPanel,
+        'B' = AuditTable
+    ),
+    STYLE (PADDING = '30px', THEME = 'light')
 );

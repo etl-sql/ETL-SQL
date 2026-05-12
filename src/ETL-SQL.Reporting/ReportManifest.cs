@@ -358,6 +358,19 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("literalParameters")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? LiteralParameters { get; set; }
+
+        // SET_UI_STATE fields
+        [JsonPropertyName("targets")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public List<string>? Targets { get; set; }
+
+        [JsonPropertyName("key")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Key { get; set; }
+
+        [JsonPropertyName("value")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Value { get; set; }
     }
 
     /// <summary>A layout page with its slot→visual mapping.</summary>

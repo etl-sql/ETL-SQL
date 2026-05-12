@@ -622,6 +622,10 @@
         const div = document.createElement('div');
         const isScroll = (containerDef.containerType || '').toUpperCase() === 'SCROLL';
         div.className = isScroll ? 'container-scroll' : 'container-box';
+        div.setAttribute('data-name', containerDef.name);
+        
+        const tag = getOption(containerDef.options, 'TAG') || getStyle(containerDef.styles, 'TAG');
+        if (tag) div.setAttribute('data-tag', tag);
         const styles = containerDef.styles || {};
         const containerTheme = getStyle(styles, 'THEME') || pageTheme;
 
@@ -678,6 +682,10 @@
         // 3. Create Drawer
         const drawer = document.createElement('div');
         drawer.className = 'collapsible-drawer';
+        drawer.setAttribute('data-name', containerDef.name);
+        const tag = getOption(containerDef.options, 'TAG') || getStyle(containerDef.styles, 'TAG');
+        if (tag) drawer.setAttribute('data-tag', tag);
+
         const styles = containerDef.styles || {};
         const containerTheme = getStyle(styles, 'THEME') || pageTheme;
         
@@ -825,7 +833,12 @@
     function renderVisual(container, visual, pageTheme, manifest) {
         const card = document.createElement('div');
         card.className = 'visual-card';
-        card.setAttribute('data-visual-name', visual.name);
+        card.setAttribute('data-name', visual.name);
+        card.setAttribute('data-visual-name', visual.name); // Compatibility
+        
+        const tag = getOption(visual.options, 'TAG');
+        if (tag) card.setAttribute('data-tag', tag);
+        
         card._visualData = visual;
 
         // Apply WIDTH / HEIGHT / TOOLTIP from styles
@@ -2477,6 +2490,10 @@
         const btnEl = document.createElement('button');
         btnEl.className = 'report-btn';
         btnEl.textContent = btn.title || btn.name;
+        btnEl.setAttribute('data-name', btn.name);
+        
+        const tag = getOption(btn.options, 'TAG') || getStyle(styles, 'TAG');
+        if (tag) btnEl.setAttribute('data-tag', tag);
         if (btn.tooltip && btn.tooltip.text) btnEl.title = btn.tooltip.text;
 
         // Apply inline styles from STYLE definition
@@ -2878,8 +2895,50 @@
             for (let k in pendingParameters) delete pendingParameters[k];
             updateStagedUI();
             
-            // Flush to server (forcing bypass of staged mode via a internal call or flag)
+            // Flush to server
             _postParametersInternal(batch).then(m => { if (m) renderManifest(m); });
+        } else if (action.type === 'SET_UI_STATE') {
+            const targets = action.targets || [];
+            const key = (action.key || '').toUpperCase();
+            const value = action.value;
+
+            // Resolve target elements
+            const elements = [];
+            targets.forEach(t => {
+                if (t.startsWith('TAG:')) {
+                    const tagName = t.substring(4);
+                    document.querySelectorAll(`[data-tag="${tagName}"]`).forEach(el => elements.push(el));
+                } else {
+                    const el = document.getElementById(t) || document.querySelector(`[data-name="${t}"]`);
+                    if (el) elements.push(el);
+                }
+            });
+
+            elements.forEach(el => {
+                if (key === 'VISIBLE') {
+                    const isVisible = isOn(value);
+                    el.style.display = isVisible ? '' : 'none';
+                } else if (key === 'COLLAPSED') {
+                    const isCollapsed = isOn(value);
+                    const container = el.closest('.collapsible-drawer') || el.closest('.report-container') || el;
+                    if (isCollapsed) container.classList.add('collapsed');
+                    else container.classList.remove('collapsed');
+                    
+                    // Specific logic for drawers
+                    if (container.classList.contains('collapsible-drawer')) {
+                        if (isCollapsed) container.classList.remove('open');
+                        else container.classList.add('open');
+                    }
+                } else if (key === 'BACKGROUND-COLOR') {
+                    el.style.backgroundColor = value;
+                } else if (key === 'COLOR') {
+                    el.style.color = value;
+                } else if (key === 'CLASS') {
+                    if (value.startsWith('+')) el.classList.add(value.substring(1));
+                    else if (value.startsWith('-')) el.classList.remove(value.substring(1));
+                    else el.className = value;
+                }
+            });
         }
     }
 

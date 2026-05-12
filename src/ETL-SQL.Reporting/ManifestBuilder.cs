@@ -325,16 +325,15 @@ namespace ETL_SQL.Reporting
                     ScriptPath = rs.ScriptPath,
                     Parameters = rs.Parameters
                 },
-                ApplyParametersAction ap => new VisualActionManifest
+                ApplyParametersAction ap => new VisualActionManifest { Type = "APPLY_PARAMETERS", Trigger = action.Trigger },
+                DrillInAction di => new VisualActionManifest { Type = "DRILL_IN", Trigger = action.Trigger, Hierarchy = di.Hierarchy },
+                SetUiStateAction su => new VisualActionManifest
                 {
-                    Type    = "APPLY_PARAMETERS",
-                    Trigger = ap.Trigger
-                },
-                DrillInAction di => new VisualActionManifest
-                {
-                    Type      = "DRILL_IN",
-                    Trigger   = di.Trigger,
-                    Hierarchy = di.Hierarchy
+                    Type = "SET_UI_STATE",
+                    Trigger = action.Trigger,
+                    Targets = su.Targets,
+                    Key = su.Key,
+                    Value = su.Value
                 },
                 _ => new VisualActionManifest { Type = "UNKNOWN", Trigger = action.Trigger }
             };

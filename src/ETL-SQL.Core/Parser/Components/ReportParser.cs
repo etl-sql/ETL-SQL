@@ -1347,6 +1347,12 @@ namespace ETL_SQL.Core.Parser.Components
             throw new SyntaxException(message, _parser.Current.Line, _parser.Current.Column);
         }
 
+        private Token ConsumeIdentifierOrString(string message)
+        {
+            if (ReportCheck(TokenType.IDENTIFIER) || ReportCheck(TokenType.STRING_LITERAL) || ReportCheck(TokenType.VARIABLE) || ReportCheck(TokenType.VALUE)) return _parser.Advance();
+            throw new SyntaxException(message, _parser.Current.Line, _parser.Current.Column);
+        }
+
         private IEnumerable<VisualAction> ParseActions()
         {
             var result = new List<VisualAction>();
@@ -1432,10 +1438,46 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     action = new ClearFiltersAction { Trigger = trigger };
                 }
+                else if (Match(TokenType.APPLY_PARAMETERS) || (_parser.Current.Value == "RUN_REPORT" && Match(TokenType.IDENTIFIER)))
+                {
+                    action = new ApplyParametersAction { Trigger = trigger };
+                }
+                else if (_parser.Current.Value == "SET_UI_STATE" && Match(TokenType.IDENTIFIER))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after SET_UI_STATE");
+                    var targets = new List<string>();
+                    if (Match(TokenType.LPAREN))
+                    {
+                        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                        {
+                            targets.Add(ConsumeIdentifierOrString("Expected target name or TAG:name").Value);
+                            Match(TokenType.COMMA);
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' to close target list");
+                    }
+                    else
+                    {
+                        targets.Add(ConsumeIdentifierOrString("Expected target name or TAG:name").Value);
+                    }
+
+                    Consume(TokenType.COMMA, "Expected ',' after targets");
+                    var key = ConsumeIdentifierOrString("Expected state key (e.g. VISIBLE)").Value;
+                    Consume(TokenType.COMMA, "Expected ',' after key");
+                    var val = ConsumeIdentifierOrString("Expected state value (e.g. ON)").Value;
+                    Consume(TokenType.RPAREN, "Expected ')' to close SET_UI_STATE");
+
+                    action = new SetUiStateAction
+                    {
+                        Trigger = trigger,
+                        Targets = targets,
+                        Key = key,
+                        Value = val
+                    };
+                }
                 else
                 {
                     throw new SyntaxException(
-                        $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, or CLEAR_FILTERS after {trigger} =",
+                        $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, CLEAR_FILTERS, APPLY_PARAMETERS, or SET_UI_STATE after {trigger} =",
                         _parser.Current.Line, _parser.Current.Column);
                 }
 

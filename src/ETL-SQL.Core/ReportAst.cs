@@ -162,6 +162,14 @@ namespace ETL_SQL.Core
         public override string ToSql() => "APPLY_PARAMETERS";
     }
 
+    public record SetUiStateAction : VisualAction
+    {
+        public required List<string> Targets { get; init; }
+        public required string Key           { get; init; }
+        public required string Value         { get; init; }
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
     public record TableSummaryItem(string Aggregate, string Column, string? Alias);
 
     public record TableSummaryOptions : AstNode
