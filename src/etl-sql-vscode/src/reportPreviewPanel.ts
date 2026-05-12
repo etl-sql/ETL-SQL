@@ -78,6 +78,9 @@ export class ReportPreviewPanel {
                             .then(m => m.publishToPortal(this._context, this._scriptPath))
                             .catch(err => vscode.window.showErrorMessage(`Publish error: ${err.message}`));
                         break;
+                    case 'drillReport':
+                        this._handleDrillReport(message.targetReport, message.parameters);
+                        break;
                 }
             },
             null,
@@ -134,6 +137,40 @@ export class ReportPreviewPanel {
                 this._panel.webview.html = this._getReportHtml(manifest);
             }
         });
+    }
+
+    private async _handleDrillReport(target: string, parameters?: Record<string, any>): Promise<void> {
+        // Resolve target relative to current script
+        let targetPath = path.resolve(path.dirname(this._scriptPath), target);
+        
+        // If not found with .rptsql, try adding it
+        if (!fs.existsSync(targetPath) && !targetPath.endsWith('.rptsql')) {
+            targetPath += '.rptsql';
+        }
+
+        if (!fs.existsSync(targetPath)) {
+            // Try workspace search
+            const files = await vscode.workspace.findFiles(`**/${target}`);
+            if (files.length > 0) {
+                targetPath = files[0].fsPath;
+            } else if (!target.endsWith('.rptsql')) {
+                const files2 = await vscode.workspace.findFiles(`**/${target}.rptsql`);
+                if (files2.length > 0) targetPath = files2[0].fsPath;
+            }
+        }
+
+        if (!fs.existsSync(targetPath)) {
+            vscode.window.showErrorMessage(`ETL-SQL: Could not find target report '${target}' in workspace.`);
+            return;
+        }
+
+        // Open the target report in a new preview
+        const panel = ReportPreviewPanel.open(this._context, targetPath);
+        if (parameters) {
+            // Pre-seed the new panel with parameters
+            panel._parameters = parameters;
+            panel._refreshContent();
+        }
     }
 
     private async _handleExport(format: string): Promise<void> {

@@ -155,7 +155,23 @@
       },
       {
         "command": "etlsql.launchInBrowser",
-        "title": "ETL-SQL: Open Report in Browser"
+        "title": "ETL-SQL: Open Report in Browser",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "etlsql.launchReportFile",
+        "title": "Launch current report only",
+        "icon": "$(file)"
+      },
+      {
+        "command": "etlsql.launchReportDirectory",
+        "title": "Launch all reports in directory",
+        "icon": "$(file-directory)"
+      },
+      {
+        "command": "etlsql.launchReportManifest",
+        "title": "Launch using reports.json",
+        "icon": "$(list-unordered)"
       },
       {
         "command": "etlsql.publishToPortal",
@@ -232,7 +248,12 @@
         },
         {
           "command": "etlsql.previewReport",
-          "group": "navigation",
+          "group": "navigation@1",
+          "when": "resourceLangId == etlsql"
+        },
+        {
+          "submenu": "etlsql.launchMenu",
+          "group": "navigation@2",
           "when": "resourceLangId == etlsql"
         }
       ],
@@ -259,8 +280,26 @@
           "when": "view == etlsql-sidebar && (viewItem == connection-global || viewItem == connection-script)",
           "group": "inline"
         }
+      ],
+      "etlsql.launchMenu": [
+        {
+          "command": "etlsql.launchReportFile"
+        },
+        {
+          "command": "etlsql.launchReportDirectory"
+        },
+        {
+          "command": "etlsql.launchReportManifest"
+        }
       ]
-    }
+    },
+    "submenus": [
+      {
+        "id": "etlsql.launchMenu",
+        "label": "Launch Options",
+        "icon": "$(rocket)"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

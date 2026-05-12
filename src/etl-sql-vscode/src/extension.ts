@@ -327,24 +327,19 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Reporting Commands (Phase 3 & 4)
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.launchInBrowser', async (uri?: vscode.Uri) => {
-        let scriptPath = '';
-        if (uri) {
-            scriptPath = uri.fsPath;
-        } else {
-            const editor = vscode.window.activeTextEditor;
-            if (!editor || !editor.document.fileName.endsWith('.rptsql')) {
-                vscode.window.showErrorMessage('ETL-SQL: Open a .rptsql file first.');
-                return;
-            }
-            scriptPath = editor.document.fileName;
-        }
+        await launchReport(context, 'file', uri);
+    }));
 
-        const reportExe = getReportExecutablePath(context);
-        const terminal = vscode.window.createTerminal('ETL-SQL Report Server');
-        terminal.show();
-        // Forwarding to CLI which handles browser open automatically
-        const args = [...reportExe.baseArgs, 'serve', `"${scriptPath}"`].join(' ');
-        terminal.sendText(`& ${reportExe.exe} ${args}`);
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.launchReportFile', async (uri?: vscode.Uri) => {
+        await launchReport(context, 'file', uri);
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.launchReportDirectory', async (uri?: vscode.Uri) => {
+        await launchReport(context, 'dir', uri);
+    }));
+
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.launchReportManifest', async (uri?: vscode.Uri) => {
+        await launchReport(context, 'manifest', uri);
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.exportMarkdown', async () => {
@@ -565,6 +560,56 @@ function getReportExecutablePath(context: vscode.ExtensionContext): { exe: strin
     }
 
     return { exe: 'ETL-SQL-Report', baseArgs: [] };
+}
+
+async function launchReport(context: vscode.ExtensionContext, mode: 'file' | 'dir' | 'manifest', uri?: vscode.Uri) {
+    let targetPath = '';
+    if (uri) {
+        targetPath = uri.fsPath;
+    } else {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || !editor.document.fileName.endsWith('.rptsql')) {
+            vscode.window.showErrorMessage('ETL-SQL: Open a .rptsql file first.');
+            return;
+        }
+        targetPath = editor.document.fileName;
+    }
+
+    const reportExe = getReportExecutablePath(context);
+    const terminal = vscode.window.createTerminal(`ETL-SQL Report Server [${mode}]`);
+    terminal.show();
+
+    let args = [...reportExe.baseArgs, 'serve'];
+    const dir = path.dirname(targetPath);
+
+    if (mode === 'dir') {
+        args.push('--dir', `"${dir}"`);
+        args.push('--open', `"${path.basename(targetPath)}"`);
+    } else if (mode === 'manifest') {
+        // Look for reports.json in current or parent dirs
+        let currentDir = dir;
+        let manifestPath = '';
+        while (currentDir && currentDir !== path.parse(currentDir).root) {
+            const possible = path.join(currentDir, 'reports.json');
+            if (fs.existsSync(possible)) {
+                manifestPath = possible;
+                break;
+            }
+            currentDir = path.dirname(currentDir);
+        }
+
+        if (!manifestPath) {
+            vscode.window.showErrorMessage('ETL-SQL: No reports.json manifest found in current or parent directories.');
+            return;
+        }
+        args.push('--manifest', `"${manifestPath}"`);
+        args.push('--open', `"${path.basename(targetPath)}"`);
+    } else {
+        // Single file mode
+        args.push(`"${targetPath}"`);
+    }
+
+    terminal.sendText(`& ${reportExe.exe} ${args.join(' ')}`);
 }
 
 async function handleExport(context: vscode.ExtensionContext, format: string, label: string, extensions: string[]) {
