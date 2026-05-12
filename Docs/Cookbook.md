@@ -737,7 +737,7 @@ CREATE VISUAL RegionTable AS TABLE (
     ACTIONS (
         -- Cross-report drill
         ON_CLICK = DRILL_REPORT (
-            FILE = 'regional_detail.rptsql',
+            REPORT = 'SalesDetail',  -- Name defined in reports.json
             PARAMETERS ( @TargetRegion = Region )
         )
     )

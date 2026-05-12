@@ -1134,20 +1134,28 @@ CREATE VISUAL SalesByPeriod AS BAR (
 
 ```sql
 ON_CLICK = DRILL_REPORT (
-  FILE = 'detailed_audit.rptsql',
+  REPORT = 'SalesDetail',    -- Recommended: Use logical name from reports.json
+  -- FILE = 'detail.rptsql', -- Alternative: Use relative file path
   PARAMETERS (
-    @TargetID = user_id,
-    @ReportDate = @start
+    @TargetID = user_id,     -- Map source column to target parameter
+    @ReportDate = @start     -- Map local variable to target parameter
   )
 )
 ```
 
-Navigates to a completely different report file. This is the preferred way to implement Master-Detail dashboards where the detail view is complex or hosted separately.
+Navigates to a completely different report. This is the preferred way to implement Master-Detail dashboards where the detail view is complex, hosted separately, or part of a multi-report application.
 
-- **FILE**: The path to the target `.rptsql` file.
+- **REPORT**: The logical name (slug) of the target report as defined in a `reports.json` manifest.
+- **FILE**: The physical path to the target `.rptsql` file (relative to the current report).
 - **PARAMETERS**: A mapping of target report parameters to source column names or local variables.
-- **Navigation**:
-  - In **VS Code**, the target file opens in a new tab with a live preview.
+- **Navigation Behavior**:
+  - **In VS Code**:
+    - **Tab-to-Tab**: Clicking a drill link in a preview panel opens the target report in a new VS Code tab, passing the parameters into the new preview session.
+    - **Launch Options**: Use the 🚀 **Launch Options** dropdown to "Launch all reports in directory" or "Launch using reports.json". This ensures the local server hosts the entire suite for full navigation testing.
+  - **In Report Player / Portal**: The browser navigates to the target URL (e.g. `/reports/SalesDetail?@TargetID=123`) and the engine injects the query string parameters into the target report's execution context.
+
+> [!TIP]
+> Always use the logical `REPORT` name when working with manifests. This makes your drill links resilient to file renames or moves, as long as the manifest name remains stable.
   - In the **Report Portal**, the browser navigates to the target report URL.
   - In the **Standalone Player**, the browser navigates to the sibling report on the same server.
 
