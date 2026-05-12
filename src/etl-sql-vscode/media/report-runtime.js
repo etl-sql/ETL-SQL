@@ -632,13 +632,48 @@
         if (tag) div.setAttribute('data-tag', tag);
         const styles = containerDef.styles || {};
         const containerTheme = getStyle(styles, 'THEME') || pageTheme;
+        const isCollapsible = containerDef.isCollapsible;
 
         if (isScroll) {
             const height = getStyle(styles, 'HEIGHT') || '400px';
             div.style.maxHeight = height;
         }
 
-        renderLayout(div, containerDef, manifest, containerTheme);
+        if (isCollapsible) {
+            div.classList.add('collapsible-inline');
+            const header = document.createElement('div');
+            header.className = 'container-header';
+            
+            const title = document.createElement('span');
+            title.className = 'container-title';
+            title.textContent = containerDef.title || containerDef.name;
+            header.appendChild(title);
+            
+            const chevron = document.createElement('span');
+            chevron.className = 'container-chevron';
+            chevron.innerHTML = '&#x25B2;'; // UP
+            header.appendChild(chevron);
+            
+            header.onclick = () => {
+                const isCollapsed = div.classList.toggle('collapsed');
+                chevron.innerHTML = isCollapsed ? '&#x25BC;' : '&#x25B2;'; // DOWN : UP
+                setTimeout(() => {
+                    resizeChartsIn(div);
+                    const grid = getPageContainer(div)?.querySelector('.page-grid');
+                    if (grid) resizeChartsIn(grid);
+                }, 350);
+            };
+            
+            div.appendChild(header);
+            
+            const content = document.createElement('div');
+            content.className = 'container-content';
+            renderLayout(content, containerDef, manifest, containerTheme);
+            div.appendChild(content);
+        } else {
+            renderLayout(div, containerDef, manifest, containerTheme);
+        }
+        
         container.appendChild(div);
     }
 
@@ -793,7 +828,8 @@
                 } else {
                     const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
                     if (nested) {
-                        if (nested.isCollapsible) {
+                        const mode = (getStyle(nested.styles, 'COLLAPSE_MODE') || 'DRAWER').toUpperCase();
+                        if (nested.isCollapsible && mode === 'DRAWER') {
                             renderCollapsibleContainer(container, nested, manifest, pageTheme, wrapper);
                         } else {
                             renderContainer(wrapper, nested, manifest, pageTheme);
@@ -816,7 +852,8 @@
                 } else {
                     const nested = (manifest.containers || []).find(c => c.name.toLowerCase() === item.toLowerCase());
                     if (nested) {
-                        if (nested.isCollapsible) {
+                        const mode = (getStyle(nested.styles, 'COLLAPSE_MODE') || 'DRAWER').toUpperCase();
+                        if (nested.isCollapsible && mode === 'DRAWER') {
                             renderCollapsibleContainer(container, nested, manifest, pageTheme, null);
                         } else {
                             renderContainer(container, nested, manifest, pageTheme);
@@ -2924,15 +2961,27 @@
                     el.style.display = isVisible ? '' : 'none';
                 } else if (key === 'COLLAPSED') {
                     const isCollapsed = isOn(value);
-                    const container = el.closest('.collapsible-drawer') || el.closest('.report-container') || el;
+                    const container = el.closest('.collapsible-drawer') || el.closest('.collapsible-inline') || el.closest('.report-container') || el;
                     if (isCollapsed) container.classList.add('collapsed');
                     else container.classList.remove('collapsed');
+
+                    // Update chevrons for inline collapsible
+                    if (container.classList.contains('collapsible-inline')) {
+                        const chevron = container.querySelector('.container-chevron');
+                        if (chevron) chevron.innerHTML = isCollapsed ? '&#x25BC;' : '&#x25B2;';
+                    }
                     
                     // Specific logic for drawers
                     if (container.classList.contains('collapsible-drawer')) {
                         if (isCollapsed) container.classList.remove('open');
                         else container.classList.add('open');
                     }
+
+                    // Trigger resize to handle grid reflow
+                    setTimeout(() => {
+                        const pageGrid = document.querySelector('.page-grid');
+                        if (pageGrid) resizeChartsIn(pageGrid);
+                    }, 350);
                 } else if (key === 'BACKGROUND-COLOR') {
                     el.style.backgroundColor = value;
                 } else if (key === 'COLOR') {

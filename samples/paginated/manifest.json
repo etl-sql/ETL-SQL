@@ -1,6 +1,6 @@
 {
   "source": "samples/paginated/audit_report.rptsql",
-  "builtAt": "2026-05-12T18:17:22.187412Z",
+  "builtAt": "2026-05-12T18:30:22.7660269Z",
   "title": "System Audit Journal",
   "description": "Comprehensive audit trail with interactive filter panel.",
   "visuals": [
@@ -20202,7 +20202,8 @@
         "BACKGROUND-COLOR": "#f8fafc",
         "BORDER": "1px solid #e2e8f0",
         "PADDING": "20px",
-        "MARGIN-BOTTOM": "20px"
+        "MARGIN-BOTTOM": "20px",
+        "COLLAPSE_MODE": "INLINE"
       },
       "isCollapsible": true,
       "icon": "FILTER",
@@ -20282,64 +20283,64 @@
   },
   "messages": [
     {
-      "message": "[a38e6edc] Connection audit_src created.",
+      "message": "[c663dd9d] Connection audit_src created.",
       "color": "white",
-      "timestamp": "2026-05-12T18:17:22.0222608Z"
+      "timestamp": "2026-05-12T18:30:22.5524789Z"
     },
     {
-      "message": "[a38e6edc] [SELECT] Executing SelectStatement. Session: a38e6edc",
+      "message": "[c663dd9d] [SELECT] Executing SelectStatement. Session: c663dd9d",
       "color": "white",
-      "timestamp": "2026-05-12T18:17:22.032164Z"
+      "timestamp": "2026-05-12T18:30:22.5624209Z"
     },
     {
-      "message": "[a38e6edc] Visual \u0027StartPicker\u0027 created.",
+      "message": "[c663dd9d] Visual \u0027StartPicker\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-12T18:17:22.1782325Z"
+      "timestamp": "2026-05-12T18:30:22.7568452Z"
     },
     {
-      "message": "[a38e6edc] Visual \u0027EndPicker\u0027 created.",
+      "message": "[c663dd9d] Visual \u0027EndPicker\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-12T18:17:22.1800802Z"
+      "timestamp": "2026-05-12T18:30:22.7587138Z"
     },
     {
-      "message": "[a38e6edc] Button \u0027RunBtn\u0027 created.",
+      "message": "[c663dd9d] Button \u0027RunBtn\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-12T18:17:22.180512Z"
+      "timestamp": "2026-05-12T18:30:22.7591577Z"
     },
     {
-      "message": "[a38e6edc] Visual \u0027AuditTable\u0027 created.",
+      "message": "[c663dd9d] Visual \u0027AuditTable\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-12T18:17:22.180777Z"
+      "timestamp": "2026-05-12T18:30:22.7594161Z"
     },
     {
-      "message": "[a38e6edc] Container \u0027FilterPanel\u0027 registered.",
+      "message": "[c663dd9d] Container \u0027FilterPanel\u0027 registered.",
       "color": "white",
-      "timestamp": "2026-05-12T18:17:22.1813008Z"
+      "timestamp": "2026-05-12T18:30:22.7599511Z"
     },
     {
-      "message": "[a38e6edc] Page \u0027Main\u0027 created.",
+      "message": "[c663dd9d] Page \u0027Main\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-12T18:17:22.1823442Z"
+      "timestamp": "2026-05-12T18:30:22.7610116Z"
     }
   ],
   "executionTree": [
     {
-      "id": "0eb5ccc3-afea-401c-a891-7476f13585bf",
+      "id": "d2e1f109-0cb8-4749-bba6-d9497d820593",
       "name": "Script Execution",
       "status": "Completed",
       "rowsProcessed": 0,
-      "durationMs": 177.1656,
+      "durationMs": 225.8585,
       "iterationCount": 1,
       "isParallelBlock": false,
       "velocity": 0,
       "error": null,
       "children": [
         {
-          "id": "abdfa70c-bd19-4380-9cdf-bf88f734d1bd",
+          "id": "de1e7dfe-ce80-4d91-9235-211d3b63d90a",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.229,
+          "durationMs": 1.3689,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -20347,11 +20348,11 @@
           "children": []
         },
         {
-          "id": "f38cadb9-505e-4d77-8596-c2ab3ef3d1b3",
+          "id": "c906c196-4ef1-489f-a6a6-68ba03ad030d",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0317,
+          "durationMs": 0.0319,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -20359,11 +20360,11 @@
           "children": []
         },
         {
-          "id": "e09943eb-1956-4104-bd15-12ff2a0db399",
+          "id": "8bfbd00c-2fba-4cc7-ac9e-36d1057a3153",
           "name": "Declare",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 2.8542,
+          "durationMs": 3.1975,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -20371,11 +20372,11 @@
           "children": []
         },
         {
-          "id": "d91e276d-790c-4356-81cb-2d11510fabb5",
+          "id": "581c1013-ae01-4d2b-99c0-872c761a3eb6",
           "name": "Declare",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.5851,
+          "durationMs": 0.2827,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -20383,35 +20384,35 @@
           "children": []
         },
         {
-          "id": "84ea78a8-403c-4926-8ec4-d054152858a0",
+          "id": "96b2a6ee-e3f1-46c0-8b96-d9a6942df517",
           "name": "CreateConnection",
           "status": "Completed",
           "rowsProcessed": 20,
-          "durationMs": 15.572,
+          "durationMs": 15.599,
           "iterationCount": 1,
           "isParallelBlock": false,
-          "velocity": 1284.3565373747754,
+          "velocity": 1282.1334700942368,
           "error": null,
           "children": []
         },
         {
-          "id": "ed581678-b632-47c7-a916-5e9ae8fc25e4",
+          "id": "9bdf9514-b8bb-48db-90c7-d18bc5600d59",
           "name": "Select",
           "status": "Completed",
           "rowsProcessed": 27744,
-          "durationMs": 144.4172,
+          "durationMs": 192.8197,
           "iterationCount": 1,
           "isParallelBlock": false,
-          "velocity": 192110.08107067578,
+          "velocity": 143885.71292248665,
           "error": null,
           "children": []
         },
         {
-          "id": "1d6a2824-68d4-475c-959e-e338b0a7a46a",
+          "id": "cfd0a10c-1d0c-4f33-8797-3e1e4e68e7bd",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.6524,
+          "durationMs": 0.6885,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -20419,11 +20420,11 @@
           "children": []
         },
         {
-          "id": "d5c6ad16-d234-4e53-a03e-c58e8d885b51",
+          "id": "5b86541a-3300-4d12-a958-7797f436eefc",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.08,
+          "durationMs": 0.0784,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -20431,11 +20432,11 @@
           "children": []
         },
         {
-          "id": "206741e1-869d-49f3-bd95-4302da32084e",
+          "id": "4bc0d5b6-ff90-4c14-9631-1aa12052f642",
           "name": "CreateButton",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2858,
+          "durationMs": 0.2875,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -20443,11 +20444,11 @@
           "children": []
         },
         {
-          "id": "7eaa18e1-ec62-4211-9d40-40c7692ba922",
+          "id": "acf2ba16-a8e4-45c9-a633-c7c81fc44534",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0518,
+          "durationMs": 0.0531,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -20455,11 +20456,11 @@
           "children": []
         },
         {
-          "id": "bdb362f0-f4b6-4ecb-b730-c83ef9f9d2bc",
+          "id": "128b9f7e-2baa-47bc-9d4c-a94f7382140b",
           "name": "CreateContainer",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2659,
+          "durationMs": 0.2598,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -20467,11 +20468,11 @@
           "children": []
         },
         {
-          "id": "ab1c285a-5b10-4892-98f2-f51d50276ec7",
+          "id": "e8180a4d-5869-4a4d-bb6a-6cfcde691ced",
           "name": "CreatePage",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.8916,
+          "durationMs": 0.9126,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,

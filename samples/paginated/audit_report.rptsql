@@ -78,7 +78,8 @@ CREATE CONTAINER FilterPanel AS BOX (
         BACKGROUND-COLOR = '#f8fafc',
         BORDER = '1px solid #e2e8f0',
         PADDING = '20px',
-        MARGIN-BOTTOM = '20px'
+        MARGIN-BOTTOM = '20px',
+        COLLAPSE_MODE = 'INLINE'
     )
 );
 
