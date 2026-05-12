@@ -1661,6 +1661,7 @@ CREATE [OR ALTER] BUTTON <name> AS BACK|REFRESH|<customType> (
 |------|----------|
 | `BACK` | Navigates to the previous page in the browser history. |
 | `REFRESH` | Forces a full report refresh (equivalent to hitting `/api/refresh`). |
+| `RUN` | Enables **Staged Mode**. Implies `APPLY_PARAMETERS` — use this for paginated reports where data should only load after a user clicks. |
 | `<identifier>` | Custom type — behavior driven entirely by the `ACTIONS` clause. |
 
 ### Examples
@@ -2185,3 +2186,43 @@ WITH PAGES (Overview, Trends);
 ```
 
 ---
+
+## Best Practices & FAQ
+
+### How do I create a "Run-to-Data" paginated report?
+For reports with heavy queries or many parameters, you should avoid refreshing the report on every character change. Use the **Run-to-Data** pattern:
+1.  **Use `AS RUN`**: Create a button with `AS RUN`. This automatically puts the dashboard into "Staged Mode," meaning parameters are collected but not applied until the button is clicked.
+2.  **Use `VISIBLE = OFF`**: Set the results visual (e.g., a TABLE) to `VISIBLE = OFF`. The engine will show a placeholder message ("Configure parameters and click Run") instead of loading empty data on the initial page load.
+
+### Why do I get a "Failed to cast" error when using `RELDATE` parameters?
+**Never explicitly `CAST` a `RELDATE` parameter to a `DATE` or `DATETIME` in your SQL.**
+- `RELDATE` variables hold relative expressions like `'D-7'` or `'M-1'`. 
+- If you write `CAST(@start AS DATE)`, the engine attempts to treat the string `'D-7'` as a literal date, which fails.
+- **Correct Pattern**: Use the variable directly: `WHERE event_time >= @start`. The engine handles the resolution of the relative expression into an absolute timestamp automatically during comparison.
+
+### `DATEPICKER` vs `RELDATEPICKER`
+- Use `DATEPICKER` for fixed date parameters that do not need relative logic.
+- Use `RELDATEPICKER` for `RELDATE INPUT` variables. It provides a specialized UI with quick-action buttons (Today, Yesterday, Last 7 Days, etc.) and ensures the string passed back to the engine is a valid relative date expression.
+
+### Can I customize button styling?
+Yes. The `STYLE (...)` block on a `CREATE BUTTON` supports standard CSS properties. The report runtime specifically handles:
+- `BACKGROUND-COLOR` (or `BACKGROUND`)
+- `COLOR`
+- `PADDING`
+- `BORDER-RADIUS`
+- `FONT-WEIGHT` (e.g., `bold`)
+- `FONT-SIZE`
+- `BORDER`
+- `BOX-SHADOW` (e.g., `0 2px 4px rgba(0,0,0,0.2)`)
+
+```sql
+CREATE BUTTON RunBtn AS RUN (
+    TITLE = 'Run Report',
+    STYLE (
+        BACKGROUND = '#2563eb', 
+        COLOR = '#ffffff', 
+        FONT-WEIGHT = 'bold',
+        BOX-SHADOW = '0 2px 4px rgba(0,0,0,0.2)'
+    )
+);
+```

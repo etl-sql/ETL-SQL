@@ -1,0 +1,70 @@
+SET REPORT TITLE = 'Simplified Audit Report';
+SET REPORT DESCRIPTION = 'Minimal paginated report demonstration.';
+
+-- 1. Parameters
+DECLARE @start RELDATE INPUT = 'D-1000';
+DECLARE @end   RELDATE INPUT = 'D';
+
+-- 2. Data Ingestion
+CREATE CONNECTION audit_src ON FLATFILE() WITH(
+    PATH = 'c:\Users\chuck\scratch\ETL-SQL\samples\paginated\audit_logs.csv',
+    FORMAT = 'CSV',
+    HAS_HEADER = TRUE
+);
+
+SELECT 
+    TRY_CAST(timestamp AS DATETIME) AS event_time,
+    user_id,
+    event_type,
+    resource,
+    status
+INTO #audit_base 
+FROM audit_src.FILE;
+
+-- 3. Visuals
+CREATE VISUAL StartPicker AS RELDATEPICKER (
+    TITLE = 'Start Date',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@start, value))
+);
+
+CREATE VISUAL EndPicker AS RELDATEPICKER (
+    TITLE = 'End Date',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@end, value))
+);
+
+CREATE BUTTON RunBtn AS RUN (
+    TITLE = 'Run Report',
+    STYLE (
+        BACKGROUND-COLOR = '#2563eb', 
+        COLOR = '#ffffff', 
+        PADDING = '12px 24px', 
+        BORDER-RADIUS = '6px',
+        FONT-WEIGHT = 'bold',
+        BOX-SHADOW = '0 2px 4px rgba(0,0,0,0.2)'
+    )
+);
+
+CREATE VISUAL AuditTable AS TABLE (
+    TITLE = 'Audit Details',
+    VISIBLE = OFF,
+    SOURCE = (
+        SELECT event_time, user_id, event_type, resource, status
+        FROM #audit_base
+        WHERE event_time BETWEEN @start AND @end
+        ORDER BY event_time DESC
+    )
+);
+
+
+
+-- 4. Layout
+CREATE PAGE Main AS (
+    STRUCTURE = 'A B C / D',
+    MAP (
+        'A' = StartPicker,
+        'B' = EndPicker,
+        'C' = RunBtn,
+        'D' = AuditTable
+    ),
+    STYLE (PADDING = '20px')
+);

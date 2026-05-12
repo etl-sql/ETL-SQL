@@ -2363,16 +2363,27 @@
         if (btn.tooltip && btn.tooltip.text) btnEl.title = btn.tooltip.text;
 
         // Apply inline styles from STYLE definition
-        const bg  = getStyle(styles, 'BACKGROUND');
-        const fg  = getStyle(styles, 'COLOR');
-        const pad = getStyle(styles, 'PADDING');
-        if (bg)  btnEl.style.background = bg;
-        if (fg)  btnEl.style.color      = fg;
-        if (pad) btnEl.style.padding    = pad;
+        const bg   = getStyle(styles, 'BACKGROUND') || getStyle(styles, 'BACKGROUND-COLOR');
+        const fg   = getStyle(styles, 'COLOR');
+        const pad  = getStyle(styles, 'PADDING');
+        const rad  = getStyle(styles, 'BORDER-RADIUS');
+        const fw   = getStyle(styles, 'FONT-WEIGHT');
+        const fs   = getStyle(styles, 'FONT-SIZE');
+        const brd  = getStyle(styles, 'BORDER');
+        const shd  = getStyle(styles, 'BOX-SHADOW');
+
+        if (bg)   btnEl.style.background   = bg;
+        if (fg)   btnEl.style.color        = fg;
+        if (pad)  btnEl.style.padding      = pad;
+        if (rad)  btnEl.style.borderRadius = rad;
+        if (fw)   btnEl.style.fontWeight   = fw;
+        if (fs)   btnEl.style.fontSize     = fs;
+        if (brd)  btnEl.style.border       = brd;
+        if (shd)  btnEl.style.boxShadow    = shd;
+
         btnEl.style.cursor      = 'pointer';
-        btnEl.style.borderRadius = '4px';
-        btnEl.style.border       = 'none';
-        btnEl.style.fontWeight   = '600';
+        if (!brd) btnEl.style.border = 'none';
+        if (!fw)  btnEl.style.fontWeight = '600';
 
         const type = (btn.buttonType || '').toUpperCase();
         // Mark RUN buttons so updateStagedUI can target them precisely
