@@ -162,10 +162,20 @@ if (multiMode)
             "text/html");
     });
 
-    app.MapGet("/reports/{name}/api/manifest", async (string name, DashboardServiceFactory fac) =>
+    app.MapGet("/reports/{name}/api/manifest", async (string name, HttpContext ctx, DashboardServiceFactory fac) =>
     {
         var svc = fac.GetService(name);
         if (svc == null) return Results.NotFound();
+        
+        // Pick up @Parameters from QueryString
+        foreach (var q in ctx.Request.Query)
+        {
+            if (q.Key.StartsWith("@"))
+            {
+                await svc.SetParameterAsync(q.Key, q.Value.ToString());
+            }
+        }
+        
         return Results.Json(await svc.GetManifestAsync(), noCache);
     });
 
@@ -231,8 +241,18 @@ if (multiMode)
 // ─────────────────────────────────────────────────────────────────────────────
 else
 {
-    app.MapGet("/api/manifest", async (DashboardService svc) =>
-        Results.Json(await svc.GetManifestAsync(), noCache));
+    app.MapGet("/api/manifest", async (HttpContext ctx, DashboardService svc) =>
+    {
+        // Pick up @Parameters from QueryString
+        foreach (var q in ctx.Request.Query)
+        {
+            if (q.Key.StartsWith("@"))
+            {
+                await svc.SetParameterAsync(q.Key, q.Value.ToString());
+            }
+        }
+        return Results.Json(await svc.GetManifestAsync(), noCache);
+    });
 
     app.MapPost("/api/parameter", async (HttpContext ctx, DashboardService svc) =>
     {

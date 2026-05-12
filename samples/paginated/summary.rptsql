@@ -1,0 +1,32 @@
+-- summary.rptsql
+SET REPORT TITLE = 'Order Summary';
+
+DECLARE @Region STRING = 'All';
+
+-- 1. Data Source
+SELECT * INTO #OrdersSummary FROM (
+    SELECT 'East' AS Region, 1200 AS Sales, 45 AS OrderCount
+    UNION ALL SELECT 'West', 1500, 52
+    UNION ALL SELECT 'North', 800, 31
+    UNION ALL SELECT 'South', 1100, 38
+) AS d;
+
+-- 2. Visuals
+CREATE VISUAL RegionSales AS TABLE (
+    SOURCE = (SELECT Region, Sales, OrderCount AS [Count] FROM #OrdersSummary),
+    ACTIONS (
+        ON_CLICK = DRILL_REPORT (
+            FILE = 'detail.rptsql',
+            PARAMETERS (
+                @TargetRegion = Region
+            )
+        )
+    )
+);
+
+-- 3. Layout
+CREATE PAGE Main AS LAYOUT (
+    STRUCTURE = 'A',
+    MAP ('A' = RegionSales),
+    STYLE (PADDING = '20px')
+);

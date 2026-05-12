@@ -91,6 +91,7 @@ namespace ETL_SQL.Core.Parser
             dict["ON_CLICK"]      = TokenType.ON_CLICK;
             dict["DRILL_DOWN"]    = TokenType.DRILL_DOWN;
             dict["DRILL_IN"]      = TokenType.DRILL_IN;
+            dict["DRILL_REPORT"]  = TokenType.DRILL_REPORT;
             dict["SET_PARAMETER"] = TokenType.SET_PARAMETER;
             dict["ON_CHANGE"]     = TokenType.ON_CHANGE;
             dict["REFRESH"]       = TokenType.REFRESH;

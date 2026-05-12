@@ -1130,6 +1130,27 @@ CREATE VISUAL SalesByPeriod AS BAR (
 );
 ```
 
+#### DRILL_REPORT
+
+```sql
+ON_CLICK = DRILL_REPORT (
+  FILE = 'detailed_audit.rptsql',
+  PARAMETERS (
+    @TargetID = user_id,
+    @ReportDate = @start
+  )
+)
+```
+
+Navigates to a completely different report file. This is the preferred way to implement Master-Detail dashboards where the detail view is complex or hosted separately.
+
+- **FILE**: The path to the target `.rptsql` file.
+- **PARAMETERS**: A mapping of target report parameters to source column names or local variables.
+- **Navigation**:
+  - In **VS Code**, the target file opens in a new tab with a live preview.
+  - In the **Report Portal**, the browser navigates to the target report URL.
+  - In the **Standalone Player**, the browser navigates to the sibling report on the same server.
+
 #### SET_PARAMETER
 
 ```sql

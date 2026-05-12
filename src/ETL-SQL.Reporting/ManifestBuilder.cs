@@ -323,7 +323,18 @@ namespace ETL_SQL.Reporting
                     Type       = "RUN_SCRIPT",
                     Trigger    = rs.Trigger,
                     ScriptPath = rs.ScriptPath,
-                    Parameters = rs.Parameters
+                    Parameters = rs.Parameters,
+                    ParameterColumns = rs.Parameters.Where(p => !p.Value.StartsWith("'") && !p.Value.StartsWith("@")).ToDictionary(p => p.Key, p => p.Value),
+                    LiteralParameters = rs.Parameters.Where(p => p.Value.StartsWith("'") || p.Value.StartsWith("@")).ToDictionary(p => p.Key, p => p.Value.Trim('\''))
+                },
+                DrillReportAction dr => new VisualActionManifest
+                {
+                    Type         = "DRILL_REPORT",
+                    Trigger      = dr.Trigger,
+                    TargetReport = dr.TargetReport,
+                    Parameters   = dr.Parameters,
+                    ParameterColumns = dr.Parameters.Where(p => !p.Value.StartsWith("'") && !p.Value.StartsWith("@")).ToDictionary(p => p.Key, p => p.Value),
+                    LiteralParameters = dr.Parameters.Where(p => p.Value.StartsWith("'") || p.Value.StartsWith("@")).ToDictionary(p => p.Key, p => p.Value.Trim('\''))
                 },
                 ApplyParametersAction ap => new VisualActionManifest { Type = "APPLY_PARAMETERS", Trigger = action.Trigger },
                 DrillInAction di => new VisualActionManifest { Type = "DRILL_IN", Trigger = action.Trigger, Hierarchy = di.Hierarchy },

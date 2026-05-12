@@ -351,6 +351,10 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("parameters")]
         public Dictionary<string, string>? Parameters { get; set; }
 
+        [JsonPropertyName("targetReport")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? TargetReport { get; set; }
+
         [JsonPropertyName("parameterColumns")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? ParameterColumns { get; set; }

@@ -1,0 +1,6 @@
+{
+  "reports": [
+    { "name": "Summary", "path": "summary.rptsql" },
+    { "name": "Detail", "path": "detail.rptsql" }
+  ]
+}

@@ -162,6 +162,13 @@ namespace ETL_SQL.Core
         public override string ToSql() => "APPLY_PARAMETERS";
     }
 
+    public record DrillReportAction : VisualAction
+    {
+        public string TargetReport { get; init; } = string.Empty;
+        public Dictionary<string, string> Parameters { get; init; } = new();
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
     public record SetUiStateAction : VisualAction
     {
         public required List<string> Targets { get; init; }

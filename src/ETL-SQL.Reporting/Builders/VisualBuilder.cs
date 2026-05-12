@@ -145,6 +145,13 @@ namespace ETL_SQL.Reporting.Builders
                         Trigger   = di.Trigger,
                         Hierarchy = di.Hierarchy
                     },
+                    DrillReportAction dr => new VisualActionManifest
+                    {
+                        Type         = "DRILL_REPORT",
+                        Trigger      = dr.Trigger,
+                        TargetReport = dr.TargetReport,
+                        Parameters   = dr.Parameters
+                    },
                     _ => throw new NotSupportedException($"Action type {action.GetType().Name} not supported in manifest.")
                 });
             }
@@ -223,7 +230,7 @@ namespace ETL_SQL.Reporting.Builders
                 {
                     ResolveSetParameterAction(action, vm.Columns);
                 }
-                else if (action.Type == "RUN_SCRIPT" && action.Parameters is { Count: > 0 })
+                else if ((action.Type == "RUN_SCRIPT" || action.Type == "DRILL_REPORT") && action.Parameters is { Count: > 0 })
                 {
                     action.ParameterColumns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     action.LiteralParameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -234,7 +241,13 @@ namespace ETL_SQL.Reporting.Builders
                         if (matchingColumn != null)
                             action.ParameterColumns[name] = matchingColumn;
                         else
-                            action.LiteralParameters[name] = expression;
+                        {
+                            // Remove quotes if present for literal values
+                            var val = expression;
+                            if (val.StartsWith("'") && val.EndsWith("'") && val.Length >= 2)
+                                val = val.Substring(1, val.Length - 2);
+                            action.LiteralParameters[name] = val;
+                        }
                     }
                 }
             }

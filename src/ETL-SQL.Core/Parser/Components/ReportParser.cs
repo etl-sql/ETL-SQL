@@ -1460,6 +1460,31 @@ namespace ETL_SQL.Core.Parser.Components
                     Consume(TokenType.RPAREN, "Expected ')' to close RUN_SCRIPT");
                     action = new RunScriptAction { Trigger = trigger, ScriptPath = scriptPath, Parameters = actionParams };
                 }
+                else if (Match(TokenType.DRILL_REPORT))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after DRILL_REPORT");
+                    Advance(); // skip "FILE" identifier
+                    Consume(TokenType.EQUALS, "Expected '=' after FILE");
+                    var targetReport = Consume(TokenType.STRING_LITERAL, "Expected report path string").Value;
+                    var actionParams = new Dictionary<string, string>();
+                    if (Match(TokenType.COMMA))
+                    {
+                        Advance(); // skip "PARAMETERS"
+                        Consume(TokenType.LPAREN, "Expected '(' to open parameter list");
+                        while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                        {
+                            var pName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
+                            if (!pName.StartsWith("@")) pName = "@" + pName;
+                            Consume(TokenType.EQUALS, "Expected '=' after parameter name");
+                            var pVal = ConsumeIdentifierOrVariable("Expected column name or expression").Value;
+                            actionParams[pName] = pVal;
+                            Match(TokenType.COMMA);
+                        }
+                        Consume(TokenType.RPAREN, "Expected ')' to close parameter list");
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close DRILL_REPORT");
+                    action = new DrillReportAction { Trigger = trigger, TargetReport = targetReport, Parameters = actionParams };
+                }
                 else if (Match(TokenType.CLEAR_FILTERS))
                 {
                     action = new ClearFiltersAction { Trigger = trigger };

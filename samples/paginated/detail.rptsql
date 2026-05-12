@@ -1,0 +1,25 @@
+-- detail.rptsql
+SET REPORT TITLE = 'Order Details';
+
+DECLARE @TargetRegion STRING INPUT;
+
+-- 1. Data Source
+SELECT * INTO #OrderDetails FROM (
+    SELECT 'East' AS Region, 'ORD-001' AS OrderID, 500 AS Amount
+    UNION ALL SELECT 'East', 'ORD-002', 700
+    UNION ALL SELECT 'West', 'ORD-003', 1500
+    UNION ALL SELECT 'North', 'ORD-004', 800
+    UNION ALL SELECT 'South', 'ORD-005', 1100
+) AS d;
+
+-- 2. Visuals
+CREATE VISUAL DetailTable AS TABLE (
+    SOURCE = (SELECT OrderID, Region, Amount FROM #OrderDetails WHERE Region = @TargetRegion OR @TargetRegion = 'All')
+);
+
+-- 3. Layout
+CREATE PAGE Main AS LAYOUT (
+    STRUCTURE = 'A',
+    MAP ('A' = DetailTable),
+    STYLE (PADDING = '20px')
+);

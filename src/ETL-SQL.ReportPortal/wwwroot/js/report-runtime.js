@@ -106,7 +106,8 @@
         } else if (isWebMode) {
             // Multi-report web mode: fetch from API
             try {
-                const res = await fetch(apiBase + '/manifest');
+                const qs = window.location.search;
+                const res = await fetch(apiBase + '/manifest' + qs);
                 manifest  = await res.json();
             } catch (e) {
                 document.getElementById('root').innerHTML =
@@ -1390,6 +1391,8 @@
         menu.style.top  = y + 'px';
 
         const drillDowns = (visual.actions || []).filter(a => a.type === 'DRILL_DOWN');
+        const drillReports = (visual.actions || []).filter(a => a.type === 'DRILL_REPORT');
+
         drillDowns.forEach(action => {
             const item = document.createElement('div');
             item.className = 'ctx-item';
@@ -1402,7 +1405,21 @@
             menu.appendChild(item);
         });
 
-        if (drillDowns.length > 0) {
+        drillReports.forEach(action => {
+            const item = document.createElement('div');
+            item.className = 'ctx-item';
+            const target = action.targetReport || 'Report';
+            // Clean up filename for display
+            const displayName = target.replace(/\.[^/.]+$/, "").replace(/^.*[\\\/]/, '');
+            item.innerHTML = `<span>&#x2197;</span> Open <b>${escHtml(displayName)}</b>`;
+            item.addEventListener('click', () => {
+                executeAction(action, rowData || [], visual.columns || [], visual.name, visual);
+                hideCtxMenu();
+            });
+            menu.appendChild(item);
+        });
+
+        if (drillDowns.length > 0 || drillReports.length > 0) {
             const sep = document.createElement('div');
             sep.className = 'ctx-sep';
             menu.appendChild(sep);
@@ -2899,6 +2916,44 @@
             
             // Flush to server
             _postParametersInternal(batch).then(m => { if (m) renderManifest(m); });
+        } else if (action.type === 'DRILL_REPORT') {
+            const targetReport = action.targetReport;
+            if (!targetReport) return;
+
+            const finalParams = resolveActionParameters(action, rowData, columns);
+            
+            // Build query string
+            const qs = Object.entries(finalParams)
+                .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+                .join('&');
+
+            if (vscode) {
+                vscode.postMessage({ 
+                    type: 'drillReport', 
+                    targetReport: targetReport, 
+                    parameters: finalParams 
+                });
+            } else {
+                // Determine target URL based on current environment
+                let targetUrl = '';
+                const reportName = targetReport.replace(/\.[^/.]+$/, "").replace(/^.*[\\\/]/, '');
+
+                if (window.__API_BASE__) {
+                    // Portal mode: navigate to sibling report
+                    const parts = window.__API_BASE__.split('/'); // e.g. ["", "reports", "Summary", "api"]
+                    if (parts.length >= 3) {
+                        targetUrl = `/${parts[1]}/${encodeURIComponent(reportName)}`;
+                    } else {
+                        targetUrl = `/reports/${encodeURIComponent(reportName)}`;
+                    }
+                } else {
+                    // Standalone mode: assume sibling file on same server
+                    targetUrl = `/${encodeURIComponent(reportName)}`;
+                }
+
+                if (qs) targetUrl += (targetUrl.includes('?') ? '&' : '?') + qs;
+                window.location.href = targetUrl;
+            }
         } else if (action.type === 'SET_UI_STATE') {
             const targets = action.targets || [];
             const key = (action.key || '').toUpperCase();
