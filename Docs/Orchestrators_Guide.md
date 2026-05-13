@@ -821,6 +821,137 @@ The console will render a live, dynamic **Execution Tree** showing which scripts
 
 ---
 
+---
+
+## 14. Orchestrator Management Portal
+
+The **Orchestrator Management Portal** is a browser-based dashboard embedded in the ETL-SQL Report Portal that gives administrators full visibility and control over scheduled jobs without needing the CLI or a SQLite viewer.
+
+### 14.1 Prerequisites
+
+The management portal is hosted inside the Report Portal (`ETL-SQL-Portal`). The Orchestrator Service (`ETL-SQL-Service`) must be running and reachable from the machine that runs the portal. The two services communicate over HTTP using a shared API key.
+
+### 14.2 Enabling the API Key
+
+By default the Orchestrator's management endpoints are open (no authentication). For production, set a shared secret on both sides.
+
+**On the Orchestrator Service** (`appsettings.json` or environment variable):
+
+```json
+{
+  "Orchestrator": {
+    "ApiKey": "your-shared-secret",
+    "ScriptRoot": "/opt/etl/scripts"
+  }
+}
+```
+
+Or via environment variable:
+```
+Orchestrator__ApiKey=your-shared-secret
+Orchestrator__ScriptRoot=/opt/etl/scripts
+```
+
+**On the Report Portal** — two options:
+
+*Option A — `appsettings.json` / environment variable (applied at startup):*
+```json
+{
+  "Portal": {
+    "Orchestrator": {
+      "ApiUrl": "http://orchestrator-host:5100",
+      "ApiKey": "your-shared-secret"
+    }
+  }
+}
+```
+Or:
+```
+Portal__Orchestrator__ApiUrl=http://orchestrator-host:5100
+Portal__Orchestrator__ApiKey=your-shared-secret
+```
+
+*Option B — Admin UI (applied immediately, no restart needed):*
+Log in as Admin, navigate to **Admin → Settings → Orchestrator Connection**, enter the URL and API key, and click **Save**. Settings are written to a `portal-orchestrator.json` sidecar file and take effect on the very next request. UI-saved settings take precedence over environment variables.
+
+### 14.3 Script Root
+
+The portal's **Create Job** modal lets users pick a script file from a browser rather than typing a raw path. The Orchestrator Service exposes the file browser under a configured root directory:
+
+```json
+{
+  "Orchestrator": {
+    "ScriptRoot": "C:\\ETL\\Scripts"
+  }
+}
+```
+
+If `ScriptRoot` is not set it defaults to the Orchestrator's working directory. The file browser only surfaces `.etlsql` files and prevents path traversal outside the root.
+
+### 14.4 Granting Portal Access
+
+Two roles can access the Orchestrator tab in the portal:
+
+| Role | Access |
+| :--- | :--- |
+| **Admin** | Full access — Orchestrator tab is always visible |
+| **OrchestratorManager** | Orchestrator tab only — cannot access the Admin panel |
+
+Assign the `OrchestratorManager` role to operations staff who need to manage jobs but should not be able to create users or manage reports. See the [Report Portal Administrator's Guide](./ReportPortal_Administrators_Guide.md#orchestrator-manager-role) for role assignment instructions.
+
+### 14.5 Dashboard Features
+
+Navigate to the Orchestrator tab in the portal after logging in with an eligible role.
+
+**Stats bar** — five chips that auto-refresh every 10 seconds: service status (Online/Offline badge), Active Jobs, Queued, Completed Today, Failed Today.
+
+**24-hour Gantt chart** — a timeline from 00:00 to 23:59 showing each job as a horizontal bar at its scheduled firing time, sized by historical average duration. Blue bars are enabled jobs; grey bars are disabled. Click any bar to open the job detail panel.
+
+**Jobs table** — all jobs including disabled ones (disabled rows are visually dimmed). Columns: Name, Schedule, Status, Last Run, Next Run, Actions. Actions per row:
+
+| Action | What it does |
+| :--- | :--- |
+| **Run** | Triggers an immediate out-of-schedule execution |
+| **Enable / Disable** | Toggles `IsEnabled` — the job stays in the database and remains visible when disabled |
+| **Kill** | Cancels a currently-running execution (requires the job to have a `RUNNING` history entry) |
+| **Delete** | Permanently removes the job and all its history (equivalent to `DROP JOB`) |
+
+**Job detail panel** — slides in from the right when you click a job or Gantt bar. Shows:
+- Schedule definition and next fire time
+- Script content as of the last save (read-only, monospace)
+- Duration trend sparkline (last 30 runs)
+- History table: last 20 executions with Status, Start Time, Duration, Rows Processed, Peak RAM, CPU Time, and any error message
+
+**Create Job modal** — opens via the **New Job** button. Fields:
+- Job name
+- Script — dropdown of files from the Orchestrator's script root, with a manual path fallback
+- Schedule: Every N `SECONDS / MINUTES / HOURS / DAYS`, optional `AT HH:MM` for day-level jobs
+- Max Retries and Retry Delay
+- Hash Policy (`Warn`, `Block`, or `Off`)
+
+> [!NOTE]
+> Jobs created through the portal store the full script content in the database at creation time. If the `.etlsql` file on disk is edited later, the database copy is not automatically updated. Re-save the job through the portal (or via `CREATE JOB … AS …` in a script) to pick up changes.
+
+### 14.6 Service Control
+
+When the Orchestrator is **online**, two service-control buttons appear next to the Online chip:
+
+- **Stop** — sends `POST /management/stop` to the Orchestrator, which calls `IHostApplicationLifetime.StopApplication()`. If the Orchestrator is registered as a Windows Service or systemd unit, the OS supervisor restarts it automatically. The portal polls `/health` every 3 seconds and updates the status chip as soon as the service comes back.
+- **Restart** — equivalent to Stop; the portal waits for the service to come back online.
+
+When the Orchestrator is **offline**, the portal displays a banner: *"Orchestrator is offline."* If `Portal:Orchestrator:SameHost = true` is configured, a **Start** button also appears that uses the Windows `ServiceController` API to start the local service. On separate-server deployments, start the service manually on its host.
+
+### 14.7 Differences from `DROP JOB`
+
+| Action | Effect |
+| :--- | :--- |
+| **Disable** (portal) | Sets `IsEnabled = 0`. Job stays in the database; history is preserved; the job is still visible in the portal greyed-out. Re-enable at any time. |
+| **Delete** (portal) | Equivalent to `DROP JOB` — permanently removes the job definition and all history. Cannot be undone. |
+
+Use **Disable** when you want to pause a recurring job temporarily. Use **Delete** only when you are retiring a job permanently.
+
+---
+
 *For the scheduling internals, see [Architecture/Orchestrator.md](./Architecture/Orchestrator.md).*  
 *For the full `CREATE JOB` syntax and all scheduling options, see [Reference/Grammar.md](./Reference/Grammar.md#13-job-scheduling).*  
 *For complete function and connector references, see [Reference/Standard_Library.md](./Reference/Standard_Library.md) and [Reference/Data_Connectors.md](./Reference/Data_Connectors.md).*

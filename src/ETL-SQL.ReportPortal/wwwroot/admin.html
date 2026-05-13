@@ -14,6 +14,7 @@
     <span class="topbar-brand"><span class="brand-mark">E</span> ETL-SQL <span>Portal</span></span>
     <nav class="topbar-nav">
       <a href="/index.html">Reports</a>
+      <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
       <a href="/admin.html" class="active">Admin</a>
     </nav>
     <span class="topbar-spacer"></span>
@@ -42,6 +43,7 @@
         <button class="admin-tab" data-tab="audit">Audit Log</button>
         <button class="admin-tab" data-tab="subscriptions">Subscriptions</button>
         <button class="admin-tab" data-tab="datasets">Shared Datasets</button>
+        <button class="admin-tab" data-tab="settings">Settings</button>
       </div>
 
       <!-- ── Users panel ─────────────────────────────────────────────── -->
@@ -82,6 +84,7 @@
               <select id="nu-role">
                 <option value="Viewer">Viewer</option>
                 <option value="Publisher">Publisher</option>
+                <option value="OrchestratorManager">Orchestrator Manager</option>
                 <option value="Admin">Admin</option>
               </select>
             </div>
@@ -384,6 +387,50 @@
         </div>
       </div>
 
+      <!-- ── Settings panel ──────────────────────────────────────────────── -->
+      <div class="admin-panel" id="panel-settings">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <span class="section-kicker">Integration</span>
+              <h3>Orchestrator Connection</h3>
+            </div>
+            <div class="admin-action-group">
+              <span id="orch-test-result"></span>
+              <button class="btn btn-outline btn-sm" id="orchTestBtn">Test Connection</button>
+            </div>
+          </div>
+          <p class="text-sm text-muted" style="margin:0 0 1.25rem">
+            Configure the URL and API key for the ETL-SQL Orchestrator service.
+            Settings are saved to disk and take effect immediately — no restart needed.
+            Environment-variable defaults (<code>Portal__Orchestrator__ApiUrl</code>) are used
+            as the initial value but are overridden once you save here.
+          </p>
+          <div class="form-row">
+            <div class="form-group" style="flex:2">
+              <label>Orchestrator API URL</label>
+              <input id="orch-url" type="url" placeholder="http://orchestrator-host:5100">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group" style="flex:2">
+              <label>API Key <span class="text-sm text-muted" id="orch-key-status"></span></label>
+              <input id="orch-key" type="password" placeholder="Leave blank to keep current key">
+            </div>
+          </div>
+          <div id="orch-clear-row" style="display:none;margin-bottom:1rem">
+            <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+              <input type="checkbox" id="orch-clear-check">
+              <span class="text-sm">Clear API key (disable authentication)</span>
+            </label>
+          </div>
+          <div id="orch-error" class="error-msg"></div>
+          <div class="form-actions">
+            <button class="btn btn-primary btn-sm" id="orchSaveBtn">Save</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
@@ -441,12 +488,16 @@ try {
   const roles = payload.role || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || [];
   const isAdmin = Array.isArray(roles) ? roles.includes('Admin') : roles === 'Admin';
   if (!isAdmin) window.location.href = '/index.html';
+  const canOrch = Array.isArray(roles)
+    ? (roles.includes('Admin') || roles.includes('OrchestratorManager'))
+    : (roles === 'Admin' || roles === 'OrchestratorManager');
+  if (canOrch) document.getElementById('orchestratorNav').style.display = '';
 } catch { window.location.href = '/login.html'; }
 
 document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());
 
 // ── Tab switching ──────────────────────────────────────────────────────────────
-const panels = { users: null, groups: null, folders: null, reports: null, audit: null, subscriptions: null, datasets: null };
+const panels = { users: null, groups: null, folders: null, reports: null, audit: null, subscriptions: null, datasets: null, settings: null };
 document.querySelectorAll('.admin-tab').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
@@ -461,7 +512,7 @@ document.querySelectorAll('.admin-tab').forEach(btn => {
   });
 });
 
-const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, reports: loadReports, audit: loadAudit, subscriptions: loadSubscriptions, datasets: loadDatasets };
+const tabLoaders = { users: loadUsers, groups: loadGroups, folders: loadFolders, reports: loadReports, audit: loadAudit, subscriptions: loadSubscriptions, datasets: loadDatasets, settings: loadSettings };
 // Load the initial tab (users)
 panels.users = true;
 loadUsers();
@@ -1339,6 +1390,62 @@ document.getElementById('ds-acl-grantBtn').addEventListener('click', async () =>
   if (!groupId) return;
   await datasetsApi.grantAcl(selectedDatasetId, groupId, permission).catch(alertErr);
   loadDatasetAcl(selectedDatasetId);
+});
+
+// ── Settings ───────────────────────────────────────────────────────────────────
+
+async function loadSettings() {
+  try {
+    const s = await adminApi.getOrchestratorSettings();
+    document.getElementById('orch-url').value = s.apiUrl || '';
+    const $status = document.getElementById('orch-key-status');
+    const $clearRow = document.getElementById('orch-clear-row');
+    if (s.hasApiKey) {
+      $status.textContent = '— key is set';
+      $clearRow.style.display = '';
+    } else {
+      $status.textContent = '— not set';
+      $clearRow.style.display = 'none';
+    }
+    document.getElementById('orch-key').value = '';
+    document.getElementById('orch-clear-check').checked = false;
+    document.getElementById('orch-error').classList.remove('show');
+    document.getElementById('orch-test-result').textContent = '';
+  } catch { }
+}
+
+document.getElementById('orchSaveBtn').addEventListener('click', async () => {
+  const url = document.getElementById('orch-url').value.trim() || null;
+  const keyInput = document.getElementById('orch-key').value;
+  const clearKey = document.getElementById('orch-clear-check').checked;
+  // null = keep current; '' = explicitly clear; non-empty = set new value
+  const apiKey = clearKey ? '' : (keyInput || null);
+  const $err = document.getElementById('orch-error');
+  $err.classList.remove('show');
+  try {
+    await adminApi.updateOrchestratorSettings({ apiUrl: url, apiKey });
+    await loadSettings();
+    document.getElementById('orch-test-result').textContent = 'Saved.';
+  } catch (err) {
+    $err.textContent = err.message || 'Failed to save settings.';
+    $err.classList.add('show');
+  }
+});
+
+document.getElementById('orchTestBtn').addEventListener('click', async () => {
+  const $result = document.getElementById('orch-test-result');
+  $result.textContent = 'Testing…';
+  try {
+    const resp = await fetch('/api/orchestrator/status', {
+      headers: { Authorization: `Bearer ${auth.getToken()}` }
+    });
+    const data = await resp.json();
+    $result.innerHTML = data.online
+      ? '<span class="chip chip-active">Online</span>'
+      : '<span class="chip chip-inactive">Offline — service unreachable</span>';
+  } catch {
+    $result.innerHTML = '<span class="chip chip-inactive">Connection failed</span>';
+  }
 });
 
 // ── Utilities ──────────────────────────────────────────────────────────────────

@@ -135,6 +135,16 @@ namespace ETL_SQL.Orchestrator.Scheduling
             _logger.LogInformation("Scheduler service stopped.");
         }
 
+        /// <summary>Enqueues an immediate out-of-schedule execution for an existing job.</summary>
+        public async Task<bool> TriggerJobAsync(string jobName)
+        {
+            var jobs = await _store.GetAllJobsAsync();
+            var job = jobs.FirstOrDefault(j => j.Name.Equals(jobName, StringComparison.OrdinalIgnoreCase));
+            if (job == null) return false;
+            _ = Task.Run(() => ExecuteJobAsync(job));
+            return true;
+        }
+
         /// <summary>Kills a running job instance by its HistoryId.</summary>
         public bool KillJob(long historyId)
         {

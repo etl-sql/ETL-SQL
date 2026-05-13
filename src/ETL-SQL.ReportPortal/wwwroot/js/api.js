@@ -221,7 +221,11 @@ export const adminApi = {
     listAllSubscriptions: () => apiJson('/api/subscriptions'),
 
     // reports (admin sees all)
-    listAllReports: () => apiJson('/api/admin/reports')
+    listAllReports: () => apiJson('/api/admin/reports'),
+
+    // orchestrator connection settings
+    getOrchestratorSettings:    ()     => apiJson('/api/admin/settings/orchestrator'),
+    updateOrchestratorSettings: (body) => apiJson('/api/admin/settings/orchestrator', { method: 'PUT', body })
 };
 
 // ── Install global fetch intercept for report-runtime.js ──────────────────────

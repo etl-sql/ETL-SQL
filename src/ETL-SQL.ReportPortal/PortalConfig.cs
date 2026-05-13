@@ -15,8 +15,10 @@ public class PortalConfig
 
 public class OrchestratorConfig
 {
-    public string? ApiUrl { get; set; }
+    public string? ApiUrl      { get; set; }
     public string? DatabasePath { get; set; }
+    public string? ApiKey      { get; set; }
+    public bool    SameHost    { get; set; } = false;
 }
 
 public class ResourcesConfig

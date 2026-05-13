@@ -220,6 +220,37 @@ namespace ETL_SQL.Orchestrator.Storage
             return jobs;
         }
 
+        public async Task<IEnumerable<JobDefinition>> GetAllJobsAsync()
+        {
+            await EnsureInitializedAsync();
+            using var connection = new SqliteConnection(_connectionString);
+            await connection.OpenAsync();
+
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT * FROM Jobs;";
+
+            var jobs = new List<JobDefinition>();
+            using var reader = await command.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                jobs.Add(new JobDefinition(
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetInt32(2),
+                    reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4),
+                    reader.IsDBNull(5) ? null : DateTime.Parse(reader.GetString(5)),
+                    reader.IsDBNull(6) ? null : DateTime.Parse(reader.GetString(6)),
+                    reader.GetInt32(7) == 1,
+                    reader.IsDBNull(8) ? 0 : reader.GetInt32(8),
+                    reader.IsDBNull(9) ? 30 : reader.GetInt32(9),
+                    reader.IsDBNull(10) ? null : reader.GetString(10),
+                    reader.IsDBNull(11) ? "Warn" : reader.GetString(11)
+                ));
+            }
+            return jobs;
+        }
+
         public async Task DeleteJobAsync(string name)
         {
             await EnsureInitializedAsync();

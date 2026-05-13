@@ -364,7 +364,9 @@ namespace ETL_SQL.Core.Services
                                         prefix = info.BaseTableName ?? info.TableName;
                                     }
                                 }
-                                // Single table with no explicit prefix requested: prefix remains empty
+                                // Single table: use full qualified name if table is a connection-qualified reference (e.g. m.Users → m.Users.col)
+                                else if (info.ConnectionName != null)
+                                    prefix = info.TableName;
                             }
                             else
                             {

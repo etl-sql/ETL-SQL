@@ -428,3 +428,100 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     transition-duration: .001ms !important;
   }
 }
+
+/* ── Orchestrator Portal ─────────────────────────────────────────────────────── */
+
+.orch-stats-bar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 12px 0 4px; margin-bottom: 4px;
+}
+.orch-service-chip {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--portal-surface); border: 1px solid var(--portal-border);
+  border-radius: var(--portal-radius); padding: 7px 14px;
+  font-weight: 600; font-size: .875em; color: var(--portal-text);
+}
+.orch-status-dot {
+  width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+  background: var(--portal-muted);
+}
+.orch-status-dot.online  { background: var(--portal-success); }
+.orch-status-dot.offline { background: var(--portal-danger); }
+.orch-stat-chip {
+  display: flex; flex-direction: column; align-items: center;
+  background: var(--portal-surface); border: 1px solid var(--portal-border);
+  border-radius: var(--portal-radius); padding: 7px 18px; min-width: 80px;
+}
+.orch-stat-value { font-size: 1.4em; font-weight: 700; color: var(--portal-text); line-height: 1.2; }
+.orch-stat-label { font-size: .72em; color: var(--portal-muted); text-transform: uppercase; letter-spacing: .04em; margin-top: 2px; }
+.orch-stat-chip.danger .orch-stat-value   { color: var(--portal-danger); }
+.orch-stat-chip.running .orch-stat-value  { color: var(--portal-accent); }
+
+.orch-offline-banner {
+  background: var(--portal-warning-soft); border: 1px solid #f3c96b;
+  border-radius: var(--portal-radius-sm); padding: 10px 16px;
+  margin-bottom: 16px; font-size: .875em; color: var(--portal-warning);
+}
+
+/* Detail side panel */
+.orch-detail-panel {
+  position: fixed; top: 52px; right: 0;
+  width: 440px; height: calc(100vh - 52px);
+  background: var(--portal-surface); border-left: 1px solid var(--portal-border);
+  box-shadow: -4px 0 24px rgba(15, 23, 42, .10);
+  transform: translateX(100%); transition: transform .2s ease;
+  overflow-y: auto; z-index: 200; display: flex; flex-direction: column;
+}
+.orch-detail-panel.open { transform: translateX(0); }
+.orch-detail-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 20px; border-bottom: 1px solid var(--portal-border);
+  background: var(--portal-surface-subtle); position: sticky; top: 0; z-index: 1;
+}
+.orch-detail-header h3 { margin: 0; font-size: 1em; }
+.orch-detail-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 20px; }
+.orch-detail-section label {
+  display: block; font-size: .75em; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--portal-muted); margin-bottom: 6px;
+}
+.orch-detail-section label small { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.orch-detail-meta { display: flex; flex-direction: column; gap: 4px; font-size: .875em; }
+.orch-detail-meta span { color: var(--portal-text-soft); }
+.orch-detail-meta strong { color: var(--portal-text); }
+
+.orch-script-preview {
+  background: var(--portal-bg); border: 1px solid var(--portal-border);
+  border-radius: var(--portal-radius-sm); padding: 12px; margin: 0;
+  font-family: "Cascadia Code", "Fira Code", "Consolas", monospace;
+  font-size: .78em; line-height: 1.6; overflow-x: auto;
+  max-height: 200px; overflow-y: auto; white-space: pre; color: var(--portal-text);
+}
+
+/* Status badges */
+.status-badge {
+  display: inline-block; font-size: .72em; font-weight: 700;
+  padding: 2px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .04em;
+}
+.status-badge.success  { background: var(--portal-success-soft); color: var(--portal-success); }
+.status-badge.running  { background: var(--portal-accent-soft);  color: var(--portal-accent); }
+.status-badge.failure  { background: var(--portal-danger-soft);  color: var(--portal-danger); }
+.status-badge.blocked  { background: var(--portal-warning-soft); color: var(--portal-warning); }
+.status-badge.cancelled{ background: var(--portal-bg-soft);      color: var(--portal-muted); }
+.status-badge.disabled { background: var(--portal-bg-soft);      color: var(--portal-muted); }
+.status-badge.enabled  { background: var(--portal-success-soft); color: var(--portal-success); }
+
+/* Job table row — clickable */
+.data-table tr.job-row { cursor: pointer; }
+.data-table tr.job-row.selected td { background: var(--portal-accent-soft); }
+
+/* Gantt chart container */
+.orch-gantt-wrap { padding: 4px 0 8px; }
+
+/* Create job modal — script preview */
+.cj-preview-section { margin-top: 4px; }
+.cj-preview-section pre {
+  background: var(--portal-bg); border: 1px solid var(--portal-border);
+  border-radius: var(--portal-radius-sm); padding: 10px; margin: 0;
+  font-family: monospace; font-size: .78em; line-height: 1.5;
+  max-height: 120px; overflow: auto; white-space: pre;
+}

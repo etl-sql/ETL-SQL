@@ -95,7 +95,10 @@ builder.Services.AddAuthentication(opt =>
     };
 });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(opt =>
+{
+    opt.AddPolicy("OrchestratorAccess", p => p.RequireRole("Admin", "OrchestratorManager"));
+});
 
 // ── Swagger ───────────────────────────────────────────────────────────────────
 builder.Services.AddEndpointsApiExplorer();
@@ -124,6 +127,16 @@ builder.Services.AddScoped<ETL_SQL.ReportPortal.Services.AuditService>();
 builder.Services.AddScoped<IDatasetRegistry, ETL_SQL.ReportPortal.Services.DatasetRegistryService>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.SmtpPasswordProtector>();
 builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorDbLocator>();
+
+// ── Orchestrator Management Proxy ─────────────────────────────────────────────
+// OrchestratorSettingsService holds the active URL/key and persists UI-configured
+// overrides so the admin can point the portal at a different host without a restart.
+builder.Services.AddSingleton<ETL_SQL.ReportPortal.Services.OrchestratorSettingsService>();
+builder.Services.AddHttpClient<ETL_SQL.ReportPortal.Services.OrchestratorProxyService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(10);
+    // No base address — OrchestratorProxyService builds absolute URIs from OrchestratorSettingsService.
+});
 
 // ── Orchestrator Channel ──────────────────────────────────────────────────────
 if (!string.IsNullOrEmpty(portalConfig.Orchestrator.ApiUrl))
@@ -253,7 +266,7 @@ static async Task SeedFirstRunAsync(IServiceProvider services, PortalConfig conf
     var userMgr = services.GetRequiredService<UserManager<PortalUser>>();
     var roleMgr = services.GetRequiredService<RoleManager<PortalRole>>();
 
-    foreach (var role in new[] { "Admin", "Publisher", "Viewer" })
+    foreach (var role in new[] { "Admin", "Publisher", "Viewer", "OrchestratorManager" })
     {
         if (!await roleMgr.RoleExistsAsync(role))
             await roleMgr.CreateAsync(new PortalRole(role));

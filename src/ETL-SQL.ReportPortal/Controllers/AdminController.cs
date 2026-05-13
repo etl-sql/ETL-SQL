@@ -380,6 +380,29 @@ public class AdminController(
             filename);
     }
 
+    // ── Orchestrator connection settings ──────────────────────────────────────
+
+    [HttpGet("settings/orchestrator")]
+    public IActionResult GetOrchestratorSettings(
+        [FromServices] ETL_SQL.ReportPortal.Services.OrchestratorSettingsService settings)
+    {
+        return Ok(new
+        {
+            ApiUrl    = settings.ApiUrl,
+            HasApiKey = !string.IsNullOrEmpty(settings.ApiKey)
+        });
+    }
+
+    [HttpPut("settings/orchestrator")]
+    public async Task<IActionResult> UpdateOrchestratorSettings(
+        [FromServices] ETL_SQL.ReportPortal.Services.OrchestratorSettingsService settings,
+        [FromBody] Models.UpdateOrchestratorSettingsRequest req)
+    {
+        settings.Update(req.ApiUrl, req.ApiKey);
+        await audit.LogAsync(CurrentUserId, "UPDATE_ORCHESTRATOR_SETTINGS", "System", null, req.ApiUrl);
+        return NoContent();
+    }
+
     private static string CsvField(string? value)
     {
         if (value is null) return string.Empty;

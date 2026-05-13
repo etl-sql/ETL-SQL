@@ -17,6 +17,7 @@
       <a href="#" id="navSubscriptions">My Subscriptions</a>
     </nav>
     <nav class="topbar-nav">
+      <a href="/orchestrator.html" id="orchestratorNav" style="display:none">Orchestrator</a>
       <a href="/admin.html" id="adminNav" style="display:none">Admin</a>
     </nav>
     <span class="topbar-spacer"></span>
@@ -220,6 +221,10 @@ async function init() {
     const roles = payload.role || payload['http://schemas.microsoft.com/ws/2008/06/identity/claims/role'] || [];
     isAdmin = Array.isArray(roles) ? roles.includes('Admin') : roles === 'Admin';
     if (isAdmin) document.getElementById('adminNav').style.display = '';
+    const canOrch = Array.isArray(roles)
+      ? (roles.includes('Admin') || roles.includes('OrchestratorManager'))
+      : (roles === 'Admin' || roles === 'OrchestratorManager');
+    if (canOrch) document.getElementById('orchestratorNav').style.display = '';
   } catch {}
 
   document.getElementById('logoutBtn').addEventListener('click', () => authApi.logout());

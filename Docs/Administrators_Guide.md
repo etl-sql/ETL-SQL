@@ -85,15 +85,65 @@ Update your `appsettings.json` (or `appsettings.Production.json`):
 ## 5. Multi-Node Networking
 
 If the Report Portal and Orchestrator are running on different servers:
-1. **Orchestrator**: Ensure port `5001` (HTTP) or `5003` (HTTPS) is open in the firewall.
-2. **Portal**: Update the `Portal:Orchestrator:ApiUrl` in `appsettings.json`:
+1. **Orchestrator**: Ensure port `5100` (HTTP) or the configured HTTPS port is open in the firewall.
+2. **Portal**: Configure the Orchestrator URL in one of two ways:
+
+   *Via `appsettings.json` or environment variable (applied at startup):*
    ```json
    "Portal": {
      "Orchestrator": {
-       "ApiUrl": "https://orchestrator-server:5003"
+       "ApiUrl": "http://orchestrator-server:5100",
+       "ApiKey": "your-shared-secret"
      }
    }
    ```
+   Or as environment variables:
+   ```
+   Portal__Orchestrator__ApiUrl=http://orchestrator-server:5100
+   Portal__Orchestrator__ApiKey=your-shared-secret
+   ```
+
+   *Via the Admin UI (applied immediately, no restart needed):*
+   Log in as Admin → **Admin → Settings → Orchestrator Connection** → enter the URL and API key → **Save**. The portal writes a `portal-orchestrator.json` sidecar file alongside the portal database. UI-saved values take precedence over environment variables.
+
+### 5.1 Orchestrator API Key
+
+In production, protect the Orchestrator's management HTTP endpoints with a shared API key. The portal sends the key in an `X-Orchestrator-Key` request header on every proxied call.
+
+**On the Orchestrator Service** (`appsettings.json` or environment variable):
+```json
+{
+  "Orchestrator": {
+    "ApiKey": "your-shared-secret",
+    "ScriptRoot": "/opt/etl/scripts"
+  }
+}
+```
+Or: `Orchestrator__ApiKey=your-shared-secret`
+
+`ScriptRoot` is the directory the portal's job-creation script browser is scoped to. It defaults to the Orchestrator's working directory if not set.
+
+If `ApiKey` is left empty the management endpoints are open — acceptable only on isolated internal networks.
+
+### 5.2 Same-Host Start
+
+If the Portal and Orchestrator run on the **same Windows host**, the portal can use the Windows `ServiceController` API to start the Orchestrator service when it is offline. Enable this with:
+
+```json
+"Portal": {
+  "Orchestrator": {
+    "SameHost": true
+  }
+}
+```
+
+When `SameHost = true`, a **Start** button appears in the Orchestrator tab when the service is offline. On separate-server deployments leave `SameHost = false` (the default); the portal will prompt the operator to start the service on its host machine.
+
+### 5.3 OrchestratorManager Role
+
+The Orchestrator tab in the Report Portal is gated by the `OrchestratorAccess` policy (`Admin` OR `OrchestratorManager`). Assign `OrchestratorManager` to operations staff who need to schedule and monitor jobs but should not have access to the full Admin panel (users, groups, audit log).
+
+Assign the role via **Admin → Users → Edit User → Role: Orchestrator Manager**. See the [Report Portal Administrator's Guide](./ReportPortal_Administrators_Guide.md) for full details.
 
 ---
 
