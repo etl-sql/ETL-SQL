@@ -160,7 +160,7 @@ A strict `VERB NOUN` / `VERB_NOUN` convention for all automation commands.
 - **Dry-Run Mode**: `SET WHAT_IF ON` suppresses all side-effecting operations (`INSERT`, `UPDATE`, `DELETE`, file writes, emails) and logs what *would* have run — zero risk when validating a new script against production.
 
 ### Deep Observability
-- **Data Lineage 2.0**: Trace column origins with `LINEAGE()`. Tag fields with 20 core tags (`@pii`, `@sensitive`, etc.) — tag inheritance follows `@pii: true-wins` logic. Export OpenLineage-compliant JSON or Mermaid.js diagrams.
+- **Deep Data Lineage**: Trace column origins with `LINEAGE()`. Tag fields with 20 core tags (`@pii`, `@sensitive`, etc.) — tag inheritance follows `@pii: true-wins` logic. Export OpenLineage-compliant JSON or Mermaid.js diagrams.
 - **Static Analysis**: Catch logic errors and dialect mismatches before production with `LINT 'script.etlsql'`.
 - **Execution Profiling**: `SET PROFILING ON` reveals statement-by-statement timing and memory deltas.
 
