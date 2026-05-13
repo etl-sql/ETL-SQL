@@ -1,10 +1,10 @@
 # ETL-SQL Engine
 
-![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.6.0-blue?style=for-the-badge&logo=dotnet)
+![ETL-SQL Banner](https://img.shields.io/badge/ETL--SQL-v0.7.0-blue?style=for-the-badge&logo=dotnet)
 ![Language](https://img.shields.io/badge/Language-C%23-green?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20|%20Linux%20|%20macOS-lightgrey?style=for-the-badge)
 
-A high-performance ETL engine and scripting language that blends **Standard SQL** with **procedural automation**. Write data pipelines, interactive reports, and scheduled jobs in a single SQL-first language — and run them headless, in a terminal IDE, or as live web dashboards.
+A high-performance ETL engine and scripting language that blends **Standard SQL** with **procedural automation**. Write data pipelines, interactive reports, and scheduled jobs in a single SQL-first language — and run them headless, in a terminal IDE, as live web dashboards, or as **interactive notebooks**.
 
 ---
 
@@ -16,18 +16,17 @@ A high-performance ETL engine and scripting language that blends **Standard SQL*
 
 *Syntax highlighting · autocomplete · live results grid · compare mode · profiling dashboard*
 
-### VS Code Extension
+### VS Code Extension & Notebooks
 
 ![VS Code demo](Docs/assets/vscode-demo.gif)
 
-*Inline diagnostics · schema autocomplete · REPL results panel · report preview*
+*Inline diagnostics · schema autocomplete · REPL results panel · report preview · cell-by-cell notebook execution*
 
 ### Report-SQL Dashboards
 
-<!-- Record with ScreenToGif or VHS → save to docs/assets/report-demo.gif -->
 ![Report demo](Docs/assets/report-demo.gif)
 
-*Interactive charts · live parameter slicers · multi-page navigation · PDF export*
+*Interactive charts · drill-down navigation · live parameter slicers · multi-page navigation · PDF export*
 
 ---
 
@@ -56,6 +55,10 @@ dotnet run --project src/ETL-SQL.App -- --ui edit MyScript.etlsql
 dotnet run --project src/ETL-SQL.App -- --run MyScript.etlsql
 ```
 
+### Open an ETL Notebook in VS Code
+
+Create a new file with the `.etlnb` extension — VS Code will open it as an ETL-SQL Notebook. Each cell is an independent execution unit that shares connection and variable state with preceding cells.
+
 ### Serve a Report Dashboard
 
 ```bash
@@ -76,7 +79,7 @@ etl-sql-report build my_report.rptsql --format md
 ### Full Release Build (Maintainers)
 
 ```powershell
-.\scripts\Master-Release.ps1 -Version "0.6.0"
+.\scripts\Master-Release.ps1 -Version "0.7.0"
 ```
 
 This validates the engine, builds the VS Code extension, publishes binaries for Windows/Linux/macOS, and packages everything into ZIP archives.
@@ -132,7 +135,8 @@ Fourteen connector types spanning every tier of the modern data stack.
 | Category | Connectors |
 | :--- | :--- |
 | **SQL Databases** | MSSQL, Postgres, Oracle, ODBC |
-| **File Formats** | CSV / Flat File, Parquet, JSON, XML, Avro |
+| **Data Lakes** | Snowflake, BigQuery |
+| **File Formats** | CSV / Flat File, Parquet, JSON, XML, Avro, Excel |
 | **Cloud & Transfer** | Azure Blob, SFTP, FTP |
 | **APIs & Messaging** | REST, SMTP |
 | **Testing** | MOCKDB (in-memory) |
@@ -143,7 +147,7 @@ A strict `VERB NOUN` / `VERB_NOUN` convention for all automation commands.
 | Category | Commands |
 | :--- | :--- |
 | **Data Flow** | `SEND EMAIL`, `SEND FILE`, `RECEIVE FILE` |
-| **Filesystem** | `CREATE DIRECTORY`, `DELETE FILE`, `COMPRESS FILE`, `ENCRYPT FILE` |
+| **Filesystem** | `CREATE DIRECTORY`, `DELETE FILE`, `COMPRESS FILE`, `DECOMPRESS FILE`, `ENCRYPT FILE` |
 | **Management** | `CREATE CONNECTION`, `DROP CONNECTION`, `START DOCKER`, `CLOSE DOCKER`, `CREATE JOB` |
 | **Scripting** | `CREATE PROCEDURE`, `CREATE FUNCTION`, `CREATE SETS`, `USE SETS` |
 | **Analysis** | `LINT`, `EXPLAIN`, `LINEAGE()`, `SET PROFILING ON` |
@@ -156,7 +160,7 @@ A strict `VERB NOUN` / `VERB_NOUN` convention for all automation commands.
 - **Dry-Run Mode**: `SET WHAT_IF ON` suppresses all side-effecting operations (`INSERT`, `UPDATE`, `DELETE`, file writes, emails) and logs what *would* have run — zero risk when validating a new script against production.
 
 ### Deep Observability
-- **Data Lineage**: Trace column origins with `LINEAGE()`. Export Mermaid.js diagrams via `LINEAGE(#result) TO 'report.md'`.
+- **Data Lineage 2.0**: Trace column origins with `LINEAGE()`. Tag fields with 20 core tags (`@pii`, `@sensitive`, etc.) — tag inheritance follows `@pii: true-wins` logic. Export OpenLineage-compliant JSON or Mermaid.js diagrams.
 - **Static Analysis**: Catch logic errors and dialect mismatches before production with `LINT 'script.etlsql'`.
 - **Execution Profiling**: `SET PROFILING ON` reveals statement-by-statement timing and memory deltas.
 
@@ -211,6 +215,24 @@ Brings ETL-SQL into Visual Studio Code with two independent backend channels:
 - **Connections Sidebar**: Browse data source schemas without leaving the editor.
 - **Report Preview**: Render `.rptsql` dashboards directly in a VS Code WebView panel — no browser required.
 
+### ETL Notebooks (`.etlnb`) ✨ New in 0.7.0
+Native VS Code Notebook support for iterative, cell-by-cell data exploration:
+
+- **Stateful Execution**: The engine runs as a persistent REPL — connections opened in Cell 1 are available in Cell 2, and temp tables carry forward across all subsequent cells.
+- **Cross-Cell IntelliSense**: Schema autocomplete, linter diagnostics, and hover documentation all see the full notebook context. Define `CREATE CONNECTION m` in Cell 1 and get `m.Users` suggestions in Cell 2 automatically.
+- **Rich Cell Outputs**: Each cell renders its result set as an interactive grid inline in the notebook.
+- **Notebook Guide**: See [ETL Notebook Guide](Docs/ETL_Notebook_Guide.md) for the full reference.
+
+```
+Cell 1:
+  CREATE CONNECTION m ON MOCKDB();
+  SELECT * INTO #orders FROM m.Orders WHERE status = 'Open';
+
+Cell 2:
+  SELECT Region, COUNT(*) AS cnt FROM #orders  ← autocomplete sees #orders and m.*
+  GROUP BY Region ORDER BY cnt DESC;
+```
+
 ---
 
 ## Report-SQL: Interactive Dashboards
@@ -251,10 +273,71 @@ your_report.rptsql
 
 | Category | Types |
 | :--- | :--- |
-| **Charts** | `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL` |
-| **Data** | `TABLE` (with conditional formatting), `CARD` (scalar KPI) |
-| **Text** | `TEXT` (free HTML/markdown block) |
-| **Filters** | `SLICER`, `MULTISELECT`, `DATEPICKER`, `SLIDER`, `SEARCH` |
+| **Charts** | `BAR`, `HBAR`, `LINE`, `SCATTER`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `BUBBLE`, `RADAR`, `CANDLESTICK` |
+| **Geo** | `MAP` (ECharts + custom GeoJSON via `MAP_FILE`) |
+| **Data** | `TABLE` (with conditional formatting, grand totals), `CARD` (scalar KPI) |
+| **Text** | `TEXT` (free HTML/markdown, GFM table support) |
+| **Filters** | `SLICER`, `MULTISELECT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH` |
+| **Input** | `TEXTBOX`, `NUMBERBOX`, `CHECKBOX` (direct scalar parameter input) |
+
+### Drill-Downs & Cross-Report Navigation ✨ New in 0.7.0
+
+Navigate hierarchically within a single report or jump between reports while passing full parameter state:
+
+```sql
+CREATE VISUAL SalesByRegion AS BAR (
+    SOURCE   = #summary,
+    MAPPINGS ( X = Region, Y = Revenue ),
+    ACTIONS  (
+        ON_CLICK = DRILL_IN(Region, @region),           -- in-place sub-view
+        ON_CLICK = DRILL_TO('detail_report.rptsql',     -- cross-report nav
+                   PASS(@region = Region, @date = @date))
+    )
+);
+```
+
+### Paginated Reports ✨ New in 0.7.0
+
+Automatically flow large data grids across multiple pages with repeated column headers and footers:
+
+```sql
+SET REPORT PAGINATED = ON;
+
+CREATE VISUAL InvoiceTable AS TABLE (
+    SOURCE   = #invoices,
+    OPTIONS  ( PAGE_SIZE = 40, REPEAT_HEADER = ON )
+);
+```
+
+### Collapsible Containers & Layouts
+
+Organize visuals into collapsible panels, overlay drawers, or pinnable sidebars:
+
+```sql
+CREATE CONTAINER FiltersPanel (
+    COLLAPSABLE = ON,
+    PINNABLE    = ON,
+    ICON        = 'filter',
+    MAP ('A' = RegionFilter, 'B' = DatePicker)
+);
+```
+
+### Shared Datasets & Multi-Report Portal
+
+Register shared datasets once and reuse them across any number of reports with automatic background refresh:
+
+```sql
+CREATE DATASET GlobalRevenue AS (
+    SELECT * FROM prod_db.dbo.DailyRevenue
+) WITH ( REFRESH = '15m', ENCRYPT = MACHINE );
+```
+
+Host all reports in a single portal:
+
+```bash
+etl-sql-report serve --manifest portal_manifest.json
+# Opens the Report Portal at http://localhost:5001
+```
 
 ### Quick-Start Report
 
@@ -323,20 +406,21 @@ For multi-report hosting, live parameter binding, and the full visual reference 
 
 ## Architecture
 
-Six dependency tiers, strictly layered:
+Seven dependency tiers, strictly layered:
 
 | Tier | Project(s) | Role |
 | :--- | :--- | :--- |
 | 0 — Foundation | `ETL-SQL.Core` | Parser, AST, interfaces, linting rules |
-| 1 — Execution | `ETL-SQL.Engine` | Evaluator, 30+ statement handlers, external sort/join/aggregate/window engines |
-| 2 — Integration | `ETL-SQL.Connectors`, `ETL-SQL.Orchestrator` | 14 connector types, job scheduler, execution history (SQLite) |
-| 3 — Language Server | `ETL-SQL.LanguageServer` | LSP — completions, diagnostics, hover, schema autocomplete |
-| 4 — Shells | `ETL-SQL.App`, `ETL-SQL.TUI` | CLI entry point (System.CommandLine), Spectre.Console terminal IDE |
-| 5 — Reports | `ETL-SQL.ReportBuilder`, `ETL-SQL.ReportPlayer` | Report-SQL compilation and live dashboard HTTP server |
+| 1 — Analysis | `ETL-SQL.Analysis` | Linting engine, lineage tracking, dialect validation |
+| 2 — Execution | `ETL-SQL.Engine` | Evaluator, 30+ statement handlers, external sort/join/aggregate/window engines |
+| 3 — Integration | `ETL-SQL.Connectors`, `ETL-SQL.Orchestrator` | 14+ connector types, job scheduler, execution history (SQLite) |
+| 4 — Language Server | `ETL-SQL.LanguageServer` | LSP — completions, diagnostics, hover, schema autocomplete, notebook context |
+| 5 — Shells | `ETL-SQL.App`, `ETL-SQL.TUI` | CLI entry point (System.CommandLine), Spectre.Console terminal IDE |
+| 6 — Reports | `ETL-SQL.ReportBuilder`, `ETL-SQL.ReportPlayer`, `ETL-SQL.ReportPortal`, `ETL-SQL.ReportHosting` | Report-SQL compilation, live dashboard server, multi-report portal |
 
 ```mermaid
 graph TD
-    A[".etlsql / .rptsql script"] --> B[Lexer]
+    A[".etlsql / .rptsql / .etlnb"] --> B[Lexer]
     B --> C[Parser]
     C --> D[AST]
     D --> E[Evaluator / Engine]
@@ -350,13 +434,14 @@ graph TD
         E --> R[Report Context]
     end
 
-    G --> I[(MSSQL / Postgres / Oracle)]
-    G --> J[Flat Files / JSON / Parquet]
+    G --> I[(MSSQL / Postgres / Oracle / Snowflake / BigQuery)]
+    G --> J[Flat Files / JSON / Parquet / Excel]
     G --> K[SFTP / FTP / Azure Blob]
     G --> L[SMTP / Email]
     G --> M[REST API]
     O --> N[ReportBuilder / .rptsql]
     R --> P[ReportPlayer — localhost:5200]
+    R --> Q[ReportPortal — localhost:5001]
 ```
 
 ---
@@ -378,7 +463,8 @@ graph TD
 | Document | Description |
 | :--- | :--- |
 | [User Manual](Docs/User_Manual.md) | Pipeline mental model, connections, variables, control flow, and debugging |
-| [Report-SQL Guide](Docs/Report_SQL_Guide.md) | `.rptsql` syntax, `CREATE VISUAL`, dashboards, and the report player |
+| [ETL Notebook Guide](Docs/ETL_Notebook_Guide.md) | Cell execution model, cross-cell state, IntelliSense in notebooks |
+| [Report-SQL Guide](Docs/Report_SQL_Guide.md) | `.rptsql` syntax, `CREATE VISUAL`, dashboards, drill-downs, and the report player |
 | [Pattern Cookbook](Docs/Cookbook.md) | 18 self-contained, production-ready ETL recipes |
 | [Sample Guide](Docs/Sample_Guide.md) | Inventory of 55+ sample scripts in the `/samples/` folder |
 
@@ -398,7 +484,7 @@ graph TD
 | [Reporting Architecture](Docs/Architecture/Reporting.md) | Report-SQL runtime — manifest builder, ECharts renderer, PDF export, parameter binding |
 | [Connector Architecture](Docs/Architecture/Connectors.md) | Connector interface contracts, lifecycle, pushdown logic |
 | [TUI Editor](Docs/Architecture/TuiEditor.md) | Terminal IDE internals — buffer, highlighting, autocomplete |
-| [VS Code Extension](Docs/Architecture/VSCodeExtension.md) | LSP + REPL channels, results panel, report preview |
+| [VS Code Extension](Docs/Architecture/VSCodeExtension.md) | LSP + REPL channels, notebook controller, results panel, report preview |
 | [Orchestrator](Docs/Architecture/Orchestrator.md) | Job scheduling, execution sessions, history |
 
 ### Standards & Governance
