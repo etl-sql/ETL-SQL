@@ -107,11 +107,6 @@
           "default": false,
           "description": "Automatically open the Report Preview panel when opening an .rptsql file."
         },
-        "etlsql.editor.inlayHints.enabled": {
-          "type": "boolean",
-          "default": false,
-          "description": "Enable parameter inlay hints (Ghost Text) in the editor."
-        },
         "etlsql.portal.url": {
           "type": "string",
           "default": "",
