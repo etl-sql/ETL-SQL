@@ -1,10 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>ETL_SQL.ReportRuntime</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 

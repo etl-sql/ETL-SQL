@@ -1,29 +1,28 @@
 <Project Sdk="Microsoft.NET.Sdk">
- 
-   <PropertyGroup>
-     <RootNamespace>ETL_SQL.Engine</RootNamespace>
-   </PropertyGroup>
- 
-   <ItemGroup>
-     <PackageReference Include="Apache.Arrow" Version="16.0.0" />
-     <PackageReference Include="PgpCore" Version="7.0.0" />
-     <PackageReference Include="Spectre.Console" Version="0.54.0" />
-   </ItemGroup>
- 
-   <ItemGroup>
-     <ProjectReference Include="..\ETL-SQL.Analysis\ETL-SQL.Analysis.csproj" />
-     <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
-     <ProjectReference Include="..\ETL-SQL.Reporting\ETL-SQL.Reporting.csproj" />
-   </ItemGroup>
- 
-   <ItemGroup>
-     <InternalsVisibleTo Include="ETL-SQL.Tests" />
-   </ItemGroup>
- 
- 
-   <ItemGroup>
-     <Using Include="ETL_SQL.Core" />
-     <Using Include="ETL_SQL.Core.Parser" />
-   </ItemGroup>
- 
- </Project>
+
+  <PropertyGroup>
+    <RootNamespace>ETL_SQL.Engine</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Apache.Arrow" />
+    <PackageReference Include="PgpCore" />
+    <PackageReference Include="Spectre.Console" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ETL-SQL.Analysis\ETL-SQL.Analysis.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Core\ETL-SQL.Core.csproj" />
+    <ProjectReference Include="..\ETL-SQL.Reporting\ETL-SQL.Reporting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ETL-SQL.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="ETL_SQL.Core" />
+    <Using Include="ETL_SQL.Core.Parser" />
+  </ItemGroup>
+
+</Project>
