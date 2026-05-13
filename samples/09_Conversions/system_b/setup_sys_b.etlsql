@@ -1,3 +1,4 @@
+-- @requires: postgres
 -- Setup Script for System B (Target)
 -- Path: samples/conversion/setup_sys_b.etlsql
 

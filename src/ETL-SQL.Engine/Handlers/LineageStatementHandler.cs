@@ -89,6 +89,8 @@ namespace ETL_SQL.Engine.Handlers
                     sb.AppendLine($"| {entry.Timestamp:yyyy-MM-dd HH:mm:ss} | {entry.Operation} | {sources} | {metadataStr} |");
                 }
 
+                var dir = Path.GetDirectoryName(fullPath);
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
                 await File.WriteAllTextAsync(fullPath, sb.ToString());
                 _logger.WriteLine($"Lineage report exported to: {fullPath}", ConsoleColor.Green);
             }

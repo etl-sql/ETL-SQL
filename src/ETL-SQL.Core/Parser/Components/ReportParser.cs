@@ -1347,6 +1347,14 @@ namespace ETL_SQL.Core.Parser.Components
             throw new SyntaxException(message, _parser.Current.Line, _parser.Current.Column);
         }
 
+        // Accepts column names (including DAY/MONTH/YEAR etc.), variables, and string literals for action value expressions.
+        private Token ConsumeValueExpr(string message)
+        {
+            if (ReportCheck(TokenType.STRING_LITERAL) || ReportCheck(TokenType.VARIABLE))
+                return _parser.Advance();
+            return ConsumeIdentifier(message); // handles identifiers and keyword-as-column (DAY, MONTH, etc.)
+        }
+
         private Token ConsumeIdentifierOrString(string message)
         {
             if (ReportCheck(TokenType.IDENTIFIER) || ReportCheck(TokenType.STRING_LITERAL) || 
@@ -1440,7 +1448,7 @@ namespace ETL_SQL.Core.Parser.Components
                     var paramName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
                     if (!paramName.StartsWith("@")) paramName = "@" + paramName;
                     Match(TokenType.COMMA);
-                    var valueExpr = ConsumeIdentifierOrVariable("Expected value expression").Value;
+                    var valueExpr = ConsumeValueExpr("Expected value expression").Value;
                     Consume(TokenType.RPAREN, "Expected ')' to close SET_PARAMETER");
                     action = new SetParameterAction { Trigger = trigger, ParameterName = paramName, ValueExpression = valueExpr };
                 }
@@ -1454,7 +1462,7 @@ namespace ETL_SQL.Core.Parser.Components
                         var pName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
                         if (!pName.StartsWith("@")) pName = "@" + pName;
                         Consume(TokenType.EQUALS, "Expected '=' after parameter name");
-                        var pVal = ConsumeIdentifierOrVariable("Expected column name or expression").Value;
+                        var pVal = ConsumeValueExpr("Expected column name or expression").Value;
                         actionParams[pName] = pVal;
                     }
                     Consume(TokenType.RPAREN, "Expected ')' to close RUN_SCRIPT");
@@ -1476,7 +1484,7 @@ namespace ETL_SQL.Core.Parser.Components
                             var pName = ConsumeIdentifierOrVariable("Expected parameter name").Value;
                             if (!pName.StartsWith("@")) pName = "@" + pName;
                             Consume(TokenType.EQUALS, "Expected '=' after parameter name");
-                            var pVal = ConsumeIdentifierOrVariable("Expected column name or expression").Value;
+                            var pVal = ConsumeValueExpr("Expected column name or expression").Value;
                             actionParams[pName] = pVal;
                             Match(TokenType.COMMA);
                         }
