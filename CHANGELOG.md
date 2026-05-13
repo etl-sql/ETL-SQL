@@ -4,12 +4,14 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 
 ---
 
-## [0.7.0] — 2026-05-11
+## [0.7.0] — 2026-05-12
 
 ### Added
 
 **Reporting & Interactive Dashboards**
-- **Advanced Drill-Down**: Implemented `DRILL_IN` and `DRILL_DOWN` for hierarchical, in-place data exploration across visual layers.
+- **Advanced Drill-Down**: Implemented `DRILL_IN` and `DRILL_DOWN` for hierarchical, in-place data exploration; added `DRILL_TO` for cross-report navigation with parameter state passing.
+- **Paginated Reports**: Support for `PAGINATED = ON` reports featuring automatic header/footer repetition, multi-page data grid spans, and specialized snapshot formats.
+- **ETL Notebooks (`.etlnb`)**: Native VS Code notebook support with cell-based execution, stateful REPL persistence, and cross-cell IntelliSense for connections and variables.
 - **Cross-Visual Highlighting**: Power BI-style interactive filtering where clicking a chart segment highlights related data across all other visuals.
 - **Ghost Rendering**: Enhanced interaction logic with "ghosting" (dimming) support for Line, Scatter, Pie, and Donut charts during highlighting.
 - **New Visual Types**:
@@ -62,6 +64,8 @@ All notable changes to ETL-SQL are documented here. This project follows [Keep a
 - **Slicer Logic**: Fixed null-reference errors in `renderSlicer` when actions were undefined.
 - **Cross-Filesystem Paths**: Fixed portal publish flow failures when handling paths across different drives.
 - **Gauge Rendering**: Resolved template string errors and implemented auto-formatting for decimal values.
+- **Notebook Reliability**: Fixed "REPL process exited unexpectedly" and communication deadlocks by implementing atomic process lifecycle management and heartbeat checks.
+- **Protocol Standardization**: Migrated REPL communication to strict PascalCase JSON with mandatory CRLF endings for Windows pipe stability.
 
 ### Changed
 - **Sample Reorganization**: Moved all `TestData` to `samples/data/` and redirected script outputs to `samples/output/` for repository cleanliness.
