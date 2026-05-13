@@ -1158,6 +1158,9 @@ namespace ETL_SQL.Engine
                 ? Path.GetFullPath(resolved)
                 : Path.GetFullPath(resolved, basePath);
 
+            // Canonicalize symlinks so callers always receive the real path
+            fullPath = SecurityService.ResolvePathSymlinks(fullPath);
+
             if (_securityService != null)
             {
                 _securityService.ValidatePath(fullPath);

@@ -246,23 +246,8 @@ namespace ETL_SQL.Services
 
             var fullPath = Path.GetFullPath(path);
 
-            // Security Hardening: Canonicalize symlinks to prevent sandbox escapes.
-            if (File.Exists(fullPath) || Directory.Exists(fullPath))
-            {
-                try
-                {
-                    FileSystemInfo fsInfo = File.Exists(fullPath) ? new FileInfo(fullPath) : new DirectoryInfo(fullPath);
-                    var target = fsInfo.ResolveLinkTarget(true); 
-                    if (target != null)
-                    {
-                        fullPath = Path.GetFullPath(target.FullName);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.Debug("Failed to resolve symlink for {Path}: {Message}", fullPath, ex.Message);
-                }
-            }
+            // Security Hardening: Canonicalize symlinks (including in parent components) to prevent sandbox escapes.
+            fullPath = ResolvePathSymlinks(fullPath);
 
             // 0. Internal Bypass
             if (IsInternalOperation) return;
@@ -704,6 +689,43 @@ namespace ETL_SQL.Services
                 return false;
             }
             catch { return true; } // Safety first: if invalid path, treat as system path
+        }
+
+        /// <summary>
+        /// Resolves all symlink components in a path, including symlinks in parent directories.
+        /// Walks each component and calls ResolveLinkTarget so that a symlink anywhere in the
+        /// path hierarchy is canonicalized. Returns the original path if resolution fails.
+        /// </summary>
+        public static string ResolvePathSymlinks(string path)
+        {
+            try
+            {
+                var root = Path.GetPathRoot(path) ?? string.Empty;
+                var parts = path.Substring(root.Length)
+                    .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+                           StringSplitOptions.RemoveEmptyEntries);
+
+                var current = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                foreach (var part in parts)
+                {
+                    current = Path.Combine(current, part);
+                    if (File.Exists(current) || Directory.Exists(current))
+                    {
+                        try
+                        {
+                            FileSystemInfo fsInfo = Directory.Exists(current)
+                                ? (FileSystemInfo)new DirectoryInfo(current)
+                                : new FileInfo(current);
+                            var target = fsInfo.ResolveLinkTarget(returnFinalTarget: true);
+                            if (target != null)
+                                current = Path.GetFullPath(target.FullName);
+                        }
+                        catch { }
+                    }
+                }
+                return current;
+            }
+            catch { return path; }
         }
 
         private bool IsWithinSafeZone(string? path)
