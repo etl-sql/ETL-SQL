@@ -33,7 +33,7 @@ function Invoke-DotNetTest {
 
     if ($NoRestore) { $args += "--no-restore" }
     if ($NoBuild) { $args += "--no-build" }
-    if ($Filter) { $args += @("--filter", $Filter) }
+    if ($Filter) { $args += @("--filter", """$Filter""") }
     if ($CollectCoverage) {
         $args += @(
             "--collect:XPlat Code Coverage",
@@ -60,11 +60,11 @@ switch ($Lane) {
         if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     }
     "fast" {
-        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category!=Integration&Category!=Performance&FullyQualifiedName!~Integration&FullyQualifiedName!~Hardening.Performance"
+        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "(Category!=Integration)&(Category!=Performance)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
         Invoke-DotNetTest "tests\ETL-SQL.LanguageServer.Tests\ETL-SQL.LanguageServer.Tests.csproj"
     }
     "engine" {
-        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "Category!=Integration&Category!=Performance&FullyQualifiedName!~Integration&FullyQualifiedName!~Hardening.Performance"
+        Invoke-DotNetTest "tests\ETL-SQL.Tests\ETL-SQL.Tests.csproj" "(Category!=Integration)&(Category!=Performance)&(FullyQualifiedName!~Integration)&(FullyQualifiedName!~Performance)"
     }
     "portal" {
         Invoke-DotNetTest "tests\ETL-SQL.ReportPortal.Tests\ETL-SQL.ReportPortal.Tests.csproj"

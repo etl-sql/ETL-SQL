@@ -13,6 +13,7 @@ using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Tests.Integration
 {
+    [Trait("Category", "Integration")]
     [Collection("Database collection")]
     public class DatabaseIntegrationTests
     {

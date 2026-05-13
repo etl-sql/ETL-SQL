@@ -12,6 +12,7 @@ using Spectre.Console;
 
 namespace ETL_SQL.Tests.Integration
 {
+    [Trait("Category", "Integration")]
     [Collection("Database collection")]
     public class PostgresTests
     {
@@ -23,7 +24,6 @@ namespace ETL_SQL.Tests.Integration
         }
 
         [Fact]
-        [Trait("Category", "Integration")]
         public async Task RunAllTests()
         {
             var connStr = _fixture.PostgresConnectionString;

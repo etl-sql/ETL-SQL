@@ -8,7 +8,7 @@
     <Nullable>disable</Nullable>
     <AssemblyName>ETL-SQL.Benchmarks</AssemblyName>
     <IsPackable>false</IsPackable>
-    <IsTestProject>true</IsTestProject>
+    <IsTestProject>false</IsTestProject>
     <StartupObject>ETL_SQL.Benchmarks.Program</StartupObject>
   </PropertyGroup>
 

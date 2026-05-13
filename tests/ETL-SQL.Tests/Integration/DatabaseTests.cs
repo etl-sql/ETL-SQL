@@ -11,6 +11,7 @@ using Spectre.Console;
 
 namespace ETL_SQL.Tests.Integration
 {
+    [Trait("Category", "Integration")]
     public class DatabaseTests
     {
 
