@@ -66,21 +66,24 @@ export class ETLNotebookController {
                     outputs.push(vscode.NotebookCellOutputItem.text(html, 'text/html'));
                     execution.replaceOutput(new vscode.NotebookCellOutput(outputs));
                 } else if (msg.type === 'visual') {
-                    // Immediate visual emission
                     const manifest = JSON.stringify(msg.data, null, 2);
                     outputs.push(vscode.NotebookCellOutputItem.text(`Visual Created: ${msg.data.Name}\n${manifest}`, 'text/plain'));
                     execution.replaceOutput(new vscode.NotebookCellOutput(outputs));
                 } else if (msg.type === 'message') {
                     outputs.push(vscode.NotebookCellOutputItem.text(msg.text, 'text/plain'));
                     execution.replaceOutput(new vscode.NotebookCellOutput(outputs));
+                } else if (msg.type === 'lineage') {
+                    // Render mermaid lineage in a collapsible section
+                    const mermaid = `<details><summary>Show Lineage Graph</summary>\n\n\`\`\`mermaid\n${msg.mermaid}\n\`\`\`\n</details>`;
+                    outputs.push(vscode.NotebookCellOutputItem.text(mermaid, 'text/markdown'));
+                    execution.replaceOutput(new vscode.NotebookCellOutput(outputs));
                 }
             };
 
-            // We need a way to subscribe to messages for THIS specific execution
             const workspaceFolder = vscode.workspace.getWorkspaceFolder(cell.notebook.uri);
             const workspaceRoot = workspaceFolder?.uri.fsPath;
 
-            await repl.execute(cell.document.getText(), exePath, args, cell.document.uri.fsPath, workspaceRoot, true);
+            await repl.execute(cell.document.getText(), exePath, args, cell.notebook.uri.fsPath, workspaceRoot, true, messageHandler);
             
             execution.end(true, Date.now());
         } catch (err: any) {
@@ -96,7 +99,8 @@ export class ETLNotebookController {
     }
 
     private _formatTable(columns: string[], rows: any[]): string {
-        let html = '<table style="border-collapse: collapse; width: 100%;">';
+        let html = '<div style="max-height: 400px; overflow: auto; border: 1px solid #444; border-radius: 4px;">';
+        html += '<table style="border-collapse: collapse; width: 100%; font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size);">';
         html += '<thead><tr>';
         for (const col of columns) {
             html += `<th style="border: 1px solid #444; padding: 8px; text-align: left; background-color: #333;">${col}</th>`;
@@ -109,7 +113,7 @@ export class ETLNotebookController {
             }
             html += '</tr>';
         }
-        html += '</tbody></table>';
+        html += '</tbody></table></div>';
         return html;
     }
 

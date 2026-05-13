@@ -30,12 +30,19 @@ namespace ETL_SQL.LSP
             => _states.TryGetValue(uri, out var s) ? s.Text : null;
 
         private readonly ConcurrentDictionary<string, string> _notebookPrefixes = new();
+        private readonly ConcurrentDictionary<string, string> _notebookPaths = new();
 
-        public void SetNotebookPrefix(string uri, string prefix)
-            => _notebookPrefixes[uri] = prefix;
+        public void SetNotebookContext(string uri, string prefix, string path)
+        {
+            _notebookPrefixes[uri] = prefix;
+            _notebookPaths[uri] = path;
+        }
 
         public string GetNotebookPrefix(string uri)
             => _notebookPrefixes.TryGetValue(uri, out var prefix) ? prefix : "";
+
+        public string? GetNotebookPath(string uri)
+            => _notebookPaths.TryGetValue(uri, out var path) ? path : null;
     }
 
     /// <summary>Immutable snapshot of a parsed document.</summary>

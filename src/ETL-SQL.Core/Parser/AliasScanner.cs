@@ -16,12 +16,42 @@ namespace ETL_SQL.Core.Parser
 
     public static class AliasScanner
     {
-        public static Dictionary<string, AliasInfo> Scan(string script)
+        public static Dictionary<string, AliasInfo> Scan(string script, int cursorOffset = -1)
         {
             var aliases = new Dictionary<string, AliasInfo>(StringComparer.OrdinalIgnoreCase);
             
-            // Find FROM/JOIN and the tables following them until next major keyword or semicolon
-            var matches = Regex.Matches(script, @"\b(FROM|JOIN)\s+([^;]+?)(?=\b(WHERE|GROUP|ORDER|HAVING|LIMIT|OFFSET|JOIN|ON|UNION|EXCEPT|INTERSECT|SELECT)\b|;|SELECT|$)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+            // Heuristic: identify the statement block containing the cursor
+            // Split by GO, semicolon, or double newline
+            string activeBlock = script;
+            if (cursorOffset >= 0 && cursorOffset <= script.Length)
+            {
+                var blocks = Regex.Matches(script, @"\bGO\b|;|(?:\r?\n){2,}", RegexOptions.IgnoreCase);
+                int start = 0;
+                int end = script.Length;
+                
+                foreach (Match m in blocks)
+                {
+                    if (m.Index < cursorOffset)
+                    {
+                        start = m.Index + m.Length;
+                    }
+                    else
+                    {
+                        end = m.Index;
+                        break;
+                    }
+                }
+                activeBlock = script.Substring(start, end - start);
+            }
+            else
+            {
+                // Fallback to last block if no cursor info
+                var blocks = Regex.Split(script, @"\bGO\b|;|(?:\r?\n){2,}", RegexOptions.IgnoreCase);
+                activeBlock = blocks.LastOrDefault() ?? "";
+            }
+            
+            // Find FROM/JOIN and the tables following them until next major keyword or separator
+            var matches = Regex.Matches(activeBlock, @"\b(FROM|JOIN)\s+([^;]+?)(?=\b(WHERE|GROUP|ORDER|HAVING|LIMIT|OFFSET|JOIN|ON|UNION|EXCEPT|INTERSECT|SELECT)\b|;|SELECT|$)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
             
             foreach (Match m in matches)
             {

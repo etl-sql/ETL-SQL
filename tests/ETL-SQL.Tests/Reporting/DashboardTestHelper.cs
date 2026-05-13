@@ -102,6 +102,10 @@ namespace ETL_SQL.Tests.Reporting
                 {
                     var provider  = BuildScopeProvider();
                     var mockScope = new Mock<IServiceScope>();
+                    mockScope.As<IAsyncDisposable>()
+                        .Setup(s => s.DisposeAsync())
+                        .Returns(new ValueTask(Task.CompletedTask));
+                    
                     mockScope.Setup(s => s.ServiceProvider).Returns(provider);
                     mockScope.Setup(s => s.Dispose()).Callback(() => provider.Dispose());
                     return mockScope.Object;

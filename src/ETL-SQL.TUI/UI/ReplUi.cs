@@ -165,7 +165,9 @@ namespace ETL_SQL.TUI.UI
                             if (cmd.ScriptPath != null)
                                 _evaluator!.CurrentScriptPath = cmd.ScriptPath;
                             
-                            Console.Error.WriteLine($"[TRACE] Starting execution of script ({cmd.Script?.Length} chars)");
+                            _evaluator!.InteractiveMode = cmd.InteractiveMode;
+
+                            Console.Error.WriteLine($"[TRACE] Starting execution of script ({cmd.Script?.Length} chars) - Interactive: {cmd.InteractiveMode}");
                             activeExecutionTask = ExecuteScript(cmd.Script ?? "");
                         }
                         else if (cmd.Action == "export")
@@ -205,6 +207,18 @@ namespace ETL_SQL.TUI.UI
                         isFirst = true,
                         columns = table.ColumnNames,
                         rows = table.Rows.Select(r => r.Columns)
+                    });
+                };
+
+                _evaluator.OnMessage = (diag) =>
+                {
+                    WriteJson(new
+                    {
+                        type = "message",
+                        level = diag.Severity.ToString().ToLower(),
+                        text = diag.Message,
+                        line = diag.Line,
+                        column = diag.Column
                     });
                 };
 
@@ -280,6 +294,7 @@ namespace ETL_SQL.TUI.UI
                     _evaluator.LastLexTimeMs = lexTime.ElapsedMilliseconds;
                     _evaluator.LastParseTimeMs = parseTime.ElapsedMilliseconds;
                     _evaluator.OnResultSet = originalOnResultSet;
+                    _evaluator.OnMessage = null;
                     
                     lock (_execLock)
                     {
@@ -331,6 +346,9 @@ namespace ETL_SQL.TUI.UI
 
                 WriteJson(new { type = "variables", data = userVars });
 
+                // Emit cell-level lineage
+                EmitCellLineage();
+
                 WriteJson(new { type = "done", exitCode = 0 });
             }
             catch (Exception ex)
@@ -338,6 +356,40 @@ namespace ETL_SQL.TUI.UI
                 WriteJson(new { type = "message", level = "error", text = ex.Message });
                 WriteJson(new { type = "done", exitCode = 1 });
             }
+        }
+
+        private void EmitCellLineage()
+        {
+            if (_evaluator == null) return;
+            var entries = _evaluator.LineageTracker.GetFullLineage().ToList();
+            if (entries.Count == 0) return;
+
+            // Simple mermaid graph generation
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("graph LR");
+            var nodes = new HashSet<string>();
+            
+            foreach (var entry in entries)
+            {
+                foreach (var src in entry.SourceTables)
+                {
+                    string srcId = SanitizeMermaidId(src);
+                    string targetId = SanitizeMermaidId(entry.TargetTable);
+                    sb.AppendLine($"  {srcId} --> {targetId}");
+                    nodes.Add(srcId);
+                    nodes.Add(targetId);
+                }
+            }
+
+            if (nodes.Count > 0)
+            {
+                WriteJson(new { type = "lineage", mermaid = sb.ToString() });
+            }
+        }
+
+        private string SanitizeMermaidId(string id)
+        {
+            return id.Replace(".", "_").Replace("#", "Temp_").Replace("@", "Var_").Replace(" ", "_");
         }
 
         private async Task HandleExport(ReplCommand cmd)

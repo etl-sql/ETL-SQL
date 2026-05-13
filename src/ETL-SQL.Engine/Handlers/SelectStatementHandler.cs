@@ -10,6 +10,7 @@ using ETL_SQL.Engine.Engines;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
 using ETL_SQL.Core.Common.Exceptions;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Engine.Services;
 
 namespace ETL_SQL.Engine.Handlers
@@ -68,7 +69,21 @@ namespace ETL_SQL.Engine.Handlers
                 new LineageManager(context.LineageTracker).RecordSelectIntoLineage(statement, intoTable, context);
 
                 var boundBatches = context.InterceptProgress(batches);
-                await destination.WriteBatches(boundBatches);
+                long totalRows = 0;
+                await foreach (var batch in boundBatches)
+                {
+                    totalRows += batch.Rows.Count;
+                    await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true);
+                }
+
+                context.Variables["@@ROWCOUNT"] = totalRows;
+                context.Logger.Info($"{totalRows} rows affected.");
+                
+                if (context.InteractiveMode)
+                {
+                    // Emit a friendly message for notebooks
+                    context.OnMessage?.Invoke(new Diagnostic($"{totalRows} rows affected (INTO {intoTable.TableName})", 0, 0, DiagnosticSeverity.Info));
+                }
             }
             // 3. Handle Standard SELECT (Extract -> Display)
             else

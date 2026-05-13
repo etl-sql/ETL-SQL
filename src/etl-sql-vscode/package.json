@@ -204,6 +204,11 @@
         "command": "etlsql.showWelcome",
         "title": "ETL-SQL: Show Welcome Page",
         "category": "ETL-SQL"
+      },
+      {
+        "command": "etlsql.exportNotebook",
+        "title": "ETL-SQL: Export Notebook to .etlsql",
+        "icon": "$(export)"
       }
     ],
     "keybindings": [
@@ -271,6 +276,11 @@
           "submenu": "etlsql.launchMenu",
           "group": "navigation@2",
           "when": "resourceLangId == etlsql"
+        },
+        {
+          "command": "etlsql.exportNotebook",
+          "group": "navigation@3",
+          "when": "notebookEditorFocused && notebookType == etl-sql-notebook"
         }
       ],
       "view/title": [

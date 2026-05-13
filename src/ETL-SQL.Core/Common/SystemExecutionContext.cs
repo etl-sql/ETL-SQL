@@ -102,6 +102,7 @@ namespace ETL_SQL.Core.Common
         public List<LogEntry> Messages { get; } = new();
         public int MaxMessages { get; set; } = 1000;
         public Func<string, Task<bool>>? OnPrompt { get; set; }
+        public Action<Diagnostic>? OnMessage { get; set; }
         public bool IsPersistentSession { get; set; }
         public bool InteractiveMode { get; set; }
         public List<object?>? Parameters { get; set; }

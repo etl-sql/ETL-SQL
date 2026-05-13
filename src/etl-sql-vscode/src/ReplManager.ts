@@ -6,7 +6,7 @@ export class ReplManager {
     private static _instance: ReplManager;
     private _process: cp.ChildProcess | undefined;
     private _isReady: boolean = false;
-    private _commandQueue: { script: string, scriptPath?: string, workspaceRoot?: string, interactiveMode?: boolean, resolve: (val: any) => void, reject: (err: any) => void }[] = [];
+    private _commandQueue: { script: string, scriptPath?: string, workspaceRoot?: string, interactiveMode?: boolean, onMessage?: (msg: any) => void, resolve: (val: any) => void, reject: (err: any) => void }[] = [];
     private _currentHandler: ((msg: any) => void) | undefined;
     private _outputChannel: vscode.OutputChannel | undefined;
     private _currentSessionId: string | undefined;
@@ -31,7 +31,7 @@ export class ReplManager {
         this._debugMode = debug;
     }
 
-    public async execute(script: string, exePath: string, args: string[], scriptPath?: string, workspaceRoot?: string, interactiveMode?: boolean): Promise<void> {
+    public async execute(script: string, exePath: string, args: string[], scriptPath?: string, workspaceRoot?: string, interactiveMode?: boolean, onMessage?: (msg: any) => void): Promise<void> {
         // Extract sessionId from args for tracking
         let sessionId: string | undefined;
         const sessionIdx = args.indexOf('--session');
@@ -45,7 +45,7 @@ export class ReplManager {
         }
 
         return new Promise(async (resolve, reject) => {
-            this._commandQueue.push({ script, scriptPath, workspaceRoot, interactiveMode, resolve, reject });
+            this._commandQueue.push({ script, scriptPath, workspaceRoot, interactiveMode, onMessage, resolve, reject });
             
             if (this._startPromise) {
                 await this._startPromise;
@@ -160,6 +160,9 @@ export class ReplManager {
         }, 60000);
 
         this._currentHandler = (msg) => {
+            if (cmd.onMessage) {
+                cmd.onMessage(msg);
+            }
             if (msg.type === 'done') {
                 clearTimeout(timeout);
                 this._currentHandler = undefined;

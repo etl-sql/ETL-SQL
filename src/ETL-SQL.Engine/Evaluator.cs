@@ -241,6 +241,9 @@ namespace ETL_SQL.Engine
         /// <summary>Event raised when a new visual is created (Interactive Mode).</summary>
         public Action<CreateVisualStatement>? OnVisualCreated { get; set; }
         
+        /// <summary>Event raised when a diagnostic message is emitted (Interactive Mode).</summary>
+        public Action<Diagnostic>? OnMessage { get; set; }
+        
         private readonly object _lastResultSetsLock = new();
         private readonly object _messagesLock = new();
 
@@ -376,6 +379,7 @@ namespace ETL_SQL.Engine
         public bool ContainsVariable(string name) => VarContext.ContainsVariable(name);
         public void PushScope(Dictionary<string, object?> vars, Dictionary<string, VariableMetadata>? metadata = null) => VarContext.PushScope(vars, metadata);
         public void PopScope() => VarContext.PopScope();
+        public void Reset() => VarContext.Reset();
         
         public void SetProcedure(string name, CreateProcedureStatement stmt) => VarContext.SetProcedure(name, stmt);
         public bool TryGetProcedure(string name, out CreateProcedureStatement? stmt) => VarContext.TryGetProcedure(name, out stmt);
@@ -1143,9 +1147,16 @@ namespace ETL_SQL.Engine
                 return resolved;
             }
 
+            string basePath = WorkingDirectory;
+            if (!string.IsNullOrEmpty(CurrentScriptPath))
+            {
+                var scriptDir = Path.GetDirectoryName(CurrentScriptPath);
+                if (!string.IsNullOrEmpty(scriptDir)) basePath = scriptDir;
+            }
+
             var fullPath = Path.IsPathRooted(resolved)
                 ? Path.GetFullPath(resolved)
-                : Path.GetFullPath(resolved, WorkingDirectory);
+                : Path.GetFullPath(resolved, basePath);
 
             if (_securityService != null)
             {

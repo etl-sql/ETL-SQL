@@ -459,6 +459,7 @@ Override `appsettings.json` defaults for the current session.
 | `SET REGEX_MATCH_TIMEOUT = n` | 1,000 | Milliseconds before a regex match is aborted |
 | `SET MAX_GROUPING_SETS = n` | 100 | Max `CUBE`/`GROUPING SETS` combinations before abort |
 | `SET MAX_SESSION_SIZE = n` | 524,288,000 | Max session state in bytes before eviction (~500 MB) |
+| `SET INTERACTIVE_MODE = ON\|OFF` | OFF | Enables "Notebook" behavior: idempotent creation of connections/datasets and cleaned expansion results. |
 | `SET PERSIST = ON\|OFF` | ON | Whether to save session state (variables, temp tables) to disk on script completion |
 | `SET SPILL_ENCRYPTION = ON/OFF` | ON | AES-256 encryption on spill files |
 | `SET SPILL_COMPRESSION = ON/OFF` | ON | Brotli compression on spill files |

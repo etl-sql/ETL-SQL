@@ -61,7 +61,7 @@ namespace ETL_SQL.Core.Services
             try
             {
                 if (context.Aliases.Count == 0 && !string.IsNullOrEmpty(context.FullScript))
-                    context.Aliases = AliasScanner.Scan(context.FullScript);
+                    context.Aliases = AliasScanner.Scan(context.FullScript, context.ScriptBefore.Length);
 
                 var allSuggestions = new List<Suggestion>();
                 allSuggestions.AddRange(GetFilePathSuggestions(context));
@@ -341,18 +341,38 @@ namespace ETL_SQL.Core.Services
                 if (string.IsNullOrEmpty(context.Prefix) || context.Prefix == "*")
                 {
                     var allCols = new List<string>();
-                    foreach (var info in context.Aliases.Values)
+                    foreach (var info in context.Aliases.Values.Distinct())
                     {
                         var cols = await _metadata.GetColumnsAsync(info.ConnectionName ?? info.TableName, info.BaseTableName ?? info.TableName, context.DocumentUri);
                         string? prefixAlias = context.Prefix == "*" ? "" : null;
 
                         if (cols.Any())
                         {
-                            var prefix = string.IsNullOrEmpty(prefixAlias) 
-                                ? (string.IsNullOrEmpty(info.Alias) ? info.TableName : info.Alias) 
-                                : prefixAlias;
+                            string prefix = "";
+                            if (string.IsNullOrEmpty(prefixAlias))
+                            {
+                                // If multiple tables are involved in the statement, we must use prefixes to avoid ambiguity
+                                if (context.Aliases.Count > 1)
+                                {
+                                    if (info.HasExplicitAlias)
+                                    {
+                                        prefix = info.Alias!;
+                                    }
+                                    else
+                                    {
+                                        // Use base table name (strip connection if present)
+                                        prefix = info.BaseTableName ?? info.TableName;
+                                    }
+                                }
+                                // Single table with no explicit prefix requested: prefix remains empty
+                            }
+                            else
+                            {
+                                prefix = prefixAlias;
+                            }
                                 
-                            allCols.AddRange(cols.Select(c => $"{prefix}.{c}"));
+                            string qualifiedCols = string.Join(", ", cols.Select(c => string.IsNullOrEmpty(prefix) ? c : $"{prefix}.{c}"));
+                            allCols.Add(qualifiedCols);
                         }
                     }
 

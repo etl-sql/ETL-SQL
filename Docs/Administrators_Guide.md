@@ -107,3 +107,22 @@ If the Report Portal and Orchestrator are running on different servers:
 Logs are stored by default in:
 - Windows: `%PROGRAMFILES%\ETL-SQL\logs`
 - Linux: `/var/log/etl-sql/`
+
+---
+
+## 7. Session Management & Notebooks
+
+ETL-SQL provides a specialized **Interactive Mode** designed for iterative development in VS Code Notebooks or REPL environments.
+
+### 7.1 Interactive Mode (`SET INTERACTIVE_MODE`)
+When enabled, the engine modifies its behavior to support re-runnable script cells:
+- **Idempotent DDL**: `CREATE CONNECTION` and `CREATE DATASET` statements behave as `CREATE OR ALTER`. This prevents "Object already exists" errors when re-executing a cell.
+- **Clean Expansion**: Column expansion (`SELECT *`) prioritizes non-aliased names to reduce noise in interactive data exploration.
+- **Default State**:
+    - **VS Code Notebooks**: Automatically enabled (`ON`).
+    - **CLI/Orchestrator**: Automatically disabled (`OFF`).
+
+To manually toggle this behavior in a script:
+```sql
+SET INTERACTIVE_MODE ON;
+```

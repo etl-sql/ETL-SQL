@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using ETL_SQL.Core.Spill;
 using ETL_SQL.Core.Execution;
+using ETL_SQL.Core.Common;
 
 namespace ETL_SQL.Core
 {
@@ -290,13 +291,16 @@ namespace ETL_SQL.Core
     /// </summary>
     public interface IExecutionContext : IQueryContext, ISqlCompilerContext,
                                         ITransactionContext, ILineageContext, IDockerContext,
-                                        ILoggingContext, IEvaluationContext, IDataContext, IEngineContext
+                                        ILoggingContext, IEvaluationContext, IDataContext, IEngineContext, IVariableContext
     {
         // Property-based access to sub-contexts for better interface segregation (TODO-91)
         IVariableContext VarContext { get; }
         IReportContext ReportContext { get; }
         ITelemetryContext Telemetry { get; }
         IDatasetRegistry? DatasetRegistry { get; }
+        
+        /// <summary>Event raised when a diagnostic message is emitted (Interactive Mode).</summary>
+        Action<Diagnostic>? OnMessage { get; set; }
         
         /// <summary>
         /// Whether the engine is in interactive mode (e.g. Notebooks/REPL).

@@ -13,6 +13,7 @@ namespace ETL_SQL.LSP
     {
         public string Uri { get; init; } = "";
         public string Prefix { get; init; } = "";
+        public string NotebookPath { get; init; } = "";
     }
 
     public class UpdateNotebookContextHandler : IJsonRpcNotificationHandler<UpdateNotebookContextParams>
@@ -26,7 +27,7 @@ namespace ETL_SQL.LSP
 
         public Task<Unit> Handle(UpdateNotebookContextParams request, CancellationToken cancellationToken)
         {
-            _store.SetNotebookPrefix(request.Uri, request.Prefix ?? "");
+            _store.SetNotebookContext(request.Uri, request.Prefix ?? "", request.NotebookPath ?? "");
             return Unit.Task;
         }
     }

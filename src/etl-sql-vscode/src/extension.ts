@@ -220,7 +220,8 @@ export function activate(context: vscode.ExtensionContext) {
             
             client.sendNotification('etlsql/updateNotebookContext', {
                 uri: document.uri.toString(),
-                prefix: precedingText
+                prefix: precedingText,
+                notebookPath: notebook.uri.fsPath
             });
         }
 
@@ -238,6 +239,10 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     // Register Commands
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.exportNotebook', () => {
+        exportNotebookToSql();
+    }));
+
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.runScript', () => {
         runEtlSql(context);
     }));
@@ -723,5 +728,49 @@ async function handleExport(context: vscode.ExtensionContext, format: string, la
                 });
             });
         });
+    }
+}
+async function exportNotebookToSql() {
+    const editor = vscode.window.activeNotebookEditor;
+    if (!editor) {
+        vscode.window.showErrorMessage("ETL-SQL: No active notebook to export.");
+        return;
+    }
+
+    const notebook = editor.notebook;
+    const cells = notebook.getCells();
+    let scriptContent = "";
+
+    for (const cell of cells) {
+        if (cell.kind === vscode.NotebookCellKind.Code && cell.document.languageId === "etlsql") {
+            const text = cell.document.getText().trim();
+            if (text) {
+                scriptContent += `-- Cell: ${cell.index + 1}\n`;
+                scriptContent += text;
+                if (!text.toUpperCase().includes("GO")) {
+                    scriptContent += "\nGO";
+                }
+                scriptContent += "\n\n";
+            }
+        }
+    }
+
+    if (!scriptContent.trim()) {
+        vscode.window.showWarningMessage("ETL-SQL: Notebook contains no etlsql code cells.");
+        return;
+    }
+
+    const defaultUri = vscode.Uri.file(notebook.uri.fsPath.replace(/\.etlnb$/, ".etlsql"));
+    const uri = await vscode.window.showSaveDialog({
+        defaultUri,
+        filters: { "ETL-SQL Scripts": ["etlsql"] },
+        title: "Export Notebook to ETL-SQL Script"
+    });
+
+    if (uri) {
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(scriptContent, "utf8"));
+        vscode.window.showInformationMessage(`Exported to: ${uri.fsPath}`);
+        const doc = await vscode.workspace.openTextDocument(uri);
+        await vscode.window.showTextDocument(doc);
     }
 }
