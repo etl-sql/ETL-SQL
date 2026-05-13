@@ -15,6 +15,9 @@ import { ConnectionsProvider, Connection } from './connectionsProvider';
 import { SidebarProvider } from './sidebarProvider';
 import { ReportPreviewPanel } from './reportPreviewPanel';
 import * as crypto from 'crypto';
+import { ETLNotebookSerializer } from './notebookSerializer';
+import { ETLNotebookController } from './notebookController';
+import { WelcomeView } from './WelcomeView';
 
 let client: LanguageClient;
 let outputChannel: vscode.OutputChannel;
@@ -37,6 +40,27 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(SidebarProvider.viewType, sidebarProvider)
     );
+
+    // Welcome Page registration
+    context.subscriptions.push(
+        vscode.commands.registerCommand('etlsql.showWelcome', () => {
+            WelcomeView.createOrShow(context.extensionUri);
+        })
+    );
+
+    // Automatically show Welcome Page if no files are open
+    if (vscode.window.visibleTextEditors.length === 0) {
+        WelcomeView.createOrShow(context.extensionUri);
+    }
+
+    // Register Notebook Serializer
+    context.subscriptions.push(
+        vscode.workspace.registerNotebookSerializer('etl-sql-notebook', new ETLNotebookSerializer())
+    );
+
+    // Register Notebook Controller
+    const controller = new ETLNotebookController();
+    context.subscriptions.push(controller);
 
     // Sync state changes to sidebar
     connectionsProvider.onDidChangeTreeData(() => {
@@ -80,7 +104,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Register Results Panel (Bottom Panel)
     const resultsProvider = ResultsPanel.register(context);
     ResultsPanel.setOnMessageReceived((msg) => {
-        if (msg.type === 'cancel') ReplManager.getInstance().stop();
+        if (msg.type === 'cancel') ReplManager.getInstance().cancel();
     });
 
     let serverPath = (config.get<string>('server.path') || '').trim();
@@ -186,7 +210,11 @@ export function activate(context: vscode.ExtensionContext) {
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.stopScript', () => {
-        ReplManager.getInstance().stop();
+        ReplManager.getInstance().cancel();
+    }));
+    
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.rollbackTransactions', () => {
+        ReplManager.getInstance().rollback();
     }));
 
     context.subscriptions.push(vscode.commands.registerCommand('etlsql.showLineage', () => {

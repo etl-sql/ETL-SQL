@@ -103,6 +103,7 @@ namespace ETL_SQL.Core.Common
         public int MaxMessages { get; set; } = 1000;
         public Func<string, Task<bool>>? OnPrompt { get; set; }
         public bool IsPersistentSession { get; set; }
+        public bool InteractiveMode { get; set; }
         public List<object?>? Parameters { get; set; }
         public DayOfWeek WeekStartDay { get; set; } = DayOfWeek.Monday;
         public string ScriptHashPolicy { get; set; } = "Warn";
@@ -223,6 +224,7 @@ namespace ETL_SQL.Core.Common
         public Task BeginTransaction() => Task.CompletedTask;
         public Task CommitTransaction() => Task.CompletedTask;
         public Task RollbackTransaction(string? name = null) => Task.CompletedTask;
+        public Task RollbackAllTransactions() => Task.CompletedTask;
 
         public void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true) 
         {
@@ -243,7 +245,7 @@ namespace ETL_SQL.Core.Common
 
         public bool IsSqlPushdown(string connName) => false;
 
-        public Task EvaluateStatement(Statement statement) => Task.CompletedTask;
+        public Task EvaluateStatement(Statement statement, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task Evaluate(Script script, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt) => throw new NotSupportedException();
         public Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args) => Task.CompletedTask;

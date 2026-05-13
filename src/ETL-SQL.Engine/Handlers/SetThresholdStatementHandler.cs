@@ -98,6 +98,9 @@ namespace ETL_SQL.Engine.Handlers
                 case ThresholdType.MaxInternalOperations:
                     context.SecurityService.MaxInternalOperations = intVal;
                     break;
+                case ThresholdType.InteractiveMode:
+                    context.InteractiveMode = Convert.ToBoolean(val);
+                    break;
             }
 
 

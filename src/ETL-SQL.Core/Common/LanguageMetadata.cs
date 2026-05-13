@@ -55,7 +55,7 @@ namespace ETL_SQL.Common
         {
             "RELDATE", "WEEK_START_DAY", "SCRIPT_HASH_POLICY",
             "SUBSCRIPTION", "ENABLE", "DISABLE",
-            "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON", "WHAT_IF", "SYSDATE", "PERCENT", "TIES", "FILTER", "VISIBLE",
+            "PRINT", "STEP", "IN", "TO", "SHOW", "PROFILING", "PROFILE", "OFF", "ON", "WHAT_IF", "SYSDATE", "PERCENT", "TIES", "FILTER", "VISIBLE", "INTERACTIVE_MODE",
             "CURRENT_TIMESTAMP", "CURRENT_DATE", "CURRENT_TIME",
             "WAIT", "WAITFOR", "DELAY", "UNTIL",
             "WITH", "RECURSIVE", "HASH", "LOOP",

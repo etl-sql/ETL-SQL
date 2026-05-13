@@ -167,9 +167,9 @@ describe('ReplManager', () => {
         await execPromise;
 
         const written = fakeProcess.stdin.write.mock.calls.map((c: any) => JSON.parse(c[0]));
-        const runCmd = written.find((w: any) => w.action === 'run');
+        const runCmd = written.find((w: any) => w.Action === 'run');
         expect(runCmd).toBeDefined();
-        expect(runCmd!.script).toBe('SELECT 42;');
+        expect(runCmd!.Script).toBe('SELECT 42;');
     });
 
     // ── Message routing ────────────────────────────────────────────────────────
@@ -298,10 +298,10 @@ describe('ReplManager', () => {
         await exec2;
 
         const written = fakeProcess.stdin.write.mock.calls.map((c: any) => JSON.parse(c[0]));
-        const runs = written.filter((w: any) => w.action === 'run');
+        const runs = written.filter((w: any) => w.Action === 'run');
         expect(runs).toHaveLength(2);
-        expect(runs[0].script).toBe('SELECT 1;');
-        expect(runs[1].script).toBe('SELECT 2;');
+        expect(runs[0].Script).toBe('SELECT 1;');
+        expect(runs[1].Script).toBe('SELECT 2;');
     });
 
     // ── Stop / cleanup ─────────────────────────────────────────────────────────
@@ -314,7 +314,7 @@ describe('ReplManager', () => {
         mgr.stop();
 
         const written = fakeProcess.stdin.write.mock.calls.map((c: any) => JSON.parse(c[0]));
-        expect(written.some((w: any) => w.action === 'exit')).toBe(true);
+        expect(written.some((w: any) => w.Action === 'exit')).toBe(true);
         expect(fakeProcess.kill).toHaveBeenCalled();
     });
 
@@ -415,13 +415,13 @@ describe('ReplManager', () => {
         await execPromise;
 
         const written = fakeProcess.stdin.write.mock.calls.map((c: any) => JSON.parse(c[0]));
-        const runCmd = written.find((w: any) => w.action === 'run');
+        const runCmd = written.find((w: any) => w.Action === 'run');
         expect(runCmd).toBeDefined();
-        // Keys must be lowercase so C# case-insensitive deserialization can map them.
-        expect(Object.keys(runCmd)).toContain('action');
-        expect(Object.keys(runCmd)).toContain('script');
-        expect(runCmd.action).toBe('run');
-        expect(runCmd.script).toBe('SELECT 1;');
+        // Keys must be PascalCase matching C# properties.
+        expect(Object.keys(runCmd)).toContain('Action');
+        expect(Object.keys(runCmd)).toContain('Script');
+        expect(runCmd.Action).toBe('run');
+        expect(runCmd.Script).toBe('SELECT 1;');
     });
 
     it('[regression] stderr diagnostic lines do not block protocol processing', async () => {

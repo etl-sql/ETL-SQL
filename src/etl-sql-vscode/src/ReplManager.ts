@@ -6,7 +6,7 @@ export class ReplManager {
     private static _instance: ReplManager;
     private _process: cp.ChildProcess | undefined;
     private _isReady: boolean = false;
-    private _commandQueue: { script: string, scriptPath?: string, workspaceRoot?: string, resolve: (val: any) => void, reject: (err: any) => void }[] = [];
+    private _commandQueue: { script: string, scriptPath?: string, workspaceRoot?: string, interactiveMode?: boolean, resolve: (val: any) => void, reject: (err: any) => void }[] = [];
     private _currentHandler: ((msg: any) => void) | undefined;
     private _outputChannel: vscode.OutputChannel | undefined;
     private _currentSessionId: string | undefined;
@@ -14,6 +14,7 @@ export class ReplManager {
     private _onVariablesChange: vscode.EventEmitter<any[]> = new vscode.EventEmitter<any[]>();
     public readonly onVariablesChange: vscode.Event<any[]> = this._onVariablesChange.event;
     private _isRunning: boolean = false;
+    private _startPromise: Promise<void> | undefined;
 
     public static getInstance(): ReplManager {
         if (!ReplManager._instance) {
@@ -30,7 +31,7 @@ export class ReplManager {
         this._debugMode = debug;
     }
 
-    public async execute(script: string, exePath: string, args: string[], scriptPath?: string, workspaceRoot?: string): Promise<void> {
+    public async execute(script: string, exePath: string, args: string[], scriptPath?: string, workspaceRoot?: string, interactiveMode?: boolean): Promise<void> {
         // Extract sessionId from args for tracking
         let sessionId: string | undefined;
         const sessionIdx = args.indexOf('--session');
@@ -43,15 +44,34 @@ export class ReplManager {
             this.stop();
         }
 
-        if (!this._process) {
-            this._currentSessionId = sessionId;
-            await this._start(exePath, args);
-        }
+        return new Promise(async (resolve, reject) => {
+            this._commandQueue.push({ script, scriptPath, workspaceRoot, interactiveMode, resolve, reject });
+            
+            if (this._startPromise) {
+                await this._startPromise;
+            } else if (!this._process) {
+                this._currentSessionId = sessionId;
+                this._startPromise = this._start(exePath, args);
+                await this._startPromise;
+                this._startPromise = undefined;
+            }
 
-        return new Promise((resolve, reject) => {
-            this._commandQueue.push({ script, scriptPath, workspaceRoot, resolve, reject });
             this._processNext();
         });
+    }
+
+    public cancel() {
+        if (this._process) {
+            this._outputChannel?.appendLine('[REPL] Sending cancel request...');
+            this._process.stdin?.write(JSON.stringify({ Action: "cancel" }) + "\r\n");
+        }
+    }
+
+    public rollback() {
+        if (this._process) {
+            this._outputChannel?.appendLine('[REPL] Sending rollback request...');
+            this._process.stdin?.write(JSON.stringify({ Action: "run", Script: "ROLLBACK;" }) + "\r\n");
+        }
     }
     private async _start(exePath: string, args: string[]): Promise<void> {
         return new Promise((resolve, reject) => {
@@ -59,13 +79,14 @@ export class ReplManager {
             const startMsg = `Starting ETL-SQL REPL: "${absoluteExePath}" ui repl ${args.join(' ')}`;
             this._outputChannel?.appendLine(startMsg);
 
-            this._process = cp.spawn(absoluteExePath, ["ui", "repl", ...args], {
+            const child = cp.spawn(absoluteExePath, ["ui", "repl", ...args], {
                 env: { ...process.env, "FORCE_COLOR": "0" }
             });
+            this._process = child;
 
             // All JSON protocol messages (status, message, results, done) come on stdout.
             let buffer = '';
-            this._process.stdout?.on('data', (data) => {
+            child.stdout?.on('data', (data) => {
                 buffer += data.toString();
                 const lines = buffer.split('\n');
                 buffer = lines.pop() || '';
@@ -92,26 +113,30 @@ export class ReplManager {
             });
 
             // Stderr is raw diagnostics only — log to output channel, never parse as protocol.
-            this._process.stderr?.on('data', (data) => {
+            child.stderr?.on('data', (data) => {
                 const text = data.toString().trimEnd();
                 if (text) {
                     this._outputChannel?.appendLine(text);
                 }
             });
 
-            this._process.on('close', (code) => {
+            child.on('close', (code) => {
                 this._outputChannel?.appendLine(`REPL process exited (code ${code}).`);
-                this._process = undefined;
-                this._isReady = false;
-                // Reject any in-flight command so the caller's promise doesn't hang.
-                if (this._currentHandler) {
-                    this._currentHandler({ type: 'done', exitCode: code ?? 1 });
+                if (this._process === child) {
+                    this._process = undefined;
+                    this._isReady = false;
+                    this._startPromise = undefined;
+                    
+                    // Reject any in-flight command so the caller's promise doesn't hang.
+                    if (this._currentHandler) {
+                        this._currentHandler({ type: 'done', exitCode: code ?? 1 });
+                    }
+                    // Drain the queue — no process to run them.
+                    for (const cmd of this._commandQueue) {
+                        cmd.reject(new Error('REPL process exited unexpectedly'));
+                    }
+                    this._commandQueue = [];
                 }
-                // Drain the queue — no process to run them.
-                for (const cmd of this._commandQueue) {
-                    cmd.reject(new Error('REPL process exited unexpectedly'));
-                }
-                this._commandQueue = [];
             });
         });
     }
@@ -151,10 +176,27 @@ export class ReplManager {
         };
 
         this._outputChannel?.appendLine(`[PROCESS] Running script (${cmd.script.length} bytes)...`);
-        this._process?.stdin?.write(JSON.stringify({ action: "run", script: cmd.script, scriptPath: cmd.scriptPath, workspaceRoot: cmd.workspaceRoot }) + "\n");
+        const payload = JSON.stringify({ 
+            Action: "run", 
+            Script: cmd.script, 
+            ScriptPath: cmd.scriptPath, 
+            WorkspaceRoot: cmd.workspaceRoot,
+            InteractiveMode: cmd.interactiveMode 
+        });
+        this._outputChannel?.appendLine(`[REPL] STDIN write: ${payload}`);
+        const ok = this._process?.stdin?.write(payload + "\r\n", 'utf8');
+        this._outputChannel?.appendLine(`[REPL] STDIN ok: ${ok}`);
     }
 
     private _handleMessage(msg: any) {
+        if (msg.type === 'pong') {
+            this._outputChannel?.appendLine(`[REPL] Heartbeat: PONG received.`);
+            return;
+        }
+        if (msg.type === 'status' && msg.status === 'ready') {
+            this._outputChannel?.appendLine(`[REPL] Engine ready. Sending ping...`);
+            this._process?.stdin?.write(JSON.stringify({ Action: "ping" }) + "\r\n", 'utf8');
+        }
         // Log text messages to the output channel (once, here).
         if (msg.type === 'message') {
             const prefix = msg.level === 'error' ? '[ERROR] ' : (msg.level === 'warning' ? '[WARN] ' : '');
@@ -185,11 +227,14 @@ export class ReplManager {
         this._commandQueue = [];
         this._currentHandler = undefined;
         this._isReady = false;
+        this._startPromise = undefined;
 
-        if (this._process) {
-            this._process.stdin?.write(JSON.stringify({ action: "exit" }) + "\n");
-            this._process.kill();
-            this._process = undefined;
+        const p = this._process;
+        this._process = undefined;
+
+        if (p) {
+            p.stdin?.write(JSON.stringify({ Action: "exit" }) + "\r\n");
+            p.kill();
         }
     }
     

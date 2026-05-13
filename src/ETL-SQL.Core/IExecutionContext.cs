@@ -76,6 +76,7 @@ namespace ETL_SQL.Core
         int TranCount { get; }
         /// <summary>Whether to automatically rollback open transactions when a script finishes (Zero-Trust safety).</summary>
         bool AutoRollbackOnFinish { get; set; }
+        Task RollbackAllTransactions();
     }
 
     public interface IDockerContext
@@ -223,7 +224,7 @@ namespace ETL_SQL.Core
     {
         Functions.IFunctionRegistry FunctionRegistry { get; }
         Interfaces.ILanguageHelpRegistry LanguageHelp { get; }
-        Task EvaluateStatement(Statement statement);
+        Task EvaluateStatement(Statement statement, System.Threading.CancellationToken cancellationToken = default);
         Task Evaluate(Script script, System.Threading.CancellationToken cancellationToken = default);
         IAsyncEnumerable<DataTable> EvaluateSelect(SelectStatement stmt);
         Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args);
@@ -296,6 +297,12 @@ namespace ETL_SQL.Core
         IReportContext ReportContext { get; }
         ITelemetryContext Telemetry { get; }
         IDatasetRegistry? DatasetRegistry { get; }
+        
+        /// <summary>
+        /// Whether the engine is in interactive mode (e.g. Notebooks/REPL).
+        /// Enables global idempotency for object creation and immediate visual emission.
+        /// </summary>
+        bool InteractiveMode { get; set; }
         
         IEvaluationContext EvaluationContext => this;
         IDataContext DataContext => this;

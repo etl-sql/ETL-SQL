@@ -30,6 +30,8 @@ namespace ETL_SQL.TUI.UI
         private readonly CliContext _ctx;
         private Evaluator? _evaluator;
         private ETL_SQL.Data.DataTable? _lastResult;
+        private CancellationTokenSource? _currentCts;
+        private readonly object _execLock = new();
 
         private readonly IServiceProvider _serviceProvider;
         private readonly JsonSerializerOptions _deserializeOptions =
@@ -74,30 +76,99 @@ namespace ETL_SQL.TUI.UI
                     WriteJson(new { type = "message", level, text = msg });
                 };
 
+                _evaluator.OnVisualCreated = (stmt) =>
+                {
+                    WriteJson(new { type = "visual", data = stmt });
+                };
+
                 // Signal ready — the IDE will now send run commands on stdin.
-                WriteJson(new { type = "status", status = "ready", buildId = "DIAGNOSTIC-2026-04-10-02-00" });
+                WriteJson(new { 
+                    type = "status", 
+                    status = "ready", 
+                    buildId = "DIAGNOSTIC-2026-04-10-03-00",
+                    pid = System.Diagnostics.Process.GetCurrentProcess().Id
+                });
+
+                Task? activeExecutionTask = null;
 
                 while (true)
                 {
-                    var line = await Console.In.ReadLineAsync();
-                    if (line == null) break;                  // stdin closed
+                    Console.Error.WriteLine("[TRACE] Engine about to ReadLine (sync)...");
+                    var line = Console.In.ReadLine();
+                    Console.Error.WriteLine($"[TRACE] Engine ReadLine returned ({line?.Length ?? -1} chars): {line ?? "NULL"}");
+                    
+                    if (line == null) 
+                    {
+                        Console.Error.WriteLine("[TRACE] stdin reached end of stream (null).");
+                        break;
+                    }
+
                     if (string.IsNullOrWhiteSpace(line)) continue;
+                    
+                    Console.Error.WriteLine($"[TRACE] Received REPL line ({line.Length} chars): {line}");
 
                     try
                     {
                         var cmd = JsonSerializer.Deserialize<ReplCommand>(line, _deserializeOptions);
                         if (cmd == null) continue;
 
-                        if (cmd.Action == "exit") break;
-                        if (cmd.Action == "run")
+                        if (cmd.Action == "ping")
                         {
+                            WriteJson(new { type = "pong" });
+                            continue;
+                        }
+
+                        if (cmd.Action == "exit")
+                        {
+                            lock (_execLock) _currentCts?.Cancel();
+                            break;
+                        }
+
+                        if (cmd.Action == "cancel")
+                        {
+                            lock (_execLock)
+                            {
+                                if (_currentCts != null)
+                                {
+                                    _currentCts.Cancel();
+                                    WriteJson(new { type = "message", level = "warning", text = "Execution cancellation requested." });
+                                }
+                                else
+                                {
+                                    WriteJson(new { type = "message", level = "info", text = "No active execution to cancel." });
+                                }
+                            }
+                        }
+                        else if (cmd.Action == "rollback")
+                        {
+                            if (_evaluator != null)
+                            {
+                                await _evaluator.RollbackAllTransactions();
+                                WriteJson(new { type = "message", level = "warning", text = "All active transactions rolled back." });
+                            }
+                        }
+                        else if (cmd.Action == "ping")
+                        {
+                            WriteJson(new { type = "pong" });
+                            continue;
+                        }
+                        else if (cmd.Action == "run")
+                        {
+                            if (activeExecutionTask != null && !activeExecutionTask.IsCompleted)
+                            {
+                                WriteJson(new { type = "message", level = "warning", text = "Another script is already running. Please wait or cancel." });
+                                continue;
+                            }
+
                             if (cmd.WorkspaceRoot != null)
                                 _evaluator!.WorkingDirectory = cmd.WorkspaceRoot;
                             if (cmd.ScriptPath != null)
                                 _evaluator!.CurrentScriptPath = cmd.ScriptPath;
-                            await ExecuteScript(cmd.Script ?? "");
+                            
+                            Console.Error.WriteLine($"[TRACE] Starting execution of script ({cmd.Script?.Length} chars)");
+                            activeExecutionTask = ExecuteScript(cmd.Script ?? "");
                         }
-                        if (cmd.Action == "export")
+                        else if (cmd.Action == "export")
                         {
                             await HandleExport(cmd);
                         }
@@ -167,6 +238,12 @@ namespace ETL_SQL.TUI.UI
 
                 // Initialize telemetry timing
                 var execTime = Stopwatch.StartNew();
+                
+                lock (_execLock)
+                {
+                    _currentCts = new CancellationTokenSource();
+                }
+                
                 using var treeCts = new CancellationTokenSource();
 
                 // Start heartbeat for real-time graphical progress (10Hz)
@@ -190,7 +267,9 @@ namespace ETL_SQL.TUI.UI
 
                 try 
                 {
-                    await _evaluator.Evaluate(script);
+                    Console.Error.WriteLine("[TRACE] Evaluator.Evaluate START");
+                    await _evaluator.Evaluate(script, _currentCts.Token);
+                    Console.Error.WriteLine("[TRACE] Evaluator.Evaluate END");
                 }
                 finally
                 {
@@ -201,6 +280,12 @@ namespace ETL_SQL.TUI.UI
                     _evaluator.LastLexTimeMs = lexTime.ElapsedMilliseconds;
                     _evaluator.LastParseTimeMs = parseTime.ElapsedMilliseconds;
                     _evaluator.OnResultSet = originalOnResultSet;
+                    
+                    lock (_execLock)
+                    {
+                        _currentCts?.Dispose();
+                        _currentCts = null;
+                    }
                 }
 
                 // Final status ensures we see the completed nodes
@@ -312,14 +397,18 @@ namespace ETL_SQL.TUI.UI
             return value;
         }
 
+        private static readonly object _writeLock = new();
         /// <summary>Serializes <paramref name="obj"/> as a single JSON line on stdout.</summary>
         private static void WriteJson(object obj)
         {
-            Console.WriteLine(JsonSerializer.Serialize(obj));
-            Console.Out.Flush();
+            lock (_writeLock)
+            {
+                Console.WriteLine(JsonSerializer.Serialize(obj));
+                Console.Out.Flush();
+            }
         }
 
-        private class ReplCommand
+        public class ReplCommand
         {
             public string Action { get; set; } = "run";
             public string? Script { get; set; }
@@ -327,6 +416,7 @@ namespace ETL_SQL.TUI.UI
             public string? Format { get; set; }
             public string? ScriptPath { get; set; }
             public string? WorkspaceRoot { get; set; }
+            public bool InteractiveMode { get; set; }
         }
     }
 }

@@ -24,7 +24,8 @@ namespace ETL_SQL.Core
         TempTableSpill,
         MaxLastResultRows,
         MaxGenerateRows,
-        MaxInternalOperations
+        MaxInternalOperations,
+        InteractiveMode
 
     }
 

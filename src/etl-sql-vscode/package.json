@@ -18,6 +18,17 @@
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
+    "notebooks": [
+      {
+        "type": "etl-sql-notebook",
+        "displayName": "ETL-SQL Notebook",
+        "selector": [
+          {
+            "filenamePattern": "*.etlnb"
+          }
+        ]
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -188,6 +199,16 @@
       {
         "command": "etlsql.exportText",
         "title": "ETL-SQL: Export Text"
+      },
+      {
+        "command": "etlsql.rollbackTransactions",
+        "title": "ETL-SQL: Rollback All Transactions",
+        "icon": "$(history)"
+      },
+      {
+        "command": "etlsql.showWelcome",
+        "title": "ETL-SQL: Show Welcome Page",
+        "category": "ETL-SQL"
       }
     ],
     "keybindings": [

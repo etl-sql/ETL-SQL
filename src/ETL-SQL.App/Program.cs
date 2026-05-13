@@ -30,6 +30,10 @@ namespace ETL_SQL
         /// <returns>Exit code (0 for success, non-zero for failure).</returns>
         static async Task<int> Main(string[] args)
         {
+            // Ensure consistent encoding for IDE communication
+            Console.InputEncoding = System.Text.Encoding.UTF8;
+            Console.OutputEncoding = System.Text.Encoding.UTF8;
+
             try
             {
                 // Diagnostic breadcrumb for IDEs

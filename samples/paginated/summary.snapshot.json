@@ -1,0 +1,179 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\paginated\\summary.rptsql",
+  "builtAt": "2026-05-12T22:13:50.2904947Z",
+  "title": "Order Summary",
+  "visuals": [
+    {
+      "name": "RegionSales",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "Region",
+        "Sales",
+        "Count"
+      ],
+      "rows": [
+        [
+          "East",
+          "1200",
+          "45"
+        ],
+        [
+          "West",
+          "1500",
+          "52"
+        ],
+        [
+          "North",
+          "800",
+          "31"
+        ],
+        [
+          "South",
+          "1100",
+          "38"
+        ]
+      ],
+      "options": {},
+      "error": null,
+      "actions": [
+        {
+          "type": "DRILL_REPORT",
+          "trigger": "ON_CLICK",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": null,
+          "valueExpression": null,
+          "scriptPath": null,
+          "parameters": {
+            "@TargetRegion": "Region"
+          },
+          "targetReport": "detail.rptsql",
+          "parameterColumns": {
+            "@TargetRegion": "Region"
+          },
+          "literalParameters": {}
+        }
+      ],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "Main",
+      "structure": "A",
+      "slotMap": {
+        "A": "RegionSales"
+      },
+      "styles": {
+        "PADDING": "20px"
+      }
+    }
+  ],
+  "datasets": [],
+  "parameters": {
+    "@Region": "All"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 4,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[9901b92f] [SELECT] Executing SelectStatement. Session: 9901b92f",
+      "color": "white",
+      "timestamp": "2026-05-12T22:13:50.2586351Z"
+    },
+    {
+      "message": "[9901b92f] Visual \u0027RegionSales\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T22:13:50.2819249Z"
+    },
+    {
+      "message": "[9901b92f] Page \u0027Main\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-12T22:13:50.284898Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "de9b08af-fb1a-4da7-b1d4-cb4b2a976b78",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 39.8479,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "108ff7df-61f1-4b61-b363-4cdbd90d25bd",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.3475,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "aaa1803b-f177-49d4-b3f0-a23de7179fc7",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.8138,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "6e931335-e551-498b-a214-4cdb6f75e8b9",
+          "name": "Select",
+          "status": "Completed",
+          "rowsProcessed": 12,
+          "durationMs": 23.0543,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 520.5102735715246,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "603d2703-b165-4d22-a078-2c078475719b",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9783,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "63e2edde-f4a7-4184-a595-5e409962999b",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9627,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

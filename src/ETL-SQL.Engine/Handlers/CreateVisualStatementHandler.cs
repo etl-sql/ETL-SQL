@@ -37,7 +37,8 @@ namespace ETL_SQL.Engine.Handlers
             }
 
             // Register / overwrite visual definition
-            if (stmt.Mode == ObjectCreationMode.Create && context.ReportContext.VisualDefinitions.ContainsKey(stmt.Name))
+            bool alreadyExists = context.ReportContext.VisualDefinitions.ContainsKey(stmt.Name);
+            if (stmt.Mode == ObjectCreationMode.Create && alreadyExists && !context.InteractiveMode)
             {
                  throw new ExecutionException($"Visual '{stmt.Name}' already exists. Use CREATE OR ALTER or DROP VISUAL first.", null, stmt.Line, stmt.Column);
             }
@@ -45,7 +46,12 @@ namespace ETL_SQL.Engine.Handlers
             context.ReportContext.VisualDefinitions[stmt.Name] = stmt;
 
             _logger.Debug("Visual '{VisualName}' ({VisualType}) registered.", stmt.Name, stmt.VisualType);
-            context.Log($"Visual '{stmt.Name}' {(stmt.Mode == ObjectCreationMode.CreateOrAlter ? "updated" : "created")}.");
+            context.Log($"Visual '{stmt.Name}' {(alreadyExists ? "updated" : "created")}.");
+
+            if (context.InteractiveMode && context is Evaluator eval)
+            {
+                eval.OnVisualCreated?.Invoke(stmt);
+            }
 
             return Task.CompletedTask;
         }

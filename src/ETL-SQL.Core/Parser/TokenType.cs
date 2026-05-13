@@ -58,6 +58,7 @@ namespace ETL_SQL.Core.Parser
         UNTIL,
         CONFIG,
         WEEK_START_DAY,
+        INTERACTIVE_MODE,
         SCRIPT_HASH_POLICY,
         LF, CR, CRLF, TAB,
         

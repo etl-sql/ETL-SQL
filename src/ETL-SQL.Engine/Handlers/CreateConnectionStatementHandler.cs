@@ -27,15 +27,19 @@ namespace ETL_SQL.Engine.Handlers
             var stmt = (CreateConnectionStatement)statement;
             
             bool alreadyExists = context.Connections.TryGetValue(stmt.ConnectionName, out var existingDataSource);
+            bool isInteractive = context.InteractiveMode;
 
-            if (stmt.Mode == ObjectCreationMode.Create && alreadyExists)
+            if (stmt.Mode == ObjectCreationMode.Create && alreadyExists && !isInteractive)
                 throw new ExecutionException($"Connection '{stmt.ConnectionName}' already exists. Use ALTER CONNECTION to modify it.");
+
+            // In Interactive Mode, force CreateOrAlter behavior if it already exists
+            var effectiveMode = (isInteractive && alreadyExists) ? ObjectCreationMode.CreateOrAlter : stmt.Mode;
 
             string? connectionType = stmt.ConnectionType;
             string? target = null;
             Dictionary<string, string>? options = null;
 
-            if (stmt.Mode == ObjectCreationMode.CreateOrAlter && alreadyExists)
+            if (effectiveMode == ObjectCreationMode.CreateOrAlter && alreadyExists)
             {
                 // CREATE OR ALTER with existing connection — patches and preserves options
                 if (existingDataSource == null) throw new ExecutionException($"Connection '{stmt.ConnectionName}' exists but its data source is null.");
@@ -159,19 +163,30 @@ namespace ETL_SQL.Engine.Handlers
             context.Connections[stmt.ConnectionName] = ds;
             _logger.WriteLine($"Connection {stmt.ConnectionName} {(alreadyExists ? "altered" : "created")}.", ConsoleColor.Green);
 
+            Console.Error.WriteLine("[TRACE] CREATE CONNECTION: Fetching columns...");
             // Generate a preview result for the Result Panel
+            context.CancellationToken.ThrowIfCancellationRequested();
             var preview = new DataTable();
             var cols = (await ds.GetColumnsAsync()).ToList();
+            Console.Error.WriteLine($"[TRACE] CREATE CONNECTION: Found {cols.Count} columns.");
             if (cols.Any())
             {
                 preview.SetColumns(cols.Take(10));
                 try
                 {
+                    Console.Error.WriteLine("[TRACE] CREATE CONNECTION: Reading sample batches...");
                     var sampleBatches = ds.ReadBatches(10).Take(1);
-                    await foreach (var b in sampleBatches)
+                    await foreach (var b in sampleBatches.WithCancellation(context.CancellationToken))
                     {
-                        foreach (var r in b.Rows.Take(10)) await preview.AddRowAsync(r);
+                        Console.Error.WriteLine($"[TRACE] CREATE CONNECTION: Got batch with {b.Rows.Count} rows.");
+                        context.CancellationToken.ThrowIfCancellationRequested();
+                        foreach (var r in b.Rows.Take(10)) 
+                        {
+                            context.CancellationToken.ThrowIfCancellationRequested();
+                            await preview.AddRowAsync(r);
+                        }
                     }
+                    Console.Error.WriteLine("[TRACE] CREATE CONNECTION: Preview complete.");
                 }
                 catch (Exception ex)
                 {

@@ -237,6 +237,9 @@ namespace ETL_SQL.Engine
         
         /// <summary>Event raised when a new result set is produced.</summary>
         public Action<DataTable>? OnResultSet { get; set; }
+
+        /// <summary>Event raised when a new visual is created (Interactive Mode).</summary>
+        public Action<CreateVisualStatement>? OnVisualCreated { get; set; }
         
         private readonly object _lastResultSetsLock = new();
         private readonly object _messagesLock = new();
@@ -264,6 +267,9 @@ namespace ETL_SQL.Engine
 
         /// <summary>Whether to reuse execution nodes for identical statements in loops to keep the pipeline view clean.</summary>
         public bool ReuseLoopNodes { get; set; } = true;
+
+        /// <summary>Whether the engine is in interactive mode (e.g. Notebooks/REPL).</summary>
+        public bool InteractiveMode { get; set; } = false;
         
         public IServiceProvider ServiceProvider => _serviceProvider;
 
@@ -695,7 +701,7 @@ namespace ETL_SQL.Engine
                         foreach (var statement in batch)
                         {
                             cancellationToken.ThrowIfCancellationRequested();
-                            await EvaluateStatement(statement);
+                            await EvaluateStatement(statement, cancellationToken);
                         }
                         if (hasBatches) Log($"Batch {batchNum} completed.", ConsoleColor.DarkGray);
                     }
@@ -729,7 +735,7 @@ namespace ETL_SQL.Engine
                 if (TranCount > 0 && AutoRollbackOnFinish)
                 {
                     _logger.Warning("Script execution ended with {Count} open transactions. Performing emergency rollback.", TranCount);
-                    await RollbackAll();
+                    await RollbackAllTransactions();
                 }
             }
         }
@@ -782,8 +788,11 @@ namespace ETL_SQL.Engine
             }
         }
 
-        public async Task EvaluateStatement(Statement statement)
+        public async Task EvaluateStatement(Statement statement, CancellationToken cancellationToken = default)
         {
+            CancellationToken = cancellationToken;
+            cancellationToken.ThrowIfCancellationRequested();
+
             // Update PreviousErrorNumber and reset LastError for the new statement
             // We skip this for internal/structural nodes that don't count as "atomic" statements for @@ERROR purposes
             if (statement is not NoOpStatement && statement is not BlockStatement)
@@ -1066,7 +1075,7 @@ namespace ETL_SQL.Engine
         public async Task BeginTransaction() => await _transactionManager.BeginTransaction(_variableScopeManager.Variables, _connections);
         public async Task CommitTransaction() => await _transactionManager.CommitTransaction();
         public async Task RollbackTransaction(string? name = null) => await _transactionManager.RollbackTransaction(_variableScopeManager.Variables, _connections);
-        public async Task RollbackAll() => await _transactionManager.RollbackAll(_variableScopeManager.Variables, _connections);
+        public async Task RollbackAllTransactions() => await _transactionManager.RollbackAll(_variableScopeManager.Variables, _connections);
 
         public void Log(string message, ConsoleColor color = ConsoleColor.White, bool forwardToLogger = true)
         {
