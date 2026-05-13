@@ -1,0 +1,152 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Trigger on any version tag like v0.7.0
+
+jobs:
+  # 1. Validation Job - ensures the release is stable
+  validate:
+    name: Validate & Test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+      - name: Build & Run Smoke Tests
+        shell: pwsh
+        run: |
+          dotnet build ETL-SQL.slnx --configuration Release
+          .\scripts\test-lane.ps1 -Lane smoke -Configuration Release -NoRestore -NoBuild
+
+  # 2. Windows Build (ZIP + MSI + VSIX)
+  build-windows:
+    name: Build Windows (MSI & ZIP)
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Build & Publish
+        shell: pwsh
+        run: |
+          $Version = $github.ref_name.TrimStart('v')
+          $env:ETL_SQL_VERSION = $Version
+          .\scripts\publish_release.ps1
+      
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          # WiX is pre-installed on windows-latest runners
+          .\scripts\build_msi.ps1
+          # The MSI script puts it in src/ETL-SQL.Installer
+          # We want to move it to the release folder
+          $Version = $github.ref_name.TrimStart('v')
+          Move-Item "src/ETL-SQL.Installer/ETL-SQL-Enterprise-v$Version.msi" "release/ETL-SQL-v$Version-x64-Setup.msi"
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: release/
+
+  # 3. Linux Build (ZIP + DEB)
+  build-linux:
+    name: Build Linux (DEB & ZIP)
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+      
+      - name: Publish Binaries
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          mkdir -p release/linux-x64
+          # Publish core projects
+          dotnet publish src/ETL-SQL.App/ETL-SQL.App.csproj -c Release -r linux-x64 --self-contained true -p:PublishSingleFile=true -o release/linux-x64/bin
+          # Build .deb
+          chmod +x scripts/build_linux_packages.sh
+          ./scripts/build_linux_packages.sh $VERSION
+          # Move .deb to release root
+          mv etl-sql_${VERSION}_amd64.deb release/
+          # Create zip
+          cd release/linux-x64 && zip -r ../ETL-SQL-v${VERSION}-linux-x64.zip *
+
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: release/*.{zip,deb}
+
+  # 4. macOS Build (ZIP + DMG)
+  build-macos:
+    name: Build macOS (DMG & ZIP)
+    needs: validate
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+      
+      - name: Publish Binaries
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          mkdir -p release/osx-x64
+          dotnet publish src/ETL-SQL.App/ETL-SQL.App.csproj -c Release -r osx-x64 --self-contained true -p:PublishSingleFile=true -o release/osx-x64/bin
+          # Build .dmg
+          chmod +x scripts/build_mac_dmg.sh
+          ./scripts/build_mac_dmg.sh $VERSION
+          # Move .dmg to release root
+          mv ETL-SQL_v${VERSION}.dmg release/
+          # Create zip
+          cd release/osx-x64 && zip -r ../ETL-SQL-v${VERSION}-osx-x64.zip *
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-macos
+          path: release/*.{zip,dmg}
+
+  # 5. Create GitHub Release
+  create-release:
+    name: Create GitHub Release
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-artifacts/
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            all-artifacts/*.zip
+            all-artifacts/*.msi
+            all-artifacts/*.deb
+            all-artifacts/*.dmg
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
