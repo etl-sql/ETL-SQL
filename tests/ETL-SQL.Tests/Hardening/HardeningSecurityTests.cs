@@ -159,14 +159,18 @@ namespace ETL_SQL.Tests.Hardening.Hardening
         [Fact]
         public async Task TestRecursiveDepth_Throws()
         {
-            var securityService = Program.ServiceProvider.GetRequiredService<SecurityService>();
+            var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();
+            var securityService = eval.SecurityService;
+            
             var originalTestMode = securityService.IsTestMode;
             securityService.IsTestMode = false;
+            var originalMax = securityService.MaxRecursiveDepth;
+            securityService.MaxRecursiveDepth = 5;
 
             try
             {
-                var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();
                 eval.CurrentRecursiveDepth = 6;
+                eval.AllowDeepRecursion = false;
                 
                 var ex = Assert.Throws<SecurityException>(() => eval.IncrementOperationCount());
                 Assert.Contains("Recursive operation depth (6) exceeds the safety limit of 5", ex.Message);
@@ -174,6 +178,7 @@ namespace ETL_SQL.Tests.Hardening.Hardening
             finally
             {
                 securityService.IsTestMode = originalTestMode;
+                securityService.MaxRecursiveDepth = originalMax;
             }
         }
     }

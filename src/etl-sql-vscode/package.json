@@ -330,7 +330,7 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "npm run sync-assets && tsc -p ./",
-    "sync-assets": "powershell -ExecutionPolicy Bypass -NoProfile -File ../../scripts/sync-assets.ps1",
+    "sync-assets": "node ../../scripts/sync-assets.js",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src --ext ts",

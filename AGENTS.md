@@ -260,8 +260,8 @@ Files copied under these host folders are generated sync outputs and must not be
 When changing report runtime JavaScript, CSS, themes, or shared browser dependencies:
 
 1. Edit the canonical file in `src/ETL-SQL.ReportRuntime/Resources/Shared/`.
-2. Run `.\scripts\sync-assets.ps1`.
-3. Run `.\scripts\sync-assets.ps1 -Check`.
+2. Run `node .\scripts\sync-assets.js`.
+3. Run `node .\scripts\sync-assets.js -Check`.
 
 Do not "fix" drift by editing generated host copies. The check step compares host copies to the canonical shared source and will fail if they diverge.
 

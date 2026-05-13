@@ -21,6 +21,15 @@ namespace ETL_SQL.Tests.Core
 
             var xlsx = Path.Combine(dir, "test_employees.xlsx");
             if (!File.Exists(xlsx)) GenerateEmployeesXlsx(xlsx);
+
+            var largeCsv = Path.Combine(dir, "test_large_employees.csv");
+            if (!File.Exists(largeCsv)) GenerateLargeEmployeesCsv(largeCsv);
+
+            var json = Path.Combine(dir, "test_employees.json");
+            if (!File.Exists(json)) GenerateEmployeesJson(json);
+
+            var xml = Path.Combine(dir, "test_products.xml");
+            if (!File.Exists(xml)) GenerateProductsXml(xml);
         }
 
         /// <summary>
@@ -140,6 +149,29 @@ namespace ETL_SQL.Tests.Core
                 "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>" +
                 "<cellXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\" xfId=\"0\"/></cellXfs>" +
                 "</styleSheet>");
+        }
+
+        private static void GenerateLargeEmployeesCsv(string path)
+        {
+            var sb = new StringBuilder();
+            sb.AppendLine("ID,Name,Department,Salary,HireDate");
+            for (int i = 1; i <= 10000; i++)
+            {
+                sb.AppendLine($"{i},Employee {i},Engineering,{50000 + (i % 50000)},2020-01-01");
+            }
+            File.WriteAllText(path, sb.ToString());
+        }
+
+        private static void GenerateEmployeesJson(string path)
+        {
+            var json = "[{\"id\":1,\"name\":\"Alice\",\"department\":\"Engineering\",\"salary\":95000},{\"id\":2,\"name\":\"Bob\",\"department\":\"Marketing\",\"salary\":72000},{\"id\":3,\"name\":\"Charlie\",\"department\":\"Engineering\",\"salary\":88000},{\"id\":4,\"name\":\"Diana\",\"department\":\"Finance\",\"salary\":81000},{\"id\":5,\"name\":\"Eve\",\"department\":\"Marketing\",\"salary\":67000},{\"id\":6,\"name\":\"Frank\",\"department\":\"Sales\",\"salary\":55000},{\"id\":7,\"name\":\"Grace\",\"department\":\"Engineering\",\"salary\":91000},{\"id\":8,\"name\":\"Hank\",\"department\":\"Sales\",\"salary\":58000},{\"id\":9,\"name\":\"Ivy\",\"department\":\"Finance\",\"salary\":79000},{\"id\":10,\"name\":\"Jack\",\"department\":\"Sales\",\"salary\":52000}]";
+            File.WriteAllText(path, json);
+        }
+
+        private static void GenerateProductsXml(string path)
+        {
+            var xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><products><product><id>1</id><name>Laptop</name><category>Electronics</category><price>1200</price></product><product><id>2</id><name>Mouse</name><category>Electronics</category><price>25</price></product></products>";
+            File.WriteAllText(path, xml);
         }
     }
 }

@@ -169,6 +169,7 @@ namespace ETL_SQL.TUI.UI
 
                             Console.Error.WriteLine($"[TRACE] Starting execution of script ({cmd.Script?.Length} chars) - Interactive: {cmd.InteractiveMode}");
                             activeExecutionTask = ExecuteScript(cmd.Script ?? "");
+                            await activeExecutionTask;
                         }
                         else if (cmd.Action == "export")
                         {

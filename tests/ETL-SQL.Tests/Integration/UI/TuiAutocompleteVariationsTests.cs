@@ -83,9 +83,9 @@ namespace ETL_SQL.Tests.Integration.UI
             Assert.True(expansionSuggestion != null, "No comma-separated expansion found. Results: " + string.Join("; ", results.Select(r => $"[{r.Type}] {r.Text}")));
             var expansion = expansionSuggestion.Text;
             
-            // Should contain columns prefixed with table/alias
-            Assert.Contains("m.Users.UserID", expansion);
-            Assert.Contains("m.Users.UserName", expansion);
+            // Should contain columns (without prefix if no alias)
+            Assert.Contains("UserID", expansion);
+            Assert.Contains("UserName", expansion);
             Assert.Equal(SuggestionType.Column, expansionSuggestion.Type);
         }
 

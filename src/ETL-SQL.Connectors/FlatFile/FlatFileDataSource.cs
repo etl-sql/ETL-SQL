@@ -552,7 +552,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
                 using (var writer = new StreamWriter(tempFile, append, _encoding))
                 {
-                    bool headersWritten = append && System.IO.File.Exists(_filePath);
+                    bool headersWritten = append && System.IO.File.Exists(_filePath) && new System.IO.FileInfo(_filePath).Length > 0;
                     int totalRows = 0;
 
                     await foreach (var batch in batches)
@@ -714,7 +714,7 @@ namespace ETL_SQL.Connectors.FlatFile
 
             if (System.IO.File.Exists(_filePath))
             {
-                System.IO.File.WriteAllText(_filePath, string.Empty);
+                System.IO.File.Delete(_filePath);
             }
             await Task.CompletedTask;
         }

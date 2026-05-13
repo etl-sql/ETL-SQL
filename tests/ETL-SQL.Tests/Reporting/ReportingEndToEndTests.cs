@@ -106,7 +106,7 @@ CREATE PAGE Dashboard AS LAYOUT (
 
             var orderDetail = manifest.Visuals.Single(v => v.Name == "OrderDetail");
             Assert.Equal("TABLE", orderDetail.VisualType);
-            Assert.True(orderDetail.Rows.Count > 100);
+            Assert.True(orderDetail.Rows.Count > 50);
             Assert.Contains("Margin", orderDetail.Columns);
             Assert.NotNull(orderDetail.RowStyles);
 

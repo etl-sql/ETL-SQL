@@ -45,9 +45,8 @@ namespace ETL_SQL.Core.Parser
             }
             else
             {
-                // Fallback to last block if no cursor info
-                var blocks = Regex.Split(script, @"\bGO\b|;|(?:\r?\n){2,}", RegexOptions.IgnoreCase);
-                activeBlock = blocks.LastOrDefault() ?? "";
+                // Fallback to whole script if no cursor info (e.g. in tests or for global highlighting)
+                activeBlock = script;
             }
             
             // Find FROM/JOIN and the tables following them until next major keyword or separator
