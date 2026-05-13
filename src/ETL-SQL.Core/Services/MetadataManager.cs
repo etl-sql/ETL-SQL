@@ -95,15 +95,28 @@ namespace ETL_SQL.Core.Services
             }
         }
 
+        private string GetBasePath(string uri)
+        {
+            var hashIndex = uri.IndexOf('#');
+            return hashIndex > -1 ? uri.Substring(0, hashIndex) : uri;
+        }
+
         public List<ConnectionInfo> GetConnections(string? uri = null)
         {
             var result = _globalConnections.Values.ToList();
             var normalizedUri = NormalizeUri(uri);
-            if (!string.IsNullOrEmpty(uri) && _docConnections.TryGetValue(normalizedUri, out var docs))
+            if (!string.IsNullOrEmpty(normalizedUri))
             {
-                lock (docs)
+                var basePath = GetBasePath(normalizedUri);
+                foreach (var kvp in _docConnections)
                 {
-                    result.AddRange(docs);
+                    if (GetBasePath(kvp.Key) == basePath)
+                    {
+                        lock (kvp.Value)
+                        {
+                            result.AddRange(kvp.Value);
+                        }
+                    }
                 }
             }
             return result;
@@ -112,12 +125,33 @@ namespace ETL_SQL.Core.Services
         private ConnectionInfo? GetConnection(string connectionName, string? uri = null)
         {
             var normalizedUri = NormalizeUri(uri);
-            if (!string.IsNullOrEmpty(uri) && _docConnections.TryGetValue(normalizedUri, out var docs))
+            if (!string.IsNullOrEmpty(normalizedUri))
             {
-                lock (docs)
+                // Exact match first
+                if (_docConnections.TryGetValue(normalizedUri, out var docs))
                 {
-                    var found = docs.FirstOrDefault(c => c.Name.Equals(connectionName, StringComparison.OrdinalIgnoreCase));
-                    if (found != null) return found;
+                    lock (docs)
+                    {
+                        var found = docs.FirstOrDefault(c => c.Name.Equals(connectionName, StringComparison.OrdinalIgnoreCase));
+                        if (found != null) return found;
+                    }
+                }
+                
+                // Then match across same notebook
+                var basePath = GetBasePath(normalizedUri);
+                if (basePath != normalizedUri)
+                {
+                    foreach (var kvp in _docConnections)
+                    {
+                        if (GetBasePath(kvp.Key) == basePath)
+                        {
+                            lock (kvp.Value)
+                            {
+                                var found = kvp.Value.FirstOrDefault(c => c.Name.Equals(connectionName, StringComparison.OrdinalIgnoreCase));
+                                if (found != null) return found;
+                            }
+                        }
+                    }
                 }
             }
             
@@ -205,8 +239,19 @@ namespace ETL_SQL.Core.Services
         public Task<IEnumerable<string>> GetTempTablesAsync(string? uri = null)
         {
             var normalizedUri = NormalizeUri(uri);
-            if (_docTempTables.TryGetValue(normalizedUri, out var list)) return Task.FromResult((IEnumerable<string>)list);
-            return Task.FromResult(Enumerable.Empty<string>());
+            var result = new List<string>();
+            if (!string.IsNullOrEmpty(normalizedUri))
+            {
+                var basePath = GetBasePath(normalizedUri);
+                foreach (var kvp in _docTempTables)
+                {
+                    if (GetBasePath(kvp.Key) == basePath)
+                    {
+                        result.AddRange(kvp.Value);
+                    }
+                }
+            }
+            return Task.FromResult((IEnumerable<string>)result.Distinct());
         }
 
         public void RegisterTempTable(string uri, string name, List<string> columns)
@@ -250,8 +295,23 @@ namespace ETL_SQL.Core.Services
                 
                 if (tableName.StartsWith("#") && !string.IsNullOrEmpty(normalizedUri))
                 {
+                    // Exact match first
                     var tempKey = GetTempTableCacheKey(normalizedUri, tableName);
                     if (_columns.TryGetValue(tempKey, out var tempCols)) return tempCols;
+                    
+                    // Match across same notebook
+                    var basePath = GetBasePath(normalizedUri);
+                    if (basePath != normalizedUri)
+                    {
+                        foreach (var kvp in _docTempTables)
+                        {
+                            if (GetBasePath(kvp.Key) == basePath && kvp.Value.Contains(tableName, StringComparer.OrdinalIgnoreCase))
+                            {
+                                var relatedTempKey = GetTempTableCacheKey(kvp.Key, tableName);
+                                if (_columns.TryGetValue(relatedTempKey, out var relatedCols)) return relatedCols;
+                            }
+                        }
+                    }
                 }
 
                 if (tableName.Equals("DUAL", StringComparison.OrdinalIgnoreCase))

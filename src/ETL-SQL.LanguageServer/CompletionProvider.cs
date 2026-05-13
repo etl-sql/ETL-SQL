@@ -36,8 +36,18 @@ namespace ETL_SQL.LSP
                 return new CompletionList();
 
             var text = state.Text;
+            var prefixStr = _store.GetNotebookPrefix(request.TextDocument.Uri.ToString());
+            var prefixLines = 0;
+            
+            if (!string.IsNullOrEmpty(prefixStr))
+            {
+                prefixLines = prefixStr.Count(c => c == '\n');
+                text = prefixStr + text;
+            }
+
             var lines = text.Split('\n');
-            var currentLine = lines.Length > line ? lines[line] : "";
+            var adjustedLine = line + prefixLines;
+            var currentLine = lines.Length > adjustedLine ? lines[adjustedLine] : "";
             
             // Calculate prefix and script before.
             // Include & so that &datasetName is captured as a single prefix token.
@@ -54,7 +64,7 @@ namespace ETL_SQL.LSP
                 }
             }
 
-            var scriptBefore = string.Join("\n", lines.Take(line)) + (line > 0 ? "\n" : "") + currentLine.Substring(0, col);
+            var scriptBefore = string.Join("\n", lines.Take(adjustedLine)) + (adjustedLine > 0 ? "\n" : "") + currentLine.Substring(0, col);
 
             var context = new SuggestionContext
             {

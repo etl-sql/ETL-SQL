@@ -198,6 +198,43 @@ export function activate(context: vscode.ExtensionContext) {
         }).catch(err => {
             outputChannel.appendLine(`CRITICAL: Language Client failed to start: ${err}`);
         });
+
+        // Sync notebook context for cross-cell autocomplete
+        function syncNotebookContext(document: vscode.TextDocument) {
+            if (!client) return;
+            
+            const notebook = vscode.workspace.notebookDocuments.find(n => 
+                n.getCells().some(c => c.document.uri.toString() === document.uri.toString())
+            );
+            if (!notebook) return;
+            
+            let precedingText = '';
+            for (const cell of notebook.getCells()) {
+                if (cell.kind === vscode.NotebookCellKind.Code) {
+                    if (cell.document.uri.toString() === document.uri.toString()) {
+                        break;
+                    }
+                    precedingText += cell.document.getText() + '\n\n';
+                }
+            }
+            
+            client.sendNotification('etlsql/updateNotebookContext', {
+                uri: document.uri.toString(),
+                prefix: precedingText
+            });
+        }
+
+        context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(e => {
+            if (e.document.uri.scheme === 'vscode-notebook-cell') {
+                syncNotebookContext(e.document);
+            }
+        }));
+        
+        context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(e => {
+            if (e?.document.uri.scheme === 'vscode-notebook-cell') {
+                syncNotebookContext(e.document);
+            }
+        }));
     }
 
     // Register Commands

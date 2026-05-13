@@ -28,6 +28,14 @@ namespace ETL_SQL.LSP
         /// <summary>Returns the raw text of a document, or null if the URI is not tracked.</summary>
         public string? GetDocumentText(DocumentUri uri)
             => _states.TryGetValue(uri, out var s) ? s.Text : null;
+
+        private readonly ConcurrentDictionary<string, string> _notebookPrefixes = new();
+
+        public void SetNotebookPrefix(string uri, string prefix)
+            => _notebookPrefixes[uri] = prefix;
+
+        public string GetNotebookPrefix(string uri)
+            => _notebookPrefixes.TryGetValue(uri, out var prefix) ? prefix : "";
     }
 
     /// <summary>Immutable snapshot of a parsed document.</summary>

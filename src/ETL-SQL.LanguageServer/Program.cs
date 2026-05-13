@@ -119,6 +119,7 @@ namespace ETL_SQL.LSP
                         services.AddSingleton<DatasetStore>();
                         services.AddSingleton<CustomMethodsHandler>();
                         services.AddSingleton<RefreshMetadataHandler>();
+                        services.AddSingleton<UpdateNotebookContextHandler>();
                     })
                     .OnStarted((server, ct) => {
                         server.Configuration.AddConfigurationItem(new ConfigurationItem { Section = "etlsql" });
@@ -132,6 +133,7 @@ namespace ETL_SQL.LSP
                     .WithHandler<FormattingProvider>()
                     .WithHandler<CustomMethodsHandler>()
                     .WithHandler<RefreshMetadataHandler>()
+                    .WithHandler<UpdateNotebookContextHandler>()
             );
 
             await server.WaitForExit;
