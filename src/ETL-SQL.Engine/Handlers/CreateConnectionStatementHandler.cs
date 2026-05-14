@@ -117,6 +117,7 @@ namespace ETL_SQL.Engine.Handlers
                     }
                     catch (Exception ex)
                     {
+                        _logger.Error("Failed to build connection string for connector '{ConnectorType}' (connection '{ConnectionName}'): {Error}", ex, connectionType, stmt.ConnectionName, ex.Message);
                         throw new ExecutionException($"Failed to build connection string for {connectionType}: {ex.Message}");
                     }
                 }
@@ -175,7 +176,9 @@ namespace ETL_SQL.Engine.Handlers
                 try
                 {
                     _logger.Debug("CREATE CONNECTION: Reading preview rows for {ConnectionName}...", stmt.ConnectionName);
-                    var sampleBatches = ds.ReadBatches(10).Take(1);
+                    // batchSize=10 here is the preview row limit, not a batch-count.
+                    // Take(1) ensures we stop after the first batch.
+                    var sampleBatches = ds.ReadBatches(batchSize: 10).Take(1);
                     await foreach (var b in sampleBatches.WithCancellation(context.CancellationToken))
                     {
                         _logger.Debug("CREATE CONNECTION: Preview batch has {RowCount} rows.", b.Rows.Count);

@@ -121,8 +121,15 @@ namespace ETL_SQL.Orchestrator.Execution
             _logger.LogInformation("Job process PID={Pid} exited with code {ExitCode}. CPU: {Cpu}s, Peak RAM: {Mem} bytes", 
                 process.Id, exitCode, cpuSeconds, peakMemory);
 
+            // Many CLIs write progress info to stderr even on success; only escalate to Error
+            // when the process also exited non-zero, otherwise log at Info to avoid alert noise.
             if (stderr.Length > 0)
-                _logger.LogWarning("Job process stderr: {Stderr}", stderr.ToString().Trim());
+            {
+                if (exitCode != 0)
+                    _logger.LogError("Job process PID={Pid} stderr (exit {ExitCode}): {Stderr}", process.Id, exitCode, stderr.ToString().Trim());
+                else
+                    _logger.LogInformation("Job process PID={Pid} stderr (exit 0): {Stderr}", process.Id, stderr.ToString().Trim());
+            }
 
             return ParseResult(exitCode, stdout.ToString(), peakMemory, cpuSeconds);
         }

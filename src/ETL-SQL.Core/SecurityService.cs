@@ -19,6 +19,14 @@ namespace ETL_SQL.Services
 
     public class SecurityService
     {
+        /// <summary>
+        /// Returns a SHA-256 digest of <c>MachineName:UserName</c> as a stable per-machine identifier.
+        /// <para><b>Entropy note:</b> Container orchestrators (Docker, Kubernetes) often assign predictable
+        /// hostnames (e.g. <c>pod-abc123</c>) and run all workloads as the same OS user, which weakens the
+        /// "machine-unique" property. For production deployments where strong uniqueness is required, override
+        /// by setting <c>Security:MachineKey</c> in configuration to a secret injected via environment
+        /// variable or a secrets manager.</para>
+        /// </summary>
         public static string GetMachineKey()
         {
             var rawKey = $"{Environment.MachineName}:{Environment.UserName}";
@@ -64,10 +72,15 @@ namespace ETL_SQL.Services
                 if (AppDomain.CurrentDomain.GetAssemblies().Any(a => a.FullName?.Contains("xunit") == true || a.FullName?.Contains("Test") == true))
                     return true;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                // Swallow: test-detection is best-effort; failures here must not prevent startup.
+                // Log at Debug so CI/CD environments can diagnose unexpected reflection errors.
+                try { _logger.Debug("[SECURITY] CheckTestEnvironment probe failed: {Message}", ex.Message); } catch { }
+            }
             return false;
         }
-    
+
         /// <summary>
         /// Centralized method to update security settings from the 'Security' section of the application configuration.
         /// </summary>
@@ -118,24 +131,31 @@ namespace ETL_SQL.Services
             RegexMatchTimeout = int.TryParse(section["RegexMatchTimeoutMs"], out var rmt) ? TimeSpan.FromMilliseconds(rmt) : DefaultRegexMatchTimeout;
         }
 
+        // Data formats a script is expected to read or write. Any other extension is denied by default.
         private static readonly string[] AllowedExtensions = { ".csv", ".json", ".parquet", ".avro", ".db", ".enc", ".pgp", ".asc", ".gpg", ".key", ".gz", ".7z", ".txt", ".sql", ".log", ".xlsx", ".xml", ".yaml", ".yml", ".ini", ".md", ".zip", ".dat", ".tsv", ".psv", ".fixed" };
+        // Executables and code-signing certificates: a compromised script must not be able to drop or
+        // overwrite binaries, installers, or trust-store certs (.pfx/.cer) that could escalate privilege.
         private static readonly string[] BlockedExtensions = { ".dll", ".exe", ".bat", ".cmd", ".sh", ".msi", ".sys", ".com", ".pfx", ".cer" };
-        
-        // Final guardrail: Scripts cannot edit other scripts (Human-Authoring Only)
+        // Prevent scripts from mutating the source files that define them — authoring must remain a human act.
         private static readonly string[] BlockedWriteExtensions = { ".etlsql", ".rptsql", ".sql", ".etls", ".py", ".js", ".sh", ".bat", ".cmd" };
 
-        // Comprehensive System Lockdown (Windows & Linux)
-        private static readonly string[] RestrictedDirectories = { 
+        // Build artifacts (bin/obj), VCS state (.git via SensitiveDirectories), and IDE config are blocked
+        // because they contain compiled binaries, lock files, or secrets that a script has no legitimate
+        // reason to read or write.  "packages" is not listed because NuGet restore is a dev-time operation
+        // that scripts do not exercise; add it here if a connector ever needs to traverse it.
+        private static readonly string[] RestrictedDirectories = {
             // VCS & IDE
-            ".vscode", ".idea", "node_modules", "bin", "obj", 
+            ".vscode", ".idea", "node_modules", "bin", "obj",
             // Windows System
-            "Program Files", "Program Files (x86)", 
+            "Program Files", "Program Files (x86)",
             "ProgramData", "AppData", "Documents and Settings", "Config.msi", "System Volume Information",
             // Linux System
-            "/boot", "/dev", "/lib", "/lib32", "/lib64", "/libx32", "/lost+found", 
+            "/boot", "/dev", "/lib", "/lib32", "/lib64", "/libx32", "/lost+found",
             "/media", "/mnt", "/run", "/srv", "/sys"
         };
 
+        // Kernel and OS directories whose modification would be catastrophic or where secrets live.
+        // "etc" covers /etc (Linux) and C:\Windows\System32\drivers\etc (Windows hosts file).
         private static readonly string[] CriticalSystemDirectories = {
              "Windows", "System32", "SysWOW64", "etc", "/bin", "/sbin", "/root", "/usr", "/var"
         };
@@ -399,9 +419,25 @@ namespace ETL_SQL.Services
         }
 
         /// <summary>
-        /// Checks if an operation count or recursion depth exceeds the allowed limits.
-        /// Bypasses are only honored in 'Approved Safe Zones'.
+        /// Checks if an operation count or recursion depth exceeds the configured safety limits.
         /// </summary>
+        /// <param name="type">The category of operation being counted (FileSystem or internal mock).</param>
+        /// <param name="count">Total operations executed so far in this script.</param>
+        /// <param name="depth">Current recursive nesting depth.</param>
+        /// <param name="allowLargeCount">
+        ///   When <c>true</c> (set via <c>SET ALLOW_GREATER_THAN_100_FILE ON</c>), permits exceeding
+        ///   <see cref="MaxFileOperations"/> — but only if <paramref name="path"/> is inside an
+        ///   <see cref="ApprovedSafeZones"/> entry. Ignored for internal operations.
+        /// </param>
+        /// <param name="allowDeepRecursion">
+        ///   When <c>true</c> (set via <c>SET ALLOW_RECURSIVE_LAYERS = n</c>), permits exceeding
+        ///   <see cref="MaxRecursiveDepth"/> — also gated on <see cref="ApprovedSafeZones"/>.
+        ///   The two flags are independent: granting one does not imply the other.
+        /// </param>
+        /// <param name="path">
+        ///   Optional path context used to verify the safe-zone gate when a bypass flag is active.
+        ///   Pass the script path or the target file path for the current operation.
+        /// </param>
         public void CheckRunawayProtection(OperationType type, int count, int depth, bool allowLargeCount = false, bool allowDeepRecursion = false, string? path = null)
         {
             if (IsInternalOperation) return;
@@ -725,12 +761,20 @@ namespace ETL_SQL.Services
                             if (target != null)
                                 current = Path.GetFullPath(target.FullName);
                         }
-                        catch { }
+                        catch
+                        {
+                            // Swallow: symlink resolution is best-effort; the unresolved path
+                            // is still validated by ValidatePath below.
+                        }
                     }
                 }
                 return current;
             }
-            catch { return path; }
+            catch
+            {
+                // Swallow: return the original path so ValidatePath can still run its checks.
+                return path;
+            }
         }
 
         private bool IsWithinSafeZone(string? path)
@@ -754,6 +798,7 @@ namespace ETL_SQL.Services
                 if (parent == null || parent == current) break;
                 current = parent;
             }
+            _logger.Debug("[SECURITY] Path DENIED — not within any approved safe zone: {Path}", fullPath);
             return false;
         }
     }

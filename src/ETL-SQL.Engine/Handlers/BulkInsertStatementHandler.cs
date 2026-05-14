@@ -122,9 +122,11 @@ namespace ETL_SQL.Engine.Handlers
 
                 int count = 0;
                 int errorCount = 0;
+                int batchIndex = 0;
 
                 await foreach (var batch in batches)
                 {
+                    batchIndex++;
                     // Map columns by position from source to destination
                     var mappedBatch = new DataTable();
                     mappedBatch.SetColumns(destColumns);
@@ -161,11 +163,14 @@ namespace ETL_SQL.Engine.Handlers
                     }
                     catch (Exception ex)
                     {
-                        if (context.IsWhatIf) throw; // Should not happen in dry run really, but keep consistency
+                        if (context.IsWhatIf) throw;
                         if (errorCount < maxErrors)
                         {
-                            _logger.WriteLine($"[WARNING] Batch write failed: {ex.Message}. Retrying row-by-row up to MAXERRORS={maxErrors}.");
-                            
+                            int rowStart = count + 1;
+                            int rowEnd = count + mappedBatch.Rows.Count;
+                            _logger.Warning("Batch #{BatchIndex} write failed (rows {RowStart}–{RowEnd}, target '{Target}'): {Message}. Retrying row-by-row (MAXERRORS={MaxErrors}).",
+                                batchIndex, rowStart, rowEnd, stmt.TargetTable.TableName, ex.Message, maxErrors);
+
                             // Fallback: Try writing each row individually
                             foreach (var row in mappedBatch.Rows)
                             {
@@ -180,17 +185,18 @@ namespace ETL_SQL.Engine.Handlers
                                 catch (Exception rowEx)
                                 {
                                     errorCount++;
-                                    _logger.WriteLine($"[ERROR] Row failed: {rowEx.Message}");
+                                    _logger.Warning("Row {Row} in batch #{BatchIndex} failed (target '{Target}'): {Message}",
+                                        count + 1, batchIndex, stmt.TargetTable.TableName, rowEx.Message);
                                     if (errorCount > maxErrors)
                                     {
-                                        throw new ExecutionException($"Max errors ({maxErrors}) exceeded during bulk insert. Last error: {rowEx.Message}", rowEx);
+                                        throw new ExecutionException($"Max errors ({maxErrors}) exceeded during bulk insert into '{stmt.TargetTable.TableName}'. Last error: {rowEx.Message}", rowEx);
                                     }
                                 }
                             }
                         }
                         else
                         {
-                            throw new ExecutionException($"Bulk insert failed and MAXERRORS is 0. Error: {ex.Message}", ex);
+                            throw new ExecutionException($"Bulk insert into '{stmt.TargetTable.TableName}' failed and MAXERRORS is 0. Error: {ex.Message}", ex);
                         }
                     }
                 }

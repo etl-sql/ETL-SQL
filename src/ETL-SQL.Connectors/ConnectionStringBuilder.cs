@@ -21,6 +21,25 @@ namespace ETL_SQL.Connectors
             "FLATFILE", "CSV", "EXCEL", "JSON", "XML", "PARQUET", "AVRO", "DIRECTORY", "MOCKDB"
         };
 
+        /// <summary>
+        /// Builds a provider-specific connection string from a property dictionary.
+        /// </summary>
+        /// <param name="provider">Connector type name, e.g. <c>MSSQL</c>, <c>POSTGRES</c>, <c>ORACLE</c>, <c>FLATFILE</c>.</param>
+        /// <param name="props">
+        ///   Key/value options. Required keys vary by provider:
+        ///   <list type="bullet">
+        ///     <item><b>MSSQL / SQLSERVER</b> — <c>SERVER</c> (required); optional: <c>DATABASE</c>, <c>USER</c>, <c>PASSWORD</c>, <c>TRUSTED_CONNECTION</c>, <c>ENCRYPT</c>, <c>PORT</c>.</item>
+        ///     <item><b>POSTGRES / NPSQL</b> — <c>SERVER</c> (required); optional: <c>DATABASE</c>, <c>USER</c>, <c>PASSWORD</c>, <c>PORT</c>, <c>SSL_MODE</c>.</item>
+        ///     <item><b>ORACLE</b> — <c>SERVER</c> (required); optional: <c>USER</c>, <c>PASSWORD</c>, <c>PORT</c>, <c>SERVICE_NAME</c>.</item>
+        ///     <item><b>ODBC</b> — <c>DSN</c> or <c>DRIVER</c> required; optional: <c>SERVER</c>, <c>DATABASE</c>, <c>USER</c>, <c>PASSWORD</c>.</item>
+        ///     <item><b>API / REST / HTTP</b> — <c>URL</c> (required); optional: <c>AUTH_TYPE</c>, <c>TOKEN</c>, <c>USER</c>, <c>PASSWORD</c>.</item>
+        ///     <item><b>FTP / SFTP / AZURE_BLOB / EMAIL / SSH</b> — <c>HOST</c> or <c>URL</c> required; optional: <c>USER</c>, <c>PASSWORD</c>, <c>PORT</c>, <c>CONTAINER</c>.</item>
+        ///     <item><b>File connectors (FLATFILE, CSV, etc.)</b> — empty string returned; path is set directly on the data source.</item>
+        ///   </list>
+        ///   All keys are case-insensitive.
+        /// </param>
+        /// <returns>A ready-to-use connection string, or <see cref="string.Empty"/> if <paramref name="provider"/> or <paramref name="props"/> is null/empty.</returns>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="provider"/> is not in <see cref="ValidProviders"/>.</exception>
         public static string Build(string provider, Dictionary<string, string> props)
         {
             if (string.IsNullOrWhiteSpace(provider)) return string.Empty;

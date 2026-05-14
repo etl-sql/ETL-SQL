@@ -102,8 +102,9 @@ namespace ETL_SQL.Engine
             var strongMatches = new List<string>();
             var weakMatches = new List<string>();
 
-            // BUG FIX: Must include dynamic columns (like qualified names from joins) when checking for overlaps.
-            // Using GetColumnNames() to avoid creating a full dictionary copy for every resolution.
+            // GetColumnNames() includes dynamic qualified keys added by join pushdown (e.g. "t.ColA").
+            // Without them, an unqualified "ColA" could incorrectly resolve when the same base name
+            // exists under two different table qualifiers, producing a silent wrong-value bug.
             var allNames = context.GetColumnNames();
             
             // Pre-scan for qualified suffixes only if we have a qualifier

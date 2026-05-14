@@ -56,12 +56,18 @@ namespace ETL_SQL.Engine.Handlers
             string sqlToExecute = stmt.SqlText;
 
             // Strip the ETL-SQL connection prefix wherever it appears as a qualifier
-            // (e.g. "FROM m.dbo.Employee" → "FROM dbo.Employee"). Use a word-boundary
-            // negative lookbehind so we don't corrupt occurrences inside string literals
-            // that happen to contain the connection name followed by a dot.
+            // (e.g. "FROM m.dbo.Employee" → "FROM dbo.Employee"). Users sometimes write
+            // fully-qualified ETL-SQL names inside pushdown blocks for readability; the
+            // remote database does not know the ETL-SQL connection alias. Uses a word-boundary
+            // negative lookbehind to avoid corrupting SQL string literals that happen to
+            // contain the connection name followed by a dot.
             string escapedName = Regex.Escape(connectionName);
-            sqlToExecute = Regex.Replace(sqlToExecute, $@"(?<![.\w]){escapedName}\.", "", RegexOptions.IgnoreCase);
-            _logger.Debug("Pushdown SQL prefix stripped for connection {ConnectionName}.", connectionName);
+            var rewritten = Regex.Replace(sqlToExecute, $@"(?<![.\w]){escapedName}\.", "", RegexOptions.IgnoreCase);
+            if (!ReferenceEquals(rewritten, sqlToExecute) && rewritten != sqlToExecute)
+            {
+                _logger.Debug("Pushdown SQL prefix stripped for connection {ConnectionName}.\nOriginal: {Original}\nRewritten: {Rewritten}", connectionName, sqlToExecute, rewritten);
+                sqlToExecute = rewritten;
+            }
 
             if (context.IsWhatIf)
             {

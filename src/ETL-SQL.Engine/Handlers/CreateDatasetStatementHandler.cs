@@ -71,7 +71,12 @@ namespace ETL_SQL.Engine.Handlers
             await MaterializeSourceQuery(stmt, context);
             var rowCount = context.Telemetry.LastStatementRowsProcessed;
 
-            // ── 5. Portal persistence (Parquet write + registry + job) ─────────────
+            // ── 5. Portal persistence (Parquet write → registry → refresh job) ──────
+            // Intentional ordering: write the file first so the registry entry always points
+            // to data that exists.  If registry update succeeds but CreateRefreshJob fails,
+            // the dataset is registered but will not auto-refresh — the operator must re-run
+            // the script or create a job manually.  No rollback is attempted because the
+            // Parquet file and registry entry are both valid; only the scheduled refresh is missing.
             if (registry != null)
             {
                 var parquetPath = registry.BuildDatasetFilePath(stmt.TempTableName, folderPath);
@@ -118,6 +123,9 @@ namespace ETL_SQL.Engine.Handlers
             var ttlStr = ttlOverride ?? existing.Ttl;
             if (string.IsNullOrWhiteSpace(ttlStr)) return false;
 
+            // ParseDuration is called once per dataset check (not in a hot loop), so the
+            // allocation cost is acceptable.  If profiling shows this on the critical path,
+            // store TimeSpan? CachedTtl in DatasetMetadata and populate it at registration.
             var ttl = ParseDuration(ttlStr);
             if (!ttl.HasValue) return false;
 

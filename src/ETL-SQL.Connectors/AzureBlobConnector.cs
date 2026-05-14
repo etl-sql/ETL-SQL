@@ -100,6 +100,8 @@ namespace ETL_SQL.Connectors
             return _client.GetBlobContainerClient(_containerName);
         }
 
+        // TODO: When IRemoteFileSystem.ListFilesAsync is updated to return IAsyncEnumerable<FileMetaData>,
+        // remove the intermediate list and yield directly from the GetBlobsAsync async enumerator.
         public async Task<IEnumerable<FileMetaData>> ListFilesAsync(string path)
         {
             var container = GetContainer();

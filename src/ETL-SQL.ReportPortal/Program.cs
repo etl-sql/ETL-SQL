@@ -72,8 +72,12 @@ builder.Services.AddIdentity<PortalUser, PortalRole>(opt =>
 // Use a zero-filled placeholder when no secret is configured so the service can start.
 // JwtSecretValidationService shuts down the app if the secret is missing/short in production.
 // In tests, ConfigureWebHost's PostConfigure<JwtBearerOptions> replaces the key.
+// If no secret is configured, generate a random ephemeral key so the app can start
+// (JwtSecretValidationService will shut it down before serving requests in production).
+// A random key — rather than all-zero — means no attacker-crafted token signed with a
+// known placeholder will ever validate during the brief startup window.
 var rawSecret = string.IsNullOrEmpty(portalConfig.Jwt.Secret)
-    ? new byte[32]                                         // placeholder — 32 zero bytes
+    ? System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)
     : Encoding.UTF8.GetBytes(portalConfig.Jwt.Secret);
 var signingKey = new SymmetricSecurityKey(rawSecret);
 

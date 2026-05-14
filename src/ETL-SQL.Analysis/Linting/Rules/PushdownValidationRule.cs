@@ -62,7 +62,18 @@ namespace ETL_SQL.Analysis.Linting.Rules
 
         private void ValidateNativeBlock(string sql, ExecutePushdownStatement node, List<LintResult> results)
         {
-            if (string.IsNullOrWhiteSpace(sql)) return;
+            if (string.IsNullOrWhiteSpace(sql))
+            {
+                results.Add(new LintResult
+                {
+                    RuleName = Name,
+                    Severity = LintSeverity.Warning,
+                    Message = "EXECUTE PUSHDOWN block is empty. No SQL will be sent to the remote database.",
+                    LineNumber = node.Line,
+                    ColumnNumber = node.Column
+                });
+                return;
+            }
 
             try
             {
