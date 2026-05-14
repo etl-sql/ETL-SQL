@@ -192,5 +192,54 @@ CREATE VISUAL ShareChart AS PIE (
 
             Assert.Empty(results);
         }
+
+        // ── Linter metadata discovery in nested containers ────────────────────────
+
+        [Fact]
+        public async Task Linter_DiscoverMetadata_FindsTableInsideTryCatch()
+        {
+            // CREATE TABLE inside TRY body must be discovered so rules that check
+            // table existence don't produce false-positive "table not found" warnings.
+            var linter = new Linter();
+            var sql = @"
+BEGIN TRY
+    CREATE TABLE #Result (Id INT, Name VARCHAR(100));
+END TRY
+BEGIN CATCH
+END CATCH";
+            var script = Parse(sql);
+
+            // Verify the parse produced a TryCatchStatement (not empty due to SyntaxException)
+            Assert.True(script.Statements.Count > 0,
+                $"Script should have at least 1 statement. Diagnostics: {string.Join("; ", script.Diagnostics.Select(d => d.Message))}");
+            Assert.True(script.Statements[0] is TryCatchStatement,
+                $"Expected TryCatchStatement at index 0, got {script.Statements[0]?.GetType().Name}");
+
+            var context = new DefaultLintContext();
+            await linter.AnalyzeAsync(script, context);
+
+            var tables = (await context.Metadata.GetTablesAsync("DEFAULT")).ToList();
+            Assert.True(tables.Any(t => t.Equals("#Result", StringComparison.OrdinalIgnoreCase) ||
+                                        t.Equals("Result", StringComparison.OrdinalIgnoreCase)),
+                $"Table #Result inside TRY body should be discovered. Found: [{string.Join(", ", tables)}]");
+        }
+
+        [Fact]
+        public async Task Linter_DiscoverMetadata_FindsTableInsideProcedure()
+        {
+            var linter = new Linter();
+            var sql = @"
+CREATE PROCEDURE usp_Test AS BEGIN
+    CREATE TABLE #Temp (Val INT);
+END";
+            var script = Parse(sql);
+            var context = new DefaultLintContext();
+            await linter.AnalyzeAsync(script, context);
+
+            var tables = (await context.Metadata.GetTablesAsync("DEFAULT")).ToList();
+            Assert.True(tables.Any(t => t.Equals("#Temp", StringComparison.OrdinalIgnoreCase) ||
+                                        t.Equals("Temp", StringComparison.OrdinalIgnoreCase)),
+                $"Table #Temp inside procedure body should be discovered. Found: [{string.Join(", ", tables)}]");
+        }
     }
 }

@@ -113,6 +113,27 @@ namespace ETL_SQL.Analysis.Linting
             {
                 DiscoverFromStatement(foreachStmt.Body, overlay);
             }
+            else if (statement is TryCatchStatement tryCatch)
+            {
+                DiscoverFromStatement(tryCatch.TryBody, overlay);
+                DiscoverFromStatement(tryCatch.CatchBody, overlay);
+            }
+            else if (statement is CreateProcedureStatement proc)
+            {
+                DiscoverFromStatement(proc.Body, overlay);
+            }
+            else if (statement is CreateFunctionStatement func)
+            {
+                DiscoverFromStatement(func.Body, overlay);
+            }
+            else if (statement is ParallelStatement parallel)
+            {
+                DiscoverFromStatement(parallel.Body, overlay);
+            }
+            else if (statement is ParallelForStatement parallelFor)
+            {
+                DiscoverFromStatement(parallelFor.Body, overlay);
+            }
         }
 
         private void DiscoverFromNativeBlock(string sql, string connectionName, ScriptMetadataOverlay overlay)
