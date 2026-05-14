@@ -15,7 +15,7 @@ export const window = {
     showErrorMessage: vi.fn(),
     showWarningMessage: vi.fn(),
     showInformationMessage: vi.fn(),
-    activeTextEditor: undefined as any,
+    activeTextEditor: undefined as unknown,
     onDidChangeActiveTextEditor: vi.fn(() => ({ dispose: vi.fn() }))
 };
 
@@ -24,7 +24,7 @@ export const workspace = {
         get: vi.fn(),
         update: vi.fn()
     })),
-    workspaceFolders: undefined as any,
+    workspaceFolders: undefined as unknown,
     onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
     onDidCloseTextDocument: vi.fn(() => ({ dispose: vi.fn() }))
 };
@@ -52,8 +52,8 @@ export const env = {
 };
 
 export class EventEmitter<T> {
-    private handlers: ((e: T) => any)[] = [];
-    event = vi.fn((handler: (e: T) => any) => {
+    private handlers: ((e: T) => void)[] = [];
+    event = vi.fn((handler: (e: T) => void) => {
         this.handlers.push(handler);
         return { dispose: () => {} };
     });

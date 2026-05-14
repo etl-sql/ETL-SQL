@@ -1,18 +1,43 @@
 import * as cp from 'child_process';
 import * as vscode from 'vscode';
+import * as path from 'path';
 import { ResultsPanel } from './resultsPanel';
+
+export interface EngineMessage {
+    type: string;
+    status?: string;
+    buildId?: string;
+    exitCode?: number;
+    text?: string;
+    level?: string;
+    data?: unknown;
+    columns?: string[];
+    rows?: Record<string, unknown>[];
+    metrics?: Record<string, number>;
+    mermaid?: string; // Added for lineage
+}
+
+interface CommandRequest {
+    script: string;
+    scriptPath?: string;
+    workspaceRoot?: string;
+    interactiveMode?: boolean;
+    onMessage?: (msg: EngineMessage) => void;
+    resolve: (val?: void) => void;
+    reject: (err?: unknown) => void;
+}
 
 export class ReplManager {
     private static _instance: ReplManager;
     private _process: cp.ChildProcess | undefined;
     private _isReady: boolean = false;
-    private _commandQueue: { script: string, scriptPath?: string, workspaceRoot?: string, interactiveMode?: boolean, onMessage?: (msg: any) => void, resolve: (val: any) => void, reject: (err: any) => void }[] = [];
-    private _currentHandler: ((msg: any) => void) | undefined;
+    private _commandQueue: CommandRequest[] = [];
+    private _currentHandler: ((msg: EngineMessage) => void) | undefined;
     private _outputChannel: vscode.OutputChannel | undefined;
     private _currentSessionId: string | undefined;
     private _debugMode: boolean = false;
-    private _onVariablesChange: vscode.EventEmitter<any[]> = new vscode.EventEmitter<any[]>();
-    public readonly onVariablesChange: vscode.Event<any[]> = this._onVariablesChange.event;
+    private _onVariablesChange: vscode.EventEmitter<unknown[]> = new vscode.EventEmitter<unknown[]>();
+    public readonly onVariablesChange: vscode.Event<unknown[]> = this._onVariablesChange.event;
     private _isRunning: boolean = false;
     private _startPromise: Promise<void> | undefined;
 
@@ -31,7 +56,7 @@ export class ReplManager {
         this._debugMode = debug;
     }
 
-    public async execute(script: string, exePath: string, args: string[], scriptPath?: string, workspaceRoot?: string, interactiveMode?: boolean, onMessage?: (msg: any) => void): Promise<void> {
+    public async execute(script: string, exePath: string, args: string[], scriptPath?: string, workspaceRoot?: string, interactiveMode?: boolean, onMessage?: (msg: EngineMessage) => void): Promise<void> {
         // Extract sessionId from args for tracking
         let sessionId: string | undefined;
         const sessionIdx = args.indexOf('--session');
@@ -44,19 +69,22 @@ export class ReplManager {
             this.stop();
         }
 
-        return new Promise(async (resolve, reject) => {
+        return new Promise((resolve, reject) => {
             this._commandQueue.push({ script, scriptPath, workspaceRoot, interactiveMode, onMessage, resolve, reject });
             
-            if (this._startPromise) {
-                await this._startPromise;
-            } else if (!this._process) {
-                this._currentSessionId = sessionId;
-                this._startPromise = this._start(exePath, args);
-                await this._startPromise;
-                this._startPromise = undefined;
-            }
+            const startExecution = async () => {
+                if (this._startPromise) {
+                    await this._startPromise;
+                } else if (!this._process) {
+                    this._currentSessionId = sessionId;
+                    this._startPromise = this._start(exePath, args);
+                    await this._startPromise;
+                    this._startPromise = undefined;
+                }
+                this._processNext();
+            };
 
-            this._processNext();
+            startExecution();
         });
     }
 
@@ -74,8 +102,8 @@ export class ReplManager {
         }
     }
     private async _start(exePath: string, args: string[]): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const absoluteExePath = require('path').resolve(exePath);
+        return new Promise((resolve) => {
+            const absoluteExePath = path.resolve(exePath);
             const startMsg = `Starting ETL-SQL REPL: "${absoluteExePath}" ui repl ${args.join(' ')}`;
             this._outputChannel?.appendLine(startMsg);
 
@@ -93,7 +121,9 @@ export class ReplManager {
 
                 for (const line of lines) {
                     const trimmed = line.trim();
-                    if (!trimmed) continue;
+                    if (!trimmed) {
+                        continue;
+                    }
                     try {
                         const msg = JSON.parse(trimmed);
                         this._handleMessage(msg);
@@ -122,21 +152,21 @@ export class ReplManager {
 
             child.on('close', (code) => {
                 this._outputChannel?.appendLine(`REPL process exited (code ${code}).`);
-                if (this._process === child) {
-                    this._process = undefined;
-                    this._isReady = false;
-                    this._startPromise = undefined;
-                    
-                    // Reject any in-flight command so the caller's promise doesn't hang.
-                    if (this._currentHandler) {
-                        this._currentHandler({ type: 'done', exitCode: code ?? 1 });
-                    }
-                    // Drain the queue — no process to run them.
-                    for (const cmd of this._commandQueue) {
-                        cmd.reject(new Error('REPL process exited unexpectedly'));
-                    }
-                    this._commandQueue = [];
+                this._startPromise = undefined;
+                this._process = undefined;
+                this._isReady = false;
+                
+                // Reject any in-flight command so the caller's promise doesn't hang.
+                if (this._currentHandler) {
+                    const handler = this._currentHandler;
+                    this._currentHandler = undefined;
+                    handler({ type: 'done', exitCode: code ?? 1 });
                 }
+                // Drain the queue — no process to run them.
+                for (const cmd of this._commandQueue) {
+                    cmd.reject(new Error('REPL process exited unexpectedly'));
+                }
+                this._commandQueue = [];
             });
         });
     }
@@ -169,8 +199,11 @@ export class ReplManager {
                 // Forward done to webview so the spinner stops.
                 ResultsPanel.postMessage(msg);
                 this._outputChannel?.appendLine(`[PROCESS] Command finished with code ${msg.exitCode}`);
-                if (msg.exitCode === 0) cmd.resolve(0);
-                else cmd.reject(new Error("Execution failed"));
+                if (msg.exitCode === 0) {
+                    cmd.resolve();
+                } else {
+                    cmd.reject(new Error("Execution failed"));
+                }
                 this._processNext();
             } else {
                 // Forward all other messages (results, message, performance) to the webview.
@@ -191,7 +224,7 @@ export class ReplManager {
         this._outputChannel?.appendLine(`[REPL] STDIN ok: ${ok}`);
     }
 
-    private _handleMessage(msg: any) {
+    private _handleMessage(msg: EngineMessage) {
         if (msg.type === 'pong') {
             this._outputChannel?.appendLine(`[REPL] Heartbeat: PONG received.`);
             return;
@@ -207,7 +240,7 @@ export class ReplManager {
         }
 
         if (msg.type === 'variables') {
-            this._onVariablesChange.fire(msg.data);
+            this._onVariablesChange.fire(msg.data as unknown[]);
         }
 
         if (this._currentHandler) {
@@ -246,7 +279,9 @@ export class ReplManager {
     }
 
     public warmup(exePath: string, args: string[]): void {
-        if (this._process) return;
+        if (this._process) {
+            return;
+        }
         const sessionIdx = args.indexOf('--session');
         if (sessionIdx !== -1 && sessionIdx + 1 < args.length) {
             this._currentSessionId = args[sessionIdx + 1];

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
 
 export class ResultsPanel implements vscode.WebviewViewProvider {
     public static readonly viewType = 'etlsql-results-view';
@@ -7,8 +8,8 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private _extensionUri: vscode.Uri;
     private _isReady: boolean = false;
-    private _messageQueue: any[] = [];
-    private _onMessageReceived?: (message: any) => void;
+    private _messageQueue: unknown[] = [];
+    private _onMessageReceived?: (message: unknown) => void;
 
     private constructor(extensionUri: vscode.Uri) {
         this._extensionUri = extensionUri;
@@ -23,16 +24,14 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
         return provider;
     }
 
-    public static setOnMessageReceived(handler: (message: any) => void) {
+    public static setOnMessageReceived(handler: (message: unknown) => void) {
         if (ResultsPanel.currentPanel) {
             ResultsPanel.currentPanel._onMessageReceived = handler;
         }
     }
 
     public resolveWebviewView(
-        webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
-        _token: vscode.CancellationToken,
+        webviewView: vscode.WebviewView
     ) {
         this._view = webviewView;
 
@@ -60,7 +59,7 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
         });
     }
 
-    public static postMessage(message: any) {
+    public static postMessage(message: unknown) {
         if (ResultsPanel.currentPanel) {
             if (ResultsPanel.currentPanel._isReady && ResultsPanel.currentPanel._view) {
                 ResultsPanel.currentPanel._view.show?.(true); 
@@ -73,7 +72,9 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
     }
 
     private _flushQueue() {
-        if (!this._view) return;
+        if (!this._view) {
+            return;
+        }
         while (this._messageQueue.length > 0) {
             const msg = this._messageQueue.shift();
             this._view.webview.postMessage(msg);
@@ -86,7 +87,6 @@ export class ResultsPanel implements vscode.WebviewViewProvider {
         try {
             // Path to the built React app (single-file mode via vite-plugin-singlefile)
             const indexPath = vscode.Uri.joinPath(this._extensionUri, 'ui', 'dist', 'index.html');
-            const fs = require('fs');
             let html = fs.readFileSync(indexPath.fsPath, 'utf8');
 
             // Inject nonce and CSP to maintain "Zero-Trust" standards

@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
-import { ReplManager } from './ReplManager';
+import { ReplManager, EngineMessage } from './ReplManager';
+import * as path from 'path';
+import * as cp from 'child_process';
+import * as fs from 'fs';
 
 export class ETLNotebookController {
     readonly controllerId = 'etl-sql-notebook-controller-id';
@@ -23,11 +26,9 @@ export class ETLNotebookController {
     }
 
     private async _execute(
-        cells: vscode.NotebookCell[],
-        _notebook: vscode.NotebookDocument,
-        _controller: vscode.NotebookController
+        cells: vscode.NotebookCell[]
     ): Promise<void> {
-        for (let cell of cells) {
+        for (const cell of cells) {
             await this._doExecution(cell);
         }
     }
@@ -38,7 +39,7 @@ export class ETLNotebookController {
         execution.start(Date.now());
         
         const repl = ReplManager.getInstance();
-        (repl as any)._outputChannel?.appendLine(`[NOTEBOOK] Executing cell: ${cell.document.uri.fsPath}`);
+        (repl as unknown as { _outputChannel?: vscode.OutputChannel })._outputChannel?.appendLine(`[NOTEBOOK] Executing cell: ${cell.document.uri.fsPath}`);
         
         // Wire up the 'Stop' button
         execution.token.onCancellationRequested(() => {
@@ -60,17 +61,18 @@ export class ETLNotebookController {
             // HACK: Capture ReplManager messages via a callback hook (we'll add this to ReplManager)
             const outputs: vscode.NotebookCellOutputItem[] = [];
             
-            const messageHandler = (msg: any) => {
+            const messageHandler = (msg: EngineMessage) => {
                 if (msg.type === 'results') {
-                    const html = this._formatTable(msg.columns, msg.rows);
+                    const html = this._formatTable(msg.columns || [], msg.rows || []);
                     outputs.push(vscode.NotebookCellOutputItem.text(html, 'text/html'));
                     execution.replaceOutput(new vscode.NotebookCellOutput(outputs));
                 } else if (msg.type === 'visual') {
+                    const data = msg.data as { Name: string } | undefined;
                     const manifest = JSON.stringify(msg.data, null, 2);
-                    outputs.push(vscode.NotebookCellOutputItem.text(`Visual Created: ${msg.data.Name}\n${manifest}`, 'text/plain'));
+                    outputs.push(vscode.NotebookCellOutputItem.text(`Visual Created: ${data?.Name ?? 'Unknown'}\n${manifest}`, 'text/plain'));
                     execution.replaceOutput(new vscode.NotebookCellOutput(outputs));
                 } else if (msg.type === 'message') {
-                    outputs.push(vscode.NotebookCellOutputItem.text(msg.text, 'text/plain'));
+                    outputs.push(vscode.NotebookCellOutputItem.text(msg.text || '', 'text/plain'));
                     execution.replaceOutput(new vscode.NotebookCellOutput(outputs));
                 } else if (msg.type === 'lineage') {
                     // Render mermaid lineage in a collapsible section
@@ -86,19 +88,20 @@ export class ETLNotebookController {
             await repl.execute(cell.document.getText(), exePath, args, cell.notebook.uri.fsPath, workspaceRoot, true, messageHandler);
             
             execution.end(true, Date.now());
-        } catch (err: any) {
+        } catch (err: unknown) {
+            const error = err instanceof Error ? err : new Error(String(err));
             execution.replaceOutput([
                 new vscode.NotebookCellOutput([
-                    vscode.NotebookCellOutputItem.error(err)
+                    vscode.NotebookCellOutputItem.error(error)
                 ])
             ]);
             execution.end(false, Date.now());
         } finally {
-            (repl as any)._onCellMessage = undefined;
+            (repl as unknown as { _onCellMessage?: (msg: EngineMessage) => void })._onCellMessage = undefined;
         }
     }
 
-    private _formatTable(columns: string[], rows: any[]): string {
+    private _formatTable(columns: string[], rows: Record<string, unknown>[]): string {
         let html = '<div style="max-height: 400px; overflow: auto; border: 1px solid #444; border-radius: 4px;">';
         html += '<table style="border-collapse: collapse; width: 100%; font-family: var(--vscode-editor-font-family); font-size: var(--vscode-editor-font-size);">';
         html += '<thead><tr>';
@@ -118,26 +121,34 @@ export class ETLNotebookController {
     }
 
     private _getExecutablePath(config: vscode.WorkspaceConfiguration): string {
-        let exePath = (config.get<string>('executable.path') || '').trim();
-        if (exePath) return exePath;
+        const exePath = (config.get<string>('executable.path') || '').trim();
+        if (exePath) {
+            return exePath;
+        }
 
         // 1. Try System PATH first
         const platform = process.platform;
         const cmd = platform === 'win32' ? `where ETL-SQL` : `which ETL-SQL`;
         try {
-            const out = require('child_process').execSync(cmd, { stdio: [] }).toString().trim();
-            if (out) return out.split(/\r?\n/)[0].trim();
-        } catch {}
+            const out = cp.execSync(cmd, { stdio: [] }).toString().trim();
+            if (out) {
+                return out.split(/\r?\n/)[0].trim();
+            }
+        } catch {
+            // ignore
+        }
 
         // 2. Search in common build folders
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         if (workspaceFolder) {
             const searchPaths = [
-                require('path').join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Debug', 'net10.0', 'ETL-SQL.exe'),
-                require('path').join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Release', 'net10.0', 'ETL-SQL.exe')
+                path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Debug', 'net10.0', 'ETL-SQL.exe'),
+                path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Release', 'net10.0', 'ETL-SQL.exe')
             ];
             for (const p of searchPaths) {
-                if (require('fs').existsSync(p)) return p;
+                if (fs.existsSync(p)) {
+                    return p;
+                }
             }
         }
 

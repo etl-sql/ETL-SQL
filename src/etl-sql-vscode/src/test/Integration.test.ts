@@ -99,7 +99,9 @@ describe('Engine Integration (Real Pipe)', () => {
                             doneReceived = true;
                             child.stdin.write(JSON.stringify({ Action: 'exit' }) + '\r\n');
                         }
-                    } catch {}
+                    } catch {
+                        // ignore startup noise
+                    }
                 }
             });
 

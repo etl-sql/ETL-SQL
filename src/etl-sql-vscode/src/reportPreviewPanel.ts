@@ -139,7 +139,7 @@ export class ReportPreviewPanel {
         });
     }
 
-    private async _handleDrillReport(target: string, parameters?: Record<string, any>): Promise<void> {
+    private async _handleDrillReport(target: string, parameters?: Record<string, unknown>): Promise<void> {
         // Resolve target relative to current script
         let targetPath = path.resolve(path.dirname(this._scriptPath), target);
         
@@ -155,7 +155,9 @@ export class ReportPreviewPanel {
                 targetPath = files[0].fsPath;
             } else if (!target.endsWith('.rptsql')) {
                 const files2 = await vscode.workspace.findFiles(`**/${target}.rptsql`);
-                if (files2.length > 0) targetPath = files2[0].fsPath;
+                if (files2.length > 0) {
+                    targetPath = files2[0].fsPath;
+                }
             }
         }
 
@@ -168,7 +170,7 @@ export class ReportPreviewPanel {
         const panel = ReportPreviewPanel.open(this._context, targetPath);
         if (parameters) {
             // Pre-seed the new panel with parameters
-            panel._parameters = parameters;
+            panel._parameters = parameters as Record<string, string | null>;
             panel._refreshContent();
         }
     }
@@ -197,7 +199,9 @@ export class ReportPreviewPanel {
             filters
         });
 
-        if (!uri) return;
+        if (!uri) {
+            return;
+        }
 
         const { exe, baseArgs } = this._resolveCliCall();
         const args = [...baseArgs];
@@ -210,7 +214,9 @@ export class ReportPreviewPanel {
 
         // Add parameters
         for (const [key, val] of Object.entries(this._parameters)) {
-            if (val !== null) args.push('--parameter', `${key}=${val}`);
+            if (val !== null) {
+                args.push('--parameter', `${key}=${val}`);
+            }
         }
 
         vscode.window.withProgress({
@@ -221,7 +227,9 @@ export class ReportPreviewPanel {
             return new Promise<void>((resolve, reject) => {
                 const proc = cp.spawn(exe, args, { shell: false, cwd: this._resolveExecutionCwd() });
                 let stderr = '';
-                proc.stderr.on('data', d => stderr += d.toString());
+                proc.stderr.on('data', d => {
+                    stderr += d.toString();
+                });
                 proc.on('close', code => {
                     if (code === 0) {
                         vscode.window.showInformationMessage(`Report exported successfully to ${path.basename(uri.fsPath)}`);
@@ -236,7 +244,7 @@ export class ReportPreviewPanel {
     }
 
     /** Spawns `ETL-SQL-Report build --format json` and returns the parsed manifest. */
-    private async _buildManifest(isInteraction: boolean, callback: (err: string | null, manifest: any | null) => void): Promise<void> {
+    private async _buildManifest(isInteraction: boolean, callback: (err: string | null, manifest: Record<string, unknown> | null) => void): Promise<void> {
         const outputPath = path.join(os.tmpdir(), `etlsql-preview-${Date.now()}.json`);
         const { exe, baseArgs } = this._resolveCliCall();
         
@@ -291,10 +299,13 @@ export class ReportPreviewPanel {
                 const manifest = JSON.parse(json);
                 // In the unified React UI, the protocol expect { type: 'reportManifest', ... }
                 manifest.type  = 'reportManifest';
-                if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+                if (fs.existsSync(outputPath)) {
+                    fs.unlinkSync(outputPath);
+                }
                 callback(null, manifest);
-            } catch (e: any) {
-                callback(e.message, null);
+            } catch (e: unknown) {
+                const message = e instanceof Error ? e.message : String(e);
+                callback(message, null);
             }
         });
     }
@@ -342,7 +353,7 @@ export class ReportPreviewPanel {
         return path.dirname(this._scriptPath);
     }
 
-    private _getReportHtml(manifest: any): string {
+    private _getReportHtml(manifest: Record<string, unknown>): string {
         const webview = this._panel.webview;
         const nonce   = this._nonce();
         
@@ -388,8 +399,9 @@ export class ReportPreviewPanel {
     private _nonce(): string {
         let text = '';
         const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-        for (let i = 0; i < 32; i++)
+        for (let i = 0; i < 32; i++) {
             text += possible.charAt(Math.floor(Math.random() * possible.length));
+        }
         return text;
     }
 

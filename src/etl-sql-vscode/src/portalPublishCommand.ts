@@ -4,10 +4,20 @@ import * as https from 'https';
 import * as http from 'http';
 import { URL } from 'url';
 
-interface FolderItem { id: number; path: string; }
-interface HttpResult  { status: number; data: any; }
+interface FolderNode {
+    id: number;
+    name: string;
+    children?: FolderNode[];
+}
 
-function httpRequest(method: string, urlStr: string, body: any, token?: string): Promise<HttpResult> {
+interface FolderItem { id: number; path: string; }
+
+interface HttpResult {
+    status: number;
+    data: unknown;
+}
+
+function httpRequest(method: string, urlStr: string, body: unknown, token?: string): Promise<HttpResult> {
     return new Promise((resolve, reject) => {
         const url     = new URL(urlStr);
         const isHttps = url.protocol === 'https:';
@@ -36,7 +46,9 @@ function httpRequest(method: string, urlStr: string, body: any, token?: string):
         });
 
         req.on('error', reject);
-        if (bodyStr) req.write(bodyStr);
+        if (bodyStr) {
+            req.write(bodyStr);
+        }
         req.end();
     });
 }
@@ -53,32 +65,38 @@ async function ensureAuthenticated(context: vscode.ExtensionContext, portalUrl: 
     }
 
     const username = await vscode.window.showInputBox({ prompt: 'Portal username', ignoreFocusOut: true });
-    if (username === undefined) return null;
+    if (username === undefined) {
+        return null;
+    }
 
     const password = await vscode.window.showInputBox({ prompt: 'Portal password', password: true, ignoreFocusOut: true });
-    if (password === undefined) return null;
+    if (password === undefined) {
+        return null;
+    }
 
     try {
         const res = await httpRequest('POST', `${portalUrl}/api/auth/login`, { username, password });
-        if (res.status === 401 || !res.data?.token) {
+        const resData = res.data as { token?: string; message?: string } | undefined;
+        if (res.status === 401 || !resData?.token) {
             vscode.window.showErrorMessage('Login failed: invalid credentials.');
             return null;
         }
         if (res.status !== 200) {
-            vscode.window.showErrorMessage(`Login failed: ${res.data?.message ?? `HTTP ${res.status}`}`);
+            vscode.window.showErrorMessage(`Login failed: ${resData?.message ?? `HTTP ${res.status}`}`);
             return null;
         }
-        const accessToken = res.data.token as string;
+        const accessToken = resData.token as string;
         await context.globalState.update(tokenKey,  accessToken);
         await context.globalState.update(expiryKey, Date.now() + 55 * 60 * 1000);
         return accessToken;
-    } catch (e: any) {
-        vscode.window.showErrorMessage(`Could not connect to portal: ${e.message}`);
+    } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        vscode.window.showErrorMessage(`Could not connect to portal: ${message}`);
         return null;
     }
 }
 
-function flattenFolders(nodes: any[], prefix = ''): FolderItem[] {
+function flattenFolders(nodes: FolderNode[], prefix = ''): FolderItem[] {
     const result: FolderItem[] = [];
     for (const node of nodes ?? []) {
         const p = prefix ? `${prefix}/${node.name}` : `/${node.name}`;
@@ -108,7 +126,9 @@ export async function publishToPortal(context: vscode.ExtensionContext, filePath
     }
 
     const token = await ensureAuthenticated(context, portalUrl);
-    if (!token) return;
+    if (!token) {
+        return;
+    }
 
     // Upload the local file to the portal's script root so it is accessible
     // on the portal's filesystem (e.g. inside a Docker container).
@@ -119,20 +139,28 @@ export async function publishToPortal(context: vscode.ExtensionContext, filePath
         const filename = path.basename(filePath);
         const res = await httpRequest('POST', `${portalUrl}/api/scripts/upload`,
             { filename, contentBase64 }, token);
+        const resData = res.data as { error?: string; path?: string } | undefined;
         if (res.status !== 200) {
-            const msg = res.data?.error ?? `HTTP ${res.status}`;
+            const msg = resData?.error ?? `HTTP ${res.status}`;
             vscode.window.showErrorMessage(`Upload failed: ${msg}`);
             return;
         }
-        scriptPath = res.data.path as string;
-    } catch (e: any) {
-        vscode.window.showErrorMessage(`Upload failed: ${e.message}`);
+        if (!resData || !resData.path) {
+            vscode.window.showErrorMessage('Upload failed: missing response path.');
+            return;
+        }
+        scriptPath = resData.path as string;
+    } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        vscode.window.showErrorMessage(`Upload failed: ${message}`);
         return;
     }
 
     const defaultName = path.basename(filePath).replace(/\.(rptsql|rpt)$/i, '');
     const reportName  = await vscode.window.showInputBox({ prompt: 'Report name', value: defaultName, ignoreFocusOut: true });
-    if (!reportName) return;
+    if (!reportName) {
+        return;
+    }
 
     let folders: FolderItem[];
     try {
@@ -142,8 +170,9 @@ export async function publishToPortal(context: vscode.ExtensionContext, filePath
             return;
         }
         folders = flattenFolders(Array.isArray(res.data) ? res.data : [res.data]);
-    } catch (e: any) {
-        vscode.window.showErrorMessage(`Could not fetch folders: ${e.message}`);
+    } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        vscode.window.showErrorMessage(`Could not fetch folders: ${message}`);
         return;
     }
 
@@ -156,10 +185,14 @@ export async function publishToPortal(context: vscode.ExtensionContext, filePath
         folders.map(f => ({ label: f.path, folderId: f.id })),
         { placeHolder: 'Select destination folder', ignoreFocusOut: true }
     );
-    if (!picked) return;
+    if (!picked) {
+        return;
+    }
 
     const description = await vscode.window.showInputBox({ prompt: 'Description (optional — press Enter to skip)', ignoreFocusOut: true });
-    if (description === undefined) return;
+    if (description === undefined) {
+        return;
+    }
 
     try {
         const res = await httpRequest('POST', `${portalUrl}/api/reports`, {
@@ -174,7 +207,8 @@ export async function publishToPortal(context: vscode.ExtensionContext, filePath
         } else if (res.status === 403) {
             vscode.window.showErrorMessage('Publish failed: insufficient permissions on the selected folder.');
         } else if (res.status === 400) {
-            const msg = res.data?.message || res.data?.title || `HTTP 400`;
+            const resData = res.data as { message?: string; title?: string } | undefined;
+            const msg = resData?.message || resData?.title || `HTTP 400`;
             if (typeof msg === 'string' && msg.toLowerCase().includes('path')) {
                 vscode.window.showErrorMessage("Publish failed: file path is outside the Portal's configured root directory.");
             } else {
@@ -183,7 +217,8 @@ export async function publishToPortal(context: vscode.ExtensionContext, filePath
         } else {
             vscode.window.showErrorMessage(`Publish failed: HTTP ${res.status}`);
         }
-    } catch (e: any) {
-        vscode.window.showErrorMessage(`Publish failed: ${e.message}`);
+    } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
+        vscode.window.showErrorMessage(`Publish failed: ${message}`);
     }
 }

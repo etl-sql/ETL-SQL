@@ -24,6 +24,35 @@ let outputChannel: vscode.OutputChannel;
 let connectionsProvider: ConnectionsProvider;
 let sidebarProvider: SidebarProvider;
 
+function syncNotebookContext(document: vscode.TextDocument) {
+    if (!client) {
+        return;
+    }
+    
+    const notebook = vscode.workspace.notebookDocuments.find(n => 
+        n.getCells().some(c => c.document.uri.toString() === document.uri.toString())
+    );
+    if (!notebook) {
+        return;
+    }
+    
+    let precedingText = '';
+    for (const cell of notebook.getCells()) {
+        if (cell.kind === vscode.NotebookCellKind.Code) {
+            if (cell.document.uri.toString() === document.uri.toString()) {
+                break;
+            }
+            precedingText += cell.document.getText() + '\n\n';
+        }
+    }
+    
+    client.sendNotification('etlsql/updateNotebookContext', {
+        uri: document.uri.toString(),
+        prefix: precedingText,
+        notebookPath: notebook.uri.fsPath
+    });
+}
+
 export function activate(context: vscode.ExtensionContext) {
     outputChannel = vscode.window.createOutputChannel("ETL-SQL");
     outputChannel.appendLine("ETL-SQL extension activated.");
@@ -68,7 +97,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     ReplManager.getInstance().onVariablesChange(vars => {
-        connectionsProvider.updateVariables(vars);
+        connectionsProvider.updateVariables(vars as { name: string; value: string; type: string }[]);
         sidebarProvider.postMessage({ type: 'variables', variables: vars });
     });
 
@@ -102,9 +131,11 @@ export function activate(context: vscode.ExtensionContext) {
     }
 
     // Register Results Panel (Bottom Panel)
-    const resultsProvider = ResultsPanel.register(context);
-    ResultsPanel.setOnMessageReceived((msg) => {
-        if (msg.type === 'cancel') ReplManager.getInstance().cancel();
+    ResultsPanel.register(context);
+    ResultsPanel.setOnMessageReceived((msg: unknown) => {
+        if ((msg as { type: string }).type === 'cancel') {
+            ReplManager.getInstance().cancel();
+        }
     });
 
     let serverPath = (config.get<string>('server.path') || '').trim();
@@ -182,14 +213,14 @@ export function activate(context: vscode.ExtensionContext) {
             connectionsProvider.refresh();
             syncConnectionsToLsp();
 
-            client.onNotification('etlsql/scriptConnections', (params: { uri: string, connections: any[] }) => {
+            client.onNotification('etlsql/scriptConnections', (params: { uri: string, connections: unknown[] }) => {
                 const normalizedUri = vscode.Uri.parse(params.uri).toString();
                 outputChannel.appendLine(`Received ${params.connections.length} connections from script: ${normalizedUri}`);
-                connectionsProvider.updateScriptConnections(normalizedUri, params.connections);
+                connectionsProvider.updateScriptConnections(normalizedUri, params.connections as Connection[]);
                 sidebarProvider.postMessage({ type: 'scriptConnections', uri: normalizedUri, connections: params.connections });
             });
 
-            client.onNotification('etlsql/scriptVariables', (params: { uri: string, variables: any[] }) => {
+            client.onNotification('etlsql/scriptVariables', (params: { uri: string, variables: unknown[] }) => {
                 const normalizedUri = vscode.Uri.parse(params.uri).toString();
                 // outputChannel.appendLine(`Received ${params.variables.length} variables from script: ${normalizedUri}`);
                 sidebarProvider.postMessage({ type: 'scriptVariables', uri: normalizedUri, variables: params.variables });
@@ -198,32 +229,6 @@ export function activate(context: vscode.ExtensionContext) {
         }).catch(err => {
             outputChannel.appendLine(`CRITICAL: Language Client failed to start: ${err}`);
         });
-
-        // Sync notebook context for cross-cell autocomplete
-        function syncNotebookContext(document: vscode.TextDocument) {
-            if (!client) return;
-            
-            const notebook = vscode.workspace.notebookDocuments.find(n => 
-                n.getCells().some(c => c.document.uri.toString() === document.uri.toString())
-            );
-            if (!notebook) return;
-            
-            let precedingText = '';
-            for (const cell of notebook.getCells()) {
-                if (cell.kind === vscode.NotebookCellKind.Code) {
-                    if (cell.document.uri.toString() === document.uri.toString()) {
-                        break;
-                    }
-                    precedingText += cell.document.getText() + '\n\n';
-                }
-            }
-            
-            client.sendNotification('etlsql/updateNotebookContext', {
-                uri: document.uri.toString(),
-                prefix: precedingText,
-                notebookPath: notebook.uri.fsPath
-            });
-        }
 
         context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(e => {
             if (e.document.uri.scheme === 'vscode-notebook-cell') {
@@ -266,7 +271,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('etlsql.removeConnection', (node: any) => {
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.removeConnection', (node: { label?: string }) => {
         if (node && node.label) {
             connectionsProvider.removeConnection(node.label);
             syncConnectionsToLsp();
@@ -282,7 +287,7 @@ export function activate(context: vscode.ExtensionContext) {
         syncConnectionsToLsp();
     }));
 
-    context.subscriptions.push(vscode.commands.registerCommand('etlsql.copyConnection', (node: any) => {
+    context.subscriptions.push(vscode.commands.registerCommand('etlsql.copyConnection', (node: { connection?: { name: string; type: string; connectionString: string } }) => {
         if (node && node.connection) {
             const conn = node.connection;
             const code = `CREATE CONNECTION ${conn.name} ON ${conn.type}('${conn.connectionString}');`;
@@ -320,7 +325,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    vscode.workspace.onDidChangeConfiguration(e => {
+    vscode.workspace.onDidChangeConfiguration(() => {
         // Handled as needed
     });
 
@@ -362,7 +367,9 @@ export function activate(context: vscode.ExtensionContext) {
             placeHolder: "Password"
         });
 
-        if (!password) return;
+        if (!password) {
+            return;
+        }
 
         const editor = vscode.window.visibleTextEditors.find(e => e.document.uri.toString() === uri) 
                     || vscode.window.activeTextEditor;
@@ -390,8 +397,9 @@ export function activate(context: vscode.ExtensionContext) {
                 
                 vscode.window.showInformationMessage("Connections secured successfully.");
             }
-        } catch (err: any) {
-            vscode.window.showErrorMessage(`Failed to secure connections: ${err.message}`);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            vscode.window.showErrorMessage(`Failed to secure connections: ${message}`);
         }
     }));
 
@@ -463,12 +471,14 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
         const errors = diagnostics.filter(d => d.severity === vscode.DiagnosticSeverity.Error);
         if (errors.length > 0) {
             const choice = await vscode.window.showWarningMessage(`This script has errors. Run anyway?`, { modal: true }, 'Run');
-            if (choice !== 'Run') return;
+            if (choice !== 'Run') {
+                return;
+            }
         }
     }
 
     const config = vscode.workspace.getConfiguration('etlsql');
-    let exePath = getExecutablePath(context, config);
+    const exePath = getExecutablePath(context, config);
     
     // Defaulting previously user-facing settings to standard defaults for cleaner UI
     const runMethod = 'Webview (Grid)'; 
@@ -504,8 +514,13 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
 
         const sessionId = getSessionId(document);
         const replArgs = [];
-        if (verbose) replArgs.push('--verbose');
-        if (enableLogging) { replArgs.push('--log'); replArgs.push(logPath); }
+        if (verbose) {
+            replArgs.push('--verbose');
+        }
+        if (enableLogging) {
+            replArgs.push('--log');
+            replArgs.push(logPath);
+        }
         replArgs.push('--perf', '--json', '--session', sessionId);
         if (masterPassword) {
             replArgs.push('--pass', masterPassword);
@@ -517,8 +532,9 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
                 ?? (scriptPath ? path.dirname(scriptPath) : undefined);
             vscode.commands.executeCommand('setContext', 'etlsql.isRunning', true);
             await ReplManager.getInstance().execute(scriptText, exePath, replArgs, scriptPath, workspaceRoot);
-        } catch (err: any) {
-            vscode.window.showErrorMessage(`ETL-SQL Error: ${err.message}`);
+        } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            vscode.window.showErrorMessage(`ETL-SQL Error: ${message}`);
         } finally {
             vscode.commands.executeCommand('setContext', 'etlsql.isRunning', false);
             connectionsProvider.refresh();
@@ -533,7 +549,9 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
         let scriptPath = document.fileName;
         if (selectionOnly || document.isDirty || document.isUntitled) {
             const tempDir = path.join(os.tmpdir(), 'etlsql_temp');
-            if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+            if (!fs.existsSync(tempDir)) {
+                fs.mkdirSync(tempDir, { recursive: true });
+            }
             scriptPath = path.join(tempDir, `temp_${Date.now()}.etlsql`);
             fs.writeFileSync(scriptPath, scriptText);
         }
@@ -546,7 +564,9 @@ async function runEtlSql(context: vscode.ExtensionContext, selectionOnly: boolea
 }
 
 function warmupRepl(context: vscode.ExtensionContext, document: vscode.TextDocument) {
-    if (ReplManager.getInstance().isRunning()) return;
+    if (ReplManager.getInstance().isRunning()) {
+        return;
+    }
     const config = vscode.workspace.getConfiguration('etlsql');
     const exePath = getExecutablePath(context, config);
     const sessionId = getSessionId(document);
@@ -555,16 +575,22 @@ function warmupRepl(context: vscode.ExtensionContext, document: vscode.TextDocum
 }
 
 function getExecutablePath(context: vscode.ExtensionContext, config: vscode.WorkspaceConfiguration): string {
-    let exePath = (config.get<string>('executable.path') || '').trim();
-    if (exePath) return exePath;
+    const exePath = (config.get<string>('executable.path') || '').trim();
+    if (exePath) {
+        return exePath;
+    }
 
     // 1. Try System PATH first (User-installed SDK)
     const inPath = findInPath(os.platform() === 'win32' ? 'ETL-SQL' : 'ETL-SQL');
-    if (inPath) return inPath;
+    if (inPath) {
+        return inPath;
+    }
 
     // 2. Try bundled path
     const bundledPath = path.join(context.extensionPath, 'bin', os.platform() === 'win32' ? 'ETL-SQL.exe' : 'ETL-SQL');
-    if (fs.existsSync(bundledPath)) return bundledPath;
+    if (fs.existsSync(bundledPath)) {
+        return bundledPath;
+    }
 
     // 3. Search in common build folders
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -573,7 +599,11 @@ function getExecutablePath(context: vscode.ExtensionContext, config: vscode.Work
             path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Debug', 'net10.0', 'ETL-SQL.exe'),
             path.join(workspaceFolder.uri.fsPath, 'src', 'ETL-SQL.App', 'bin', 'Release', 'net10.0', 'ETL-SQL.exe')
         ];
-        for (const p of searchPaths) if (fs.existsSync(p)) return p;
+        for (const p of searchPaths) {
+            if (fs.existsSync(p)) {
+                return p;
+            }
+        }
     }
 
     const finalPath = 'ETL-SQL.exe'; // Fallback to PATH for spawn even if findInPath failed
@@ -590,7 +620,9 @@ function getSessionId(document: vscode.TextDocument): string {
 
 export function deactivate(): Thenable<void> | undefined {
     ReplManager.getInstance().stop();
-    if (!client) return undefined;
+    if (!client) {
+        return undefined;
+    }
     return client.stop();
 }
 
@@ -613,12 +645,16 @@ function getReportExecutablePath(context: vscode.ExtensionContext): { exe: strin
     const config = vscode.workspace.getConfiguration('etlsql');
     const configured = (config.get<string>('report.executable.path') || '').trim();
     
-    if (configured) return { exe: configured, baseArgs: [] };
+    if (configured) {
+        return { exe: configured, baseArgs: [] };
+    }
 
     // 1. Try bundled path
     const ext = os.platform() === 'win32' ? '.exe' : '';
     const bundledPath = path.join(context.extensionPath, 'bin', `ETL-SQL-Report${ext}`);
-    if (fs.existsSync(bundledPath)) return { exe: bundledPath, baseArgs: [] };
+    if (fs.existsSync(bundledPath)) {
+        return { exe: bundledPath, baseArgs: [] };
+    }
 
     // 2. Dev fallback
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -649,7 +685,7 @@ async function launchReport(context: vscode.ExtensionContext, mode: 'file' | 'di
     const terminal = vscode.window.createTerminal(`ETL-SQL Report Server [${mode}]`);
     terminal.show();
 
-    let args = [...reportExe.baseArgs, 'serve'];
+    const args = [...reportExe.baseArgs, 'serve'];
     const dir = path.dirname(targetPath);
 
     if (mode === 'dir') {

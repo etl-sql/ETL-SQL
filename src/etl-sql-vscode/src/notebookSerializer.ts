@@ -12,10 +12,9 @@ interface RawNotebookCell {
 
 export class ETLNotebookSerializer implements vscode.NotebookSerializer {
     async deserializeNotebook(
-        content: Uint8Array,
-        _token: vscode.CancellationToken
+        content: Uint8Array
     ): Promise<vscode.NotebookData> {
-        var contents = new TextDecoder().decode(content);
+        const contents = new TextDecoder().decode(content);
 
         let raw: RawNotebook;
         try {
@@ -32,10 +31,9 @@ export class ETLNotebookSerializer implements vscode.NotebookSerializer {
     }
 
     async serializeNotebook(
-        data: vscode.NotebookData,
-        _token: vscode.CancellationToken
+        data: vscode.NotebookData
     ): Promise<Uint8Array> {
-        let contents: RawNotebook = {
+        const contents: RawNotebook = {
             cells: data.cells.map(cell => ({
                 kind: cell.kind,
                 language: cell.languageId,

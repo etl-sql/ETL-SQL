@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import * as fs from 'fs';
-import { ReplManager } from './ReplManager';
+import { LanguageClient } from 'vscode-languageclient/node';
 import { ConnectionsProvider } from './connectionsProvider';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
@@ -10,9 +9,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     private _view?: vscode.WebviewView;
     private _isReady: boolean = false;
-    private _messageQueue: any[] = [];
+    private _messageQueue: unknown[] = [];
 
-    public client: any;
+    public client: LanguageClient | undefined;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -29,9 +28,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
 
     public resolveWebviewView(
-        webviewView: vscode.WebviewView,
-        _context: vscode.WebviewViewResolveContext,
-        _token: vscode.CancellationToken,
+        webviewView: vscode.WebviewView
     ) {
         this._view = webviewView;
 
@@ -54,7 +51,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     });
                     this.postMessage({ 
                         type: 'variables', 
-                        variables: (this._connectionsProvider as any).variables || [] 
+                        variables: (this._connectionsProvider as unknown as { variables: unknown[] }).variables || [] 
                     });
                     
                     // Also trigger active editor change if one exists
@@ -88,8 +85,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         });
     }
 
-    private async _handleGetTables(message: any) {
-        if (!this.client) return;
+    private async _handleGetTables(message: { connectionName: string, uri: string, requestId: string }) {
+        if (!this.client) {
+            return;
+        }
         try {
             const response = await this.client.sendRequest('etlsql/getTables', {
                 connectionName: message.connectionName,
@@ -98,13 +97,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             this.postMessage({
                 type: 'tablesResponse',
                 requestId: message.requestId,
-                tables: (response as any).tables
+                tables: (response as { tables: string[] }).tables
             });
-        } catch (e) {}
+        } catch (e) {
+            // ignore
+        }
     }
 
-    private async _handleGetColumns(message: any) {
-        if (!this.client) return;
+    private async _handleGetColumns(message: { connectionName: string, tableName: string, uri: string, requestId: string }) {
+        if (!this.client) {
+            return;
+        }
         try {
             const response = await this.client.sendRequest('etlsql/getColumns', {
                 connectionName: message.connectionName,
@@ -114,24 +117,30 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             this.postMessage({
                 type: 'columnsResponse',
                 requestId: message.requestId,
-                columns: (response as any).columns
+                columns: (response as { columns: string[] }).columns
             });
-        } catch (e) {}
+        } catch (e) {
+            // ignore
+        }
     }
 
-    private async _handleGetTempTables(message: any) {
-        if (!this.client) return;
+    private async _handleGetTempTables(message: { uri: string, requestId: string }) {
+        if (!this.client) {
+            return;
+        }
         try {
             const response = await this.client.sendRequest('etlsql/getTempTables', { uri: message.uri });
             this.postMessage({
                 type: 'tempTablesResponse',
                 requestId: message.requestId,
-                tables: (response as any).tables
+                tables: (response as { tables: string[] }).tables
             });
-        } catch (e) {}
+        } catch (e) {
+            // ignore
+        }
     }
 
-    public postMessage(message: any) {
+    public postMessage(message: unknown) {
         if (this._isReady && this._view) {
             this._view.webview.postMessage(message);
         } else {
@@ -140,7 +149,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
 
     private _flushQueue() {
-        if (!this._view) return;
+        if (!this._view) {
+            return;
+        }
         while (this._messageQueue.length > 0) {
             const msg = this._messageQueue.shift();
             this._view.webview.postMessage(msg);
