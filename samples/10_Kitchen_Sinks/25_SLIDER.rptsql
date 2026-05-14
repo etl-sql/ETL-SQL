@@ -1,0 +1,35 @@
+-- Kitchen Sink: SLIDER Visual
+-- This script demonstrates the SLIDER visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: SLIDER Visual';
+
+-- 1. Setup Parameter (MINMAX type)
+DECLARE @range MINMAX(INT) = (10, 80);
+
+-- 2. Slider Visual
+CREATE VISUAL AgeSlider AS SLIDER (
+    TITLE = 'Filter by Age',
+    OPTIONS (
+        MIN = 0,
+        MAX = 100,
+        STEP = 1,
+        DEFAULT = 25 -- Initial value if not using the full range? Wait, Slider can be a range or single value.
+    ),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@range, value))
+);
+
+-- 3. Result
+CREATE VISUAL SliderResult AS TABLE (
+    SOURCE = (SELECT @range.MIN AS MinVal, @range.MAX AS MaxVal)
+);
+
+-- Page Layout
+CREATE PAGE SliderKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = AgeSlider,
+        'B' = SliderResult
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = SliderKitchenSink) WITH PAGES (SliderKitchenSink);

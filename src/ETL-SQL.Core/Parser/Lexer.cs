@@ -128,6 +128,7 @@ namespace ETL_SQL.Core.Parser
             dict["RADAR"]        = TokenType.RADAR;
             dict["BUBBLE"]       = TokenType.BUBBLE;
             dict["CANDLESTICK"]  = TokenType.CANDLESTICK;
+            dict["GANTT"]        = TokenType.GANTT;
             dict["FORMATTING"]  = TokenType.FORMATTING;
             dict["EXPECT"]      = TokenType.EXPECT;
             dict["PLACEHOLDER"] = TokenType.PLACEHOLDER;

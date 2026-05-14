@@ -1,0 +1,44 @@
+-- Kitchen Sink: RADAR Visual
+-- This script demonstrates the RADAR (Spider) visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: RADAR Visual';
+SET REPORT DESCRIPTION = 'Demonstration of RADAR (Spider) chart capabilities for multi-dimensional metrics.';
+
+-- 1. Mock Data Generation
+-- First column: Series Name
+-- Other columns: Metric Axes
+SELECT 'Product A' AS Name, 80 AS Quality, 70 AS Speed, 90 AS Support, 60 AS Value, 85 AS UX INTO #radar
+UNION ALL SELECT 'Product B', 60, 90, 70, 80, 65
+UNION ALL SELECT 'Product C', 90, 60, 85, 50, 95;
+
+-- 2. Basic Radar Chart
+-- No MAPPINGS required; engine uses all columns.
+CREATE VISUAL BasicRadar AS RADAR (
+    SOURCE = #radar,
+    TITLE = 'Product Performance Radar'
+);
+
+-- 3. Styled Radar
+CREATE VISUAL StyledRadar AS RADAR (
+    SOURCE = #radar,
+    TITLE = 'Styled Radar Chart',
+    OPTIONS (
+        COLORS (
+            'Product A' = '#4e79a7',
+            'Product B' = '#f28e2b',
+            'Product C' = '#e15759'
+        ),
+        LEGEND_POSITION = BOTTOM
+    )
+);
+
+-- Page Layout
+CREATE PAGE RadarKitchenSink AS LAYOUT (
+    STRUCTURE = 'A B',
+    MAP (
+        'A' = BasicRadar,
+        'B' = StyledRadar
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = RadarKitchenSink) WITH PAGES (RadarKitchenSink);

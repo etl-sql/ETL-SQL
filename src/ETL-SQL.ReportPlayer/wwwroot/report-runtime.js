@@ -1105,7 +1105,12 @@
             })
             .catch(err => {
                 const parent = wrapper.parentElement;
-                if (parent) parent.appendChild(noDataEl('Map load failed: ' + err.message));
+                if (parent) {
+                    const msg = !isWebMode && vscode 
+                        ? 'Maps only work in the Portal' 
+                        : 'Map load failed: ' + err.message;
+                    parent.appendChild(noDataEl(msg));
+                }
             });
     }
 
@@ -1163,6 +1168,34 @@
                 if (s.type === 'scatter') s.symbolSize = val => val[2];
             }
         });
+
+        // GANTT: __ganttRenderItem on root option → wire renderItem function on custom series
+        if (option.__ganttRenderItem) {
+            delete option.__ganttRenderItem;
+            (option.series || []).forEach(s => {
+                if (s.type === 'custom') {
+                    s.renderItem = function(params, api) {
+                        const categoryIndex = api.value(0);
+                        const start = api.coord([api.value(1), categoryIndex]);
+                        const end   = api.coord([api.value(2), categoryIndex]);
+                        const height = api.size([0, 1])[1] * 0.6; // Bar height 60% of category height
+                        
+                        return {
+                            type: 'rect',
+                            shape: {
+                                x: start[0],
+                                y: start[1] - height / 2,
+                                width: Math.max(end[0] - start[0], 2), // Min 2px width
+                                height: height
+                            },
+                            style: api.style({
+                                fill: api.value(4) || '#5470c6'
+                            })
+                        };
+                    };
+                }
+            });
+        }
 
         // FIPS matching: tell ECharts to use the 'fips' property instead of default 'name'
         if (matchBy === 'FIPS') {

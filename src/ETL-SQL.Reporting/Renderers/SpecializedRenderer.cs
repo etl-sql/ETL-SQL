@@ -341,6 +341,70 @@ namespace ETL_SQL.Reporting.Renderers
             });
         }
 
+        // ── GANTT ─────────────────────────────────────────────────────────────
+        // Expected mappings: Y (Task/Category), START (Date/Time), END (Date/Time), COLOR (optional).
+        // If mappings are absent, uses columns 0 (Y), 1 (Start), 2 (End).
+
+        public string RenderGantt(VisualManifest v)
+        {
+            var yCol     = FindRole(v, "y")      ?? FindRole(v, "label") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var startCol = FindRole(v, "start")  ?? FindRole(v, "x")     ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var endCol   = FindRole(v, "end")    ?? FindRole(v, "x2")    ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
+            var colorCol = FindRole(v, "color")  ?? (v.Columns.Count > 3 ? v.Columns[3] : null);
+
+            int yi = ColIdx(v, yCol);
+            int si = ColIdx(v, startCol);
+            int ei = ColIdx(v, endCol);
+            int ci = ColIdx(v, colorCol);
+
+            // Get unique categories for the Y axis
+            var categories = v.Rows
+                .Select(r => yi >= 0 && yi < r.Count ? r[yi]?.ToString() ?? "" : "")
+                .Distinct()
+                .ToList();
+            
+            var catMap = categories.Select((c, i) => (c, i)).ToDictionary(t => t.c, t => t.i);
+
+            // Encode [categoryIndex, start, end, label, color]
+            var data = v.Rows.Select(r =>
+            {
+                string catName = yi >= 0 && yi < r.Count ? r[yi]?.ToString() ?? "" : "";
+                int catIdx     = catMap.TryGetValue(catName, out var idx) ? idx : 0;
+                var startVal   = si >= 0 && si < r.Count ? r[si] : null;
+                var endVal     = ei >= 0 && ei < r.Count ? r[ei] : null;
+                var color      = ci >= 0 && ci < r.Count ? r[ci]?.ToString() : null;
+
+                return new object[] 
+                { 
+                    catIdx, 
+                    startVal, 
+                    endVal, 
+                    catName, 
+                    color ?? GetColor(v, "primary") ?? "#5470c6" 
+                };
+            }).ToList();
+
+            return Serialize(new
+            {
+                title   = TitleOpt(v),
+                tooltip = new { trigger = "item" },
+                grid    = new { left = "10%", right = "5%", bottom = "10%", containLabel = true },
+                xAxis   = new { type = "time" },
+                yAxis   = new { type = "category", data = categories, inverse = true },
+                __ganttRenderItem = true, // signal to client to wire custom renderItem
+                series  = new[]
+                {
+                    new
+                    {
+                        type = "custom",
+                        name = v.Name,
+                        data = data,
+                        encode = new { x = new[] { 1, 2 }, y = 0 }
+                    }
+                }
+            });
+        }
+
         private static int ColIdx(VisualManifest v, string? col) =>
             col != null ? v.Columns.FindIndex(c => string.Equals(c, col, StringComparison.OrdinalIgnoreCase)) : -1;
     }

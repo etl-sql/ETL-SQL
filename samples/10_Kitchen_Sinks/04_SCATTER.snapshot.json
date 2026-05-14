@@ -1,0 +1,497 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\04_SCATTER.rptsql",
+  "builtAt": "2026-05-14T17:38:48.3729846Z",
+  "title": "Kitchen Sink: SCATTER Visual",
+  "description": "Demonstration of SCATTER plot capabilities, including regression fits and multiple series.",
+  "visuals": [
+    {
+      "name": "BasicScatter",
+      "visualType": "SCATTER",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Basic Scatter Plot\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022xAxis\u0022:{},\u0022yAxis\u0022:{},\u0022series\u0022:[{\u0022type\u0022:\u0022scatter\u0022,\u0022name\u0022:\u0022BasicScatter\u0022,\u0022data\u0022:[[10,20],[15,25],[20,30],[25,35],[30,45],[12,18],[18,22],[22,28],[28,32],[35,40]]}]}",
+      "columns": [
+        "Score",
+        "Rank",
+        "Grp"
+      ],
+      "rows": [
+        [
+          "10",
+          "20",
+          "Group A"
+        ],
+        [
+          "15",
+          "25",
+          "Group A"
+        ],
+        [
+          "20",
+          "30",
+          "Group A"
+        ],
+        [
+          "25",
+          "35",
+          "Group A"
+        ],
+        [
+          "30",
+          "45",
+          "Group A"
+        ],
+        [
+          "12",
+          "18",
+          "Group B"
+        ],
+        [
+          "18",
+          "22",
+          "Group B"
+        ],
+        [
+          "22",
+          "28",
+          "Group B"
+        ],
+        [
+          "28",
+          "32",
+          "Group B"
+        ],
+        [
+          "35",
+          "40",
+          "Group B"
+        ]
+      ],
+      "options": {
+        "title": "Basic Scatter Plot",
+        "mapping:x": "Score",
+        "mapping:y": "Rank"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "MultiScatter",
+      "visualType": "SCATTER",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Multi-Series Scatter\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022xAxis\u0022:{},\u0022yAxis\u0022:{},\u0022series\u0022:[{\u0022type\u0022:\u0022scatter\u0022,\u0022name\u0022:\u0022MultiScatter\u0022,\u0022data\u0022:[[10,20],[15,25],[20,30],[25,35],[30,45],[12,18],[18,22],[22,28],[28,32],[35,40]]}]}",
+      "columns": [
+        "Score",
+        "Rank",
+        "Grp"
+      ],
+      "rows": [
+        [
+          "10",
+          "20",
+          "Group A"
+        ],
+        [
+          "15",
+          "25",
+          "Group A"
+        ],
+        [
+          "20",
+          "30",
+          "Group A"
+        ],
+        [
+          "25",
+          "35",
+          "Group A"
+        ],
+        [
+          "30",
+          "45",
+          "Group A"
+        ],
+        [
+          "12",
+          "18",
+          "Group B"
+        ],
+        [
+          "18",
+          "22",
+          "Group B"
+        ],
+        [
+          "22",
+          "28",
+          "Group B"
+        ],
+        [
+          "28",
+          "32",
+          "Group B"
+        ],
+        [
+          "35",
+          "40",
+          "Group B"
+        ]
+      ],
+      "options": {
+        "title": "Multi-Series Scatter",
+        "mapping:x": "Score",
+        "mapping:y": "Rank",
+        "mapping:series": "Grp"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "RegressionScatter",
+      "visualType": "SCATTER",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Scatter with Regression Fits\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022xAxis\u0022:{},\u0022yAxis\u0022:{},\u0022series\u0022:[{\u0022type\u0022:\u0022scatter\u0022,\u0022name\u0022:\u0022RegressionScatter\u0022,\u0022data\u0022:[[10,20],[15,25],[20,30],[25,35],[30,45]]}]}",
+      "columns": [
+        "Score",
+        "Rank"
+      ],
+      "rows": [
+        [
+          "10",
+          "20"
+        ],
+        [
+          "15",
+          "25"
+        ],
+        [
+          "20",
+          "30"
+        ],
+        [
+          "25",
+          "35"
+        ],
+        [
+          "30",
+          "45"
+        ]
+      ],
+      "options": {
+        "title": "Scatter with Regression Fits",
+        "mapping:x": "Score",
+        "mapping:y": "Rank"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "overlays": [
+        {
+          "overlayType": "Linear",
+          "parameter": null,
+          "lineStyle": "dashed",
+          "color": "Blue",
+          "label": "Linear Fit"
+        },
+        {
+          "overlayType": "Polynomial",
+          "parameter": 2,
+          "lineStyle": "dotted",
+          "color": "Red",
+          "label": "Poly Fit (Deg 2)"
+        }
+      ]
+    },
+    {
+      "name": "ThresholdScatter",
+      "visualType": "SCATTER",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Scatter with Thresholds\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022xAxis\u0022:{},\u0022yAxis\u0022:{},\u0022series\u0022:[{\u0022type\u0022:\u0022scatter\u0022,\u0022name\u0022:\u0022ThresholdScatter\u0022,\u0022data\u0022:[[10,20],[15,25],[20,30],[25,35],[30,45],[12,18],[18,22],[22,28],[28,32],[35,40]]}]}",
+      "columns": [
+        "Score",
+        "Rank",
+        "Grp"
+      ],
+      "rows": [
+        [
+          "10",
+          "20",
+          "Group A"
+        ],
+        [
+          "15",
+          "25",
+          "Group A"
+        ],
+        [
+          "20",
+          "30",
+          "Group A"
+        ],
+        [
+          "25",
+          "35",
+          "Group A"
+        ],
+        [
+          "30",
+          "45",
+          "Group A"
+        ],
+        [
+          "12",
+          "18",
+          "Group B"
+        ],
+        [
+          "18",
+          "22",
+          "Group B"
+        ],
+        [
+          "22",
+          "28",
+          "Group B"
+        ],
+        [
+          "28",
+          "32",
+          "Group B"
+        ],
+        [
+          "35",
+          "40",
+          "Group B"
+        ]
+      ],
+      "options": {
+        "title": "Scatter with Thresholds",
+        "mapping:x": "Score",
+        "mapping:y": "Rank"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "overlays": [
+        {
+          "overlayType": "Goal",
+          "parameter": 30,
+          "lineStyle": "dashed",
+          "color": "Green",
+          "label": "Rank Threshold"
+        },
+        {
+          "overlayType": "Average",
+          "parameter": null,
+          "lineStyle": "dotted",
+          "color": "Orange",
+          "label": "Mean Rank"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "ScatterKitchenSink",
+      "structure": "A B / C D",
+      "slotMap": {
+        "A": "BasicScatter",
+        "B": "MultiScatter",
+        "C": "RegressionScatter",
+        "D": "ThresholdScatter"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "ScatterKitchenSink",
+      "pages": [
+        "ScatterKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "10"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 10,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[b49a60e5] [SELECT] Executing SelectStatement. Session: b49a60e5",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:48.3405777Z"
+    },
+    {
+      "message": "[b49a60e5] 10 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:48.3606906Z"
+    },
+    {
+      "message": "[b49a60e5] Visual \u0027BasicScatter\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:48.3632734Z"
+    },
+    {
+      "message": "[b49a60e5] Visual \u0027MultiScatter\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:48.3651004Z"
+    },
+    {
+      "message": "[b49a60e5] Visual \u0027RegressionScatter\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:48.3653394Z"
+    },
+    {
+      "message": "[b49a60e5] Visual \u0027ThresholdScatter\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:48.3658028Z"
+    },
+    {
+      "message": "[b49a60e5] Page \u0027ScatterKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:48.3668625Z"
+    },
+    {
+      "message": "[b49a60e5] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:48.3674914Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "3fa6ebbc-470a-4bc1-b932-f2cb6c3b3055",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 35.6834,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "19a996b3-368f-40f2-8cc2-ed3cd4eceb6b",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2269,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "839aa309-a70c-4e7d-beff-9bba6c95fcf1",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0299,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "3544bf18-fabf-4082-b63a-a66f9ae0fb03",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 20,
+          "durationMs": 22.8231,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 876.3051469782807,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8593e372-30ab-470f-b522-86082b269a9c",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.826,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "adc40943-d3f3-4baf-b131-e16379f9abb3",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0902,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "95101f2c-31f3-47e7-b683-954b639a336d",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.062,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "9d739617-3c56-453b-8bcb-e832358b0ca9",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.451,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "e4bcc0be-200a-44a9-b21a-9c19b6ddb162",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8909,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5e7cf770-5d40-4099-9c12-59e2b5148032",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.268,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

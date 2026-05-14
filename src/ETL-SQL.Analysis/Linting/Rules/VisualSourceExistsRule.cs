@@ -49,14 +49,57 @@ namespace ETL_SQL.Analysis.Linting.Rules
         private static HashSet<string> CollectTempTableNames(Script script)
         {
             var names = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
-            foreach (var stmt in script.Statements)
-            {
-                if (stmt is CreateDatasetStatement ds)
-                    names.Add(StripSigil(ds.TempTableName));
-                else if (stmt is SelectStatement sel && sel.IntoTable != null)
-                    names.Add(StripSigil(sel.IntoTable.TableName));
-            }
+            CollectFromStatements(script.Statements, names);
             return names;
+        }
+
+        private static void CollectFromStatements(IEnumerable<Statement> statements, HashSet<string> names)
+        {
+            foreach (var stmt in statements)
+            {
+                var created = stmt.GetCreatedTable();
+                if (created != null)
+                {
+                    names.Add(StripSigil(created));
+                }
+
+                // Recurse into blocks to find nested definitions (e.g. inside BEGIN TRY)
+                if (stmt is BlockStatement block)
+                {
+                    CollectFromStatements(block.Statements, names);
+                }
+                else if (stmt is TryCatchStatement tc)
+                {
+                    CollectFromStatements(new[] { tc.TryBody, tc.CatchBody }, names);
+                }
+                else if (stmt is IfStatement ifs)
+                {
+                    var branchStmts = new List<Statement> { ifs.IfBody };
+                    if (ifs.ElseIfClauses != null) branchStmts.AddRange(ifs.ElseIfClauses.Select(c => c.Body));
+                    if (ifs.ElseBody != null) branchStmts.Add(ifs.ElseBody);
+                    CollectFromStatements(branchStmts, names);
+                }
+                else if (stmt is WhileStatement ws)
+                {
+                    CollectFromStatements(new[] { ws.Body }, names);
+                }
+                else if (stmt is ForStatement fs)
+                {
+                    CollectFromStatements(new[] { fs.Body }, names);
+                }
+                else if (stmt is ForeachStatement fes)
+                {
+                    CollectFromStatements(new[] { fes.Body }, names);
+                }
+                else if (stmt is ParallelStatement ps)
+                {
+                    CollectFromStatements(new[] { ps.Body }, names);
+                }
+                else if (stmt is ParallelForStatement pfs)
+                {
+                    CollectFromStatements(new[] { pfs.Body }, names);
+                }
+            }
         }
     }
 }

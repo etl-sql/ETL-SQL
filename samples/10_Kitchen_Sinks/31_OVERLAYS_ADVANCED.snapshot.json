@@ -1,0 +1,310 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\31_OVERLAYS_ADVANCED.rptsql",
+  "builtAt": "2026-05-14T19:07:24.4878853Z",
+  "title": "Kitchen Sink: Overlays",
+  "visuals": [
+    {
+      "name": "BasicOverlays",
+      "visualType": "LINE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022BasicOverlays\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00221\u0022,\u00222\u0022,\u00223\u0022,\u00224\u0022,\u00225\u0022,\u00226\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Y\u0022,\u0022data\u0022:[2,4,9,16,32,64],\u0022markLine\u0022:{\u0022symbol\u0022:\u0022none\u0022,\u0022data\u0022:[{\u0022yAxis\u0022:50,\u0022name\u0022:\u0022Goal Line\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022dashed\u0022,\u0022color\u0022:\u0022Red\u0022},\u0022label\u0022:{\u0022formatter\u0022:\u0022Goal Line\u0022,\u0022color\u0022:\u0022Red\u0022}},{\u0022yAxis\u0022:21.166666666666668,\u0022name\u0022:\u0022Mean\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022dotted\u0022,\u0022color\u0022:\u0022Blue\u0022},\u0022label\u0022:{\u0022formatter\u0022:\u0022Mean\u0022,\u0022color\u0022:\u0022Blue\u0022}}]}},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u00222-Period MA\u0022,\u0022data\u0022:[null,3,6.5,12.5,24,48],\u0022smooth\u0022:true,\u0022symbol\u0022:\u0022none\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022solid\u0022,\u0022color\u0022:\u0022Green\u0022},\u0022itemStyle\u0022:{\u0022color\u0022:\u0022Green\u0022},\u0022tooltip\u0022:{\u0022valueFormatter\u0022:null}}]}",
+      "columns": [
+        "X",
+        "Y"
+      ],
+      "rows": [
+        [
+          "1",
+          "2"
+        ],
+        [
+          "2",
+          "4"
+        ],
+        [
+          "3",
+          "9"
+        ],
+        [
+          "4",
+          "16"
+        ],
+        [
+          "5",
+          "32"
+        ],
+        [
+          "6",
+          "64"
+        ]
+      ],
+      "options": {
+        "mapping:x": "X",
+        "mapping:y": "Y"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "overlays": [
+        {
+          "overlayType": "Goal",
+          "parameter": 50,
+          "lineStyle": "dashed",
+          "color": "Red",
+          "label": "Goal Line"
+        },
+        {
+          "overlayType": "Average",
+          "parameter": null,
+          "lineStyle": "dotted",
+          "color": "Blue",
+          "label": "Mean"
+        },
+        {
+          "overlayType": "MovingAvg",
+          "parameter": 2,
+          "lineStyle": "solid",
+          "color": "Green",
+          "label": "2-Period MA"
+        }
+      ]
+    },
+    {
+      "name": "RegressionOverlays",
+      "visualType": "SCATTER",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022RegressionOverlays\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022xAxis\u0022:{},\u0022yAxis\u0022:{},\u0022series\u0022:[{\u0022type\u0022:\u0022scatter\u0022,\u0022name\u0022:\u0022RegressionOverlays\u0022,\u0022data\u0022:[[1,2],[2,4],[3,9],[4,16],[5,32],[6,64]]}]}",
+      "columns": [
+        "X",
+        "Y"
+      ],
+      "rows": [
+        [
+          "1",
+          "2"
+        ],
+        [
+          "2",
+          "4"
+        ],
+        [
+          "3",
+          "9"
+        ],
+        [
+          "4",
+          "16"
+        ],
+        [
+          "5",
+          "32"
+        ],
+        [
+          "6",
+          "64"
+        ]
+      ],
+      "options": {
+        "mapping:x": "X",
+        "mapping:y": "Y"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "overlays": [
+        {
+          "overlayType": "Linear",
+          "parameter": null,
+          "lineStyle": "solid",
+          "color": "Black",
+          "label": "Linear"
+        },
+        {
+          "overlayType": "Exponential",
+          "parameter": null,
+          "lineStyle": "dashed",
+          "color": "Orange",
+          "label": "Exp"
+        },
+        {
+          "overlayType": "Logarithmic",
+          "parameter": null,
+          "lineStyle": "dotted",
+          "color": "Purple",
+          "label": "Log"
+        },
+        {
+          "overlayType": "Power",
+          "parameter": null,
+          "lineStyle": "dashed",
+          "color": "Cyan",
+          "label": "Power"
+        },
+        {
+          "overlayType": "Polynomial",
+          "parameter": 2,
+          "lineStyle": "solid",
+          "color": "Magenta",
+          "label": "Poly(2)"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "OverlaySink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "BasicOverlays",
+        "B": "RegressionOverlays"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "OverlaySink",
+      "pages": [
+        "OverlaySink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "6"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 6,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[ffa41d37] [SELECT] Executing SelectStatement. Session: ffa41d37",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:24.4558801Z"
+    },
+    {
+      "message": "[ffa41d37] 6 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:24.4762867Z"
+    },
+    {
+      "message": "[ffa41d37] Visual \u0027BasicOverlays\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:24.4785711Z"
+    },
+    {
+      "message": "[ffa41d37] Visual \u0027RegressionOverlays\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:24.4806026Z"
+    },
+    {
+      "message": "[ffa41d37] Page \u0027OverlaySink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:24.4816839Z"
+    },
+    {
+      "message": "[ffa41d37] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:24.4823064Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "9382e5c3-232f-4766-9572-b39a98e9e6c2",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 35.2183,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "8a548f88-d0df-4cf4-b9b4-af1ead8a7cc4",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.332,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7d0626f0-77cc-417a-afa9-09d02f2869b2",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 12,
+          "durationMs": 23.358,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 513.74261494991,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "e9a7eecb-05f8-4327-bf15-e37d2bd0fbd1",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.6394,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "516a9735-ef06-4268-97b8-9da4b2faee6a",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2971,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "f02218b5-1f78-4efa-b552-6200ad3a8da7",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9048,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5e9d865b-1ee4-412e-89f9-02775e0bfd29",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2735,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

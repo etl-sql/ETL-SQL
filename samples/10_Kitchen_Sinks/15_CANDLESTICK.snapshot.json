@@ -1,0 +1,331 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\15_CANDLESTICK.rptsql",
+  "builtAt": "2026-05-14T17:57:22.6832211Z",
+  "title": "Kitchen Sink: CANDLESTICK Visual",
+  "description": "Demonstration of CANDLESTICK financial charts.",
+  "visuals": [
+    {
+      "name": "BasicCandle",
+      "visualType": "CANDLESTICK",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Stock Price History\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022,\u0022axisPointer\u0022:{\u0022type\u0022:\u0022cross\u0022}},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00222026-05-01\u0022,\u00222026-05-02\u0022,\u00222026-05-03\u0022,\u00222026-05-04\u0022,\u00222026-05-05\u0022,\u00222026-05-06\u0022,\u00222026-05-07\u0022],\u0022boundaryGap\u0022:true,\u0022axisLine\u0022:{\u0022onZero\u0022:false}},\u0022yAxis\u0022:{\u0022scale\u0022:true},\u0022series\u0022:[{\u0022type\u0022:\u0022candlestick\u0022,\u0022name\u0022:\u0022BasicCandle\u0022,\u0022data\u0022:[[100,105,95,110],[105,112,102,115],[112,101,100,113],[101,106,98,108],[106,110,105,112],[110,104,103,111],[104,115,104,118]],\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#ec0000\u0022,\u0022color0\u0022:\u0022#00da3c\u0022,\u0022borderColor\u0022:\u0022#8A0000\u0022,\u0022borderColor0\u0022:\u0022#008F28\u0022}}]}",
+      "columns": [
+        "Date",
+        "Open",
+        "High",
+        "Low",
+        "Close"
+      ],
+      "rows": [
+        [
+          "2026-05-01",
+          "100",
+          "110",
+          "95",
+          "105"
+        ],
+        [
+          "2026-05-02",
+          "105",
+          "115",
+          "102",
+          "112"
+        ],
+        [
+          "2026-05-03",
+          "112",
+          "113",
+          "100",
+          "101"
+        ],
+        [
+          "2026-05-04",
+          "101",
+          "108",
+          "98",
+          "106"
+        ],
+        [
+          "2026-05-05",
+          "106",
+          "112",
+          "105",
+          "110"
+        ],
+        [
+          "2026-05-06",
+          "110",
+          "111",
+          "103",
+          "104"
+        ],
+        [
+          "2026-05-07",
+          "104",
+          "118",
+          "104",
+          "115"
+        ]
+      ],
+      "options": {
+        "title": "Stock Price History",
+        "mapping:x": "Date",
+        "mapping:open": "Open",
+        "mapping:high": "High",
+        "mapping:low": "Low",
+        "mapping:close": "Close"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StyledCandle",
+      "visualType": "CANDLESTICK",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled Candlestick Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022,\u0022axisPointer\u0022:{\u0022type\u0022:\u0022cross\u0022}},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00222026-05-01\u0022,\u00222026-05-02\u0022,\u00222026-05-03\u0022,\u00222026-05-04\u0022,\u00222026-05-05\u0022,\u00222026-05-06\u0022,\u00222026-05-07\u0022],\u0022boundaryGap\u0022:true,\u0022axisLine\u0022:{\u0022onZero\u0022:false}},\u0022yAxis\u0022:{\u0022scale\u0022:true},\u0022series\u0022:[{\u0022type\u0022:\u0022candlestick\u0022,\u0022name\u0022:\u0022StyledCandle\u0022,\u0022data\u0022:[[100,105,95,110],[105,112,102,115],[112,101,100,113],[101,106,98,108],[106,110,105,112],[110,104,103,111],[104,115,104,118]],\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#ec0000\u0022,\u0022color0\u0022:\u0022#00da3c\u0022,\u0022borderColor\u0022:\u0022#8A0000\u0022,\u0022borderColor0\u0022:\u0022#008F28\u0022}}]}",
+      "columns": [
+        "Date",
+        "Open",
+        "High",
+        "Low",
+        "Close"
+      ],
+      "rows": [
+        [
+          "2026-05-01",
+          "100",
+          "110",
+          "95",
+          "105"
+        ],
+        [
+          "2026-05-02",
+          "105",
+          "115",
+          "102",
+          "112"
+        ],
+        [
+          "2026-05-03",
+          "112",
+          "113",
+          "100",
+          "101"
+        ],
+        [
+          "2026-05-04",
+          "101",
+          "108",
+          "98",
+          "106"
+        ],
+        [
+          "2026-05-05",
+          "106",
+          "112",
+          "105",
+          "110"
+        ],
+        [
+          "2026-05-06",
+          "110",
+          "111",
+          "103",
+          "104"
+        ],
+        [
+          "2026-05-07",
+          "104",
+          "118",
+          "104",
+          "115"
+        ]
+      ],
+      "options": {
+        "title": "Styled Candlestick Chart",
+        "color:positive": "#eb4436",
+        "color:negative": "#0f9d58",
+        "axis:y:label": "Price ($)",
+        "axis:y:min": "90",
+        "mapping:x": "Date",
+        "mapping:open": "Open",
+        "mapping:high": "High",
+        "mapping:low": "Low",
+        "mapping:close": "Close"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "CandleKitchenSink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "BasicCandle",
+        "B": "StyledCandle"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "CandleKitchenSink",
+      "pages": [
+        "CandleKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "7"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 7,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[3664457d] [SELECT] Executing SelectStatement. Session: 3664457d",
+      "color": "white",
+      "timestamp": "2026-05-14T17:57:22.6511348Z"
+    },
+    {
+      "message": "[3664457d] 7 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:57:22.6712083Z"
+    },
+    {
+      "message": "[3664457d] Visual \u0027BasicCandle\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:57:22.6741264Z"
+    },
+    {
+      "message": "[3664457d] Visual \u0027StyledCandle\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:57:22.6759518Z"
+    },
+    {
+      "message": "[3664457d] Page \u0027CandleKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:57:22.6771124Z"
+    },
+    {
+      "message": "[3664457d] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:57:22.677733Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "63927291-fde8-486a-a13a-f2267aaebf31",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 35.2788,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "d97bf3a1-8ef5-4959-ad56-24f6a992fa31",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2001,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "42f4d638-742d-45dc-ad3b-55ef013b2bb2",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0449,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "99bee859-d45c-479b-80b9-bbc5e2726e49",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 14,
+          "durationMs": 22.8264,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 613.324922020117,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "3da365b9-1a0b-46fa-8925-36294e4ddce5",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.1515,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "739e8258-8969-4acd-ba63-8cd45f7816bb",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0834,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "f80b519f-3092-48af-a489-cafb92e9a0c8",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8768,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "03b2a604-5c4d-4731-8b80-3dfc3f50bd57",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2718,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+-- Kitchen Sink: SLICER Visual
+-- This script demonstrates the SLICER (dropdown) visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: SLICER Visual';
+
+-- 1. Setup Parameter
+DECLARE @region VARCHAR = 'All';
+
+-- 2. Mock Data for Options
+SELECT 'North' AS Region UNION ALL SELECT 'South' UNION ALL SELECT 'East' UNION ALL SELECT 'West' INTO #regions;
+
+-- 3. Slicer Visual
+CREATE VISUAL RegionFilter AS SLICER (
+    SOURCE = (SELECT 'All' AS Region UNION ALL SELECT Region FROM #regions),
+    MAPPINGS (VALUE = Region),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@region, Region)),
+    DEFAULT = 'All'
+);
+
+-- 4. Result Visual (to test the slicer)
+CREATE VISUAL SelectedResult AS CARD (
+    SOURCE = (SELECT @region AS val, 'Currently Selected' AS lbl),
+    MAPPINGS (VALUE = val, LABEL = lbl)
+);
+
+-- Page Layout
+CREATE PAGE SlicerKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = RegionFilter,
+        'B' = SelectedResult
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = SlicerKitchenSink) WITH PAGES (SlicerKitchenSink);

@@ -1,0 +1,32 @@
+-- Kitchen Sink: TEXTBOX Visual
+-- This script demonstrates the TEXTBOX visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: TEXTBOX Visual';
+
+-- 1. Setup Parameter
+DECLARE @userNote STRING = 'Default note';
+
+-- 2. Textbox Visual
+CREATE VISUAL NoteInput AS TEXTBOX (
+    TITLE = 'Enter Note',
+    LABEL_POSITION = 'TOP',
+    OPTIONS (PLACEHOLDER = 'Type something...'),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@userNote, value))
+);
+
+-- 3. Result
+CREATE VISUAL TextboxResult AS CARD (
+    SOURCE = (SELECT @userNote AS Note),
+    MAPPINGS (VALUE = Note)
+);
+
+-- Page Layout
+CREATE PAGE TextboxKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = NoteInput,
+        'B' = TextboxResult
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = TextboxKitchenSink) WITH PAGES (TextboxKitchenSink);

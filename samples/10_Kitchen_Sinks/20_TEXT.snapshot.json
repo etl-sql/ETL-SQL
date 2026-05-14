@@ -1,0 +1,232 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\20_TEXT.rptsql",
+  "builtAt": "2026-05-14T18:48:19.6350355Z",
+  "title": "Kitchen Sink: TEXT Visual",
+  "description": "Demonstration of TEXT visuals with Markdown and HTML support.",
+  "visuals": [
+    {
+      "name": "BasicText",
+      "visualType": "TEXT",
+      "isMarkdown": true,
+      "chartConfig": null,
+      "defaultValue": "This is a simple text block without any formatting.",
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Static Text Block"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "MarkdownText",
+      "visualType": "TEXT",
+      "isMarkdown": true,
+      "chartConfig": null,
+      "defaultValue": "\n# Heading 1\n## Heading 2\nThis block supports **bold**, *italic*, and [links](https://etl-sql.io).\n\n### Bullet Points\n- Item 1\n- Item 2\n  - Sub-item\n\n\u0060\u0060\u0060sql\nSELECT * FROM #temp;\n\u0060\u0060\u0060\n",
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Markdown Block"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "WelcomeText",
+      "visualType": "TEXT",
+      "isMarkdown": true,
+      "chartConfig": null,
+      "defaultValue": "### Welcome back, Chuck!\\nToday is 5/14/2026 1:48:19 PM",
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Dynamic Welcome"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "TextKitchenSink",
+      "structure": "A / B / C",
+      "slotMap": {
+        "A": "BasicText",
+        "B": "MarkdownText",
+        "C": "WelcomeText"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "TextKitchenSink",
+      "pages": [
+        "TextKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@user_name": "Chuck",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": ""
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 0,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[cb68fc9f] Visual \u0027BasicText\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:19.6186774Z"
+    },
+    {
+      "message": "[cb68fc9f] Visual \u0027MarkdownText\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:19.6212992Z"
+    },
+    {
+      "message": "[cb68fc9f] Visual \u0027WelcomeText\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:19.6245266Z"
+    },
+    {
+      "message": "[cb68fc9f] Page \u0027TextKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:19.6287706Z"
+    },
+    {
+      "message": "[cb68fc9f] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:19.629398Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "6cf81418-f032-40aa-a630-e8132d17ca14",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 21.2451,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "175036fc-af41-4d7d-9be7-7a5098833810",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2402,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "806e357c-14c2-417f-842c-9285535b4f48",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0329,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "35129bcd-1051-429f-a422-9bd7e4290d44",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.1457,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8166dbbb-91e4-497e-9ee6-d02697937f7b",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.6083,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "09f8f5b0-807e-4223-a800-c9823d3c1321",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.6888,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5c7bf0d6-bcb4-44c6-a5ad-a34a4e63105d",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0685,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "453b1381-b207-4fa4-997a-dc3b586cc6f7",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9485,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d8a1164b-55ad-4a24-aff8-809e24660bd6",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2721,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

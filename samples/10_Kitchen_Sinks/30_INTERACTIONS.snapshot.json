@@ -1,0 +1,533 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\30_INTERACTIONS.rptsql",
+  "builtAt": "2026-05-14T19:07:05.393293Z",
+  "title": "Kitchen Sink: Interactive Actions",
+  "visuals": [
+    {
+      "name": "DrillinChart",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Drill-In (Hierarchical: Year \\u003E Qtr \\u003E Month)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00222024\u0022,\u00222025\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Rev\u0022,\u0022data\u0022:[100,200]}]}",
+      "columns": [
+        "Year",
+        "Quarter",
+        "Month",
+        "Rev"
+      ],
+      "rows": [
+        [
+          "2025",
+          "Q1",
+          "Jan",
+          "200"
+        ],
+        [
+          "2024",
+          "Q1",
+          "Feb",
+          "120"
+        ],
+        [
+          "2024",
+          "Q2",
+          "Apr",
+          "150"
+        ],
+        [
+          "2024",
+          "Q1",
+          "Jan",
+          "100"
+        ]
+      ],
+      "options": {
+        "title": "Drill-In (Hierarchical: Year \u003E Qtr \u003E Month)",
+        "mapping:x": "Year",
+        "mapping:y": "Rev"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "DRILL_IN",
+          "trigger": "ON_CLICK",
+          "targetVisual": null,
+          "keyColumns": null,
+          "hierarchy": [
+            "Year",
+            "Quarter",
+            "Month"
+          ],
+          "parameterName": null,
+          "valueExpression": null,
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {}
+    },
+    {
+      "name": "DetailChart",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Detail View for None\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Sales\u0022,\u0022data\u0022:[]}]}",
+      "columns": [
+        "Cat",
+        "Sales"
+      ],
+      "rows": [],
+      "options": {
+        "title": "Detail View for None",
+        "VISIBLE": "OFF",
+        "mapping:x": "Cat",
+        "mapping:y": "Sales"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "MasterChart",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Master View (Click to Drill Down)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022North\u0022,\u0022South\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Sales\u0022,\u0022data\u0022:[800,1000]}]}",
+      "columns": [
+        "Region",
+        "Sales"
+      ],
+      "rows": [
+        [
+          "North",
+          "800"
+        ],
+        [
+          "South",
+          "1000"
+        ]
+      ],
+      "options": {
+        "title": "Master View (Click to Drill Down)",
+        "mapping:x": "Region",
+        "mapping:y": "Sales"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "DRILL_DOWN",
+          "trigger": "ON_CLICK",
+          "targetVisual": "DetailChart",
+          "keyColumns": [
+            "Region"
+          ],
+          "parameterName": null,
+          "valueExpression": null,
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {}
+    },
+    {
+      "name": "RegionChart",
+      "visualType": "PIE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Region (Interaction Source)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022pie\u0022,\u0022name\u0022:\u0022RegionChart\u0022,\u0022radius\u0022:\u002260%\u0022,\u0022data\u0022:[{\u0022name\u0022:\u0022North\u0022,\u0022value\u0022:800},{\u0022name\u0022:\u0022South\u0022,\u0022value\u0022:1000}]}]}",
+      "columns": [
+        "Region",
+        "Sales"
+      ],
+      "rows": [
+        [
+          "North",
+          "800"
+        ],
+        [
+          "South",
+          "1000"
+        ]
+      ],
+      "options": {
+        "title": "Region (Interaction Source)",
+        "mapping:label": "Region",
+        "mapping:value": "Sales"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "FilteredTable",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "Region",
+        "Cat",
+        "Sales"
+      ],
+      "rows": [
+        [
+          "North",
+          "Electronics",
+          "500"
+        ],
+        [
+          "North",
+          "Furniture",
+          "300"
+        ],
+        [
+          "South",
+          "Electronics",
+          "400"
+        ],
+        [
+          "South",
+          "Furniture",
+          "600"
+        ]
+      ],
+      "options": {
+        "title": "Filtered Table (responds to Region click)",
+        "CROSS_VISUAL_ACTION": "FILTER"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "HighlightedBar",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Highlighted Bar (responds to Region click)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Electronics\u0022,\u0022Furniture\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022North\u0022,\u0022data\u0022:[500,300]},{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022South\u0022,\u0022data\u0022:[400,600]}]}",
+      "columns": [
+        "Region",
+        "Cat",
+        "Sales"
+      ],
+      "rows": [
+        [
+          "North",
+          "Electronics",
+          "500"
+        ],
+        [
+          "North",
+          "Furniture",
+          "300"
+        ],
+        [
+          "South",
+          "Electronics",
+          "400"
+        ],
+        [
+          "South",
+          "Furniture",
+          "600"
+        ]
+      ],
+      "options": {
+        "title": "Highlighted Bar (responds to Region click)",
+        "CROSS_VISUAL_ACTION": "HIGHLIGHT",
+        "mapping:x": "Cat",
+        "mapping:y": "Sales",
+        "mapping:series": "Region"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "InteractionSink",
+      "structure": "A A / B C / D E / F F",
+      "slotMap": {
+        "A": "DrillinChart",
+        "B": "MasterChart",
+        "C": "DetailChart",
+        "D": "RegionChart",
+        "E": "FilteredTable",
+        "F": "HighlightedBar"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "InteractionSink",
+      "pages": [
+        "InteractionSink"
+      ]
+    }
+  ],
+  "buttons": [
+    {
+      "name": "ToggleBtn",
+      "buttonType": "CUSTOM",
+      "title": "Toggle Detail Chart Visibility",
+      "options": {},
+      "actions": [
+        {
+          "type": "SET_UI_STATE",
+          "trigger": "ON_CLICK",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": null,
+          "valueExpression": null,
+          "scriptPath": null,
+          "parameters": null,
+          "targets": [
+            "DetailChart"
+          ],
+          "key": "VISIBLE",
+          "value": "TOGGLE"
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "4"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 8,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[bcd1c1ff] [SELECT] Executing SelectStatement. Session: bcd1c1ff",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.3596545Z"
+    },
+    {
+      "message": "[bcd1c1ff] 4 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.3796462Z"
+    },
+    {
+      "message": "[bcd1c1ff] [SELECT] Executing SelectStatement. Session: bcd1c1ff",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.3806439Z"
+    },
+    {
+      "message": "[bcd1c1ff] 4 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.3807794Z"
+    },
+    {
+      "message": "[bcd1c1ff] Visual \u0027DrillinChart\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.3824201Z"
+    },
+    {
+      "message": "[bcd1c1ff] Visual \u0027DetailChart\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.384516Z"
+    },
+    {
+      "message": "[bcd1c1ff] Visual \u0027MasterChart\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.384934Z"
+    },
+    {
+      "message": "[bcd1c1ff] Visual \u0027RegionChart\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.3850218Z"
+    },
+    {
+      "message": "[bcd1c1ff] Visual \u0027FilteredTable\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.3850918Z"
+    },
+    {
+      "message": "[bcd1c1ff] Visual \u0027HighlightedBar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.385561Z"
+    },
+    {
+      "message": "[bcd1c1ff] Button \u0027ToggleBtn\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.3859984Z"
+    },
+    {
+      "message": "[bcd1c1ff] Page \u0027InteractionSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.3870774Z"
+    },
+    {
+      "message": "[bcd1c1ff] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:05.3876939Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "b26ba4be-00a6-4460-924e-7d0121338639",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 36.2175,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "ec3bbe08-71a1-498d-bc2f-4bc4c8bb72d9",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2271,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "6d676e36-4e7d-4fae-8b7e-dc4787d0d31a",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 8,
+          "durationMs": 22.6036,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 353.9259233042524,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "036bdb85-f90e-4ac2-ad84-9c08fb12275e",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 7,
+          "durationMs": 0.2052,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 34113.0604288499,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "e5db8b67-5f06-426d-9e72-8d1039239400",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8006,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ae684928-7c9f-4dd4-a41f-1f5e4031e727",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0798,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7422e279-6bcd-4542-83f0-8747e6265792",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0568,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "4cf6f0b7-3f8e-4055-878e-1989546c2d88",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0314,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "66f98311-015f-4eda-a047-4c8a905fc9bb",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0611,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "296398bc-44db-4482-a5fd-d350e38388ef",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.4616,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "24d94c5a-5344-4365-8670-98f2defe062c",
+          "name": "CreateButton",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2838,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "29c38cd9-5e8f-4754-8de7-48ee19c27e93",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9185,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "1f391304-d0a1-4c0f-8303-bfd94ede93b8",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2682,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

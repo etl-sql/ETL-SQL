@@ -1,23 +1,21 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Reporting.Builders
 {
     public class PageBuilder(StyleBuilder styleBuilder)
     {
-        public PageManifest Build(string name, CreatePageStatement pStmt, IExecutionContext? ctx = null)
-            => Build(name, pStmt, ctx, null);
-
-        public PageManifest Build(
+        public async Task<PageManifest> BuildAsync(
             string name,
             CreatePageStatement pStmt,
             IExecutionContext? ctx,
             IReadOnlyDictionary<string, string>? inheritedStyles)
         {
-            var (title, titleMd) = styleBuilder.ResolveMarkdown(pStmt.Title, pStmt.TitleIsMarkdown);
-            var (subtitle, subtitleMd) = styleBuilder.ResolveMarkdown(pStmt.Subtitle, pStmt.SubtitleIsMarkdown);
+            var (title, titleMd) = await styleBuilder.ResolveMarkdownAsync(pStmt.Title, pStmt.TitleIsMarkdown);
+            var (subtitle, subtitleMd) = await styleBuilder.ResolveMarkdownAsync(pStmt.Subtitle, pStmt.SubtitleIsMarkdown);
 
             bool isHidden = false;
             if (pStmt.Visibility != null && ctx != null)
@@ -45,7 +43,7 @@ namespace ETL_SQL.Reporting.Builders
                 TitleIsMarkdown    = titleMd,
                 Subtitle           = subtitle,
                 SubtitleIsMarkdown = subtitleMd,
-                Tooltip            = styleBuilder.BuildTooltipManifest(pStmt.Tooltip)
+                Tooltip            = await styleBuilder.BuildTooltipManifestAsync(pStmt.Tooltip)
             };
 
 

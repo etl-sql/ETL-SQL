@@ -1,0 +1,59 @@
+-- Kitchen Sink: PIE Visual
+-- This script demonstrates all features of the PIE visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: PIE Visual';
+SET REPORT DESCRIPTION = 'Demonstration of PIE chart capabilities, including custom colors and legend positions.';
+
+-- 1. Mock Data Generation
+SELECT 'Direct' AS Channel, 450 AS Users INTO #channels
+UNION ALL SELECT 'Social', 300
+UNION ALL SELECT 'Search', 600
+UNION ALL SELECT 'Referral', 150
+UNION ALL SELECT 'Email', 200;
+
+-- 2. Basic Pie Chart
+CREATE VISUAL BasicPie AS PIE (
+    SOURCE = #channels,
+    TITLE = 'Basic Pie Chart',
+    MAPPINGS (LABEL = Channel, VALUE = Users)
+);
+
+-- 3. Pie with Data Labels and Percentages
+CREATE VISUAL PercentPie AS PIE (
+    SOURCE = #channels,
+    TITLE = 'Pie with Data Labels',
+    MAPPINGS (LABEL = Channel, VALUE = Users),
+    OPTIONS (
+        DATA_LABELS = ON,
+        FORMAT = 'P0'
+    )
+);
+
+-- 4. Styled Pie (Custom Colors & Legend)
+CREATE VISUAL StyledPie AS PIE (
+    SOURCE = #channels,
+    TITLE = 'Styled Pie Chart',
+    MAPPINGS (LABEL = Channel, VALUE = Users),
+    OPTIONS (
+        COLORS (
+            'Direct' = '#4e79a7',
+            'Social' = '#f28e2b',
+            'Search' = '#e15759',
+            'Referral' = '#76b7b2',
+            'Email' = '#59a14f'
+        ),
+        LEGEND_POSITION = RIGHT
+    )
+);
+
+-- Page Layout
+CREATE PAGE PieKitchenSink AS LAYOUT (
+    STRUCTURE = 'A B / C',
+    MAP (
+        'A' = BasicPie,
+        'B' = PercentPie,
+        'C' = StyledPie
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = PieKitchenSink) WITH PAGES (PieKitchenSink);

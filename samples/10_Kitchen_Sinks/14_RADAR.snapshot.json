@@ -1,0 +1,273 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\14_RADAR.rptsql",
+  "builtAt": "2026-05-14T17:41:37.6458229Z",
+  "title": "Kitchen Sink: RADAR Visual",
+  "description": "Demonstration of RADAR (Spider) chart capabilities for multi-dimensional metrics.",
+  "visuals": [
+    {
+      "name": "BasicRadar",
+      "visualType": "RADAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Product Performance Radar\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022radar\u0022:{\u0022indicator\u0022:[{\u0022name\u0022:\u0022Quality\u0022,\u0022max\u0022:104.50000000000001,\u0022min\u0022:0},{\u0022name\u0022:\u0022Speed\u0022,\u0022max\u0022:104.50000000000001,\u0022min\u0022:0},{\u0022name\u0022:\u0022Support\u0022,\u0022max\u0022:104.50000000000001,\u0022min\u0022:0},{\u0022name\u0022:\u0022Value\u0022,\u0022max\u0022:104.50000000000001,\u0022min\u0022:0},{\u0022name\u0022:\u0022UX\u0022,\u0022max\u0022:104.50000000000001,\u0022min\u0022:0}]},\u0022series\u0022:[{\u0022type\u0022:\u0022radar\u0022,\u0022name\u0022:\u0022BasicRadar\u0022,\u0022data\u0022:[{\u0022name\u0022:\u0022Product A\u0022,\u0022value\u0022:[80,70,90,60,85]},{\u0022name\u0022:\u0022Product B\u0022,\u0022value\u0022:[60,90,70,80,65]},{\u0022name\u0022:\u0022Product C\u0022,\u0022value\u0022:[90,60,85,50,95]}]}]}",
+      "columns": [
+        "Name",
+        "Quality",
+        "Speed",
+        "Support",
+        "Value",
+        "UX"
+      ],
+      "rows": [
+        [
+          "Product A",
+          "80",
+          "70",
+          "90",
+          "60",
+          "85"
+        ],
+        [
+          "Product B",
+          "60",
+          "90",
+          "70",
+          "80",
+          "65"
+        ],
+        [
+          "Product C",
+          "90",
+          "60",
+          "85",
+          "50",
+          "95"
+        ]
+      ],
+      "options": {
+        "title": "Product Performance Radar"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StyledRadar",
+      "visualType": "RADAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled Radar Chart\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022radar\u0022:{\u0022indicator\u0022:[{\u0022name\u0022:\u0022Quality\u0022,\u0022max\u0022:104.50000000000001,\u0022min\u0022:0},{\u0022name\u0022:\u0022Speed\u0022,\u0022max\u0022:104.50000000000001,\u0022min\u0022:0},{\u0022name\u0022:\u0022Support\u0022,\u0022max\u0022:104.50000000000001,\u0022min\u0022:0},{\u0022name\u0022:\u0022Value\u0022,\u0022max\u0022:104.50000000000001,\u0022min\u0022:0},{\u0022name\u0022:\u0022UX\u0022,\u0022max\u0022:104.50000000000001,\u0022min\u0022:0}]},\u0022series\u0022:[{\u0022type\u0022:\u0022radar\u0022,\u0022name\u0022:\u0022StyledRadar\u0022,\u0022data\u0022:[{\u0022name\u0022:\u0022Product A\u0022,\u0022value\u0022:[80,70,90,60,85]},{\u0022name\u0022:\u0022Product B\u0022,\u0022value\u0022:[60,90,70,80,65]},{\u0022name\u0022:\u0022Product C\u0022,\u0022value\u0022:[90,60,85,50,95]}]}]}",
+      "columns": [
+        "Name",
+        "Quality",
+        "Speed",
+        "Support",
+        "Value",
+        "UX"
+      ],
+      "rows": [
+        [
+          "Product A",
+          "80",
+          "70",
+          "90",
+          "60",
+          "85"
+        ],
+        [
+          "Product B",
+          "60",
+          "90",
+          "70",
+          "80",
+          "65"
+        ],
+        [
+          "Product C",
+          "90",
+          "60",
+          "85",
+          "50",
+          "95"
+        ]
+      ],
+      "options": {
+        "title": "Styled Radar Chart",
+        "color:Product A": "#4e79a7",
+        "color:Product B": "#f28e2b",
+        "color:Product C": "#e15759",
+        "LEGEND_POSITION": "BOTTOM"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "RadarKitchenSink",
+      "structure": "A B",
+      "slotMap": {
+        "A": "BasicRadar",
+        "B": "StyledRadar"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "RadarKitchenSink",
+      "pages": [
+        "RadarKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "3"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 3,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[520a8c4a] [SELECT] Executing SelectStatement. Session: 520a8c4a",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:37.6136736Z"
+    },
+    {
+      "message": "[520a8c4a] 3 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:37.6337305Z"
+    },
+    {
+      "message": "[520a8c4a] Visual \u0027BasicRadar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:37.6362896Z"
+    },
+    {
+      "message": "[520a8c4a] Visual \u0027StyledRadar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:37.6385517Z"
+    },
+    {
+      "message": "[520a8c4a] Page \u0027RadarKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:37.6397109Z"
+    },
+    {
+      "message": "[520a8c4a] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:37.6403285Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "9f780b03-5a12-40db-b8ea-18ef5ecd8a5d",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 35.4532,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "32d5cdd9-0dd8-4194-9a11-218d9a6feb6a",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2642,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "884d50f7-c8e8-487e-aa76-2ace0f9333dd",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0309,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "cdcb9f37-5872-4370-b416-3e81847a3cbf",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 6,
+          "durationMs": 22.7397,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 263.85572369028614,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "3d2e5aee-c717-4119-a1c1-9f0d0b20f759",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8302,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "eac56c93-d523-4838-a9ee-a8c82fe2b93c",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.4692,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "1c15be4f-bd22-4f86-b9ff-b4d0dfdfd05b",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8984,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "21f00902-ddf1-491b-bd70-164968a78ad3",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2671,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

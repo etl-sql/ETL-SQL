@@ -1,0 +1,275 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\13_WATERFALL.rptsql",
+  "builtAt": "2026-05-14T17:41:29.1837448Z",
+  "title": "Kitchen Sink: WATERFALL Visual",
+  "description": "Demonstration of WATERFALL cumulative change visualization.",
+  "visuals": [
+    {
+      "name": "BasicWaterfall",
+      "visualType": "WATERFALL",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Cash Flow Waterfall\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022,\u0022axisPointer\u0022:{\u0022type\u0022:\u0022shadow\u0022}},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Opening Balance\u0022,\u0022Sales\u0022,\u0022Refunds\u0022,\u0022Marketing\u0022,\u0022Payroll\u0022,\u0022Rent\u0022,\u0022Closing Balance\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022stack\u0022:\u0022total\u0022,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022transparent\u0022},\u0022emphasis\u0022:{\u0022itemStyle\u0022:{\u0022color\u0022:\u0022transparent\u0022}},\u0022data\u0022:[0,1000,1450,1250,850,700,700]},{\u0022type\u0022:\u0022bar\u0022,\u0022stack\u0022:\u0022total\u0022,\u0022name\u0022:\u0022BasicWaterfall\u0022,\u0022data\u0022:[{\u0022value\u0022:1000,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#5cb85c\u0022}},{\u0022value\u0022:500,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#5cb85c\u0022}},{\u0022value\u0022:50,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#d9534f\u0022}},{\u0022value\u0022:200,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#d9534f\u0022}},{\u0022value\u0022:400,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#d9534f\u0022}},{\u0022value\u0022:150,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#d9534f\u0022}},{\u0022value\u0022:700,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#5cb85c\u0022}}]}]}",
+      "columns": [
+        "Period",
+        "Delta"
+      ],
+      "rows": [
+        [
+          "Opening Balance",
+          "1000"
+        ],
+        [
+          "Sales",
+          "500"
+        ],
+        [
+          "Refunds",
+          "-50"
+        ],
+        [
+          "Marketing",
+          "-200"
+        ],
+        [
+          "Payroll",
+          "-400"
+        ],
+        [
+          "Rent",
+          "-150"
+        ],
+        [
+          "Closing Balance",
+          "700"
+        ]
+      ],
+      "options": {
+        "title": "Cash Flow Waterfall",
+        "mapping:x": "Period",
+        "mapping:y": "Delta"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StyledWaterfall",
+      "visualType": "WATERFALL",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled Waterfall with Custom Colors\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022,\u0022axisPointer\u0022:{\u0022type\u0022:\u0022shadow\u0022}},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Opening Balance\u0022,\u0022Sales\u0022,\u0022Refunds\u0022,\u0022Marketing\u0022,\u0022Payroll\u0022,\u0022Rent\u0022,\u0022Closing Balance\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022stack\u0022:\u0022total\u0022,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022transparent\u0022},\u0022emphasis\u0022:{\u0022itemStyle\u0022:{\u0022color\u0022:\u0022transparent\u0022}},\u0022data\u0022:[0,1000,1450,1250,850,700,700]},{\u0022type\u0022:\u0022bar\u0022,\u0022stack\u0022:\u0022total\u0022,\u0022name\u0022:\u0022StyledWaterfall\u0022,\u0022data\u0022:[{\u0022value\u0022:1000,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#28a745\u0022}},{\u0022value\u0022:500,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#28a745\u0022}},{\u0022value\u0022:50,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#dc3545\u0022}},{\u0022value\u0022:200,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#dc3545\u0022}},{\u0022value\u0022:400,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#dc3545\u0022}},{\u0022value\u0022:150,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#dc3545\u0022}},{\u0022value\u0022:700,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#28a745\u0022}}]}]}",
+      "columns": [
+        "Period",
+        "Delta"
+      ],
+      "rows": [
+        [
+          "Opening Balance",
+          "1000"
+        ],
+        [
+          "Sales",
+          "500"
+        ],
+        [
+          "Refunds",
+          "-50"
+        ],
+        [
+          "Marketing",
+          "-200"
+        ],
+        [
+          "Payroll",
+          "-400"
+        ],
+        [
+          "Rent",
+          "-150"
+        ],
+        [
+          "Closing Balance",
+          "700"
+        ]
+      ],
+      "options": {
+        "title": "Styled Waterfall with Custom Colors",
+        "color:positive": "#28a745",
+        "color:negative": "#dc3545",
+        "mapping:x": "Period",
+        "mapping:y": "Delta"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "WaterfallKitchenSink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "BasicWaterfall",
+        "B": "StyledWaterfall"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "WaterfallKitchenSink",
+      "pages": [
+        "WaterfallKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "7"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 7,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[06412c13] [SELECT] Executing SelectStatement. Session: 06412c13",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:29.1507999Z"
+    },
+    {
+      "message": "[06412c13] 7 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:29.1720955Z"
+    },
+    {
+      "message": "[06412c13] Visual \u0027BasicWaterfall\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:29.1746463Z"
+    },
+    {
+      "message": "[06412c13] Visual \u0027StyledWaterfall\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:29.1764566Z"
+    },
+    {
+      "message": "[06412c13] Page \u0027WaterfallKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:29.1776313Z"
+    },
+    {
+      "message": "[06412c13] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:29.1782521Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "4024ea51-8fdb-4570-9f68-380bc19e397b",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 36.5418,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "c3f06ebf-a15b-4d36-8dbf-9f69abff94c9",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.3562,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "c6988399-b55b-4de8-9cf3-bbf1f10a2533",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0299,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "005e36f5-f99d-4fbd-8646-cb3ee96cd8be",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 14,
+          "durationMs": 24.3616,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 574.6748982004466,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d2f227f9-1a8c-41bb-bc68-216f67b3f248",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.7964,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "22a64a9d-1003-4819-83c0-ae996b1d9901",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0792,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "b97d25d5-6199-4fa5-83cc-b8885d18e434",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9194,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "92de193a-c45e-4f98-baa5-fb3f3e22c93e",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2685,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

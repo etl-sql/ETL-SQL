@@ -1,0 +1,49 @@
+-- Kitchen Sink: TEXT Visual
+-- This script demonstrates the TEXT visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: TEXT Visual';
+SET REPORT DESCRIPTION = 'Demonstration of TEXT visuals with Markdown and HTML support.';
+
+-- 1. Simple Text
+CREATE VISUAL BasicText AS TEXT (
+    TITLE = 'Static Text Block',
+    DEFAULT = 'This is a simple text block without any formatting.'
+);
+
+-- 2. Rich Markdown Text
+CREATE VISUAL MarkdownText AS TEXT (
+    TITLE = 'Markdown Block',
+    DEFAULT = '
+# Heading 1
+## Heading 2
+This block supports **bold**, *italic*, and [links](https://etl-sql.io).
+
+### Bullet Points
+- Item 1
+- Item 2
+  - Sub-item
+
+```sql
+SELECT * FROM #temp;
+```
+'
+);
+
+-- 3. Dynamic Text (using Variables)
+DECLARE @user_name STRING = 'Chuck';
+CREATE VISUAL WelcomeText AS TEXT (
+    TITLE = 'Dynamic Welcome',
+    DEFAULT = '### Welcome back, ' + @user_name + '!\nToday is ' + CAST(GETDATE() AS STRING)
+);
+
+-- Page Layout
+CREATE PAGE TextKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B / C',
+    MAP (
+        'A' = BasicText,
+        'B' = MarkdownText,
+        'C' = WelcomeText
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = TextKitchenSink) WITH PAGES (TextKitchenSink);

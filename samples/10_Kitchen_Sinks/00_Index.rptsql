@@ -1,0 +1,52 @@
+-- Kitchen Sink: Master Index
+-- This script provides a central hub for all visual "Kitchen Sink" samples.
+
+SET REPORT TITLE = 'ETL-SQL: Visual Kitchen Sink Index';
+SET REPORT DESCRIPTION = 'Click any card to view the detailed demonstration for that visual type.';
+
+-- 1. Create a table of all samples
+SELECT 'BAR' AS Visual, '01_BAR.rptsql' AS Path, 'Vertical bars, stacking, overlays' AS Desc INTO #samples
+UNION ALL SELECT 'HBAR', '02_HBAR.rptsql', 'Horizontal bars, stacking'
+UNION ALL SELECT 'LINE', '03_LINE.rptsql', 'Line charts, smoothing, regression'
+UNION ALL SELECT 'SCATTER', '04_SCATTER.rptsql', 'X/Y plots, linear/poly fits'
+UNION ALL SELECT 'PIE', '05_PIE.rptsql', 'Circular part-to-whole'
+UNION ALL SELECT 'DONUT', '06_DONUT.rptsql', 'Hollow pie charts'
+UNION ALL SELECT 'COMBO', '07_COMBO.rptsql', 'Bar + Line combined'
+UNION ALL SELECT 'GAUGE', '08_GAUGE.rptsql', 'KPI gauges (Progress, Semi-circle, Ring)'
+UNION ALL SELECT 'BOXPLOT', '09_BOXPLOT.rptsql', 'Distribution box-and-whisker'
+UNION ALL SELECT 'TREEMAP', '10_TREEMAP.rptsql', 'Area-based hierarchy'
+UNION ALL SELECT 'HEATMAP', '11_HEATMAP.rptsql', 'Grid-based density'
+UNION ALL SELECT 'FUNNEL', '12_FUNNEL.rptsql', 'Conversion stages'
+UNION ALL SELECT 'WATERFALL', '13_WATERFALL.rptsql', 'Cumulative changes'
+UNION ALL SELECT 'RADAR', '14_RADAR.rptsql', 'Multi-metric spider charts'
+UNION ALL SELECT 'BUBBLE', '32_BUBBLE.rptsql', '3D scatter (X, Y, Size)'
+UNION ALL SELECT 'CANDLESTICK', '15_CANDLESTICK.rptsql', 'Financial OHLC'
+UNION ALL SELECT 'MAP', '16_MAP.rptsql', 'Choropleth and Point maps'
+UNION ALL SELECT 'TABLE', '17_TABLE.rptsql', 'Data grids, summaries, formatting'
+UNION ALL SELECT 'CARD', '18_CARD.rptsql', 'Big KPI numbers'
+UNION ALL SELECT 'IMAGE', '19_IMAGE.rptsql', 'Static and dynamic images'
+UNION ALL SELECT 'TEXT', '20_TEXT.rptsql', 'Markdown and HTML content'
+UNION ALL SELECT 'SLICER', '21_SLICER.rptsql', 'Dropdown filters'
+UNION ALL SELECT 'MULTISELECT', '22_MULTISELECT.rptsql', 'Checkbox list filters'
+UNION ALL SELECT 'DATEPICKER', '23_DATEPICKER.rptsql', 'Calendar date selection'
+UNION ALL SELECT 'RELDATEPICKER', '24_RELDATEPICKER.rptsql', 'Relative expressions (D-7, M-1)'
+UNION ALL SELECT 'SLIDER', '25_SLIDER.rptsql', 'Numeric range controls'
+UNION ALL SELECT 'SEARCH', '26_SEARCH.rptsql', 'Free-text search'
+UNION ALL SELECT 'INPUTS', '27_CHECKBOX.rptsql', 'Form-like inputs (Checkbox, Textbox, Numberbox)';
+
+-- 2. Visual for the Index
+CREATE VISUAL VisualIndex AS TABLE (
+    SOURCE = #samples,
+    TITLE = 'Visual Type Catalog',
+    ACTIONS (
+        ON_CLICK = DRILL_REPORT(FILE = Path)
+    )
+);
+
+-- 3. Page Layout
+CREATE PAGE IndexPage AS LAYOUT (
+    STRUCTURE = 'A',
+    MAP ('A' = VisualIndex)
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = IndexPage) WITH PAGES (IndexPage);

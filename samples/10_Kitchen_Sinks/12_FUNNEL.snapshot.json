@@ -1,0 +1,259 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\12_FUNNEL.rptsql",
+  "builtAt": "2026-05-14T17:41:18.5144233Z",
+  "title": "Kitchen Sink: FUNNEL Visual",
+  "description": "Demonstration of FUNNEL conversion visualization.",
+  "visuals": [
+    {
+      "name": "BasicFunnel",
+      "visualType": "FUNNEL",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Sales Conversion Funnel\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022,\u0022formatter\u0022:\u0022{a} \\u003Cbr/\\u003E{b}: {c}\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022funnel\u0022,\u0022name\u0022:\u0022BasicFunnel\u0022,\u0022label\u0022:{\u0022show\u0022:true,\u0022position\u0022:\u0022inside\u0022},\u0022data\u0022:[{\u0022name\u0022:\u0022Prospects\u0022,\u0022value\u0022:1000},{\u0022name\u0022:\u0022Qualified\u0022,\u0022value\u0022:600},{\u0022name\u0022:\u0022Proposal\u0022,\u0022value\u0022:300},{\u0022name\u0022:\u0022Negotiation\u0022,\u0022value\u0022:150},{\u0022name\u0022:\u0022Closed Won\u0022,\u0022value\u0022:80}]}]}",
+      "columns": [
+        "Stage",
+        "Count"
+      ],
+      "rows": [
+        [
+          "Prospects",
+          "1000"
+        ],
+        [
+          "Qualified",
+          "600"
+        ],
+        [
+          "Proposal",
+          "300"
+        ],
+        [
+          "Negotiation",
+          "150"
+        ],
+        [
+          "Closed Won",
+          "80"
+        ]
+      ],
+      "options": {
+        "title": "Sales Conversion Funnel",
+        "mapping:label": "Stage",
+        "mapping:value": "Count"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StyledFunnel",
+      "visualType": "FUNNEL",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled Funnel\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022,\u0022formatter\u0022:\u0022{a} \\u003Cbr/\\u003E{b}: {c}\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022funnel\u0022,\u0022name\u0022:\u0022StyledFunnel\u0022,\u0022label\u0022:{\u0022show\u0022:true,\u0022position\u0022:\u0022inside\u0022},\u0022data\u0022:[{\u0022name\u0022:\u0022Prospects\u0022,\u0022value\u0022:1000},{\u0022name\u0022:\u0022Qualified\u0022,\u0022value\u0022:600},{\u0022name\u0022:\u0022Proposal\u0022,\u0022value\u0022:300},{\u0022name\u0022:\u0022Negotiation\u0022,\u0022value\u0022:150},{\u0022name\u0022:\u0022Closed Won\u0022,\u0022value\u0022:80}]}]}",
+      "columns": [
+        "Stage",
+        "Count"
+      ],
+      "rows": [
+        [
+          "Prospects",
+          "1000"
+        ],
+        [
+          "Qualified",
+          "600"
+        ],
+        [
+          "Proposal",
+          "300"
+        ],
+        [
+          "Negotiation",
+          "150"
+        ],
+        [
+          "Closed Won",
+          "80"
+        ]
+      ],
+      "options": {
+        "title": "Styled Funnel",
+        "color:Prospects": "#4e79a7",
+        "color:Closed Won": "#59a14f",
+        "mapping:label": "Stage",
+        "mapping:value": "Count"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "FunnelKitchenSink",
+      "structure": "A B",
+      "slotMap": {
+        "A": "BasicFunnel",
+        "B": "StyledFunnel"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "FunnelKitchenSink",
+      "pages": [
+        "FunnelKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "5"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 5,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[8016ad00] [SELECT] Executing SelectStatement. Session: 8016ad00",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:18.482367Z"
+    },
+    {
+      "message": "[8016ad00] 5 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:18.5022967Z"
+    },
+    {
+      "message": "[8016ad00] Visual \u0027BasicFunnel\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:18.5048357Z"
+    },
+    {
+      "message": "[8016ad00] Visual \u0027StyledFunnel\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:18.5068274Z"
+    },
+    {
+      "message": "[8016ad00] Page \u0027FunnelKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:18.5080026Z"
+    },
+    {
+      "message": "[8016ad00] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:18.5089931Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "4566453e-ea1e-4f7a-b71a-c04c34071cf9",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 35.2237,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "ca261eb2-4e18-45c0-8539-8c3278965f9f",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.3507,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "a6cb7e9e-1fc5-4452-b0d0-f769aee53a01",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0304,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "abda349c-1b19-41c5-8b7a-8b65a6a40578",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 10,
+          "durationMs": 22.5761,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 442.94630161985464,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "bc56d510-fed4-4e80-a228-723bb0218a67",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8138,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ed8bc3cb-5d27-4b9d-9fae-89c1eefab068",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0788,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8b626516-9778-4961-882e-5eb0b7656822",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9061,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "bd6b0e60-c6e3-413d-9123-6dc84f1711ea",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.6362,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

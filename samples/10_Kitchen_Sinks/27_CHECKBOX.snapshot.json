@@ -1,0 +1,203 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\27_CHECKBOX.rptsql",
+  "builtAt": "2026-05-14T19:06:29.8184063Z",
+  "title": "Kitchen Sink: CHECKBOX Visual",
+  "visuals": [
+    {
+      "name": "InactiveToggle",
+      "visualType": "CHECKBOX",
+      "chartConfig": null,
+      "labelPosition": "LEFT",
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Include Inactive Records"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@showInactive",
+          "valueExpression": "value",
+          "valueSource": "CONTROL_VALUE",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "CheckboxResult",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "Status"
+      ],
+      "rows": [
+        [
+          "Active Only"
+        ]
+      ],
+      "options": {
+        "mapping:value": "Status"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "CheckboxKitchenSink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "InactiveToggle",
+        "B": "CheckboxResult"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "CheckboxKitchenSink",
+      "pages": [
+        "CheckboxKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@showInactive": "False",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": ""
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 0,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[009e3e52] Visual \u0027InactiveToggle\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:06:29.8083817Z"
+    },
+    {
+      "message": "[009e3e52] Visual \u0027CheckboxResult\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:06:29.8107253Z"
+    },
+    {
+      "message": "[009e3e52] Page \u0027CheckboxKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:06:29.8123488Z"
+    },
+    {
+      "message": "[009e3e52] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:06:29.8130213Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "eba1c4bd-cd7b-4913-8d7c-8abfc75e0cd5",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 15.6596,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "9105d585-848e-40f1-9dcc-4105ee78a67a",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2411,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "a2e3c515-48d4-431e-849e-08b302d4bc31",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.658,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "4aaa2812-a91e-4b7d-bfb4-1d25290bdd41",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.0497,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ceab32f0-a010-44b0-b69a-0edcff32db87",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2858,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "82b1c5b0-300c-4b1c-9f5b-4fb743a9eb30",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.3479,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "2d75af77-5569-4481-a8e9-d29807a7c5f2",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.3128,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

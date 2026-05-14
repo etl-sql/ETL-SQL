@@ -1,0 +1,24 @@
+-- Required Parameter Test Report
+DECLARE @Region STRING INPUT REQUIRED = '';
+DECLARE @Year INT INPUT REQUIRED = 2024;
+
+-- Data source (Mock)
+SELECT 'North' AS Region, 2024 AS Year, 1000 AS Sales
+UNION ALL
+SELECT 'South' AS Region, 2024 AS Year, 1500 AS Sales
+UNION ALL
+SELECT 'North' AS Region, 2023 AS Year, 800 AS Sales
+INTO #sales;
+
+-- Visuals
+CREATE VISUAL SalesCard AS CARD (
+    SOURCE = (SELECT SUM(Sales) FROM #sales WHERE Region = @Region AND Year = CAST(@Year AS INT)),
+    MAPPINGS (VALUE = column1)
+);
+
+-- Note: No SLICER is defined, so @Region and @Year should appear in the Auto-Panel.
+
+CREATE PAGE Main AS LAYOUT (
+    STRUCTURE = 'A',
+    MAP ('A' = SalesCard)
+);

@@ -51,11 +51,13 @@ bld/
 [Oo]bj/
 [Ll]og/
 [Ll]ogs/
-Snapshots/
-Reports/
+/Snapshots/
+/Reports/
 publish_test/
-data/
+/data/
 sdk_test_output/
+/coverage/
+coverage.*.xml
 
 ## OS
 Thumbs.db

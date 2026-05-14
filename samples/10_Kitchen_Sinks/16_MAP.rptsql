@@ -1,0 +1,59 @@
+-- Kitchen Sink: MAP Visual
+-- This script demonstrates the MAP visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: MAP Visual';
+SET REPORT DESCRIPTION = 'Demonstration of MAP visualizations (Choropleth and Point modes).';
+
+-- 1. Mock Data Generation (Regions)
+SELECT 'USA' AS Country, 5000 AS Rev INTO #regions
+UNION ALL SELECT 'Canada', 3000
+UNION ALL SELECT 'Mexico', 2000
+UNION ALL SELECT 'UK', 4000
+UNION ALL SELECT 'France', 3500
+UNION ALL SELECT 'Germany', 4500;
+
+-- 2. Mock Data Generation (Points)
+SELECT 'New York' AS City, 40.7128 AS Lat, -74.0060 AS Lon, 100 AS Val INTO #points
+UNION ALL SELECT 'London', 51.5074, -0.1278, 80
+UNION ALL SELECT 'Paris', 48.8566, 2.3522, 90
+UNION ALL SELECT 'Tokyo', 35.6762, 139.6503, 120;
+
+-- 3. Basic Choropleth Map
+CREATE VISUAL BasicMap AS MAP (
+    SOURCE = #regions,
+    TITLE = 'Global Revenue by Country',
+    MAPPINGS (REGION = Country, VALUE = Rev)
+);
+
+-- 4. Point Map
+CREATE VISUAL PointMap AS MAP (
+    SOURCE = #points,
+    TITLE = 'Office Locations and Activity',
+    OPTIONS (MODE = 'POINTS'),
+    MAPPINGS (LAT = Lat, LON = Lon, VALUE = Val, LABEL = City)
+);
+
+-- 5. Styled Map (Custom Range Colors)
+CREATE VISUAL StyledMap AS MAP (
+    SOURCE = #regions,
+    TITLE = 'Styled Choropleth Map',
+    MAPPINGS (REGION = Country, VALUE = Rev),
+    OPTIONS (
+        COLORS (
+            'min' = '#e0f3db',
+            'max' = '#0868ac'
+        )
+    )
+);
+
+-- Page Layout
+CREATE PAGE MapKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B / C',
+    MAP (
+        'A' = BasicMap,
+        'B' = PointMap,
+        'C' = StyledMap
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = MapKitchenSink) WITH PAGES (MapKitchenSink);

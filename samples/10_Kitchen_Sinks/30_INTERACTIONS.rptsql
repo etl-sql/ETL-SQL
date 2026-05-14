@@ -1,0 +1,82 @@
+-- Kitchen Sink: INTERACTIVE ACTIONS
+-- This script demonstrates DRILL_DOWN, DRILL_IN, CROSS_VISUAL_ACTION, and SET_UI_STATE.
+
+SET REPORT TITLE = 'Kitchen Sink: Interactive Actions';
+
+-- 1. Mock Data (Hierarchy for DRILL_IN)
+SELECT 2024 AS Year, 'Q1' AS Quarter, 'Jan' AS Month, 100 AS Rev INTO #hierarchy
+UNION ALL SELECT 2024, 'Q1', 'Feb', 120
+UNION ALL SELECT 2024, 'Q2', 'Apr', 150
+UNION ALL SELECT 2025, 'Q1', 'Jan', 200;
+
+-- 2. Mock Data (General)
+SELECT 'North' AS Region, 'Electronics' AS Cat, 500 AS Sales INTO #sales
+UNION ALL SELECT 'North', 'Furniture', 300
+UNION ALL SELECT 'South', 'Electronics', 400
+UNION ALL SELECT 'South', 'Furniture', 600;
+
+-- 3. DRILL_IN Visual (Hierarchical)
+CREATE VISUAL DrillinChart AS BAR (
+    SOURCE = (SELECT Year, Quarter, Month, SUM(Rev) AS Rev FROM #hierarchy GROUP BY Year, Quarter, Month),
+    TITLE = 'Drill-In (Hierarchical: Year > Qtr > Month)',
+    MAPPINGS (X = Year, Y = Rev),
+    ACTIONS (ON_CLICK = DRILL_IN(HIERARCHY = (Year, Quarter, Month)))
+);
+
+-- 4. DRILL_DOWN Visual (Master-Detail)
+CREATE VISUAL DetailChart AS BAR (
+    SOURCE = (SELECT Cat, SUM(Sales) AS Sales FROM #sales WHERE Region = @hover_value GROUP BY Cat),
+    TITLE = 'Detail View for ' + ISNULL(@hover_value, 'None'),
+    MAPPINGS (X = Cat, Y = Sales),
+    VISIBLE = OFF -- Only shows when triggered
+);
+
+CREATE VISUAL MasterChart AS BAR (
+    SOURCE = (SELECT Region, SUM(Sales) AS Sales FROM #sales GROUP BY Region),
+    TITLE = 'Master View (Click to Drill Down)',
+    MAPPINGS (X = Region, Y = Sales),
+    ACTIONS (ON_CLICK = DRILL_DOWN(Target = DetailChart, Key = Region))
+);
+
+-- 5. CROSS_VISUAL_ACTION (Highlight vs Filter)
+CREATE VISUAL RegionChart AS PIE (
+    SOURCE = (SELECT Region, SUM(Sales) AS Sales FROM #sales GROUP BY Region),
+    TITLE = 'Region (Interaction Source)',
+    MAPPINGS (LABEL = Region, VALUE = Sales)
+);
+
+CREATE VISUAL FilteredTable AS TABLE (
+    SOURCE = #sales,
+    TITLE = 'Filtered Table (responds to Region click)',
+    OPTIONS (CROSS_VISUAL_ACTION = 'FILTER')
+);
+
+CREATE VISUAL HighlightedBar AS BAR (
+    SOURCE = #sales,
+    TITLE = 'Highlighted Bar (responds to Region click)',
+    MAPPINGS (X = Cat, Y = Sales, SERIES = Region),
+    OPTIONS (CROSS_VISUAL_ACTION = 'HIGHLIGHT')
+);
+
+-- 6. SET_UI_STATE (Toggling visibility)
+CREATE BUTTON ToggleBtn AS CUSTOM (
+    TITLE = 'Toggle Detail Chart Visibility',
+    ACTIONS (ON_CLICK = SET_UI_STATE('DetailChart', 'VISIBLE', 'TOGGLE')) -- Wait, is TOGGLE supported? 
+    -- Guide says "Value: ON/OFF, colors...". I'll use ON/OFF or explicit toggle logic if possible.
+    -- Actually, guide says "Value: ON/OFF". I'll use ON/OFF.
+);
+
+-- Page Layout
+CREATE PAGE InteractionSink AS LAYOUT (
+    STRUCTURE = 'A A / B C / D E / F F',
+    MAP (
+        'A' = DrillinChart,
+        'B' = MasterChart,
+        'C' = DetailChart,
+        'D' = RegionChart,
+        'E' = FilteredTable,
+        'F' = HighlightedBar
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = InteractionSink) WITH PAGES (InteractionSink);

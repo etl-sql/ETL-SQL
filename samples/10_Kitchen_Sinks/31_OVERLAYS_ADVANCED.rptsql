@@ -1,0 +1,47 @@
+-- Kitchen Sink: ADVANCED OVERLAYS
+-- This script demonstrates all regression and reference line types.
+
+SET REPORT TITLE = 'Kitchen Sink: Overlays';
+
+-- 1. Mock Data (Exponential/Power growth)
+SELECT 1 AS X, 2 AS Y INTO #data
+UNION ALL SELECT 2, 4
+UNION ALL SELECT 3, 9
+UNION ALL SELECT 4, 16
+UNION ALL SELECT 5, 32
+UNION ALL SELECT 6, 64;
+
+-- 2. Basic Overlays (Goal, Average, Moving Average)
+CREATE VISUAL BasicOverlays AS LINE (
+    SOURCE = #data,
+    MAPPINGS (X = X, Y = Y),
+    OVERLAYS (
+        GOAL(50) AS DASHED WITH (COLOR = 'Red', LABEL = 'Goal Line'),
+        AVERAGE AS DOTTED WITH (COLOR = 'Blue', LABEL = 'Mean'),
+        MOVING_AVG(2) AS SOLID WITH (COLOR = 'Green', LABEL = '2-Period MA')
+    )
+);
+
+-- 3. Regression Overlays
+CREATE VISUAL RegressionOverlays AS SCATTER (
+    SOURCE = #data,
+    MAPPINGS (X = X, Y = Y),
+    OVERLAYS (
+        LINEAR AS SOLID WITH (COLOR = 'Black', LABEL = 'Linear'),
+        EXPONENTIAL AS DASHED WITH (COLOR = 'Orange', LABEL = 'Exp'),
+        LOGARITHMIC AS DOTTED WITH (COLOR = 'Purple', LABEL = 'Log'),
+        POWER AS DASHED WITH (COLOR = 'Cyan', LABEL = 'Power'),
+        POLYNOMIAL(2) AS SOLID WITH (COLOR = 'Magenta', LABEL = 'Poly(2)')
+    )
+);
+
+-- Page Layout
+CREATE PAGE OverlaySink AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = BasicOverlays,
+        'B' = RegressionOverlays
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = OverlaySink) WITH PAGES (OverlaySink);

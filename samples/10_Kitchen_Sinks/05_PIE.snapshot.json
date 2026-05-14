@@ -1,0 +1,331 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\05_PIE.rptsql",
+  "builtAt": "2026-05-14T17:39:04.6117798Z",
+  "title": "Kitchen Sink: PIE Visual",
+  "description": "Demonstration of PIE chart capabilities, including custom colors and legend positions.",
+  "visuals": [
+    {
+      "name": "BasicPie",
+      "visualType": "PIE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Basic Pie Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022pie\u0022,\u0022name\u0022:\u0022BasicPie\u0022,\u0022radius\u0022:\u002260%\u0022,\u0022data\u0022:[{\u0022name\u0022:\u0022Direct\u0022,\u0022value\u0022:450},{\u0022name\u0022:\u0022Social\u0022,\u0022value\u0022:300},{\u0022name\u0022:\u0022Search\u0022,\u0022value\u0022:600},{\u0022name\u0022:\u0022Referral\u0022,\u0022value\u0022:150},{\u0022name\u0022:\u0022Email\u0022,\u0022value\u0022:200}]}]}",
+      "columns": [
+        "Channel",
+        "Users"
+      ],
+      "rows": [
+        [
+          "Direct",
+          "450"
+        ],
+        [
+          "Social",
+          "300"
+        ],
+        [
+          "Search",
+          "600"
+        ],
+        [
+          "Referral",
+          "150"
+        ],
+        [
+          "Email",
+          "200"
+        ]
+      ],
+      "options": {
+        "title": "Basic Pie Chart",
+        "mapping:label": "Channel",
+        "mapping:value": "Users"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "PercentPie",
+      "visualType": "PIE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Pie with Data Labels\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022pie\u0022,\u0022name\u0022:\u0022PercentPie\u0022,\u0022radius\u0022:\u002260%\u0022,\u0022data\u0022:[{\u0022name\u0022:\u0022Direct\u0022,\u0022value\u0022:450},{\u0022name\u0022:\u0022Social\u0022,\u0022value\u0022:300},{\u0022name\u0022:\u0022Search\u0022,\u0022value\u0022:600},{\u0022name\u0022:\u0022Referral\u0022,\u0022value\u0022:150},{\u0022name\u0022:\u0022Email\u0022,\u0022value\u0022:200}],\u0022label\u0022:{\u0022show\u0022:true}}]}",
+      "columns": [
+        "Channel",
+        "Users"
+      ],
+      "rows": [
+        [
+          "Direct",
+          "450"
+        ],
+        [
+          "Social",
+          "300"
+        ],
+        [
+          "Search",
+          "600"
+        ],
+        [
+          "Referral",
+          "150"
+        ],
+        [
+          "Email",
+          "200"
+        ]
+      ],
+      "options": {
+        "title": "Pie with Data Labels",
+        "DATA_LABELS": "ON",
+        "FORMAT": "P0",
+        "mapping:label": "Channel",
+        "mapping:value": "Users"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "dataLabels": {
+        "show": true,
+        "position": null,
+        "color": null,
+        "fontSize": null,
+        "fontWeight": null,
+        "fontFamily": null,
+        "format": null
+      }
+    },
+    {
+      "name": "StyledPie",
+      "visualType": "PIE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled Pie Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022vertical\u0022,\u0022right\u0022:\u0022right\u0022,\u0022top\u0022:\u0022middle\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022pie\u0022,\u0022name\u0022:\u0022StyledPie\u0022,\u0022radius\u0022:\u002260%\u0022,\u0022data\u0022:[{\u0022name\u0022:\u0022Direct\u0022,\u0022value\u0022:450,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#4e79a7\u0022}},{\u0022name\u0022:\u0022Social\u0022,\u0022value\u0022:300,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#f28e2b\u0022}},{\u0022name\u0022:\u0022Search\u0022,\u0022value\u0022:600,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#e15759\u0022}},{\u0022name\u0022:\u0022Referral\u0022,\u0022value\u0022:150,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#76b7b2\u0022}},{\u0022name\u0022:\u0022Email\u0022,\u0022value\u0022:200,\u0022itemStyle\u0022:{\u0022color\u0022:\u0022#59a14f\u0022}}]}]}",
+      "columns": [
+        "Channel",
+        "Users"
+      ],
+      "rows": [
+        [
+          "Direct",
+          "450"
+        ],
+        [
+          "Social",
+          "300"
+        ],
+        [
+          "Search",
+          "600"
+        ],
+        [
+          "Referral",
+          "150"
+        ],
+        [
+          "Email",
+          "200"
+        ]
+      ],
+      "options": {
+        "title": "Styled Pie Chart",
+        "color:Direct": "#4e79a7",
+        "color:Social": "#f28e2b",
+        "color:Search": "#e15759",
+        "color:Referral": "#76b7b2",
+        "color:Email": "#59a14f",
+        "LEGEND_POSITION": "RIGHT",
+        "mapping:label": "Channel",
+        "mapping:value": "Users"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "PieKitchenSink",
+      "structure": "A B / C",
+      "slotMap": {
+        "A": "BasicPie",
+        "B": "PercentPie",
+        "C": "StyledPie"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "PieKitchenSink",
+      "pages": [
+        "PieKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "5"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 5,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[87f054ce] [SELECT] Executing SelectStatement. Session: 87f054ce",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:04.5796263Z"
+    },
+    {
+      "message": "[87f054ce] 5 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:04.5998593Z"
+    },
+    {
+      "message": "[87f054ce] Visual \u0027BasicPie\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:04.6025722Z"
+    },
+    {
+      "message": "[87f054ce] Visual \u0027PercentPie\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:04.6044995Z"
+    },
+    {
+      "message": "[87f054ce] Visual \u0027StyledPie\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:04.604675Z"
+    },
+    {
+      "message": "[87f054ce] Page \u0027PieKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:04.6057403Z"
+    },
+    {
+      "message": "[87f054ce] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:04.606364Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "efc727ce-a566-4789-8251-5a954b76792c",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 35.2805,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "1960e345-efbf-482f-a4d9-da29df4e4e42",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.3867,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "2781d923-7409-409c-87e3-bf9e9e671ab3",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0302,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "a7d34ed4-a6cc-4a24-b7b7-67cd8c99498d",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 10,
+          "durationMs": 22.9449,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 435.82669787185824,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "43a0b7d4-0476-4bef-963a-c185c0eebd23",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8078,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "84eb795e-68bd-4bc1-a3a5-34463a034a5b",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0866,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "538d4afb-853c-43f0-a88a-51d314494024",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0434,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "c86ed839-5797-4d57-a69f-e11bc05e2809",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9031,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "fca0e730-c288-43b8-b1bd-5beefaf003c1",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2716,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,267 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\10_TREEMAP.rptsql",
+  "builtAt": "2026-05-14T17:40:59.0495383Z",
+  "title": "Kitchen Sink: TREEMAP Visual",
+  "description": "Demonstration of TREEMAP area chart capabilities.",
+  "visuals": [
+    {
+      "name": "BasicTreemap",
+      "visualType": "TREEMAP",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Basic Treemap (Category Size by Value)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022treemap\u0022,\u0022name\u0022:\u0022BasicTreemap\u0022,\u0022data\u0022:[{\u0022name\u0022:\u0022Electronics\u0022,\u0022value\u0022:1500},{\u0022name\u0022:\u0022Furniture\u0022,\u0022value\u0022:1200},{\u0022name\u0022:\u0022Clothing\u0022,\u0022value\u0022:900},{\u0022name\u0022:\u0022Toys\u0022,\u0022value\u0022:400},{\u0022name\u0022:\u0022Books\u0022,\u0022value\u0022:300},{\u0022name\u0022:\u0022Garden\u0022,\u0022value\u0022:600}],\u0022roam\u0022:false,\u0022label\u0022:{\u0022show\u0022:true},\u0022breadcrumb\u0022:{\u0022show\u0022:false}}]}",
+      "columns": [
+        "Cat",
+        "Val"
+      ],
+      "rows": [
+        [
+          "Electronics",
+          "1500"
+        ],
+        [
+          "Furniture",
+          "1200"
+        ],
+        [
+          "Clothing",
+          "900"
+        ],
+        [
+          "Toys",
+          "400"
+        ],
+        [
+          "Books",
+          "300"
+        ],
+        [
+          "Garden",
+          "600"
+        ]
+      ],
+      "options": {
+        "title": "Basic Treemap (Category Size by Value)",
+        "mapping:label": "Cat",
+        "mapping:value": "Val"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StyledTreemap",
+      "visualType": "TREEMAP",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled Treemap\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022treemap\u0022,\u0022name\u0022:\u0022StyledTreemap\u0022,\u0022data\u0022:[{\u0022name\u0022:\u0022Electronics\u0022,\u0022value\u0022:1500},{\u0022name\u0022:\u0022Furniture\u0022,\u0022value\u0022:1200},{\u0022name\u0022:\u0022Clothing\u0022,\u0022value\u0022:900},{\u0022name\u0022:\u0022Toys\u0022,\u0022value\u0022:400},{\u0022name\u0022:\u0022Books\u0022,\u0022value\u0022:300},{\u0022name\u0022:\u0022Garden\u0022,\u0022value\u0022:600}],\u0022roam\u0022:false,\u0022label\u0022:{\u0022show\u0022:true},\u0022breadcrumb\u0022:{\u0022show\u0022:false}}]}",
+      "columns": [
+        "Cat",
+        "Val"
+      ],
+      "rows": [
+        [
+          "Electronics",
+          "1500"
+        ],
+        [
+          "Furniture",
+          "1200"
+        ],
+        [
+          "Clothing",
+          "900"
+        ],
+        [
+          "Toys",
+          "400"
+        ],
+        [
+          "Books",
+          "300"
+        ],
+        [
+          "Garden",
+          "600"
+        ]
+      ],
+      "options": {
+        "title": "Styled Treemap",
+        "color:Electronics": "#4e79a7",
+        "color:Furniture": "#f28e2b",
+        "mapping:label": "Cat",
+        "mapping:value": "Val"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "TreemapKitchenSink",
+      "structure": "A B",
+      "slotMap": {
+        "A": "BasicTreemap",
+        "B": "StyledTreemap"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "TreemapKitchenSink",
+      "pages": [
+        "TreemapKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "6"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 6,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[1036f804] [SELECT] Executing SelectStatement. Session: 1036f804",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:59.0174124Z"
+    },
+    {
+      "message": "[1036f804] 6 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:59.037418Z"
+    },
+    {
+      "message": "[1036f804] Visual \u0027BasicTreemap\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:59.0403387Z"
+    },
+    {
+      "message": "[1036f804] Visual \u0027StyledTreemap\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:59.0422844Z"
+    },
+    {
+      "message": "[1036f804] Page \u0027TreemapKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:59.0434601Z"
+    },
+    {
+      "message": "[1036f804] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:59.044113Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "ba9d1497-29d0-4a3d-8000-f664356a6b70",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 35.2391,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "f1249517-a1b4-4d55-8207-c3082048e5d0",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.3303,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "bad15abc-7248-4599-bc84-d1accc833e57",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0331,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "6fd47f8b-082e-4655-bca8-8926a1d61895",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 12,
+          "durationMs": 22.7036,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 528.5505382406315,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8f04b8e2-81c5-472e-93c2-11f5ae747ab3",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.158,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ff8fb1f6-c975-477c-9c2d-a93cc06b2da1",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0806,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5e6b7c4b-fcd5-4044-aa9c-faf98e30c4e7",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.899,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "538a409e-9695-4aa4-92eb-d33d6d08a858",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2843,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

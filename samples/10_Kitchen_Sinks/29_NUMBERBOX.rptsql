@@ -1,0 +1,35 @@
+-- Kitchen Sink: NUMBERBOX Visual
+-- This script demonstrates the NUMBERBOX visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: NUMBERBOX Visual';
+
+-- 1. Setup Parameter
+DECLARE @threshold DECIMAL = 100.00;
+
+-- 2. Numberbox Visual
+CREATE VISUAL MinPriceInput AS NUMBERBOX (
+    TITLE = 'Minimum Price Threshold',
+    LABEL_POSITION = 'LEFT',
+    MIN = 0,
+    MAX = 10000,
+    DECIMALS = 2,
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@threshold, value))
+);
+
+-- 3. Result
+CREATE VISUAL NumberResult AS CARD (
+    SOURCE = (SELECT @threshold AS val),
+    MAPPINGS (VALUE = val),
+    OPTIONS (FORMAT = 'C2')
+);
+
+-- Page Layout
+CREATE PAGE NumberboxKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = MinPriceInput,
+        'B' = NumberResult
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = NumberboxKitchenSink) WITH PAGES (NumberboxKitchenSink);

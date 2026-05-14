@@ -1,0 +1,231 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\19_IMAGE.rptsql",
+  "builtAt": "2026-05-14T18:47:23.8877509Z",
+  "title": "Kitchen Sink: IMAGE Visual",
+  "description": "Demonstration of IMAGE rendering with different fit modes.",
+  "visuals": [
+    {
+      "name": "RemoteImage",
+      "visualType": "IMAGE",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "SRC": "https://etl-sql.io/logo.png",
+        "FIT": "contain"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "CoverImage",
+      "visualType": "IMAGE",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "SRC": "https://etl-sql.io/hero-bg.jpg",
+        "FIT": "cover"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {
+        "HEIGHT": "300"
+      }
+    },
+    {
+      "name": "DynamicImage",
+      "visualType": "IMAGE",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "SRC": "@brand_logo",
+        "FIT": "none"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "ImageKitchenSink",
+      "structure": "A / B C",
+      "slotMap": {
+        "A": "RemoteImage",
+        "B": "CoverImage",
+        "C": "DynamicImage"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "ImageKitchenSink",
+      "pages": [
+        "ImageKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@brand_logo": "https://etl-sql.io/favicon.ico",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": ""
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 0,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[50de715e] Visual \u0027RemoteImage\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:47:23.8741652Z"
+    },
+    {
+      "message": "[50de715e] Visual \u0027CoverImage\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:47:23.8763299Z"
+    },
+    {
+      "message": "[50de715e] Visual \u0027DynamicImage\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:47:23.8799131Z"
+    },
+    {
+      "message": "[50de715e] Page \u0027ImageKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:47:23.8810368Z"
+    },
+    {
+      "message": "[50de715e] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:47:23.8820467Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "8ad5c925-2e07-4c5d-867a-42d91bec6970",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 16.1176,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "898ae176-2f22-4f86-8163-81d1a4f0addc",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.4241,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7bf9f629-a7a8-4fdd-a7da-346c322ebb59",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0293,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "eb10515f-9dda-4ff0-bbe7-3b149ef9e351",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.1653,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "af15a25f-c182-414c-8374-f49642fccb68",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2797,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "f4504aa9-faad-4141-a753-59948099a6fe",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 3.0689,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "88e18b66-5d51-43fa-9d6d-58f58fdb2e0a",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0749,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8b0a6bce-cc8d-4263-b563-886c239d4fc7",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.964,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "9d1fce45-6ec2-4f4c-bc70-72cbf05caa1e",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.6572,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+-- Kitchen Sink: COMBO Visual
+-- This script demonstrates all features of the COMBO visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: COMBO Visual';
+SET REPORT DESCRIPTION = 'Demonstration of combined BAR and LINE charts in a single visual.';
+
+-- 1. Mock Data Generation
+SELECT 'Jan' AS Month, 1000 AS Revenue, 50 AS Orders INTO #data
+UNION ALL SELECT 'Feb', 1200, 60
+UNION ALL SELECT 'Mar', 800, 45
+UNION ALL SELECT 'Apr', 1500, 75
+UNION ALL SELECT 'May', 1300, 65;
+
+-- 2. Basic Combo (Revenue as Bar, Orders as Line)
+CREATE VISUAL BasicCombo AS COMBO (
+    SOURCE = #data,
+    TITLE = 'Revenue (Bar) vs Orders (Line)',
+    MAPPINGS (X = Month),
+    SERIES (BAR Revenue, LINE Orders)
+);
+
+-- 3. Combo with Multiple Bars and Lines
+SELECT 'Jan' AS Month, 1000 AS RevA, 800 AS RevB, 50 AS OrdA, 40 AS OrdB INTO #multi
+UNION ALL SELECT 'Feb', 1200, 900, 60, 55;
+
+CREATE VISUAL MultiCombo AS COMBO (
+    SOURCE = #multi,
+    TITLE = 'Multiple Series Combo',
+    MAPPINGS (X = Month),
+    SERIES (BAR RevA, BAR RevB, LINE OrdA, LINE OrdB)
+);
+
+-- 4. Combo with Custom Axis and Colors
+CREATE VISUAL StyledCombo AS COMBO (
+    SOURCE = #data,
+    TITLE = 'Styled Combo Chart',
+    MAPPINGS (X = Month),
+    SERIES (BAR Revenue, LINE Orders),
+    OPTIONS (
+        COLORS (
+            'Revenue' = '#4e79a7',
+            'Orders' = '#e15759'
+        ),
+        Y_AXIS (LABEL = 'Primary Axis (Revenue)'),
+        X_AXIS (LABEL = 'Month')
+    )
+);
+
+-- Page Layout
+CREATE PAGE ComboKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B / C',
+    MAP (
+        'A' = BasicCombo,
+        'B' = MultiCombo,
+        'C' = StyledCombo
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = ComboKitchenSink) WITH PAGES (ComboKitchenSink);

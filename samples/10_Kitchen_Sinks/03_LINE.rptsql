@@ -1,0 +1,84 @@
+-- Kitchen Sink: LINE Visual
+-- This script demonstrates all features of the LINE visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: LINE Visual';
+SET REPORT DESCRIPTION = 'Demonstration of LINE chart capabilities, including smoothing, stacking, and regression overlays.';
+
+-- 1. Mock Data Generation
+SELECT '2026-01-01' AS Date, 'Product A' AS Category, 100 AS Val INTO #trends
+UNION ALL SELECT '2026-01-01', 'Product B', 120
+UNION ALL SELECT '2026-02-01', 'Product A', 150
+UNION ALL SELECT '2026-02-01', 'Product B', 130
+UNION ALL SELECT '2026-03-01', 'Product A', 180
+UNION ALL SELECT '2026-03-01', 'Product B', 160
+UNION ALL SELECT '2026-04-01', 'Product A', 220
+UNION ALL SELECT '2026-04-01', 'Product B', 210
+UNION ALL SELECT '2026-05-01', 'Product A', 200
+UNION ALL SELECT '2026-05-01', 'Product B', 230;
+
+-- 2. Basic Line Chart
+CREATE VISUAL BasicLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Basic Line Chart',
+    MAPPINGS (X = Date, Y = Total)
+);
+
+-- 3. Smooth Line Chart
+CREATE VISUAL SmoothLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Smooth Line Chart',
+    MAPPINGS (X = Date, Y = Total),
+    OPTIONS (SMOOTH = ON)
+);
+
+-- 4. Multi-Series Line Chart
+CREATE VISUAL MultiLine AS LINE (
+    SOURCE = #trends,
+    TITLE = 'Multi-Series Line Chart',
+    MAPPINGS (X = Date, Y = Val, SERIES = Category),
+    OPTIONS (LEGEND_POSITION = RIGHT)
+);
+
+-- 5. Stacked Line Chart
+CREATE VISUAL StackedLine AS LINE (
+    SOURCE = #trends,
+    TITLE = 'Stacked Line Chart',
+    MAPPINGS (X = Date, Y = Val, SERIES = Category),
+    OPTIONS (STACKED = ON)
+);
+
+-- 6. Line Chart with Regression Overlays
+CREATE VISUAL RegressionLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Line Chart with Regression Overlays',
+    MAPPINGS (X = Date, Y = Total),
+    OVERLAYS (
+        LINEAR AS DASHED WITH (COLOR = 'Purple', LABEL = 'Linear Trend'),
+        POLYNOMIAL(2) AS DOTTED WITH (COLOR = 'Orange', LABEL = 'Poly Trend (Deg 2)')
+    )
+);
+
+-- 7. Line Chart with Moving Average
+CREATE VISUAL MovingAvgLine AS LINE (
+    SOURCE = (SELECT Date, SUM(Val) AS Total FROM #trends GROUP BY Date),
+    TITLE = 'Line Chart with 3-Period Moving Average',
+    MAPPINGS (X = Date, Y = Total),
+    OVERLAYS (
+        MOVING_AVG(3) AS SOLID WITH (COLOR = 'Cyan', LABEL = '3-Period MA')
+    )
+);
+
+-- Page Layout
+CREATE PAGE LineKitchenSink AS LAYOUT (
+    STRUCTURE = 'A B / C D / E F',
+    MAP (
+        'A' = BasicLine,
+        'B' = SmoothLine,
+        'C' = MultiLine,
+        'D' = StackedLine,
+        'E' = RegressionLine,
+        'F' = MovingAvgLine
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = LineKitchenSink) WITH PAGES (LineKitchenSink);

@@ -1,0 +1,35 @@
+-- Kitchen Sink: DATEPICKER Visual
+-- This script demonstrates the DATEPICKER visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: DATEPICKER Visual';
+
+-- 1. Setup Parameter
+DECLARE @myDate DATE = '2026-05-01';
+
+-- 2. Datepicker Visual
+CREATE VISUAL SingleDatePicker AS DATEPICKER (
+    TITLE = 'Pick a Date',
+    OPTIONS (
+        MIN = '2026-01-01',
+        MAX = '2026-12-31',
+        DEFAULT = '2026-05-01'
+    ),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@myDate, value))
+);
+
+-- 3. Result
+CREATE VISUAL DateResult AS CARD (
+    SOURCE = (SELECT @myDate AS val, 'Selected Date' AS lbl),
+    MAPPINGS (VALUE = val, LABEL = lbl)
+);
+
+-- Page Layout
+CREATE PAGE DateKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = SingleDatePicker,
+        'B' = DateResult
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = DateKitchenSink) WITH PAGES (DateKitchenSink);

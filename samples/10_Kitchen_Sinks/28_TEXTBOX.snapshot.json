@@ -1,0 +1,205 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\28_TEXTBOX.rptsql",
+  "builtAt": "2026-05-14T19:06:42.8500571Z",
+  "title": "Kitchen Sink: TEXTBOX Visual",
+  "visuals": [
+    {
+      "name": "NoteInput",
+      "visualType": "TEXTBOX",
+      "isMarkdown": true,
+      "chartConfig": null,
+      "labelPosition": "TOP",
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Enter Note",
+        "PLACEHOLDER": "Type something..."
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@userNote",
+          "valueExpression": "value",
+          "valueSource": "CONTROL_VALUE",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "TextboxResult",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "Note"
+      ],
+      "rows": [
+        [
+          "Default note"
+        ]
+      ],
+      "options": {
+        "mapping:value": "Note"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "TextboxKitchenSink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "NoteInput",
+        "B": "TextboxResult"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "TextboxKitchenSink",
+      "pages": [
+        "TextboxKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@userNote": "Default note",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": ""
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 0,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[b65471ee] Visual \u0027NoteInput\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:06:42.8402477Z"
+    },
+    {
+      "message": "[b65471ee] Visual \u0027TextboxResult\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:06:42.8426819Z"
+    },
+    {
+      "message": "[b65471ee] Page \u0027TextboxKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:06:42.8439034Z"
+    },
+    {
+      "message": "[b65471ee] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:06:42.8445683Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "efbe1cc1-00d2-4869-a65c-9dd166e22100",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 15.5496,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "488be892-78a2-4d68-a455-3ec5202c8400",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.3877,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "aef6cc37-9e7c-4103-81f0-203b762be342",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.7825,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5e7552ce-065b-4922-95e3-290f5eb51e44",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.0847,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "934dae6d-715f-47b6-90a6-2019bf75288d",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.296,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "699d8ea8-1773-453a-8955-79307a9b7328",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9501,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "70125ff2-d87a-4408-93ff-9f06b83a2b68",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.3058,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

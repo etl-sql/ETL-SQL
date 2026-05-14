@@ -1,0 +1,355 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\16_MAP.rptsql",
+  "builtAt": "2026-05-14T18:48:10.0335405Z",
+  "title": "Kitchen Sink: MAP Visual",
+  "description": "Demonstration of MAP visualizations (Choropleth and Point modes).",
+  "visuals": [
+    {
+      "name": "BasicMap",
+      "visualType": "MAP",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Global Revenue by Country\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022,\u0022formatter\u0022:\u0022{b}\\u003Cbr/\\u003E{c}\u0022},\u0022visualMap\u0022:{\u0022min\u0022:2000,\u0022max\u0022:5000,\u0022left\u0022:\u0022right\u0022,\u0022calculable\u0022:true,\u0022realtime\u0022:false,\u0022inRange\u0022:{\u0022color\u0022:[\u0022#e0f3f8\u0022,\u0022#08306b\u0022]}},\u0022series\u0022:[{\u0022type\u0022:\u0022map\u0022,\u0022map\u0022:\u0022world\u0022,\u0022name\u0022:\u0022BasicMap\u0022,\u0022roam\u0022:true,\u0022emphasis\u0022:{\u0022label\u0022:{\u0022show\u0022:true}},\u0022label\u0022:{\u0022show\u0022:false},\u0022data\u0022:[{\u0022name\u0022:\u0022USA\u0022,\u0022value\u0022:5000},{\u0022name\u0022:\u0022Canada\u0022,\u0022value\u0022:3000},{\u0022name\u0022:\u0022Mexico\u0022,\u0022value\u0022:2000},{\u0022name\u0022:\u0022UK\u0022,\u0022value\u0022:4000},{\u0022name\u0022:\u0022France\u0022,\u0022value\u0022:3500},{\u0022name\u0022:\u0022Germany\u0022,\u0022value\u0022:4500}]}],\u0022__mapKey\u0022:\u0022world\u0022,\u0022__matchBy\u0022:\u0022NAME\u0022}",
+      "columns": [
+        "Country",
+        "Rev"
+      ],
+      "rows": [
+        [
+          "USA",
+          "5000"
+        ],
+        [
+          "Canada",
+          "3000"
+        ],
+        [
+          "Mexico",
+          "2000"
+        ],
+        [
+          "UK",
+          "4000"
+        ],
+        [
+          "France",
+          "3500"
+        ],
+        [
+          "Germany",
+          "4500"
+        ]
+      ],
+      "options": {
+        "title": "Global Revenue by Country",
+        "mapping:region": "Country",
+        "mapping:value": "Rev"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "PointMap",
+      "visualType": "MAP",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Office Locations and Activity\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022,\u0022formatter\u0022:\u0022{b}: {c}\u0022},\u0022geo\u0022:{\u0022map\u0022:\u0022world\u0022,\u0022roam\u0022:true,\u0022label\u0022:{\u0022show\u0022:false},\u0022itemStyle\u0022:{\u0022areaColor\u0022:\u0022#f3f4f6\u0022,\u0022borderColor\u0022:\u0022#d1d5db\u0022}},\u0022visualMap\u0022:{\u0022min\u0022:80,\u0022max\u0022:120,\u0022left\u0022:\u0022right\u0022,\u0022calculable\u0022:true,\u0022inRange\u0022:{\u0022color\u0022:[\u0022#e0f3f8\u0022,\u0022#08306b\u0022]}},\u0022series\u0022:[{\u0022type\u0022:\u0022scatter\u0022,\u0022coordinateSystem\u0022:\u0022geo\u0022,\u0022name\u0022:\u0022PointMap\u0022,\u0022data\u0022:[{\u0022value\u0022:[-74.006,40.7128,38.333333333333336,100],\u0022name\u0022:\u0022New York\u0022},{\u0022value\u0022:[-0.1278,51.5074,31.666666666666664,80],\u0022name\u0022:\u0022London\u0022},{\u0022value\u0022:[2.3522,48.8566,35,90],\u0022name\u0022:\u0022Paris\u0022},{\u0022value\u0022:[139.6503,35.6762,45,120],\u0022name\u0022:\u0022Tokyo\u0022}],\u0022__pointsSymbolSize\u0022:true}],\u0022__mapKey\u0022:\u0022world\u0022}",
+      "columns": [
+        "City",
+        "Lat",
+        "Lon",
+        "Val"
+      ],
+      "rows": [
+        [
+          "New York",
+          "40.7128",
+          "-74.0060",
+          "100"
+        ],
+        [
+          "London",
+          "51.5074",
+          "-0.1278",
+          "80"
+        ],
+        [
+          "Paris",
+          "48.8566",
+          "2.3522",
+          "90"
+        ],
+        [
+          "Tokyo",
+          "35.6762",
+          "139.6503",
+          "120"
+        ]
+      ],
+      "options": {
+        "title": "Office Locations and Activity",
+        "MODE": "POINTS",
+        "mapping:lat": "Lat",
+        "mapping:lon": "Lon",
+        "mapping:value": "Val",
+        "mapping:label": "City"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StyledMap",
+      "visualType": "MAP",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled Choropleth Map\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022,\u0022formatter\u0022:\u0022{b}\\u003Cbr/\\u003E{c}\u0022},\u0022visualMap\u0022:{\u0022min\u0022:2000,\u0022max\u0022:5000,\u0022left\u0022:\u0022right\u0022,\u0022calculable\u0022:true,\u0022realtime\u0022:false,\u0022inRange\u0022:{\u0022color\u0022:[\u0022#e0f3f8\u0022,\u0022#08306b\u0022]}},\u0022series\u0022:[{\u0022type\u0022:\u0022map\u0022,\u0022map\u0022:\u0022world\u0022,\u0022name\u0022:\u0022StyledMap\u0022,\u0022roam\u0022:true,\u0022emphasis\u0022:{\u0022label\u0022:{\u0022show\u0022:true}},\u0022label\u0022:{\u0022show\u0022:false},\u0022data\u0022:[{\u0022name\u0022:\u0022USA\u0022,\u0022value\u0022:5000},{\u0022name\u0022:\u0022Canada\u0022,\u0022value\u0022:3000},{\u0022name\u0022:\u0022Mexico\u0022,\u0022value\u0022:2000},{\u0022name\u0022:\u0022UK\u0022,\u0022value\u0022:4000},{\u0022name\u0022:\u0022France\u0022,\u0022value\u0022:3500},{\u0022name\u0022:\u0022Germany\u0022,\u0022value\u0022:4500}]}],\u0022__mapKey\u0022:\u0022world\u0022,\u0022__matchBy\u0022:\u0022NAME\u0022}",
+      "columns": [
+        "Country",
+        "Rev"
+      ],
+      "rows": [
+        [
+          "USA",
+          "5000"
+        ],
+        [
+          "Canada",
+          "3000"
+        ],
+        [
+          "Mexico",
+          "2000"
+        ],
+        [
+          "UK",
+          "4000"
+        ],
+        [
+          "France",
+          "3500"
+        ],
+        [
+          "Germany",
+          "4500"
+        ]
+      ],
+      "options": {
+        "title": "Styled Choropleth Map",
+        "color:min": "#e0f3db",
+        "color:max": "#0868ac",
+        "mapping:region": "Country",
+        "mapping:value": "Rev"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "MapKitchenSink",
+      "structure": "A / B / C",
+      "slotMap": {
+        "A": "BasicMap",
+        "B": "PointMap",
+        "C": "StyledMap"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "MapKitchenSink",
+      "pages": [
+        "MapKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "4"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 10,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[3bedf6d3] [SELECT] Executing SelectStatement. Session: 3bedf6d3",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:09.9974018Z"
+    },
+    {
+      "message": "[3bedf6d3] 6 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:10.0175367Z"
+    },
+    {
+      "message": "[3bedf6d3] [SELECT] Executing SelectStatement. Session: 3bedf6d3",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:10.018818Z"
+    },
+    {
+      "message": "[3bedf6d3] 4 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:10.0226709Z"
+    },
+    {
+      "message": "[3bedf6d3] Visual \u0027BasicMap\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:10.0242371Z"
+    },
+    {
+      "message": "[3bedf6d3] Visual \u0027PointMap\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:10.0260903Z"
+    },
+    {
+      "message": "[3bedf6d3] Visual \u0027StyledMap\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:10.0262532Z"
+    },
+    {
+      "message": "[3bedf6d3] Page \u0027MapKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:10.0273149Z"
+    },
+    {
+      "message": "[3bedf6d3] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:10.0279627Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "8348a952-db18-43ec-9790-6da76497a082",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 39.5633,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "34c45b15-c2b7-4b14-8b69-3a857516aa81",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.5554,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "f91c303e-82f4-4366-b2df-6e9e64faad12",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0342,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "0225958f-6dfa-4a02-8896-cdde3a7f6926",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 12,
+          "durationMs": 22.9413,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 523.0741065240418,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d086bd4b-985c-421a-911c-f11e03028639",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 7,
+          "durationMs": 4.1825,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 1673.6401673640166,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "a9d4e09d-5871-4fac-82d3-406d6439e0ee",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.6401,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8b47bc11-0d5a-4c07-993c-45835ae1e562",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0817,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "31a63034-eb8c-48ec-8812-e0b3218cb37b",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0496,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "67ba7461-7a23-48a3-a6af-37538fcc8993",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8909,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8bb93016-f446-49dd-b445-1a8821897a58",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2901,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

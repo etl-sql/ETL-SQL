@@ -1,0 +1,577 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\03_LINE.rptsql",
+  "builtAt": "2026-05-14T17:38:24.5308822Z",
+  "title": "Kitchen Sink: LINE Visual",
+  "description": "Demonstration of LINE chart capabilities, including smoothing, stacking, and regression overlays.",
+  "visuals": [
+    {
+      "name": "BasicLine",
+      "visualType": "LINE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Basic Line Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00221/1/2026 12:00:00 AM\u0022,\u00222/1/2026 12:00:00 AM\u0022,\u00223/1/2026 12:00:00 AM\u0022,\u00224/1/2026 12:00:00 AM\u0022,\u00225/1/2026 12:00:00 AM\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Total\u0022,\u0022data\u0022:[220,280,340,430,430]}]}",
+      "columns": [
+        "Date",
+        "Total"
+      ],
+      "rows": [
+        [
+          "4/1/2026 12:00:00 AM",
+          "430"
+        ],
+        [
+          "5/1/2026 12:00:00 AM",
+          "430"
+        ],
+        [
+          "2/1/2026 12:00:00 AM",
+          "280"
+        ],
+        [
+          "1/1/2026 12:00:00 AM",
+          "220"
+        ],
+        [
+          "3/1/2026 12:00:00 AM",
+          "340"
+        ]
+      ],
+      "options": {
+        "title": "Basic Line Chart",
+        "mapping:x": "Date",
+        "mapping:y": "Total"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "SmoothLine",
+      "visualType": "LINE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Smooth Line Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00221/1/2026 12:00:00 AM\u0022,\u00222/1/2026 12:00:00 AM\u0022,\u00223/1/2026 12:00:00 AM\u0022,\u00224/1/2026 12:00:00 AM\u0022,\u00225/1/2026 12:00:00 AM\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Total\u0022,\u0022data\u0022:[220,280,340,430,430],\u0022smooth\u0022:true}]}",
+      "columns": [
+        "Date",
+        "Total"
+      ],
+      "rows": [
+        [
+          "4/1/2026 12:00:00 AM",
+          "430"
+        ],
+        [
+          "5/1/2026 12:00:00 AM",
+          "430"
+        ],
+        [
+          "2/1/2026 12:00:00 AM",
+          "280"
+        ],
+        [
+          "1/1/2026 12:00:00 AM",
+          "220"
+        ],
+        [
+          "3/1/2026 12:00:00 AM",
+          "340"
+        ]
+      ],
+      "options": {
+        "title": "Smooth Line Chart",
+        "SMOOTH": "True",
+        "mapping:x": "Date",
+        "mapping:y": "Total"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "MultiLine",
+      "visualType": "LINE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Multi-Series Line Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022vertical\u0022,\u0022right\u0022:\u0022right\u0022,\u0022top\u0022:\u0022middle\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00222026-01-01\u0022,\u00222026-02-01\u0022,\u00222026-03-01\u0022,\u00222026-04-01\u0022,\u00222026-05-01\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Product A\u0022,\u0022data\u0022:[100,150,180,220,200]},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Product B\u0022,\u0022data\u0022:[120,130,160,210,230]}]}",
+      "columns": [
+        "Date",
+        "Category",
+        "Val"
+      ],
+      "rows": [
+        [
+          "2026-01-01",
+          "Product A",
+          "100"
+        ],
+        [
+          "2026-01-01",
+          "Product B",
+          "120"
+        ],
+        [
+          "2026-02-01",
+          "Product A",
+          "150"
+        ],
+        [
+          "2026-02-01",
+          "Product B",
+          "130"
+        ],
+        [
+          "2026-03-01",
+          "Product A",
+          "180"
+        ],
+        [
+          "2026-03-01",
+          "Product B",
+          "160"
+        ],
+        [
+          "2026-04-01",
+          "Product A",
+          "220"
+        ],
+        [
+          "2026-04-01",
+          "Product B",
+          "210"
+        ],
+        [
+          "2026-05-01",
+          "Product A",
+          "200"
+        ],
+        [
+          "2026-05-01",
+          "Product B",
+          "230"
+        ]
+      ],
+      "options": {
+        "title": "Multi-Series Line Chart",
+        "LEGEND_POSITION": "RIGHT",
+        "mapping:x": "Date",
+        "mapping:y": "Val",
+        "mapping:series": "Category"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StackedLine",
+      "visualType": "LINE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Stacked Line Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00222026-01-01\u0022,\u00222026-02-01\u0022,\u00222026-03-01\u0022,\u00222026-04-01\u0022,\u00222026-05-01\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Product A\u0022,\u0022data\u0022:[100,150,180,220,200],\u0022stack\u0022:\u0022total\u0022},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Product B\u0022,\u0022data\u0022:[120,130,160,210,230],\u0022stack\u0022:\u0022total\u0022}]}",
+      "columns": [
+        "Date",
+        "Category",
+        "Val"
+      ],
+      "rows": [
+        [
+          "2026-01-01",
+          "Product A",
+          "100"
+        ],
+        [
+          "2026-01-01",
+          "Product B",
+          "120"
+        ],
+        [
+          "2026-02-01",
+          "Product A",
+          "150"
+        ],
+        [
+          "2026-02-01",
+          "Product B",
+          "130"
+        ],
+        [
+          "2026-03-01",
+          "Product A",
+          "180"
+        ],
+        [
+          "2026-03-01",
+          "Product B",
+          "160"
+        ],
+        [
+          "2026-04-01",
+          "Product A",
+          "220"
+        ],
+        [
+          "2026-04-01",
+          "Product B",
+          "210"
+        ],
+        [
+          "2026-05-01",
+          "Product A",
+          "200"
+        ],
+        [
+          "2026-05-01",
+          "Product B",
+          "230"
+        ]
+      ],
+      "options": {
+        "title": "Stacked Line Chart",
+        "STACKED": "True",
+        "mapping:x": "Date",
+        "mapping:y": "Val",
+        "mapping:series": "Category"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "RegressionLine",
+      "visualType": "LINE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Line Chart with Regression Overlays\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00221/1/2026 12:00:00 AM\u0022,\u00222/1/2026 12:00:00 AM\u0022,\u00223/1/2026 12:00:00 AM\u0022,\u00224/1/2026 12:00:00 AM\u0022,\u00225/1/2026 12:00:00 AM\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Total\u0022,\u0022data\u0022:[220,280,340,430,430]},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Linear Trend\u0022,\u0022data\u0022:[226,283,340,397,454],\u0022smooth\u0022:false,\u0022symbol\u0022:\u0022none\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022dashed\u0022,\u0022color\u0022:\u0022Purple\u0022},\u0022itemStyle\u0022:{\u0022color\u0022:\u0022Purple\u0022}},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Poly Trend (Deg 2)\u0022,\u0022data\u0022:[213.14285714285714,3898,14787.142857142859,32880.571428571435,58178.28571428572],\u0022smooth\u0022:true,\u0022symbol\u0022:\u0022none\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022dotted\u0022,\u0022color\u0022:\u0022Orange\u0022},\u0022itemStyle\u0022:{\u0022color\u0022:\u0022Orange\u0022}}]}",
+      "columns": [
+        "Date",
+        "Total"
+      ],
+      "rows": [
+        [
+          "4/1/2026 12:00:00 AM",
+          "430"
+        ],
+        [
+          "5/1/2026 12:00:00 AM",
+          "430"
+        ],
+        [
+          "2/1/2026 12:00:00 AM",
+          "280"
+        ],
+        [
+          "1/1/2026 12:00:00 AM",
+          "220"
+        ],
+        [
+          "3/1/2026 12:00:00 AM",
+          "340"
+        ]
+      ],
+      "options": {
+        "title": "Line Chart with Regression Overlays",
+        "mapping:x": "Date",
+        "mapping:y": "Total"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "overlays": [
+        {
+          "overlayType": "Linear",
+          "parameter": null,
+          "lineStyle": "dashed",
+          "color": "Purple",
+          "label": "Linear Trend"
+        },
+        {
+          "overlayType": "Polynomial",
+          "parameter": 2,
+          "lineStyle": "dotted",
+          "color": "Orange",
+          "label": "Poly Trend (Deg 2)"
+        }
+      ]
+    },
+    {
+      "name": "MovingAvgLine",
+      "visualType": "LINE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Line Chart with 3-Period Moving Average\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00221/1/2026 12:00:00 AM\u0022,\u00222/1/2026 12:00:00 AM\u0022,\u00223/1/2026 12:00:00 AM\u0022,\u00224/1/2026 12:00:00 AM\u0022,\u00225/1/2026 12:00:00 AM\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Total\u0022,\u0022data\u0022:[220,280,340,430,430]},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u00223-Period MA\u0022,\u0022data\u0022:[null,null,280,350,400],\u0022smooth\u0022:true,\u0022symbol\u0022:\u0022none\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022solid\u0022,\u0022color\u0022:\u0022Cyan\u0022},\u0022itemStyle\u0022:{\u0022color\u0022:\u0022Cyan\u0022},\u0022tooltip\u0022:{\u0022valueFormatter\u0022:null}}]}",
+      "columns": [
+        "Date",
+        "Total"
+      ],
+      "rows": [
+        [
+          "4/1/2026 12:00:00 AM",
+          "430"
+        ],
+        [
+          "5/1/2026 12:00:00 AM",
+          "430"
+        ],
+        [
+          "2/1/2026 12:00:00 AM",
+          "280"
+        ],
+        [
+          "1/1/2026 12:00:00 AM",
+          "220"
+        ],
+        [
+          "3/1/2026 12:00:00 AM",
+          "340"
+        ]
+      ],
+      "options": {
+        "title": "Line Chart with 3-Period Moving Average",
+        "mapping:x": "Date",
+        "mapping:y": "Total"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "overlays": [
+        {
+          "overlayType": "MovingAvg",
+          "parameter": 3,
+          "lineStyle": "solid",
+          "color": "Cyan",
+          "label": "3-Period MA"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "LineKitchenSink",
+      "structure": "A B / C D / E F",
+      "slotMap": {
+        "A": "BasicLine",
+        "B": "SmoothLine",
+        "C": "MultiLine",
+        "D": "StackedLine",
+        "E": "RegressionLine",
+        "F": "MovingAvgLine"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "LineKitchenSink",
+      "pages": [
+        "LineKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "10"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 10,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[b9455c84] [SELECT] Executing SelectStatement. Session: b9455c84",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:24.4981998Z"
+    },
+    {
+      "message": "[b9455c84] 10 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:24.5183125Z"
+    },
+    {
+      "message": "[b9455c84] Visual \u0027BasicLine\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:24.520855Z"
+    },
+    {
+      "message": "[b9455c84] Visual \u0027SmoothLine\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:24.5230541Z"
+    },
+    {
+      "message": "[b9455c84] Visual \u0027MultiLine\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:24.5232538Z"
+    },
+    {
+      "message": "[b9455c84] Visual \u0027StackedLine\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:24.5233013Z"
+    },
+    {
+      "message": "[b9455c84] Visual \u0027RegressionLine\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:24.5233312Z"
+    },
+    {
+      "message": "[b9455c84] Visual \u0027MovingAvgLine\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:24.5233553Z"
+    },
+    {
+      "message": "[b9455c84] Page \u0027LineKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:24.5244097Z"
+    },
+    {
+      "message": "[b9455c84] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:24.5250633Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "be5ae06b-776c-405f-aa48-a7d9ecc8df2d",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 35.4025,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "f0c997d7-554d-4501-bfe4-6e681de8c4bb",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.1987,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "73c29259-1e3b-47b2-8878-b5b5ccac4083",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0292,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "03f29df3-4337-4bad-854b-2a9779d551c1",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 20,
+          "durationMs": 22.837,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 875.771773875728,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "40b0abc0-3780-4e76-aeca-851b458c6783",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.7965,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "59c215fb-b40e-4110-9d7c-15255e7627b0",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.4568,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "844eacfc-77e1-4c06-86de-1ed33b710410",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.069,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "0d77878f-5c5c-4c4e-adb4-703ee75f4bc1",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0293,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "a1598649-baac-4d4d-9853-fbee7c2d7477",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0173,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5150030e-5a0d-489f-8045-6b5ce8444a1f",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.015,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "86056c43-cee4-439f-a008-66b4287278ce",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8942,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "e6c859c8-8bcd-4a7b-b511-c10691844f25",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2677,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

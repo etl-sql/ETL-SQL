@@ -1,0 +1,384 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\07_COMBO.rptsql",
+  "builtAt": "2026-05-14T17:39:38.7594117Z",
+  "title": "Kitchen Sink: COMBO Visual",
+  "description": "Demonstration of combined BAR and LINE charts in a single visual.",
+  "visuals": [
+    {
+      "name": "BasicCombo",
+      "visualType": "COMBO",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Revenue (Bar) vs Orders (Line)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Jan\u0022,\u0022Feb\u0022,\u0022Mar\u0022,\u0022Apr\u0022,\u0022May\u0022]},\u0022yAxis\u0022:[{\u0022type\u0022:\u0022value\u0022},{\u0022type\u0022:\u0022value\u0022,\u0022position\u0022:\u0022right\u0022,\u0022splitLine\u0022:{\u0022show\u0022:false}}],\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[1000,1200,800,1500,1300],\u0022yAxisIndex\u0022:0},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Orders\u0022,\u0022data\u0022:[50,60,45,75,65],\u0022yAxisIndex\u0022:1}]}",
+      "columns": [
+        "Month",
+        "Revenue",
+        "Orders"
+      ],
+      "rows": [
+        [
+          "Jan",
+          "1000",
+          "50"
+        ],
+        [
+          "Feb",
+          "1200",
+          "60"
+        ],
+        [
+          "Mar",
+          "800",
+          "45"
+        ],
+        [
+          "Apr",
+          "1500",
+          "75"
+        ],
+        [
+          "May",
+          "1300",
+          "65"
+        ]
+      ],
+      "options": {
+        "title": "Revenue (Bar) vs Orders (Line)",
+        "mapping:x": "Month"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "seriesDefs": [
+        {
+          "seriesType": "bar",
+          "column": "Revenue"
+        },
+        {
+          "seriesType": "line",
+          "column": "Orders"
+        }
+      ]
+    },
+    {
+      "name": "MultiCombo",
+      "visualType": "COMBO",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Multiple Series Combo\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Jan\u0022,\u0022Feb\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022RevA\u0022,\u0022data\u0022:[1000,1200]},{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022RevB\u0022,\u0022data\u0022:[800,900]},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022OrdA\u0022,\u0022data\u0022:[50,60]},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022OrdB\u0022,\u0022data\u0022:[40,55]}]}",
+      "columns": [
+        "Month",
+        "RevA",
+        "RevB",
+        "OrdA",
+        "OrdB"
+      ],
+      "rows": [
+        [
+          "Jan",
+          "1000",
+          "800",
+          "50",
+          "40"
+        ],
+        [
+          "Feb",
+          "1200",
+          "900",
+          "60",
+          "55"
+        ]
+      ],
+      "options": {
+        "title": "Multiple Series Combo",
+        "mapping:x": "Month"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "seriesDefs": [
+        {
+          "seriesType": "bar",
+          "column": "RevA"
+        },
+        {
+          "seriesType": "bar",
+          "column": "RevB"
+        },
+        {
+          "seriesType": "line",
+          "column": "OrdA"
+        },
+        {
+          "seriesType": "line",
+          "column": "OrdB"
+        }
+      ]
+    },
+    {
+      "name": "StyledCombo",
+      "visualType": "COMBO",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled Combo Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Jan\u0022,\u0022Feb\u0022,\u0022Mar\u0022,\u0022Apr\u0022,\u0022May\u0022],\u0022name\u0022:\u0022Month\u0022},\u0022yAxis\u0022:[{\u0022type\u0022:\u0022value\u0022,\u0022name\u0022:\u0022Primary Axis (Revenue)\u0022},{\u0022type\u0022:\u0022value\u0022,\u0022position\u0022:\u0022right\u0022,\u0022splitLine\u0022:{\u0022show\u0022:false}}],\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[1000,1200,800,1500,1300],\u0022yAxisIndex\u0022:0},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u0022Orders\u0022,\u0022data\u0022:[50,60,45,75,65],\u0022yAxisIndex\u0022:1}]}",
+      "columns": [
+        "Month",
+        "Revenue",
+        "Orders"
+      ],
+      "rows": [
+        [
+          "Jan",
+          "1000",
+          "50"
+        ],
+        [
+          "Feb",
+          "1200",
+          "60"
+        ],
+        [
+          "Mar",
+          "800",
+          "45"
+        ],
+        [
+          "Apr",
+          "1500",
+          "75"
+        ],
+        [
+          "May",
+          "1300",
+          "65"
+        ]
+      ],
+      "options": {
+        "title": "Styled Combo Chart",
+        "color:Revenue": "#4e79a7",
+        "color:Orders": "#e15759",
+        "axis:y:label": "Primary Axis (Revenue)",
+        "axis:x:label": "Month",
+        "mapping:x": "Month"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "seriesDefs": [
+        {
+          "seriesType": "bar",
+          "column": "Revenue"
+        },
+        {
+          "seriesType": "line",
+          "column": "Orders"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "ComboKitchenSink",
+      "structure": "A / B / C",
+      "slotMap": {
+        "A": "BasicCombo",
+        "B": "MultiCombo",
+        "C": "StyledCombo"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "ComboKitchenSink",
+      "pages": [
+        "ComboKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "2"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 7,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[984cfe18] [SELECT] Executing SelectStatement. Session: 984cfe18",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:38.72662Z"
+    },
+    {
+      "message": "[984cfe18] 5 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:38.7465695Z"
+    },
+    {
+      "message": "[984cfe18] Visual \u0027BasicCombo\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:38.7491829Z"
+    },
+    {
+      "message": "[984cfe18] [SELECT] Executing SelectStatement. Session: 984cfe18",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:38.7510161Z"
+    },
+    {
+      "message": "[984cfe18] 2 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:38.7516194Z"
+    },
+    {
+      "message": "[984cfe18] Visual \u0027MultiCombo\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:38.7516839Z"
+    },
+    {
+      "message": "[984cfe18] Visual \u0027StyledCombo\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:38.7517092Z"
+    },
+    {
+      "message": "[984cfe18] Page \u0027ComboKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:38.7529036Z"
+    },
+    {
+      "message": "[984cfe18] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:38.7535639Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "57669539-2df0-4f1c-90ba-096d5795f6db",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 35.7799,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "feba42d0-cad3-47fe-a949-50a554cee2a2",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2078,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "611bd530-fe03-4d86-9180-90a07b363fde",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0302,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "f902cb3a-e716-4f9d-8ee7-c66698fc102e",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 10,
+          "durationMs": 22.9615,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 435.5116172723907,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "e1bc6838-f712-44e2-a8bf-3302a3bf248a",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8136,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "321086c7-e0b0-43cf-b2bb-37fb93d8f772",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 3,
+          "durationMs": 0.6802,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 4410.467509556012,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5ebe47d0-35b8-4dbe-951d-f3425c13660a",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.04,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "96771402-be4f-49c8-9c46-b12f622aee82",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0168,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "661225af-2f43-4bf0-9f59-efbaf78cd565",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8993,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7087e02f-471e-45c6-b846-04d897608516",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.3118,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

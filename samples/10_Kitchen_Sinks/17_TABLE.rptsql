@@ -1,0 +1,65 @@
+-- Kitchen Sink: TABLE Visual
+-- This script demonstrates all features of the TABLE visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: TABLE Visual';
+SET REPORT DESCRIPTION = 'Comprehensive demonstration of TABLE capabilities, including conditional formatting and summaries.';
+
+-- 1. Mock Data Generation
+SELECT 101 AS ID, 'Direct' AS Channel, 500.00 AS Revenue, 0.15 AS Margin, '2026-05-01' AS Date INTO #sales
+UNION ALL SELECT 102, 'Social', 300.00, -0.05, '2026-05-02'
+UNION ALL SELECT 103, 'Search', 800.00, 0.20, '2026-05-03'
+UNION ALL SELECT 104, 'Referral', 150.00, 0.08, '2026-05-04'
+UNION ALL SELECT 105, 'Email', 250.00, 0.12, '2026-05-05'
+UNION ALL SELECT 106, 'Direct', 1200.00, 0.25, '2026-05-06';
+
+-- 2. Basic Table
+CREATE VISUAL BasicTable AS TABLE (
+    SOURCE = #sales,
+    TITLE = 'Basic Data Table'
+);
+
+-- 3. Table with Summaries (Grand Total)
+CREATE VISUAL SummaryTable AS TABLE (
+    SOURCE = #sales,
+    TITLE = 'Table with Totals',
+    SUMMARY (
+        GRAND_TOTAL = ON,
+        SUM(Revenue) AS 'Total Revenue',
+        AVG(Margin) AS 'Average Margin'
+    )
+);
+
+-- 4. Table with Conditional Formatting
+CREATE VISUAL FormattedTable AS TABLE (
+    SOURCE = #sales,
+    TITLE = 'Table with Conditional Formatting',
+    FORMATTING (
+        Margin < 0 THEN 'red',
+        Margin >= 0.2 THEN '#28a745',
+        Revenue > 1000 THEN 'yellow'
+    )
+);
+
+-- 5. Table with Custom Grid and Options
+CREATE VISUAL StyledTable AS TABLE (
+    SOURCE = #sales,
+    TITLE = 'Styled Table (Custom Grid)',
+    OPTIONS (
+        GRID = (HEADER, FOOTER, LEFT),
+        SHOW_NO_DATA_PLACEHOLDER = ON,
+        FORMAT = 'C2' -- Applies to numeric columns generally? (Wait, usually it's per column, but guide says CARD, TABLE)
+    )
+);
+
+-- Page Layout
+CREATE PAGE TableKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B / C / D',
+    MAP (
+        'A' = BasicTable,
+        'B' = SummaryTable,
+        'C' = FormattedTable,
+        'D' = StyledTable
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = TableKitchenSink) WITH PAGES (TableKitchenSink);

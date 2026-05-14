@@ -1,0 +1,208 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\23_DATEPICKER.rptsql",
+  "builtAt": "2026-05-14T19:03:05.7537257Z",
+  "title": "Kitchen Sink: DATEPICKER Visual",
+  "visuals": [
+    {
+      "name": "SingleDatePicker",
+      "visualType": "DATEPICKER",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Pick a Date",
+        "MIN": "2026-01-01",
+        "MAX": "2026-12-31",
+        "DEFAULT": "2026-05-01"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@myDate",
+          "valueExpression": "value",
+          "valueSource": "CONTROL_VALUE",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "DateResult",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "val",
+        "lbl"
+      ],
+      "rows": [
+        [
+          "5/1/2026 12:00:00 AM",
+          "Selected Date"
+        ]
+      ],
+      "options": {
+        "mapping:value": "val",
+        "mapping:label": "lbl"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "DateKitchenSink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "SingleDatePicker",
+        "B": "DateResult"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "DateKitchenSink",
+      "pages": [
+        "DateKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@myDate": "5/1/2026 12:00:00 AM",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": ""
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 0,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[137e0c6b] Visual \u0027SingleDatePicker\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:03:05.7437226Z"
+    },
+    {
+      "message": "[137e0c6b] Visual \u0027DateResult\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:03:05.7460971Z"
+    },
+    {
+      "message": "[137e0c6b] Page \u0027DateKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:03:05.7473159Z"
+    },
+    {
+      "message": "[137e0c6b] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:03:05.7480278Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "7076b506-5df8-4311-87cd-0c50411d0387",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 16.1161,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "4c1b8876-7bb1-4bf3-88d3-b458d779b282",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2959,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "a9336d43-60bd-44e2-b83a-642b5633556c",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 3.0582,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5bd87995-1f27-4d54-82f1-2fdfe52611ab",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.1219,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "13add596-dd3c-4100-bd4f-f4f35b7161f6",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2811,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "4b3813b2-5133-43d6-8129-15f70a564958",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9575,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "9124d52d-896d-40e8-8bcc-314abbe8bb5b",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.3548,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

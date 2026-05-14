@@ -1,0 +1,268 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\06_DONUT.rptsql",
+  "builtAt": "2026-05-14T17:39:24.4196341Z",
+  "title": "Kitchen Sink: DONUT Visual",
+  "description": "Demonstration of DONUT chart capabilities, including labels and legend placements.",
+  "visuals": [
+    {
+      "name": "BasicDonut",
+      "visualType": "DONUT",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Basic Donut Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022pie\u0022,\u0022name\u0022:\u0022BasicDonut\u0022,\u0022radius\u0022:[\u002240%\u0022,\u002270%\u0022],\u0022data\u0022:[{\u0022name\u0022:\u0022Windows\u0022,\u0022value\u0022:55},{\u0022name\u0022:\u0022macOS\u0022,\u0022value\u0022:25},{\u0022name\u0022:\u0022Linux\u0022,\u0022value\u0022:10},{\u0022name\u0022:\u0022iOS\u0022,\u0022value\u0022:5},{\u0022name\u0022:\u0022Android\u0022,\u0022value\u0022:5}]}]}",
+      "columns": [
+        "OS",
+        "Share"
+      ],
+      "rows": [
+        [
+          "Windows",
+          "55"
+        ],
+        [
+          "macOS",
+          "25"
+        ],
+        [
+          "Linux",
+          "10"
+        ],
+        [
+          "iOS",
+          "5"
+        ],
+        [
+          "Android",
+          "5"
+        ]
+      ],
+      "options": {
+        "title": "Basic Donut Chart",
+        "mapping:label": "OS",
+        "mapping:value": "Share"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StyledDonut",
+      "visualType": "DONUT",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Donut with Right Legend\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022vertical\u0022,\u0022right\u0022:\u0022right\u0022,\u0022top\u0022:\u0022middle\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022pie\u0022,\u0022name\u0022:\u0022StyledDonut\u0022,\u0022radius\u0022:[\u002240%\u0022,\u002270%\u0022],\u0022data\u0022:[{\u0022name\u0022:\u0022Windows\u0022,\u0022value\u0022:55},{\u0022name\u0022:\u0022macOS\u0022,\u0022value\u0022:25},{\u0022name\u0022:\u0022Linux\u0022,\u0022value\u0022:10},{\u0022name\u0022:\u0022iOS\u0022,\u0022value\u0022:5},{\u0022name\u0022:\u0022Android\u0022,\u0022value\u0022:5}],\u0022label\u0022:{\u0022show\u0022:true}}]}",
+      "columns": [
+        "OS",
+        "Share"
+      ],
+      "rows": [
+        [
+          "Windows",
+          "55"
+        ],
+        [
+          "macOS",
+          "25"
+        ],
+        [
+          "Linux",
+          "10"
+        ],
+        [
+          "iOS",
+          "5"
+        ],
+        [
+          "Android",
+          "5"
+        ]
+      ],
+      "options": {
+        "title": "Donut with Right Legend",
+        "LEGEND_POSITION": "RIGHT",
+        "DATA_LABELS": "ON",
+        "mapping:label": "OS",
+        "mapping:value": "Share"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "dataLabels": {
+        "show": true,
+        "position": null,
+        "color": null,
+        "fontSize": null,
+        "fontWeight": null,
+        "fontFamily": null,
+        "format": null
+      }
+    }
+  ],
+  "pages": [
+    {
+      "name": "DonutKitchenSink",
+      "structure": "A B",
+      "slotMap": {
+        "A": "BasicDonut",
+        "B": "StyledDonut"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "DonutKitchenSink",
+      "pages": [
+        "DonutKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "5"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 5,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[70e310a6] [SELECT] Executing SelectStatement. Session: 70e310a6",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:24.3876627Z"
+    },
+    {
+      "message": "[70e310a6] 5 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:24.4076368Z"
+    },
+    {
+      "message": "[70e310a6] Visual \u0027BasicDonut\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:24.4102251Z"
+    },
+    {
+      "message": "[70e310a6] Visual \u0027StyledDonut\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:24.4120521Z"
+    },
+    {
+      "message": "[70e310a6] Page \u0027DonutKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:24.4131737Z"
+    },
+    {
+      "message": "[70e310a6] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:39:24.4141664Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "b51eb187-d501-42af-80d8-0694f37732b2",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 35.0724,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "6f0371ae-b856-48ec-89d7-db1d1b38891e",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2148,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "0985781a-c782-47e3-a169-db14fc822824",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0291,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ac7715fa-8bff-4470-846c-84d0abfab222",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 10,
+          "durationMs": 22.6599,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 441.30821406978845,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "2f62e3b5-16e8-4686-8fb7-b8cdfadd7704",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8096,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "16f95e6b-e696-4813-bd2a-f75f55a6c985",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0817,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "a6acdd2b-219b-42d1-bf9a-6da25cf12965",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8802,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "94feb0a7-60f5-4256-9a9c-46e0a39a0a1e",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.6376,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

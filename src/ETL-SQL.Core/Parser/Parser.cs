@@ -31,7 +31,7 @@ namespace ETL_SQL.Core.Parser
             TokenType.TYPE, TokenType.VERSION, TokenType.SOURCE, TokenType.MATCHED,
             TokenType.TABLE, TokenType.TAG, TokenType.VALUE, TokenType.BITS, 
             TokenType.ALGORITHM, TokenType.PASSPHRASE, TokenType.COMMENT, TokenType.DATE,
-            TokenType.GETDATE, TokenType.RETURNS, TokenType.CONFIG,
+            TokenType.GETDATE, TokenType.RETURNS, TokenType.CONFIG, TokenType.CLOSE,
             TokenType.MIN, TokenType.MAX, TokenType.SUM, TokenType.AVG, TokenType.COUNT,
             TokenType.STEP, TokenType.TOP, TokenType.BOTTOM, TokenType.LEFT, TokenType.RIGHT
         };

@@ -13,23 +13,25 @@ namespace ETL_SQL.Reporting.Builders
     {
         public async Task<VisualManifest> BuildAsync(string name, CreateVisualStatement vStmt, Dictionary<string, string>? interactionValues = null, bool skipDeferredVisuals = false, VisualDrillState? drillState = null)
         {
-            var (title, titleMd) = styleBuilder.ResolveMarkdown(vStmt.Title, vStmt.TitleIsMarkdown);
-            var (subtitle, subtitleMd) = styleBuilder.ResolveMarkdown(vStmt.Subtitle, vStmt.SubtitleIsMarkdown);
+            var (title, titleMd) = await styleBuilder.ResolveMarkdownAsync(vStmt.Title, vStmt.TitleIsMarkdown);
+            var (subtitle, subtitleMd) = await styleBuilder.ResolveMarkdownAsync(vStmt.Subtitle, vStmt.SubtitleIsMarkdown);
+            var (defVal, _) = await styleBuilder.ResolveMarkdownAsync(vStmt.DefaultValue);
+            var (placeholder, _) = await styleBuilder.ResolveMarkdownAsync(vStmt.Placeholder);
 
             var vm = new VisualManifest
             {
                 Name            = name,
                 VisualType      = vStmt.VisualType.ToString().ToUpperInvariant(),
-                DefaultValue    = vStmt.DefaultValue,
+                DefaultValue    = defVal,
                 LabelPosition   = vStmt.LabelPosition,
                 Min             = vStmt.Min,
                 Max             = vStmt.Max,
                 Decimals        = vStmt.Decimals,
-                Placeholder     = vStmt.Placeholder,
+                Placeholder     = placeholder,
                 TitleIsMarkdown = titleMd,
                 SubtitleIsMarkdown = subtitleMd,
                 IsMarkdown      = vStmt.VisualType == VisualType.Text || vStmt.VisualType == VisualType.Textbox,
-                Tooltip         = styleBuilder.BuildTooltipManifest(vStmt.Tooltip)
+                Tooltip         = await styleBuilder.BuildTooltipManifestAsync(vStmt.Tooltip)
             };
 
             if (title != null) vm.Options["title"] = title;
@@ -542,6 +544,5 @@ namespace ETL_SQL.Reporting.Builders
                    type == VisualType.Numberbox;
         }
 
-        private (string? Value, bool IsMarkdown) ResolveMarkdown(string? input, bool parserFlag) => styleBuilder.ResolveMarkdown(input, parserFlag);
     }
 }

@@ -1,0 +1,230 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\21_SLICER.rptsql",
+  "builtAt": "2026-05-14T18:48:27.3238228Z",
+  "title": "Kitchen Sink: SLICER Visual",
+  "visuals": [
+    {
+      "name": "RegionFilter",
+      "visualType": "SLICER",
+      "chartConfig": null,
+      "defaultValue": "All",
+      "columns": [
+        "Region"
+      ],
+      "rows": [
+        [
+          "All"
+        ]
+      ],
+      "options": {
+        "mapping:value": "Region"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@region",
+          "valueExpression": "Region",
+          "valueSource": "COLUMN",
+          "valueColumn": "Region",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "SelectedResult",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "val",
+        "lbl"
+      ],
+      "rows": [
+        [
+          "All",
+          "Currently Selected"
+        ]
+      ],
+      "options": {
+        "mapping:value": "val",
+        "mapping:label": "lbl"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "SlicerKitchenSink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "RegionFilter",
+        "B": "SelectedResult"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "SlicerKitchenSink",
+      "pages": [
+        "SlicerKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@region": "All",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": ""
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 4,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[2b6aead1] [SELECT] Executing SelectStatement. Session: 2b6aead1",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:27.2949406Z"
+    },
+    {
+      "message": "[2b6aead1] Visual \u0027RegionFilter\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:27.3148582Z"
+    },
+    {
+      "message": "[2b6aead1] Visual \u0027SelectedResult\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:27.3167024Z"
+    },
+    {
+      "message": "[2b6aead1] Page \u0027SlicerKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:27.3177711Z"
+    },
+    {
+      "message": "[2b6aead1] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:48:27.3184007Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "1b538b64-e9b7-4466-b7e3-8e6a7b2f91cf",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 34.784,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "4f15aced-09fe-40c8-93d2-fcf591861a0b",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.256,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d74e83b3-135c-455b-a446-101fef41d119",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.698,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "534a0714-49e2-496d-9400-8d4d113ceca8",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 12,
+          "durationMs": 19.8983,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 603.0665936286015,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "98a04c17-e411-498d-9a6f-0f6cf8c767fc",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9729,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ff1400c4-3217-4a0b-ba59-fec4557f79b2",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0833,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "e6aa36cd-bc78-45b0-99e8-c938a934153a",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9055,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8f24c47b-d4c1-45ea-9934-6eb76f80b2de",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2724,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

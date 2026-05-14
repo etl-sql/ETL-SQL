@@ -11,7 +11,7 @@ Syntax:
 
 Chart types:
   BAR, HBAR       — vertical / horizontal bars
-  LINE            — line or area trend chart
+  LINE            — line trend chart; set AREA = ON for area fills
   PIE, DONUT      — pie and donut charts
   SCATTER         — scatter plot correlating two numeric dimensions
   BUBBLE          — scatter with a SIZE column controlling bubble area
@@ -24,6 +24,7 @@ Chart types:
   BOXPLOT         — statistical distribution chart
   COMBO           — bar + line on dual axes
   CANDLESTICK     — OHLC financial chart (X, OPEN, HIGH, LOW, CLOSE mappings)
+  GANTT           — project timeline (Y, START, END, COLOR mappings)
   MAP             — choropleth (REGION mapping) or point overlay (LON/LAT + MODE=POINTS)
 
 Display types:

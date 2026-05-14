@@ -48,6 +48,16 @@ Clears visual-level selections and returns cross-filtered visuals to their unfil
 ON_CLICK = CLEAR_FILTERS
 ```
 
+### SET_UI_STATE
+Changes the visual state of report objects (Visibility, Color, Class) without a server round-trip.
+```sql
+ON_CLICK = SET_UI_STATE('FilterPanel', 'VISIBLE', OFF)
+-- Toggle class:
+ON_CLICK = SET_UI_STATE('TargetVisual', 'CLASS', '+highlighted')
+```
+Key: `VISIBLE`, `COLLAPSED`, `COLOR`, `BACKGROUND-COLOR`, `CLASS`.
+Value: `ON`/`OFF`, hex colors, or class names (prefix with `+` to add, `-` to remove).
+
 ## Examples
 
 **Table with Row Selection:**

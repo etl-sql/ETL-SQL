@@ -1,0 +1,30 @@
+-- Kitchen Sink: RELDATEPICKER Visual
+-- This script demonstrates the RELDATEPICKER visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: RELDATEPICKER Visual';
+
+-- 1. Setup Parameter (RELDATE type)
+DECLARE @relativeDate RELDATE = 'M-1';
+
+-- 2. RelDatepicker Visual
+CREATE VISUAL RelPicker AS RELDATEPICKER (
+    TITLE = 'Relative Date Selection',
+    OPTIONS (DEFAULT = 'M-1'),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@relativeDate, value))
+);
+
+-- 3. Result (Resolving RELDATE to absolute for display)
+CREATE VISUAL RelResult AS TABLE (
+    SOURCE = (SELECT @relativeDate AS Expression, RELDATE(@relativeDate) AS ResolvedDate)
+);
+
+-- Page Layout
+CREATE PAGE RelDateKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = RelPicker,
+        'B' = RelResult
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = RelDateKitchenSink) WITH PAGES (RelDateKitchenSink);

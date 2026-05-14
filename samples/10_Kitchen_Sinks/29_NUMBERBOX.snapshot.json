@@ -1,0 +1,207 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\29_NUMBERBOX.rptsql",
+  "builtAt": "2026-05-14T19:06:57.2180816Z",
+  "title": "Kitchen Sink: NUMBERBOX Visual",
+  "visuals": [
+    {
+      "name": "MinPriceInput",
+      "visualType": "NUMBERBOX",
+      "chartConfig": null,
+      "labelPosition": "LEFT",
+      "min": 0,
+      "max": 10000,
+      "decimals": 2,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Minimum Price Threshold"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@threshold",
+          "valueExpression": "value",
+          "valueSource": "CONTROL_VALUE",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "NumberResult",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "val"
+      ],
+      "rows": [
+        [
+          "100.00"
+        ]
+      ],
+      "options": {
+        "FORMAT": "C2",
+        "mapping:value": "val"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "NumberboxKitchenSink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "MinPriceInput",
+        "B": "NumberResult"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "NumberboxKitchenSink",
+      "pages": [
+        "NumberboxKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@threshold": "100.00",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": ""
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 0,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[3512d24a] Visual \u0027MinPriceInput\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:06:57.2082547Z"
+    },
+    {
+      "message": "[3512d24a] Visual \u0027NumberResult\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:06:57.2106276Z"
+    },
+    {
+      "message": "[3512d24a] Page \u0027NumberboxKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:06:57.2119212Z"
+    },
+    {
+      "message": "[3512d24a] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:06:57.2126933Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "df51e0ff-6a9c-4fb1-ad36-1ae51778c62e",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 15.9568,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "1aff9941-8bdc-4c18-a420-7cd351c83064",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.243,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ce96038b-67f2-49bb-8c16-a7cc53468678",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.7609,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "2d6e8942-aab9-4820-9f77-affda0d885c7",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.4204,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "3248f809-55e8-41e6-bdb4-2699f9a2fde9",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2813,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "434f35c3-1eb1-4be3-91b7-2d7457b3148e",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9521,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "609c80c6-94a6-4b60-a856-f5b26b5c6a40",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.3912,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

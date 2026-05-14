@@ -1,0 +1,44 @@
+-- Kitchen Sink: CARD Visual
+-- This script demonstrates the CARD visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: CARD Visual';
+SET REPORT DESCRIPTION = 'Demonstration of CARD KPI visuals.';
+
+-- 1. Mock Data Generation
+SELECT 1250000 AS Rev, 'Total Revenue' AS Label, 0.18 AS Growth INTO #kpis;
+
+-- 2. Basic Card
+CREATE VISUAL BasicCard AS CARD (
+    SOURCE = #kpis,
+    MAPPINGS (VALUE = Rev, LABEL = Label),
+    OPTIONS (FORMAT = 'C0')
+);
+
+-- 3. Card with Styling
+CREATE VISUAL StyledCard AS CARD (
+    SOURCE = (SELECT Growth, 'Year-over-Year' AS Lbl FROM #kpis),
+    TITLE = 'Growth %',
+    MAPPINGS (VALUE = Growth, LABEL = Lbl),
+    OPTIONS (FORMAT = 'P1'),
+    STYLE (
+        BACKGROUND-COLOR = '#f8fafc',
+        COLOR = '#2563eb',
+        BORDER = '1px solid #e2e8f0',
+        BORDER-RADIUS = '12px',
+        PADDING = '24px'
+    )
+);
+
+-- 4. Multiple Cards in a Row (using Container)
+CREATE CONTAINER KpiGrid AS BOX (
+    STRUCTURE = 'A B',
+    MAP ('A' = BasicCard, 'B' = StyledCard)
+);
+
+-- Page Layout
+CREATE PAGE CardKitchenSink AS LAYOUT (
+    STRUCTURE = 'A',
+    MAP ('A' = KpiGrid)
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = CardKitchenSink) WITH PAGES (CardKitchenSink);

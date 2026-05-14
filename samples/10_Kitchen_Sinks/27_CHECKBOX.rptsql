@@ -1,0 +1,31 @@
+-- Kitchen Sink: CHECKBOX Visual
+-- This script demonstrates the CHECKBOX visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: CHECKBOX Visual';
+
+-- 1. Setup Parameter
+DECLARE @showInactive BIT = 0;
+
+-- 2. Checkbox Visual
+CREATE VISUAL InactiveToggle AS CHECKBOX (
+    TITLE = 'Include Inactive Records',
+    LABEL_POSITION = 'LEFT',
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@showInactive, value))
+);
+
+-- 3. Result
+CREATE VISUAL CheckboxResult AS CARD (
+    SOURCE = (SELECT CASE WHEN @showInactive = 1 THEN 'Showing All' ELSE 'Active Only' END AS Status),
+    MAPPINGS (VALUE = Status)
+);
+
+-- Page Layout
+CREATE PAGE CheckboxKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = InactiveToggle,
+        'B' = CheckboxResult
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = CheckboxKitchenSink) WITH PAGES (CheckboxKitchenSink);

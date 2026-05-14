@@ -1,0 +1,66 @@
+-- Kitchen Sink: SCATTER Visual
+-- This script demonstrates all features of the SCATTER visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: SCATTER Visual';
+SET REPORT DESCRIPTION = 'Demonstration of SCATTER plot capabilities, including regression fits and multiple series.';
+
+-- 1. Mock Data Generation
+SELECT 10 AS Score, 20 AS Rank, 'Group A' AS Grp INTO #stats
+UNION ALL SELECT 15, 25, 'Group A'
+UNION ALL SELECT 20, 30, 'Group A'
+UNION ALL SELECT 25, 35, 'Group A'
+UNION ALL SELECT 30, 45, 'Group A'
+UNION ALL SELECT 12, 18, 'Group B'
+UNION ALL SELECT 18, 22, 'Group B'
+UNION ALL SELECT 22, 28, 'Group B'
+UNION ALL SELECT 28, 32, 'Group B'
+UNION ALL SELECT 35, 40, 'Group B';
+
+-- 2. Basic Scatter Plot
+CREATE VISUAL BasicScatter AS SCATTER (
+    SOURCE = #stats,
+    TITLE = 'Basic Scatter Plot',
+    MAPPINGS (X = Score, Y = Rank)
+);
+
+-- 3. Multi-Series Scatter
+CREATE VISUAL MultiScatter AS SCATTER (
+    SOURCE = #stats,
+    TITLE = 'Multi-Series Scatter',
+    MAPPINGS (X = Score, Y = Rank, SERIES = Grp)
+);
+
+-- 4. Scatter with Regression Overlays
+CREATE VISUAL RegressionScatter AS SCATTER (
+    SOURCE = (SELECT Score, Rank FROM #stats WHERE Grp = 'Group A'),
+    TITLE = 'Scatter with Regression Fits',
+    MAPPINGS (X = Score, Y = Rank),
+    OVERLAYS (
+        LINEAR AS DASHED WITH (COLOR = 'Blue', LABEL = 'Linear Fit'),
+        POLYNOMIAL(2) AS DOTTED WITH (COLOR = 'Red', LABEL = 'Poly Fit (Deg 2)')
+    )
+);
+
+-- 5. Scatter with Goal/Average
+CREATE VISUAL ThresholdScatter AS SCATTER (
+    SOURCE = #stats,
+    TITLE = 'Scatter with Thresholds',
+    MAPPINGS (X = Score, Y = Rank),
+    OVERLAYS (
+        GOAL(30) AS DASHED WITH (COLOR = 'Green', LABEL = 'Rank Threshold'),
+        AVERAGE AS DOTTED WITH (COLOR = 'Orange', LABEL = 'Mean Rank')
+    )
+);
+
+-- Page Layout
+CREATE PAGE ScatterKitchenSink AS LAYOUT (
+    STRUCTURE = 'A B / C D',
+    MAP (
+        'A' = BasicScatter,
+        'B' = MultiScatter,
+        'C' = RegressionScatter,
+        'D' = ThresholdScatter
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = ScatterKitchenSink) WITH PAGES (ScatterKitchenSink);

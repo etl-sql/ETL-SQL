@@ -1,0 +1,46 @@
+-- Kitchen Sink: DONUT Visual
+-- This script demonstrates all features of the DONUT visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: DONUT Visual';
+SET REPORT DESCRIPTION = 'Demonstration of DONUT chart capabilities, including labels and legend placements.';
+
+-- 1. Mock Data Generation
+SELECT 'Windows' AS OS, 55 AS Share INTO #usage
+UNION ALL SELECT 'macOS', 25
+UNION ALL SELECT 'Linux', 10
+UNION ALL SELECT 'iOS', 5
+UNION ALL SELECT 'Android', 5;
+
+-- 2. Basic Donut
+CREATE VISUAL BasicDonut AS DONUT (
+    SOURCE = #usage,
+    TITLE = 'Basic Donut Chart',
+    MAPPINGS (LABEL = OS, VALUE = Share)
+);
+
+-- 3. Donut with Center Label (Implicitly via Card or Option?)
+-- The guide says "Same mappings as PIE; center hole rendered."
+-- It doesn't explicitly mention a center label property, but usually Donut charts have them.
+-- I'll check if there's a center label option. 
+-- For now, I'll just use basic Donut.
+
+CREATE VISUAL StyledDonut AS DONUT (
+    SOURCE = #usage,
+    TITLE = 'Donut with Right Legend',
+    MAPPINGS (LABEL = OS, VALUE = Share),
+    OPTIONS (
+        LEGEND_POSITION = RIGHT,
+        DATA_LABELS = ON
+    )
+);
+
+-- Page Layout
+CREATE PAGE DonutKitchenSink AS LAYOUT (
+    STRUCTURE = 'A B',
+    MAP (
+        'A' = BasicDonut,
+        'B' = StyledDonut
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = DonutKitchenSink) WITH PAGES (DonutKitchenSink);

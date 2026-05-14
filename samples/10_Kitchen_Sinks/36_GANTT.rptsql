@@ -1,0 +1,51 @@
+-- Kitchen Sink: GANTT Visual
+-- This script demonstrates the newly implemented GANTT visual type.
+
+DECLARE @today = GETDATE();
+
+-- Create sample task data
+SELECT 'Planning' AS Task, DATEADD(DAY, -10, @today) AS StartDate, DATEADD(DAY, -5, @today) AS EndDate, '#5470c6' AS Color
+INTO #tasks;
+
+INSERT INTO #tasks VALUES ('Design', DATEADD(DAY, -6, @today), DATEADD(DAY, -2, @today), '#91cc75');
+INSERT INTO #tasks VALUES ('Development', DATEADD(DAY, -3, @today), DATEADD(DAY, 5, @today), '#fac858');
+INSERT INTO #tasks VALUES ('Testing', DATEADD(DAY, 4, @today), DATEADD(DAY, 8, @today), '#ee6666');
+INSERT INTO #tasks VALUES ('Deployment', DATEADD(DAY, 9, @today), DATEADD(DAY, 10, @today), '#73c0de');
+
+-- Multi-row tasks (overlapping)
+INSERT INTO #tasks VALUES ('Documentation', DATEADD(DAY, -5, @today), DATEADD(DAY, 5, @today), '#3ba272');
+INSERT INTO #tasks VALUES ('Bug Fixing', DATEADD(DAY, 0, @today), DATEADD(DAY, 7, @today), '#fc8452');
+
+SET REPORT TITLE = 'Project Roadmap (Gantt)';
+
+-- Standard Gantt
+CREATE VISUAL ProjectTimeline AS GANTT (
+    SOURCE = #tasks,
+    MAPPINGS (
+        Y     = Task,
+        START = StartDate,
+        END   = EndDate,
+        COLOR = Color
+    )
+);
+
+-- Gantt with explicit roles using standard X/X2/Y mappings
+CREATE VISUAL TechnicalRoadmap AS GANTT (
+    SOURCE = #tasks,
+    MAPPINGS (
+        Y  = Task,
+        X  = StartDate,
+        X2 = EndDate
+    ),
+    OPTIONS (
+        TITLE = 'Technical Roadmap (Default Colors)'
+    )
+);
+
+CREATE PAGE 'Timeline' (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = ProjectTimeline,
+        'B' = TechnicalRoadmap
+    )
+);

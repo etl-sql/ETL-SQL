@@ -1,0 +1,260 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\32_BUBBLE.rptsql",
+  "builtAt": "2026-05-14T19:07:33.9353071Z",
+  "title": "Kitchen Sink: BUBBLE Visual",
+  "visuals": [
+    {
+      "name": "BasicBubble",
+      "visualType": "BUBBLE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Market Growth vs Profit (Bubble size = Market Size)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022xAxis\u0022:{},\u0022yAxis\u0022:{},\u0022__bubbleSymbolSize\u0022:true,\u0022series\u0022:[{\u0022type\u0022:\u0022scatter\u0022,\u0022name\u0022:\u0022BasicBubble\u0022,\u0022data\u0022:[{\u0022value\u0022:[10,20,35,1000],\u0022name\u0022:\u0022Market A\u0022},{\u0022value\u0022:[15,25,20,500],\u0022name\u0022:\u0022Market B\u0022},{\u0022value\u0022:[5,30,65,2000],\u0022name\u0022:\u0022Market C\u0022},{\u0022value\u0022:[20,10,29,800],\u0022name\u0022:\u0022Market D\u0022}]}]}",
+      "columns": [
+        "Market",
+        "Growth",
+        "Profit",
+        "Size"
+      ],
+      "rows": [
+        [
+          "Market A",
+          "10",
+          "20",
+          "1000"
+        ],
+        [
+          "Market B",
+          "15",
+          "25",
+          "500"
+        ],
+        [
+          "Market C",
+          "5",
+          "30",
+          "2000"
+        ],
+        [
+          "Market D",
+          "20",
+          "10",
+          "800"
+        ]
+      ],
+      "options": {
+        "title": "Market Growth vs Profit (Bubble size = Market Size)",
+        "mapping:x": "Growth",
+        "mapping:y": "Profit",
+        "mapping:size": "Size",
+        "mapping:label": "Market"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "MultiBubble",
+      "visualType": "BUBBLE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Multi-Series Bubble\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022xAxis\u0022:{},\u0022yAxis\u0022:{},\u0022__bubbleSymbolSize\u0022:true,\u0022series\u0022:[{\u0022type\u0022:\u0022scatter\u0022,\u0022name\u0022:\u0022MultiBubble\u0022,\u0022data\u0022:[{\u0022value\u0022:[10,20,35,1000],\u0022name\u0022:\u00221000\u0022},{\u0022value\u0022:[15,25,20,500],\u0022name\u0022:\u0022500\u0022},{\u0022value\u0022:[5,30,65,2000],\u0022name\u0022:\u00222000\u0022},{\u0022value\u0022:[20,10,29,800],\u0022name\u0022:\u0022800\u0022}]}]}",
+      "columns": [
+        "Market",
+        "Growth",
+        "Profit",
+        "Size"
+      ],
+      "rows": [
+        [
+          "Market A",
+          "10",
+          "20",
+          "1000"
+        ],
+        [
+          "Market B",
+          "15",
+          "25",
+          "500"
+        ],
+        [
+          "Market C",
+          "5",
+          "30",
+          "2000"
+        ],
+        [
+          "Market D",
+          "20",
+          "10",
+          "800"
+        ]
+      ],
+      "options": {
+        "title": "Multi-Series Bubble",
+        "mapping:x": "Growth",
+        "mapping:y": "Profit",
+        "mapping:size": "Size",
+        "mapping:series": "Market"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "BubbleKitchenSink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "BasicBubble",
+        "B": "MultiBubble"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "BubbleKitchenSink",
+      "pages": [
+        "BubbleKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "4"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 4,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[98fc17a1] [SELECT] Executing SelectStatement. Session: 98fc17a1",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:33.9034681Z"
+    },
+    {
+      "message": "[98fc17a1] 4 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:33.9233348Z"
+    },
+    {
+      "message": "[98fc17a1] Visual \u0027BasicBubble\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:33.9257175Z"
+    },
+    {
+      "message": "[98fc17a1] Visual \u0027MultiBubble\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:33.92782Z"
+    },
+    {
+      "message": "[98fc17a1] Page \u0027BubbleKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:33.9292801Z"
+    },
+    {
+      "message": "[98fc17a1] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:07:33.9299089Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "fa3bc012-4a08-4a23-8924-ee9ebfcf3894",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 34.7046,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "7cf5c524-ec00-4918-bbfa-0243cceb053d",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2004,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "13b1d442-f6a3-4e44-b23d-cdfa688476a5",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 8,
+          "durationMs": 22.4761,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 355.9336361735355,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d07054a4-31c6-4da2-b0c9-adbfdb645dbf",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.6125,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "f3515171-8f1f-40d7-aa60-6015d414bc7f",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2793,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "41ff32c0-f854-46b6-bb9f-b6b0f564c54f",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2656,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "1808acec-608e-48a9-ab71-503f781ffc8c",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2719,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

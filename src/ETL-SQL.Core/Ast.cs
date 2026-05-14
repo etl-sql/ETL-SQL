@@ -32,6 +32,8 @@ namespace ETL_SQL.Core
         public List<CteDefinition>? Ctes { get; init; }
         /// <summary>Identifies all tables referenced as data sources in this statement.</summary>
         public virtual IEnumerable<string> GetSourceTables() => Enumerable.Empty<string>();
+        /// <summary>Identifies the table created or populated by this statement (e.g. INTO #temp).</summary>
+        public virtual string? GetCreatedTable() => null;
     }
 
     public enum ObjectCreationMode { Create, Alter, CreateOrAlter }
@@ -273,6 +275,8 @@ namespace ETL_SQL.Core
             }
             return sources.Distinct(StringComparer.OrdinalIgnoreCase);
         }
+
+        public override string? GetCreatedTable() => IntoTable?.TableName;
     }
 
     public enum GroupingSetType { None, GroupingSets, Rollup, Cube }
@@ -311,6 +315,8 @@ namespace ETL_SQL.Core
             Operation = op;
             Right = right;
         }
+
+        public override string? GetCreatedTable() => Left.GetCreatedTable() ?? Right.GetCreatedTable();
 
         public override IEnumerable<string> GetSourceTables()
         {

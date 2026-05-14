@@ -1,0 +1,35 @@
+-- Kitchen Sink: BUBBLE Visual
+-- This script demonstrates the BUBBLE visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: BUBBLE Visual';
+
+-- 1. Mock Data Generation
+SELECT 'Market A' AS Market, 10 AS Growth, 20 AS Profit, 1000 AS Size INTO #bubbles
+UNION ALL SELECT 'Market B', 15, 25, 500
+UNION ALL SELECT 'Market C', 5, 30, 2000
+UNION ALL SELECT 'Market D', 20, 10, 800;
+
+-- 2. Basic Bubble Chart
+CREATE VISUAL BasicBubble AS BUBBLE (
+    SOURCE = #bubbles,
+    TITLE = 'Market Growth vs Profit (Bubble size = Market Size)',
+    MAPPINGS (X = Growth, Y = Profit, SIZE = Size, LABEL = Market)
+);
+
+-- 3. Multi-Series Bubble
+CREATE VISUAL MultiBubble AS BUBBLE (
+    SOURCE = #bubbles,
+    TITLE = 'Multi-Series Bubble',
+    MAPPINGS (X = Growth, Y = Profit, SIZE = Size, SERIES = Market)
+);
+
+-- Page Layout
+CREATE PAGE BubbleKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = BasicBubble,
+        'B' = MultiBubble
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = BubbleKitchenSink) WITH PAGES (BubbleKitchenSink);

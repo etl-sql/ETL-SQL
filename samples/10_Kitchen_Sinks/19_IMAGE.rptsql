@@ -1,0 +1,43 @@
+-- Kitchen Sink: IMAGE Visual
+-- This script demonstrates the IMAGE visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: IMAGE Visual';
+SET REPORT DESCRIPTION = 'Demonstration of IMAGE rendering with different fit modes.';
+
+-- 1. Basic Image from URL
+CREATE VISUAL RemoteImage AS IMAGE (
+    OPTIONS (
+        SRC = 'https://etl-sql.io/logo.png',
+        FIT = 'contain'
+    )
+);
+
+-- 2. Image with Cover Fit
+CREATE VISUAL CoverImage AS IMAGE (
+    OPTIONS (
+        SRC = 'https://etl-sql.io/hero-bg.jpg',
+        FIT = 'cover'
+    ),
+    STYLE (HEIGHT = 300)
+);
+
+-- 3. Dynamic Image from Variable
+DECLARE @brand_logo IMAGE = 'https://etl-sql.io/favicon.ico';
+CREATE VISUAL DynamicImage AS IMAGE (
+    OPTIONS (
+        SRC = @brand_logo,
+        FIT = 'none'
+    )
+);
+
+-- Page Layout
+CREATE PAGE ImageKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B C',
+    MAP (
+        'A' = RemoteImage,
+        'B' = CoverImage,
+        'C' = DynamicImage
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = ImageKitchenSink) WITH PAGES (ImageKitchenSink);

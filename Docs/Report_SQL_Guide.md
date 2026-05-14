@@ -330,7 +330,7 @@ Accepted values: `ON` (default), `OFF`, `TRUE`, `FALSE`, `1`, `0`.
 |------|-------------|----------|
 | `BAR` | Vertical bar chart. Supports grouping via a `SERIES` mapping. | ECharts |
 | `HBAR` | Horizontal bar chart. Same mappings as BAR, bars run left-to-right. | ECharts |
-| `LINE` | Line chart. Supports multiple series and smooth curves. | ECharts |
+| `LINE` | Line chart. Supports multiple series, smooth curves, and area fills (`AREA = ON`). | ECharts |
 | `SCATTER` | X/Y scatter plot. Each row becomes one point. | ECharts |
 | `PIE` | Pie chart. One slice per row. | ECharts |
 | `DONUT` | Donut chart. Same mappings as PIE; center hole rendered. | ECharts |
@@ -344,6 +344,7 @@ Accepted values: `ON` (default), `OFF`, `TRUE`, `FALSE`, `1`, `0`.
 | `RADAR` | Spider/radar chart. First column is the series name; remaining columns become metric axes. No `MAPPINGS` required. | ECharts |
 | `BUBBLE` | Bubble chart. X/Y positions with a `SIZE` column controlling bubble area. | ECharts |
 | `CANDLESTICK` | OHLC financial chart. Requires `X`, `OPEN`, `HIGH`, `LOW`, `CLOSE` mappings. | ECharts |
+| `GANTT` | Project timeline. Requires `Y` (Task), `START`, and `END` mappings. Optional `COLOR` mapping. | ECharts |
 | `MAP` | Choropleth map (`MAPPINGS (REGION = col)`) or point map (`OPTIONS (MODE = POINTS)` with `LON`/`LAT` mappings). | ECharts |
 | `TABLE` | Paginated, scrollable data grid. Supports `SUMMARY` for server-side aggregates and `FORMATTING` for conditional cell colors. | HTML `<table>` |
 | `CARD` | Single large KPI number with an optional label. | Styled `<div>` |
@@ -354,6 +355,17 @@ Accepted values: `ON` (default), `OFF`, `TRUE`, `FALSE`, `1`, `0`.
 | `RELDATEPICKER` | Relative-date picker: text input + calendar + quick-pick buttons. No SOURCE required. | Text + calendar |
 | `SLIDER` | Numeric range slider. No SOURCE required. | `<input type="range">` |
 | `MULTISELECT` | Multi-value checkbox list. SOURCE provides the option list. | Checkbox list |
+
+> [!TIP]
+> **100% Stacked Charts**: ETL-SQL does not have a native `STACKED_100` option. To create a 100% stacked bar or line chart, calculate the percentages in the `SOURCE` query using window functions:
+> ```sql
+> SOURCE = (
+>   SELECT category, sub_category,
+>     value * 100.0 / SUM(value) OVER(PARTITION BY category) AS pct
+>   FROM #data
+> )
+> ```
+
 | `SEARCH` | Free-text search box with debounce. No SOURCE required. | `<input type="text">` |
 | `CHECKBOX` | Boolean toggle. No SOURCE required. | `<input type="checkbox">` |
 | `TEXTBOX` | Text input field. No SOURCE required. | `<input type="text">` |
@@ -471,15 +483,24 @@ MAPPINGS (X = month, Y = revenue)
 MAPPINGS (X = month, Y = revenue, SERIES = region)
 ```
 
-#### SCATTER
+#### SCATTER / BUBBLE
+
+A scatter plot for exploring correlations between two numeric dimensions. If the `SIZE` mapping is provided, it renders as a **BUBBLE** chart.
 
 | Role | Description |
 |------|-------------|
 | `X` | Horizontal axis column (numeric). |
 | `Y` | Vertical axis column (numeric). |
+| `SIZE` | (Bubble only) Numeric value controlling point area. |
+| `COLOR` | (Optional) Grouping column; points share color by value. |
+| `LABEL` | (Optional) Text to display in tooltips or labels for each point. |
 
 ```sql
+-- Scatter
 MAPPINGS (X = score, Y = rank)
+
+-- Bubble
+MAPPINGS (X = score, Y = rank, SIZE = population, LABEL = city)
 ```
 
 #### PIE and DONUT
@@ -903,7 +924,8 @@ OPTIONS (
 | Key | Applies to | Values | Description |
 |-----|------------|--------|-------------|
 | `TITLE` | All chart types | Any string | Chart title. Defaults to the visual name. Prefer the top-level `TITLE` clause. |
-| `STACKED` | BAR, HBAR, LINE | `ON` / `OFF` | Stack series on top of each other. Default `OFF`. |
+| `AREA` | LINE | `ON`, `OFF` | Fill the region below the line. Default `OFF`. |
+| `STACKED` | BAR, LINE | `ON`, `OFF` | Stack multiple series. Default `OFF`. |
 | `SMOOTH` | LINE | `ON` / `OFF` | Smooth curves via bezier interpolation. Default `OFF`. |
 | `FORMAT` | CARD, TABLE | .NET format string | Applies a numeric format (e.g. `N0`, `C2`, `P1`). |
 | `LEGEND_POSITION` | All chart types | `TOP` / `BOTTOM` / `LEFT` / `RIGHT` | Legend placement. Default `BOTTOM`. |

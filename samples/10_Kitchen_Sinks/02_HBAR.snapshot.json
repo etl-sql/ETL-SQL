@@ -1,0 +1,434 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\02_HBAR.rptsql",
+  "builtAt": "2026-05-14T17:38:08.9052015Z",
+  "title": "Kitchen Sink: HBAR Visual",
+  "description": "Comprehensive demonstration of HBAR chart capabilities.",
+  "visuals": [
+    {
+      "name": "BasicHBar",
+      "visualType": "HORIZONTALBAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Basic Horizontal Bar\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022yAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Product A\u0022,\u0022Product B\u0022,\u0022Product C\u0022,\u0022Product D\u0022,\u0022Product E\u0022]},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Sales\u0022,\u0022data\u0022:[500,750,300,900,600]}]}",
+      "columns": [
+        "Product",
+        "Sales",
+        "Target"
+      ],
+      "rows": [
+        [
+          "Product A",
+          "500",
+          "450"
+        ],
+        [
+          "Product B",
+          "750",
+          "800"
+        ],
+        [
+          "Product C",
+          "300",
+          "400"
+        ],
+        [
+          "Product D",
+          "900",
+          "850"
+        ],
+        [
+          "Product E",
+          "600",
+          "600"
+        ]
+      ],
+      "options": {
+        "title": "Basic Horizontal Bar",
+        "mapping:x": "Product",
+        "mapping:y": "Sales"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StyledHBar",
+      "visualType": "HORIZONTALBAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled HBAR with Goal Overlay\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022value\u0022,\u0022name\u0022:\u0022Total Sales\u0022},\u0022yAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Product A\u0022,\u0022Product B\u0022,\u0022Product C\u0022,\u0022Product D\u0022,\u0022Product E\u0022],\u0022name\u0022:\u0022Product Name\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Sales\u0022,\u0022data\u0022:[500,750,300,900,600],\u0022markLine\u0022:{\u0022symbol\u0022:\u0022none\u0022,\u0022data\u0022:[{\u0022xAxis\u0022:800,\u0022name\u0022:\u0022Global Target\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022dashed\u0022,\u0022color\u0022:\u0022Red\u0022},\u0022label\u0022:{\u0022formatter\u0022:\u0022Global Target\u0022,\u0022color\u0022:\u0022Red\u0022}}]},\u0022label\u0022:{\u0022show\u0022:true,\u0022position\u0022:\u0022right\u0022,\u0022color\u0022:\u0022#333\u0022}}]}",
+      "columns": [
+        "Product",
+        "Sales",
+        "Target"
+      ],
+      "rows": [
+        [
+          "Product A",
+          "500",
+          "450"
+        ],
+        [
+          "Product B",
+          "750",
+          "800"
+        ],
+        [
+          "Product C",
+          "300",
+          "400"
+        ],
+        [
+          "Product D",
+          "900",
+          "850"
+        ],
+        [
+          "Product E",
+          "600",
+          "600"
+        ]
+      ],
+      "options": {
+        "title": "Styled HBAR with Goal Overlay",
+        "DATA_LABELS": "ON",
+        "DATA_LABELS:POSITION": "RIGHT",
+        "DATA_LABELS:COLOR": "#333",
+        "axis:x:label": "Product Name",
+        "axis:y:label": "Total Sales",
+        "mapping:x": "Product",
+        "mapping:y": "Sales"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "overlays": [
+        {
+          "overlayType": "Goal",
+          "parameter": 800,
+          "lineStyle": "dashed",
+          "color": "Red",
+          "label": "Global Target"
+        }
+      ],
+      "dataLabels": {
+        "show": true,
+        "position": "RIGHT",
+        "color": "#333",
+        "fontSize": null,
+        "fontWeight": null,
+        "fontFamily": null,
+        "format": null
+      }
+    },
+    {
+      "name": "MultiHBar",
+      "visualType": "HORIZONTALBAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Grouped Horizontal Bar\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022yAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Feb\u0022,\u0022Jan\u0022]},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022North\u0022,\u0022data\u0022:[150,100]},{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022South\u0022,\u0022data\u0022:[130,120]}]}",
+      "columns": [
+        "Month",
+        "Region",
+        "Rev"
+      ],
+      "rows": [
+        [
+          "Jan",
+          "North",
+          "100"
+        ],
+        [
+          "Jan",
+          "South",
+          "120"
+        ],
+        [
+          "Feb",
+          "North",
+          "150"
+        ],
+        [
+          "Feb",
+          "South",
+          "130"
+        ]
+      ],
+      "options": {
+        "title": "Grouped Horizontal Bar",
+        "STACKED": "False",
+        "mapping:x": "Month",
+        "mapping:y": "Rev",
+        "mapping:series": "Region"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StackedHBar",
+      "visualType": "HORIZONTALBAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Stacked Horizontal Bar\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022yAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Feb\u0022,\u0022Jan\u0022]},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022North\u0022,\u0022data\u0022:[150,100],\u0022stack\u0022:\u0022total\u0022},{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022South\u0022,\u0022data\u0022:[130,120],\u0022stack\u0022:\u0022total\u0022}]}",
+      "columns": [
+        "Month",
+        "Region",
+        "Rev"
+      ],
+      "rows": [
+        [
+          "Jan",
+          "North",
+          "100"
+        ],
+        [
+          "Jan",
+          "South",
+          "120"
+        ],
+        [
+          "Feb",
+          "North",
+          "150"
+        ],
+        [
+          "Feb",
+          "South",
+          "130"
+        ]
+      ],
+      "options": {
+        "title": "Stacked Horizontal Bar",
+        "STACKED": "True",
+        "mapping:x": "Month",
+        "mapping:y": "Rev",
+        "mapping:series": "Region"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "HBarKitchenSink",
+      "structure": "A B / C D",
+      "slotMap": {
+        "A": "BasicHBar",
+        "B": "StyledHBar",
+        "C": "MultiHBar",
+        "D": "StackedHBar"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "HBarKitchenSink",
+      "pages": [
+        "HBarKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "4"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 9,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[341007d6] [SELECT] Executing SelectStatement. Session: 341007d6",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:08.8724917Z"
+    },
+    {
+      "message": "[341007d6] 5 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:08.8924629Z"
+    },
+    {
+      "message": "[341007d6] Visual \u0027BasicHBar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:08.8950466Z"
+    },
+    {
+      "message": "[341007d6] Visual \u0027StyledHBar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:08.8970746Z"
+    },
+    {
+      "message": "[341007d6] [SELECT] Executing SelectStatement. Session: 341007d6",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:08.8973231Z"
+    },
+    {
+      "message": "[341007d6] 4 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:08.8974708Z"
+    },
+    {
+      "message": "[341007d6] Visual \u0027MultiHBar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:08.897941Z"
+    },
+    {
+      "message": "[341007d6] Visual \u0027StackedHBar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:08.8979868Z"
+    },
+    {
+      "message": "[341007d6] Page \u0027HBarKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:08.8990445Z"
+    },
+    {
+      "message": "[341007d6] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:38:08.8997117Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "d4ae6cef-50c2-4599-abf6-19b9b94d0a19",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 35.6037,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "b8c60458-4040-4dd9-9e07-9c321667ed85",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.215,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "773e4d16-7e77-40c1-8b73-d7cb7f46b2d4",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0302,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "3104c6ed-6522-406b-97e0-0d1751def97c",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 10,
+          "durationMs": 22.6238,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 442.01239402752856,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "cf48e4d2-fd92-4491-a36a-48fb97edde1b",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.7921,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "21ee91b9-a411-4f87-b454-a364d17827bc",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.086,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "c59ef928-0c4e-4702-9bf1-4f1dc7f96165",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 7,
+          "durationMs": 0.2108,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 33206.83111954459,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "2870e4ad-ed80-4054-9230-08b41b13f9f7",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.444,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "4528b0af-19fe-4635-a05a-6e375328b5dc",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0259,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5ec34a98-f98f-4c6d-ae48-50c0fc5b8283",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8842,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "405cbf7f-2e13-4988-b89a-fe01e8bc0cad",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2835,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

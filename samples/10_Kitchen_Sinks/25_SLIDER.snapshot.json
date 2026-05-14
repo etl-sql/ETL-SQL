@@ -1,0 +1,206 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\25_SLIDER.rptsql",
+  "builtAt": "2026-05-14T19:04:25.5201012Z",
+  "title": "Kitchen Sink: SLIDER Visual",
+  "visuals": [
+    {
+      "name": "AgeSlider",
+      "visualType": "SLIDER",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Filter by Age",
+        "MIN": "0",
+        "MAX": "100",
+        "STEP": "1",
+        "DEFAULT": "25"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@range",
+          "valueExpression": "value",
+          "valueSource": "CONTROL_VALUE",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "SliderResult",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "MinVal",
+        "MaxVal"
+      ],
+      "rows": [
+        [
+          "10",
+          "80"
+        ]
+      ],
+      "options": {},
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "SliderKitchenSink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "AgeSlider",
+        "B": "SliderResult"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "SliderKitchenSink",
+      "pages": [
+        "SliderKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@range": "(10, 80)",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": ""
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 0,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[aeb07686] Visual \u0027AgeSlider\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:04:25.5099255Z"
+    },
+    {
+      "message": "[aeb07686] Visual \u0027SliderResult\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:04:25.512429Z"
+    },
+    {
+      "message": "[aeb07686] Page \u0027SliderKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:04:25.5139726Z"
+    },
+    {
+      "message": "[aeb07686] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:04:25.5146212Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "3c059113-5ca1-4863-a561-ab726df55f8d",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 18.6617,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "1ba9f4b6-7384-4518-a56e-3a113b080aa5",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.1914,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8153b8dc-3655-4773-bd63-a569431e877a",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 3.0795,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5fe215db-6dae-40e0-b6b7-15bb2609f9a5",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.14,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "17cc5cf1-82e9-40f0-b8d0-0800c5e5d1d4",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2709,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "90979365-caea-408a-b00b-f7b0d5c22842",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.3552,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "724c5a22-fae2-4aec-84b4-529631502944",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2743,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

@@ -22,10 +22,11 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.LPAREN, "Expected '(' after visual type");
 
             VisualSourceExpression? source = null;
-            string? title = null, subtitle = null;
+            Expression? title = null, subtitle = null;
             bool titleMd = false, subtitleMd = false;
-            string? defaultValue = null;
-            string? styleName = null, placeholder = null;
+            Expression? defaultValue = null;
+            string? styleName = null;
+            Expression? placeholder = null;
             TooltipDefinition? tooltip = null;
             var mappings        = new List<VisualMapping>();
             var options         = new List<VisualOption>();
@@ -135,8 +136,7 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 else if (Match(TokenType.PLACEHOLDER))
                 {
-                    Match(TokenType.EQUALS);
-                    placeholder = ConsumeReportOptionValue();
+                    placeholder = ParseVisualProperty("PLACEHOLDER");
                 }
                 else if (Match(TokenType.SUMMARY))
                 {
@@ -228,7 +228,7 @@ namespace ETL_SQL.Core.Parser.Components
             var slotMap    = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var pageStyles = new Dictionary<string, string>();
             string? pageStyleName = null;
-            string? title = null, subtitle = null;
+            Expression? title = null, subtitle = null;
             bool titleMd = false, subtitleMd = false;
             TooltipDefinition? tooltip = null;
             int refreshSecs = 0;
@@ -559,7 +559,7 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.LPAREN, "Expected '(' after container type");
 
             string? containerStyleName = null;
-            string? title = null, subtitle = null;
+            Expression? title = null, subtitle = null;
             bool titleMd = false, subtitleMd = false;
             TooltipDefinition? tooltip = null;
             string? structure = null;
@@ -783,7 +783,7 @@ namespace ETL_SQL.Core.Parser.Components
 
             Consume(TokenType.LPAREN, "Expected '(' after button type");
 
-            string? title = null;
+            Expression? title      = null;
             TooltipDefinition? tooltip = null;
             string? styleName = null;
             var options = new List<VisualOption>();
@@ -795,7 +795,7 @@ namespace ETL_SQL.Core.Parser.Components
                 if (Match(TokenType.TITLE))
                 {
                     Match(TokenType.EQUALS);
-                    title = Consume(TokenType.STRING_LITERAL, "Expected button title string").Value;
+                    title = ParseExpression();
                 }
                 else if (Match(TokenType.TOOLTIP))
                 {
@@ -858,7 +858,7 @@ namespace ETL_SQL.Core.Parser.Components
             var actions     = new List<VisualAction>();
             var styles      = new Dictionary<string, string>();
             string? styleName = null;
-            string? title = null, subtitle = null;
+            Expression? title = null, subtitle = null;
             bool titleMd = false, subtitleMd = false;
             TooltipDefinition? tooltip = null;
 
@@ -872,12 +872,12 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.TITLE))
                 {
                     Match(TokenType.EQUALS);
-                    title = Consume(TokenType.STRING_LITERAL, "Expected title string").Value;
+                    title = ParseExpression();
                 }
                 else if (Match(TokenType.SUBTITLE))
                 {
                     Match(TokenType.EQUALS);
-                    subtitle = Consume(TokenType.STRING_LITERAL, "Expected subtitle string").Value;
+                    subtitle = ParseExpression();
                 }
                 else if (Match(TokenType.TOOLTIP))
                 {
@@ -1007,6 +1007,7 @@ namespace ETL_SQL.Core.Parser.Components
                     "RADAR"        => VisualType.Radar,
                     "CANDLESTICK"  => VisualType.Candlestick,
                     "MAP"          => VisualType.Map,
+                    "GANTT"        => VisualType.Gantt,
                     "CHECKBOX"     => VisualType.Checkbox,
                     "TEXTBOX"      => VisualType.Textbox,
                     "NUMBERBOX"    => VisualType.Numberbox,
@@ -1017,7 +1018,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             throw new SyntaxException(
-                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, RELDATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP, CHECKBOX, TEXTBOX, NUMBERBOX) but got '{_parser.Current.Value}'",
+                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, RELDATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP, GANTT, CHECKBOX, TEXTBOX, NUMBERBOX) but got '{_parser.Current.Value}'",
                 _parser.Current.Line, _parser.Current.Column);
         }
 
@@ -1054,61 +1055,21 @@ namespace ETL_SQL.Core.Parser.Components
             return new VisualSourceExpression { TempTableName = tableRef };
         }
 
-        private (string? Value, bool IsMarkdown) ParseVisualPropertyWithMd(string propertyName)
+        private (Expression? Value, bool IsMarkdown) ParseVisualPropertyWithMd(string propertyName)
         {
             Match(TokenType.EQUALS);
-            string? value;
             bool isMarkdown = false;
             if (Match(TokenType.LPAREN))
             {
                 isMarkdown = true;
-                if (Match(TokenType.VARIABLE))
-                {
-                    value = _parser.Previous.Value;
-                }
-                else
-                {
-                    if (propertyName == "DEFAULT")
-                    {
-                        value = ConsumeReportOptionValue();
-                    }
-                    else if (Match(TokenType.NUMBER))
-                    {
-                        value = _parser.Previous.Value;
-                    }
-                    else
-                    {
-                        value = Consume(TokenType.STRING_LITERAL, $"Expected string literal or variable for {propertyName}").Value;
-                    }
-                }
+                var expr = _parser.ParseExpression();
                 Consume(TokenType.RPAREN, $"Expected ')' after {propertyName}");
+                return (expr, isMarkdown);
             }
-            else
-            {
-                if (Match(TokenType.VARIABLE))
-                {
-                    value = _parser.Previous.Value;
-                }
-                else
-                {
-                    if (propertyName == "DEFAULT")
-                    {
-                        value = ConsumeReportOptionValue();
-                    }
-                    else if (Match(TokenType.NUMBER))
-                    {
-                        value = _parser.Previous.Value;
-                    }
-                    else
-                    {
-                        value = Consume(TokenType.STRING_LITERAL, $"Expected string literal or variable for {propertyName}").Value;
-                    }
-                }
-            }
-            return (value, isMarkdown);
+            return (_parser.ParseExpression(), false);
         }
 
-        private string? ParseVisualProperty(string propertyName) => ParseVisualPropertyWithMd(propertyName).Value;
+        private Expression? ParseVisualProperty(string propertyName) => ParseVisualPropertyWithMd(propertyName).Value;
 
         private TooltipDefinition ParseTooltipDefinition()
         {
@@ -1144,7 +1105,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             if (ReportCheck(TokenType.STRING_LITERAL))
-                return TooltipDefinition.Text(Advance().Value);
+                return TooltipDefinition.Text(ParseExpression());
 
             return TooltipDefinition.Container(
                 ConsumeIdentifier("Expected string, container name, or '(' for TOOLTIP").Value);

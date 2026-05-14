@@ -28,8 +28,8 @@ namespace ETL_SQL.Tests.Reporting.Reporting
 
             Assert.Equal("SalesChart", stmt.Name);
             Assert.Equal(VisualType.Bar, stmt.VisualType);
-            Assert.Equal("Global Sales Report", stmt.Title);
-            Assert.Equal("Q1 2026", stmt.Subtitle);
+            Assert.Equal("'Global Sales Report'", stmt.Title.ToSql());
+            Assert.Equal("'Q1 2026'", stmt.Subtitle.ToSql());
             Assert.NotNull(stmt.Source.InlineSelect);
         }
 
@@ -50,7 +50,7 @@ namespace ETL_SQL.Tests.Reporting.Reporting
             var stmt = (CreateVisualStatement)parser.ParseStatement();
 
             Assert.Equal("SalesChart", stmt.Name);
-            Assert.Equal("Global Sales Report", stmt.Title);
+            Assert.Equal("'Global Sales Report'", stmt.Title.ToSql());
             Assert.NotNull(stmt.Source.InlineSelect);
             var inlineSelect = Assert.IsType<SelectStatement>(stmt.Source.InlineSelect);
             Assert.Equal("Total", inlineSelect.Columns[1].Alias);

@@ -71,16 +71,33 @@ namespace ETL_SQL.Reporting
             if (reportStyles.Count > 0)
                 manifest.Styles = reportStyles;
 
+            // Seed common interaction variables if they don't exist, to prevent expression evaluation errors during manifest generation
+            var interactionVars = new[] { "@hover_value", "@click_value", "@selected_value", "@drill_value", "@param_value" };
+            foreach (var v in interactionVars)
+            {
+                if (!_ctx.VarContext.ContainsVariable(v))
+                    _ctx.VarContext.DeclareVariable(v, null);
+            }
+
             // ── Visuals ──────────────────────────────────────────────────────
             foreach (var (name, vStmt) in _ctx.ReportContext.VisualDefinitions)
             {
-                manifest.Visuals.Add(await _visualBuilder.BuildAsync(name, vStmt, interactionValues, skipDeferredVisuals));
+                try
+                {
+                    manifest.Visuals.Add(await _visualBuilder.BuildAsync(name, vStmt, interactionValues, skipDeferredVisuals));
+                }
+                catch (Exception ex)
+                {
+                    manifest.Messages ??= new();
+                    manifest.Messages.Add(new LogEntryManifest($"Failed to build visual '{name}': {ex.Message}", "Red", DateTime.UtcNow));
+                    manifest.Error = "One or more visuals failed to build.";
+                }
             }
 
             // ── Pages ────────────────────────────────────────────────────────
             foreach (var (name, pStmt) in _ctx.ReportContext.PageDefinitions)
             {
-                manifest.Pages.Add(_pageBuilder.Build(name, pStmt, _ctx, reportStyles));
+                manifest.Pages.Add(await _pageBuilder.BuildAsync(name, pStmt, _ctx, reportStyles));
             }
 
             // ── Containers ───────────────────────────────────────────────────
@@ -90,8 +107,8 @@ namespace ETL_SQL.Reporting
                 foreach (var (name, cStmt) in _ctx.ReportContext.ContainerDefinitions)
                 {
                     var resolvedStyles = _styleBuilder.ResolveStyles(cStmt.StyleName, cStmt.Styles, reportStyles);
-                    var (title, titleMd) = _styleBuilder.ResolveMarkdown(cStmt.Title, cStmt.TitleIsMarkdown);
-                    var (subtitle, subtitleMd) = _styleBuilder.ResolveMarkdown(cStmt.Subtitle, cStmt.SubtitleIsMarkdown);
+                    var (title, titleMd) = await _styleBuilder.ResolveMarkdownAsync(cStmt.Title, cStmt.TitleIsMarkdown);
+                    var (subtitle, subtitleMd) = await _styleBuilder.ResolveMarkdownAsync(cStmt.Subtitle, cStmt.SubtitleIsMarkdown);
 
                     manifest.Containers.Add(new ContainerManifest
                     {
@@ -103,7 +120,7 @@ namespace ETL_SQL.Reporting
                         TitleIsMarkdown    = titleMd,
                         Subtitle           = subtitle,
                         SubtitleIsMarkdown = subtitleMd,
-                        Tooltip            = _styleBuilder.BuildTooltipManifest(cStmt.Tooltip),
+                        Tooltip            = await _styleBuilder.BuildTooltipManifestAsync(cStmt.Tooltip),
                         IsCollapsible      = cStmt.IsCollapsible,
                         Icon               = cStmt.Icon,
                         IsPinnable         = cStmt.IsPinnable,
@@ -144,12 +161,13 @@ namespace ETL_SQL.Reporting
                 foreach (var (name, bStmt) in _ctx.ReportContext.ButtonDefinitions)
                 {
                     var resolvedStyles = _styleBuilder.ResolveStyles(bStmt.StyleName, bStmt.Styles, reportStyles);
+                    var (bTitle, _) = await _styleBuilder.ResolveMarkdownAsync(bStmt.Title);
                     var bm = new ButtonManifest
                     {
                         Name       = name,
                         ButtonType = bStmt.ButtonType,
-                        Title      = bStmt.Title,
-                        Tooltip    = _styleBuilder.BuildTooltipManifest(bStmt.Tooltip),
+                        Title      = bTitle,
+                        Tooltip    = await _styleBuilder.BuildTooltipManifestAsync(bStmt.Tooltip),
                         Styles     = resolvedStyles.Count > 0 ? resolvedStyles : new Dictionary<string, string>()
                     };
 

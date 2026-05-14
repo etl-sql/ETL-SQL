@@ -1,0 +1,40 @@
+-- Kitchen Sink: SEARCH Visual
+-- This script demonstrates the SEARCH visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: SEARCH Visual';
+
+-- 1. Setup Parameter
+DECLARE @searchTerm VARCHAR = '';
+
+-- 2. Search Visual
+CREATE VISUAL GlobalSearch AS SEARCH (
+    TITLE = 'Search Inventory',
+    OPTIONS (
+        PLACEHOLDER = 'Type SKU or Name...',
+        DEFAULT = ''
+    ),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@searchTerm, value))
+);
+
+-- 3. Filtered Result
+-- Using MOCKDB for demonstration
+SELECT 'Apple' AS Item, 10 AS Qty INTO #inventory
+UNION ALL SELECT 'Banana', 20
+UNION ALL SELECT 'Cherry', 15
+UNION ALL SELECT 'Date', 5;
+
+CREATE VISUAL FilteredTable AS TABLE (
+    SOURCE = (SELECT * FROM #inventory WHERE Item LIKE '%' + @searchTerm + '%'),
+    TITLE = 'Search Results'
+);
+
+-- Page Layout
+CREATE PAGE SearchKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = GlobalSearch,
+        'B' = FilteredTable
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = SearchKitchenSink) WITH PAGES (SearchKitchenSink);

@@ -1,0 +1,262 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\18_CARD.rptsql",
+  "builtAt": "2026-05-14T18:10:11.8180146Z",
+  "title": "Kitchen Sink: CARD Visual",
+  "description": "Demonstration of CARD KPI visuals.",
+  "visuals": [
+    {
+      "name": "BasicCard",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "Rev",
+        "Label",
+        "Growth"
+      ],
+      "rows": [
+        [
+          "1250000",
+          "Total Revenue",
+          "0.18"
+        ]
+      ],
+      "options": {
+        "FORMAT": "C0",
+        "mapping:value": "Rev",
+        "mapping:label": "Label"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StyledCard",
+      "visualType": "CARD",
+      "chartConfig": null,
+      "columns": [
+        "Growth",
+        "Lbl"
+      ],
+      "rows": [
+        [
+          "0.18",
+          "Year-over-Year"
+        ]
+      ],
+      "options": {
+        "title": "Growth %",
+        "FORMAT": "P1",
+        "mapping:value": "Growth",
+        "mapping:label": "Lbl"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {
+        "BACKGROUND-COLOR": "#f8fafc",
+        "COLOR": "#2563eb",
+        "BORDER": "1px solid #e2e8f0",
+        "BORDER-RADIUS": "12px",
+        "PADDING": "24px"
+      }
+    }
+  ],
+  "pages": [
+    {
+      "name": "CardKitchenSink",
+      "structure": "A",
+      "slotMap": {
+        "A": "KpiGrid"
+      }
+    }
+  ],
+  "datasets": [],
+  "containers": [
+    {
+      "name": "KpiGrid",
+      "containerType": "BOX",
+      "structure": "A B",
+      "slotMap": {
+        "A": "BasicCard",
+        "B": "StyledCard"
+      },
+      "isPinnable": true
+    }
+  ],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "CardKitchenSink",
+      "pages": [
+        "CardKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "1"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 1,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[b97195f0] [SELECT] Executing SelectStatement. Session: b97195f0",
+      "color": "white",
+      "timestamp": "2026-05-14T18:10:11.7894137Z"
+    },
+    {
+      "message": "[b97195f0] 1 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:10:11.8059628Z"
+    },
+    {
+      "message": "[b97195f0] Visual \u0027BasicCard\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:10:11.8083381Z"
+    },
+    {
+      "message": "[b97195f0] Visual \u0027StyledCard\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:10:11.8104693Z"
+    },
+    {
+      "message": "[b97195f0] Container \u0027KpiGrid\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:10:11.8109362Z"
+    },
+    {
+      "message": "[b97195f0] Page \u0027CardKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:10:11.8119417Z"
+    },
+    {
+      "message": "[b97195f0] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:10:11.8125669Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "92c64c3e-fbd6-47be-82bf-ac85ded442bf",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 31.469,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "8b1032cc-ad83-4110-964d-08e908b8eebb",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2665,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "fa60cbc9-de84-47d2-afbe-db257a928da5",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0308,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "e14ecc81-0feb-4026-910c-d4e3e1115fb4",
+          "name": "Select",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 19.1459,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 104.46100731749355,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "dbbf904a-d023-4d90-a665-293943154a2d",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8066,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7a357f8f-5d46-4d89-a9b5-81f6b027d062",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0768,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "e16057a7-ba20-4efb-a802-ba706ef57f73",
+          "name": "CreateContainer",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2709,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "de8596f1-823c-465d-81d9-9cbacea5a6b9",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8524,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "662ffe84-e477-4a42-add6-478ee819b171",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2633,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

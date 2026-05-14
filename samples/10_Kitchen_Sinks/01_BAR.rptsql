@@ -1,0 +1,129 @@
+-- Kitchen Sink: BAR Visual
+-- This script demonstrates all features of the BAR visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: BAR Visual';
+SET REPORT DESCRIPTION = 'Comprehensive demonstration of BAR chart capabilities, including stacking, overlays, and styling.';
+
+-- 1. Mock Data Generation
+SELECT 'Jan' AS Month, 'North' AS Region, 100 AS Revenue, 80 AS Target INTO #sales
+UNION ALL SELECT 'Jan', 'South', 120, 90
+UNION ALL SELECT 'Feb', 'North', 150, 100
+UNION ALL SELECT 'Feb', 'South', 130, 95
+UNION ALL SELECT 'Mar', 'North', 180, 110
+UNION ALL SELECT 'Mar', 'South', 160, 105
+UNION ALL SELECT 'Apr', 'North', 200, 120
+UNION ALL SELECT 'Apr', 'South', 190, 115;
+
+-- 2. Basic Bar Chart
+CREATE VISUAL BasicBar AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    TITLE = 'Basic Bar Chart (Revenue by Month)',
+    MAPPINGS (X = Month, Y = Revenue)
+);
+
+-- 3. Grouped Bar Chart
+CREATE VISUAL GroupedBar AS BAR (
+    SOURCE = #sales,
+    TITLE = 'Grouped Bar Chart (By Region)',
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
+    OPTIONS (
+        LEGEND_POSITION = TOP
+    )
+);
+
+-- 4. Stacked Bar Chart
+CREATE VISUAL StackedBar AS BAR (
+    SOURCE = #sales,
+    TITLE = 'Stacked Bar Chart',
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
+    OPTIONS (
+        STACKED = ON,
+        DATA_LABELS = ON WITH (POSITION = 'INSIDE', COLOR = '#FFFFFF', FORMAT = 'N0')
+    )
+);
+
+-- 5. Bar Chart with Overlays
+CREATE VISUAL OverlayBar AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    TITLE = 'Bar Chart with Overlays',
+    MAPPINGS (X = Month, Y = Revenue),
+    OVERLAYS (
+        GOAL(150) AS DASHED WITH (COLOR = 'Red', LABEL = 'Monthly Goal'),
+        AVERAGE AS DOTTED WITH (COLOR = 'Blue', LABEL = 'Average Revenue'),
+        MOVING_AVG(2) AS SOLID WITH (COLOR = 'Green', LABEL = '2-Month Moving Avg')
+    )
+);
+
+-- 6. Styled Bar Chart (Custom Colors & Axis)
+CREATE VISUAL StyledBar AS BAR (
+    SOURCE = #sales,
+    TITLE = 'Styled Bar Chart',
+    MAPPINGS (X = Month, Y = Revenue, SERIES = Region),
+    OPTIONS (
+        COLORS (
+            'North' = '#4e79a7',
+            'South' = '#f28e2b'
+        ),
+        X_AXIS (LABEL = 'Fiscal Month'),
+        Y_AXIS (LABEL = 'USD Revenue', MIN = 0, MAX = 300)
+    ),
+    STYLE (
+        BORDER = '2px solid #ddd',
+        BORDER-RADIUS = '8px',
+        SHADOW = ON
+    )
+);
+
+-- 7. 100% Stacked Bar (Manual Calculation)
+-- Since 100% stacking isn't a native option, we calculate percentages in Tier 2/3.
+CREATE VISUAL PercentBar AS BAR (
+    SOURCE = (
+        SELECT 
+            Month, 
+            Region, 
+            Revenue * 100.0 / SUM(Revenue) OVER(PARTITION BY Month) AS RevenuePct
+        FROM #sales
+    ),
+    TITLE = '100% Stacked Bar (Manual Calculation)',
+    MAPPINGS (X = Month, Y = RevenuePct, SERIES = Region),
+    OPTIONS (
+        STACKED = ON,
+        Y_AXIS (MAX = 100, LABEL = 'Percentage (%)'),
+        FORMAT = 'P1'
+    )
+);
+
+-- 8. Visual with Tooltip Container
+CREATE VISUAL MonthDetail AS BAR (
+    SOURCE = (SELECT Region, Revenue FROM #sales WHERE Month = @hover_value),
+    TITLE = 'Regional Detail for ' + ISNULL(@hover_value, 'Selected Month'),
+    MAPPINGS (X = Region, Y = Revenue)
+);
+
+CREATE CONTAINER TooltipBox AS BOX (
+    STRUCTURE = 'A',
+    MAP ('A' = MonthDetail)
+);
+
+CREATE VISUAL BarWithTooltip AS BAR (
+    SOURCE = (SELECT Month, SUM(Revenue) AS Revenue FROM #sales GROUP BY Month),
+    TITLE = 'Bar with Hover Tooltip',
+    MAPPINGS (X = Month, Y = Revenue),
+    TOOLTIP = TooltipBox
+);
+
+-- Page Layout
+CREATE PAGE BarKitchenSink AS LAYOUT (
+    STRUCTURE = 'A B / C D / E F / G G',
+    MAP (
+        'A' = BasicBar,
+        'B' = GroupedBar,
+        'C' = StackedBar,
+        'D' = OverlayBar,
+        'E' = StyledBar,
+        'F' = PercentBar,
+        'G' = BarWithTooltip
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = BarKitchenSink) WITH PAGES (BarKitchenSink);

@@ -46,6 +46,7 @@ namespace ETL_SQL.Reporting
                 "BUBBLE"                  => _specialized.RenderBubble(visual),
                 "RADAR"                   => _specialized.RenderRadar(visual),
                 "CANDLESTICK"             => _specialized.RenderCandlestick(visual),
+                "GANTT"                   => _specialized.RenderGantt(visual),
 
                 "MAP"                     => _geographic.RenderMap(visual),
 

@@ -64,10 +64,10 @@ namespace ETL_SQL.Core.Data
                 if (s.Contains("/") || s.Contains("\\") || s.Contains("."))
                 {
                     var lower = s.ToLowerInvariant();
-                    if (lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.EndsWith(".png") || lower.EndsWith(".gif") || lower.EndsWith(".svg"))
+                    if (lower.EndsWith(".jpg") || lower.EndsWith(".jpeg") || lower.EndsWith(".png") || lower.EndsWith(".gif") || lower.EndsWith(".svg") || lower.EndsWith(".ico"))
                         return s;
                     
-                    throw new ArgumentException("Invalid image extension. Supported types are: .jpg, .jpeg, .png, .gif, .svg");
+                    throw new ArgumentException("Invalid image extension. Supported types are: .jpg, .jpeg, .png, .gif, .svg, .ico");
                 }
                 try { return Convert.FromBase64String(s); } catch { return s; }
             },

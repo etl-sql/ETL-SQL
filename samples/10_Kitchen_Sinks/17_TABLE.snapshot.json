@@ -1,0 +1,496 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\17_TABLE.rptsql",
+  "builtAt": "2026-05-14T18:09:59.9765562Z",
+  "title": "Kitchen Sink: TABLE Visual",
+  "description": "Comprehensive demonstration of TABLE capabilities, including conditional formatting and summaries.",
+  "visuals": [
+    {
+      "name": "BasicTable",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "ID",
+        "Channel",
+        "Revenue",
+        "Margin",
+        "Date"
+      ],
+      "rows": [
+        [
+          "101",
+          "Direct",
+          "500.00",
+          "0.15",
+          "2026-05-01"
+        ],
+        [
+          "102",
+          "Social",
+          "300.00",
+          "-0.05",
+          "2026-05-02"
+        ],
+        [
+          "103",
+          "Search",
+          "800.00",
+          "0.20",
+          "2026-05-03"
+        ],
+        [
+          "104",
+          "Referral",
+          "150.00",
+          "0.08",
+          "2026-05-04"
+        ],
+        [
+          "105",
+          "Email",
+          "250.00",
+          "0.12",
+          "2026-05-05"
+        ],
+        [
+          "106",
+          "Direct",
+          "1200.00",
+          "0.25",
+          "2026-05-06"
+        ]
+      ],
+      "options": {
+        "title": "Basic Data Table"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "SummaryTable",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "ID",
+        "Channel",
+        "Revenue",
+        "Margin",
+        "Date"
+      ],
+      "rows": [
+        [
+          "101",
+          "Direct",
+          "500.00",
+          "0.15",
+          "2026-05-01"
+        ],
+        [
+          "102",
+          "Social",
+          "300.00",
+          "-0.05",
+          "2026-05-02"
+        ],
+        [
+          "103",
+          "Search",
+          "800.00",
+          "0.20",
+          "2026-05-03"
+        ],
+        [
+          "104",
+          "Referral",
+          "150.00",
+          "0.08",
+          "2026-05-04"
+        ],
+        [
+          "105",
+          "Email",
+          "250.00",
+          "0.12",
+          "2026-05-05"
+        ],
+        [
+          "106",
+          "Direct",
+          "1200.00",
+          "0.25",
+          "2026-05-06"
+        ]
+      ],
+      "options": {
+        "title": "Table with Totals"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "summaryData": {
+        "aggregates": [
+          {
+            "column": "Revenue",
+            "aggregate": "SUM",
+            "value": "3200",
+            "alias": "Total Revenue"
+          },
+          {
+            "column": "Margin",
+            "aggregate": "AVG",
+            "value": "0.125",
+            "alias": "Average Margin"
+          }
+        ],
+        "grandTotals": {
+          "ID": "621",
+          "Revenue": "3200",
+          "Margin": "0.75"
+        }
+      }
+    },
+    {
+      "name": "FormattedTable",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "ID",
+        "Channel",
+        "Revenue",
+        "Margin",
+        "Date"
+      ],
+      "rows": [
+        [
+          "101",
+          "Direct",
+          "500.00",
+          "0.15",
+          "2026-05-01"
+        ],
+        [
+          "102",
+          "Social",
+          "300.00",
+          "-0.05",
+          "2026-05-02"
+        ],
+        [
+          "103",
+          "Search",
+          "800.00",
+          "0.20",
+          "2026-05-03"
+        ],
+        [
+          "104",
+          "Referral",
+          "150.00",
+          "0.08",
+          "2026-05-04"
+        ],
+        [
+          "105",
+          "Email",
+          "250.00",
+          "0.12",
+          "2026-05-05"
+        ],
+        [
+          "106",
+          "Direct",
+          "1200.00",
+          "0.25",
+          "2026-05-06"
+        ]
+      ],
+      "rowStyles": [
+        null,
+        "red",
+        "#28a745",
+        null,
+        null,
+        "#28a745"
+      ],
+      "options": {
+        "title": "Table with Conditional Formatting"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StyledTable",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "ID",
+        "Channel",
+        "Revenue",
+        "Margin",
+        "Date"
+      ],
+      "rows": [
+        [
+          "101",
+          "Direct",
+          "500.00",
+          "0.15",
+          "2026-05-01"
+        ],
+        [
+          "102",
+          "Social",
+          "300.00",
+          "-0.05",
+          "2026-05-02"
+        ],
+        [
+          "103",
+          "Search",
+          "800.00",
+          "0.20",
+          "2026-05-03"
+        ],
+        [
+          "104",
+          "Referral",
+          "150.00",
+          "0.08",
+          "2026-05-04"
+        ],
+        [
+          "105",
+          "Email",
+          "250.00",
+          "0.12",
+          "2026-05-05"
+        ],
+        [
+          "106",
+          "Direct",
+          "1200.00",
+          "0.25",
+          "2026-05-06"
+        ]
+      ],
+      "options": {
+        "title": "Styled Table (Custom Grid)",
+        "GRID": "HEADER,FOOTER,LEFT",
+        "SHOW_NO_DATA_PLACEHOLDER": "True",
+        "FORMAT": "C2"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "gridStyle": "HEADER,FOOTER,LEFT"
+    }
+  ],
+  "pages": [
+    {
+      "name": "TableKitchenSink",
+      "structure": "A / B / C / D",
+      "slotMap": {
+        "A": "BasicTable",
+        "B": "SummaryTable",
+        "C": "FormattedTable",
+        "D": "StyledTable"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "TableKitchenSink",
+      "pages": [
+        "TableKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "6"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 6,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[03d5e560] [SELECT] Executing SelectStatement. Session: 03d5e560",
+      "color": "white",
+      "timestamp": "2026-05-14T18:09:59.9426068Z"
+    },
+    {
+      "message": "[03d5e560] 6 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:09:59.9643677Z"
+    },
+    {
+      "message": "[03d5e560] Visual \u0027BasicTable\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:09:59.9669597Z"
+    },
+    {
+      "message": "[03d5e560] Visual \u0027SummaryTable\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:09:59.9688012Z"
+    },
+    {
+      "message": "[03d5e560] Visual \u0027FormattedTable\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:09:59.9688382Z"
+    },
+    {
+      "message": "[03d5e560] Visual \u0027StyledTable\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:09:59.9688597Z"
+    },
+    {
+      "message": "[03d5e560] Page \u0027TableKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:09:59.970377Z"
+    },
+    {
+      "message": "[03d5e560] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T18:09:59.9709988Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "e315d86f-b42d-4a60-be0a-20cac3b3037e",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 36.9211,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "2ae7b1d4-e1ac-42d2-b2ed-b473ec1c0af4",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2532,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "daa04906-f278-4b6d-9719-fe2b90c4a57c",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0332,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "6c237a98-29d6-4abb-a172-f718775fe600",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 12,
+          "durationMs": 24.3913,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 491.97869732240594,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "fcd95d75-2009-46b6-ab91-5bbd4b1dd66d",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.7926,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "12abe189-e6cc-4cfd-9102-c38bfdec71c2",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0824,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "12de939b-c714-4b9a-a9f9-e8949dbaa61a",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.024,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "91cbc9a6-947e-45a4-9955-ed4f665d19dc",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0165,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "452ce359-04cf-4ab4-80e9-19c4970ff5cd",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2552,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "17028800-2373-4167-a801-20e2c617c9b4",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2732,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

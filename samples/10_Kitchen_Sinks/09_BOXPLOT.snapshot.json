@@ -1,0 +1,284 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\09_BOXPLOT.rptsql",
+  "builtAt": "2026-05-14T17:40:45.8475079Z",
+  "title": "Kitchen Sink: BOXPLOT Visual",
+  "description": "Demonstration of BOXPLOT (Box-and-Whisker) capabilities.",
+  "visuals": [
+    {
+      "name": "BasicBoxplot",
+      "visualType": "BOXPLOT",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Basic Boxplot\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Category A\u0022,\u0022Category B\u0022,\u0022Category C\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022boxplot\u0022,\u0022data\u0022:[[10,10,10,10,10],[5,5,5,5,5],[12,12,12,12,12]]}]}",
+      "columns": [
+        "Cat",
+        "Low",
+        "Q1",
+        "Median",
+        "Q3",
+        "High"
+      ],
+      "rows": [
+        [
+          "Category A",
+          "10",
+          "20",
+          "25",
+          "35",
+          "50"
+        ],
+        [
+          "Category B",
+          "5",
+          "15",
+          "22",
+          "30",
+          "45"
+        ],
+        [
+          "Category C",
+          "12",
+          "18",
+          "28",
+          "40",
+          "55"
+        ]
+      ],
+      "options": {
+        "title": "Basic Boxplot",
+        "mapping:x": "Cat",
+        "mapping:low": "Low",
+        "mapping:q1": "Q1",
+        "mapping:median": "Median",
+        "mapping:q3": "Q3",
+        "mapping:high": "High"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StyledBoxplot",
+      "visualType": "BOXPLOT",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled Boxplot\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Category A\u0022,\u0022Category B\u0022,\u0022Category C\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022boxplot\u0022,\u0022data\u0022:[[10,10,10,10,10],[5,5,5,5,5],[12,12,12,12,12]]}]}",
+      "columns": [
+        "Cat",
+        "Low",
+        "Q1",
+        "Median",
+        "Q3",
+        "High"
+      ],
+      "rows": [
+        [
+          "Category A",
+          "10",
+          "20",
+          "25",
+          "35",
+          "50"
+        ],
+        [
+          "Category B",
+          "5",
+          "15",
+          "22",
+          "30",
+          "45"
+        ],
+        [
+          "Category C",
+          "12",
+          "18",
+          "28",
+          "40",
+          "55"
+        ]
+      ],
+      "options": {
+        "title": "Styled Boxplot",
+        "color:Category A": "#4e79a7",
+        "axis:x:label": "Category Name",
+        "axis:y:label": "Distribution Range",
+        "mapping:x": "Cat",
+        "mapping:low": "Low",
+        "mapping:q1": "Q1",
+        "mapping:median": "Median",
+        "mapping:q3": "Q3",
+        "mapping:high": "High"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "BoxplotKitchenSink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "BasicBoxplot",
+        "B": "StyledBoxplot"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "BoxplotKitchenSink",
+      "pages": [
+        "BoxplotKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "3"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 3,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[d589d13c] [SELECT] Executing SelectStatement. Session: d589d13c",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:45.8157322Z"
+    },
+    {
+      "message": "[d589d13c] 3 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:45.8356622Z"
+    },
+    {
+      "message": "[d589d13c] Visual \u0027BasicBoxplot\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:45.8382415Z"
+    },
+    {
+      "message": "[d589d13c] Visual \u0027StyledBoxplot\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:45.8401775Z"
+    },
+    {
+      "message": "[d589d13c] Page \u0027BoxplotKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:45.8413859Z"
+    },
+    {
+      "message": "[d589d13c] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:45.8420326Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "35f8dde8-5b72-43c7-8395-285ed1ee6554",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 34.8383,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "62496290-7441-4e81-a051-d8dfa9f0b90c",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2067,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "aedfd8a6-ef27-4dd5-8d60-6ae8bc1c250f",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0427,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "2f7626d2-f041-43c5-a846-c3b9dee63f7e",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 6,
+          "durationMs": 22.6208,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 265.24260857264113,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "841b3399-6d22-44d5-8492-5c8cb1f0711a",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8048,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "26684e2a-dedb-4fda-9dd9-7f53b295710e",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0837,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "1a346e46-0e03-47bf-90d8-18162328d81a",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9265,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d5bae6d2-c319-4b25-9706-30cbab2f73a8",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2683,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

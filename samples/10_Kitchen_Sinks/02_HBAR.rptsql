@@ -1,0 +1,68 @@
+-- Kitchen Sink: HBAR Visual
+-- This script demonstrates all features of the HBAR (Horizontal Bar) visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: HBAR Visual';
+SET REPORT DESCRIPTION = 'Comprehensive demonstration of HBAR chart capabilities.';
+
+-- 1. Mock Data Generation
+SELECT 'Product A' AS Product, 500 AS Sales, 450 AS Target INTO #data
+UNION ALL SELECT 'Product B', 750, 800
+UNION ALL SELECT 'Product C', 300, 400
+UNION ALL SELECT 'Product D', 900, 850
+UNION ALL SELECT 'Product E', 600, 600;
+
+-- 2. Basic HBAR
+CREATE VISUAL BasicHBar AS HBAR (
+    SOURCE = #data,
+    TITLE = 'Basic Horizontal Bar',
+    MAPPINGS (X = Product, Y = Sales)
+);
+
+-- 3. HBAR with Custom Colors and Overlays
+CREATE VISUAL StyledHBar AS HBAR (
+    SOURCE = #data,
+    TITLE = 'Styled HBAR with Goal Overlay',
+    MAPPINGS (X = Product, Y = Sales),
+    OVERLAYS (
+        GOAL(800) AS DASHED WITH (COLOR = 'Red', LABEL = 'Global Target')
+    ),
+    OPTIONS (
+        DATA_LABELS = ON WITH (POSITION = 'RIGHT', COLOR = '#333'),
+        X_AXIS (LABEL = 'Product Name'),
+        Y_AXIS (LABEL = 'Total Sales')
+    )
+);
+
+-- 4. Multi-Series HBAR
+SELECT 'Jan' AS Month, 'North' AS Region, 100 AS Rev INTO #multi
+UNION ALL SELECT 'Jan', 'South', 120
+UNION ALL SELECT 'Feb', 'North', 150
+UNION ALL SELECT 'Feb', 'South', 130;
+
+CREATE VISUAL MultiHBar AS HBAR (
+    SOURCE = #multi,
+    TITLE = 'Grouped Horizontal Bar',
+    MAPPINGS (X = Month, Y = Rev, SERIES = Region),
+    OPTIONS (STACKED = OFF)
+);
+
+-- 5. Stacked HBAR
+CREATE VISUAL StackedHBar AS HBAR (
+    SOURCE = #multi,
+    TITLE = 'Stacked Horizontal Bar',
+    MAPPINGS (X = Month, Y = Rev, SERIES = Region),
+    OPTIONS (STACKED = ON)
+);
+
+-- Page Layout
+CREATE PAGE HBarKitchenSink AS LAYOUT (
+    STRUCTURE = 'A B / C D',
+    MAP (
+        'A' = BasicHBar,
+        'B' = StyledHBar,
+        'C' = MultiHBar,
+        'D' = StackedHBar
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = HBarKitchenSink) WITH PAGES (HBarKitchenSink);

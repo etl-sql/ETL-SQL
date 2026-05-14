@@ -1,0 +1,47 @@
+-- Kitchen Sink: HEATMAP Visual
+-- This script demonstrates the HEATMAP visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: HEATMAP Visual';
+SET REPORT DESCRIPTION = 'Demonstration of HEATMAP grid visualization capabilities.';
+
+-- 1. Mock Data Generation (Heatmap of Hour vs Weekday)
+SELECT 'Mon' AS Day, '00:00' AS Hour, 5 AS ActiveUsers INTO #heat
+UNION ALL SELECT 'Mon', '04:00', 2
+UNION ALL SELECT 'Mon', '08:00', 25
+UNION ALL SELECT 'Mon', '12:00', 45
+UNION ALL SELECT 'Mon', '16:00', 50
+UNION ALL SELECT 'Tue', '00:00', 4
+UNION ALL SELECT 'Tue', '08:00', 28
+UNION ALL SELECT 'Tue', '12:00', 42
+UNION ALL SELECT 'Wed', '12:00', 55;
+
+-- 2. Basic Heatmap
+CREATE VISUAL BasicHeatmap AS HEATMAP (
+    SOURCE = #heat,
+    TITLE = 'User Activity Heatmap (Day vs Hour)',
+    MAPPINGS (X = Hour, Y = Day, VALUE = ActiveUsers)
+);
+
+-- 3. Styled Heatmap
+CREATE VISUAL StyledHeatmap AS HEATMAP (
+    SOURCE = #heat,
+    TITLE = 'Styled Heatmap',
+    MAPPINGS (X = Hour, Y = Day, VALUE = ActiveUsers),
+    OPTIONS (
+        COLORS (
+            'min' = '#f7fbff',
+            'max' = '#08306b'
+        )
+    )
+);
+
+-- Page Layout
+CREATE PAGE HeatmapKitchenSink AS LAYOUT (
+    STRUCTURE = 'A B',
+    MAP (
+        'A' = BasicHeatmap,
+        'B' = StyledHeatmap
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = HeatmapKitchenSink) WITH PAGES (HeatmapKitchenSink);

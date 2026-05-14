@@ -1,0 +1,241 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\26_SEARCH.rptsql",
+  "builtAt": "2026-05-14T19:05:23.1101748Z",
+  "title": "Kitchen Sink: SEARCH Visual",
+  "visuals": [
+    {
+      "name": "GlobalSearch",
+      "visualType": "SEARCH",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Search Inventory",
+        "PLACEHOLDER": "Type SKU or Name...",
+        "DEFAULT": ""
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@searchTerm",
+          "valueExpression": "value",
+          "valueSource": "CONTROL_VALUE",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "FilteredTable",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "Item",
+        "Qty"
+      ],
+      "rows": [
+        [
+          "Apple",
+          "10"
+        ],
+        [
+          "Banana",
+          "20"
+        ],
+        [
+          "Cherry",
+          "15"
+        ],
+        [
+          "Date",
+          "5"
+        ]
+      ],
+      "options": {
+        "title": "Search Results"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "SearchKitchenSink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "GlobalSearch",
+        "B": "FilteredTable"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "SearchKitchenSink",
+      "pages": [
+        "SearchKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@searchTerm": "",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "4"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 4,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[7baf45ca] Visual \u0027GlobalSearch\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:05:23.0789105Z"
+    },
+    {
+      "message": "[7baf45ca] [SELECT] Executing SelectStatement. Session: 7baf45ca",
+      "color": "white",
+      "timestamp": "2026-05-14T19:05:23.0829182Z"
+    },
+    {
+      "message": "[7baf45ca] 4 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:05:23.1010414Z"
+    },
+    {
+      "message": "[7baf45ca] Visual \u0027FilteredTable\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:05:23.1025854Z"
+    },
+    {
+      "message": "[7baf45ca] Page \u0027SearchKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:05:23.1037472Z"
+    },
+    {
+      "message": "[7baf45ca] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:05:23.1044178Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "b297625c-11e7-428a-8c4e-5ec1642f1552",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 37.3242,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "38f5eb34-ffa0-4603-a48c-f5367b0192b1",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2461,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "caa46a74-cb42-45af-bcc9-7ab123fc80b4",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.9277,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "1ccc8fbe-3fb8-40da-8deb-3a9d0609a9cb",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.4265,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5b2486d6-1c3d-4476-bd18-0e6657f20e71",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 8,
+          "durationMs": 19.6976,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 406.14084964665744,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "726cc116-522e-493c-a294-c80ffcece7d0",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.4408,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "e6863900-e9ec-4038-8ce5-b498eccb0ec2",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9352,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "ac695c1b-7f5b-4e3c-9749-a373156978e1",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2794,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

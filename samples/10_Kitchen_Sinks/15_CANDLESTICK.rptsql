@@ -1,0 +1,46 @@
+-- Kitchen Sink: CANDLESTICK Visual
+-- This script demonstrates the CANDLESTICK visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: CANDLESTICK Visual';
+SET REPORT DESCRIPTION = 'Demonstration of CANDLESTICK financial charts.';
+
+-- 1. Mock Data Generation (OHLC Data)
+SELECT '2026-05-01' AS Date, 100 AS Open, 110 AS High, 95 AS Low, 105 AS Close INTO #ohlc
+UNION ALL SELECT '2026-05-02', 105, 115, 102, 112
+UNION ALL SELECT '2026-05-03', 112, 113, 100, 101
+UNION ALL SELECT '2026-05-04', 101, 108, 98, 106
+UNION ALL SELECT '2026-05-05', 106, 112, 105, 110
+UNION ALL SELECT '2026-05-06', 110, 111, 103, 104
+UNION ALL SELECT '2026-05-07', 104, 118, 104, 115;
+
+-- 2. Basic Candlestick
+CREATE VISUAL BasicCandle AS CANDLESTICK (
+    SOURCE = #ohlc,
+    TITLE = 'Stock Price History',
+    MAPPINGS (X = Date, OPEN = Open, HIGH = High, LOW = Low, CLOSE = Close)
+);
+
+-- 3. Candlestick with Custom Colors
+CREATE VISUAL StyledCandle AS CANDLESTICK (
+    SOURCE = #ohlc,
+    TITLE = 'Styled Candlestick Chart',
+    MAPPINGS (X = Date, OPEN = Open, HIGH = High, LOW = Low, CLOSE = Close),
+    OPTIONS (
+        COLORS (
+            positive = '#eb4436', -- ECharts default for Up is usually red in some locales, green in others. 
+            negative = '#0f9d58'  -- We can specify what we want.
+        ),
+        Y_AXIS (LABEL = 'Price ($)', MIN = 90)
+    )
+);
+
+-- Page Layout
+CREATE PAGE CandleKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = BasicCandle,
+        'B' = StyledCandle
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = CandleKitchenSink) WITH PAGES (CandleKitchenSink);

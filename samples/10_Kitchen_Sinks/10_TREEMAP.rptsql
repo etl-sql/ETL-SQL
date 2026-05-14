@@ -1,0 +1,44 @@
+-- Kitchen Sink: TREEMAP Visual
+-- This script demonstrates the TREEMAP visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: TREEMAP Visual';
+SET REPORT DESCRIPTION = 'Demonstration of TREEMAP area chart capabilities.';
+
+-- 1. Mock Data Generation
+SELECT 'Electronics' AS Cat, 1500 AS Val INTO #treedata
+UNION ALL SELECT 'Furniture', 1200
+UNION ALL SELECT 'Clothing', 900
+UNION ALL SELECT 'Toys', 400
+UNION ALL SELECT 'Books', 300
+UNION ALL SELECT 'Garden', 600;
+
+-- 2. Basic Treemap
+CREATE VISUAL BasicTreemap AS TREEMAP (
+    SOURCE = #treedata,
+    TITLE = 'Basic Treemap (Category Size by Value)',
+    MAPPINGS (LABEL = Cat, VALUE = Val)
+);
+
+-- 3. Treemap with Custom Colors
+CREATE VISUAL StyledTreemap AS TREEMAP (
+    SOURCE = #treedata,
+    TITLE = 'Styled Treemap',
+    MAPPINGS (LABEL = Cat, VALUE = Val),
+    OPTIONS (
+        COLORS (
+            'Electronics' = '#4e79a7',
+            'Furniture' = '#f28e2b'
+        )
+    )
+);
+
+-- Page Layout
+CREATE PAGE TreemapKitchenSink AS LAYOUT (
+    STRUCTURE = 'A B',
+    MAP (
+        'A' = BasicTreemap,
+        'B' = StyledTreemap
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = TreemapKitchenSink) WITH PAGES (TreemapKitchenSink);

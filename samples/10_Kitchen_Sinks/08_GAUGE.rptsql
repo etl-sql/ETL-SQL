@@ -1,0 +1,52 @@
+-- Kitchen Sink: GAUGE Visual
+-- This script demonstrates all features of the GAUGE visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: GAUGE Visual';
+SET REPORT DESCRIPTION = 'Demonstration of all GAUGE styles: Progress, Semi-Circle, and Ring.';
+
+-- 1. Mock Data Generation
+SELECT 75 AS Val, 100 AS MaxVal, 'Service Level' AS Lbl INTO #kpi;
+
+-- 2. Default Gauge (Circular Bar / Progress)
+CREATE VISUAL DefaultGauge AS GAUGE (
+    SOURCE = #kpi,
+    TITLE = 'Default Gauge (Progress)',
+    MAPPINGS (VALUE = Val, MAX = MaxVal, LABEL = Lbl)
+);
+
+-- 3. Semi-Circle Gauge (Power BI Style)
+CREATE VISUAL SemiCircleGauge AS GAUGE (
+    SOURCE = #kpi,
+    TITLE = 'Semi-Circle Gauge',
+    MAPPINGS (VALUE = Val, MAX = MaxVal, LABEL = Lbl),
+    OPTIONS (GAUGE_STYLE = 'SEMI_CIRCLE')
+);
+
+-- 4. Ring Gauge (Simple Donut style Gauge)
+CREATE VISUAL RingGauge AS GAUGE (
+    SOURCE = #kpi,
+    TITLE = 'Ring Gauge',
+    MAPPINGS (VALUE = Val, MAX = MaxVal, LABEL = Lbl),
+    OPTIONS (GAUGE_STYLE = 'RING')
+);
+
+-- 5. Gauge with Custom Bounds (0 to 200)
+CREATE VISUAL CustomBoundsGauge AS GAUGE (
+    SOURCE = (SELECT 150 AS Value, 'Over-Target' AS Label),
+    TITLE = 'Gauge with Custom Bounds (0-200)',
+    MAPPINGS (VALUE = Value, LABEL = Label),
+    OPTIONS (MIN = 0, MAX = 200, GAUGE_STYLE = 'SEMI_CIRCLE')
+);
+
+-- 6. Multiple Gauges in a Row (Page Layout)
+CREATE PAGE GaugeKitchenSink AS LAYOUT (
+    STRUCTURE = 'A B / C D',
+    MAP (
+        'A' = DefaultGauge,
+        'B' = SemiCircleGauge,
+        'C' = RingGauge,
+        'D' = CustomBoundsGauge
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = GaugeKitchenSink) WITH PAGES (GaugeKitchenSink);

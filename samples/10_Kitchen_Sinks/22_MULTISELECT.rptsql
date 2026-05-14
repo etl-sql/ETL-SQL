@@ -1,0 +1,44 @@
+-- Kitchen Sink: MULTISELECT Visual
+-- This script demonstrates the MULTISELECT visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: MULTISELECT Visual';
+
+-- 1. Setup Parameter (LIST type)
+DECLARE @categories LIST(VARCHAR) = ('Electronics', 'Furniture');
+
+-- 2. Mock Data for Options
+SELECT 'Electronics' AS Cat UNION ALL SELECT 'Furniture' UNION ALL SELECT 'Clothing' UNION ALL SELECT 'Toys' INTO #cats;
+
+-- 3. Multiselect (Inline Checkboxes)
+CREATE VISUAL CatFilterInline AS MULTISELECT (
+    SOURCE = #cats,
+    TITLE = 'Categories (Inline)',
+    MAPPINGS (VALUE = Cat),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@categories, Cat))
+);
+
+-- 4. Multiselect (Dropdown)
+CREATE VISUAL CatFilterDropdown AS MULTISELECT (
+    SOURCE = #cats,
+    TITLE = 'Categories (Dropdown)',
+    MAPPINGS (VALUE = Cat),
+    ACTIONS (ON_CHANGE = SET_PARAMETER(@categories, Cat)),
+    STYLE (LAYOUT = 'DROPDOWN')
+);
+
+-- 5. Result Visual (to test multiselect)
+CREATE VISUAL SelectedList AS TABLE (
+    SOURCE = (SELECT @categories AS SelectedCategories)
+);
+
+-- Page Layout
+CREATE PAGE MultiselectKitchenSink AS LAYOUT (
+    STRUCTURE = 'A B / C',
+    MAP (
+        'A' = CatFilterInline,
+        'B' = CatFilterDropdown,
+        'C' = SelectedList
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = MultiselectKitchenSink) WITH PAGES (MultiselectKitchenSink);

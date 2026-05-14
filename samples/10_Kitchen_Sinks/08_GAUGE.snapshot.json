@@ -1,0 +1,321 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\08_GAUGE.rptsql",
+  "builtAt": "2026-05-14T17:40:21.7113334Z",
+  "title": "Kitchen Sink: GAUGE Visual",
+  "description": "Demonstration of all GAUGE styles: Progress, Semi-Circle, and Ring.",
+  "visuals": [
+    {
+      "name": "DefaultGauge",
+      "visualType": "GAUGE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Default Gauge (Progress)\u0022},\u0022tooltip\u0022:{\u0022formatter\u0022:\u0022{b}: {c}\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022gauge\u0022,\u0022min\u0022:0,\u0022max\u0022:100,\u0022data\u0022:[{\u0022value\u0022:75,\u0022name\u0022:\u0022Service Level\u0022}],\u0022detail\u0022:{\u0022valueAnimation\u0022:true,\u0022formatter\u0022:\u0022{value}\u0022}}]}",
+      "columns": [
+        "Val",
+        "MaxVal",
+        "Lbl"
+      ],
+      "rows": [
+        [
+          "75",
+          "100",
+          "Service Level"
+        ]
+      ],
+      "options": {
+        "title": "Default Gauge (Progress)",
+        "mapping:value": "Val",
+        "mapping:max": "MaxVal",
+        "mapping:label": "Lbl"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "SemiCircleGauge",
+      "visualType": "GAUGE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Semi-Circle Gauge\u0022},\u0022tooltip\u0022:{\u0022formatter\u0022:\u0022{b}: {c}\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022gauge\u0022,\u0022min\u0022:0,\u0022max\u0022:100,\u0022data\u0022:[{\u0022value\u0022:75,\u0022name\u0022:\u0022Service Level\u0022}],\u0022detail\u0022:{\u0022offsetCenter\u0022:[\u00220\u0022,\u0022-10%\u0022],\u0022valueAnimation\u0022:true,\u0022formatter\u0022:\u0022{value}\u0022},\u0022startAngle\u0022:180,\u0022endAngle\u0022:0,\u0022center\u0022:[\u002250%\u0022,\u002275%\u0022],\u0022radius\u0022:\u0022100%\u0022,\u0022progress\u0022:{\u0022show\u0022:true,\u0022width\u0022:18},\u0022axisLine\u0022:{\u0022lineStyle\u0022:{\u0022width\u0022:18}},\u0022pointer\u0022:{\u0022show\u0022:true,\u0022length\u0022:\u002280%\u0022,\u0022width\u0022:3},\u0022axisTick\u0022:{\u0022show\u0022:false},\u0022splitLine\u0022:{\u0022show\u0022:false},\u0022axisLabel\u0022:{\u0022show\u0022:false}}]}",
+      "columns": [
+        "Val",
+        "MaxVal",
+        "Lbl"
+      ],
+      "rows": [
+        [
+          "75",
+          "100",
+          "Service Level"
+        ]
+      ],
+      "options": {
+        "title": "Semi-Circle Gauge",
+        "GAUGE_STYLE": "SEMI_CIRCLE",
+        "mapping:value": "Val",
+        "mapping:max": "MaxVal",
+        "mapping:label": "Lbl"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "RingGauge",
+      "visualType": "GAUGE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Ring Gauge\u0022},\u0022tooltip\u0022:{\u0022formatter\u0022:\u0022{b}: {c}\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022gauge\u0022,\u0022min\u0022:0,\u0022max\u0022:100,\u0022data\u0022:[{\u0022value\u0022:75,\u0022name\u0022:\u0022Service Level\u0022}],\u0022detail\u0022:{\u0022show\u0022:true,\u0022formatter\u0022:\u0022{value}%\u0022,\u0022offsetCenter\u0022:[0,0]},\u0022startAngle\u0022:90,\u0022endAngle\u0022:-270,\u0022pointer\u0022:{\u0022show\u0022:false},\u0022progress\u0022:{\u0022show\u0022:true,\u0022overlap\u0022:false,\u0022roundCap\u0022:true,\u0022clip\u0022:false},\u0022axisLine\u0022:{\u0022lineStyle\u0022:{\u0022width\u0022:15}},\u0022splitLine\u0022:{\u0022show\u0022:false},\u0022axisTick\u0022:{\u0022show\u0022:false},\u0022axisLabel\u0022:{\u0022show\u0022:false}}]}",
+      "columns": [
+        "Val",
+        "MaxVal",
+        "Lbl"
+      ],
+      "rows": [
+        [
+          "75",
+          "100",
+          "Service Level"
+        ]
+      ],
+      "options": {
+        "title": "Ring Gauge",
+        "GAUGE_STYLE": "RING",
+        "mapping:value": "Val",
+        "mapping:max": "MaxVal",
+        "mapping:label": "Lbl"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "CustomBoundsGauge",
+      "visualType": "GAUGE",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Gauge with Custom Bounds (0-200)\u0022},\u0022tooltip\u0022:{\u0022formatter\u0022:\u0022{b}: {c}\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022gauge\u0022,\u0022min\u0022:0,\u0022max\u0022:200,\u0022data\u0022:[{\u0022value\u0022:150,\u0022name\u0022:\u0022Over-Target\u0022}],\u0022detail\u0022:{\u0022offsetCenter\u0022:[\u00220\u0022,\u0022-10%\u0022],\u0022valueAnimation\u0022:true,\u0022formatter\u0022:\u0022{value}\u0022},\u0022startAngle\u0022:180,\u0022endAngle\u0022:0,\u0022center\u0022:[\u002250%\u0022,\u002275%\u0022],\u0022radius\u0022:\u0022100%\u0022,\u0022progress\u0022:{\u0022show\u0022:true,\u0022width\u0022:18},\u0022axisLine\u0022:{\u0022lineStyle\u0022:{\u0022width\u0022:18}},\u0022pointer\u0022:{\u0022show\u0022:true,\u0022length\u0022:\u002280%\u0022,\u0022width\u0022:3},\u0022axisTick\u0022:{\u0022show\u0022:false},\u0022splitLine\u0022:{\u0022show\u0022:false},\u0022axisLabel\u0022:{\u0022show\u0022:false}}]}",
+      "columns": [
+        "Value",
+        "Label"
+      ],
+      "rows": [
+        [
+          "150",
+          "Over-Target"
+        ]
+      ],
+      "options": {
+        "title": "Gauge with Custom Bounds (0-200)",
+        "MIN": "0",
+        "MAX": "200",
+        "GAUGE_STYLE": "SEMI_CIRCLE",
+        "mapping:value": "Value",
+        "mapping:label": "Label"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "GaugeKitchenSink",
+      "structure": "A B / C D",
+      "slotMap": {
+        "A": "DefaultGauge",
+        "B": "SemiCircleGauge",
+        "C": "RingGauge",
+        "D": "CustomBoundsGauge"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "GaugeKitchenSink",
+      "pages": [
+        "GaugeKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "1"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 1,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[b126e4f4] [SELECT] Executing SelectStatement. Session: b126e4f4",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:21.68223Z"
+    },
+    {
+      "message": "[b126e4f4] 1 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:21.6995331Z"
+    },
+    {
+      "message": "[b126e4f4] Visual \u0027DefaultGauge\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:21.7019928Z"
+    },
+    {
+      "message": "[b126e4f4] Visual \u0027SemiCircleGauge\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:21.7038582Z"
+    },
+    {
+      "message": "[b126e4f4] Visual \u0027RingGauge\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:21.7040385Z"
+    },
+    {
+      "message": "[b126e4f4] Visual \u0027CustomBoundsGauge\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:21.7040758Z"
+    },
+    {
+      "message": "[b126e4f4] Page \u0027GaugeKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:21.7051762Z"
+    },
+    {
+      "message": "[b126e4f4] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:40:21.7058119Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "26719eb9-7035-4f40-a548-329ec884e0bd",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 32.4517,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "2517a6bb-dce9-4aa1-a063-662c12d742a4",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2552,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "a4c3beb8-66a3-4ef7-b6b3-885b75bae4fb",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.395,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "c4530651-f881-463e-94b5-1209d3a4f321",
+          "name": "Select",
+          "status": "Completed",
+          "rowsProcessed": 2,
+          "durationMs": 20.0887,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 99.55845823771574,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "9a018f09-a778-4730-899a-ea025ac039fe",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8124,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "fe8847e3-c3a0-4ab4-adf7-c2c39147b04c",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0816,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "67e6b931-90d5-4a7a-9150-5422f116b582",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0702,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8734b40d-2986-4e51-9f2b-b247726ea4f5",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0236,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "211742db-8d95-48bd-b8c4-029faa97ead0",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9287,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "edfc7ce7-54f0-4dfd-8363-fa82528bcddd",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2682,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

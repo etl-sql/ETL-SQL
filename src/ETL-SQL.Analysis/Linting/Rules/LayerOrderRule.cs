@@ -19,75 +19,110 @@ namespace ETL_SQL.Analysis.Linting.Rules
 
         public Task<IEnumerable<LintResult>> AnalyzeAsync(Script script, ILintContext context)
         {
-            var results      = new List<LintResult>();
+            var results = new List<LintResult>();
             var definedDashboardObjects = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
             var definedDatasets = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
 
-            foreach (var stmt in script.Statements)
-            {
-                switch (stmt)
-                {
-                    case CreateDatasetStatement ds:
-                        definedDatasets.Add(StripSigil(ds.TempTableName));
-                        break;
-
-                    case SelectStatement sel when sel.IntoTable != null:
-                        definedDatasets.Add(StripSigil(sel.IntoTable.TableName));
-                        break;
-
-                    case CreateVisualStatement visual:
-                        // Check that a temp-table source was defined earlier
-                        if (!visual.Source.IsInlineSelect && visual.Source.TempTableName != null)
-                        {
-                            var refName = visual.Source.TempTableName;
-                            if (!definedDatasets.Contains(StripSigil(refName)))
-                            {
-                                results.Add(new LintResult
-                                {
-                                    RuleName     = Name,
-                                    Severity     = LintSeverity.Warning,
-                                    Message      = $"Visual '{visual.Name}' references '{refName}' before it is defined. Move CREATE DATASET / SELECT INTO above this CREATE VISUAL.",
-                                    LineNumber   = visual.Line,
-                                    ColumnNumber = visual.Column
-                                });
-                            }
-                        }
-                        definedDashboardObjects.Add(visual.Name);
-                        break;
-
-                    case CreateContainerStatement container:
-                        definedDashboardObjects.Add(container.Name);
-                        break;
-
-                    case CreateButtonStatement btn:
-                        definedDashboardObjects.Add(btn.Name);
-                        break;
-
-                    case CreateNavigationStatement nav:
-                        definedDashboardObjects.Add(nav.Name);
-                        break;
-
-                    case CreatePageStatement page:
-                        // All slot objects should be defined before the page
-                        foreach (var (slot, objectName) in page.SlotMap)
-                        {
-                            if (!definedDashboardObjects.Contains(objectName))
-                            {
-                                results.Add(new LintResult
-                                {
-                                    RuleName     = Name,
-                                    Severity     = LintSeverity.Warning,
-                                    Message      = $"Page '{page.Name}': slot '{slot}' references dashboard object '{objectName}' before it is defined. Move its CREATE statement above this CREATE PAGE.",
-                                    LineNumber   = page.Line,
-                                    ColumnNumber = page.Column
-                                });
-                            }
-                        }
-                        break;
-                }
-            }
+            ProcessStatements(script.Statements, definedDatasets, definedDashboardObjects, results);
 
             return Task.FromResult<IEnumerable<LintResult>>(results);
+        }
+
+        private void ProcessStatements(IEnumerable<Statement> statements, HashSet<string> definedDatasets, HashSet<string> definedDashboardObjects, List<LintResult> results)
+        {
+            foreach (var stmt in statements)
+            {
+                ProcessStatement(stmt, definedDatasets, definedDashboardObjects, results);
+            }
+        }
+
+        private void ProcessStatement(Statement stmt, HashSet<string> definedDatasets, HashSet<string> definedDashboardObjects, List<LintResult> results)
+        {
+            var created = stmt.GetCreatedTable();
+            if (created != null)
+            {
+                definedDatasets.Add(StripSigil(created));
+            }
+
+            switch (stmt)
+            {
+                case CreateVisualStatement visual:
+                    if (!visual.Source.IsInlineSelect && visual.Source.TempTableName != null)
+                    {
+                        var refName = visual.Source.TempTableName;
+                        if (!definedDatasets.Contains(StripSigil(refName)))
+                        {
+                            results.Add(new LintResult
+                            {
+                                RuleName     = Name,
+                                Severity     = LintSeverity.Warning,
+                                Message      = $"Visual '{visual.Name}' references '{refName}' before it is defined. Move CREATE DATASET / SELECT INTO above this CREATE VISUAL.",
+                                LineNumber   = visual.Line,
+                                ColumnNumber = visual.Column
+                            });
+                        }
+                    }
+                    definedDashboardObjects.Add(visual.Name);
+                    break;
+
+                case CreateContainerStatement container:
+                    definedDashboardObjects.Add(container.Name);
+                    break;
+
+                case CreateButtonStatement btn:
+                    definedDashboardObjects.Add(btn.Name);
+                    break;
+
+                case CreateNavigationStatement nav:
+                    definedDashboardObjects.Add(nav.Name);
+                    break;
+
+                case CreatePageStatement page:
+                    foreach (var (slot, objectName) in page.SlotMap)
+                    {
+                        if (!definedDashboardObjects.Contains(objectName))
+                        {
+                            results.Add(new LintResult
+                            {
+                                RuleName     = Name,
+                                Severity     = LintSeverity.Warning,
+                                Message      = $"Page '{page.Name}': slot '{slot}' references dashboard object '{objectName}' before it is defined. Move its CREATE statement above this CREATE PAGE.",
+                                LineNumber   = page.Line,
+                                ColumnNumber = page.Column
+                            });
+                        }
+                    }
+                    break;
+                
+                // Recurse into blocks and control flow
+                case BlockStatement block:
+                    ProcessStatements(block.Statements, definedDatasets, definedDashboardObjects, results);
+                    break;
+                case TryCatchStatement tc:
+                    ProcessStatement(tc.TryBody, definedDatasets, definedDashboardObjects, results);
+                    ProcessStatement(tc.CatchBody, definedDatasets, definedDashboardObjects, results);
+                    break;
+                case IfStatement ifs:
+                    ProcessStatement(ifs.IfBody, definedDatasets, definedDashboardObjects, results);
+                    if (ifs.ElseIfClauses != null) foreach (var c in ifs.ElseIfClauses) ProcessStatement(c.Body, definedDatasets, definedDashboardObjects, results);
+                    if (ifs.ElseBody != null) ProcessStatement(ifs.ElseBody, definedDatasets, definedDashboardObjects, results);
+                    break;
+                case WhileStatement ws:
+                    ProcessStatement(ws.Body, definedDatasets, definedDashboardObjects, results);
+                    break;
+                case ForStatement fs:
+                    ProcessStatement(fs.Body, definedDatasets, definedDashboardObjects, results);
+                    break;
+                case ForeachStatement fes:
+                    ProcessStatement(fes.Body, definedDatasets, definedDashboardObjects, results);
+                    break;
+                case ParallelStatement ps:
+                    ProcessStatement(ps.Body, definedDatasets, definedDashboardObjects, results);
+                    break;
+                case ParallelForStatement pfs:
+                    ProcessStatement(pfs.Body, definedDatasets, definedDashboardObjects, results);
+                    break;
+            }
         }
 
         private static string StripSigil(string name) =>

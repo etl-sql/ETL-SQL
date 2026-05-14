@@ -1,0 +1,313 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\11_HEATMAP.rptsql",
+  "builtAt": "2026-05-14T17:41:08.3849328Z",
+  "title": "Kitchen Sink: HEATMAP Visual",
+  "description": "Demonstration of HEATMAP grid visualization capabilities.",
+  "visuals": [
+    {
+      "name": "BasicHeatmap",
+      "visualType": "HEATMAP",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022User Activity Heatmap (Day vs Hour)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022visualMap\u0022:{\u0022min\u0022:0,\u0022max\u0022:55,\u0022calculable\u0022:true,\u0022orient\u0022:\u0022horizontal\u0022,\u0022left\u0022:\u0022center\u0022,\u0022bottom\u0022:\u002215%\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u002200:00\u0022,\u002204:00\u0022,\u002208:00\u0022,\u002212:00\u0022,\u002216:00\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Mon\u0022,\u0022Tue\u0022,\u0022Wed\u0022]},\u0022series\u0022:[{\u0022type\u0022:\u0022heatmap\u0022,\u0022data\u0022:[[0,0,5],[1,0,2],[2,0,25],[3,0,45],[4,0,50],[0,1,4],[2,1,28],[3,1,42],[3,2,55]],\u0022label\u0022:{\u0022show\u0022:true}}]}",
+      "columns": [
+        "Day",
+        "Hour",
+        "ActiveUsers"
+      ],
+      "rows": [
+        [
+          "Mon",
+          "00:00",
+          "5"
+        ],
+        [
+          "Mon",
+          "04:00",
+          "2"
+        ],
+        [
+          "Mon",
+          "08:00",
+          "25"
+        ],
+        [
+          "Mon",
+          "12:00",
+          "45"
+        ],
+        [
+          "Mon",
+          "16:00",
+          "50"
+        ],
+        [
+          "Tue",
+          "00:00",
+          "4"
+        ],
+        [
+          "Tue",
+          "08:00",
+          "28"
+        ],
+        [
+          "Tue",
+          "12:00",
+          "42"
+        ],
+        [
+          "Wed",
+          "12:00",
+          "55"
+        ]
+      ],
+      "options": {
+        "title": "User Activity Heatmap (Day vs Hour)",
+        "mapping:x": "Hour",
+        "mapping:y": "Day",
+        "mapping:value": "ActiveUsers"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StyledHeatmap",
+      "visualType": "HEATMAP",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled Heatmap\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022item\u0022},\u0022visualMap\u0022:{\u0022min\u0022:0,\u0022max\u0022:55,\u0022calculable\u0022:true,\u0022orient\u0022:\u0022horizontal\u0022,\u0022left\u0022:\u0022center\u0022,\u0022bottom\u0022:\u002215%\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u002200:00\u0022,\u002204:00\u0022,\u002208:00\u0022,\u002212:00\u0022,\u002216:00\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Mon\u0022,\u0022Tue\u0022,\u0022Wed\u0022]},\u0022series\u0022:[{\u0022type\u0022:\u0022heatmap\u0022,\u0022data\u0022:[[0,0,5],[1,0,2],[2,0,25],[3,0,45],[4,0,50],[0,1,4],[2,1,28],[3,1,42],[3,2,55]],\u0022label\u0022:{\u0022show\u0022:true}}]}",
+      "columns": [
+        "Day",
+        "Hour",
+        "ActiveUsers"
+      ],
+      "rows": [
+        [
+          "Mon",
+          "00:00",
+          "5"
+        ],
+        [
+          "Mon",
+          "04:00",
+          "2"
+        ],
+        [
+          "Mon",
+          "08:00",
+          "25"
+        ],
+        [
+          "Mon",
+          "12:00",
+          "45"
+        ],
+        [
+          "Mon",
+          "16:00",
+          "50"
+        ],
+        [
+          "Tue",
+          "00:00",
+          "4"
+        ],
+        [
+          "Tue",
+          "08:00",
+          "28"
+        ],
+        [
+          "Tue",
+          "12:00",
+          "42"
+        ],
+        [
+          "Wed",
+          "12:00",
+          "55"
+        ]
+      ],
+      "options": {
+        "title": "Styled Heatmap",
+        "color:min": "#f7fbff",
+        "color:max": "#08306b",
+        "mapping:x": "Hour",
+        "mapping:y": "Day",
+        "mapping:value": "ActiveUsers"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "HeatmapKitchenSink",
+      "structure": "A B",
+      "slotMap": {
+        "A": "BasicHeatmap",
+        "B": "StyledHeatmap"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "HeatmapKitchenSink",
+      "pages": [
+        "HeatmapKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "9"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 9,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[02ce1434] [SELECT] Executing SelectStatement. Session: 02ce1434",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:08.3532283Z"
+    },
+    {
+      "message": "[02ce1434] 9 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:08.3731412Z"
+    },
+    {
+      "message": "[02ce1434] Visual \u0027BasicHeatmap\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:08.3757345Z"
+    },
+    {
+      "message": "[02ce1434] Visual \u0027StyledHeatmap\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:08.3776933Z"
+    },
+    {
+      "message": "[02ce1434] Page \u0027HeatmapKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:08.3788782Z"
+    },
+    {
+      "message": "[02ce1434] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:41:08.3795236Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "2300b6cc-da78-4534-bfe6-4d5283954ba3",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 35.1189,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "1f969d6d-a810-4d81-ab75-d47f5f75d1c4",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2793,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "24e6ba36-e119-4fd2-90fc-fee52dba1936",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.034,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "837958b5-2409-40f2-ba2c-c1d969c4b704",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 18,
+          "durationMs": 22.8877,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 786.4486165058088,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "121e03bb-374e-4651-a4ab-c9a88ff4f11b",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8102,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "4f722142-48bc-49bf-b34a-45d4e3f6e470",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0964,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7a9054ed-f076-4e93-acfa-f5608b9faaa6",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9325,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "937f43cf-166f-4a51-ad99-82b7b28b0584",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2697,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

@@ -770,11 +770,11 @@ namespace ETL_SQL.Core.Formatting
         {
             var sb = new System.Text.StringBuilder();
             sb.AppendLine($"CREATE VISUAL {s.Name} AS {s.VisualType.ToString().ToUpper()} (");
-            if (s.Title != null) sb.AppendLine($"    TITLE = '{s.Title.Replace("'", "''")}',");
-            if (s.Subtitle != null) sb.AppendLine($"    SUBTITLE = '{s.Subtitle.Replace("'", "''")}',");
+            if (s.Title != null) sb.AppendLine($"    TITLE = {s.Title.ToSql()},");
+            if (s.Subtitle != null) sb.AppendLine($"    SUBTITLE = {s.Subtitle.ToSql()},");
             // TEXT visuals use CONTENT; controls use DEFAULT; both map to DefaultValue on the AST node
             if (s.DefaultValue != null && s.VisualType == VisualType.Text)
-                sb.AppendLine($"    CONTENT = '{s.DefaultValue.Replace("'", "''")}',");
+                sb.AppendLine($"    CONTENT = {s.DefaultValue.ToSql()},");
             // Only emit SOURCE when actually set (TEXT/controls without a query have an empty source)
             if (s.Source.InlineSelect != null || s.Source.TempTableName != null)
                 sb.AppendLine($"    SOURCE = {s.Source.ToSql()},");
@@ -787,7 +787,7 @@ namespace ETL_SQL.Core.Formatting
             if (s.Actions.Count > 0)
                 sb.AppendLine($"    ACTIONS ( {string.Join(", ", s.Actions.Select(a => a.ToSql()))} ),");
             if (s.DefaultValue != null && s.VisualType != VisualType.Text)
-                sb.AppendLine($"    DEFAULT = '{s.DefaultValue.Replace("'", "''")}',");
+                sb.AppendLine($"    DEFAULT = {s.DefaultValue.ToSql()},");
 
             var result = sb.ToString().TrimEnd().TrimEnd(',');
             return result + "\n);";

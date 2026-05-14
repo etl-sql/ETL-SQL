@@ -19,12 +19,12 @@ namespace ETL_SQL.Core
     /// </summary>
     public record TooltipDefinition
     {
-        public string? PlainText     { get; init; }
+        public Expression? PlainText     { get; init; }
         public string? ContainerRef  { get; init; }
         public string? InlineMarkdown{ get; init; }
         public List<string>? InlineVisuals { get; init; }
 
-        public static TooltipDefinition Text(string text) =>
+        public static TooltipDefinition Text(Expression text) =>
             new() { PlainText = text };
 
         public static TooltipDefinition Container(string containerName) =>
@@ -72,7 +72,7 @@ namespace ETL_SQL.Core
         DatePicker, RelDatePicker, Slider, MultiSelect, Search,
         Gauge, Funnel, Waterfall, Image,
         Bubble, Radar, Candlestick,
-        Map,
+        Map, Gantt,
         Checkbox, Textbox, Numberbox
     }
 
@@ -214,7 +214,7 @@ namespace ETL_SQL.Core
     {
         public required string Name                    { get; init; }
         public required string ButtonType              { get; init; } // BACK, REFRESH, HELP, etc.
-        public string? Title                          { get; init; }
+        public Expression? Title                          { get; init; }
         public TooltipDefinition? Tooltip             { get; init; }
         public List<VisualOption> Options              { get; init; } = new();
         public List<VisualAction> Actions              { get; init; } = new();
@@ -228,17 +228,17 @@ namespace ETL_SQL.Core
     {
         public required string Name                    { get; init; }
         public required VisualType VisualType          { get; init; }
-        public string? Title                          { get; init; }
+        public Expression? Title                      { get; init; }
         public bool TitleIsMarkdown                  { get; init; }
-        public string? Subtitle                       { get; init; }
+        public Expression? Subtitle                   { get; init; }
         public bool SubtitleIsMarkdown               { get; init; }
         public TooltipDefinition? Tooltip             { get; init; }
-        public string? DefaultValue                   { get; init; }
+        public Expression? DefaultValue               { get; init; }
         public string? LabelPosition                  { get; init; }
         public double? Min                            { get; init; }
         public double? Max                            { get; init; }
         public int? Decimals                          { get; init; }
-        public string? Placeholder                    { get; init; }
+        public Expression? Placeholder                { get; init; }
         public required VisualSourceExpression Source  { get; init; }
         public List<VisualMapping> Mappings            { get; init; } = new();
         public List<VisualOption> Options              { get; init; } = new();
@@ -265,9 +265,9 @@ namespace ETL_SQL.Core
         public Dictionary<string, string> SlotMap             { get; init; } = new();
         public Dictionary<string, string> Styles              { get; init; } = new();
         public string? StyleName                              { get; init; }
-        public string? Title                                  { get; init; }
+        public Expression? Title                              { get; init; }
         public bool TitleIsMarkdown                          { get; init; }
-        public string? Subtitle                               { get; init; }
+        public Expression? Subtitle                           { get; init; }
         public bool SubtitleIsMarkdown                       { get; init; }
         public TooltipDefinition? Tooltip                     { get; init; }
         public string? Visibility                             { get; init; }
@@ -300,9 +300,9 @@ namespace ETL_SQL.Core
         public Dictionary<string, string> SlotMap { get; init; } = new();
         public Dictionary<string, string> Styles { get; init; } = new();
         public string? StyleName { get; init; }
-        public string? Title { get; init; }
+        public Expression? Title { get; init; }
         public bool TitleIsMarkdown { get; init; }
-        public string? Subtitle { get; init; }
+        public Expression? Subtitle { get; init; }
         public bool SubtitleIsMarkdown { get; init; }
         public TooltipDefinition? Tooltip { get; init; }
         public bool IsCollapsible { get; init; }
@@ -338,6 +338,7 @@ namespace ETL_SQL.Core
         public DatasetAccessLevel AccessLevel         { get; init; } = DatasetAccessLevel.Private;
         public required Statement SourceQuery         { get; init; }
         public ObjectCreationMode Mode                { get; init; } = ObjectCreationMode.Create;
+        public override string? GetCreatedTable() => TempTableName;
     }
 
     /// <summary>
@@ -357,6 +358,7 @@ namespace ETL_SQL.Core
     public record ShowDatasetsStatement : Statement
     {
         public string? IntoTable { get; init; }
+        public override string? GetCreatedTable() => IntoTable;
     }
 
     /// <summary>
@@ -390,9 +392,9 @@ namespace ETL_SQL.Core
         public List<VisualAction>? Actions             { get; init; }
         public Dictionary<string, string>? Styles      { get; init; }
         public string? StyleName                       { get; init; }
-        public string? Title                           { get; init; }
+        public Expression? Title                       { get; init; }
         public bool TitleIsMarkdown                   { get; init; }
-        public string? Subtitle                        { get; init; }
+        public Expression? Subtitle                    { get; init; }
         public bool SubtitleIsMarkdown                { get; init; }
         public TooltipDefinition? Tooltip              { get; init; }
     }

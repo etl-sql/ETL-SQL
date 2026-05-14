@@ -1,0 +1,195 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\24_RELDATEPICKER.rptsql",
+  "builtAt": "2026-05-14T19:03:20.8308867Z",
+  "title": "Kitchen Sink: RELDATEPICKER Visual",
+  "visuals": [
+    {
+      "name": "RelPicker",
+      "visualType": "RELDATEPICKER",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {
+        "title": "Relative Date Selection",
+        "DEFAULT": "M-1"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@relativeDate",
+          "valueExpression": "value",
+          "valueSource": "CONTROL_VALUE",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "RelResult",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [],
+      "rows": [],
+      "options": {},
+      "error": "Unknown function: RELDATE. If this is a database-specific function, check that the query is being pushed down to the remote source (e.g. by avoiding local-only operations like joins with CSV files).",
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "RelDateKitchenSink",
+      "structure": "A / B",
+      "slotMap": {
+        "A": "RelPicker",
+        "B": "RelResult"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "RelDateKitchenSink",
+      "pages": [
+        "RelDateKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@relativeDate": "M-1",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": ""
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 0,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[7912a4ed] Visual \u0027RelPicker\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:03:20.8208091Z"
+    },
+    {
+      "message": "[7912a4ed] Visual \u0027RelResult\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:03:20.8232542Z"
+    },
+    {
+      "message": "[7912a4ed] Page \u0027RelDateKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:03:20.8244277Z"
+    },
+    {
+      "message": "[7912a4ed] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T19:03:20.8251318Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "0e503da0-4796-47e2-9326-6f13caae3a30",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 16.162,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "4aee0a4e-d5f4-480c-bafb-17eda64e1d6b",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2525,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "21fa4bf7-ded6-46b4-8bd5-36d13994878b",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.7512,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "979055b7-dc4d-4b6f-a001-be11b802eb82",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 2.1492,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "2b3e89ac-734c-4e64-be87-4995ad288ef3",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.3233,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "99e30ba5-2813-4720-bb8f-b068994c1052",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9699,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "29a1e7f1-721b-4892-a61d-4755c702393f",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2774,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

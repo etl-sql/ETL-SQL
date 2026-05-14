@@ -1,0 +1,40 @@
+-- Kitchen Sink: BOXPLOT Visual
+-- This script demonstrates the BOXPLOT visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: BOXPLOT Visual';
+SET REPORT DESCRIPTION = 'Demonstration of BOXPLOT (Box-and-Whisker) capabilities.';
+
+-- 1. Mock Data Generation (Pre-calculated stats)
+SELECT 'Category A' AS Cat, 10 AS Low, 20 AS Q1, 25 AS Median, 35 AS Q3, 50 AS High INTO #stats
+UNION ALL SELECT 'Category B', 5, 15, 22, 30, 45
+UNION ALL SELECT 'Category C', 12, 18, 28, 40, 55;
+
+-- 2. Basic Boxplot
+CREATE VISUAL BasicBoxplot AS BOXPLOT (
+    SOURCE = #stats,
+    TITLE = 'Basic Boxplot',
+    MAPPINGS (X = Cat, LOW = Low, Q1 = Q1, MEDIAN = Median, Q3 = Q3, HIGH = High)
+);
+
+-- 3. Boxplot with Custom Styles
+CREATE VISUAL StyledBoxplot AS BOXPLOT (
+    SOURCE = #stats,
+    TITLE = 'Styled Boxplot',
+    MAPPINGS (X = Cat, LOW = Low, Q1 = Q1, MEDIAN = Median, Q3 = Q3, HIGH = High),
+    OPTIONS (
+        COLORS ('Category A' = '#4e79a7'),
+        X_AXIS (LABEL = 'Category Name'),
+        Y_AXIS (LABEL = 'Distribution Range')
+    )
+);
+
+-- Page Layout
+CREATE PAGE BoxplotKitchenSink AS LAYOUT (
+    STRUCTURE = 'A / B',
+    MAP (
+        'A' = BasicBoxplot,
+        'B' = StyledBoxplot
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = BoxplotKitchenSink) WITH PAGES (BoxplotKitchenSink);

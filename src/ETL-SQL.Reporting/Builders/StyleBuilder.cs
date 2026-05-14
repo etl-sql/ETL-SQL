@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using ETL_SQL.Core;
 
 namespace ETL_SQL.Reporting.Builders
@@ -71,7 +72,7 @@ namespace ETL_SQL.Reporting.Builders
                 ? ctx.VarContext.GetVariable(value)?.ToString() ?? value
                 : value;
 
-        public TooltipManifest? BuildTooltipManifest(TooltipDefinition? tooltip)
+        public async Task<TooltipManifest?> BuildTooltipManifestAsync(TooltipDefinition? tooltip)
         {
             if (tooltip == null) return null;
             if (tooltip.ContainerRef != null)
@@ -79,24 +80,29 @@ namespace ETL_SQL.Reporting.Builders
             if (tooltip.InlineVisuals != null)
                 return new TooltipManifest { Type = "inline", Markdown = tooltip.InlineMarkdown, Visuals = tooltip.InlineVisuals };
             
-            var (text, isMd) = ResolveMarkdown(tooltip.PlainText);
+            var (text, isMd) = await ResolveMarkdownAsync(tooltip.PlainText);
             return new TooltipManifest { Type = "text", Text = text, IsMarkdown = isMd };
         }
 
-        public (string? Value, bool IsMarkdown) ResolveMarkdown(string? input, bool parserFlag = false)
+        public async Task<(string? Value, bool IsMarkdown)> ResolveMarkdownAsync(Expression? input, bool parserFlag = false)
         {
-            if (string.IsNullOrEmpty(input)) return (null, false);
-            if (input.StartsWith("@"))
+            if (input == null) return (null, false);
+            
+            // If it's a literal string, check if it's a variable reference first (for backward compatibility)
+            if (input is LiteralExpression lit && lit.Value is string s && s.StartsWith("@"))
             {
-                var val = ctx.VarContext.GetVariable(input);
+                var val = ctx.VarContext.GetVariable(s);
                 bool typeMd = false;
-                if (ctx.VarContext.VariableMetadata.TryGetValue(input, out var meta))
+                if (ctx.VarContext.VariableMetadata.TryGetValue(s, out var meta))
                 {
                     typeMd = meta.DataType?.Equals("MARKDOWN", StringComparison.OrdinalIgnoreCase) == true;
                 }
                 return (val?.ToString(), parserFlag || typeMd);
             }
-            return (input, parserFlag);
+
+            // Otherwise, evaluate the expression
+            var result = await ctx.EvaluateValue(input, null);
+            return (result?.ToString(), parserFlag);
         }
     }
 }

@@ -1,0 +1,764 @@
+{
+  "source": "samples\\10_Kitchen_Sinks\\01_BAR.rptsql",
+  "builtAt": "2026-05-14T17:45:24.5153112Z",
+  "title": "Kitchen Sink: BAR Visual",
+  "description": "Comprehensive demonstration of BAR chart capabilities, including stacking, overlays, and styling.",
+  "visuals": [
+    {
+      "name": "BasicBar",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Basic Bar Chart (Revenue by Month)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[390,280,220,340]}]}",
+      "columns": [
+        "Month",
+        "Revenue"
+      ],
+      "rows": [
+        [
+          "Apr",
+          "390"
+        ],
+        [
+          "Jan",
+          "220"
+        ],
+        [
+          "Mar",
+          "340"
+        ],
+        [
+          "Feb",
+          "280"
+        ]
+      ],
+      "options": {
+        "title": "Basic Bar Chart (Revenue by Month)",
+        "mapping:x": "Month",
+        "mapping:y": "Revenue"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "GroupedBar",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Grouped Bar Chart (By Region)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022top\u0022:\u0022top\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022North\u0022,\u0022data\u0022:[200,150,100,180]},{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022South\u0022,\u0022data\u0022:[190,130,120,160]}]}",
+      "columns": [
+        "Month",
+        "Region",
+        "Revenue",
+        "Target"
+      ],
+      "rows": [
+        [
+          "Jan",
+          "North",
+          "100",
+          "80"
+        ],
+        [
+          "Jan",
+          "South",
+          "120",
+          "90"
+        ],
+        [
+          "Feb",
+          "North",
+          "150",
+          "100"
+        ],
+        [
+          "Feb",
+          "South",
+          "130",
+          "95"
+        ],
+        [
+          "Mar",
+          "North",
+          "180",
+          "110"
+        ],
+        [
+          "Mar",
+          "South",
+          "160",
+          "105"
+        ],
+        [
+          "Apr",
+          "North",
+          "200",
+          "120"
+        ],
+        [
+          "Apr",
+          "South",
+          "190",
+          "115"
+        ]
+      ],
+      "options": {
+        "title": "Grouped Bar Chart (By Region)",
+        "LEGEND_POSITION": "TOP",
+        "mapping:x": "Month",
+        "mapping:y": "Revenue",
+        "mapping:series": "Region"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "StackedBar",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Stacked Bar Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022North\u0022,\u0022data\u0022:[200,150,100,180],\u0022stack\u0022:\u0022total\u0022,\u0022label\u0022:{\u0022show\u0022:true,\u0022position\u0022:\u0022inside\u0022,\u0022color\u0022:\u0022#FFFFFF\u0022,\u0022formatter\u0022:\u0022{c}\u0022}},{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022South\u0022,\u0022data\u0022:[190,130,120,160],\u0022stack\u0022:\u0022total\u0022,\u0022label\u0022:{\u0022show\u0022:true,\u0022position\u0022:\u0022inside\u0022,\u0022color\u0022:\u0022#FFFFFF\u0022,\u0022formatter\u0022:\u0022{c}\u0022}}]}",
+      "columns": [
+        "Month",
+        "Region",
+        "Revenue",
+        "Target"
+      ],
+      "rows": [
+        [
+          "Jan",
+          "North",
+          "100",
+          "80"
+        ],
+        [
+          "Jan",
+          "South",
+          "120",
+          "90"
+        ],
+        [
+          "Feb",
+          "North",
+          "150",
+          "100"
+        ],
+        [
+          "Feb",
+          "South",
+          "130",
+          "95"
+        ],
+        [
+          "Mar",
+          "North",
+          "180",
+          "110"
+        ],
+        [
+          "Mar",
+          "South",
+          "160",
+          "105"
+        ],
+        [
+          "Apr",
+          "North",
+          "200",
+          "120"
+        ],
+        [
+          "Apr",
+          "South",
+          "190",
+          "115"
+        ]
+      ],
+      "options": {
+        "title": "Stacked Bar Chart",
+        "STACKED": "True",
+        "DATA_LABELS": "ON",
+        "DATA_LABELS:POSITION": "INSIDE",
+        "DATA_LABELS:COLOR": "#FFFFFF",
+        "DATA_LABELS:FORMAT": "N0",
+        "mapping:x": "Month",
+        "mapping:y": "Revenue",
+        "mapping:series": "Region"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "dataLabels": {
+        "show": true,
+        "position": "INSIDE",
+        "color": "#FFFFFF",
+        "fontSize": null,
+        "fontWeight": null,
+        "fontFamily": null,
+        "format": "N0"
+      }
+    },
+    {
+      "name": "OverlayBar",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Bar Chart with Overlays\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[390,280,220,340],\u0022markLine\u0022:{\u0022symbol\u0022:\u0022none\u0022,\u0022data\u0022:[{\u0022yAxis\u0022:150,\u0022name\u0022:\u0022Monthly Goal\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022dashed\u0022,\u0022color\u0022:\u0022Red\u0022},\u0022label\u0022:{\u0022formatter\u0022:\u0022Monthly Goal\u0022,\u0022color\u0022:\u0022Red\u0022}},{\u0022yAxis\u0022:307.5,\u0022name\u0022:\u0022Average Revenue\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022dotted\u0022,\u0022color\u0022:\u0022Blue\u0022},\u0022label\u0022:{\u0022formatter\u0022:\u0022Average Revenue\u0022,\u0022color\u0022:\u0022Blue\u0022}}]}},{\u0022type\u0022:\u0022line\u0022,\u0022name\u0022:\u00222-Month Moving Avg\u0022,\u0022data\u0022:[null,335,250,280],\u0022smooth\u0022:true,\u0022symbol\u0022:\u0022none\u0022,\u0022lineStyle\u0022:{\u0022type\u0022:\u0022solid\u0022,\u0022color\u0022:\u0022Green\u0022},\u0022itemStyle\u0022:{\u0022color\u0022:\u0022Green\u0022},\u0022tooltip\u0022:{\u0022valueFormatter\u0022:null}}]}",
+      "columns": [
+        "Month",
+        "Revenue"
+      ],
+      "rows": [
+        [
+          "Apr",
+          "390"
+        ],
+        [
+          "Jan",
+          "220"
+        ],
+        [
+          "Mar",
+          "340"
+        ],
+        [
+          "Feb",
+          "280"
+        ]
+      ],
+      "options": {
+        "title": "Bar Chart with Overlays",
+        "mapping:x": "Month",
+        "mapping:y": "Revenue"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {},
+      "overlays": [
+        {
+          "overlayType": "Goal",
+          "parameter": 150,
+          "lineStyle": "dashed",
+          "color": "Red",
+          "label": "Monthly Goal"
+        },
+        {
+          "overlayType": "Average",
+          "parameter": null,
+          "lineStyle": "dotted",
+          "color": "Blue",
+          "label": "Average Revenue"
+        },
+        {
+          "overlayType": "MovingAvg",
+          "parameter": 2,
+          "lineStyle": "solid",
+          "color": "Green",
+          "label": "2-Month Moving Avg"
+        }
+      ]
+    },
+    {
+      "name": "StyledBar",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Styled Bar Chart\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022],\u0022name\u0022:\u0022Fiscal Month\u0022},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022,\u0022name\u0022:\u0022USD Revenue\u0022,\u0022min\u0022:0,\u0022max\u0022:300},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022North\u0022,\u0022data\u0022:[200,150,100,180]},{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022South\u0022,\u0022data\u0022:[190,130,120,160]}]}",
+      "columns": [
+        "Month",
+        "Region",
+        "Revenue",
+        "Target"
+      ],
+      "rows": [
+        [
+          "Jan",
+          "North",
+          "100",
+          "80"
+        ],
+        [
+          "Jan",
+          "South",
+          "120",
+          "90"
+        ],
+        [
+          "Feb",
+          "North",
+          "150",
+          "100"
+        ],
+        [
+          "Feb",
+          "South",
+          "130",
+          "95"
+        ],
+        [
+          "Mar",
+          "North",
+          "180",
+          "110"
+        ],
+        [
+          "Mar",
+          "South",
+          "160",
+          "105"
+        ],
+        [
+          "Apr",
+          "North",
+          "200",
+          "120"
+        ],
+        [
+          "Apr",
+          "South",
+          "190",
+          "115"
+        ]
+      ],
+      "options": {
+        "title": "Styled Bar Chart",
+        "color:North": "#4e79a7",
+        "color:South": "#f28e2b",
+        "axis:x:label": "Fiscal Month",
+        "axis:y:label": "USD Revenue",
+        "axis:y:min": "0",
+        "axis:y:max": "300",
+        "mapping:x": "Month",
+        "mapping:y": "Revenue",
+        "mapping:series": "Region"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {
+        "BORDER": "2px solid #ddd",
+        "BORDER-RADIUS": "8px",
+        "SHADOW": "ON"
+      }
+    },
+    {
+      "name": "PercentBar",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022100% Stacked Bar (Manual Calculation)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022,\u0022name\u0022:\u0022Percentage (%)\u0022,\u0022max\u0022:100},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022North\u0022,\u0022data\u0022:[51.282051282051285,53.57142857142857,45.45454545454545,52.94117647058823],\u0022stack\u0022:\u0022total\u0022},{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022South\u0022,\u0022data\u0022:[48.717948717948715,46.42857142857143,54.54545454545455,47.05882352941177],\u0022stack\u0022:\u0022total\u0022}]}",
+      "columns": [
+        "Month",
+        "Region",
+        "RevenuePct"
+      ],
+      "rows": [
+        [
+          "Jan",
+          "North",
+          "45.454545454545454545454545455"
+        ],
+        [
+          "Jan",
+          "South",
+          "54.545454545454545454545454545"
+        ],
+        [
+          "Feb",
+          "North",
+          "53.571428571428571428571428571"
+        ],
+        [
+          "Feb",
+          "South",
+          "46.428571428571428571428571429"
+        ],
+        [
+          "Mar",
+          "North",
+          "52.941176470588235294117647059"
+        ],
+        [
+          "Mar",
+          "South",
+          "47.058823529411764705882352941"
+        ],
+        [
+          "Apr",
+          "North",
+          "51.282051282051282051282051282"
+        ],
+        [
+          "Apr",
+          "South",
+          "48.717948717948717948717948718"
+        ]
+      ],
+      "options": {
+        "title": "100% Stacked Bar (Manual Calculation)",
+        "STACKED": "True",
+        "FORMAT": "P1",
+        "axis:y:max": "100",
+        "axis:y:label": "Percentage (%)",
+        "mapping:x": "Month",
+        "mapping:y": "RevenuePct",
+        "mapping:series": "Region"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "MonthDetail",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Regional Detail for Selected Month\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[]}]}",
+      "columns": [
+        "Region",
+        "Revenue"
+      ],
+      "rows": [],
+      "options": {
+        "title": "Regional Detail for Selected Month",
+        "mapping:x": "Region",
+        "mapping:y": "Revenue"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    },
+    {
+      "name": "BarWithTooltip",
+      "visualType": "BAR",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Bar with Hover Tooltip\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Apr\u0022,\u0022Feb\u0022,\u0022Jan\u0022,\u0022Mar\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Revenue\u0022,\u0022data\u0022:[390,280,220,340]}]}",
+      "tooltip": {
+        "type": "container",
+        "containerRef": "TooltipBox"
+      },
+      "columns": [
+        "Month",
+        "Revenue"
+      ],
+      "rows": [
+        [
+          "Apr",
+          "390"
+        ],
+        [
+          "Jan",
+          "220"
+        ],
+        [
+          "Mar",
+          "340"
+        ],
+        [
+          "Feb",
+          "280"
+        ]
+      ],
+      "options": {
+        "title": "Bar with Hover Tooltip",
+        "mapping:x": "Month",
+        "mapping:y": "Revenue"
+      },
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "BarKitchenSink",
+      "structure": "A B / C D / E F / G G",
+      "slotMap": {
+        "A": "BasicBar",
+        "B": "GroupedBar",
+        "C": "StackedBar",
+        "D": "OverlayBar",
+        "E": "StyledBar",
+        "F": "PercentBar",
+        "G": "BarWithTooltip"
+      }
+    }
+  ],
+  "datasets": [],
+  "containers": [
+    {
+      "name": "TooltipBox",
+      "containerType": "BOX",
+      "structure": "A",
+      "slotMap": {
+        "A": "MonthDetail"
+      },
+      "isPinnable": true
+    }
+  ],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "BarKitchenSink",
+      "pages": [
+        "BarKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "8"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 8,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[402fbee1] [SELECT] Executing SelectStatement. Session: 402fbee1",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.4744639Z"
+    },
+    {
+      "message": "[402fbee1] 8 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.4957455Z"
+    },
+    {
+      "message": "[402fbee1] Visual \u0027BasicBar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.4983744Z"
+    },
+    {
+      "message": "[402fbee1] Visual \u0027GroupedBar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.5002117Z"
+    },
+    {
+      "message": "[402fbee1] Visual \u0027StackedBar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.5003731Z"
+    },
+    {
+      "message": "[402fbee1] Visual \u0027OverlayBar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.5004129Z"
+    },
+    {
+      "message": "[402fbee1] Visual \u0027StyledBar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.5004405Z"
+    },
+    {
+      "message": "[402fbee1] Visual \u0027PercentBar\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.5005563Z"
+    },
+    {
+      "message": "[402fbee1] Visual \u0027MonthDetail\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.5008984Z"
+    },
+    {
+      "message": "[402fbee1] Container \u0027TooltipBox\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.5014494Z"
+    },
+    {
+      "message": "[402fbee1] Visual \u0027BarWithTooltip\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.5016337Z"
+    },
+    {
+      "message": "[402fbee1] Page \u0027BarKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.502706Z"
+    },
+    {
+      "message": "[402fbee1] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T17:45:24.5033415Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "7829d6da-0cf5-4761-93f8-41b140f982dc",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 38.0855,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "f5039d92-f61f-44e3-b11b-dc2a517bfcaa",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.2492,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "8e52b95e-fbbb-4116-a5d0-3835c8ed5bba",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.032,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "7f6c35bd-0ffd-42ab-8f1d-b132f58b8add",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 16,
+          "durationMs": 24.4879,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 653.3839161381744,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "5c6f1eea-5ff5-4935-9198-f4dae9cee6d4",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.8883,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "db258f8e-7caa-47f9-b20e-30ff4ee90c4f",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0958,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "c6ebf8ac-95e4-4f4b-b2b0-6f36b0bcc456",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0457,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "84b02f63-f658-4b0b-b4e7-1780db1ff567",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0227,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "1c4f4e43-a19f-4a8d-bba3-31d365ba4425",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0168,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d196aebc-40f2-42ce-9667-cbcd39d2fd68",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0354,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "96ecc85c-7426-434d-ba09-a9498096355c",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0543,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "c9e07181-7f42-49d7-9e44-5c54af946f79",
+          "name": "CreateContainer",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.261,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "f499a27e-0978-4ddf-b180-883e4ca64435",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0501,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "960367cb-ddcb-410c-a8a5-d8986f5a8868",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9103,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "6befcfcc-72d6-4a43-af11-8710750a16e3",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.272,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

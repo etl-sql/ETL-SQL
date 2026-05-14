@@ -1,0 +1,43 @@
+-- Kitchen Sink: FUNNEL Visual
+-- This script demonstrates the FUNNEL visual type.
+
+SET REPORT TITLE = 'Kitchen Sink: FUNNEL Visual';
+SET REPORT DESCRIPTION = 'Demonstration of FUNNEL conversion visualization.';
+
+-- 1. Mock Data Generation
+SELECT 'Prospects' AS Stage, 1000 AS Count INTO #funnel
+UNION ALL SELECT 'Qualified', 600
+UNION ALL SELECT 'Proposal', 300
+UNION ALL SELECT 'Negotiation', 150
+UNION ALL SELECT 'Closed Won', 80;
+
+-- 2. Basic Funnel
+CREATE VISUAL BasicFunnel AS FUNNEL (
+    SOURCE = (SELECT Stage, Count FROM #funnel ORDER BY Count DESC),
+    TITLE = 'Sales Conversion Funnel',
+    MAPPINGS (LABEL = Stage, VALUE = Count)
+);
+
+-- 3. Styled Funnel
+CREATE VISUAL StyledFunnel AS FUNNEL (
+    SOURCE = (SELECT Stage, Count FROM #funnel ORDER BY Count DESC),
+    TITLE = 'Styled Funnel',
+    MAPPINGS (LABEL = Stage, VALUE = Count),
+    OPTIONS (
+        COLORS (
+            'Prospects' = '#4e79a7',
+            'Closed Won' = '#59a14f'
+        )
+    )
+);
+
+-- Page Layout
+CREATE PAGE FunnelKitchenSink AS LAYOUT (
+    STRUCTURE = 'A B',
+    MAP (
+        'A' = BasicFunnel,
+        'B' = StyledFunnel
+    )
+);
+
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = FunnelKitchenSink) WITH PAGES (FunnelKitchenSink);
