@@ -70,6 +70,72 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
     }
 
     [Fact]
+    public async Task Login_WithDeactivatedUser_Returns401()
+    {
+        var adminToken = await GetAdminTokenAsync();
+
+        // Create a fresh user for this test to avoid side-effects on shared state.
+        var username = $"inactive_{Guid.NewGuid():N}"[..18];
+        var createRes = await AuthPost(adminToken, "/api/admin/users", new
+        {
+            username,
+            email    = $"{username}@test.local",
+            password = "Active@Test1!",
+            role     = "Viewer"
+        });
+        Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
+        var created = await createRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var userId  = created!["id"]!.GetValue<int>();
+
+        // Deactivate the user via admin PUT.
+        var deactivateRes = await AuthPut(adminToken, $"/api/admin/users/{userId}",
+            new { isActive = false });
+        Assert.Equal(HttpStatusCode.NoContent, deactivateRes.StatusCode);
+
+        // Login attempt on inactive account must return 401 (not 500 or 403).
+        var loginRes = await _client.PostAsJsonAsync("/api/auth/login", new
+        {
+            username,
+            password = "Active@Test1!"
+        });
+        Assert.Equal(HttpStatusCode.Unauthorized, loginRes.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_AfterExcessiveFailures_Returns429()
+    {
+        var adminToken = await GetAdminTokenAsync();
+
+        var username = $"lockout_{Guid.NewGuid():N}"[..17];
+        var createRes = await AuthPost(adminToken, "/api/admin/users", new
+        {
+            username,
+            email    = $"{username}@test.local",
+            password = "Lockout@Test1!",
+            role     = "Viewer"
+        });
+        Assert.Equal(HttpStatusCode.Created, createRes.StatusCode);
+
+        // Exhaust the lockout threshold (default 5 failed attempts).
+        // Use wrong password — separate user so admin counter stays clean.
+        for (int i = 0; i < 6; i++)
+        {
+            await _client.PostAsJsonAsync("/api/auth/login", new
+            {
+                username,
+                password = "WrongPassword@1!"
+            });
+        }
+
+        var lockedRes = await _client.PostAsJsonAsync("/api/auth/login", new
+        {
+            username,
+            password = "WrongPassword@1!"
+        });
+        Assert.Equal(429, (int)lockedRes.StatusCode);
+    }
+
+    [Fact]
     public async Task MustChangePassword_BlocksApiUntilChanged()
     {
         var token = await GetAdminTokenAsync();
