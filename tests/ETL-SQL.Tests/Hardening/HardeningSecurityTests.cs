@@ -157,6 +157,84 @@ namespace ETL_SQL.Tests.Hardening.Hardening
         }
 
         [Fact]
+        public void TestResolvePathSymlinks_UncPath_DoesNotCrash()
+        {
+            // UNC paths must not crash the symlink resolver — they are valid absolute paths
+            // but have a different root format ("\\server\share\").
+            var uncPath = @"\\server\share\data.csv";
+            var result = SecurityService.ResolvePathSymlinks(uncPath);
+            // UNC paths to non-existent servers just return themselves (no symlinks to follow).
+            Assert.False(string.IsNullOrEmpty(result));
+            Assert.DoesNotContain("..", result);
+        }
+
+        [Fact]
+        public void TestResolvePathSymlinks_MixedSeparators_NormalizesCorrectly()
+        {
+            // Mixed forward/backslash separators should resolve to the same canonical path
+            // as the backslash-only form. This matters on Windows where both separators are valid.
+            var tempDir = Path.GetTempPath();
+            var withForward  = Path.Combine(tempDir, "test_mixed").Replace('\\', '/');
+            var withBackslash = Path.Combine(tempDir, "test_mixed");
+
+            var resolvedForward   = SecurityService.ResolvePathSymlinks(withForward);
+            var resolvedBackslash = SecurityService.ResolvePathSymlinks(withBackslash);
+
+            Assert.Equal(
+                resolvedBackslash.Replace('/', '\\'),
+                resolvedForward.Replace('/', '\\'),
+                StringComparer.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void TestValidatePath_UncPath_BlockedInDefinedMode()
+        {
+            // In DEFINED mode, any path not in an approved safe zone should be blocked,
+            // including UNC paths.  This is the tightest security posture.
+            var securityService = Program.ServiceProvider.GetRequiredService<SecurityService>();
+            var originalMode = securityService.ProtectionMode;
+            var originalTest = securityService.IsTestMode;
+            securityService.ProtectionMode = PathProtectionMode.Defined;
+            securityService.IsTestMode = false;
+            try
+            {
+                var ex = Assert.Throws<SecurityException>(
+                    () => securityService.ValidatePath(@"\\server\share\data.csv"));
+                Assert.Contains("Approved Safe Zone", ex.Message);
+            }
+            finally
+            {
+                securityService.ProtectionMode = originalMode;
+                securityService.IsTestMode = originalTest;
+            }
+        }
+
+        [Fact]
+        public void TestValidatePath_MixedSeparators_SameAsBackslash()
+        {
+            // Forward-slash paths should be treated identically to backslash paths.
+            // If a backslash path would be blocked, the forward-slash equivalent must also be blocked.
+            var securityService = Program.ServiceProvider.GetRequiredService<SecurityService>();
+            var originalTest = securityService.IsTestMode;
+            securityService.IsTestMode = false;
+            try
+            {
+                // .git/config is a blocked path regardless of separator style
+                var exBackslash = Assert.Throws<SecurityException>(
+                    () => securityService.ValidatePath(@".git\config"));
+                var exForward = Assert.Throws<SecurityException>(
+                    () => securityService.ValidatePath(".git/config"));
+
+                Assert.Contains("protected system/environment directory", exBackslash.Message);
+                Assert.Contains("protected system/environment directory", exForward.Message);
+            }
+            finally
+            {
+                securityService.IsTestMode = originalTest;
+            }
+        }
+
+        [Fact]
         public async Task TestRecursiveDepth_Throws()
         {
             var eval = Program.ServiceProvider.GetRequiredService<Evaluator>();

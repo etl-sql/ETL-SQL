@@ -1,5 +1,6 @@
 using Xunit;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using System.Linq;
 using ETL_SQL.Core;
@@ -14,7 +15,7 @@ namespace ETL_SQL.Tests.Analysis
         {
             var lexer = new Lexer(sql);
             var tokens = lexer.Tokenize();
-            var parser = new Parser(tokens);
+            var parser = new Parser(tokens, sql);
             return parser.Parse();
         }
 
@@ -102,6 +103,94 @@ CREATE VISUAL ShareChart AS PIE (
 
             Assert.Single(results);
             Assert.Equal(LintSeverity.Error, results[0].Severity);
+        }
+
+        // ── New rules added in code review batch ──────────────────────────────────
+
+        [Fact]
+        public async Task TestPushdownValidationRule_EmptyBody_IsWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new PushdownValidationRule());
+
+            var sql = "EXECUTE myConn BEGIN END;";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.Single(results);
+            Assert.Equal(LintSeverity.Warning, results[0].Severity);
+            Assert.Contains("empty", results[0].Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task TestPushdownValidationRule_NonEmptyBody_NoWarning()
+        {
+            var linter = new Linter();
+            linter.AddRule(new PushdownValidationRule());
+
+            var sql = "EXECUTE myConn BEGIN SELECT 1; END;";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.DoesNotContain(results, r => r.Message.Contains("empty", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public async Task TestBulkInsertOptionsRule_BadBatchSize_IsError()
+        {
+            var linter = new Linter();
+            linter.AddRule(new BulkInsertOptionsRule());
+
+            var tempFile = Path.GetTempFileName();
+            var sql = $"BULK INSERT #t FROM '{tempFile}' WITH (BATCHSIZE = 'yes');";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.Single(results);
+            Assert.Equal(LintSeverity.Error, results[0].Severity);
+            Assert.Contains("BATCHSIZE", results[0].Message);
+        }
+
+        [Fact]
+        public async Task TestBulkInsertOptionsRule_ValidOptions_NoError()
+        {
+            var linter = new Linter();
+            linter.AddRule(new BulkInsertOptionsRule());
+
+            var tempFile = Path.GetTempFileName();
+            var sql = $"BULK INSERT #t FROM '{tempFile}' WITH (BATCHSIZE = 5000, MAXERRORS = 10);";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.Empty(results);
+        }
+
+        [Fact]
+        public async Task TestFlatFileDelimiterConflictRule_SameDelimiters_IsError()
+        {
+            var linter = new Linter();
+            linter.AddRule(new FlatFileDelimiterConflictRule());
+
+            var sql = "CREATE CONNECTION myfile ON FLATFILE ('data.csv') WITH (DELIMITER = ',', ROW_DELIMITER = ',');";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.Single(results);
+            Assert.Equal(LintSeverity.Error, results[0].Severity);
+            Assert.Contains("DELIMITER", results[0].Message);
+        }
+
+        [Fact]
+        public async Task TestFlatFileDelimiterConflictRule_DifferentDelimiters_NoError()
+        {
+            var linter = new Linter();
+            linter.AddRule(new FlatFileDelimiterConflictRule());
+
+            var sql = "CREATE CONNECTION myfile ON FLATFILE ('data.csv') WITH (DELIMITER = ',', ROW_DELIMITER = '\\n');";
+            var script = Parse(sql);
+            var results = await linter.AnalyzeAsync(script, new DefaultLintContext());
+
+            Assert.Empty(results);
         }
     }
 }
