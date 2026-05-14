@@ -1,11 +1,37 @@
 import { describe, it } from 'vitest';
 import * as cp from 'child_process';
 import * as path from 'path';
+import * as fs from 'fs';
+
+function getEnginePath(): string | null {
+    const isWindows = process.platform === 'win32';
+    const exeName = isWindows ? 'ETL-SQL.exe' : 'ETL-SQL';
+    const relativeBase = '../../../../src/ETL-SQL.App/bin';
+    
+    const configs = ['Debug', 'Release'];
+    const frameworks = ['net10.0'];
+
+    for (const config of configs) {
+        for (const framework of frameworks) {
+            const fullPath = path.resolve(__dirname, relativeBase, config, framework, exeName);
+            if (fs.existsSync(fullPath)) {
+                return fullPath;
+            }
+        }
+    }
+
+    return null;
+}
 
 describe('Engine Integration (Real Pipe)', () => {
-    const exePath = path.resolve(__dirname, '../../../../src/ETL-SQL.App/bin/Debug/net10.0/ETL-SQL.exe');
+    const exePath = getEnginePath();
 
     it('successfully pings the real engine via stdin/stdout', async () => {
+        if (!exePath) {
+            console.warn('Skipping integration test: ETL-SQL engine not found. Build the ETL-SQL.App project first.');
+            return;
+        }
+
         return new Promise<void>((resolve, reject) => {
             const child = cp.spawn(exePath, ['ui', 'repl', '--json', '--verbose'], {
                 env: { ...process.env, "FORCE_COLOR": "0" },
@@ -66,6 +92,11 @@ describe('Engine Integration (Real Pipe)', () => {
     });
 
     it('executes a simple MOCKDB query on the real engine', async () => {
+        if (!exePath) {
+            console.warn('Skipping query integration test: ETL-SQL engine not found.');
+            return;
+        }
+
         return new Promise<void>((resolve, reject) => {
             const child = cp.spawn(exePath, ['ui', 'repl', '--json'], {
                 env: { ...process.env, "FORCE_COLOR": "0" },

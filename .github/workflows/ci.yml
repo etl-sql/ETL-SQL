@@ -88,6 +88,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.x'
+
+      - name: Build engine for integration tests
+        run: dotnet build src/ETL-SQL.App/ETL-SQL.App.csproj --configuration Debug
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
