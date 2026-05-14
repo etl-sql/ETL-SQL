@@ -94,8 +94,7 @@ namespace ETL_SQL.Engine
             if (string.IsNullOrEmpty(name)) return null;
             if (context.HasColumn(name)) return context[name];
 
-            var parts = name.Split('.');
-            var baseName = parts.Last();
+            var baseName = name.Contains(".") ? name.Substring(name.LastIndexOf('.') + 1) : name;
             var qualifier = name.Contains(".") ? name.Substring(0, name.LastIndexOf('.')) : null;
             var suffix = "." + baseName;
 
@@ -106,42 +105,62 @@ namespace ETL_SQL.Engine
             // Without them, an unqualified "ColA" could incorrectly resolve when the same base name
             // exists under two different table qualifiers, producing a silent wrong-value bug.
             var allNames = context.GetColumnNames();
-            
-            // Pre-scan for qualified suffixes only if we have a qualifier
-            var qualifiedSuffixes = qualifier != null 
-                ? allNames.Where(k => k.Contains(".")).ToHashSet(StringComparer.OrdinalIgnoreCase)
-                : null;
+
+            // When a qualifier is present, build an index from baseName → qualified keys so the
+            // "belongs to another qualifier" check is O(1) per candidate instead of O(N).
+            Dictionary<string, List<string>>? qualifiedByBase = null;
+            if (qualifier != null)
+            {
+                qualifiedByBase = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+                foreach (var k in allNames)
+                {
+                    if (!k.Contains(".")) continue;
+                    var kBase = k.Substring(k.LastIndexOf('.') + 1);
+                    if (!qualifiedByBase.TryGetValue(kBase, out var list))
+                        qualifiedByBase[kBase] = list = new List<string>();
+                    list.Add(k);
+                }
+            }
 
             foreach (var k in allNames)
             {
-                // Case 1: Partial match on baseName or suffix
-                if (k.Equals(baseName, StringComparison.OrdinalIgnoreCase) || k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                if (!k.Equals(baseName, StringComparison.OrdinalIgnoreCase) && !k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (qualifier != null)
                 {
-                    if (qualifier != null)
+                    // User specified a qualifier (#A.ID)
+                    if (k.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase))
                     {
-                        // User specified a qualifier (#A.ID)
-                        if (k.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase))
-                            strongMatches.Add(k);
-                        else if (!k.Contains("."))
+                        strongMatches.Add(k);
+                    }
+                    else if (!k.Contains("."))
+                    {
+                        // An unqualified column "k" should only be included if no other qualifier
+                        // owns it — i.e., there is no "otherTable.k" key in the row for a different qualifier.
+                        bool belongsToAnother = false;
+                        if (qualifiedByBase!.TryGetValue(k, out var qualifiedKeysForK))
                         {
-                            // If the row contains a strongly qualified version of this unqualified column for a DIFFERENT qualifier,
-                            // then this unqualified column actually belongs to that other block.
-                            var targetSuffix = "." + k;
-                            bool belongsToAnother = qualifiedSuffixes!.Any(other => other.EndsWith(targetSuffix, StringComparison.OrdinalIgnoreCase) && !other.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase));
-                            if (!belongsToAnother)
+                            foreach (var qk in qualifiedKeysForK)
                             {
-                                weakMatches.Add(k);
+                                if (!qk.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    belongsToAnother = true;
+                                    break;
+                                }
                             }
                         }
+                        if (!belongsToAnother)
+                            weakMatches.Add(k);
                     }
+                }
+                else
+                {
+                    // User did NOT specify a qualifier (ID)
+                    if (!k.Contains("."))
+                        strongMatches.Add(k); // Strong match: exact unqualified match
                     else
-                    {
-                        // User did NOT specify a qualifier (ID)
-                        if (!k.Contains("."))
-                            strongMatches.Add(k); // Strong match: exact unqualified match
-                        else
-                            weakMatches.Add(k); // Weak match: ID matches #A.ID
-                    }
+                        weakMatches.Add(k); // Weak match: ID matches #A.ID
                 }
             }
 

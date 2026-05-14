@@ -17,7 +17,7 @@ namespace ETL_SQL.Services
         Defined       // Only allow ApprovedSafeZones
     }
 
-    public class SecurityService
+    public partial class SecurityService
     {
         /// <summary>
         /// Returns a SHA-256 digest of <c>MachineName:UserName</c> as a stable per-machine identifier.
@@ -36,9 +36,12 @@ namespace ETL_SQL.Services
         }
 
         private readonly ILogger _logger;
-        private static readonly Regex ConnRegex = new Regex(@"(CREATE\s+CONNECTION\s+\w+\s+ON\s+\w+\s*\()(.*?)(\))(?:\s+WITH\s*\((.*?)\))?", RegexOptions.IgnoreCase | RegexOptions.Singleline);
-        private static readonly Regex PasswordOptionRegex = new Regex(@"(PASSWORD\s*=\s*)(['""])(.*?)\2", RegexOptions.IgnoreCase);
-        private static readonly Regex EncRegex = new Regex(@"(['""])ENC:[A-Za-z0-9+/=]*\1", RegexOptions.Compiled);
+        [GeneratedRegex(@"(CREATE\s+CONNECTION\s+\w+\s+ON\s+\w+\s*\()(.*?)(\))(?:\s+WITH\s*\((.*?)\))?", RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+        private static partial Regex ConnRegex();
+        [GeneratedRegex(@"(PASSWORD\s*=\s*)(['""])(.*?)\2", RegexOptions.IgnoreCase)]
+        private static partial Regex PasswordOptionRegex();
+        [GeneratedRegex(@"(['""])ENC:[A-Za-z0-9+/=]*\1")]
+        private static partial Regex EncRegex();
         // On case-sensitive filesystems (Linux), path prefix checks must be case-sensitive.
         private static readonly StringComparison PathComparison = RuntimeInformation.IsOSPlatform(OSPlatform.Linux)
             ? StringComparison.Ordinal
@@ -595,7 +598,7 @@ namespace ETL_SQL.Services
         {
             if (string.IsNullOrEmpty(password)) return text;
 
-            return EncRegex.Replace(text, m =>
+            return EncRegex().Replace(text, m =>
             {
                 try
                 {
@@ -615,7 +618,7 @@ namespace ETL_SQL.Services
         {
             if (string.IsNullOrEmpty(password)) return text;
 
-            return ConnRegex.Replace(text, m =>
+            return ConnRegex().Replace(text, m =>
             {
                 var targetWithQuotes = m.Groups[2].Value.Trim();
                 var options = m.Groups[4].Value;
@@ -641,7 +644,7 @@ namespace ETL_SQL.Services
                 // 2. Encrypt PASSWORD option in WITH clause
                 if (m.Groups[4].Success)
                 {
-                    var updatedOptions = PasswordOptionRegex.Replace(options, pm =>
+                    var updatedOptions = PasswordOptionRegex().Replace(options, pm =>
                     {
                         var pwd = pm.Groups[3].Value;
                         if (!string.IsNullOrEmpty(pwd) && !pwd.StartsWith("ENC:"))
@@ -667,7 +670,7 @@ namespace ETL_SQL.Services
         /// </summary>
         public bool NeedsEncryption(string text)
         {
-            foreach (Match m in ConnRegex.Matches(text))
+            foreach (Match m in ConnRegex().Matches(text))
             {
                 var targetWithQuotes = m.Groups[2].Value.Trim();
                 var options = m.Groups[4].Value;
@@ -685,9 +688,9 @@ namespace ETL_SQL.Services
                 }
 
                 // Check PASSWORD option in WITH clause
-                if (m.Groups[4].Success && PasswordOptionRegex.IsMatch(options))
+                if (m.Groups[4].Success && PasswordOptionRegex().IsMatch(options))
                 {
-                    var pm = PasswordOptionRegex.Match(options);
+                    var pm = PasswordOptionRegex().Match(options);
                     var pwd = pm.Groups[3].Value;
                     if (!string.IsNullOrEmpty(pwd) && !pwd.StartsWith("ENC:"))
                         return true;
