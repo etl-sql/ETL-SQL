@@ -43,6 +43,8 @@ ETL-SQL follows a T-SQL-like dialect with extensions and restrictions. For full 
 | **[Data_Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Data_Connectors.md)** | Every connector token, all `WITH()` options, authentication patterns, aliases, quick-reference table |
 | **[Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md)** | All data types, `CAST`/`TRY_CAST`, string/date/math/regex/window/JSON/XML functions with full signatures and examples |
 | **[Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md)** | File/directory operations, `SEND FILE`/`RECEIVE FILE`, `SEND EMAIL`, lineage/tagging, SSH key generation, Docker integration, profiling |
+| **[Lineage.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Lineage.md)** | `TAG`, `LINEAGE`, `SET LINEAGE`, lineage capture patterns, metadata tagging on rows and pipelines |
+| **[RelativeDate_Parameters.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/RelativeDate_Parameters.md)** | Relative date parameter syntax, `@TODAY`, `@NOW`, offset expressions, use in `WHERE` clauses and report filters |
 | **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** | `.rptsql` file structure, all visual types, MAPPINGS roles, STYLE/THEME, CONTAINER/NAVIGATION syntax, filter visuals, multi-report hosting |
 
 Key syntax facts:
@@ -198,11 +200,12 @@ Use this map to find the right document for any task.
 | Connector options and authentication | **[Data_Connectors.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Data_Connectors.md)** |
 | Functions (string, date, math, regex, window) | **[Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md)** |
 | File ops, email, lineage, Docker, jobs | **[Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md)** |
+| Lineage capture, `TAG`, pipeline metadata | **[Lineage.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Lineage.md)** |
+| Relative date parameters (`@TODAY`, offsets, report filters) | **[RelativeDate_Parameters.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/RelativeDate_Parameters.md)** |
 | Complete production recipes | **[Cookbook.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Cookbook.md)** |
 | Pipeline mental model for new users | **[User_Manual.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/User_Manual.md)** |
 | Sample script inventory (55+ scripts in `/samples/`) | **[Sample_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Sample_Guide.md)** |
 | Reporting (`.rptsql`, `CREATE VISUAL`, dashboards) | **[Report_SQL_Guide.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Report_SQL_Guide.md)** |
-| Master language reference (comprehensive) | **[ETL_SQL_Language_Reference.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/ETL_SQL_Language_Reference.md)** |
 
 ### Contributing Engine Code
 | Need | Document |
