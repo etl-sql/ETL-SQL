@@ -367,32 +367,28 @@ namespace ETL_SQL.ReportBuilder.CLI
             
             using var proc = new Process { StartInfo = psi };
             
-            string? boundUrl = null;
+            var urlSource = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
             proc.OutputDataReceived += (s, e) => {
                 if (e.Data == null) return;
                 Console.WriteLine(e.Data);
                 if (e.Data.StartsWith("REPORT_URL="))
-                {
-                    boundUrl = e.Data.Substring("REPORT_URL=".Length).Trim();
-                }
+                    urlSource.TrySetResult(e.Data.Substring("REPORT_URL=".Length).Trim());
             };
             proc.ErrorDataReceived += (s, e) => {
                 if (e.Data != null) Console.Error.WriteLine(e.Data);
             };
 
             if (!proc.Start()) { Console.Error.WriteLine("error: Failed to start ReportPlayer."); return 1; }
-            
+
             proc.BeginOutputReadLine();
             proc.BeginErrorReadLine();
 
-            // Wait up to 5s for the URL to be reported
-            for (int i = 0; i < 50 && boundUrl == null; i++) {
-                await Task.Delay(100);
-            }
+            // Wait up to 60s — dotnet run (dev mode) can take 10–30s on first build
+            var completed = await Task.WhenAny(urlSource.Task, Task.Delay(60_000));
+            var boundUrl  = completed == urlSource.Task ? urlSource.Task.Result : null;
 
             if (boundUrl != null)
             {
-                // Note: We use the boundUrl from the child process output
                 try {
                     Process.Start(new ProcessStartInfo(boundUrl) { UseShellExecute = true });
                 }
