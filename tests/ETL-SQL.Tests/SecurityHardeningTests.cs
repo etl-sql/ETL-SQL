@@ -52,6 +52,75 @@ namespace ETL_SQL.Engine.Tests
             Assert.Equal(1, result);
         }
 
+        private static Mock<IExecutionContext> MakeMockContext()
+        {
+            var mock = new Mock<IExecutionContext>();
+            mock.Setup(c => c.OuterRowStack).Returns(new Stack<Row>());
+            mock.Setup(c => c.VarContext).Returns(new Mock<IVariableContext>().Object);
+            mock.Setup(c => c.Connections).Returns(new Dictionary<string, IDataSource>());
+            var mockFr = new Mock<ETL_SQL.Core.Functions.IFunctionRegistry>();
+            mockFr.Setup(f => f.IsRegistered(It.IsAny<string>())).Returns(false);
+            mock.Setup(c => c.FunctionRegistry).Returns(mockFr.Object);
+            var mockDocker = new Mock<IDockerManager>();
+            mockDocker.Setup(d => d.GetConnectionString(It.IsAny<string>())).Returns((string?)null);
+            mock.Setup(c => c.DockerManager).Returns(mockDocker.Object);
+            return mock;
+        }
+
+        [Fact]
+        public async Task Evaluator_QualifiedIdentifier_ResolvesToCorrectTable()
+        {
+            var evaluator = new ExpressionEvaluator(MakeMockContext().Object);
+
+            var schema = new TableSchema(new[] { "T1.ID", "T2.ID" });
+            var row = new Row(schema, new object[] { 10, 20 });
+
+            // T1.ID should resolve to 10 despite T2.ID also existing
+            var result = await evaluator.Evaluate(new IdentifierExpression("T1.ID"), row);
+            Assert.Equal(10, result);
+        }
+
+        [Fact]
+        public async Task Evaluator_QualifiedIdentifier_NoMatch_ReturnsNull()
+        {
+            var evaluator = new ExpressionEvaluator(MakeMockContext().Object);
+
+            var schema = new TableSchema(new[] { "T1.ID", "T2.ID" });
+            var row = new Row(schema, new object[] { 10, 20 });
+
+            // T3.ID has no match — should return null, not throw
+            var result = await evaluator.Evaluate(new IdentifierExpression("T3.ID"), row);
+            Assert.Null(result);
+        }
+
+        [Fact]
+        public async Task Evaluator_UnqualifiedIdentifier_SingleWeakMatch_Resolves()
+        {
+            var evaluator = new ExpressionEvaluator(MakeMockContext().Object);
+
+            // Only T1.Score — unqualified "Score" should resolve via weak match
+            var schema = new TableSchema(new[] { "T1.Score", "T1.Name" });
+            var row = new Row(schema, new object[] { 99, "Alice" });
+
+            var result = await evaluator.Evaluate(new IdentifierExpression("Score"), row);
+            Assert.Equal(99, result);
+        }
+
+        [Fact]
+        public async Task Evaluator_QualifiedIdentifier_UnqualifiedColOwnedByOtherTable_IsExcluded()
+        {
+            var evaluator = new ExpressionEvaluator(MakeMockContext().Object);
+
+            // Row has both unqualified "Name" and "T2.Name".
+            // When resolving T1.Name, the unqualified "Name" is owned by T2 → not a weak match for T1.
+            // T1.Name doesn't exist as a qualified key → null.
+            var schema = new TableSchema(new[] { "Name", "T2.Name" });
+            var row = new Row(schema, new object[] { "direct", "from-t2" });
+
+            var result = await evaluator.Evaluate(new IdentifierExpression("T1.Name"), row);
+            Assert.Null(result);
+        }
+
         [Theory]
         [InlineData("SELECT * FROM T1", "src.T1")]
         [InlineData("SELECT * FROM T1 JOIN T2 ON 1=1", "src.T1", "src.T2")]
