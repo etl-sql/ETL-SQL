@@ -705,6 +705,11 @@ namespace ETL_SQL.Services
                     .Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
                            StringSplitOptions.RemoveEmptyEntries);
 
+                // Path is the root itself (e.g. "C:\", "/") — return as-is to preserve root semantics.
+                // Trimming the separator would convert "C:\" to "C:" which Path.GetFullPath resolves
+                // to the current directory on that drive, defeating root-access blocking.
+                if (parts.Length == 0) return root;
+
                 var current = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
                 foreach (var part in parts)
                 {

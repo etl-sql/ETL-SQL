@@ -163,30 +163,30 @@ namespace ETL_SQL.Engine.Handlers
             context.Connections[stmt.ConnectionName] = ds;
             _logger.WriteLine($"Connection {stmt.ConnectionName} {(alreadyExists ? "altered" : "created")}.", ConsoleColor.Green);
 
-            Console.Error.WriteLine("[TRACE] CREATE CONNECTION: Fetching columns...");
+            _logger.Debug("CREATE CONNECTION: Fetching columns for {ConnectionName}...", stmt.ConnectionName);
             // Generate a preview result for the Result Panel
             context.CancellationToken.ThrowIfCancellationRequested();
             var preview = new DataTable();
             var cols = (await ds.GetColumnsAsync()).ToList();
-            Console.Error.WriteLine($"[TRACE] CREATE CONNECTION: Found {cols.Count} columns.");
+            _logger.Debug("CREATE CONNECTION: Found {ColumnCount} columns for {ConnectionName}.", cols.Count, stmt.ConnectionName);
             if (cols.Any())
             {
                 preview.SetColumns(cols.Take(10));
                 try
                 {
-                    Console.Error.WriteLine("[TRACE] CREATE CONNECTION: Reading sample batches...");
+                    _logger.Debug("CREATE CONNECTION: Reading preview rows for {ConnectionName}...", stmt.ConnectionName);
                     var sampleBatches = ds.ReadBatches(10).Take(1);
                     await foreach (var b in sampleBatches.WithCancellation(context.CancellationToken))
                     {
-                        Console.Error.WriteLine($"[TRACE] CREATE CONNECTION: Got batch with {b.Rows.Count} rows.");
+                        _logger.Debug("CREATE CONNECTION: Preview batch has {RowCount} rows.", b.Rows.Count);
                         context.CancellationToken.ThrowIfCancellationRequested();
-                        foreach (var r in b.Rows.Take(10)) 
+                        foreach (var r in b.Rows.Take(10))
                         {
                             context.CancellationToken.ThrowIfCancellationRequested();
                             await preview.AddRowAsync(r);
                         }
                     }
-                    Console.Error.WriteLine("[TRACE] CREATE CONNECTION: Preview complete.");
+                    _logger.Debug("CREATE CONNECTION: Preview complete for {ConnectionName}.", stmt.ConnectionName);
                 }
                 catch (Exception ex)
                 {
@@ -215,7 +215,9 @@ namespace ETL_SQL.Engine.Handlers
             {
                 var varName = match.Groups[1].Value;
                 var envValue = Environment.GetEnvironmentVariable(varName);
-                return envValue ?? match.Value; // Keep as is if not found
+                if (envValue == null)
+                    _logger.Warning("CREATE CONNECTION: environment variable '{VarName}' is not set; placeholder left as-is.", varName);
+                return envValue ?? match.Value;
             });
         }
     }

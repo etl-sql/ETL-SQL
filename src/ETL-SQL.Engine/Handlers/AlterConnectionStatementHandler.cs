@@ -22,6 +22,9 @@ namespace ETL_SQL.Engine.Handlers
 
         public Type SupportedStatementType => typeof(AlterConnectionStatement);
 
+        private static readonly HashSet<string> FileConnectorTypes = new(StringComparer.OrdinalIgnoreCase)
+            { "FLATFILE", "CSV", "JSON", "XML", "EXCEL", "PARQUET", "AVRO", "DIRECTORY", "SQLITE" };
+
         public async Task Execute(Statement statement, IExecutionContext context)
         {
             var stmt = (AlterConnectionStatement)statement;
@@ -60,8 +63,7 @@ namespace ETL_SQL.Engine.Handlers
             target = Interpolate(target ?? "");
 
             // Resolve path for file-based connectors
-            var fileConnectors = new[] { "FLATFILE", "CSV", "JSON", "XML", "EXCEL", "PARQUET", "AVRO", "DIRECTORY", "SQLITE" };
-            if (fileConnectors.Contains(connectionType?.ToUpperInvariant()))
+            if (FileConnectorTypes.Contains(connectionType ?? string.Empty))
                 target = context.ResolvePath(target);
 
             var connector = _connectorRegistry.GetConnector(connectionType ?? string.Empty)
@@ -88,8 +90,18 @@ namespace ETL_SQL.Engine.Handlers
             context.LastResult = new DataTable();
         }
 
-        private static string Interpolate(string value) =>
-            Regex.Replace(value, @"\${(\w+)}", m => Environment.GetEnvironmentVariable(m.Groups[1].Value) ?? m.Value);
+        private string Interpolate(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return value;
+            return Regex.Replace(value, @"\${(\w+)}", m =>
+            {
+                var varName = m.Groups[1].Value;
+                var envValue = Environment.GetEnvironmentVariable(varName);
+                if (envValue == null)
+                    _logger.Warning("ALTER CONNECTION: environment variable '{VarName}' is not set; placeholder left as-is.", varName);
+                return envValue ?? m.Value;
+            });
+        }
 
         private string StringifyOption(object? val)
         {

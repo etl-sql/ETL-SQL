@@ -1,4 +1,6 @@
 # ETL-SQL Development Roadmap
+## Bugs
+- [ ] **VS Code when launch doesn't launch**  Click the launch button starts up the serve but doesn't open chrome automatically like it used to
 
 ---
 

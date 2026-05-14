@@ -85,12 +85,19 @@ public class AuthController(
         return Ok(new LoginResponse(jwt, newRaw, expiresAt));
     }
 
+    private int? GetCurrentUserId()
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        return int.TryParse(value, out var id) ? id : null;
+    }
+
     [HttpPost("change-password")]
     [Authorize]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest req)
     {
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var user   = await userManager.FindByIdAsync(userId.ToString());
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+        var user   = await userManager.FindByIdAsync(userId.Value.ToString());
         if (user is null) return NotFound();
 
         var result = await userManager.ChangePasswordAsync(user, req.CurrentPassword, req.NewPassword);
@@ -99,7 +106,7 @@ public class AuthController(
 
         user.MustChangePassword = false;
         await userManager.UpdateAsync(user);
-        await auditService.LogAsync(userId, "PASSWORD_CHANGED", "User", userId.ToString());
+        await auditService.LogAsync(userId.Value, "PASSWORD_CHANGED", "User", userId.Value.ToString());
 
         return NoContent();
     }
@@ -117,8 +124,9 @@ public class AuthController(
             await db.SaveChangesAsync();
         }
 
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        await auditService.LogAsync(userId, "LOGOUT", "User", userId.ToString());
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+        await auditService.LogAsync(userId.Value, "LOGOUT", "User", userId.Value.ToString());
         return NoContent();
     }
 }

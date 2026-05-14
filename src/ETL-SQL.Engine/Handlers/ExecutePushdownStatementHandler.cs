@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Data;
@@ -53,20 +54,14 @@ namespace ETL_SQL.Engine.Handlers
             _logger.WriteLine($"Pushing down native SQL to {connectionName}...", ConsoleColor.Cyan);
 
             string sqlToExecute = stmt.SqlText;
-            
-            // If the user included the connection prefix, strip it (e.g. m.dbo.Employee -> dbo.Employee)
-            // This is necessary because some users write fully-qualified ETL-SQL names even in pushdown blocks.
-            string prefix = connectionName + ".";
-            if (sqlToExecute.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                sqlToExecute = sqlToExecute.Substring(prefix.Length);
-            }
-            else
-            {
-                // Simple cleanup for common cases (e.g. FROM m.table)
-                sqlToExecute = sqlToExecute.Replace(" " + prefix, " ", StringComparison.OrdinalIgnoreCase)
-                                         .Replace("(" + prefix, "(", StringComparison.OrdinalIgnoreCase);
-            }
+
+            // Strip the ETL-SQL connection prefix wherever it appears as a qualifier
+            // (e.g. "FROM m.dbo.Employee" → "FROM dbo.Employee"). Use a word-boundary
+            // negative lookbehind so we don't corrupt occurrences inside string literals
+            // that happen to contain the connection name followed by a dot.
+            string escapedName = Regex.Escape(connectionName);
+            sqlToExecute = Regex.Replace(sqlToExecute, $@"(?<![.\w]){escapedName}\.", "", RegexOptions.IgnoreCase);
+            _logger.Debug("Pushdown SQL prefix stripped for connection {ConnectionName}.", connectionName);
 
             if (context.IsWhatIf)
             {
