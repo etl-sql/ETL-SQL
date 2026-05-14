@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 import * as cp from 'child_process';
 import * as path from 'path';
 
@@ -23,13 +23,13 @@ describe('Engine Integration (Real Pipe)', () => {
 
             child.stdout.on('data', (data) => {
                 const text = data.toString().trim();
-                if (text) console.log(`[INTEGRATION STDOUT] ${text}`);
+                if (text) { console.log(`[INTEGRATION STDOUT] ${text}`); }
                 buffer += data.toString();
                 const lines = buffer.split('\n');
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                    if (!line.trim()) continue;
+                    if (!line.trim()) { continue; }
                     try {
                         const msg = JSON.parse(line);
                         if (msg.type === 'status' && msg.status === 'ready') {
@@ -51,7 +51,7 @@ describe('Engine Integration (Real Pipe)', () => {
 
             child.stderr.on('data', (data) => {
                 const text = data.toString().trim();
-                if (text) console.log(`[INTEGRATION STDERR] ${text}`);
+                if (text) { console.log(`[INTEGRATION STDERR] ${text}`); }
             });
 
             child.on('close', (code) => {
@@ -105,10 +105,13 @@ describe('Engine Integration (Real Pipe)', () => {
                 }
             });
 
-            child.on('close', (code) => {
+            child.on('close', () => {
                 clearTimeout(timeout);
-                if (doneReceived) resolve();
-                else reject(new Error(`Query failed. Done received: ${doneReceived}`));
+                if (doneReceived) {
+                    resolve();
+                } else {
+                    reject(new Error(`Query failed. Done received: ${doneReceived}`));
+                }
             });
         });
     });

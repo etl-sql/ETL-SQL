@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * report-runtime.js unit tests
  *
@@ -72,7 +73,7 @@ function makeDOM(extraSetup?: (win: any) => void): any {
     // Prevent fetch from being called (not available in jsdom by default).
     win.fetch = () => Promise.reject(new Error('fetch not available in tests'));
 
-    if (extraSetup) extraSetup(win);
+    if (extraSetup) { extraSetup(win); }
 
     // Execute the script; __reportRuntime__ is attached to win.
     const script = dom.window.document.createElement('script');
@@ -224,7 +225,7 @@ describe('DRILL_IN action', () => {
             w.echarts = {
                 init: () => ({
                     setOption: () => {},
-                    on: (event: string, handler: any) => { if (event === 'click') clickHandler = handler; },
+                    on: (event: string, handler: any) => { if (event === 'click') { clickHandler = handler; } },
                     getOption: () => ({}),
                 }),
             };
@@ -281,7 +282,7 @@ describe('DRILL_IN action', () => {
             w.echarts = {
                 init: () => ({
                     setOption: () => {},
-                    on: (event: string, h: any) => { if (event === 'click') clickHandler = h; },
+                    on: (event: string, h: any) => { if (event === 'click') { clickHandler = h; } },
                     getOption: () => ({}),
                 }),
             };
@@ -331,7 +332,7 @@ describe('cross-filter (CROSS_FILTER = ON)', () => {
             w.echarts = {
                 init: () => ({
                     setOption: () => {},
-                    on: (event: string, handler: any) => { if (event === 'click') clickHandler = handler; },
+                    on: (event: string, handler: any) => { if (event === 'click') { clickHandler = handler; } },
                     getOption: () => ({}),
                 }),
             };

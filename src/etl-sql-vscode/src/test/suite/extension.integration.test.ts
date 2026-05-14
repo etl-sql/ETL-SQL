@@ -1,6 +1,5 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import * as path from 'path';
 
 suite('Extension Integration Test Suite', () => {
 	vscode.window.showInformationMessage('Starting integration tests...');
