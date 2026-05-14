@@ -25,15 +25,11 @@ namespace ETL_SQL.Tests.Orchestration
             public Dictionary<string, string>? Options => null;
             public string ConnectorType => "MOCK_REMOTE";
 
-            public Task<IEnumerable<FileMetaData>> ListFilesAsync(string path)
+            public async IAsyncEnumerable<FileMetaData> ListFilesAsync(string path)
             {
-                return Task.FromResult(RemoteFiles.Keys.Select(k => new FileMetaData
-                {
-                    Name = k,
-                    FullPath = k,
-                    Size = 100,
-                    IsDirectory = false
-                }));
+                await Task.CompletedTask;
+                foreach (var k in RemoteFiles.Keys)
+                    yield return new FileMetaData { Name = k, FullPath = k, Size = 100, IsDirectory = false };
             }
 
             public Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)

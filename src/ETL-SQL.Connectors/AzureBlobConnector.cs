@@ -100,24 +100,20 @@ namespace ETL_SQL.Connectors
             return _client.GetBlobContainerClient(_containerName);
         }
 
-        // TODO: When IRemoteFileSystem.ListFilesAsync is updated to return IAsyncEnumerable<FileMetaData>,
-        // remove the intermediate list and yield directly from the GetBlobsAsync async enumerator.
-        public async Task<IEnumerable<FileMetaData>> ListFilesAsync(string path)
+        public async IAsyncEnumerable<FileMetaData> ListFilesAsync(string path)
         {
             var container = GetContainer();
-            var results = new List<FileMetaData>();
             await foreach (var blob in container.GetBlobsAsync(BlobTraits.None, BlobStates.None, path, default))
             {
-                results.Add(new FileMetaData
+                yield return new FileMetaData
                 {
                     Name = blob.Name.Split('/').Last(),
                     FullPath = blob.Name,
                     Size = blob.Properties.ContentLength ?? 0,
                     LastModified = blob.Properties.LastModified?.DateTime ?? DateTime.MinValue,
                     IsDirectory = false
-                });
+                };
             }
-            return results;
         }
 
         public async Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
@@ -148,10 +144,9 @@ namespace ETL_SQL.Connectors
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
-            var files = await ListFilesAsync("");
             var table = new DataTable();
             table.ColumnNames.AddRange(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
-            foreach (var f in files)
+            await foreach (var f in ListFilesAsync(""))
             {
                 await table.AddRowAsync(new Row
                 {

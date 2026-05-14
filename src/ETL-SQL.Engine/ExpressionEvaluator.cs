@@ -94,84 +94,105 @@ namespace ETL_SQL.Engine
             if (string.IsNullOrEmpty(name)) return null;
             if (context.HasColumn(name)) return context[name];
 
-            var baseName = name.Contains(".") ? name.Substring(name.LastIndexOf('.') + 1) : name;
-            var qualifier = name.Contains(".") ? name.Substring(0, name.LastIndexOf('.')) : null;
-            var suffix = "." + baseName;
+            var match = ColumnMatcher.FindMatch(name, context.GetColumnNames());
+            if (match.IsAmbiguous)
+                throw new ExecutionException($"Ambiguous identifier '{name}'. Matches: {string.Join(", ", match.Candidates)}");
 
-            var strongMatches = new List<string>();
-            var weakMatches = new List<string>();
+            return match.ResolvedKey != null ? context[match.ResolvedKey] : null;
+        }
 
-            // GetColumnNames() includes dynamic qualified keys added by join pushdown (e.g. "t.ColA").
-            // Without them, an unqualified "ColA" could incorrectly resolve when the same base name
-            // exists under two different table qualifiers, producing a silent wrong-value bug.
-            var allNames = context.GetColumnNames();
-
-            // When a qualifier is present, build an index from baseName → qualified keys so the
-            // "belongs to another qualifier" check is O(1) per candidate instead of O(N).
-            Dictionary<string, List<string>>? qualifiedByBase = null;
-            if (qualifier != null)
+        /// <summary>
+        /// Resolves qualified and unqualified column name references against a set of row column names.
+        /// Classifies candidates as strong (exact qualifier match) or weak (unqualified fallback),
+        /// and detects cross-qualifier ambiguity.
+        /// </summary>
+        private static class ColumnMatcher
+        {
+            public readonly struct MatchResult
             {
-                qualifiedByBase = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
-                foreach (var k in allNames)
-                {
-                    if (!k.Contains(".")) continue;
-                    var kBase = k.Substring(k.LastIndexOf('.') + 1);
-                    if (!qualifiedByBase.TryGetValue(kBase, out var list))
-                        qualifiedByBase[kBase] = list = new List<string>();
-                    list.Add(k);
-                }
+                public string? ResolvedKey  { get; init; }
+                public bool    IsAmbiguous  { get; init; }
+                public IReadOnlyList<string> Candidates { get; init; }
+
+                public static MatchResult NoMatch => new() { Candidates = Array.Empty<string>() };
+                public static MatchResult Ambiguous(IReadOnlyList<string> c)
+                    => new() { IsAmbiguous = true, Candidates = c };
+                public static MatchResult Resolved(string key)
+                    => new() { ResolvedKey = key, Candidates = Array.Empty<string>() };
             }
 
-            foreach (var k in allNames)
+            public static MatchResult FindMatch(string name, IEnumerable<string> columnNames)
             {
-                if (!k.Equals(baseName, StringComparison.OrdinalIgnoreCase) && !k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-                    continue;
+                var allNames  = columnNames as IReadOnlyList<string> ?? columnNames.ToList();
+                var baseName  = name.Contains('.') ? name[(name.LastIndexOf('.') + 1)..] : name;
+                var qualifier = name.Contains('.') ? name[..name.LastIndexOf('.')] : null;
+                var suffix    = "." + baseName;
 
+                var strongMatches = new List<string>();
+                var weakMatches   = new List<string>();
+
+                // When a qualifier is present, build an index from baseName → qualified keys so the
+                // "belongs to another qualifier" check is O(1) per candidate instead of O(N).
+                Dictionary<string, List<string>>? qualifiedByBase = null;
                 if (qualifier != null)
                 {
-                    // User specified a qualifier (#A.ID)
-                    if (k.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase))
+                    qualifiedByBase = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var k in allNames)
                     {
-                        strongMatches.Add(k);
+                        if (!k.Contains('.')) continue;
+                        var kBase = k[(k.LastIndexOf('.') + 1)..];
+                        if (!qualifiedByBase.TryGetValue(kBase, out var list))
+                            qualifiedByBase[kBase] = list = new List<string>();
+                        list.Add(k);
                     }
-                    else if (!k.Contains("."))
+                }
+
+                foreach (var k in allNames)
+                {
+                    if (!k.Equals(baseName, StringComparison.OrdinalIgnoreCase)
+                        && !k.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (qualifier != null)
                     {
-                        // An unqualified column "k" should only be included if no other qualifier
-                        // owns it — i.e., there is no "otherTable.k" key in the row for a different qualifier.
-                        bool belongsToAnother = false;
-                        if (qualifiedByBase!.TryGetValue(k, out var qualifiedKeysForK))
+                        if (k.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase))
                         {
-                            foreach (var qk in qualifiedKeysForK)
+                            strongMatches.Add(k);
+                        }
+                        else if (!k.Contains('.'))
+                        {
+                            // Include an unqualified column only if no other qualifier owns it.
+                            bool belongsToAnother = false;
+                            if (qualifiedByBase!.TryGetValue(k, out var qualifiedKeysForK))
                             {
-                                if (!qk.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase))
+                                foreach (var qk in qualifiedKeysForK)
                                 {
-                                    belongsToAnother = true;
-                                    break;
+                                    if (!qk.StartsWith(qualifier + ".", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        belongsToAnother = true;
+                                        break;
+                                    }
                                 }
                             }
+                            if (!belongsToAnother)
+                                weakMatches.Add(k);
                         }
-                        if (!belongsToAnother)
-                            weakMatches.Add(k);
+                    }
+                    else
+                    {
+                        if (!k.Contains('.'))
+                            strongMatches.Add(k); // Exact unqualified match
+                        else
+                            weakMatches.Add(k);   // Weak: bare "ID" matches qualified "#A.ID"
                     }
                 }
-                else
-                {
-                    // User did NOT specify a qualifier (ID)
-                    if (!k.Contains("."))
-                        strongMatches.Add(k); // Strong match: exact unqualified match
-                    else
-                        weakMatches.Add(k); // Weak match: ID matches #A.ID
-                }
+
+                var finalMatches = strongMatches.Count > 0 ? strongMatches : weakMatches;
+
+                if (finalMatches.Count > 1) return MatchResult.Ambiguous(finalMatches);
+                if (finalMatches.Count == 1) return MatchResult.Resolved(finalMatches[0]);
+                return MatchResult.NoMatch;
             }
-
-            var finalMatches = strongMatches.Count > 0 ? strongMatches : weakMatches;
-
-            if (finalMatches.Count > 1)
-                throw new ExecutionException($"Ambiguous identifier '{name}'. Matches: {string.Join(", ", finalMatches)}");
-
-            if (finalMatches.Count == 1) return context[finalMatches[0]];
-
-            return null;
         }
 
         /// <summary>Evaluates an expression against a row context.</summary>

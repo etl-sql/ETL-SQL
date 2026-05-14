@@ -72,34 +72,8 @@ namespace ETL_SQL.Engine.Handlers
             var rowCount = context.Telemetry.LastStatementRowsProcessed;
 
             // ── 5. Portal persistence (Parquet write → registry → refresh job) ──────
-            // Intentional ordering: write the file first so the registry entry always points
-            // to data that exists.  If registry update succeeds but CreateRefreshJob fails,
-            // the dataset is registered but will not auto-refresh — the operator must re-run
-            // the script or create a job manually.  No rollback is attempted because the
-            // Parquet file and registry entry are both valid; only the scheduled refresh is missing.
             if (registry != null)
-            {
-                var parquetPath = registry.BuildDatasetFilePath(stmt.TempTableName, folderPath);
-
-                await WriteToParquet(stmt.TempTableName, parquetPath, stmt, context);
-                WriteSidecarScript(stmt, parquetPath);
-
-                await registry.RegisterOrUpdate(new DatasetMetadata
-                {
-                    Name            = stmt.TempTableName,
-                    FolderPath      = folderPath,
-                    ParquetFilePath = parquetPath,
-                    SourceQuery     = stmt.SourceQuery.ToSql(),
-                    AccessLevel     = stmt.AccessLevel,
-                    LastRefresh     = DateTime.UtcNow,
-                    Ttl             = stmt.Ttl,
-                    RefreshInterval = stmt.RefreshInterval,
-                    RowCount        = rowCount
-                });
-
-                if (!string.IsNullOrWhiteSpace(stmt.RefreshInterval))
-                    await CreateRefreshJob(stmt, parquetPath, context);
-            }
+                await PersistToPortal(stmt, registry, folderPath, rowCount, context);
 
             // ── 6. Register AST in report context (for ManifestBuilder) ───────────
             RegisterReportContext(stmt, context);
@@ -120,16 +94,44 @@ namespace ETL_SQL.Engine.Handlers
                 || !existing.LastRefresh.HasValue)
                 return false;
 
-            var ttlStr = ttlOverride ?? existing.Ttl;
-            if (string.IsNullOrWhiteSpace(ttlStr)) return false;
+            TimeSpan? ttl = ttlOverride == null && existing.CachedTtl.HasValue
+                ? existing.CachedTtl
+                : ParseDuration(ttlOverride ?? existing.Ttl);
 
-            // ParseDuration is called once per dataset check (not in a hot loop), so the
-            // allocation cost is acceptable.  If profiling shows this on the critical path,
-            // store TimeSpan? CachedTtl in DatasetMetadata and populate it at registration.
-            var ttl = ParseDuration(ttlStr);
             if (!ttl.HasValue) return false;
 
             return existing.LastRefresh.Value + ttl.Value > DateTime.UtcNow;
+        }
+
+        // Intentional ordering: write Parquet first so the registry entry always points to data that exists.
+        // If registry update succeeds but CreateRefreshJob fails, the dataset is registered but will not
+        // auto-refresh — the operator must re-run the script or create a job manually.  No rollback is
+        // attempted because the Parquet file and registry entry are both valid; only the refresh job is missing.
+        private async Task PersistToPortal(
+            CreateDatasetStatement stmt, IDatasetRegistry registry,
+            string folderPath, long rowCount, IExecutionContext context)
+        {
+            var parquetPath = registry.BuildDatasetFilePath(stmt.TempTableName, folderPath);
+
+            await WriteToParquet(stmt.TempTableName, parquetPath, stmt, context);
+            WriteSidecarScript(stmt, parquetPath);
+
+            await registry.RegisterOrUpdate(new DatasetMetadata
+            {
+                Name            = stmt.TempTableName,
+                FolderPath      = folderPath,
+                ParquetFilePath = parquetPath,
+                SourceQuery     = stmt.SourceQuery.ToSql(),
+                AccessLevel     = stmt.AccessLevel,
+                LastRefresh     = DateTime.UtcNow,
+                Ttl             = stmt.Ttl,
+                CachedTtl       = ParseDuration(stmt.Ttl),
+                RefreshInterval = stmt.RefreshInterval,
+                RowCount        = rowCount
+            });
+
+            if (!string.IsNullOrWhiteSpace(stmt.RefreshInterval))
+                await CreateRefreshJob(stmt, parquetPath, context);
         }
 
         private async Task MaterializeSourceQuery(CreateDatasetStatement stmt, IExecutionContext context)

@@ -15,7 +15,7 @@ namespace ETL_SQL.Data
 
     public interface IRemoteFileSystem : IAsyncDisposable
     {
-        Task<IEnumerable<FileMetaData>> ListFilesAsync(string path);
+        IAsyncEnumerable<FileMetaData> ListFilesAsync(string path);
         Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true);
         Task DownloadFileAsync(string remotePath, string localPath, bool overwrite = true);
         Task DeleteFileAsync(string remotePath);

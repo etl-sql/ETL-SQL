@@ -89,18 +89,19 @@ namespace ETL_SQL.Connectors
             }
         }
 
-        public Task<IEnumerable<FileMetaData>> ListFilesAsync(string path)
+        public async IAsyncEnumerable<FileMetaData> ListFilesAsync(string path)
         {
+            await Task.CompletedTask;
             EnsureConnected();
-            var items = _client!.GetListing(path);
-            return Task.FromResult(items.Select(i => new FileMetaData
-            {
-                Name = i.Name,
-                FullPath = i.FullName,
-                Size = i.Size,
-                LastModified = i.Modified,
-                IsDirectory = i.Type == FtpObjectType.Directory
-            }));
+            foreach (var i in _client!.GetListing(path))
+                yield return new FileMetaData
+                {
+                    Name = i.Name,
+                    FullPath = i.FullName,
+                    Size = i.Size,
+                    LastModified = i.Modified,
+                    IsDirectory = i.Type == FtpObjectType.Directory
+                };
         }
 
         public Task UploadFileAsync(string localPath, string remotePath, bool overwrite = true)
@@ -132,10 +133,9 @@ namespace ETL_SQL.Connectors
 
         public async IAsyncEnumerable<DataTable> ReadBatches(int batchSize = 10000)
         {
-            var files = await ListFilesAsync("");
             var table = new DataTable();
             table.ColumnNames.AddRange(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
-            foreach (var f in files)
+            await foreach (var f in ListFilesAsync(""))
             {
                 await table.AddRowAsync(new Row
                 {

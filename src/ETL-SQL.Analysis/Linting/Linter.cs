@@ -57,83 +57,72 @@ namespace ETL_SQL.Analysis.Linting
 
         private void DiscoverFromStatement(Statement statement, ScriptMetadataOverlay overlay)
         {
-            if (statement.Ctes != null)
-            {
-                foreach (var cte in statement.Ctes)
-                {
-                    overlay.RegisterTable("DEFAULT", cte.Name);
-                    if (cte.ColumnNames != null)
-                    {
-                        foreach (var col in cte.ColumnNames) overlay.RegisterColumn("DEFAULT", cte.Name, col);
-                    }
-                }
-            }
+            DiscoverCtes(statement, overlay);
 
-            if (statement is CreateConnectionStatement conn)
+            switch (statement)
             {
-                overlay.RegisterConnection(conn.name, conn.type ?? "UNKNOWN");
+                case CreateConnectionStatement conn:    DiscoverCreateConnection(conn, overlay);    break;
+                case CreateTableStatement create:       DiscoverCreateTable(create, overlay);       break;
+                case ExecutePushdownStatement pushdown: DiscoverPushdown(pushdown, overlay);        break;
+                case BlockStatement block:              DiscoverBlock(block, overlay);              break;
+                case IfStatement ifStmt:                DiscoverIf(ifStmt, overlay);                break;
+                case WhileStatement whileStmt:          DiscoverFromStatement(whileStmt.Body, overlay);     break;
+                case ForStatement forStmt:              DiscoverFromStatement(forStmt.Body, overlay);       break;
+                case ForeachStatement foreachStmt:      DiscoverFromStatement(foreachStmt.Body, overlay);   break;
+                case TryCatchStatement tryCatch:        DiscoverTryCatch(tryCatch, overlay);        break;
+                case CreateProcedureStatement proc:     DiscoverFromStatement(proc.Body, overlay);  break;
+                case CreateFunctionStatement func:      DiscoverFromStatement(func.Body, overlay);  break;
+                case ParallelStatement parallel:        DiscoverFromStatement(parallel.Body, overlay);      break;
+                case ParallelForStatement parallelFor:  DiscoverFromStatement(parallelFor.Body, overlay);   break;
             }
-            else if (statement is CreateTableStatement create)
+        }
+
+        private static void DiscoverCtes(Statement statement, ScriptMetadataOverlay overlay)
+        {
+            if (statement.Ctes == null) return;
+            foreach (var cte in statement.Ctes)
             {
-                string connName = create.TargetTable.ConnectionName ?? "DEFAULT";
-                string tableName = NormalizeName(create.TargetTable.TableName);
-                overlay.RegisterTable(connName, tableName);
-                foreach (var col in create.Columns)
-                {
-                    overlay.RegisterColumn(connName, tableName, col.ColumnName);
-                }
+                overlay.RegisterTable("DEFAULT", cte.Name);
+                if (cte.ColumnNames != null)
+                    foreach (var col in cte.ColumnNames) overlay.RegisterColumn("DEFAULT", cte.Name, col);
             }
-            else if (statement is ExecutePushdownStatement pushdown)
-            {
-                string connName = pushdown.ConnectionName is IdentifierExpression id ? id.Name : "DEFAULT";
-                DiscoverFromNativeBlock(pushdown.SqlText, connName, overlay);
-            }
-            else if (statement is BlockStatement block)
-            {
-                foreach (var s in block.Statements) DiscoverFromStatement(s, overlay);
-            }
-            else if (statement is IfStatement ifStmt)
-            {
-                DiscoverFromStatement(ifStmt.IfBody, overlay);
-                if (ifStmt.ElseIfClauses != null)
-                {
-                    foreach (var ei in ifStmt.ElseIfClauses) DiscoverFromStatement(ei.Body, overlay);
-                }
-                if (ifStmt.ElseBody != null) DiscoverFromStatement(ifStmt.ElseBody, overlay);
-            }
-            else if (statement is WhileStatement whileStmt)
-            {
-                DiscoverFromStatement(whileStmt.Body, overlay);
-            }
-            else if (statement is ForStatement forStmt)
-            {
-                DiscoverFromStatement(forStmt.Body, overlay);
-            }
-            else if (statement is ForeachStatement foreachStmt)
-            {
-                DiscoverFromStatement(foreachStmt.Body, overlay);
-            }
-            else if (statement is TryCatchStatement tryCatch)
-            {
-                DiscoverFromStatement(tryCatch.TryBody, overlay);
-                DiscoverFromStatement(tryCatch.CatchBody, overlay);
-            }
-            else if (statement is CreateProcedureStatement proc)
-            {
-                DiscoverFromStatement(proc.Body, overlay);
-            }
-            else if (statement is CreateFunctionStatement func)
-            {
-                DiscoverFromStatement(func.Body, overlay);
-            }
-            else if (statement is ParallelStatement parallel)
-            {
-                DiscoverFromStatement(parallel.Body, overlay);
-            }
-            else if (statement is ParallelForStatement parallelFor)
-            {
-                DiscoverFromStatement(parallelFor.Body, overlay);
-            }
+        }
+
+        private static void DiscoverCreateConnection(CreateConnectionStatement conn, ScriptMetadataOverlay overlay)
+            => overlay.RegisterConnection(conn.name, conn.type ?? "UNKNOWN");
+
+        private void DiscoverCreateTable(CreateTableStatement create, ScriptMetadataOverlay overlay)
+        {
+            string connName   = create.TargetTable.ConnectionName ?? "DEFAULT";
+            string tableName  = NormalizeName(create.TargetTable.TableName);
+            overlay.RegisterTable(connName, tableName);
+            foreach (var col in create.Columns)
+                overlay.RegisterColumn(connName, tableName, col.ColumnName);
+        }
+
+        private void DiscoverPushdown(ExecutePushdownStatement pushdown, ScriptMetadataOverlay overlay)
+        {
+            string connName = pushdown.ConnectionName is IdentifierExpression id ? id.Name : "DEFAULT";
+            DiscoverFromNativeBlock(pushdown.SqlText, connName, overlay);
+        }
+
+        private void DiscoverBlock(BlockStatement block, ScriptMetadataOverlay overlay)
+        {
+            foreach (var s in block.Statements) DiscoverFromStatement(s, overlay);
+        }
+
+        private void DiscoverIf(IfStatement ifStmt, ScriptMetadataOverlay overlay)
+        {
+            DiscoverFromStatement(ifStmt.IfBody, overlay);
+            if (ifStmt.ElseIfClauses != null)
+                foreach (var ei in ifStmt.ElseIfClauses) DiscoverFromStatement(ei.Body, overlay);
+            if (ifStmt.ElseBody != null) DiscoverFromStatement(ifStmt.ElseBody, overlay);
+        }
+
+        private void DiscoverTryCatch(TryCatchStatement tryCatch, ScriptMetadataOverlay overlay)
+        {
+            DiscoverFromStatement(tryCatch.TryBody, overlay);
+            DiscoverFromStatement(tryCatch.CatchBody, overlay);
         }
 
         private void DiscoverFromNativeBlock(string sql, string connectionName, ScriptMetadataOverlay overlay)

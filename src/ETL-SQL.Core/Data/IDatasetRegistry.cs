@@ -17,6 +17,7 @@ namespace ETL_SQL.Core.Data
         public DatasetAccessLevel AccessLevel     { get; set; } = DatasetAccessLevel.Private;
         public DateTime?          LastRefresh     { get; set; }
         public string?            Ttl             { get; set; }
+        public TimeSpan?          CachedTtl       { get; set; } // Parsed from Ttl at registration; avoids repeated string parsing
         public string?            RefreshInterval { get; set; }
         public long               RowCount        { get; set; }
         public string?            ColumnSchema    { get; set; } // JSON

@@ -38,13 +38,13 @@ Findings are independent of the roadmap phases below. Fix before v1 launch.
 - [x] **`CreateConnectionStatementHandler.cs` — Execute() has 10+ responsibilities**
   One method handles: expression evaluation, decryption, path resolution, connector lookup, existing-connection teardown, connection string building, column discovery, preview data generation, and result materialisation. Extract preview generation into a `ConnectionPreviewBuilder` helper and the teardown/replace logic into a separate method.
 
-- [ ] **`CreateDatasetStatementHandler.cs` — Mixes execution, persistence, and orchestration**
+- [x] **`CreateDatasetStatementHandler.cs` — Mixes execution, persistence, and orchestration**
   Execute() evaluates the query, writes Parquet, updates the dataset registry, and creates a portal refresh job. The registry/job steps belong in a post-execution hook or coordinator, not in the handler.
 
-- [ ] **`ExpressionEvaluator.cs` — `ResolveIdentifierFallback` mixes resolution strategy with ambiguity detection**
+- [x] **`ExpressionEvaluator.cs` — `ResolveIdentifierFallback` mixes resolution strategy with ambiguity detection**
   The fallback method classifies columns into strong/weak match buckets, detects cross-qualifier ambiguity, and throws execution exceptions — all in one 60-line method. Extract a `ColumnMatcher` class with a clear `MatchResult` return type.
 
-- [ ] **`Linter.cs:50–116` — `DiscoverScriptMetadata` switches over 10+ statement types inline**
+- [x] **`Linter.cs:50–116` — `DiscoverScriptMetadata` switches over 10+ statement types inline**
   Metadata discovery logic for each statement type should delegate to statement-specific visitor methods, not accumulate in one giant switch. Use the visitor pattern or `IMetadataDiscoverer` per statement type.
 
 ---
@@ -133,10 +133,10 @@ Findings are independent of the roadmap phases below. Fix before v1 launch.
 - [x] **`CreateConnectionStatementHandler.cs:178` — `ReadBatches(10).Take(1)` batch size should be minimal**
   `ReadBatches(batchSize: 10)` then `Take(1)` is fine now (10 rows), but the comment and parameter name are inconsistent — the intent is "preview rows", not "batch count". Rename the parameter and add a comment so a future refactor does not inadvertently pass a large batch size here.
 
-- [ ] **`BulkInsertStatementHandler` — Row-by-row error fallback is O(N) write operations**
+- [x] **`BulkInsertStatementHandler` — Row-by-row error fallback is O(N) write operations**
   When a batch write fails, the fallback tries each row individually using `WriteBatches()` per row. For an insert of 100 000 rows with a high error rate, this degrades to 100 000 individual write calls. Consider a binary-search bisect strategy (write half-batch, isolate failing half) or accumulate good rows and write in a single pass after error rows are identified.
 
-- [ ] **`CreateDatasetStatementHandler` — TTL `ParseDuration` called on every execution**
+- [x] **`CreateDatasetStatementHandler` — TTL `ParseDuration` called on every execution**
   `IsFreshEnough()` calls `ParseDuration(stmt.Ttl)` every time a dataset is evaluated. The parsed duration value should be cached in `DatasetMetadata` at registration time.
 
 ---
@@ -149,7 +149,7 @@ Findings are independent of the roadmap phases below. Fix before v1 launch.
 - [x] **`AlterConnectionStatementHandler.cs:63` — Hardcoded file-connector name array**
   `new[] { "FLATFILE", "CSV", "JSON", "XML", "EXCEL", ... }` must be manually updated whenever a new file connector is added. Extract to a `FileConnectorNames` constant set in the connector registry so the handler does not need to know connector identities.
 
-- [ ] **`AzureBlobConnector.cs` — `Task<IEnumerable<string>>` should be `IAsyncEnumerable<string>`**
+- [x] **`AzureBlobConnector.cs` — `Task<IEnumerable<string>>` should be `IAsyncEnumerable<string>`**
   Listing blobs over a network is inherently streaming. Returning `Task<IEnumerable<string>>` buffers all results in memory before returning. Changing to `IAsyncEnumerable<string>` allows callers to process blobs incrementally.
 
 - [x] **`ExpressionEvaluator.cs` — `qualifiedSuffixes.Where(...).ToHashSet()` allocated inside hot path**
@@ -173,25 +173,24 @@ Findings are independent of the roadmap phases below. Fix before v1 launch.
     - `ACTIONS` = outbound events emitted by visuals, controls, and buttons.
     - `INTERACTIONS` = cross-visual selection/filter/highlight behavior.
     - Portal commands = administrative DDL/operations such as users, folders, grants, publishing, subscriptions, and refresh jobs.
-- [ ] Decide the final grammar contract in `Docs/Reference/Grammar.md` before implementation. Since the product has not gone live, prefer one canonical syntax over compatibility aliases.
-- [ ] Update `Docs/Report_SQL_Guide.md`, editor help, samples, and tests only after the grammar direction is settled.
+- [ ] Decide the remaining final grammar contract in `Docs/Reference/Grammar.md` before implementation. Since the product has not gone live, prefer one canonical syntax over compatibility aliases.
+- [x] Page syntax decision: canonical syntax is `CREATE PAGE <name> AS (...)`; remove the old `CREATE PAGE <name> AS LAYOUT (...)` form from docs, help, samples, and tests before launch unless a deliberate compatibility decision is made.
+- [ ] Update `Docs/Report_SQL_Guide.md`, editor help, samples, and tests after the remaining grammar direction is settled.
 
 ### Phase 1 — Report layout syntax
-- [ ] Make `LAYOUT (...)` an explicit bucket for pages and containers.
-- [ ] Change canonical page syntax to avoid repeating `PAGE` or forcing `AS LAYOUT`:
+- [ ] Make `LAYOUT (...)` an explicit bucket for containers; pages use the page body itself for layout placement.
+- [ ] Implement the canonical page syntax without repeating `PAGE` or forcing `AS LAYOUT`:
   ```sql
-  CREATE PAGE Overview AS (
+  CREATE PAGE overview AS (
     TITLE = 'Executive Overview',
-    LAYOUT (
-      STRUCTURE = 'K K / A B / C C',
-      MAP (
-        'K' = KpiStrip,
-        'A' = RevenueByRegion,
-        'B' = MarginByProduct,
-        'C' = OrderDetail
-      ),
-      GAP = '16px'
+    STRUCTURE = 'K K / A B / C C',
+    MAP (
+      'K' = KpiStrip,
+      'A' = RevenueByRegion,
+      'B' = MarginByProduct,
+      'C' = OrderDetail
     ),
+    GAP = '16px',
     STYLE (THEME = light)
   );
   ```
@@ -308,6 +307,14 @@ Findings are independent of the roadmap phases below. Fix before v1 launch.
 - [ ] Add portal integration tests for publish, permissions, subscriptions, refresh, export, audit, and catalog search.
 - [ ] Update `AGENTS.md`, `Docs/Report_SQL_Guide.md`, `Docs/Reference/Grammar.md`, `Docs/Strategy/ReportPortal_Strategy.md`, editor help, and sample guide so all agents and users generate the same syntax.
 - [ ] Remove old docs/examples for replaced syntax before launch unless a deliberate compatibility decision is made.
+
+- [ ] **Phase 6 — Advanced Visualization Capability Gaps (BI Parity)**
+    - [x] **GANTT Visual**: Port the existing Orchestrator Portal Gantt implementation (ECharts 'custom' series) into the reporting engine.
+    - [ ] **Pivot/Matrix Visual**: Cross-tab representation with collapsible row/column headers (Industry Standard: Power BI Matrix).
+    - [ ] **Sankey/Sunburst**: Relational/Flow visualizations using ECharts native types.
+    - [ ] **Small Multiples (Trellis)**: Repeat a visual across a grid for each category value.
+    - [ ] **Selection Primitives**: Brush/Lasso selection on Scatter/Scatter3D to drive parameter filters (Industry Standard: Tableau Brush).
+    - [ ] **Network Graph**: Force-directed graphs for lineage and relationship exploration.
 
 - [ ] **Fuzzy Matching — Full Feature Set** — See `Docs/Strategy/FuzzyMatching_Strategy.md` for the complete design. Five phases in recommended order:
     - **Phase 1 — `NORMALIZE()` function** *(go first — highest ROI, smallest scope)*: Domain-aware string preprocessing with presets for COMPANY, PERSON, ADDRESS, PHONE, EMAIL. Eliminates surface variation before any similarity algorithm runs.

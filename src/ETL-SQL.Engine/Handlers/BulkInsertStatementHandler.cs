@@ -168,31 +168,23 @@ namespace ETL_SQL.Engine.Handlers
                         {
                             int rowStart = count + 1;
                             int rowEnd = count + mappedBatch.Rows.Count;
-                            _logger.Warning("Batch #{BatchIndex} write failed (rows {RowStart}–{RowEnd}, target '{Target}'): {Message}. Retrying row-by-row (MAXERRORS={MaxErrors}).",
+                            _logger.Warning("Batch #{BatchIndex} write failed (rows {RowStart}–{RowEnd}, target '{Target}'): {Message}. Bisecting to isolate bad rows (MAXERRORS={MaxErrors}).",
                                 batchIndex, rowStart, rowEnd, stmt.TargetTable.TableName, ex.Message, maxErrors);
 
-                            // Fallback: Try writing each row individually
-                            foreach (var row in mappedBatch.Rows)
-                            {
-                                try
-                                {
-                                    var singleRowBatch = new DataTable();
-                                    singleRowBatch.SetColumns(destColumns);
-                                    await singleRowBatch.AddRowAsync(row);
-                                    await destination.WriteBatches(new[] { singleRowBatch }.ToAsyncEnumerable(), append: true);
-                                    count++;
-                                }
-                                catch (Exception rowEx)
-                                {
-                                    errorCount++;
-                                    _logger.Warning("Row {Row} in batch #{BatchIndex} failed (target '{Target}'): {Message}",
-                                        count + 1, batchIndex, stmt.TargetTable.TableName, rowEx.Message);
-                                    if (errorCount > maxErrors)
-                                    {
-                                        throw new ExecutionException($"Max errors ({maxErrors}) exceeded during bulk insert into '{stmt.TargetTable.TableName}'. Last error: {rowEx.Message}", rowEx);
-                                    }
-                                }
-                            }
+                            // Bisect the failing batch: try halves recursively until bad rows are isolated.
+                            // The full batch already failed above; start bisection directly into halves
+                            // to avoid a redundant full-batch retry. Each half is tried as a unit first,
+                            // so clean halves succeed in one write. O(N + M·log N) write calls total
+                            // vs. O(N) for the old row-by-row loop (M = number of bad rows).
+                            var mid = mappedBatch.Rows.Count / 2;
+                            var (w1, e1) = await WriteBisect(
+                                mappedBatch.Rows.Take(mid).ToList(), destColumns, destination,
+                                batchIndex, stmt.TargetTable.TableName, maxErrors, errorCount);
+                            var (w2, e2) = await WriteBisect(
+                                mappedBatch.Rows.Skip(mid).ToList(), destColumns, destination,
+                                batchIndex, stmt.TargetTable.TableName, maxErrors, errorCount + e1);
+                            count += w1 + w2;
+                            errorCount += e1 + e2;
                         }
                         else
                         {
@@ -207,6 +199,43 @@ namespace ETL_SQL.Engine.Handlers
             finally
             {
                 await source.DisposeAsync();
+            }
+        }
+
+        private async Task<(int written, int errors)> WriteBisect(
+            IReadOnlyList<Row> rows, IReadOnlyList<string> destColumns, IDataSource destination,
+            int batchIndex, string targetTable, int maxErrors, int currentErrors)
+        {
+            if (rows.Count == 0) return (0, 0);
+
+            var batch = new DataTable();
+            batch.SetColumns(destColumns.ToList());
+            foreach (var row in rows) await batch.AddRowAsync(row);
+
+            try
+            {
+                await destination.WriteBatches(new[] { batch }.ToAsyncEnumerable(), append: true);
+                return (rows.Count, 0);
+            }
+            catch (Exception ex) when (rows.Count == 1)
+            {
+                if (currentErrors + 1 > maxErrors)
+                    throw new ExecutionException(
+                        $"Max errors ({maxErrors}) exceeded during bulk insert into '{targetTable}'. Last error: {ex.Message}", ex);
+                _logger.Warning("Row in batch #{BatchIndex} failed (target '{Target}'): {Message}",
+                    batchIndex, targetTable, ex.Message);
+                return (0, 1);
+            }
+            catch
+            {
+                var mid = rows.Count / 2;
+                var (w1, e1) = await WriteBisect(
+                    rows.Take(mid).ToList(), destColumns, destination,
+                    batchIndex, targetTable, maxErrors, currentErrors);
+                var (w2, e2) = await WriteBisect(
+                    rows.Skip(mid).ToList(), destColumns, destination,
+                    batchIndex, targetTable, maxErrors, currentErrors + e1);
+                return (w1 + w2, e1 + e2);
             }
         }
     }

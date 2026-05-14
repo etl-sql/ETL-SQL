@@ -99,8 +99,11 @@ namespace ETL_SQL.Tests.Statements
                 await _evaluator.Evaluate(parser.Parse());
 
                 // 3. Assert
-                Assert.Equal(3, failingDs.Rows.Count); // Alice, Bob, Charlie should be in
-                Assert.Equal(3, failingDs.FailedWrites); // 1 batch failure + 2 individual row failures
+                Assert.Equal(3, failingDs.Rows.Count); // Alice, Bob, Charlie should be written
+                // Bisect strategy: 1 full-batch fail + intermediate sub-batch fails + 2 leaf-row fails = 6 total.
+                // More write attempts than the old row-by-row (which was 3), but far fewer for low-error-rate
+                // large batches (O(N + M·log N) vs O(N)).
+                Assert.Equal(6, failingDs.FailedWrites);
                 Assert.Equal(5, (int)_evaluator.Telemetry.RowsProcessed);
             }
             finally

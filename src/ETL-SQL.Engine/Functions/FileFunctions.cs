@@ -38,10 +38,9 @@ namespace ETL_SQL.Engine.Functions
                 throw new ExecutionException($"Connection '{connName}' not found or does not support IRemoteFileSystem.");
             }
 
-            var files = await remoteFs.ListFilesAsync(path);
             var table = new DataTable();
             table.SetColumns(new[] { "Name", "FullPath", "Size", "LastModified", "IsDirectory" });
-            foreach (var fileMeta in files)
+            await foreach (var fileMeta in remoteFs.ListFilesAsync(path))
             {
                 await table.AddRowAsync(new Row
                 {
