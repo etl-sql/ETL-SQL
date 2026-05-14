@@ -62,11 +62,8 @@ jobs:
           if ($content -match "Line coverage:\s+([\d.]+)%") {
             $lineCoverage = [double]$Matches[1]
             Write-Host "Line coverage: $lineCoverage%"
-            # Baseline 2026-04-12: 70.5% — dropped to ~56% after portal + orchestrator
-            # management features were added (those assemblies are integration-tested only).
-            # Threshold lowered to hold the floor; raise back toward 70% as unit tests are added
-            # for ETL-SQL.Connectors (18.9%), ETL-SQL.Orchestrator (32.5%), and ETL-SQL.Reporting (37.1%).
-            $threshold = 54.0
+            # Baseline measured 2026-04-12: 70.5% line coverage
+            $threshold = 70.0
             if ($lineCoverage -lt $threshold) {
               Write-Error "Coverage $lineCoverage% is below threshold $threshold%"
               exit 1
