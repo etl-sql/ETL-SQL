@@ -50,7 +50,13 @@ namespace ETL_SQL.Engine.Engines
                 _logger.Debug("Joining table {TableName}{Alias} ({JoinType})", join.Table.TableName, join.Table.Alias != null ? $" AS {join.Table.Alias}" : "", join.JoinType);
                 var joinRows = await GetJoinRows(join);
 
-                if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase))
+                if (join.IsFuzzy)
+                {
+                    var fuzzyEngine = new FuzzyJoinEngine(_context, _logger);
+                    allBufferedRows = await fuzzyEngine.PerformFuzzyJoin(allBufferedRows, joinRows, join);
+                    continue;
+                }
+                else if (join.JoinType.Equals("SEMI", StringComparison.OrdinalIgnoreCase))
                 {
                     var rightAlias = join.Table.Alias ?? join.Table.TableName;
                     var hashKeysLeft = new List<string>();
@@ -154,6 +160,18 @@ namespace ETL_SQL.Engine.Engines
             }
 
             var joinRows = await GetJoinRows(join); // Buffer right side (usually smaller)
+
+            // FUZZY JOIN in streaming context — buffer left, run buffered fuzzy join, re-stream
+            if (join.IsFuzzy)
+            {
+                var leftBuffered = new List<Row>();
+                await foreach (var l in leftStream) leftBuffered.Add(l);
+                var fuzzyEngine = new FuzzyJoinEngine(_context, _logger);
+                var results = await fuzzyEngine.PerformFuzzyJoin(leftBuffered, joinRows, join);
+                foreach (var r in results) yield return r;
+                yield break;
+            }
+
             var leftAlias = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
             var rightAlias = join.Table.Alias ?? join.Table.TableName;
             var hashKeysLeft = new List<string>();

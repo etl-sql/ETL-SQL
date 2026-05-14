@@ -875,7 +875,11 @@ namespace ETL_SQL.Engine
                     node.EndTicks = Stopwatch.GetTimestamp();
                     CurrentNodeId = parentId;
                     
-                    _localSources.Clear();
+                    // [STABILIZATION] Removed _localSources.Clear(). 
+                    // Temporary sources like CTEs are managed via scope/registry, and 
+                    // user #temp tables are now registered in the persistent Connections 
+                    // dictionary via DataSourceManager to ensure visibility across 
+                    // statement boundaries (essential for CREATE VISUAL).
                 }
             }
             else

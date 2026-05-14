@@ -45,6 +45,7 @@ namespace ETL_SQL.Orchestrator
             ETL_SQL.Engine.Functions.StandardFunctions.Register(fnRegistry);
             ETL_SQL.Engine.Functions.JsonFunctions.Register(fnRegistry);
             ETL_SQL.Engine.Functions.XmlFunctions.Register(fnRegistry);
+            ETL_SQL.Engine.Functions.FuzzyFunctions.Register(fnRegistry);
             services.AddSingleton<ETL_SQL.Core.Functions.IFunctionRegistry>(fnRegistry);
 
             var helpRegistry = new ETL_SQL.Core.Metadata.LanguageHelpRegistry();

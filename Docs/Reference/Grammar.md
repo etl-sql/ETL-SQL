@@ -991,6 +991,8 @@ FETCH NEXT 10 ROWS ONLY;
 | `CROSS JOIN` | Cartesian product |
 | `LEFT SEMI JOIN` | Left rows where a match exists on the right |
 | `LEFT ANTI JOIN` | Left rows where no match exists on the right |
+| `FUZZY JOIN` | Like INNER JOIN but matches on similarity score rather than equality; injects `__score` column |
+| `LEFT FUZZY JOIN` | Like LEFT JOIN but matches on similarity score; unmatched left rows appear with NULLs and `__score = NULL` |
 
 #### 5.4.1 Join Algorithms
 ETL-SQL supports three join algorithms. While the engine automatically chooses the best one based on table size and statistics, you can provide a hint to override it.
@@ -1006,6 +1008,79 @@ SELECT * FROM #large AS a
 HASH JOIN #lookup AS b ON a.id = b.id;   -- force hash join for performance
 ```
 
+#### 5.4.2 `FUZZY JOIN` / `LEFT FUZZY JOIN`
+
+Joins two tables on a similarity expression rather than equality. When the `ON` expression contains a `SIMILARITY()` call, the engine builds a trigram blocking index on the right-side table to prune candidates before scoring. If no `SIMILARITY()` call is detected, it falls back to a full nested-loop scan with the threshold expression applied to every pair.
+
+**Syntax**
+
+```sql
+SELECT <columns>, __score
+FROM   <left_table> [AS alias]
+[LEFT] FUZZY JOIN <right_table> [AS alias]
+    ON <similarity_expression> > <threshold>
+    [KEEP BEST <n>];
+```
+
+**Clauses**
+
+| Clause | Required | Description |
+| :--- | :--- | :--- |
+| `ON <expr> > <threshold>` | Yes | Any expression using `SIMILARITY()`, `LEVENSHTEIN()`, or arithmetic over them. The threshold filters matches. |
+| `KEEP BEST <n>` | No | Keep at most N right-side matches per left row, ranked by score descending. Omitting this returns all matches above threshold (fan-out possible). |
+| `__score` | Automatic | The similarity score of the winning match is injected into the result. Selecting it explicitly is optional — it is always available. |
+
+**Semantics**
+
+| Situation | `FUZZY JOIN` | `LEFT FUZZY JOIN` |
+| :--- | :--- | :--- |
+| Match found above threshold | Row(s) included with `__score` | Row(s) included with `__score` |
+| No match above threshold | Left row excluded (like INNER JOIN) | Left row included; right columns NULL, `__score` NULL |
+| Tie at `KEEP BEST 1` | Deterministic tiebreak by right-side row order | Same |
+
+**Examples**
+
+```sql
+-- Basic: best match per left row, must score > 0.80
+SELECT a.id, b.canonical_name, __score
+FROM   #dirty a
+FUZZY JOIN #reference b
+    ON SIMILARITY(NORMALIZE(a.name, 'COMPANY'), NORMALIZE(b.name, 'COMPANY')) > 0.80
+    KEEP BEST 1;
+
+-- Left variant: keep all unmatched left rows too
+SELECT a.id, b.canonical_name, __score
+FROM   #unstructured a
+LEFT FUZZY JOIN #reference b
+    ON SIMILARITY(a.name, b.name) > 0.75
+    KEEP BEST 1;
+
+-- Top 3 candidates per row for human review
+SELECT a.id, b.id AS candidate_id, b.name, __score
+FROM   #dirty a
+FUZZY JOIN #reference b
+    ON SIMILARITY(a.name, b.name) > 0.60
+    KEEP BEST 3
+ORDER BY a.id, __score DESC;
+
+-- Composite scoring across two columns
+SELECT a.id, b.id, __score
+FROM   #dirty a
+FUZZY JOIN #reference b
+    ON 0.6 * SIMILARITY(a.name, b.name) + 0.4 * SIMILARITY(a.city, b.city) > 0.75
+    KEEP BEST 1;
+```
+
+**Scale Expectations**
+
+| Left rows | Right rows | Expected behavior |
+| :--- | :--- | :--- |
+| < 10 k | < 100 k | Fast. Blocking handles it comfortably. |
+| 10 k–100 k | < 500 k | Acceptable. Blocking is essential at this scale. |
+| > 100 k | > 500 k | May be slow. Consider dedicated record-linkage tooling (e.g. Splink). |
+
+> See `Docs/Reference/Standard_Library.md §16` for `NORMALIZE`, `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `METAPHONE`, and `NGRAMS/NGRAM_TOKENS` — the building blocks used in `FUZZY JOIN` expressions.
+
 ### 5.5 `CROSS APPLY` / `OUTER APPLY`
 ```sql
 SELECT o.OrderId, t.LineItem
@@ -1015,6 +1090,21 @@ CROSS APPLY (SELECT * FROM OrderLines WHERE OrderId = o.OrderId) AS t;
 SELECT o.OrderId, t.LineItem
 FROM Orders AS o
 OUTER APPLY (SELECT TOP 1 * FROM OrderLines WHERE OrderId = o.OrderId) AS t;
+```
+
+`CROSS APPLY` is also used to expand table-valued functions such as `STRING_SPLIT`, `NGRAMS`, and `NGRAM_TOKENS`:
+
+```sql
+-- Expand a delimited list column into rows
+SELECT s.id, t.Value AS tag
+FROM #sources s
+CROSS APPLY STRING_SPLIT(s.tags, ',') t;
+
+-- Build a trigram blocking index for fuzzy matching (see §16.5 of Standard_Library.md)
+SELECT gram, r.id AS ref_id
+INTO   #ref_index
+FROM   #reference r
+CROSS APPLY (SELECT Value AS gram FROM NGRAM_TOKENS(r.name)) t;
 ```
 
 ### 5.6 Hierarchical Aggregation

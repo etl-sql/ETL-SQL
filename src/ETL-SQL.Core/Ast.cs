@@ -176,14 +176,17 @@ namespace ETL_SQL.Core
         public TableReference Table { get; }
         public Expression Condition { get; }
         public JoinHint Hint { get; set; } = JoinHint.None;
+        public int? KeepBest { get; init; }  // FUZZY JOIN: KEEP BEST n; null = keep all above threshold
         public bool IsApply => JoinType.Contains("APPLY");
+        public bool IsFuzzy => JoinType.Contains("FUZZY", StringComparison.OrdinalIgnoreCase);
 
-        public JoinClause(string joinType, TableReference table, Expression condition, JoinHint hint = JoinHint.None)
+        public JoinClause(string joinType, TableReference table, Expression condition, JoinHint hint = JoinHint.None, int? keepBest = null)
         {
             JoinType = joinType;
             Table = table;
             Condition = condition;
             Hint = hint;
+            KeepBest = keepBest;
         }
     }
 

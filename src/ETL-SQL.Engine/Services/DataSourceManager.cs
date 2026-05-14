@@ -67,6 +67,8 @@ namespace ETL_SQL.Engine.Services
                 mem.MaxInMemoryBatches = _evaluator.MaxInMemoryBatches;
                 mem.ExecutionContext = _evaluator;
                 
+                // [STABILIZATION] Always register in global connections to ensure persistence 
+                // across statement boundaries within the session.
                 connections[name] = mem;
                 source = mem;
             }

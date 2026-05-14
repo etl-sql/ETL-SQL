@@ -63,7 +63,7 @@ namespace ETL_SQL.Core.Parser
         LF, CR, CRLF, TAB,
         
         // Joins
-        JOIN, INNER, LEFT, RIGHT, OUTER, FULL, CROSS, APPLY, HASH, LOOP,
+        JOIN, INNER, LEFT, RIGHT, OUTER, FULL, CROSS, APPLY, HASH, LOOP, FUZZY, KEEP,
         
         // Set Operations
         UNION, ALL, EXCEPT, INTERSECT,

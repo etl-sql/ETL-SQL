@@ -1,8 +1,16 @@
 # Fuzzy Matching Strategy
 
-**Status:** Planning — no implementation started  
-**Date:** 2026-05-04  
+**Status:** Phases 1–4 shipped; Phase 5 deferred  
+**Date:** 2026-05-14  
 **Scope:** New engine functions, query syntax, and normalization capabilities to support joining unstructured data to structured reference data.
+
+| Phase | Status |
+| :--- | :--- |
+| Phase 1 — `NORMALIZE()` | ✅ Shipped (`FuzzyFunctions.cs`) |
+| Phase 2 — `SIMILARITY`, `LEVENSHTEIN`, `SOUNDEX`, `METAPHONE`, `DMETAPHONE` | ✅ Shipped |
+| Phase 3 — `NGRAMS`, `NGRAM_TOKENS` | ✅ Shipped |
+| Phase 4 — `FUZZY JOIN` syntax | ✅ Shipped |
+| Phase 5 — Embedding-based semantic matching | ⏳ Deferred |
 
 ---
 
@@ -419,15 +427,13 @@ LIMIT 10;
 
 ## Recommended Implementation Order
 
-| Phase | What | Why This Order |
-|-------|------|---------------|
-| **2 first** | `NORMALIZE()` | Highest ROI, smallest scope. Users can combine it with raw SQL `LIKE` and existing `SOUNDEX` immediately. No new syntax. |
-| **1 second** | `SIMILARITY()` + phonetic functions | Provides the primitives that all subsequent phases build on. Users can start writing blocking + scoring patterns manually. |
-| **3 third** | Blocking utilities (`NGRAMS`, `NGRAM_TOKENS`) | Gives power users the tools to work around the cross-join wall before `FUZZY JOIN` exists. Low implementation cost. |
-| **4 fourth** | `FUZZY JOIN` | The ergonomic centerpiece. By this point, the engine has all the underlying primitives and the semantics are well understood from real usage. |
-| **5 last** | Embedding / semantic matching | Only after Phase 4 is shipped and real user feedback identifies where string methods are insufficient. Architecture decision (endpoint vs. bundled model) should be revisited based on what users actually need. |
-
-**Note on Phase 2 going first:** It may seem odd to implement `NORMALIZE()` before `SIMILARITY()`, but normalizing first often makes the exact-join case work where it was failing, which means users get value from Phase 2 even without any fuzzy logic. It also means `SIMILARITY()` testing benefits from normalized inputs, making the threshold behavior more predictable.
+| Phase | What | Status |
+|-------|------|--------|
+| **1** | `NORMALIZE()` | ✅ Shipped — highest ROI, no new syntax, eliminates surface variation before any scoring |
+| **2** | `SIMILARITY()` + phonetic functions | ✅ Shipped — core scoring primitives; unlocks manual blocking patterns |
+| **3** | Blocking utilities (`NGRAMS`, `NGRAM_TOKENS`) | ✅ Shipped — enables inverted-index blocking for power users |
+| **4** | `FUZZY JOIN` | ✅ Shipped — trigram blocking index, LEFT FUZZY JOIN, __score injection, KEEP BEST n |
+| **5** | Embedding / semantic matching | ⏳ Deferred — gather Phase 1–4 user feedback first |
 
 ---
 

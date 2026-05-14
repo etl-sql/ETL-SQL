@@ -70,6 +70,7 @@ namespace ETL_SQL.TUI
             ETL_SQL.Engine.Functions.StandardFunctions.Register(registry);
             ETL_SQL.Engine.Functions.JsonFunctions.Register(registry);
             ETL_SQL.Engine.Functions.XmlFunctions.Register(registry);
+            ETL_SQL.Engine.Functions.FuzzyFunctions.Register(registry);
             services.AddSingleton<Core.Functions.IFunctionRegistry>(registry);
             
             var helpRegistry = new Core.Metadata.LanguageHelpRegistry();

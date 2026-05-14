@@ -675,7 +675,143 @@ PRINT GET_TAG_VALUE('#TaggedUsers', 'UserId', 'd');  -- 'Internal user ID'
 
 ---
 
-## 16. Data Generation Functions
+## 16. Fuzzy Matching Functions
+
+Fuzzy matching functions enable comparison and normalization of strings that may differ due to typos, abbreviations, formatting variation, or phonetic spelling differences. Apply `NORMALIZE` first to eliminate surface variation, then use `SIMILARITY` or a phonetic function to score candidates.
+
+### 16.1 `NORMALIZE` — Domain-Aware Preprocessing
+
+Preprocesses a string to eliminate surface variation before similarity scoring. Applying `NORMALIZE` before `SIMILARITY` typically raises match rates by 5–15 percentage points at the same threshold.
+
+| Syntax | What it does |
+| :--- | :--- |
+| `NORMALIZE(s)` | Base: lowercase, trim, collapse whitespace, Unicode NFC, strip control characters |
+| `NORMALIZE(s, 'COMPANY')` | Remove legal suffixes (LLC, Inc, Corp, Ltd…), expand `&` → `and`, `Mfg` → `Manufacturing`, strip leading articles (The/A/An), strip punctuation |
+| `NORMALIZE(s, 'PERSON')` | Remove titles and generational suffixes (Mr, Mrs, Dr, Jr, Sr, MD, PhD…), normalize hyphens in hyphenated names |
+| `NORMALIZE(s, 'ADDRESS')` | Expand directional abbreviations (N → North, NE → Northeast…), expand street type abbreviations (St → Street, Ave → Avenue, Blvd → Boulevard…), remove unit designators (Apt, Ste, #) |
+| `NORMALIZE(s, 'PHONE')` | Strip all non-digit characters; remove leading country code `1` if result is 11 digits |
+| `NORMALIZE(s, 'EMAIL')` | Lowercase and trim only |
+
+```sql
+-- Normalize before scoring to reduce false non-matches
+SELECT SIMILARITY(
+    NORMALIZE(a.company_name, 'COMPANY'),
+    NORMALIZE(b.company_name, 'COMPANY')
+) AS score
+FROM #unstructured a
+CROSS JOIN #reference b
+WHERE SIMILARITY(
+    NORMALIZE(a.company_name, 'COMPANY'),
+    NORMALIZE(b.company_name, 'COMPANY')
+) > 0.80;
+
+-- Normalize into a temp table once, score repeatedly
+SELECT id, NORMALIZE(name, 'COMPANY') AS norm INTO #norm_ref FROM #reference;
+```
+
+### 16.2 `SIMILARITY` — Normalized Similarity Score
+
+Returns a `DECIMAL` in `[0.0, 1.0]` — `1.0` means identical, `0.0` means completely unlike.
+
+```sql
+SIMILARITY(a, b)                         -- default algorithm: JAROWINKLER
+SIMILARITY(a, b, 'JAROWINKLER')          -- Jaro-Winkler (best for short strings, names)
+SIMILARITY(a, b, 'LEVENSHTEIN')          -- 1 − (edit_distance / max_length)
+SIMILARITY(a, b, 'TRIGRAM')              -- Sørensen-Dice on character trigrams (general purpose)
+SIMILARITY(a, b, 'JACCARD')             -- word-token Jaccard: |intersect| / |union|
+SIMILARITY(a, b, 'TOKENSORT')           -- Jaro-Winkler after sorting tokens (handles name reversal)
+```
+
+| Algorithm | Best for | Avoid when |
+| :--- | :--- | :--- |
+| `JAROWINKLER` | Person names, short identifiers, prefix-heavy strings | Long strings, word-order variation |
+| `LEVENSHTEIN` | Short strings with typos, product codes | Strings of very different lengths |
+| `TRIGRAM` | General purpose, partial matches, longer strings | Very short strings (< 4 chars) |
+| `JACCARD` | Strings where word presence matters more than order | Single-word strings |
+| `TOKENSORT` | Names where first/last may be swapped | Strings that aren't name-like |
+
+### 16.3 `LEVENSHTEIN` — Raw Edit Distance
+
+Returns a whole-number `DECIMAL` — the minimum number of single-character insertions, deletions, or substitutions needed to transform `a` into `b`.
+
+```sql
+LEVENSHTEIN('kitten', 'sitting')  -- → 3
+LEVENSHTEIN('Smith', 'Smith')     -- → 0
+```
+
+Use `LEVENSHTEIN` directly when you need the raw distance (e.g., to enforce a maximum number of changes). Use `SIMILARITY(a, b, 'LEVENSHTEIN')` when you need a normalized 0–1 score.
+
+### 16.4 Phonetic Encoding Functions
+
+Phonetic functions encode pronunciation rather than spelling. They enable fast exact-join blocking on phonetically similar strings.
+
+| Function | Signature | Returns | Best for |
+| :--- | :--- | :--- | :--- |
+| `SOUNDEX` | `SOUNDEX(s)` | 4-character code (e.g. `'R163'`) | English names; very fast; rough |
+| `METAPHONE` | `METAPHONE(s)` | Variable-length code | English; more accurate than Soundex |
+| `DMETAPHONE` | `DMETAPHONE(s)` | Primary code | Multi-origin names; handles European patterns |
+| `DMETAPHONE_ALT` | `DMETAPHONE_ALT(s)` | Alternate code | Join on either primary or alternate for better recall |
+
+```sql
+-- Fast phonetic blocking before expensive SIMILARITY scoring
+SELECT a.*, b.*, SIMILARITY(a.name, b.name) AS score
+INTO   #candidates
+FROM   #dirty a
+JOIN   #reference b ON METAPHONE(a.name) = METAPHONE(b.name);   -- blocking pass
+
+SELECT *, ROW_NUMBER() OVER (PARTITION BY a_id ORDER BY score DESC) AS rank
+FROM   #candidates
+WHERE  score > 0.75;
+
+-- Double Metaphone: match on primary OR alternate for better recall
+SELECT a.*, b.*
+FROM   #dirty a
+JOIN   #reference b
+    ON DMETAPHONE(a.name) = DMETAPHONE(b.name)
+    OR DMETAPHONE_ALT(a.name) = DMETAPHONE(b.name)
+    OR DMETAPHONE(a.name) = DMETAPHONE_ALT(b.name);
+```
+
+### 16.5 `NGRAMS` / `NGRAM_TOKENS` — Blocking Utilities
+
+Table-valued functions that return character n-grams. Used with `CROSS APPLY` to build inverted-index blocking tables that dramatically reduce the candidate set before scoring.
+
+```sql
+NGRAMS(s, n)        -- Returns a table of n-character grams. NGRAMS('hello', 3) → 'hel', 'ell', 'llo'
+NGRAM_TOKENS(s)     -- Convenience: 3-grams, space-padded, lowercased. NGRAM_TOKENS('cat') → ' ca', 'cat', 'at '
+```
+
+Both return a one-column table with column name `Value`.
+
+```sql
+-- Build a trigram inverted index on the reference side (once per session)
+SELECT gram, ref_id
+INTO   #ref_index
+FROM   #reference r
+CROSS APPLY (SELECT Value AS gram FROM NGRAM_TOKENS(r.name)) t;
+
+-- Look up candidates for each unstructured record
+SELECT DISTINCT d.id AS dirty_id, r.ref_id
+INTO   #candidates
+FROM   #dirty d
+CROSS APPLY (SELECT Value AS gram FROM NGRAM_TOKENS(d.name)) dg
+JOIN   #ref_index r ON dg.gram = r.gram;
+
+-- Score only the candidate pairs (far fewer than a full cross join)
+SELECT c.dirty_id, c.ref_id,
+       SIMILARITY(d.name, r.name) AS score
+FROM   #candidates c
+JOIN   #dirty     d ON d.id = c.dirty_id
+JOIN   #reference r ON r.id = c.ref_id
+WHERE  SIMILARITY(d.name, r.name) > 0.80
+ORDER  BY c.dirty_id, score DESC;
+```
+
+> **Performance note:** A raw `CROSS JOIN` + `WHERE SIMILARITY(...) > threshold` is O(n × m). With 10 k unstructured records × 100 k reference records that is 1 billion comparisons. The phonetic blocking pattern (§16.4) or the trigram inverted-index pattern above reduce that to tens or hundreds of candidates per row. `FUZZY JOIN` (see §5.4.2 of Grammar.md) automates this blocking — use it when the pipeline fits; use the manual pattern above when you need finer control over blocking strategy.
+
+---
+
+## 17. Data Generation Functions
 
 These functions are used exclusively within the `GENERATE` statement to define mock data production rules.
 

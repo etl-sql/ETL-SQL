@@ -32,7 +32,8 @@ namespace ETL_SQL.Common
         public static readonly HashSet<string> JoinKeywords = new(StringComparer.OrdinalIgnoreCase)
         {
             "JOIN", "INNER", "LEFT", "RIGHT", "OUTER", "FULL", "CROSS", "APPLY",
-            "UNION", "ALL", "EXCEPT", "INTERSECT"
+            "UNION", "ALL", "EXCEPT", "INTERSECT",
+            "FUZZY", "KEEP"
         };
 
         public static readonly HashSet<string> OperatorKeywords = new(StringComparer.OrdinalIgnoreCase)
@@ -148,7 +149,9 @@ namespace ETL_SQL.Common
             // Data Generation Functions
             "SEQUENCE", "RANDOM", "RANDOM_INT", "RANDOM_DECIMAL",
             // Lineage & governance functions
-            "GET_TAGS", "GET_TAG_VALUE", "HAS_TAG"
+            "GET_TAGS", "GET_TAG_VALUE", "HAS_TAG",
+            // Fuzzy matching functions (Phases 1-3)
+            "NORMALIZE", "SIMILARITY", "LEVENSHTEIN", "SOUNDEX", "METAPHONE", "DMETAPHONE", "DMETAPHONE_ALT", "NGRAMS", "NGRAM_TOKENS"
         };
 
         public static string EngineVersion => typeof(LanguageMetadata).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";

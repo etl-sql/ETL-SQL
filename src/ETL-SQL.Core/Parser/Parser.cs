@@ -1035,27 +1035,34 @@ namespace ETL_SQL.Core.Parser
         public List<JoinClause> ParseJoins()
         {
             var joins = new List<JoinClause>();
-            while (Current.Type == TokenType.JOIN || Current.Type == TokenType.INNER || Current.Type == TokenType.LEFT || 
-                   Current.Type == TokenType.RIGHT || Current.Type == TokenType.OUTER || Current.Type == TokenType.FULL || 
-                   Current.Type == TokenType.CROSS || Current.Type == TokenType.APPLY || Current.Type == TokenType.SEMI || 
-                   Current.Type == TokenType.ANTI || Current.Type == TokenType.HASH || Current.Type == TokenType.LOOP || Current.Type == TokenType.MERGE)
+            while (Current.Type == TokenType.JOIN || Current.Type == TokenType.INNER || Current.Type == TokenType.LEFT ||
+                   Current.Type == TokenType.RIGHT || Current.Type == TokenType.OUTER || Current.Type == TokenType.FULL ||
+                   Current.Type == TokenType.CROSS || Current.Type == TokenType.APPLY || Current.Type == TokenType.SEMI ||
+                   Current.Type == TokenType.ANTI || Current.Type == TokenType.HASH || Current.Type == TokenType.LOOP || Current.Type == TokenType.MERGE ||
+                   Current.Type == TokenType.FUZZY)
             {
                 string joinType = "INNER";
                 JoinHint hint = JoinHint.None;
 
-                if (Match(TokenType.INNER)) 
-                { 
-                    joinType = "INNER"; 
+                if (Match(TokenType.FUZZY))
+                {
+                    joinType = "FUZZY";
+                    Consume(TokenType.JOIN, "Expected 'JOIN' after FUZZY");
+                }
+                else if (Match(TokenType.INNER))
+                {
+                    joinType = "INNER";
                     if (Match(TokenType.HASH)) hint = JoinHint.Hash;
                     else if (Match(TokenType.LOOP)) hint = JoinHint.Loop;
                     else if (Match(TokenType.MERGE)) hint = JoinHint.Merge;
-                    Consume(TokenType.JOIN, "Expected 'JOIN' after INNER [hint]"); 
+                    Consume(TokenType.JOIN, "Expected 'JOIN' after INNER [hint]");
                 }
                 else if (Match(TokenType.LEFT))
                 {
                     joinType = "LEFT"; Match(TokenType.OUTER);
                     if (Match(TokenType.SEMI)) { joinType = "LEFT SEMI"; Consume(TokenType.JOIN, "Expected 'JOIN' after LEFT SEMI"); }
                     else if (Match(TokenType.ANTI)) { joinType = "LEFT ANTI"; Consume(TokenType.JOIN, "Expected 'JOIN' after LEFT ANTI"); }
+                    else if (Match(TokenType.FUZZY)) { joinType = "LEFT FUZZY"; Consume(TokenType.JOIN, "Expected 'JOIN' after LEFT FUZZY"); }
                     else
                     {
                         if (Match(TokenType.HASH)) hint = JoinHint.Hash;
@@ -1121,6 +1128,7 @@ namespace ETL_SQL.Core.Parser
 
                 var joinTable = ParseTableReference();
                 Expression? onCondition = null;
+                int? keepBest = null;
                 if (!joinType.Contains("APPLY") && joinType != "CROSS JOIN")
                 {
                     Consume(TokenType.ON, $"Expected 'ON' after {joinType} JOIN table");
@@ -1130,8 +1138,18 @@ namespace ETL_SQL.Core.Parser
                 {
                     onCondition = new LiteralExpression(true, TokenType.NUMBER);
                 }
-                
-                joins.Add(new JoinClause(joinType, joinTable, onCondition!, hint));
+
+                // FUZZY JOIN: optional KEEP BEST <n>
+                if (joinType.Contains("FUZZY") && Current.Type == TokenType.KEEP)
+                {
+                    Advance(); // consume KEEP
+                    // BEST is an identifier token (not a reserved word)
+                    if (Current.Value?.Equals("BEST", StringComparison.OrdinalIgnoreCase) == true) Advance();
+                    if (int.TryParse(Current.Value, out var kb) && kb > 0) { keepBest = kb; Advance(); }
+                    else throw new SyntaxException("Expected a positive integer after KEEP BEST", Current.Line, Current.Column);
+                }
+
+                joins.Add(new JoinClause(joinType, joinTable, onCondition!, hint, keepBest));
             }
             return joins;
         }

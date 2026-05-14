@@ -73,6 +73,7 @@ namespace ETL_SQL.LSP
                         Engine.Functions.XmlFunctions.Register(functionRegistry);
                         Engine.Functions.RegexFunctions.Register(functionRegistry);
                         Engine.Functions.LineageFunctions.Register(functionRegistry);
+                        Engine.Functions.FuzzyFunctions.Register(functionRegistry);
 
                         services.AddSingleton<IConnectorRegistry>(registry);
                         var helpRegistry = new Core.Metadata.LanguageHelpRegistry();
