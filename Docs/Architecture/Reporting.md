@@ -62,6 +62,7 @@ build / refresh / serve                Kestrel HTTP + ReportHosting
 | `ETL-SQL.Engine` | Statement handlers that register visual/page/dataset/container/navigation definitions into `IExecutionContext` |
 | `ETL-SQL.Reporting` | Manifest building, ECharts rendering, SVG rendering, PDF/CSV/Markdown/terminal rendering, snapshot persistence, shared interaction refresh semantics |
 | `ETL-SQL.ReportHosting` | Reusable report sessions, parameter state, selective refresh, manifest caching, background dataset refresh timers, and multi-report manifest factories |
+| `ETL-SQL.ReportRuntime` | Canonical browser runtime assets (`report-runtime.js`, `echarts.min.js`, CSS themes) — sync to host projects via `scripts/sync-assets.ps1` |
 | `ETL-SQL.ReportBuilder` | Engine-facing `EXPORT REPORT` statement handler compatibility assembly |
 | `ETL-SQL.ReportBuilder.CLI` | `etl-sql-report` CLI — `build`, `refresh`, `serve` sub-commands |
 | `ETL-SQL.ReportPlayer` | Local Kestrel web server, routes, HTML shell, static asset hosting, and report embedding |

@@ -164,18 +164,22 @@ namespace ETL_SQL.Engine.Handlers
             context.Connections[stmt.ConnectionName] = ds;
             _logger.WriteLine($"Connection {stmt.ConnectionName} {(alreadyExists ? "altered" : "created")}.", ConsoleColor.Green);
 
-            _logger.Debug("CREATE CONNECTION: Fetching columns for {ConnectionName}...", stmt.ConnectionName);
-            // Generate a preview result for the Result Panel
+            context.LastResult = await BuildConnectionPreviewAsync(ds, stmt.ConnectionName, context);
+        }
+
+        private async Task<DataTable> BuildConnectionPreviewAsync(IDataSource ds, string connectionName, IExecutionContext context)
+        {
+            _logger.Debug("CREATE CONNECTION: Fetching columns for {ConnectionName}...", connectionName);
             context.CancellationToken.ThrowIfCancellationRequested();
             var preview = new DataTable();
             var cols = (await ds.GetColumnsAsync()).ToList();
-            _logger.Debug("CREATE CONNECTION: Found {ColumnCount} columns for {ConnectionName}.", cols.Count, stmt.ConnectionName);
+            _logger.Debug("CREATE CONNECTION: Found {ColumnCount} columns for {ConnectionName}.", cols.Count, connectionName);
             if (cols.Any())
             {
                 preview.SetColumns(cols.Take(10));
                 try
                 {
-                    _logger.Debug("CREATE CONNECTION: Reading preview rows for {ConnectionName}...", stmt.ConnectionName);
+                    _logger.Debug("CREATE CONNECTION: Reading preview rows for {ConnectionName}...", connectionName);
                     // batchSize=10 here is the preview row limit, not a batch-count.
                     // Take(1) ensures we stop after the first batch.
                     var sampleBatches = ds.ReadBatches(batchSize: 10).Take(1);
@@ -189,16 +193,16 @@ namespace ETL_SQL.Engine.Handlers
                             await preview.AddRowAsync(r);
                         }
                     }
-                    _logger.Debug("CREATE CONNECTION: Preview complete for {ConnectionName}.", stmt.ConnectionName);
+                    _logger.Debug("CREATE CONNECTION: Preview complete for {ConnectionName}.", connectionName);
                 }
                 catch (Exception ex)
                 {
-                    _logger.Debug("Preview data not available for {ConnectionName}: {Message}", stmt.ConnectionName, ex.Message);
+                    _logger.Debug("Preview data not available for {ConnectionName}: {Message}", connectionName, ex.Message);
                 }
             }
             preview.TotalRowsMatched = preview.Rows.Count;
-            preview.ExecutionTimeMs = 0; // Instant metadata preview
-            context.LastResult = preview;
+            preview.ExecutionTimeMs = 0;
+            return preview;
         }
         
         private string StringifyOption(object? val, Expression? expr = null)
