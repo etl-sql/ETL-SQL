@@ -397,9 +397,16 @@ namespace ETL_SQL.Core.Parser
             
             // Riverside: removed swallowed catch block to expose errors.
             TableReference? fromTable = null;
+            var preJoins = new List<JoinClause>();
             if (Match(TokenType.FROM))
             {
                 fromTable = ParseTableReference();
+                // SQL-89 comma-separated multi-table FROM (implicit CROSS JOINs)
+                while (Current.Type == TokenType.COMMA)
+                {
+                    Advance();
+                    preJoins.Add(new JoinClause("CROSS JOIN", ParseTableReference(), new LiteralExpression(true, TokenType.NUMBER)));
+                }
             }
             else
             {
@@ -407,7 +414,8 @@ namespace ETL_SQL.Core.Parser
                 fromTable = new TableReference("DUAL");
             }
 
-            var joins = ParseJoins();
+            var joins = preJoins;
+            joins.AddRange(ParseJoins());
             
             Expression? whereClause = null;
             if (Match(TokenType.WHERE))

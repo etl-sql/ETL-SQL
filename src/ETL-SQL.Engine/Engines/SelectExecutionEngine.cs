@@ -107,7 +107,31 @@ namespace ETL_SQL.Engine.Engines
                     aggInput = WhereStream(inputStream, stmt.WhereClause, _context);
                     whereApplied = true;
                 }
-                allRows = await _aggregateEngine.ApplyAggregation(aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+
+                var bufferedForSpill = new List<Row>();
+                var enumerator = aggInput.GetAsyncEnumerator();
+                try
+                {
+                    int count = 0;
+                    while (count < _context.JoinSpillThreshold && await enumerator.MoveNextAsync())
+                    {
+                        bufferedForSpill.Add(enumerator.Current);
+                        count++;
+                    }
+
+                    if (count >= _context.JoinSpillThreshold)
+                    {
+                        _logger.Info("[SELECT] Aggregate threshold reached ({Threshold}). Switching to ExternalAggregateEngine.", _context.JoinSpillThreshold);
+                        var externalAgg = new ExternalAggregateEngine(_context, _logger);
+                        var combinedStream = PrependRows(bufferedForSpill, ContinueStream(enumerator));
+                        allRows = await externalAgg.ApplyAggregationExternal(combinedStream, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet).ToListAsync();
+                    }
+                    else
+                    {
+                        allRows = await _aggregateEngine.ApplyAggregation(bufferedForSpill.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                    }
+                }
+                finally { await enumerator.DisposeAsync(); }
             }
             else
             {

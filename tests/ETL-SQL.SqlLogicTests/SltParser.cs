@@ -7,6 +7,7 @@ using System.Text;
 namespace ETL_SQL.SqlLogicTests
 {
     public enum SltRecordType { Statement, Query, Halt, HashThreshold, SkipIf, OnlyIf }
+    public enum SltSortMode { None, NoSort, RowSort, ValueSort }
 
     public class SltRecord
     {
@@ -16,6 +17,7 @@ namespace ETL_SQL.SqlLogicTests
         public string? ExpectedResult { get; set; }
         public string? ColumnTypes { get; set; }
         public string? Label { get; set; }
+        public SltSortMode SortMode { get; set; }
         public int LineNumber { get; set; }
         /// <summary>Engine name from skipif/onlyif directive. Used by the runner to decide whether to execute.</summary>
         public string? EngineCondition { get; set; }
@@ -51,7 +53,18 @@ namespace ETL_SQL.SqlLogicTests
                 {
                     var record = new SltRecord { Type = SltRecordType.Query, LineNumber = i + 1 };
                     if (parts.Length > 1) record.ColumnTypes = parts[1];
-                    if (parts.Length > 2) record.Label = parts[2];
+                    // parts[2] is sort mode keyword or a label; parts[3] (if present) is the label
+                    int labelIdx = 2;
+                    if (parts.Length > 2)
+                    {
+                        switch (parts[2].ToLowerInvariant())
+                        {
+                            case "nosort":    record.SortMode = SltSortMode.NoSort;    labelIdx = 3; break;
+                            case "rowsort":   record.SortMode = SltSortMode.RowSort;   labelIdx = 3; break;
+                            case "valuesort": record.SortMode = SltSortMode.ValueSort; labelIdx = 3; break;
+                        }
+                    }
+                    if (parts.Length > labelIdx) record.Label = parts[labelIdx];
                     i++;
                     record.Sql = ReadSql(lines, ref i);
                     record.ExpectedResult = ReadResults(lines, ref i);
@@ -86,7 +99,17 @@ namespace ETL_SQL.SqlLogicTests
                         {
                             var record = new SltRecord { Type = recordType, LineNumber = i + 1, EngineCondition = engineName };
                             if (innerParts.Length > 1) record.ColumnTypes = innerParts[1];
-                            if (innerParts.Length > 2) record.Label = innerParts[2];
+                            int labelIdx = 2;
+                            if (innerParts.Length > 2)
+                            {
+                                switch (innerParts[2].ToLowerInvariant())
+                                {
+                                    case "nosort":    record.SortMode = SltSortMode.NoSort;    labelIdx = 3; break;
+                                    case "rowsort":   record.SortMode = SltSortMode.RowSort;   labelIdx = 3; break;
+                                    case "valuesort": record.SortMode = SltSortMode.ValueSort; labelIdx = 3; break;
+                                }
+                            }
+                            if (innerParts.Length > labelIdx) record.Label = innerParts[labelIdx];
                             i++;
                             record.Sql = ReadSql(lines, ref i);
                             record.ExpectedResult = ReadResults(lines, ref i);

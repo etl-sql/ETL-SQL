@@ -30,14 +30,18 @@ namespace ETL_SQL.Engine.Engines
             {
                 var expandedSets = ExpandGroupingSets(groupingSet);
                 var allResults = new List<Row>();
+                
+                // For grouping sets, we must materialize once to avoid multiple enumerations.
+                var allBufferedRows = await inputStream.ToListAsync();
+
                 foreach (var activeGroupBy in expandedSets)
                 {
-                    // For grouping sets, we unfortunately must buffer or re-read the stream. 
-                    // To keep it simple and correct, we materialize once here.
-                    var allBufferedRows = await inputStream.ToListAsync();
+                    // Pass the materialized list to avoid further materialization in recursive calls
                     var setRows = await ApplyAggregation(allBufferedRows.ToAsyncEnumerable(), activeGroupBy, finalColumns, colNames, havingClause, null);
+                    
                     // Mark which columns were NULL-substituted (GROUPING() support)
-                    var activeKeys = new HashSet<string>(activeGroupBy.Select(e => e.ToSql()), StringComparer.OrdinalIgnoreCase);
+                    var activeKeys = new HashSet<string>(activeGroupBy!.Select(e => NormalizedToSql(e)), StringComparer.OrdinalIgnoreCase);
+                    
                     foreach (var row in setRows)
                     {
                         // For every groupBy column NOT in this set, null out its output column
@@ -45,11 +49,28 @@ namespace ETL_SQL.Engine.Engines
                         {
                             foreach (var expr in groupBy)
                             {
-                                if (!activeKeys.Contains(expr.ToSql()))
+                                if (!activeKeys.Contains(NormalizedToSql(expr)))
                                 {
-                                    var colName = expr is IdentifierExpression id ? id.Name.Split('.').Last() : expr.ToSql();
+                                    var colName = expr is IdentifierExpression id ? id.Name.Split('.').Last() : NormalizedToSql(expr);
+                                    
                                     // Match the output column name
                                     var matchIdx = colNames.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
+                                    
+                                    if (matchIdx == -1)
+                                    {
+                                        // Fallback 1: match by the expression's SQL representation in the final columns
+                                        matchIdx = finalColumns.FindIndex(fc => NormalizedToSql(fc.Expression).Equals(NormalizedToSql(expr), StringComparison.OrdinalIgnoreCase));
+                                    }
+                                    
+                                    if (matchIdx == -1)
+                                    {
+                                        // Fallback 2: match by alias if the expression is an identifier
+                                        if (expr is IdentifierExpression idExpr)
+                                        {
+                                            matchIdx = finalColumns.FindIndex(fc => string.Equals(fc.Alias, idExpr.Name, StringComparison.OrdinalIgnoreCase));
+                                        }
+                                    }
+
                                     if (matchIdx >= 0) row[colNames[matchIdx]] = null;
                                 }
                             }
@@ -186,7 +207,7 @@ namespace ETL_SQL.Engine.Engines
                     int groupIdx = -1;
                     if (groupBy != null)
                     {
-                        groupIdx = groupBy.FindIndex(g => g.ToSql().Equals(finalColumns[i].ToSql(), StringComparison.OrdinalIgnoreCase));
+                        groupIdx = groupBy.FindIndex(g => NormalizedToSql(g).Equals(NormalizedToSql(finalColumns[i].Expression), StringComparison.OrdinalIgnoreCase));
                         if (groupIdx == -1) // check for alias match
                         {
                             groupIdx = groupBy.FindIndex(g => g is IdentifierExpression id && string.Equals(id.Name, finalColumns[i].Alias, StringComparison.OrdinalIgnoreCase));
@@ -270,6 +291,15 @@ namespace ETL_SQL.Engine.Engines
 
             // GroupingSets: use the sets as-is
             return clause.GroupSets.Select(s => s.ToList()).ToList();
+        }
+
+        private string NormalizedToSql(Expression e)
+        {
+            if (e == null) return "";
+            var sql = e.ToSql().ToUpperInvariant();
+            // Remove parentheses for matching purposes
+            while (sql.StartsWith("(") && sql.EndsWith(")")) sql = sql.Substring(1, sql.Length - 2);
+            return sql.Trim();
         }
 
         public bool IsAggregate(Expression? expr)

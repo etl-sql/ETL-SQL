@@ -107,20 +107,36 @@ namespace ETL_SQL.Engine.Engines
                         // Handle GROUPING() / NULL substitution for sub-sets
                         if (expandedSets != null && groupBy != null)
                         {
-                            var activeKeys = new HashSet<string>(activeGroupBy!.Select(e => e.ToSql()), StringComparer.OrdinalIgnoreCase);
-                            foreach (var resRow in partResults)
+                            var activeKeys = new HashSet<string>(activeGroupBy!.Select(e => NormalizedToSql(e)), StringComparer.OrdinalIgnoreCase);
+                            foreach (var row in partResults)
                             {
                                 foreach (var expr in groupBy)
                                 {
-                                    if (!activeKeys.Contains(expr.ToSql()))
+                                    if (!activeKeys.Contains(NormalizedToSql(expr)))
                                     {
-                                        var colName = expr is IdentifierExpression id ? id.Name.Split('.').Last() : expr.ToSql();
+                                        var colName = expr is IdentifierExpression id ? id.Name.Split('.').Last() : NormalizedToSql(expr);
                                         var matchIdx = colNames.FindIndex(c => c.Equals(colName, StringComparison.OrdinalIgnoreCase));
-                                        if (matchIdx >= 0) resRow[colNames[matchIdx]] = null;
+                                        
+                                        if (matchIdx == -1)
+                                        {
+                                            // Fallback 1: match by the expression's SQL representation in the final columns
+                                            matchIdx = finalColumns.FindIndex(fc => NormalizedToSql(fc.Expression).Equals(NormalizedToSql(expr), StringComparison.OrdinalIgnoreCase));
+                                        }
+
+                                        if (matchIdx == -1)
+                                        {
+                                            // Fallback 2: match by alias if the expression is an identifier
+                                            if (expr is IdentifierExpression idExpr)
+                                            {
+                                                matchIdx = finalColumns.FindIndex(fc => string.Equals(fc.Alias, idExpr.Name, StringComparison.OrdinalIgnoreCase));
+                                            }
+                                        }
+
+                                        if (matchIdx >= 0) row[colNames[matchIdx]] = null;
                                     }
                                 }
                                 yieldedAny = true;
-                                yield return resRow;
+                                yield return row;
                             }
                         }
                         else
@@ -235,9 +251,11 @@ namespace ETL_SQL.Engine.Engines
                         }
                         else pIdx = (sIdx & 0x7FFFFFFF) % PartitionCount;
 
-                        // Attach SetIndex to the row so it can be identified during merge phase
-                        row["__SET_IDX"] = sIdx;
-                        await writers[pIdx].WriteRowAsync(row);
+                        // Attach SetIndex to a CLONE of the row so it can be identified during merge phase
+                        // and doesn't interfere with other sets or buffered writers.
+                        var rowToStore = row.Clone();
+                        rowToStore["__SET_IDX"] = sIdx;
+                        await writers[pIdx].WriteRowAsync(rowToStore);
                     }
                 }
             }
@@ -261,6 +279,14 @@ namespace ETL_SQL.Engine.Engines
 
 
 
+        private string NormalizedToSql(Expression e)
+        {
+            if (e == null) return "";
+            var sql = e.ToSql().ToUpperInvariant();
+            // Remove parentheses for matching purposes
+            while (sql.StartsWith("(") && sql.EndsWith(")")) sql = sql.Substring(1, sql.Length - 2);
+            return sql.Trim();
+        }
     }
 }
 

@@ -40,7 +40,7 @@ namespace ETL_SQL.Tests.Hardening.Performance
                 Region,
                 ProductID,
                 COUNT(*) as row_count,
-                SUM(Amount) as total_amount
+                SUM(Total) as total_amount
             FROM src.Sales
             GROUP BY CUBE(Region, ProductID);";
 

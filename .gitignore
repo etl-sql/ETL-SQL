@@ -5,6 +5,7 @@ obj/
 *.suo
 *.userosscache
 *.sln.docstates
+*.lscache
 
 ## NuGet packages
 *.nupkg
@@ -88,6 +89,7 @@ test_warnings*.txt
 test_errors*.txt
 full_tests_run.txt
 # Benchmark / perf captures  
+BenchmarkDotNet.Artifacts/
 benchmark_output*.json
 # Misc one-off diagnostic files
 mixed_source_verbose.txt
@@ -142,6 +144,7 @@ tests_list.txt
 
 # Sample Output
 samples/output/
+*.tmp.json
 
 # Ignore large stress test data
 TestData/test_stress_BigTable.csv

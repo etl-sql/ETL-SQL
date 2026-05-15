@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using ETL_SQL.Core;
 using ETL_SQL.Core.Parser;
@@ -81,32 +84,85 @@ namespace ETL_SQL.SqlLogicTests
             }
         }
 
+        private static readonly Regex _hashPattern =
+            new(@"^(\d+) values hashing to ([0-9a-f]+)$", RegexOptions.Compiled);
+
         private void VerifyResults(SltRecord record, DataTable? actual)
         {
+            var expectedTrimmed = (record.ExpectedResult ?? "").Trim();
+
             if (actual == null)
             {
-                if (!string.IsNullOrEmpty(record.ExpectedResult))
+                if (!string.IsNullOrEmpty(expectedTrimmed))
                     throw new Exception($"Line {record.LineNumber}: Expected results, but query returned no data.");
                 return;
             }
 
-            var actualValues = actual.Rows.SelectMany(r => actual.ColumnNames.Select(c => r[c]?.ToString() ?? "NULL")).ToList();
-            var expectedValues = (record.ExpectedResult ?? "")
+            // Build rows as string arrays using SLT-canonical formatting
+            var rows = actual.Rows
+                .Select(r => actual.ColumnNames.Select(c => FormatSltValue(r[c])).ToArray())
+                .ToList();
+
+            // Apply sort mode
+            IEnumerable<string[]> sortedRows = record.SortMode switch
+            {
+                SltSortMode.RowSort => rows.OrderBy(r => string.Join("\t", r), StringComparer.Ordinal),
+                _ => rows
+            };
+
+            IEnumerable<string> flatValues = sortedRows.SelectMany(r => r);
+            if (record.SortMode == SltSortMode.ValueSort)
+                flatValues = flatValues.OrderBy(v => v, StringComparer.Ordinal);
+
+            var flat = flatValues.ToList();
+
+            // Hash-based comparison (SQLite SLT corpus format)
+            var m = _hashPattern.Match(expectedTrimmed);
+            if (m.Success)
+            {
+                var expectedCount = int.Parse(m.Groups[1].Value);
+                var expectedHash  = m.Groups[2].Value;
+
+                if (flat.Count != expectedCount)
+                    throw new Exception($"Line {record.LineNumber}: Value count mismatch. Expected {expectedCount} values, got {flat.Count}.");
+
+                var actualHash = ComputeSltHash(flat);
+                if (actualHash != expectedHash)
+                    throw new Exception(
+                        $"Line {record.LineNumber}: Hash mismatch. Expected {expectedHash}, got {actualHash}. " +
+                        $"Sample values: {string.Join(", ", flat.Take(5))}");
+                return;
+            }
+
+            // Explicit value comparison
+            var expectedValues = expectedTrimmed
                 .Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
                 .ToList();
 
-            if (actualValues.Count != expectedValues.Count)
-            {
-                throw new Exception($"Line {record.LineNumber}: Row count mismatch. Expected {expectedValues.Count} values, got {actualValues.Count}.");
-            }
+            if (flat.Count != expectedValues.Count)
+                throw new Exception($"Line {record.LineNumber}: Row count mismatch. Expected {expectedValues.Count} values, got {flat.Count}.");
 
-            for (int i = 0; i < actualValues.Count; i++)
+            for (int i = 0; i < flat.Count; i++)
             {
-                if (actualValues[i] != expectedValues[i])
-                {
-                    throw new Exception($"Line {record.LineNumber}: Value mismatch at index {i}. Expected '{expectedValues[i]}', got '{actualValues[i]}'.");
-                }
+                if (flat[i] != expectedValues[i])
+                    throw new Exception($"Line {record.LineNumber}: Value mismatch at index {i}. Expected '{expectedValues[i]}', got '{flat[i]}'.");
             }
+        }
+
+        private static string FormatSltValue(object? value)
+        {
+            if (value == null) return "NULL";
+            if (value is decimal d && d == Math.Truncate(d) && d >= long.MinValue && d <= long.MaxValue)
+                return ((long)d).ToString();
+            return value.ToString() ?? "NULL";
+        }
+
+        private static string ComputeSltHash(List<string> values)
+        {
+            var sb = new StringBuilder();
+            foreach (var v in values) { sb.Append(v); sb.Append('\n'); }
+            var hash = MD5.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
+            return BitConverter.ToString(hash).Replace("-", "").ToLower();
         }
 
         private Evaluator CreateEvaluator(ILogger l)
