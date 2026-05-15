@@ -223,6 +223,7 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.MAX_INTERNAL_OPERATIONS)) return SystemParser.ParseSetThreshold(ThresholdType.MaxInternalOperations);
             if (_parser.Match(TokenType.TELEMETRY)) return SystemParser.ParseSetThreshold(ThresholdType.Telemetry);
             if (_parser.Match(TokenType.INTERACTIVE_MODE)) return SystemParser.ParseSetThreshold(ThresholdType.InteractiveMode);
+            if (_parser.Match(TokenType.CASE_SENSITIVE)) return SystemParser.ParseSetThreshold(ThresholdType.CaseSensitive);
             if (_parser.Match(TokenType.PERSIST)) return SystemParser.ParseSetPersist();
 
 

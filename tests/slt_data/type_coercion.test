@@ -77,8 +77,26 @@ SELECT CASE WHEN 1 = 2 THEN 1 ELSE 0 END;
 ----
 0
 
-# String comparison is case-insensitive (SQL Server-style collation)
+# String comparison is case-insensitive (SQL Server-style collation, default OFF)
 query I
 SELECT CASE WHEN 'abc' = 'ABC' THEN 1 ELSE 0 END;
 ----
 1
+
+# SET CASE_SENSITIVE = ON makes string equality case-sensitive
+statement ok
+SET CASE_SENSITIVE = ON;
+
+query I
+SELECT CASE WHEN 'abc' = 'ABC' THEN 1 ELSE 0 END;
+----
+0
+
+query I
+SELECT CASE WHEN 'abc' = 'abc' THEN 1 ELSE 0 END;
+----
+1
+
+# Restore default — subsequent tests in other files are not affected
+statement ok
+SET CASE_SENSITIVE = OFF;

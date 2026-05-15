@@ -108,6 +108,7 @@ namespace ETL_SQL.Core.Common
         public List<object?>? Parameters { get; set; }
         public DayOfWeek WeekStartDay { get; set; } = DayOfWeek.Monday;
         public string ScriptHashPolicy { get; set; } = "Warn";
+        public bool CaseSensitiveComparison { get; set; }
 
         public Stack<Row> OuterRowStack { get; } = new();
         public LruCache<SubqueryCacheKey, Data.SubqueryResult> SubqueryCache { get; } = new(5000);

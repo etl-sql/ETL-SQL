@@ -100,11 +100,11 @@ namespace ETL_SQL.Tests.Hardening
              security.IsTestMode = false;
 
              // REPLICATE('A', 2000) should exceed 1024
-             var ex = await Assert.ThrowsAsync<SecurityException>(() => 
-                 eval.EvaluateValue(new FunctionCallExpression("REPLICATE", new List<Expression> { 
-                     new LiteralExpression("A", TokenType.STRING), 
-                     new LiteralExpression(2000, TokenType.NUMBER) 
-                 }), new Row()));
+             var ex = await Assert.ThrowsAsync<SecurityException>(() =>
+                 eval.EvaluateValue(new FunctionCallExpression("REPLICATE", new List<Expression> {
+                     new LiteralExpression("A", TokenType.STRING),
+                     new LiteralExpression(2000, TokenType.NUMBER)
+                 }), new Row()).AsTask());
 
              Assert.Contains("Memory Safety Guardrail", ex.Message);
              Assert.Contains("1024 bytes", ex.Message);

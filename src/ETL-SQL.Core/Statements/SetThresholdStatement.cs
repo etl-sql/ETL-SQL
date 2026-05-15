@@ -25,7 +25,8 @@ namespace ETL_SQL.Core
         MaxLastResultRows,
         MaxGenerateRows,
         MaxInternalOperations,
-        InteractiveMode
+        InteractiveMode,
+        CaseSensitive
 
     }
 

@@ -174,5 +174,32 @@ When enabled, the engine modifies its behavior to support re-runnable script cel
 
 To manually toggle this behavior in a script:
 ```sql
-SET INTERACTIVE_MODE ON;
+SET INTERACTIVE_MODE = ON;
 ```
+
+---
+
+## 8. String Comparison Collation
+
+### 8.1 Case-Sensitive Comparisons (`SET CASE_SENSITIVE`)
+
+By default ETL-SQL uses **case-insensitive** string comparison (SQL Server-style collation), so `'ABC' = 'abc'` evaluates to true. This applies to equality (`=`, `<>`), ordering (`ORDER BY`), `LIKE`, window partitioning, join keys, and all aggregation grouping.
+
+To enable case-sensitive comparison for a session:
+```sql
+SET CASE_SENSITIVE = ON;
+```
+
+To restore the default:
+```sql
+SET CASE_SENSITIVE = OFF;
+```
+
+**Server-wide default** — set in `appsettings.json` under `Engine`:
+```json
+"Engine": {
+  "CaseSensitiveComparison": false
+}
+```
+
+Set `true` to make case-sensitive comparison the server default. Individual scripts can override with `SET CASE_SENSITIVE` regardless of this setting.

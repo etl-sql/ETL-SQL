@@ -157,6 +157,7 @@ namespace ETL_SQL.SqlLogicTests
                 new DropTableStatementHandler(l),
                 new DropIndexStatementHandler(l),
                 new BlockStatementHandler(),
+                new SetThresholdStatementHandler(),
                 new CreateConnectionStatementHandler(connectors, l)
             };
 

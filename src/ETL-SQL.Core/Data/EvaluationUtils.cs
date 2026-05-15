@@ -11,11 +11,11 @@ namespace ETL_SQL.Core.Data
 {
     public static class EvaluationUtils
     {
-        public static bool IsSoftEqual(object? a, object? b, ILogger? logger = null)
+        public static bool IsSoftEqual(object? a, object? b, ILogger? logger = null, bool caseSensitive = false)
         {
             if (a.IsNull() && b.IsNull()) return true;
             if (a.IsNull() || b.IsNull()) return false;
-            
+
             try {
                 if (a is Row ra && b is Row rb)
                 {
@@ -58,10 +58,11 @@ namespace ETL_SQL.Core.Data
                 if (logger != null) logger.Debug($"[EvaluationUtils.IsSoftEqual] Type coercion failed, falling back to string compare: {ex.Message}");
             }
 
-            return a?.ToString()?.Equals(b?.ToString(), StringComparison.OrdinalIgnoreCase) ?? false;
+            var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+            return a?.ToString()?.Equals(b?.ToString(), comparison) ?? false;
         }
 
-        public static int CompareConstants(object? a, object? b)
+        public static int CompareConstants(object? a, object? b, bool caseSensitive = false)
         {
             if (a.IsNull() && b.IsNull()) return 0;
             if (a.IsNull()) return -1;
@@ -83,10 +84,11 @@ namespace ETL_SQL.Core.Data
                 // Fallback to date or string comparison
             }
 
-            if (TryToDateTime(a, out var dta) && TryToDateTime(b, out var dtb)) 
+            if (TryToDateTime(a, out var dta) && TryToDateTime(b, out var dtb))
                 return dta.CompareTo(dtb);
 
-            return string.Compare(sa, sb, StringComparison.OrdinalIgnoreCase);
+            var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+            return string.Compare(sa, sb, comparison);
         }
 
         public static bool TryToDateTime(object? val, out DateTime dt)

@@ -47,7 +47,7 @@ namespace ETL_SQL.Tests.Hardening
             _mockContext.Setup(c => c.SecurityService).Returns(_securityService);
             _mockContext.Setup(c => c.ResolvePath(It.IsAny<string>())).Returns<string>(s => s);
             _mockContext.Setup(c => c.EvaluateValue(It.IsAny<Expression>(), It.IsAny<Row>(), It.IsAny<bool>()))
-                .Returns<Expression, Row, bool>((e, r, d) => Task.FromResult<object?>(e is LiteralExpression le ? le.Value?.ToString() : e?.ToString()?.Trim('\'')));
+                .Returns<Expression, Row, bool>((e, r, d) => new ValueTask<object?>(e is LiteralExpression le ? le.Value?.ToString() : e?.ToString()?.Trim('\'')));
         }
 
         public void Dispose()

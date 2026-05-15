@@ -186,7 +186,9 @@ namespace ETL_SQL.Engine
         public DayOfWeek WeekStartDay { get => _options.WeekStartDay; set => _options.WeekStartDay = value; }
         /// <summary>Hash-mismatch policy for script integrity checks. Settable at runtime via SET SCRIPT_HASH_POLICY.</summary>
         public string ScriptHashPolicy { get => _options.ScriptHashPolicy; set => _options.ScriptHashPolicy = value; }
-        
+        /// <summary>When true, string comparisons are case-sensitive. Defaults to false. Settable at runtime via SET CASE_SENSITIVE.</summary>
+        public bool CaseSensitiveComparison { get; set; }
+
         /// <summary>Last script lexing duration in milliseconds.</summary>
         public long LastLexTimeMs { get; set; }
         /// <summary>Last script parsing duration in milliseconds.</summary>
@@ -547,6 +549,7 @@ namespace ETL_SQL.Engine
             WeekStartDay = DefaultThresholds.StartOfWeek(config);
             ScriptHashPolicy = DefaultThresholds.ScriptHashPolicy(config);
             IsPersistentSession = DefaultThresholds.PersistenceDefault(config);
+            CaseSensitiveComparison = DefaultThresholds.CaseSensitiveComparison(config);
         }
 
         private async Task AutoExportOpenLineageAsync(System.Threading.CancellationToken ct)

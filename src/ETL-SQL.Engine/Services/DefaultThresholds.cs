@@ -65,5 +65,8 @@ namespace ETL_SQL.Engine.Services
 
         public static bool PersistenceDefault(IConfiguration? config)
             => config?.GetValue<bool?>("Session:PersistenceDefault") ?? true;
+
+        public static bool CaseSensitiveComparison(IConfiguration? config)
+            => config?.GetValue<bool?>("Engine:CaseSensitiveComparison") ?? false;
     }
 }

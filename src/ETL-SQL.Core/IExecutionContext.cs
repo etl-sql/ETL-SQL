@@ -203,6 +203,8 @@ namespace ETL_SQL.Core
         DayOfWeek WeekStartDay { get; set; }
         /// <summary>Hash-mismatch policy for script integrity checks. "Warn" logs and continues; "Block" throws. Defaults to "Warn".</summary>
         string ScriptHashPolicy { get; set; }
+        /// <summary>When true, string comparisons are case-sensitive. Defaults to false (SQL Server-style case-insensitive). Settable at runtime via SET CASE_SENSITIVE.</summary>
+        bool CaseSensitiveComparison { get; set; }
         
         /// <summary>Positional parameters provided for the current execution (for ? and ?n placeholders).</summary>
         List<object?>? Parameters { get; set; }

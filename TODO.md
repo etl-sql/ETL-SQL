@@ -195,7 +195,17 @@ These paths are currently completely untested in the SLT suite:
 ### TPC-H — Seeder and query coverage
 
 - [x] **Bump default scale factor to SF=0.1** (60,000 lineitem rows) — SF=0.01 is too small for meaningful performance signal; results at that scale measure framework overhead not engine behavior.
-- [ ] **Document engine behaviors discovered by SLT** — add to `Docs/Architecture/ExpressionEvaluation.md`: division always returns decimal (no int truncation), string comparison is case-insensitive, aggregates nested inside CASE/scalar functions are not detected by `hasAgg` (engine limitation).
+- [ ] **Document engine behaviors discovered by SLT** — add to `Docs/Architecture/ExpressionEvaluation.md`: division always returns decimal (no int truncation), aggregates nested inside CASE/scalar functions are not detected by `hasAgg` (engine limitation). *(String comparison case-sensitivity is now documented in Adminstrators_Guide.md §8.1 and controlled by `SET CASE_SENSITIVE`.)*
+
+### Engine correctness bugs discovered during SLT authoring
+
+These were identified when writing the dark-path SLT files. Each has a failing or missing test case that proves the bug.
+
+- [ ] **`CASE expr WHEN val THEN ...` (simple CASE) not parsed** — the parser only handles the searched form (`CASE WHEN condition THEN ...`). Simple CASE raises "Expected END at the conclusion of CASE statement". Add to parser: `StatementParser` / expression parser needs a `CASE <expr> WHEN <val>` branch before the `WHEN <condition>` branch.
+- [ ] **`CAST(3.9 AS INT)` does not truncate** — `CAST(x AS INT)` does not strip the fractional part; `CAST(3.9 AS INT)` returns `3.9` not `3`. Fix in `TypeConverter.Cast` — when target type is INT/BIGINT/TINYINT, apply `Math.Truncate` before converting.
+- [ ] **`NOT (condition)` returns 0 rows** — `WHERE NOT (a = 1)` excluded all rows in testing. Root cause not confirmed; likely a precedence or parenthesis-handling bug in the NOT operator evaluation. `WHERE a <> 1` works correctly as a workaround. Needs a targeted test and parser/evaluator fix.
+- [ ] **`hasAgg` does not detect aggregates nested inside `CASE` or scalar functions** — `CASE WHEN SUM(x) IS NULL THEN 0 ELSE SUM(x) END` and `COALESCE(SUM(x), 0)` are not recognized as aggregate expressions by `AggregateEngine.hasAgg`. The engine falls through to row-mode and returns multiple rows instead of one. Fix: extend `IsAggregate()` in `AggregateEngine` to recurse into `CaseExpression` branches and `FunctionCallExpression` arguments. This also blocks TPC-H Q12 and Q14.
+- [ ] **Integer division does not truncate** — `7 / 2` returns `3.5` instead of `3`. The engine treats all division as decimal. Fix: in `BinaryOperatorFactory` (or `ExpressionEvaluator`), detect when both operands are integers and return a truncated integer result. Add SLT cases to `type_coercion.test`.
 - [ ] **Add seeder tables for multi-join queries** — Extend `TpcHMockDataSeeder` to seed `orders`, `customer`, `part`, `supplier` with proportional row counts at the configured SF. This unblocks Q3, Q5, Q12, Q14.
 - [ ] **Add TPC-H Q3** (Shipping Priority) — three-table join `customer ⋈ orders ⋈ lineitem`, GROUP BY, ORDER BY. This is the first query to stress the JoinEngine rather than just AggregateEngine.
 - [ ] **Add TPC-H Q5** (Local Supplier Volume) — six-table join; meaningful load on the hash-join path.

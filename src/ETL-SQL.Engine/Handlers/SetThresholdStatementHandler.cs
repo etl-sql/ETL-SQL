@@ -101,6 +101,9 @@ namespace ETL_SQL.Engine.Handlers
                 case ThresholdType.InteractiveMode:
                     context.InteractiveMode = Convert.ToBoolean(val);
                     break;
+                case ThresholdType.CaseSensitive:
+                    context.CaseSensitiveComparison = Convert.ToBoolean(val);
+                    break;
             }
 
 

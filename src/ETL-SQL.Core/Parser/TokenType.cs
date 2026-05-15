@@ -60,6 +60,7 @@ namespace ETL_SQL.Core.Parser
         WEEK_START_DAY,
         INTERACTIVE_MODE,
         SCRIPT_HASH_POLICY,
+        CASE_SENSITIVE,
         LF, CR, CRLF, TAB,
         
         // Joins

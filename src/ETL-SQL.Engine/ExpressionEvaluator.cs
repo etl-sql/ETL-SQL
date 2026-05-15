@@ -700,10 +700,10 @@ namespace ETL_SQL.Engine
         }
 
         /// <summary>Checks for soft equality between two objects.</summary>
-        public bool IsSoftEqual(object? a, object? b) => EvaluationUtils.IsSoftEqual(a, b, _logger);
-        
+        public bool IsSoftEqual(object? a, object? b) => EvaluationUtils.IsSoftEqual(a, b, _logger, _context.CaseSensitiveComparison);
+
         /// <summary>Compares two values for ordering.</summary>
-        public int CompareConstants(object? a, object? b) => EvaluationUtils.CompareConstants(a, b);
+        public int CompareConstants(object? a, object? b) => EvaluationUtils.CompareConstants(a, b, _context.CaseSensitiveComparison);
         
         /// <summary>Performs mathematical operations between two objects.</summary>
         public object? MathOp(object? a, object? b, TokenType op) => EvaluationUtils.MathOp(a, b, op switch { TokenType.PLUS => "+", TokenType.MINUS => "-", TokenType.STAR => "*", TokenType.SLASH => "/", TokenType.MODULO => "%", _ => "" });
