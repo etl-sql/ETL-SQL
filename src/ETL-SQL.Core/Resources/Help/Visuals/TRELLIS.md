@@ -12,7 +12,7 @@ Options:
   COLUMNS     = 3        -- number of panels per row (1–6, default 3)
   SHARED_AXIS = ON       -- ON (default) locks the Y range across all panels; OFF lets each panel auto-scale
 
-Note: With SHARED_AXIS = ON, panels with a narrow data range still show the global scale — this prevents misleading comparisons but may compress low-variance panels visually.
+Note: With SHARED_AXIS = ON, panels with a narrow data range still show the global scale — this prevents misleading comparisons but may compress low-variance panels visually. SHARED_AXIS has no effect when CHART_TYPE = SCATTER (scatter panels always auto-scale independently).
 
 ```sql
 -- Revenue by category, one bar chart per region

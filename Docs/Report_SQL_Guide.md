@@ -345,7 +345,7 @@ Accepted values: `ON` (default), `OFF`, `TRUE`, `FALSE`, `1`, `0`.
 | `BUBBLE` | Bubble chart. X/Y positions with a `SIZE` column controlling bubble area. | ECharts |
 | `CANDLESTICK` | OHLC financial chart. Requires `X`, `OPEN`, `HIGH`, `LOW`, `CLOSE` mappings. | ECharts |
 | `GANTT` | Project timeline. Requires `Y` (Task), `START`, and `END` mappings. Optional `COLOR` mapping. | ECharts |
-| `SANKEY` | Flow diagram. `FROM`/`TO` define node pairs (aliases `SOURCE`/`TARGET`); `VALUE` sets link width. | ECharts |
+| `SANKEY` | Flow diagram. `SOURCE`/`TARGET` define node pairs (aliases `FROM`/`TO`); `VALUE` sets link width. | ECharts |
 | `SUNBURST` | Radial hierarchy chart. Level mode: `LEVEL1`/`LEVEL2`/`LEVEL3` + `VALUE`. Parent-child mode: `LABEL`/`PARENT`/`VALUE`. | ECharts |
 | `NETWORK` | Force-directed graph. `FROM`/`TO` define edges; optional `VALUE` (weight) and `NODE_GROUP` (color/legend). Options: `REPULSION`, `LAYOUT = FORCE\|CIRCULAR`. | ECharts |
 | `TRELLIS` | Small-multiples (faceted) chart. `X`/`Y`/`FACET` mappings. Options: `CHART_TYPE = BAR\|LINE\|SCATTER`, `COLUMNS`, `SHARED_AXIS = ON\|OFF`. | ECharts |

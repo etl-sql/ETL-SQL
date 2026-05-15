@@ -2047,7 +2047,7 @@ CREATE VISUAL <name> AS <type> (
 | `RADAR` | _(none â€” first column = series name, remaining columns = metric axes)_ | â€” |
 | `CANDLESTICK` | `X`, `OPEN`, `HIGH`, `LOW`, `CLOSE` | â€” |
 | `GANTT` | `Y` (task label), `START`, `END` | `COLOR` |
-| `SANKEY` | `FROM` (or `SOURCE`), `TO` (or `TARGET`), `VALUE` | â€” |
+| `SANKEY` | `SOURCE` (or `FROM`), `TARGET` (or `TO`), `VALUE` | â€” |
 | `SUNBURST` (level mode) | `LEVEL1`, `VALUE` | `LEVEL2`, `LEVEL3` |
 | `SUNBURST` (parent-child mode) | `LABEL` (or `NAME`), `PARENT`, `VALUE` | â€” |
 | `NETWORK` | `FROM`, `TO` | `VALUE`, `NODE_GROUP` |

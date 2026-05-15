@@ -21,14 +21,28 @@ namespace ETL_SQL.Reporting.Renderers
             }).ToList();
 
             var series = new List<object> { new { type = "scatter", name = v.Name, data } };
-            return Serialize(new
+            var option = new Dictionary<string, object>
             {
-                title = TitleOpt(v),
-                tooltip = new { trigger = "item" },
-                xAxis = new { },
-                yAxis = new { },
-                series = ApplyCommonSeriesOptions(v, series, stacked: false, smooth: false)
-            });
+                ["title"]   = TitleOpt(v),
+                ["tooltip"] = new { trigger = "item" },
+                ["xAxis"]   = new { },
+                ["yAxis"]   = new { },
+                ["series"]  = ApplyCommonSeriesOptions(v, series, stacked: false, smooth: false)
+            };
+
+            // SCATTER BRUSH: inject markers consumed by the JS runtime's brushSelected handler
+            if (IsOn(v.Options.GetValueOrDefault("BRUSH")))
+            {
+                v.Options.TryGetValue("BRUSH_PARAM", out var brushParam);
+                v.Options.TryGetValue("BRUSH_TYPE",  out var brushType);
+                if (!string.IsNullOrEmpty(brushParam))
+                {
+                    option["__brushParam"] = brushParam;
+                    option["__brushType"]  = (string.IsNullOrEmpty(brushType) ? "rect" : brushType).ToLowerInvariant();
+                }
+            }
+
+            return Serialize(option);
         }
 
         public string RenderHeatMap(VisualManifest v)
