@@ -1,0 +1,148 @@
+# Window functions — ROW_NUMBER, RANK, LAG/LEAD, running aggregates
+
+statement ok
+CREATE TABLE sales(id INT, region STRING, amount INT, month INT);
+
+statement ok
+INSERT INTO sales VALUES
+  (1, 'East', 100, 1),
+  (2, 'East', 150, 2),
+  (3, 'East', 120, 3),
+  (4, 'West', 200, 1),
+  (5, 'West', 180, 2),
+  (6, 'West', 210, 3);
+
+# ROW_NUMBER() OVER (ORDER BY amount DESC)
+query II
+SELECT id, ROW_NUMBER() OVER (ORDER BY amount DESC) AS rn FROM sales ORDER BY rn;
+----
+6
+1
+4
+2
+5
+3
+2
+4
+3
+5
+1
+6
+
+# ROW_NUMBER() OVER (PARTITION BY region ORDER BY month)
+query TII
+SELECT region, month, ROW_NUMBER() OVER (PARTITION BY region ORDER BY month) AS rn FROM sales ORDER BY region, month;
+----
+East
+1
+1
+East
+2
+2
+East
+3
+3
+West
+1
+1
+West
+2
+2
+West
+3
+3
+
+# RANK() — unique scores, no ties
+statement ok
+CREATE TABLE scores(player STRING, score INT);
+
+statement ok
+INSERT INTO scores VALUES('Alice', 100), ('Bob', 90), ('Carol', 95), ('Dave', 80);
+
+query TII
+SELECT player, score, RANK() OVER (ORDER BY score DESC) AS rnk FROM scores ORDER BY score DESC;
+----
+Alice
+100
+1
+Carol
+95
+2
+Bob
+90
+3
+Dave
+80
+4
+
+# SUM() OVER (PARTITION BY region ORDER BY month) — running total
+query TII
+SELECT region, month, SUM(amount) OVER (PARTITION BY region ORDER BY month) AS running_total
+FROM sales ORDER BY region, month;
+----
+East
+1
+100
+East
+2
+250
+East
+3
+370
+West
+1
+200
+West
+2
+380
+West
+3
+590
+
+# LAG() — previous row value within partition
+query TII
+SELECT region, month, LAG(amount, 1, 0) OVER (PARTITION BY region ORDER BY month) AS prev_amount
+FROM sales ORDER BY region, month;
+----
+East
+1
+0
+East
+2
+100
+East
+3
+150
+West
+1
+0
+West
+2
+200
+West
+3
+180
+
+# LEAD() — next row value
+query TII
+SELECT region, month, LEAD(amount, 1, 0) OVER (PARTITION BY region ORDER BY month) AS next_amount
+FROM sales ORDER BY region, month;
+----
+East
+1
+150
+East
+2
+120
+East
+3
+0
+West
+1
+180
+West
+2
+210
+West
+3
+0

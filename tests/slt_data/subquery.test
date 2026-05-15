@@ -1,0 +1,83 @@
+# Subqueries — scalar, IN, EXISTS, FROM subquery
+
+statement ok
+CREATE TABLE dept(id INT, name STRING);
+
+statement ok
+INSERT INTO dept VALUES(1, 'Eng'), (2, 'HR'), (3, 'Finance');
+
+statement ok
+CREATE TABLE emp(id INT, name STRING, dept_id INT, salary INT);
+
+statement ok
+INSERT INTO emp VALUES
+  (1, 'Alice', 1, 90),
+  (2, 'Bob',   1, 80),
+  (3, 'Carol', 2, 70),
+  (4, 'Dave',  2, 75),
+  (5, 'Eve',   1, 85),
+  (6, 'Frank', 3, 95);
+
+# Scalar subquery in SELECT
+query TI
+SELECT name, (SELECT COUNT(*) FROM emp e2 WHERE e2.dept_id = e.dept_id) AS dept_size
+FROM emp e WHERE dept_id = 2 ORDER BY name;
+----
+Carol
+2
+Dave
+2
+
+# Subquery in WHERE — IN (SELECT ...)
+query T
+SELECT name FROM emp WHERE dept_id IN (SELECT id FROM dept WHERE name = 'Eng') ORDER BY name;
+----
+Alice
+Bob
+Eve
+
+# Subquery in WHERE — NOT IN (SELECT ...)
+query T
+SELECT name FROM emp WHERE dept_id NOT IN (SELECT id FROM dept WHERE name = 'Finance') ORDER BY salary, name;
+----
+Carol
+Dave
+Bob
+Eve
+Alice
+
+# Subquery in FROM clause
+query TI
+SELECT d.name, sub.cnt FROM dept d
+JOIN (SELECT dept_id, COUNT(*) AS cnt FROM emp GROUP BY dept_id) sub ON d.id = sub.dept_id
+ORDER BY d.name;
+----
+Eng
+3
+Finance
+1
+HR
+2
+
+# Scalar subquery — single value comparison
+query T
+SELECT name FROM emp WHERE salary = (SELECT MAX(salary) FROM emp);
+----
+Frank
+
+# EXISTS subquery
+query T
+SELECT name FROM dept d WHERE EXISTS (SELECT 1 FROM emp e WHERE e.dept_id = d.id) ORDER BY name;
+----
+Eng
+Finance
+HR
+
+# NOT EXISTS subquery — dept with no employees (Finance has Frank, so use a gap)
+statement ok
+INSERT INTO dept VALUES(4, 'Legal');
+
+query T
+SELECT name FROM dept d WHERE NOT EXISTS (SELECT 1 FROM emp e WHERE e.dept_id = d.id) ORDER BY name;
+----
+Legal

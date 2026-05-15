@@ -1,0 +1,84 @@
+# Type coercion and CAST behavior
+
+# Division always returns decimal (engine does not truncate)
+query R
+SELECT 7 / 2;
+----
+3.5
+
+# Decimal literal division
+query R
+SELECT 7.0 / 2;
+----
+3.5
+
+# CAST integer to decimal
+query R
+SELECT CAST(7 AS DECIMAL) / 2;
+----
+3.5
+
+# CAST string to integer
+query I
+SELECT CAST('42' AS INT);
+----
+42
+
+# CAST string to decimal
+query R
+SELECT CAST('3.14' AS DECIMAL);
+----
+3.14
+
+# CAST integer to string
+query T
+SELECT CAST(42 AS STRING);
+----
+42
+
+# CAST string integer to INT — engine stores as decimal, formats without fraction
+query I
+SELECT CAST('3' AS INT);
+----
+3
+
+# Implicit string-to-number in arithmetic (numeric context)
+query I
+SELECT 10 + CAST('5' AS INT);
+----
+15
+
+# Decimal precision — addition
+query R
+SELECT 1.1 + 2.2;
+----
+3.3
+
+# Decimal precision — multiplication
+query R
+SELECT 0.1 * 3;
+----
+0.3
+
+# NULL CAST returns NULL
+query T
+SELECT CAST(NULL AS INT);
+----
+NULL
+
+# Boolean-like: 1 = 1 is TRUE (1), 1 = 2 is FALSE (0)
+query I
+SELECT CASE WHEN 1 = 1 THEN 1 ELSE 0 END;
+----
+1
+
+query I
+SELECT CASE WHEN 1 = 2 THEN 1 ELSE 0 END;
+----
+0
+
+# String comparison is case-insensitive (SQL Server-style collation)
+query I
+SELECT CASE WHEN 'abc' = 'ABC' THEN 1 ELSE 0 END;
+----
+1

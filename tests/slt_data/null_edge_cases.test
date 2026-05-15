@@ -1,0 +1,110 @@
+# NULL edge cases beyond the basics in nulls.test
+
+statement ok
+CREATE TABLE t1(a INT, b INT, c STRING);
+
+statement ok
+INSERT INTO t1 VALUES(1, 10, 'x'), (2, NULL, 'y'), (NULL, 30, NULL), (2, 20, 'z');
+
+# NULL comparison always returns NULL/false — not found in WHERE
+query I
+SELECT COUNT(*) FROM t1 WHERE a = NULL;
+----
+0
+
+# IS NULL vs = NULL
+query I
+SELECT COUNT(*) FROM t1 WHERE a IS NULL;
+----
+1
+
+# NULL in arithmetic produces NULL
+# ORDER BY a, b NULLs-first: (NULL,30), (1,10), (2,NULL), (2,20)
+query T
+SELECT CASE WHEN a + b IS NULL THEN 'null' ELSE 'value' END FROM t1 ORDER BY a, b;
+----
+null
+value
+null
+value
+
+# NULL propagation through CONCAT / string ops — treat separately
+query T
+SELECT COALESCE(c, 'missing') FROM t1 ORDER BY a, b;
+----
+missing
+x
+y
+z
+
+# NULL in GROUP BY groups together with other NULLs
+query TI
+SELECT c, COUNT(*) FROM t1 GROUP BY c ORDER BY c;
+----
+NULL
+1
+x
+1
+y
+1
+z
+1
+
+# SUM/AVG/MIN/MAX over all-NULL column returns NULL — COUNT(*) still counts rows
+statement ok
+CREATE TABLE t2(x INT);
+
+statement ok
+INSERT INTO t2 VALUES(NULL), (NULL), (NULL);
+
+# COUNT(x) excludes NULLs → 0
+query I
+SELECT COUNT(x) FROM t2;
+----
+0
+
+# COUNT(*) includes NULLs → 3
+query I
+SELECT COUNT(*) FROM t2;
+----
+3
+
+# SUM over all-NULL returns NULL (shown as NULL string)
+query T
+SELECT SUM(x) FROM t2;
+----
+NULL
+
+# MIN/MAX over all-NULL return NULL
+query T
+SELECT MIN(x) FROM t2;
+----
+NULL
+
+query T
+SELECT MAX(x) FROM t2;
+----
+NULL
+
+# NULLIF returns NULL when values match
+# ORDER BY a, b: (NULL,30) → NULLIF(NULL,2)=NULL, (1,10) → 1, (2,NULL) → NULL, (2,20) → NULL
+query T
+SELECT CASE WHEN NULLIF(a, 2) IS NULL THEN 'null' ELSE 'value' END FROM t1 ORDER BY a, b;
+----
+null
+value
+null
+null
+
+# Three-valued logic: NULL comparison is unknown, excluded by WHERE
+# a <> 1 excludes the NULL row (NULL <> 1 is NULL, not TRUE)
+query I
+SELECT COUNT(*) FROM t1 WHERE a <> 1;
+----
+2
+
+# NULL in BETWEEN — treated as unknown, excluded by WHERE
+query I
+SELECT COUNT(*) FROM t1 WHERE b BETWEEN 10 AND 25;
+----
+2

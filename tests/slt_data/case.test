@@ -1,0 +1,58 @@
+# CASE WHEN expressions
+
+statement ok
+CREATE TABLE t1(a INT, b STRING, c DECIMAL(10,2));
+
+statement ok
+INSERT INTO t1 VALUES(1, 'foo', 10.5), (2, 'bar', 20.0), (3, 'baz', 5.25), (4, NULL, 0.0);
+
+# Searched CASE WHEN
+query T
+SELECT CASE WHEN a = 1 THEN 'one' WHEN a = 2 THEN 'two' ELSE 'other' END FROM t1 ORDER BY a;
+----
+one
+two
+other
+other
+
+# CASE returns NULL from ELSE-less branch with no match
+query T
+SELECT CASE WHEN a > 10 THEN 'big' END FROM t1 ORDER BY a;
+----
+NULL
+NULL
+NULL
+NULL
+
+# CASE with NULL input
+query T
+SELECT CASE WHEN b IS NULL THEN 'empty' ELSE b END FROM t1 ORDER BY a;
+----
+foo
+bar
+baz
+empty
+
+# CASE in WHERE clause — c > 15 matches only a=2 (c=20.0)
+query I
+SELECT a FROM t1 WHERE CASE WHEN c > 15 THEN 1 ELSE 0 END = 1 ORDER BY a;
+----
+2
+
+# Nested CASE
+query T
+SELECT CASE WHEN a < 2 THEN 'low' WHEN a < 4 THEN CASE WHEN c > 15 THEN 'mid-high' ELSE 'mid-low' END ELSE 'high' END FROM t1 ORDER BY a;
+----
+low
+mid-high
+mid-low
+high
+
+# CASE in ORDER BY
+query T
+SELECT b FROM t1 ORDER BY CASE WHEN b IS NULL THEN 1 ELSE 0 END, b;
+----
+bar
+baz
+foo
+NULL

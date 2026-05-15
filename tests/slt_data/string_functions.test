@@ -1,0 +1,98 @@
+# String function coverage
+
+statement ok
+CREATE TABLE t1(id INT, s STRING);
+
+statement ok
+INSERT INTO t1 VALUES(1, 'Hello World'), (2, 'foo bar baz'), (3, 'UPPER lower');
+
+# UPPER / LOWER
+query T
+SELECT UPPER(s) FROM t1 ORDER BY id;
+----
+HELLO WORLD
+FOO BAR BAZ
+UPPER LOWER
+
+query T
+SELECT LOWER(s) FROM t1 ORDER BY id;
+----
+hello world
+foo bar baz
+upper lower
+
+# TRIM removes leading and trailing spaces
+query T
+SELECT TRIM('  hello  ');
+----
+hello
+
+# LTRIM removes only leading spaces
+query T
+SELECT LTRIM('   hello');
+----
+hello
+
+# RTRIM removes only trailing spaces
+query T
+SELECT RTRIM('hello   ');
+----
+hello
+
+# LEN — character count
+query I
+SELECT LEN(s) FROM t1 WHERE id = 2;
+----
+11
+
+# SUBSTRING(str, start, length) — 1-based
+query T
+SELECT SUBSTRING(s, 5, 3) FROM t1 WHERE id = 2;
+----
+bar
+
+# REPLACE
+query T
+SELECT REPLACE(s, 'bar', 'BAR') FROM t1 WHERE id = 2;
+----
+foo BAR baz
+
+# LEFT / RIGHT
+query T
+SELECT LEFT(s, 3) FROM t1 WHERE id = 2;
+----
+foo
+
+query T
+SELECT RIGHT(s, 3) FROM t1 WHERE id = 2;
+----
+baz
+
+# CHARINDEX — 1-based position, 0 when not found
+query I
+SELECT CHARINDEX('bar', s) FROM t1 WHERE id = 2;
+----
+5
+
+query I
+SELECT CHARINDEX('zzz', s) FROM t1 WHERE id = 2;
+----
+0
+
+# CONCAT
+query T
+SELECT CONCAT(LEFT(s, 3), '!') FROM t1 WHERE id = 2;
+----
+foo!
+
+# REVERSE
+query T
+SELECT REVERSE('hello');
+----
+olleh
+
+# REPLICATE / REPEAT
+query T
+SELECT REPLICATE('ab', 3);
+----
+ababab

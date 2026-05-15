@@ -1,0 +1,69 @@
+# Date function coverage
+
+statement ok
+CREATE TABLE events(id INT, name STRING, dt STRING);
+
+statement ok
+INSERT INTO events VALUES
+  (1, 'start', '2024-01-15'),
+  (2, 'mid',   '2024-06-01'),
+  (3, 'end',   '2024-12-31');
+
+# DATEPART — extract year
+query I
+SELECT DATEPART(year, dt) FROM events WHERE id = 1;
+----
+2024
+
+# DATEPART — extract month
+query I
+SELECT DATEPART(month, dt) FROM events WHERE id = 1;
+----
+1
+
+# DATEPART — extract day
+query I
+SELECT DATEPART(day, dt) FROM events WHERE id = 1;
+----
+15
+
+# DATEDIFF — days between two dates
+query I
+SELECT DATEDIFF(day, '2024-01-01', '2024-01-15');
+----
+14
+
+# DATEDIFF — months
+query I
+SELECT DATEDIFF(month, '2024-01-01', '2024-06-01');
+----
+5
+
+# DATEADD — add days (DateTime.ToString() produces locale format)
+query T
+SELECT CAST(DATEADD(day, 7, '2024-01-01') AS STRING);
+----
+1/8/2024 12:00:00 AM
+
+# DATEADD — add months
+query T
+SELECT CAST(DATEADD(month, 2, '2024-01-15') AS STRING);
+----
+3/15/2024 12:00:00 AM
+
+# DATE ordering — string dates sort correctly
+query TI
+SELECT name, id FROM events ORDER BY dt;
+----
+start
+1
+mid
+2
+end
+3
+
+# DATEDIFF between column values
+query I
+SELECT DATEDIFF(day, '2024-01-01', dt) FROM events WHERE id = 2;
+----
+152

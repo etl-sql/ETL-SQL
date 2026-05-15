@@ -1,0 +1,74 @@
+# DISTINCT and COUNT(DISTINCT)
+
+statement ok
+CREATE TABLE t1(dept STRING, name STRING, salary INT);
+
+statement ok
+INSERT INTO t1 VALUES('Eng', 'Alice', 90), ('Eng', 'Bob', 80), ('HR', 'Carol', 70), ('HR', 'Dave', 70), ('Eng', 'Eve', 80);
+
+# SELECT DISTINCT single column
+query T
+SELECT DISTINCT dept FROM t1 ORDER BY dept;
+----
+Eng
+HR
+
+# SELECT DISTINCT multiple columns
+query TI
+SELECT DISTINCT dept, salary FROM t1 ORDER BY dept, salary;
+----
+Eng
+80
+Eng
+90
+HR
+70
+
+# COUNT(DISTINCT col)
+query I
+SELECT COUNT(DISTINCT dept) FROM t1;
+----
+2
+
+# COUNT(DISTINCT) on a column with repeated values
+query I
+SELECT COUNT(DISTINCT salary) FROM t1;
+----
+3
+
+# SUM(DISTINCT) sums only unique values
+query I
+SELECT SUM(DISTINCT salary) FROM t1;
+----
+240
+
+# COUNT(DISTINCT) respects NULL — NULLs excluded
+statement ok
+CREATE TABLE t2(x INT);
+
+statement ok
+INSERT INTO t2 VALUES(1), (2), (NULL), (1), (NULL);
+
+query I
+SELECT COUNT(DISTINCT x) FROM t2;
+----
+2
+
+# SELECT DISTINCT with NULL — NULL appears once
+query I
+SELECT DISTINCT x FROM t2 ORDER BY x;
+----
+NULL
+1
+2
+
+# DISTINCT * is equivalent to DISTINCT on all columns
+query TI
+SELECT DISTINCT dept, salary FROM t1 ORDER BY salary, dept;
+----
+HR
+70
+Eng
+80
+Eng
+90
