@@ -463,3 +463,19 @@
   .theme-dark .bc-seg-link { color: #7ca1e8; }
   .theme-dark .bc-seg-active { color: #e0e0e0; }
   .bc-sep { color: #aaa; }
+
+  /* ── Matrix (Pivot) visual ──────────────────────────────────────────────── */
+  .matrix-table { border-collapse: collapse; width: 100%; font-size: 0.9em; }
+  .matrix-table th, .matrix-table td { border: 1px solid #ddd; padding: 4px 10px; white-space: nowrap; }
+  .matrix-dim-header { background: #e8eef7; font-weight: 600; text-align: left; }
+  .matrix-val-header { background: #5470c6; color: #fff; font-weight: 600; text-align: right; }
+  .matrix-dim { background: #f5f7fb; font-weight: 500; text-align: left; }
+  .matrix-val { text-align: right; }
+  .matrix-grand-total .matrix-dim { background: #e0e7f3; font-weight: 700; }
+  .matrix-grand-total .matrix-val { background: #e0e7f3; font-weight: 700; }
+  .theme-dark .matrix-dim-header { background: #2a3550; color: #cdd; }
+  .theme-dark .matrix-val-header { background: #3a4a80; color: #eef; }
+  .theme-dark .matrix-dim        { background: #252d3d; color: #ccc; }
+  .theme-dark .matrix-val        { background: #1e2535; color: #ccc; }
+  .theme-dark .matrix-grand-total .matrix-dim,
+  .theme-dark .matrix-grand-total .matrix-val { background: #2f3d5c; color: #eef; }

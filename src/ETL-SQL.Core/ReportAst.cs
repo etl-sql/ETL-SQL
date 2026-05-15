@@ -73,7 +73,8 @@ namespace ETL_SQL.Core
         Gauge, Funnel, Waterfall, Image,
         Bubble, Radar, Candlestick,
         Map, Gantt,
-        Checkbox, Textbox, Numberbox
+        Checkbox, Textbox, Numberbox,
+        Sankey, Sunburst, Network, Trellis, Matrix
     }
 
     public enum DatasetEncryptionMode

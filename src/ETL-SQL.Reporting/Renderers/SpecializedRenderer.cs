@@ -407,5 +407,435 @@ namespace ETL_SQL.Reporting.Renderers
 
         private static int ColIdx(VisualManifest v, string? col) =>
             col != null ? v.Columns.FindIndex(c => string.Equals(c, col, StringComparison.OrdinalIgnoreCase)) : -1;
+
+        // ── SANKEY ────────────────────────────────────────────────────────────
+        // Mappings: SOURCE (or FROM), TARGET (or TO), VALUE.
+
+        public string RenderSankey(VisualManifest v)
+        {
+            var srcCol = FindRole(v, "source") ?? FindRole(v, "from") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var tgtCol = FindRole(v, "target") ?? FindRole(v, "to")   ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var valCol = FindRole(v, "value")  ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
+
+            int si = ColIdx(v, srcCol), ti = ColIdx(v, tgtCol), vi = ColIdx(v, valCol);
+
+            var nodes = new HashSet<string>(StringComparer.Ordinal);
+            var links = new List<object>();
+
+            foreach (var row in v.Rows)
+            {
+                var src = si >= 0 && si < row.Count ? row[si] ?? "" : "";
+                var tgt = ti >= 0 && ti < row.Count ? row[ti] ?? "" : "";
+                var val = vi >= 0 && vi < row.Count ? ToDouble(row[vi]) ?? 1.0 : 1.0;
+                if (string.IsNullOrEmpty(src) || string.IsNullOrEmpty(tgt)) continue;
+                nodes.Add(src);
+                nodes.Add(tgt);
+                links.Add(new { source = src, target = tgt, value = val });
+            }
+
+            return Serialize(new
+            {
+                title   = TitleOpt(v),
+                tooltip = new { trigger = "item", triggerOn = "mousemove" },
+                series  = new[]
+                {
+                    new
+                    {
+                        type      = "sankey",
+                        data      = nodes.Select(n => new { name = n }).ToArray(),
+                        links     = links,
+                        emphasis  = new { focus = "adjacency" },
+                        lineStyle = new { color = "gradient", curveness = 0.5 }
+                    }
+                }
+            });
+        }
+
+        // ── SUNBURST ──────────────────────────────────────────────────────────
+        // Mappings (two modes):
+        //   Implicit hierarchy: LEVEL1, LEVEL2, [LEVEL3], VALUE
+        //   Explicit parent-child: LABEL (or NAME), PARENT, VALUE
+
+        public string RenderSunburst(VisualManifest v)
+        {
+            var level1Col = FindRole(v, "level1");
+            var level2Col = FindRole(v, "level2");
+            var level3Col = FindRole(v, "level3");
+            var labelCol  = FindRole(v, "label") ?? FindRole(v, "name") ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var parentCol = FindRole(v, "parent");
+            var valueCol  = FindRole(v, "value") ?? (v.Columns.Count > 0 ? v.Columns[^1] : null);
+
+            var data = level1Col != null
+                ? BuildSunburstLevels(v, level1Col, level2Col, level3Col, valueCol)
+                : BuildSunburstParentChild(v, labelCol, parentCol, valueCol);
+
+            return Serialize(new
+            {
+                title   = TitleOpt(v),
+                tooltip = new { trigger = "item" },
+                series  = new[]
+                {
+                    new
+                    {
+                        type     = "sunburst",
+                        data     = data,
+                        radius   = new[] { "0%", "90%" },
+                        label    = new { rotate = "radial" },
+                        emphasis = new { focus = "ancestor" }
+                    }
+                }
+            });
+        }
+
+        private sealed class SunNode
+        {
+            public string Name { get; }
+            public double Value { get; set; }
+            public Dictionary<string, SunNode> Children { get; } = new(StringComparer.Ordinal);
+            public SunNode(string name) { Name = name; }
+
+            public object ToObj() => Children.Count == 0
+                ? (object)new { name = Name, value = Value }
+                : new { name = Name, value = Children.Values.Sum(c => c.Value), children = Children.Values.Select(c => c.ToObj()).ToArray() };
+        }
+
+        private static List<object> BuildSunburstLevels(VisualManifest v, string l1Col, string? l2Col, string? l3Col, string? valCol)
+        {
+            int l1i = ColIdx(v, l1Col), l2i = ColIdx(v, l2Col), l3i = ColIdx(v, l3Col), vi = ColIdx(v, valCol);
+            var roots = new Dictionary<string, SunNode>(StringComparer.Ordinal);
+
+            foreach (var row in v.Rows)
+            {
+                var k1  = l1i >= 0 && l1i < row.Count ? row[l1i] ?? "(blank)" : "(blank)";
+                var k2  = l2i >= 0 && l2i < row.Count ? row[l2i] ?? "(blank)" : null;
+                var k3  = l3i >= 0 && l3i < row.Count ? row[l3i] ?? "(blank)" : null;
+                var val = vi  >= 0 && vi  < row.Count ? ToDouble(row[vi]) ?? 0.0 : 1.0;
+
+                if (!roots.TryGetValue(k1, out var n1)) roots[k1] = n1 = new SunNode(k1);
+                n1.Value += val;
+
+                if (k2 == null) continue;
+                if (!n1.Children.TryGetValue(k2, out var n2)) n1.Children[k2] = n2 = new SunNode(k2);
+                n2.Value += val;
+
+                if (k3 == null) continue;
+                if (!n2.Children.TryGetValue(k3, out var n3)) n2.Children[k3] = n3 = new SunNode(k3);
+                n3.Value += val;
+            }
+
+            return roots.Values.Select(n => n.ToObj()).ToList();
+        }
+
+        private static List<object> BuildSunburstParentChild(VisualManifest v, string? labelCol, string? parentCol, string? valueCol)
+        {
+            int li = ColIdx(v, labelCol), pi = ColIdx(v, parentCol), vi = ColIdx(v, valueCol);
+            var nodes = new Dictionary<string, SunNode>(StringComparer.Ordinal);
+
+            foreach (var row in v.Rows)
+            {
+                var lbl = li >= 0 && li < row.Count ? row[li] ?? "" : "";
+                var par = pi >= 0 && pi < row.Count ? row[pi] ?? "" : "";
+                var val = vi >= 0 && vi < row.Count ? ToDouble(row[vi]) ?? 0.0 : 1.0;
+                if (string.IsNullOrEmpty(lbl)) continue;
+                if (!nodes.TryGetValue(lbl, out var node)) nodes[lbl] = node = new SunNode(lbl);
+                node.Value += val;
+                // Store parent reference for later tree wiring
+                if (!string.IsNullOrEmpty(par) && !nodes.ContainsKey(par))
+                    nodes[par] = new SunNode(par);
+                if (!string.IsNullOrEmpty(par))
+                {
+                    var parentNode = nodes[par];
+                    if (!parentNode.Children.ContainsKey(lbl))
+                        parentNode.Children[lbl] = node;
+                }
+            }
+
+            // Return root nodes (those not referenced as children)
+            var childNames = new HashSet<string>(nodes.Values.SelectMany(n => n.Children.Keys), StringComparer.Ordinal);
+            return nodes.Where(kv => !childNames.Contains(kv.Key)).Select(kv => kv.Value.ToObj()).ToList();
+        }
+
+        // ── NETWORK ───────────────────────────────────────────────────────────
+        // Mappings: FROM, TO, VALUE (edge weight, optional), NODE_GROUP (optional).
+        // Options: REPULSION (int, default 1000), LAYOUT (FORCE|CIRCULAR, default FORCE).
+
+        public string RenderNetwork(VisualManifest v)
+        {
+            var fromCol  = FindRole(v, "from")       ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var toCol    = FindRole(v, "to")         ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var valCol   = FindRole(v, "value");
+            var groupCol = FindRole(v, "node_group") ?? FindRole(v, "group");
+
+            int fi = ColIdx(v, fromCol), ti = ColIdx(v, toCol), vi = ColIdx(v, valCol), gi = ColIdx(v, groupCol);
+
+            v.Options.TryGetValue("REPULSION", out var repStr);
+            double repulsion = double.TryParse(repStr, out var rep) ? rep : 1000.0;
+            v.Options.TryGetValue("LAYOUT", out var layoutOpt);
+            string layout = (layoutOpt ?? "FORCE").ToLowerInvariant() == "circular" ? "circular" : "force";
+
+            var nodes = new Dictionary<string, SunNode>(StringComparer.Ordinal);
+            var groups = new Dictionary<string, int>(StringComparer.Ordinal);
+            var links  = new List<object>();
+
+            foreach (var row in v.Rows)
+            {
+                var from  = fi >= 0 && fi < row.Count ? row[fi] ?? "" : "";
+                var to    = ti >= 0 && ti < row.Count ? row[ti] ?? "" : "";
+                var val   = vi >= 0 && vi < row.Count ? ToDouble(row[vi]) ?? 1.0 : 1.0;
+                var group = gi >= 0 && gi < row.Count ? row[gi] ?? "" : "";
+
+                if (!string.IsNullOrEmpty(from) && !nodes.ContainsKey(from)) nodes[from] = new SunNode(from);
+                if (!string.IsNullOrEmpty(to)   && !nodes.ContainsKey(to))   nodes[to]   = new SunNode(to);
+                if (!string.IsNullOrEmpty(group) && !groups.ContainsKey(group)) groups[group] = groups.Count;
+                if (!string.IsNullOrEmpty(from) && !string.IsNullOrEmpty(to))
+                    links.Add(new { source = from, target = to, value = val });
+            }
+
+            var categories = groups.Select(g => new { name = g.Key }).ToArray();
+            var nodeData = nodes.Keys.Select(name =>
+            {
+                // If no group column, all nodes go ungrouped; otherwise map via the last row seen
+                int cat = -1;
+                if (gi >= 0)
+                {
+                    var row = v.Rows.FirstOrDefault(r =>
+                        fi >= 0 && fi < r.Count && (r[fi] ?? "") == name && gi < r.Count && !string.IsNullOrEmpty(r[gi]));
+                    if (row != null && gi < row.Count)
+                        groups.TryGetValue(row[gi] ?? "", out cat);
+                }
+                return cat >= 0
+                    ? (object)new { name, category = cat, symbolSize = 30 }
+                    : new { name, symbolSize = 30 };
+            }).ToArray();
+
+            var seriesBase = new Dictionary<string, object>
+            {
+                ["type"]       = "graph",
+                ["layout"]     = layout,
+                ["data"]       = nodeData,
+                ["links"]      = links,
+                ["roam"]       = IsOn(v.Options.GetValueOrDefault("ROAM")) || true,
+                ["label"]      = new { show = true, position = "right" },
+                ["edgeSymbol"] = new[] { "circle", "arrow" },
+                ["lineStyle"]  = new { color = "source", curveness = 0.3 },
+                ["force"]      = new { repulsion = repulsion, edgeLength = new[] { 80, 200 } }
+            };
+            if (categories.Length > 0)
+            {
+                seriesBase["categories"] = categories;
+                seriesBase["legend"]     = new { show = true };
+            }
+
+            return Serialize(new
+            {
+                title   = TitleOpt(v),
+                tooltip = new { trigger = "item" },
+                series  = new[] { seriesBase }
+            });
+        }
+
+        // ── TRELLIS ───────────────────────────────────────────────────────────
+        // Mappings: X, Y, FACET, COLOR (optional).
+        // Options: CHART_TYPE = BAR|LINE|SCATTER (default BAR), COLUMNS = int (default 3),
+        //          SHARED_AXIS = ON|OFF (default ON).
+
+        public string RenderTrellis(VisualManifest v)
+        {
+            var xCol    = FindRole(v, "x")     ?? (v.Columns.Count > 0 ? v.Columns[0] : null);
+            var yCol    = FindRole(v, "y")     ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var facetCol = FindRole(v, "facet") ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
+
+            int xi = ColIdx(v, xCol), yi = ColIdx(v, yCol), fi = ColIdx(v, facetCol);
+
+            v.Options.TryGetValue("CHART_TYPE", out var chartTypeOpt);
+            string chartType = (chartTypeOpt ?? "BAR").ToLowerInvariant() switch
+            {
+                "line"    => "line",
+                "scatter" => "scatter",
+                _         => "bar"
+            };
+
+            v.Options.TryGetValue("COLUMNS", out var colsOpt);
+            int numCols = int.TryParse(colsOpt, out var nc) ? Math.Clamp(nc, 1, 6) : 3;
+            bool sharedAxis = !IsOn(v.Options.GetValueOrDefault("SHARED_AXIS") ?? "ON") == false;
+
+            // Group data by facet value
+            var facets = v.Rows
+                .GroupBy(r => fi >= 0 && fi < r.Count ? r[fi] ?? "(blank)" : "(blank)")
+                .OrderBy(g => g.Key)
+                .ToList();
+
+            int numFacets = facets.Count;
+            int numRows = (int)Math.Ceiling((double)numFacets / numCols);
+
+            double cellW = 0.9 / numCols;
+            double cellH = 0.8 / numRows;
+            double padX  = 0.05 / numCols;
+            double padY  = 0.05 / numRows;
+
+            var grids   = new List<object>();
+            var xAxes   = new List<object>();
+            var yAxes   = new List<object>();
+            var series  = new List<object>();
+
+            // Compute global Y range for shared axis
+            double globalMin = double.MaxValue, globalMax = double.MinValue;
+            if (sharedAxis && chartType != "scatter")
+            {
+                foreach (var row in v.Rows)
+                {
+                    var val = ToDouble(yi >= 0 && yi < row.Count ? row[yi] : null);
+                    if (val.HasValue) { globalMin = Math.Min(globalMin, val.Value); globalMax = Math.Max(globalMax, val.Value); }
+                }
+                if (globalMin > globalMax) { globalMin = 0; globalMax = 1; }
+            }
+
+            var palette = new[] { "#5470c6", "#91cc75", "#fac858", "#ee6666", "#73c0de", "#3ba272", "#fc8452", "#9a60b4" };
+
+            for (int i = 0; i < numFacets; i++)
+            {
+                var facet = facets[i];
+                int col = i % numCols, row = i / numCols;
+
+                double left   = col * (cellW + padX) + padX;
+                double top    = row * (cellH + padY) + 0.08 + padY;
+
+                grids.Add(new { left = $"{left:P0}", top = $"{top:P0}", width = $"{cellW:P0}", height = $"{cellH:P0}", containLabel = true });
+
+                var xLabels = facet.Select(r => xi >= 0 && xi < r.Count ? r[xi] ?? "" : "").Distinct().ToList();
+                var yData   = facet.Select(r => ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null) ?? 0.0).ToList();
+
+                if (chartType == "scatter")
+                {
+                    xAxes.Add(new { gridIndex = i, type = "value",    name = facet.Key, nameLocation = "middle", nameGap = 20 });
+                    yAxes.Add(new { gridIndex = i, type = "value" });
+                    var pts = facet.Select(r => new[]
+                    {
+                        ToDouble(xi >= 0 && xi < r.Count ? r[xi] : null) ?? 0.0,
+                        ToDouble(yi >= 0 && yi < r.Count ? r[yi] : null) ?? 0.0
+                    }).ToArray();
+                    series.Add(new { type = "scatter", xAxisIndex = i, yAxisIndex = i, data = pts, name = facet.Key, itemStyle = new { color = palette[i % palette.Length] } });
+                }
+                else
+                {
+                    xAxes.Add(new { gridIndex = i, type = "category", data = xLabels, name = facet.Key, nameLocation = "middle", nameGap = 20 });
+                    var yAxisObj = new Dictionary<string, object> { ["gridIndex"] = i };
+                    if (sharedAxis) { yAxisObj["min"] = globalMin; yAxisObj["max"] = globalMax; }
+                    yAxes.Add(yAxisObj);
+                    series.Add(new { type = chartType, xAxisIndex = i, yAxisIndex = i, data = yData, name = facet.Key, itemStyle = new { color = palette[i % palette.Length] } });
+                }
+            }
+
+            return Serialize(new
+            {
+                title   = TitleOpt(v),
+                tooltip = new { trigger = "axis" },
+                grid    = grids,
+                xAxis   = xAxes,
+                yAxis   = yAxes,
+                series  = series
+            });
+        }
+
+        // ── MATRIX (Pivot / Cross-tab) ─────────────────────────────────────────
+        // Mappings: ROW = row-dimension column, COL = column-pivot column, VALUE = measure.
+        //   For multiple row dimensions: ROW1, ROW2 (ROW is alias for ROW1).
+        // Options: AGGREGATE = SUM|AVG|COUNT|MIN|MAX (default SUM), GRAND_TOTAL = ON|OFF.
+        // Returns JSON consumed by renderMatrix() in the browser, not an ECharts option.
+
+        public string RenderMatrix(VisualManifest v)
+        {
+            // Collect row-dimension columns (ROW / ROW1 / ROW2 / ROW3)
+            var rowCols = new List<string>();
+            var r1 = FindRole(v, "row") ?? FindRole(v, "row1");
+            var r2 = FindRole(v, "row2");
+            var r3 = FindRole(v, "row3");
+            if (r1 != null) rowCols.Add(r1);
+            if (r2 != null) rowCols.Add(r2);
+            if (r3 != null) rowCols.Add(r3);
+            if (rowCols.Count == 0 && v.Columns.Count > 0) rowCols.Add(v.Columns[0]);
+
+            var colPivot = FindRole(v, "col") ?? FindRole(v, "columns") ?? (v.Columns.Count > 1 ? v.Columns[1] : null);
+            var valCol   = FindRole(v, "value") ?? (v.Columns.Count > 2 ? v.Columns[2] : null);
+
+            v.Options.TryGetValue("AGGREGATE", out var aggOpt);
+            string agg = (aggOpt ?? "SUM").ToUpperInvariant();
+            bool grandTotal = IsOn(v.Options.GetValueOrDefault("GRAND_TOTAL"));
+
+            var rowIndices = rowCols.Select(c => ColIdx(v, c)).ToList();
+            int ci = ColIdx(v, colPivot), vi = ColIdx(v, valCol);
+
+            // Collect unique column pivot values (sorted)
+            var colValues = v.Rows
+                .Select(r => ci >= 0 && ci < r.Count ? r[ci] ?? "" : "")
+                .Distinct()
+                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            // Group raw values by (row key, col pivot value)
+            var groups = new Dictionary<string, Dictionary<string, List<double>>>(StringComparer.Ordinal);
+            var rowKeyOrder = new List<string>();
+
+            foreach (var row in v.Rows)
+            {
+                var rowKey = string.Join(" ", rowIndices.Select(idx => idx >= 0 && idx < row.Count ? row[idx] ?? "" : ""));
+                var colKey = ci >= 0 && ci < row.Count ? row[ci] ?? "" : "";
+                var val    = vi >= 0 && vi < row.Count ? ToDouble(row[vi]) ?? 0.0 : 1.0;
+
+                if (!groups.ContainsKey(rowKey)) { groups[rowKey] = new Dictionary<string, List<double>>(StringComparer.Ordinal); rowKeyOrder.Add(rowKey); }
+                if (!groups[rowKey].ContainsKey(colKey)) groups[rowKey][colKey] = new List<double>();
+                groups[rowKey][colKey].Add(val);
+            }
+
+            // Build pivot rows
+            var pivotRows = rowKeyOrder.Distinct().Select(rowKey =>
+            {
+                var parts = rowKey.Split(' ');
+                var cells = colValues.Select(cv =>
+                {
+                    if (!groups[rowKey].TryGetValue(cv, out var vals) || vals.Count == 0) return null;
+                    return agg switch
+                    {
+                        "COUNT" => vals.Count.ToString(),
+                        "AVG"   => (vals.Sum() / vals.Count).ToString("G6"),
+                        "MIN"   => vals.Min().ToString("G6"),
+                        "MAX"   => vals.Max().ToString("G6"),
+                        _       => vals.Sum().ToString("G6")
+                    };
+                }).ToList();
+                return parts.Concat(cells).ToList();
+            }).ToList();
+
+            // Grand total row
+            List<string?>? totals = null;
+            if (grandTotal)
+            {
+                totals = Enumerable.Repeat<string?>(null, rowCols.Count)
+                    .Concat(colValues.Select(cv =>
+                    {
+                        var allVals = groups.Values
+                            .SelectMany(g => g.TryGetValue(cv, out var l) ? l : Enumerable.Empty<double>())
+                            .ToList();
+                        if (allVals.Count == 0) return null;
+                        return agg switch
+                        {
+                            "COUNT" => allVals.Count.ToString(),
+                            "AVG"   => (allVals.Sum() / allVals.Count).ToString("G6"),
+                            "MIN"   => allVals.Min().ToString("G6"),
+                            "MAX"   => allVals.Max().ToString("G6"),
+                            _       => allVals.Sum().ToString("G6")
+                        };
+                    })).ToList();
+            }
+
+            return Serialize(new
+            {
+                __matrix     = true,
+                rowHeaders   = rowCols,
+                colValues    = colValues,
+                rows         = pivotRows,
+                grandTotals  = totals
+            });
+        }
     }
 }

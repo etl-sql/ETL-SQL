@@ -158,9 +158,9 @@
 
 - [ ] **Phase 6 — Advanced Visualization Capability Gaps (BI Parity)**
     - [x] **GANTT Visual**: Port the existing Orchestrator Portal Gantt implementation (ECharts 'custom' series) into the reporting engine.
-    - [ ] **Pivot/Matrix Visual**: Cross-tab representation with collapsible row/column headers (Industry Standard: Power BI Matrix).
-    - [ ] **Sankey/Sunburst**: Relational/Flow visualizations using ECharts native types.
-    - [ ] **Small Multiples (Trellis)**: Repeat a visual across a grid for each category value.
-    - [ ] **Selection Primitives**: Brush/Lasso selection on Scatter/Scatter3D to drive parameter filters (Industry Standard: Tableau Brush).
-    - [ ] **Network Graph**: Force-directed graphs for lineage and relationship exploration.
+    - [x] **Pivot/Matrix Visual**: Cross-tab representation with collapsible row/column headers (Industry Standard: Power BI Matrix).
+    - [x] **Sankey/Sunburst**: Relational/Flow visualizations using ECharts native types.
+    - [x] **Small Multiples (Trellis)**: Repeat a visual across a grid for each category value.
+    - [x] **Selection Primitives**: Brush/Lasso selection on Scatter/Scatter3D to drive parameter filters (Industry Standard: Tableau Brush).
+    - [x] **Network Graph**: Force-directed graphs for lineage and relationship exploration.
 

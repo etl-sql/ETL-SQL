@@ -47,6 +47,11 @@ namespace ETL_SQL.Reporting
                 "RADAR"                   => _specialized.RenderRadar(visual),
                 "CANDLESTICK"             => _specialized.RenderCandlestick(visual),
                 "GANTT"                   => _specialized.RenderGantt(visual),
+                "SANKEY"                  => _specialized.RenderSankey(visual),
+                "SUNBURST"                => _specialized.RenderSunburst(visual),
+                "NETWORK"                 => _specialized.RenderNetwork(visual),
+                "TRELLIS"                 => _specialized.RenderTrellis(visual),
+                "MATRIX"                  => _specialized.RenderMatrix(visual),
 
                 "MAP"                     => _geographic.RenderMap(visual),
 

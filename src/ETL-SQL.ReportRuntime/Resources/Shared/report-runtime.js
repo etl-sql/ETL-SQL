@@ -954,6 +954,7 @@
             case 'TEXTBOX':     renderTextbox(card, visual, manifest);            break;
             case 'NUMBERBOX':   renderNumberbox(card, visual, manifest);          break;
             case 'IMAGE':       renderImage(card, visual);                        break;
+            case 'MATRIX':      renderMatrix(card, visual);                        break;
             default:            renderChart(card, visual, manifest, effectiveTheme); break;
         }
 
@@ -1006,7 +1007,7 @@
         container.appendChild(card);
     }
 
-    // ── Chart (ECharts — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL / BUBBLE / RADAR / CANDLESTICK / MAP) ──
+    // ── Chart (ECharts — BAR / LINE / HBAR / SCATTER / PIE / DONUT / BOXPLOT / TREEMAP / HEATMAP / GAUGE / FUNNEL / WATERFALL / BUBBLE / RADAR / CANDLESTICK / MAP / GANTT / SANKEY / SUNBURST / NETWORK / TRELLIS) ──
 
     // Cross-filter state: { filterValue, filterColumn }. Stored per page section.
     function getPageState(container) {
@@ -1193,6 +1194,18 @@
             });
         }
 
+        // SCATTER BRUSH: __brushParam → wire brushSelected event to set a parameter
+        const brushParam = option.__brushParam;
+        const brushType  = option.__brushType || 'rect';
+        if (brushParam) {
+            delete option.__brushParam;
+            delete option.__brushType;
+            if (!option.brush) option.brush = {};
+            if (!option.toolbox) option.toolbox = { feature: {} };
+            if (!option.toolbox.feature) option.toolbox.feature = {};
+            option.toolbox.feature.brush = { type: [brushType, 'keep', 'clear'] };
+        }
+
         // FIPS matching: tell ECharts to use the 'fips' property instead of default 'name'
         if (matchBy === 'FIPS') {
             (option.series || []).forEach(s => {
@@ -1265,6 +1278,20 @@
 
             chart.setOption(option);
             wrapper._echartsInst = chart;
+
+            // SCATTER BRUSH: wire brushSelected to set parameter
+            if (brushParam) {
+                chart.on('brushSelected', function(params) {
+                    const selected = params.batch && params.batch[0] ? params.batch[0].selected : [];
+                    const indices  = selected.flatMap ? selected.flatMap(s => s.dataIndex) : [];
+                    const values   = indices.map(idx => {
+                        const row = (visual.rows || [])[idx];
+                        const xIdx = (visual.columns || []).findIndex(c => c.toLowerCase() === (xMappingCol || '').toLowerCase());
+                        return row ? row[xIdx >= 0 ? xIdx : 0] : null;
+                    }).filter(v => v != null);
+                    setParameter(brushParam, values.join(','));
+                });
+            }
 
             let lastHoveredRow = null;
             chart.on('mousemove', params => {
@@ -1547,6 +1574,80 @@
             showCtxMenu(e.clientX, e.clientY, visual, rowData);
         });
 
+        container.appendChild(wrapper);
+    }
+
+    // ── MATRIX (Pivot / Cross-tab) ────────────────────────────────────────────
+    // chartConfig carries JSON with { __matrix, rowHeaders, colValues, rows, grandTotals }.
+
+    function renderMatrix(container, visual) {
+        let meta;
+        try { meta = visual.chartConfig ? JSON.parse(visual.chartConfig) : null; } catch(e) { meta = null; }
+        if (!meta || !meta.__matrix) {
+            container.appendChild(noDataEl('No pivot data available'));
+            return;
+        }
+
+        const { rowHeaders = [], colValues = [], rows = [], grandTotals = null } = meta;
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'table-wrapper';
+        let heightOpt = visual.styles ? (visual.styles['HEIGHT'] || visual.styles['height']) : null;
+        if (heightOpt) wrapper.style.maxHeight = heightOpt;
+
+        const table = document.createElement('table');
+        table.className = 'matrix-table';
+
+        // Header row
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        rowHeaders.forEach(h => {
+            const th = document.createElement('th');
+            th.textContent = h;
+            th.className = 'matrix-dim-header';
+            headerRow.appendChild(th);
+        });
+        colValues.forEach(cv => {
+            const th = document.createElement('th');
+            th.textContent = cv;
+            th.className = 'matrix-val-header';
+            headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        // Data rows
+        const tbody = document.createElement('tbody');
+        rows.forEach(row => {
+            const tr = document.createElement('tr');
+            const totalCols = rowHeaders.length + colValues.length;
+            for (let i = 0; i < totalCols; i++) {
+                const td = document.createElement('td');
+                const val = row[i] != null ? String(row[i]) : '';
+                td.textContent = i < rowHeaders.length ? val : formatValue(val, null);
+                td.className = i < rowHeaders.length ? 'matrix-dim' : 'matrix-val';
+                tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+        });
+
+        // Grand total row
+        if (grandTotals && grandTotals.length > 0) {
+            const tr = document.createElement('tr');
+            tr.className = 'matrix-grand-total';
+            const totalCols = rowHeaders.length + colValues.length;
+            for (let i = 0; i < totalCols; i++) {
+                const td = document.createElement('td');
+                const val = grandTotals[i] != null ? String(grandTotals[i]) : '';
+                td.textContent = i < rowHeaders.length ? (i === 0 ? 'Grand Total' : '') : formatValue(val, null);
+                td.className = i < rowHeaders.length ? 'matrix-dim matrix-total-label' : 'matrix-val matrix-total-val';
+                tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+        }
+
+        table.appendChild(tbody);
+        wrapper.appendChild(table);
         container.appendChild(wrapper);
     }
 

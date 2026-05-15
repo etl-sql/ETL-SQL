@@ -968,6 +968,11 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.RADAR))        return VisualType.Radar;
             if (Match(TokenType.CANDLESTICK))  return VisualType.Candlestick;
             if (Match(TokenType.GANTT))        return VisualType.Gantt;
+            if (Match(TokenType.SANKEY))       return VisualType.Sankey;
+            if (Match(TokenType.SUNBURST))     return VisualType.Sunburst;
+            if (Match(TokenType.NETWORK))      return VisualType.Network;
+            if (Match(TokenType.TRELLIS))      return VisualType.Trellis;
+            if (Match(TokenType.MATRIX))       return VisualType.Matrix;
             if (Match(TokenType.CHECKBOX))     return VisualType.Checkbox;
             if (Match(TokenType.TEXTBOX))      return VisualType.Textbox;
             if (Match(TokenType.NUMBERBOX))    return VisualType.Numberbox;
@@ -1009,6 +1014,11 @@ namespace ETL_SQL.Core.Parser.Components
                     "CANDLESTICK"  => VisualType.Candlestick,
                     "MAP"          => VisualType.Map,
                     "GANTT"        => VisualType.Gantt,
+                    "SANKEY"       => VisualType.Sankey,
+                    "SUNBURST"     => VisualType.Sunburst,
+                    "NETWORK"      => VisualType.Network,
+                    "TRELLIS"      => VisualType.Trellis,
+                    "MATRIX"       => VisualType.Matrix,
                     "CHECKBOX"     => VisualType.Checkbox,
                     "TEXTBOX"      => VisualType.Textbox,
                     "NUMBERBOX"    => VisualType.Numberbox,
@@ -1019,7 +1029,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
 
             throw new SyntaxException(
-                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, RELDATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP, GANTT, CHECKBOX, TEXTBOX, NUMBERBOX) but got '{_parser.Current.Value}'",
+                $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, RELDATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP, GANTT, SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX, CHECKBOX, TEXTBOX, NUMBERBOX) but got '{_parser.Current.Value}'",
                 _parser.Current.Line, _parser.Current.Column);
         }
 
