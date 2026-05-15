@@ -6,7 +6,7 @@ using ETL_SQL.Connectors.MockDb;
 
 namespace ETL_SQL.Benchmarks
 {
-    public class TpcHMockDataSeeder(double scaleFactor = 0.01) : IMockDataSeeder
+    public class TpcHMockDataSeeder(double scaleFactor = 0.1) : IMockDataSeeder
     {
         private readonly double _scaleFactor = scaleFactor;
 

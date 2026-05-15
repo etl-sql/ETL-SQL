@@ -164,3 +164,47 @@
     - [x] **Selection Primitives**: Brush/Lasso selection on Scatter/Scatter3D to drive parameter filters (Industry Standard: Tableau Brush).
     - [x] **Network Graph**: Force-directed graphs for lineage and relationship exploration.
 
+---
+
+## SQL Correctness & Performance Testing
+
+Current state: 7 hand-authored SLT files covering basic SQL paths; TPC-H with Q1+Q6 only at SF=0.1 against a single `lineitem` table. The goal is to reach a state where a correctness regression in any major engine path is caught automatically by CI before merge.
+
+### SLT — Import real corpus cases
+
+The SQLite SLT suite represents decades of discovered edge cases. Prefer importing too many over too few.
+
+- [ ] **Import real SQLite SLT files** — Pull from the [SQLite logic test corpus](https://www.sqlite.org/sqllogictest/doc/trunk/about.wiki) or [CockroachDB's curated port](https://github.com/cockroachdb/cockroach/tree/master/pkg/sql/logictest/testdata/logic_test). Target minimum 5,000 cases; no arbitrary ceiling. Place under `tests/slt_data/corpus/`.
+- [ ] **Add `skipif etlsql` guards** for features we deliberately do not support (e.g., recursive CTEs, `RETURNING`, `GENERATED ALWAYS`) so the corpus files run clean without masking real failures.
+- [ ] **Add column-type verification to `SltRunner.VerifyResults`** — the `query TIR` type declaration is currently ignored; validate that each cell's runtime type matches the declared type character (T=text, I=integer, R=real).
+
+### SLT — Cover dark engine paths (hand-authored files)
+
+These paths are currently completely untested in the SLT suite:
+
+- [ ] `tests/slt_data/cte.test` — Common Table Expressions: simple, chained, self-referencing (non-recursive), and CTEs inside subqueries.
+- [ ] `tests/slt_data/subquery.test` — Scalar subqueries, correlated subqueries, `EXISTS`/`NOT EXISTS`, `IN (SELECT ...)`, subquery in `FROM`.
+- [ ] `tests/slt_data/window.test` — `ROW_NUMBER()`, `RANK()`/`DENSE_RANK()`, `LAG()`/`LEAD()`, `SUM() OVER (PARTITION BY ... ORDER BY ...)`, frame clauses (`ROWS BETWEEN`, `RANGE BETWEEN`).
+- [ ] `tests/slt_data/case.test` — Searched `CASE WHEN`, simple `CASE`, `CASE` inside aggregates, `CASE` in `ORDER BY`, nested `CASE`.
+- [ ] `tests/slt_data/string_functions.test` — `SUBSTRING`, `CHARINDEX`/`INSTR`, `REPLACE`, `CONCAT`, `LEFT`/`RIGHT`, `LTRIM`/`RTRIM`, `FORMAT`, `CAST` to/from string.
+- [ ] `tests/slt_data/date_functions.test` — `DATEADD`, `DATEDIFF`, `DATEPART`, `FORMAT` with date formats, date arithmetic, string-to-date casting.
+- [ ] `tests/slt_data/null_edge_cases.test` — Expand on the current `nulls.test`: `NULL IN (1, NULL)` → NULL, `NOT NULL` propagation, NULL in `GROUP BY` key (should group together), `COUNT(*)` vs `COUNT(col)` on NULLs, `COALESCE` vs `ISNULL`, NULL in `BETWEEN`, NULL in `LIKE`.
+- [ ] `tests/slt_data/type_coercion.test` — Integer vs decimal arithmetic results, implicit cast in comparisons (`'42' = 42`), `CAST` precision loss, division behavior (`7 / 2` vs `7.0 / 2`).
+- [ ] `tests/slt_data/distinct.test` — `SELECT DISTINCT`, `COUNT(DISTINCT ...)`, `SUM(DISTINCT ...)`, `DISTINCT` with `ORDER BY`, `DISTINCT *`.
+
+### TPC-H — Seeder and query coverage
+
+- [x] **Bump default scale factor to SF=0.1** (60,000 lineitem rows) — SF=0.01 is too small for meaningful performance signal; results at that scale measure framework overhead not engine behavior.
+- [ ] **Add seeder tables for multi-join queries** — Extend `TpcHMockDataSeeder` to seed `orders`, `customer`, `part`, `supplier` with proportional row counts at the configured SF. This unblocks Q3, Q5, Q12, Q14.
+- [ ] **Add TPC-H Q3** (Shipping Priority) — three-table join `customer ⋈ orders ⋈ lineitem`, GROUP BY, ORDER BY. This is the first query to stress the JoinEngine rather than just AggregateEngine.
+- [ ] **Add TPC-H Q5** (Local Supplier Volume) — six-table join; meaningful load on the hash-join path.
+- [ ] **Add TPC-H Q12** (Shipping Modes and Order Priority) — two-table join + conditional aggregation with `CASE`; tests `ExpressionEvaluator` inside aggregates.
+- [ ] **Add TPC-H Q14** (Promotion Effect) — `CASE` inside `SUM`; commonly used as a regression canary for aggregate correctness.
+- [ ] **Verify Q1 output against known TPC-H answers** — At SF=0.1 the Q1 result is deterministic if the seeder uses a fixed seed. Check in `tests/tpch_data/expected/q1_sf01.json` with the expected group counts and aggregate sums; assert in `BenchSetupTest`.
+
+### Benchmark baseline and CI regression detection
+
+- [ ] **Establish a stored performance baseline** — After the first clean benchmark run at SF=0.1, export results to `tests/tpch_data/baseline/benchmark_results.json` using BenchmarkDotNet's JSON exporter. Check this file in.
+- [ ] **Add a CI comparison step** — On each PR, re-run benchmarks and compare against the baseline. Fail CI if any benchmark regresses by more than 15% (mean time). A simple PowerShell script diffing the two JSON files is enough; no need for a dedicated tool.
+- [ ] **Add `[Benchmark]` variants at SF=1** for local profiling — mark them `[BenchmarkCategory("LargeScale")]` and exclude from CI with `--filter Category!=LargeScale` so they only run on demand.
+
