@@ -26,6 +26,12 @@ Charts:
   BOXPLOT     — statistical distribution: median, quartiles, whiskers, outliers
   COMBO       — bar + line on shared axes (dual Y axis)
   CANDLESTICK — OHLC price chart for financial time-series data
+  GANTT       — project timeline; tasks (Y) with START and END date ranges
+  SANKEY      — flow diagram connecting weighted source→destination node pairs
+  SUNBURST    — radial hierarchy chart; implicit level columns or parent-child mode
+  NETWORK     — force-directed graph of node relationships; groups supported
+  TRELLIS     — small-multiples / faceted chart: one panel per FACET value
+  MATRIX      — pivot cross-tab table: ROW × COL dimensions with aggregated VALUE cells
   MAP         — geographic choropleth or scatter-points overlay on a base map
 
 Display:

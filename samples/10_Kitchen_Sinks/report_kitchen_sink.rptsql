@@ -5,13 +5,15 @@
 -- feature available in the Report-SQL suite.
 --
 -- Pages
---   1. Overview    – KPI cards, BAR, LINE, DONUT, cross-filter table, slicers
---   2. Trends      – COMBO, WATERFALL, SCATTER (with overlays), HBAR, BOXPLOT
---   3. Composition – TREEMAP, HEATMAP, FUNNEL, GAUGE, PIE (with data labels)
---   4. Controls    – MULTISELECT, DATEPICKER, SLIDER, SEARCH, TEXT, IMAGE
---   5. Detail      – SCROLL container, deep-formatted TABLE, BACK / REFRESH buttons
---   6. New Charts  – BUBBLE, RADAR, CANDLESTICK
---   7. Maps        – MAP choropleth (US States, World)
+--   1. Overview        – KPI cards, BAR, LINE, DONUT, cross-filter table, slicers
+--   2. Trends          – COMBO, WATERFALL, SCATTER (with overlays), HBAR, BOXPLOT
+--   3. Composition     – TREEMAP, HEATMAP, FUNNEL, GAUGE, PIE (with data labels)
+--   4. Controls        – MULTISELECT, DATEPICKER, SLIDER, SEARCH, TEXT, IMAGE
+--   5. Detail          – SCROLL container, deep-formatted TABLE, BACK / REFRESH buttons
+--   6. New Charts      – BUBBLE, RADAR, CANDLESTICK
+--   7. Maps            – MAP choropleth (US States, World)
+--   8. Drilldown       – DRILL_IN hierarchy demo
+--   9. Advanced Charts – SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX, GANTT, SCATTER BRUSH
 -- ============================================================================
 
 -- ============================================================================
@@ -300,6 +302,52 @@ UNION ALL SELECT 'Hardware',    'South', 'Peter',   CAST(215000 AS DECIMAL)
 UNION ALL SELECT 'Hardware',    'East',  'Quinn',   CAST(180000 AS DECIMAL)
 UNION ALL SELECT 'Hardware',    'West',  'Rachel',  CAST(200000 AS DECIMAL);
 
+-- 1x. Sankey: region-to-category revenue flow
+SELECT Region AS FlowFrom, Category AS FlowTo, CAST(SUM(Revenue) AS DECIMAL) AS FlowValue
+INTO #sankey_data
+FROM #sales
+GROUP BY Region, Category;
+
+-- 1y. Sunburst: 3-level hierarchy — Category > Region > Salesperson
+SELECT
+    Category   AS Level1,
+    Region     AS Level2,
+    Salesperson AS Level3,
+    CAST(SUM(Revenue) AS DECIMAL) AS Revenue
+INTO #sunburst_data
+FROM #sales
+GROUP BY Category, Region, Salesperson;
+
+-- 1z. Network: salesperson co-sell graph (pairs sharing the same category)
+SELECT
+    a.Salesperson                  AS FromNode,
+    b.Salesperson                  AS ToNode,
+    CAST(COUNT(*) AS DECIMAL)      AS SharedDeals,
+    a.Category                     AS NodeGroup
+INTO #network_data
+FROM #sales a
+JOIN #sales b ON a.Category = b.Category AND a.Salesperson < b.Salesperson
+GROUP BY a.Salesperson, b.Salesperson, a.Category;
+
+-- 1aa. Trellis: revenue by category, one panel per region
+SELECT Region AS Region, Category AS Category, CAST(SUM(Revenue) AS DECIMAL) AS Revenue
+INTO #trellis_data
+FROM #sales
+GROUP BY Region, Category;
+
+-- 1ab. Matrix: category × region revenue cross-tab
+SELECT Category AS Category, Region AS Region, CAST(SUM(Revenue) AS DECIMAL) AS Revenue
+INTO #matrix_data
+FROM #sales
+GROUP BY Category, Region;
+
+-- 1ac. Gantt: project milestone timeline (static demo)
+SELECT 'Planning'     AS TaskName, '2026-01-01' AS StartDate, '2026-02-15' AS EndDate, '#5470c6' AS TaskColor INTO #gantt_data
+UNION ALL SELECT 'Data Pipeline',  '2026-02-01', '2026-04-15', '#91cc75'
+UNION ALL SELECT 'Report Build',   '2026-03-15', '2026-05-31', '#fac858'
+UNION ALL SELECT 'UAT',            '2026-05-01', '2026-06-15', '#ee6666'
+UNION ALL SELECT 'Deploy',         '2026-06-01', '2026-06-30', '#73c0de';
+
 -- ============================================================================
 -- Phase 2: Named Shared Styles
 -- ============================================================================
@@ -350,7 +398,8 @@ DECLARE @startDate    VARCHAR = '2026-01-01';
 DECLARE @endDate      VARCHAR = '2026-12-31';
 DECLARE @minQty       INT     = 0;
 DECLARE @search       VARCHAR = '';
-DECLARE @relStartDate RELDATE = 'D-1';
+DECLARE @relStartDate    RELDATE  = 'D-1';
+DECLARE @brush_selection VARCHAR  = '';   -- set by SCATTER BRUSH lasso on Page 9
 DECLARE @relEndDate   RELDATE = 'D';
 
 -- ============================================================================
@@ -818,6 +867,108 @@ CREATE BUTTON BtnExport AS REFRESH (
 );
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- PAGE 9 — ADVANCED CHARTS  (SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX,
+--                             GANTT, SCATTER BRUSH)
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- SANKEY — region → category revenue flow
+CREATE VISUAL SankeyFlow AS SANKEY (
+    SOURCE   = #sankey_data,
+    TITLE    = 'Revenue Flow: Region → Category',
+    SUBTITLE = 'Link width ∝ revenue; hover a link to see the exact amount',
+    MAPPINGS (
+        FROM  = FlowFrom,
+        TO    = FlowTo,
+        VALUE = FlowValue
+    ),
+    STYLE    = ChartPanel
+);
+
+-- SUNBURST — 3-level revenue hierarchy (Category › Region › Salesperson)
+CREATE VISUAL SunburstRevenue AS SUNBURST (
+    SOURCE   = #sunburst_data,
+    TITLE    = 'Revenue Sunburst',
+    SUBTITLE = 'Category › Region › Salesperson — inner rings = higher levels',
+    MAPPINGS (
+        LEVEL1 = Level1,
+        LEVEL2 = Level2,
+        LEVEL3 = Level3,
+        VALUE  = Revenue
+    ),
+    STYLE    = ChartPanel
+);
+
+-- NETWORK — salesperson co-sell graph (who works the same categories)
+CREATE VISUAL NetworkSales AS NETWORK (
+    SOURCE   = #network_data,
+    TITLE    = 'Salesperson Co-Sell Network',
+    SUBTITLE = 'Edge weight = shared transaction count · Color = product category',
+    MAPPINGS (
+        FROM       = FromNode,
+        TO         = ToNode,
+        VALUE      = SharedDeals,
+        NODE_GROUP = NodeGroup
+    ),
+    OPTIONS  (REPULSION = 600, LAYOUT = FORCE),
+    STYLE    = ChartPanel
+);
+
+-- TRELLIS — revenue by category, one panel per region (small multiples)
+CREATE VISUAL TrellisRevRegion AS TRELLIS (
+    SOURCE   = #trellis_data,
+    TITLE    = 'Revenue by Category — Faceted by Region',
+    SUBTITLE = 'Each panel = one region · Shared Y axis for honest cross-region comparison',
+    MAPPINGS (
+        X     = Category,
+        Y     = Revenue,
+        FACET = Region
+    ),
+    OPTIONS  (CHART_TYPE = BAR, COLUMNS = 2, SHARED_AXIS = ON),
+    STYLE    = ChartPanel
+);
+
+-- MATRIX — category × region pivot table with grand total
+CREATE VISUAL MatrixRevenue AS MATRIX (
+    SOURCE   = #matrix_data,
+    TITLE    = 'Revenue Pivot: Category × Region',
+    SUBTITLE = 'Cross-tab with SUM aggregate and grand-total row',
+    MAPPINGS (
+        ROW   = Category,
+        COL   = Region,
+        VALUE = Revenue
+    ),
+    OPTIONS  (AGGREGATE = SUM, GRAND_TOTAL = ON),
+    STYLE    = ChartPanel
+);
+
+-- GANTT — project milestone timeline
+CREATE VISUAL GanttMilestones AS GANTT (
+    SOURCE   = #gantt_data,
+    TITLE    = 'Project Timeline',
+    SUBTITLE = 'ETL-SQL Report Portal delivery milestones · Hover a bar to see dates',
+    MAPPINGS (
+        Y     = TaskName,
+        START = StartDate,
+        END   = EndDate,
+        COLOR = TaskColor
+    ),
+    STYLE    = ChartPanel
+);
+
+-- SCATTER BRUSH — Qty vs Revenue with rectangle lasso driving @brush_selection
+CREATE VISUAL ScatterBrush AS SCATTER (
+    SOURCE   = #scatter,
+    TITLE    = 'Qty vs Revenue — Brush Selection',
+    SUBTITLE = 'Drag a rectangle to capture selected row indices into @brush_selection',
+    MAPPINGS (
+        X = Qty,
+        Y = Revenue
+    ),
+    OPTIONS  (BRUSH = ON, BRUSH_TYPE = rect, BRUSH_PARAM = brush_selection),
+    STYLE    = ChartPanel
+);
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- PAGE 6 — NEW CHARTS  (BUBBLE, RADAR, CANDLESTICK)
 -- ─────────────────────────────────────────────────────────────────────────────
 
@@ -1150,6 +1301,28 @@ CREATE PAGE MapCharts AS LAYOUT (
     STYLE (THEME = dark)
 );
 
+-- ── PAGE 9: Advanced Charts ──────────────────────────────────────────────────
+CREATE PAGE AdvancedCharts AS LAYOUT (
+    TITLE     = 'Advanced Charts',
+    TOOLTIP   = 'SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX, GANTT, and SCATTER BRUSH.',
+    STRUCTURE = '
+        A A B B /
+        C C D D /
+        E E E E /
+        F F G G
+    ',
+    MAP (
+        'A' = SankeyFlow,
+        'B' = SunburstRevenue,
+        'C' = NetworkSales,
+        'D' = TrellisRevRegion,
+        'E' = MatrixRevenue,
+        'F' = GanttMilestones,
+        'G' = ScatterBrush
+    ),
+    STYLE (THEME = dark)
+);
+
 -- ── PAGE 8: Drill-Down Demo ───────────────────────────────────────────────────
 CREATE PAGE Drilldown AS LAYOUT (
     TITLE     = 'Drilldown',
@@ -1173,7 +1346,7 @@ CREATE NAVIGATION MainNav AS TAB (
     ORIENTATION = HORIZONTAL,
     DEFAULT     = Overview
 )
-WITH PAGES (Overview, Trends, Composition, Controls, Detail, NewCharts, MapCharts, Drilldown);
+WITH PAGES (Overview, Trends, Composition, Controls, Detail, NewCharts, MapCharts, Drilldown, AdvancedCharts);
 
 -- ============================================================================
 -- Phase 8: Global Style Override

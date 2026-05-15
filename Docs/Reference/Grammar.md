@@ -2028,7 +2028,7 @@ CREATE VISUAL <name> AS <type> (
 );
 ```
 
-**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `RADAR`, `CANDLESTICK`, `MAP`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX`
+**Visual types:** `BAR`, `HBAR`, `LINE`, `SCATTER`, `BUBBLE`, `PIE`, `DONUT`, `COMBO`, `BOXPLOT`, `TREEMAP`, `HEATMAP`, `GAUGE`, `FUNNEL`, `WATERFALL`, `RADAR`, `CANDLESTICK`, `GANTT`, `SANKEY`, `SUNBURST`, `NETWORK`, `TRELLIS`, `MATRIX`, `MAP`, `TABLE`, `CARD`, `TEXT`, `IMAGE`, `SLICER`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `MULTISELECT`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX`
 
 **Mapping roles by visual type:**
 
@@ -2046,6 +2046,13 @@ CREATE VISUAL <name> AS <type> (
 | `WATERFALL` | `X`, `Y` | â€” |
 | `RADAR` | _(none â€” first column = series name, remaining columns = metric axes)_ | â€” |
 | `CANDLESTICK` | `X`, `OPEN`, `HIGH`, `LOW`, `CLOSE` | â€” |
+| `GANTT` | `Y` (task label), `START`, `END` | `COLOR` |
+| `SANKEY` | `FROM` (or `SOURCE`), `TO` (or `TARGET`), `VALUE` | â€” |
+| `SUNBURST` (level mode) | `LEVEL1`, `VALUE` | `LEVEL2`, `LEVEL3` |
+| `SUNBURST` (parent-child mode) | `LABEL` (or `NAME`), `PARENT`, `VALUE` | â€” |
+| `NETWORK` | `FROM`, `TO` | `VALUE`, `NODE_GROUP` |
+| `TRELLIS` | `X`, `Y`, `FACET` | â€” |
+| `MATRIX` | `ROW` (or `ROW1`), `COL`, `VALUE` | `ROW2`, `ROW3` |
 | `MAP` (choropleth) | `REGION` | `VALUE` |
 | `MAP` (points â€” `MODE=POINTS`) | `LON`, `LAT` | `VALUE`, `LABEL` |
 | `TABLE` | _(all source columns rendered automatically)_ | â€” |
