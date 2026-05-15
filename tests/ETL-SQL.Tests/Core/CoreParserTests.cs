@@ -139,5 +139,41 @@ namespace ETL_SQL.Tests.Core
             Assert.NotNull(fce.Filter);
             Assert.IsType<BinaryExpression>(fce.Filter);
         }
+
+        [Fact]
+        public void TestParseShowLineageForms()
+        {
+            var script = Parse(@"
+SHOW LINEAGE;
+SHOW LINEAGE FOR REPORT SalesDashboard;
+SHOW LINEAGE FOR DATASET &CustomerMart;
+SHOW LINEAGE FOR #Target COLUMN Revenue INTO #lineage;
+");
+
+            Assert.Equal(4, script.Statements.Count);
+            Assert.All(script.Statements, stmt => Assert.IsType<LineageStatement>(stmt));
+
+            var all = (LineageStatement)script.Statements[0];
+            Assert.Null(all.TargetTable);
+
+            var report = (LineageStatement)script.Statements[1];
+            Assert.Equal("report:SalesDashboard", report.TargetTable?.TableName);
+
+            var dataset = (LineageStatement)script.Statements[2];
+            Assert.Equal("dataset:CustomerMart", dataset.TargetTable?.TableName);
+
+            var table = (LineageStatement)script.Statements[3];
+            Assert.Equal("#Target", table.TargetTable?.TableName);
+            Assert.Equal("Revenue", table.ColumnName);
+            Assert.Equal("#lineage", table.IntoTable);
+        }
+
+        private static Script Parse(string source)
+        {
+            var lexer = new Lexer(source);
+            var tokens = lexer.Tokenize();
+            var parser = new Parser(tokens);
+            return parser.Parse();
+        }
     }
 }

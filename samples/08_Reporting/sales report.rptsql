@@ -90,12 +90,12 @@ CREATE CONTAINER KpiRow AS BOX (
 -- Navigation
 CREATE NAVIGATION MainNav AS TAB (
   ORIENTATION = HORIZONTAL,
-  DEFAULT = Overview
-)
-WITH PAGES (Overview, Trends);
+  DEFAULT = Overview,
+    PAGES (Overview, Trends)
+);
 
 -- Dashboard pages
-CREATE PAGE Overview AS LAYOUT (
+CREATE PAGE Overview AS (
   STRUCTURE = 'A B / C C / D D',
   MAP (
     'A' = KpiRow,
@@ -105,7 +105,7 @@ CREATE PAGE Overview AS LAYOUT (
   )
 );
 
-CREATE PAGE Trends AS LAYOUT (
+CREATE PAGE Trends AS (
     TITLE = 'Market Trends',
     STRUCTURE = 'A / B / C',
     MAP (

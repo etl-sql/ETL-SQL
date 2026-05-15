@@ -374,7 +374,7 @@ CREATE VISUAL MyChart AS BAR (
         {
             var rule = new LayerOrderRule();
             var sql = @"
-CREATE PAGE MainPage AS LAYOUT (
+CREATE PAGE MainPage AS (
     STRUCTURE = 'A',
     MAP('A' = MyChart)
 );
@@ -400,7 +400,7 @@ CREATE VISUAL MyChart AS BAR (
     SOURCE = #Src,
     MAPPINGS (X = X, Y = Y)
 );
-CREATE PAGE MainPage AS LAYOUT (
+CREATE PAGE MainPage AS (
     STRUCTURE = 'A',
     MAP('A' = MyChart)
 );";

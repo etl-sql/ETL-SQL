@@ -37,7 +37,7 @@ CREATE VISUAL WelcomeText AS TEXT (
 );
 
 -- Page Layout
-CREATE PAGE TextKitchenSink AS LAYOUT (
+CREATE PAGE TextKitchenSink AS (
     STRUCTURE = 'A / B / C',
     MAP (
         'A' = BasicText,
@@ -46,4 +46,4 @@ CREATE PAGE TextKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = TextKitchenSink) WITH PAGES (TextKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = TextKitchenSink, PAGES (TextKitchenSink));

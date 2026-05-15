@@ -31,7 +31,7 @@ CREATE BUTTON ResetFilters AS CLEAR_FILTERS (
   ACTIONS (ON_CLICK = CLEAR_FILTERS)
 );
 
-CREATE PAGE Summary AS LAYOUT (
+CREATE PAGE Summary AS (
   STRUCTURE = 'A / B C D',
   MAP ('A' = SalesChart, 'B' = GoBack, 'C' = RefreshData, 'D' = ResetFilters)
 );

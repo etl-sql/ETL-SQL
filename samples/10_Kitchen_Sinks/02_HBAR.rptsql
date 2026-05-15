@@ -55,7 +55,7 @@ CREATE VISUAL StackedHBar AS HBAR (
 );
 
 -- Page Layout
-CREATE PAGE HBarKitchenSink AS LAYOUT (
+CREATE PAGE HBarKitchenSink AS (
     STRUCTURE = 'A B / C D',
     MAP (
         'A' = BasicHBar,
@@ -65,4 +65,4 @@ CREATE PAGE HBarKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = HBarKitchenSink) WITH PAGES (HBarKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = HBarKitchenSink, PAGES (HBarKitchenSink));

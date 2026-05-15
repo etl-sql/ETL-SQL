@@ -6,17 +6,16 @@ Tracks column-level data provenance across all SELECT, INSERT, UPDATE, and MERGE
 
 ```sql
 -- Show lineage for all tables in the session
-LINEAGE;
+SHOW LINEAGE;
 
 -- Show lineage for a specific table
-LINEAGE #target_table;
+SHOW LINEAGE FOR #target_table;
 
 -- Show lineage for a specific column
-LINEAGE #target_table.revenue;
+SHOW LINEAGE FOR #target_table COLUMN revenue;
 
--- Mermaid diagram output (paste into https://mermaid.live)
-LINEAGE FORMAT = MERMAID;
-LINEAGE #target_table FORMAT = MERMAID;
+-- Store lineage rows in a temp table
+SHOW LINEAGE INTO #lineage;
 ```
 
 ### Report Nodes
@@ -162,10 +161,10 @@ FROM #orders;
 
 ## Script-Level Metadata
 
-Use `LINEAGE SET` to attach metadata to all entries recorded in the current session:
+Add script metadata in the file header with structured comments. The engine records those tags with lineage entries:
 
 ```sql
-LINEAGE SET Author = 'Data Engineering', Pipeline = 'Daily Sales ETL', Version = '2.1';
+/* @author: Data Engineering; @pipeline: Daily Sales ETL; @version: 2.1; */
 ```
 
 ## Example: Complete Tagged Pipeline
@@ -191,7 +190,7 @@ FROM #orders_raw
 GROUP BY customer_id;
 
 -- View the lineage graph
-LINEAGE #customer_summary;
+SHOW LINEAGE FOR #customer_summary;
 
 -- Query which columns carry PII
 SELECT TargetTable, TargetColumn

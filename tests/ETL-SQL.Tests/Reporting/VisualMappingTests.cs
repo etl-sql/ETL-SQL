@@ -27,7 +27,7 @@ CREATE VISUAL BadMapping AS BAR (
     TITLE 'Broken',
     MAPPINGS (X = FakeColumn, Y = Val)
 );
-CREATE PAGE P AS LAYOUT (
+CREATE PAGE P AS (
     STRUCTURE = 'A',
     MAP('A' = BadMapping)
 );
@@ -60,7 +60,7 @@ CREATE VISUAL NullValues AS BAR (
     SOURCE = #Data,
     MAPPINGS (X = Category, Y = Val)
 );
-CREATE PAGE P AS LAYOUT (
+CREATE PAGE P AS (
     STRUCTURE = 'A',
     MAP('A' = NullValues)
 );

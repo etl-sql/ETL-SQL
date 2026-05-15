@@ -24,7 +24,7 @@ CREATE VISUAL MultiBubble AS BUBBLE (
 );
 
 -- Page Layout
-CREATE PAGE BubbleKitchenSink AS LAYOUT (
+CREATE PAGE BubbleKitchenSink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = BasicBubble,
@@ -32,4 +32,4 @@ CREATE PAGE BubbleKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = BubbleKitchenSink) WITH PAGES (BubbleKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = BubbleKitchenSink, PAGES (BubbleKitchenSink));

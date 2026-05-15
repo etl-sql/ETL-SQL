@@ -36,7 +36,7 @@ CREATE VISUAL RegressionOverlays AS SCATTER (
 );
 
 -- Page Layout
-CREATE PAGE OverlaySink AS LAYOUT (
+CREATE PAGE OverlaySink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = BasicOverlays,
@@ -44,4 +44,4 @@ CREATE PAGE OverlaySink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = OverlaySink) WITH PAGES (OverlaySink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = OverlaySink, PAGES (OverlaySink));

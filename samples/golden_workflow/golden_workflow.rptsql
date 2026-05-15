@@ -202,7 +202,7 @@ CREATE VISUAL OrderDetail AS TABLE (
     )
 );
 
-CREATE PAGE Overview AS LAYOUT (
+CREATE PAGE Overview AS (
     STRUCTURE = 'A A A / B C D / E E F',
     MAP (
         'A' = WorkflowControls,
@@ -214,7 +214,7 @@ CREATE PAGE Overview AS LAYOUT (
     )
 );
 
-CREATE PAGE Quality AS LAYOUT (
+CREATE PAGE Quality AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = WorkflowControls,
@@ -222,7 +222,7 @@ CREATE PAGE Quality AS LAYOUT (
     )
 );
 
-CREATE PAGE Export AS LAYOUT (
+CREATE PAGE Export AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = WorkflowControls,
@@ -232,6 +232,6 @@ CREATE PAGE Export AS LAYOUT (
 
 CREATE NAVIGATION GoldenNav AS TAB (
     ORIENTATION = HORIZONTAL,
-    DEFAULT = Overview
-)
-WITH PAGES (Overview, Quality, Export);
+    DEFAULT = Overview,
+    PAGES (Overview, Quality, Export)
+);

@@ -71,7 +71,6 @@ namespace ETL_SQL.Core.Parser
             _dispatchMap[TokenType.HELP]          = () => SystemParser.ParseHelp();
             _dispatchMap[TokenType.USE]           = () => { var t = _parser.Previous; return SystemParser.ParseUse(t); };
             _dispatchMap[TokenType.BULK]          = () => { var t = _parser.Previous; return DataParser.ParseBulkInsert(t); };
-            _dispatchMap[TokenType.LINEAGE]       = () => { var t = _parser.Previous; return ExtensionParser.ParseLineage(t); };
             _dispatchMap[TokenType.LINT]          = () => { var t = _parser.Previous; return ExtensionParser.ParseLint(t); };
             _dispatchMap[TokenType.REQUIRE]       = () => { var t = _parser.Previous; return SystemParser.ParseRequireVersion(t); };
             _dispatchMap[TokenType.START]         = () => ExtensionParser.ParseDockerVerb(DockerAction.Start);

@@ -35,7 +35,7 @@ CREATE VISUAL StyledCandle AS CANDLESTICK (
 );
 
 -- Page Layout
-CREATE PAGE CandleKitchenSink AS LAYOUT (
+CREATE PAGE CandleKitchenSink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = BasicCandle,
@@ -43,4 +43,4 @@ CREATE PAGE CandleKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = CandleKitchenSink) WITH PAGES (CandleKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = CandleKitchenSink, PAGES (CandleKitchenSink));

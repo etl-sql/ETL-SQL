@@ -39,7 +39,7 @@ CREATE VISUAL CustomBoundsGauge AS GAUGE (
 );
 
 -- 6. Multiple Gauges in a Row (Page Layout)
-CREATE PAGE GaugeKitchenSink AS LAYOUT (
+CREATE PAGE GaugeKitchenSink AS (
     STRUCTURE = 'A B / C D',
     MAP (
         'A' = DefaultGauge,
@@ -49,4 +49,4 @@ CREATE PAGE GaugeKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = GaugeKitchenSink) WITH PAGES (GaugeKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = GaugeKitchenSink, PAGES (GaugeKitchenSink));

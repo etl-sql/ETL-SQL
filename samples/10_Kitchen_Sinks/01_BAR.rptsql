@@ -113,7 +113,7 @@ CREATE VISUAL BarWithTooltip AS BAR (
 );
 
 -- Page Layout
-CREATE PAGE BarKitchenSink AS LAYOUT (
+CREATE PAGE BarKitchenSink AS (
     STRUCTURE = 'A B / C D / E F / G G',
     MAP (
         'A' = BasicBar,
@@ -126,4 +126,4 @@ CREATE PAGE BarKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = BarKitchenSink) WITH PAGES (BarKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = BarKitchenSink, PAGES (BarKitchenSink));

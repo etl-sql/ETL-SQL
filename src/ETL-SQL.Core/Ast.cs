@@ -1572,13 +1572,15 @@ namespace ETL_SQL.Core
         public string? ColumnName { get; }
         public string? ExportPath { get; set; }
         public bool ExportAsOpenLineage { get; init; }
+        public string? IntoTable { get; init; }
 
-        public LineageStatement(TableReference? targetTable = null, string? columnName = null, string? exportPath = null, bool exportAsOpenLineage = false)
+        public LineageStatement(TableReference? targetTable = null, string? columnName = null, string? exportPath = null, bool exportAsOpenLineage = false, string? intoTable = null)
         {
             TargetTable = targetTable;
             ColumnName = columnName;
             ExportPath = exportPath;
             ExportAsOpenLineage = exportAsOpenLineage;
+            IntoTable = intoTable;
         }
     }
 

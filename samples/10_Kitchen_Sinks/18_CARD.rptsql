@@ -36,9 +36,9 @@ CREATE CONTAINER KpiGrid AS BOX (
 );
 
 -- Page Layout
-CREATE PAGE CardKitchenSink AS LAYOUT (
+CREATE PAGE CardKitchenSink AS (
     STRUCTURE = 'A',
     MAP ('A' = KpiGrid)
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = CardKitchenSink) WITH PAGES (CardKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = CardKitchenSink, PAGES (CardKitchenSink));

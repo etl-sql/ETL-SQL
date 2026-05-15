@@ -34,7 +34,7 @@ CREATE VISUAL StyledWaterfall AS WATERFALL (
 );
 
 -- Page Layout
-CREATE PAGE WaterfallKitchenSink AS LAYOUT (
+CREATE PAGE WaterfallKitchenSink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = BasicWaterfall,
@@ -42,4 +42,4 @@ CREATE PAGE WaterfallKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = WaterfallKitchenSink) WITH PAGES (WaterfallKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = WaterfallKitchenSink, PAGES (WaterfallKitchenSink));

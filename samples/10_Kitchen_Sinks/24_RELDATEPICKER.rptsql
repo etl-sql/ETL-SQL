@@ -19,7 +19,7 @@ CREATE VISUAL RelResult AS TABLE (
 );
 
 -- Page Layout
-CREATE PAGE RelDateKitchenSink AS LAYOUT (
+CREATE PAGE RelDateKitchenSink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = RelPicker,
@@ -27,4 +27,4 @@ CREATE PAGE RelDateKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = RelDateKitchenSink) WITH PAGES (RelDateKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = RelDateKitchenSink, PAGES (RelDateKitchenSink));

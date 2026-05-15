@@ -69,7 +69,7 @@ CREATE VISUAL MovingAvgLine AS LINE (
 );
 
 -- Page Layout
-CREATE PAGE LineKitchenSink AS LAYOUT (
+CREATE PAGE LineKitchenSink AS (
     STRUCTURE = 'A B / C D / E F',
     MAP (
         'A' = BasicLine,
@@ -81,4 +81,4 @@ CREATE PAGE LineKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = LineKitchenSink) WITH PAGES (LineKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = LineKitchenSink, PAGES (LineKitchenSink));

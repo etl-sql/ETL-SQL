@@ -14,9 +14,9 @@
     - `INTERACTIONS` = cross-visual selection/filter/highlight behavior.
     - Portal commands = administrative DDL/operations such as users, folders, grants, publishing, subscriptions, and refresh jobs.
 - [ ] Decide the remaining final grammar contract in `Docs/Reference/Grammar.md` before implementation. Since the product has not gone live, prefer one canonical syntax over compatibility aliases.
-- [x] Page syntax decision: canonical syntax is `CREATE PAGE <name> AS (...)`; remove the old `CREATE PAGE <name> AS LAYOUT (...)` form from docs, help, samples, and tests before launch unless a deliberate compatibility decision is made.
+- [x] Page syntax decision: canonical syntax is `CREATE PAGE <name> AS (...)`.
 - [x] Lineage syntax decision: canonicalize lineage introspection to `SHOW LINEAGE ...`; remove or deprecate bare `LINEAGE` before launch so observational commands consistently use `SHOW <object/view>`.
-- [ ] Update grammar, docs, help, samples, and tests together for `SHOW LINEAGE` forms such as:
+- [x] Update grammar, docs, help, samples, and tests together for `SHOW LINEAGE` forms such as:
   ```sql
   SHOW LINEAGE;
   SHOW LINEAGE FOR REPORT SalesDashboard;
@@ -27,7 +27,7 @@
 
 ### Phase 1 — Report layout syntax
 - [ ] Make `LAYOUT (...)` an explicit bucket for containers; pages use the page body itself for layout placement.
-- [ ] Implement the canonical page syntax without repeating `PAGE` or forcing `AS LAYOUT`:
+- [ ] Implement the canonical page syntax:
   ```sql
   CREATE PAGE overview AS (
     TITLE = 'Executive Overview',
@@ -95,7 +95,7 @@
 - [ ] Add portal/viewer support for maximizing a single visual. Treat this as a layout/viewer capability, not a chart-specific option.
 
 ### Phase 3 — Navigation, datasets, publishing, and portal admin grammar
-- [ ] Move `CREATE NAVIGATION ... WITH PAGES (...)` to one canonical body form:
+- [x] Define navigation pages inside the `CREATE NAVIGATION` body:
   ```sql
   CREATE NAVIGATION MainNav AS TAB (
     ORIENTATION = HORIZONTAL,

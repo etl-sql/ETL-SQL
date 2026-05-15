@@ -27,7 +27,7 @@ CREATE CONTAINER FilterPanel AS BOX (
 );
 
 -- Page layout: A is the collapsible filter, B is the main content
-CREATE PAGE MainView AS LAYOUT (
+CREATE PAGE MainView AS (
     STRUCTURE = 'A B',
     MAP (
         'A' = FilterPanel,

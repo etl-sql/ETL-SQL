@@ -35,7 +35,7 @@ CREATE VISUAL SalesCard AS CARD (
     MAPPINGS (VALUE = TotalSales)
 );
 
-CREATE PAGE Overview AS LAYOUT (
+CREATE PAGE Overview AS (
     STRUCTURE = 'A / B',
     MAP ('A' = RegionFilter, 'B' = SalesCard)
 );

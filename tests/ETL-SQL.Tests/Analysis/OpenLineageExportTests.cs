@@ -220,7 +220,7 @@ namespace ETL_SQL.Tests.Analysis
                     INSERT INTO #src VALUES (1, 'Alice');
                     CREATE TABLE #dst (id INT, name VARCHAR(50));
                     INSERT INTO #dst SELECT id, name FROM #src;
-                    LINEAGE #dst EXPORT AS OPENLINEAGE TO '{tmpFile.Replace("\\", "\\\\")}';";
+                    SHOW LINEAGE FOR #dst EXPORT AS OPENLINEAGE TO '{tmpFile.Replace("\\", "\\\\")}';";
 
                 await TestHelpers.Execute(eval, script);
 
@@ -250,7 +250,7 @@ namespace ETL_SQL.Tests.Analysis
                     INSERT INTO #a VALUES (1);
                     CREATE TABLE #b (x INT);
                     INSERT INTO #b SELECT x FROM #a;
-                    LINEAGE EXPORT AS OPENLINEAGE TO '{tmpFile.Replace("\\", "\\\\")}';";
+                    SHOW LINEAGE EXPORT AS OPENLINEAGE TO '{tmpFile.Replace("\\", "\\\\")}';";
 
                 await TestHelpers.Execute(eval, script);
 

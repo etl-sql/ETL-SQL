@@ -50,7 +50,7 @@ WHERE
     TITLE    = 'Sales Detail'
 );
 
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
     STRUCTURE = 'A',
     MAP ('A' = SalesGrid)
 );

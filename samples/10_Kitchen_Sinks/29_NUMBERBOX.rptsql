@@ -24,7 +24,7 @@ CREATE VISUAL NumberResult AS CARD (
 );
 
 -- Page Layout
-CREATE PAGE NumberboxKitchenSink AS LAYOUT (
+CREATE PAGE NumberboxKitchenSink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = MinPriceInput,
@@ -32,4 +32,4 @@ CREATE PAGE NumberboxKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = NumberboxKitchenSink) WITH PAGES (NumberboxKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = NumberboxKitchenSink, PAGES (NumberboxKitchenSink));

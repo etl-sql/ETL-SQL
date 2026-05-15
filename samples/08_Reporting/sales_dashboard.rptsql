@@ -80,7 +80,7 @@ CREATE BUTTON BackButton AS BACK (
 );
 
 -- Layout
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
     STRUCTURE = 'N S E W C / T T T T T / B B . . .',
     MAP (
         'N' = KpiNorth,
@@ -93,7 +93,7 @@ CREATE PAGE Main AS LAYOUT (
     )
 );
 
-CREATE PAGE DeepDive AS LAYOUT (
+CREATE PAGE DeepDive AS (
     STRUCTURE = 'K K / D D',
     MAP (
         'K' = BackButton,
@@ -103,9 +103,9 @@ CREATE PAGE DeepDive AS LAYOUT (
 
 CREATE NAVIGATION DashboardNav AS TAB (
   ORIENTATION = HORIZONTAL,
-  DEFAULT = Main
-)
-WITH PAGES (Main, DeepDive);
+  DEFAULT = Main,
+    PAGES (Main, DeepDive)
+);
 
 STYLE (
     THEME = dark, 

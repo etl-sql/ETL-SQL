@@ -24,7 +24,7 @@ CREATE VISUAL SliderResult AS TABLE (
 );
 
 -- Page Layout
-CREATE PAGE SliderKitchenSink AS LAYOUT (
+CREATE PAGE SliderKitchenSink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = AgeSlider,
@@ -32,4 +32,4 @@ CREATE PAGE SliderKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = SliderKitchenSink) WITH PAGES (SliderKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = SliderKitchenSink, PAGES (SliderKitchenSink));

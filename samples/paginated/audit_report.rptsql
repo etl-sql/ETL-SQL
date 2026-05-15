@@ -84,7 +84,7 @@ CREATE CONTAINER FilterPanel AS BOX (
 );
 
 -- 5. Page Layout
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = FilterPanel,

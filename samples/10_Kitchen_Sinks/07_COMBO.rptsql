@@ -47,7 +47,7 @@ CREATE VISUAL StyledCombo AS COMBO (
 );
 
 -- Page Layout
-CREATE PAGE ComboKitchenSink AS LAYOUT (
+CREATE PAGE ComboKitchenSink AS (
     STRUCTURE = 'A / B / C',
     MAP (
         'A' = BasicCombo,
@@ -56,4 +56,4 @@ CREATE PAGE ComboKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = ComboKitchenSink) WITH PAGES (ComboKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = ComboKitchenSink, PAGES (ComboKitchenSink));

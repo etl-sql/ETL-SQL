@@ -42,7 +42,7 @@ CREATE VISUAL CategorySlicer AS SLICER (
 );
 
 -- Page Layout
-CREATE PAGE Dashboard AS LAYOUT (
+CREATE PAGE Dashboard AS (
   STRUCTURE = 'A B / C C / D D',
   MAP ('A' = CategorySlicer, 'B' = PieByRegion, 'C' = ScatterSalesGrowth, 'D' = LineByCategory),
   STYLE (THEME = dark)

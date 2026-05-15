@@ -24,7 +24,7 @@ CREATE VISUAL DateResult AS CARD (
 );
 
 -- Page Layout
-CREATE PAGE DateKitchenSink AS LAYOUT (
+CREATE PAGE DateKitchenSink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = SingleDatePicker,
@@ -32,4 +32,4 @@ CREATE PAGE DateKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = DateKitchenSink) WITH PAGES (DateKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = DateKitchenSink, PAGES (DateKitchenSink));

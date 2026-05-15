@@ -158,7 +158,7 @@ CREATE VISUAL RegionTreeMap AS TREEMAP (
 );
 
 -- 4. Assemble the Page
-CREATE PAGE Dashboard AS LAYOUT (
+CREATE PAGE Dashboard AS (
     STRUCTURE = 'A / B / C / D / E / F / G / H / I / J / K / L / M / N',
     MAP (
         'A' = IntroText, 

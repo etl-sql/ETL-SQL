@@ -323,7 +323,7 @@ SHOW TAGS FOR TABLE #TaggedUsers COLUMN UserId;
 SHOW TAG VALUE FOR TABLE #TaggedUsers COLUMN UserId WITH TAG 'd';
 ```
 
-### 4.3 `LINEAGE` — Data Ancestry Reporting
+### 4.3 `SHOW LINEAGE` — Data Ancestry Reporting
 
 Traces the full lineage graph of a table — every source, join, transformation, and tag inheritance that led to its current state.
 
@@ -331,9 +331,10 @@ Traces the full lineage graph of a table — every source, join, transformation,
 
 | Variant | Syntax | Effect |
 | :--- | :--- | :--- |
-| Console view | `LINEAGE(#table);` | Prints a hierarchical tree in the messages panel |
-| Column trace | `LINEAGE(#table, 'Column');` | Filters the trace to a single column's ancestry |
-| Markdown export | `LINEAGE(#table) TO 'reports/lineage.md';` | Generates a Mermaid.js diagram + audit table in a Markdown file |
+| Console view | `SHOW LINEAGE FOR #table;` | Prints a hierarchical tree in the messages panel |
+| Column trace | `SHOW LINEAGE FOR #table COLUMN Column;` | Filters the trace to a single column's ancestry |
+| Markdown export | `SHOW LINEAGE FOR #table TO 'reports/lineage.md';` | Generates a Mermaid.js diagram + audit table in a Markdown file |
+| Temp table capture | `SHOW LINEAGE INTO #lineage;` | Stores lineage rows in an engine temp table |
 | Queryable source | `SELECT * FROM LINEAGE(#table);` | Lets you filter/JOIN the lineage log as a standard table |
 
 **Queryable columns from `LINEAGE(...)`:**
@@ -355,7 +356,7 @@ Traces the full lineage graph of a table — every source, join, transformation,
 *Example:*
 ```sql
 -- Export a full lineage Mermaid report
-LINEAGE(#FinalAudit) TO 'C:\Reports\Employee_Lineage.md';
+SHOW LINEAGE FOR #FinalAudit TO 'C:\Reports\Employee_Lineage.md';
 
 -- Validate lineage programmatically in a pipeline
 SELECT Operation, SourceTables

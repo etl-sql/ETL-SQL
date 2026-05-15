@@ -143,7 +143,7 @@ CREATE VISUAL Slicer1 AS SLICER (
         public void ParseCreatePage_BasicLayout_ReturnsCreatePageStatement()
         {
             var sql = @"
-CREATE PAGE Dashboard AS LAYOUT (
+CREATE PAGE Dashboard AS (
     STRUCTURE = 'AB/CC',
     MAP ('A' = SalesChart, 'B' = PieChart, 'C' = SummaryTable)
 );";
@@ -161,7 +161,7 @@ CREATE PAGE Dashboard AS LAYOUT (
         public void ParseCreatePage_Minimal_ParsesCorrectly()
         {
             var sql = @"
-CREATE PAGE SimplePage AS LAYOUT (
+CREATE PAGE SimplePage AS (
     STRUCTURE = 'A',
     MAP ('A' = Chart1)
 );";
@@ -230,6 +230,24 @@ CREATE VISUAL SalesChart AS BAR (
             Assert.NotNull(action);
             Assert.Equal("ON_CLICK", action!.Trigger);
             Assert.Equal(new[] { "Year", "Quarter", "Month" }, action.Hierarchy);
+        }
+
+        [Fact]
+        public void ParseCreateNavigation_PagesInBody_ParsesCorrectly()
+        {
+            var sql = @"
+CREATE NAVIGATION MainNav AS TAB (
+    ORIENTATION = HORIZONTAL,
+    DEFAULT = Overview,
+    PAGES (Overview, Details)
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateNavigationStatement>().FirstOrDefault();
+
+            Assert.NotNull(stmt);
+            Assert.Equal("MainNav", stmt!.Name);
+            Assert.Equal("Overview", stmt.DefaultPage);
+            Assert.Equal(new[] { "Overview", "Details" }, stmt.Pages);
         }
 
         [Fact]

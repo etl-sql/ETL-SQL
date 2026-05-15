@@ -53,7 +53,7 @@ CREATE VISUAL ThresholdScatter AS SCATTER (
 );
 
 -- Page Layout
-CREATE PAGE ScatterKitchenSink AS LAYOUT (
+CREATE PAGE ScatterKitchenSink AS (
     STRUCTURE = 'A B / C D',
     MAP (
         'A' = BasicScatter,
@@ -63,4 +63,4 @@ CREATE PAGE ScatterKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = ScatterKitchenSink) WITH PAGES (ScatterKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = ScatterKitchenSink, PAGES (ScatterKitchenSink));

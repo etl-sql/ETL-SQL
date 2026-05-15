@@ -35,7 +35,7 @@ CREATE VISUAL StyledDonut AS DONUT (
 );
 
 -- Page Layout
-CREATE PAGE DonutKitchenSink AS LAYOUT (
+CREATE PAGE DonutKitchenSink AS (
     STRUCTURE = 'A B',
     MAP (
         'A' = BasicDonut,
@@ -43,4 +43,4 @@ CREATE PAGE DonutKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = DonutKitchenSink) WITH PAGES (DonutKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = DonutKitchenSink, PAGES (DonutKitchenSink));

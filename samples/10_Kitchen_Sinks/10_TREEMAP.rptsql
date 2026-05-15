@@ -33,7 +33,7 @@ CREATE VISUAL StyledTreemap AS TREEMAP (
 );
 
 -- Page Layout
-CREATE PAGE TreemapKitchenSink AS LAYOUT (
+CREATE PAGE TreemapKitchenSink AS (
     STRUCTURE = 'A B',
     MAP (
         'A' = BasicTreemap,
@@ -41,4 +41,4 @@ CREATE PAGE TreemapKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = TreemapKitchenSink) WITH PAGES (TreemapKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = TreemapKitchenSink, PAGES (TreemapKitchenSink));

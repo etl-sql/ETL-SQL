@@ -99,7 +99,7 @@ CREATE VISUAL SalesByRegion AS BAR (
 );
 
 -- 3. Arrange on a page (STRUCTURE uses CSS grid-template-areas)
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
   STRUCTURE = 'A',
   MAP ('A' = SalesByRegion)
 );
@@ -217,16 +217,16 @@ CREATE VISUAL RevenueByRegion AS BAR (
   STYLE    (THEME = light)
 );
 
-CREATE PAGE Overview AS LAYOUT (
+CREATE PAGE Overview AS (
   STRUCTURE = 'A',
   MAP ('A' = RevenueByRegion),
   STYLE (GAP = '16px')
 );
 ```
 
-Compatibility notes:
+Syntax notes:
 
-- `CREATE PAGE <name> AS (...)` still parses, but `AS LAYOUT (...)` is the canonical form because it makes the page body unambiguous.
+- `CREATE PAGE <name> AS (...)` defines a report page. Containers use `LAYOUT (...)` for nested placement.
 - `CREATE DATASET` accepts either `&dataset` or `#temp_style` names. Prefer `&dataset` for reusable report datasets and `#temp` for intermediate engine tables.
 - `STYLE = StyleName` applies a named style. `STYLE (key = value, ...)` applies inline overrides. A standalone `STYLE (...)` statement is not valid.
 - `SOURCE = #temp`, `SOURCE = &dataset`, and `SOURCE = (SELECT ...)` are the canonical source forms.
@@ -1359,7 +1359,7 @@ CREATE DATASET &sales_keyfile
 Arranges visuals and containers into a named layout. Multiple pages can be defined in one script; the web dashboard renders each as a distinct section.
 
 ```
-CREATE [OR ALTER] PAGE <name> AS LAYOUT (
+CREATE [OR ALTER] PAGE <name> AS (
   [TITLE = '<string>',]
   [TOOLTIP = '<string>',]
   STRUCTURE = '<grid-template-areas>',
@@ -1378,7 +1378,7 @@ CREATE [OR ALTER] PAGE <name> AS LAYOUT (
 `VISIBLE = OFF` hides the page from the navigation bar while still rendering it in the DOM. Hidden pages are only reachable via `DRILL_DOWN` or programmatic navigation.
 
 ```sql
-CREATE PAGE DetailView AS LAYOUT (
+CREATE PAGE DetailView AS (
   STRUCTURE = 'A',
   MAP ('A' = DetailTable),
   VISIBLE = OFF
@@ -1449,7 +1449,7 @@ When a parameter changes, the DashboardService re-evaluates all visuals whose in
 ### Full page example
 
 ```sql
-CREATE PAGE Overview AS LAYOUT (
+CREATE PAGE Overview AS (
   STRUCTURE = 'A B / C C / D D',
   MAP (
     'A' = TotalRevenue,
@@ -1567,7 +1567,7 @@ CREATE VISUAL AlertKpi AS CARD (
 );
 
 -- Apply to pages and containers too
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
   STRUCTURE = 'A B',
   STYLE = PanelBorder,
   MAP ('A' = RevenueKpi, 'B' = AlertKpi)
@@ -1649,7 +1649,7 @@ CREATE CONTAINER InfoPanel AS BOX (
 Reference the container in a page's `MAP` just like a visual:
 
 ```sql
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
   STRUCTURE = 'A A / B C',
   MAP (
     'A' = InfoPanel,
@@ -1683,7 +1683,7 @@ CREATE CONTAINER FilterDrawer AS BOX (
   )
 );
 
-CREATE PAGE Dashboard AS LAYOUT (
+CREATE PAGE Dashboard AS (
   STRUCTURE = 'A A / B C',
   MAP (
     'A' = FilterDrawer,
@@ -1706,9 +1706,9 @@ Adds a navigation bar that controls which page is visible. The bar renders above
 ```
 CREATE [OR ALTER] NAVIGATION <name> AS TAB|BUTTON|LINK (
   [ORIENTATION = HORIZONTAL|VERTICAL,]
-  [DEFAULT = <PageName>]
-)
-WITH PAGES (Page1, Page2, ...);
+  [DEFAULT = <PageName>],
+  PAGES (Page1, Page2, ...)
+);
 ```
 
 | Nav type | Rendering |
@@ -1720,9 +1720,9 @@ WITH PAGES (Page1, Page2, ...);
 ```sql
 CREATE NAVIGATION MainNav AS TAB (
   ORIENTATION = HORIZONTAL,
-  DEFAULT = Overview
-)
-WITH PAGES (Overview, Details, Trends);
+  DEFAULT = Overview,
+  PAGES (Overview, Details, Trends)
+);
 ```
 
 If `DEFAULT` is omitted, the first page in the list is shown on load.
@@ -1811,7 +1811,7 @@ CREATE BUTTON DrillBtn AS CUSTOM (
 Place buttons in a page layout exactly like any visual:
 
 ```sql
-CREATE PAGE Dashboard AS LAYOUT (
+CREATE PAGE Dashboard AS (
   STRUCTURE = 'A B / C C',
   MAP (
     'A' = GoBack,
@@ -2253,7 +2253,7 @@ CREATE CONTAINER KpiRow AS BOX (
 );
 
 -- Dashboard pages
-CREATE PAGE Overview AS LAYOUT (
+CREATE PAGE Overview AS (
   STRUCTURE = 'A B / C C / D D',
   MAP (
     'A' = KpiRow,
@@ -2263,7 +2263,7 @@ CREATE PAGE Overview AS LAYOUT (
   )
 );
 
-CREATE PAGE Trends AS LAYOUT (
+CREATE PAGE Trends AS (
   STRUCTURE = 'A A / B C',
   MAP (
     'A' = RevenueByRegionMonth,
@@ -2275,9 +2275,9 @@ CREATE PAGE Trends AS LAYOUT (
 -- Navigation (defined after pages so the LayerOrder linter is satisfied)
 CREATE NAVIGATION MainNav AS TAB (
   ORIENTATION = HORIZONTAL,
-  DEFAULT = Overview
-)
-WITH PAGES (Overview, Trends);
+  DEFAULT = Overview,
+  PAGES (Overview, Trends)
+);
 ```
 
 ---

@@ -49,7 +49,7 @@ CREATE CONTAINER FilterDrawer AS BOX (
   MAP ('A' = RegionSlicer, 'B' = YearSlider)
 );
 
-CREATE PAGE Dashboard AS LAYOUT (
+CREATE PAGE Dashboard AS (
   STRUCTURE = 'K K / O O',
   MAP ('K' = KpiGroup, 'O' = OrderScroll)
 );

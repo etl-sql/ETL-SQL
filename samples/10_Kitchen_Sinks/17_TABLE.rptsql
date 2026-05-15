@@ -52,7 +52,7 @@ CREATE VISUAL StyledTable AS TABLE (
 );
 
 -- Page Layout
-CREATE PAGE TableKitchenSink AS LAYOUT (
+CREATE PAGE TableKitchenSink AS (
     STRUCTURE = 'A / B / C / D',
     MAP (
         'A' = BasicTable,
@@ -62,4 +62,4 @@ CREATE PAGE TableKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = TableKitchenSink) WITH PAGES (TableKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = TableKitchenSink, PAGES (TableKitchenSink));

@@ -44,8 +44,8 @@ namespace ETL_SQL.Tests.Analysis
                 UNION ALL
                 SELECT S2.ID, S2.Name FROM #SourceB S2;
                 
-                -- Verify LINEAGE output doesn't throw and contains info
-                LINEAGE #Target;
+                -- Verify SHOW LINEAGE output doesn't throw and contains info
+                SHOW LINEAGE FOR #Target;
             ";
 
             await _evaluator.Evaluate(new Parser(new Lexer(script).Tokenize()).Parse());
@@ -70,7 +70,7 @@ namespace ETL_SQL.Tests.Analysis
                     CREATE TABLE #BulkTarget (ID INT, Name VARCHAR(50));
                     BULK INSERT #BulkTarget FROM '{csvPath.Replace("\\", "/")}'
                     WITH (FIELDTERMINATOR = ',', FIRSTROW = 2);
-                    LINEAGE #BulkTarget;
+                    SHOW LINEAGE FOR #BulkTarget;
                 ";
 
                 await _evaluator.Evaluate(new Parser(new Lexer(script).Tokenize()).Parse());
@@ -98,7 +98,7 @@ namespace ETL_SQL.Tests.Analysis
                 INSERT INTO #Target (TargetID, TargetName)
                 SELECT ID /*@d: Mapping ID to TargetID; */, Name FROM #Source;
                 
-                LINEAGE #Target;
+                SHOW LINEAGE FOR #Target;
             ";
 
             await _evaluator.Evaluate(new Parser(new Lexer(script).Tokenize()).Parse());

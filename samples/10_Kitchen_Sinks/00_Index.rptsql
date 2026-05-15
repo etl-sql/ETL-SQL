@@ -44,9 +44,9 @@ CREATE VISUAL VisualIndex AS TABLE (
 );
 
 -- 3. Page Layout
-CREATE PAGE IndexPage AS LAYOUT (
+CREATE PAGE IndexPage AS (
     STRUCTURE = 'A',
     MAP ('A' = VisualIndex)
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = IndexPage) WITH PAGES (IndexPage);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = IndexPage, PAGES (IndexPage));

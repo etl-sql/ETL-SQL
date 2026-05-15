@@ -29,7 +29,7 @@ CREATE VISUAL StyledBoxplot AS BOXPLOT (
 );
 
 -- Page Layout
-CREATE PAGE BoxplotKitchenSink AS LAYOUT (
+CREATE PAGE BoxplotKitchenSink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = BasicBoxplot,
@@ -37,4 +37,4 @@ CREATE PAGE BoxplotKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = BoxplotKitchenSink) WITH PAGES (BoxplotKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = BoxplotKitchenSink, PAGES (BoxplotKitchenSink));

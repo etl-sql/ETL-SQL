@@ -1153,7 +1153,7 @@ CREATE VISUAL DrillInByCategory AS BAR (
 -- ============================================================================
 
 -- ── PAGE 1: Overview ──────────────────────────────────────────────────────────
-CREATE PAGE Overview AS LAYOUT (
+CREATE PAGE Overview AS (
     TITLE     = 'Overview',
     TOOLTIP   = 'KPI strip, trend line, donut, cross-filter table, drill-down demo, and region slicer.',
     STRUCTURE = '
@@ -1174,7 +1174,7 @@ CREATE PAGE Overview AS LAYOUT (
 );
 
 -- ── PAGE 2: Trends ────────────────────────────────────────────────────────────
-CREATE PAGE Trends AS LAYOUT (
+CREATE PAGE Trends AS (
     TITLE     = 'Trends',
     TOOLTIP   = 'COMBO, WATERFALL, SCATTER, HBAR, and BOXPLOT charts.',
     STRUCTURE = '
@@ -1193,7 +1193,7 @@ CREATE PAGE Trends AS LAYOUT (
 );
 
 -- ── PAGE 3: Composition ───────────────────────────────────────────────────────
-CREATE PAGE Composition AS LAYOUT (
+CREATE PAGE Composition AS (
     TITLE     = 'Composition',
     TOOLTIP   = 'TREEMAP, HEATMAP, FUNNEL, GAUGE variants, and PIE with data labels.',
     STRUCTURE = 'A A B B / D E C C / F F C C',
@@ -1228,7 +1228,7 @@ CREATE CONTAINER DateControls AS BOX (
 );
 
 -- ── PAGE 4: Controls ──────────────────────────────────────────────────────────
-CREATE PAGE Controls AS LAYOUT (
+CREATE PAGE Controls AS (
     TITLE     = 'Controls',
     TOOLTIP   = 'Every filter type: SLICER, MULTISELECT, DATEPICKER, SLIDER, SEARCH, IMAGE, TEXT, and BUTTONs.',
     STRUCTURE = '
@@ -1254,7 +1254,7 @@ CREATE PAGE Controls AS LAYOUT (
 );
 
 -- ── PAGE 5: Detail ────────────────────────────────────────────────────────────
-CREATE PAGE Detail AS LAYOUT (
+CREATE PAGE Detail AS (
     TITLE     = 'Detail',
     TOOLTIP   = 'Named DATASET table, stacked BAR, SCROLL container with audit log.',
     STRUCTURE = '
@@ -1271,7 +1271,7 @@ CREATE PAGE Detail AS LAYOUT (
 );
 
 -- ── PAGE 6: New Charts ────────────────────────────────────────────────────────
-CREATE PAGE NewCharts AS LAYOUT (
+CREATE PAGE NewCharts AS (
     TITLE     = 'New Charts',
     TOOLTIP   = 'BUBBLE scatter with variable point size, RADAR spider chart, and CANDLESTICK OHLC price series.',
     STRUCTURE = '
@@ -1287,7 +1287,7 @@ CREATE PAGE NewCharts AS LAYOUT (
 );
 
 -- ── PAGE 7: Map Charts ───────────────────────────────────────────────────────
-CREATE PAGE MapCharts AS LAYOUT (
+CREATE PAGE MapCharts AS (
     TITLE     = 'Maps',
     TOOLTIP   = 'Choropleth MAP visuals — US states and world country revenue heat maps.',
     STRUCTURE = '
@@ -1302,7 +1302,7 @@ CREATE PAGE MapCharts AS LAYOUT (
 );
 
 -- ── PAGE 9: Advanced Charts ──────────────────────────────────────────────────
-CREATE PAGE AdvancedCharts AS LAYOUT (
+CREATE PAGE AdvancedCharts AS (
     TITLE     = 'Advanced Charts',
     TOOLTIP   = 'SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX, GANTT, and SCATTER BRUSH.',
     STRUCTURE = '
@@ -1324,7 +1324,7 @@ CREATE PAGE AdvancedCharts AS LAYOUT (
 );
 
 -- ── PAGE 8: Drill-Down Demo ───────────────────────────────────────────────────
-CREATE PAGE Drilldown AS LAYOUT (
+CREATE PAGE Drilldown AS (
     TITLE     = 'Drilldown',
     TOOLTIP   = 'DRILL_IN demo — click a bar to drill Category > Region > Salesperson in place.',
     STRUCTURE = '
@@ -1344,9 +1344,9 @@ CREATE PAGE Drilldown AS LAYOUT (
 
 CREATE NAVIGATION MainNav AS TAB (
     ORIENTATION = HORIZONTAL,
-    DEFAULT     = Overview
-)
-WITH PAGES (Overview, Trends, Composition, Controls, Detail, NewCharts, MapCharts, Drilldown, AdvancedCharts);
+    DEFAULT     = Overview,
+    PAGES (Overview, Trends, Composition, Controls, Detail, NewCharts, MapCharts, Drilldown, AdvancedCharts)
+);
 
 -- ============================================================================
 -- Phase 8: Global Style Override

@@ -188,7 +188,7 @@ SELECT CONCAT(first_name, ' ', last_name) AS full_name
 FROM #names
 INTO #display;
 
--- LINEAGE #display shows:
+-- SHOW LINEAGE FOR #display shows:
 -- full_name
 --   @pii: true  (inherited)
 --   @d: Full display name
@@ -210,14 +210,18 @@ FROM #customers;
 
 ## Querying Lineage
 
-### LINEAGE Statement
+### SHOW LINEAGE Statement
 
 Display the lineage graph for a table or column:
 
 ```sql
-LINEAGE #target_table;                    -- all columns
-LINEAGE #target_table.column_name;        -- single column
-LINEAGE #target_table EXPORT TO 'out.md'; -- save Markdown + Mermaid to file
+SHOW LINEAGE;                                      -- all session lineage
+SHOW LINEAGE FOR #target_table;                   -- all columns
+SHOW LINEAGE FOR #target_table COLUMN column_name;-- single column
+SHOW LINEAGE FOR REPORT SalesDashboard;           -- report node
+SHOW LINEAGE FOR DATASET &CustomerMart;           -- dataset node
+SHOW LINEAGE INTO #lineage;                       -- capture rows
+SHOW LINEAGE FOR #target_table TO 'out.md';       -- save Markdown + Mermaid to file
 ```
 
 Output includes the ancestry tree, transformation types, and all tags.
@@ -322,7 +326,7 @@ SHOW SCRIPT TAGS;
 ### Markdown Export
 
 ```sql
-LINEAGE #target_table EXPORT TO 'lineage_report.md';
+SHOW LINEAGE FOR #target_table TO 'lineage_report.md';
 ```
 
 Produces a Markdown file with a Mermaid directed graph diagram and a full audit table of all lineage entries.
@@ -331,10 +335,10 @@ Produces a Markdown file with a Mermaid directed graph diagram and a full audit 
 
 ```sql
 -- Export session lineage as OpenLineage events
-LINEAGE EXPORT AS OPENLINEAGE TO 'run_lineage.jsonl';
+SHOW LINEAGE EXPORT AS OPENLINEAGE TO 'run_lineage.jsonl';
 
 -- Export lineage for a specific table
-LINEAGE #target_table EXPORT AS OPENLINEAGE TO 'table_lineage.jsonl';
+SHOW LINEAGE FOR #target_table EXPORT AS OPENLINEAGE TO 'table_lineage.jsonl';
 ```
 
 OpenLineage `.jsonl` files are importable into Marquez, DataHub, Apache Airflow (with the OpenLineage provider), Collibra, Alation, and any tool that implements the OpenLineage specification.
@@ -459,7 +463,7 @@ INTO #customer_spend;
 -- total_spend gets TransformationKind = Aggregation (SUM)
 
 -- ── Review governance state ───────────────────────────────────────────────
-LINEAGE #customer_spend;
+SHOW LINEAGE FOR #customer_spend;
 
 SELECT target_column, tag_name, tag_value
 FROM LINEAGE_TAGS
@@ -480,10 +484,10 @@ ORDER BY target_table, target_column;
 
 ```sql
 -- Full session lineage as OpenLineage events
-LINEAGE EXPORT AS OPENLINEAGE TO 'audit_2026_Q2.jsonl';
+SHOW LINEAGE EXPORT AS OPENLINEAGE TO 'audit_2026_Q2.jsonl';
 
 -- Human-readable Markdown with Mermaid graph
-LINEAGE #final_output EXPORT TO 'audit_2026_Q2_lineage.md';
+SHOW LINEAGE FOR #final_output TO 'audit_2026_Q2_lineage.md';
 
 -- Flat tag report
 SELECT target_table, target_column, tag_name, tag_value

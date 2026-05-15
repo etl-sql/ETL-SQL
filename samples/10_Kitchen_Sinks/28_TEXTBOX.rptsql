@@ -21,7 +21,7 @@ CREATE VISUAL TextboxResult AS CARD (
 );
 
 -- Page Layout
-CREATE PAGE TextboxKitchenSink AS LAYOUT (
+CREATE PAGE TextboxKitchenSink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = NoteInput,
@@ -29,4 +29,4 @@ CREATE PAGE TextboxKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = TextboxKitchenSink) WITH PAGES (TextboxKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = TextboxKitchenSink, PAGES (TextboxKitchenSink));

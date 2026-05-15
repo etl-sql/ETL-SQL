@@ -39,7 +39,7 @@ CREATE BUTTON ResetBtn AS CLEAR_FILTERS (
 );
 
 -- Layout
-CREATE PAGE TestPage AS LAYOUT (
+CREATE PAGE TestPage AS (
     STRUCTURE = 'A A / B C',
     MAP (
         'A' = BarByRegion,

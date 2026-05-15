@@ -27,7 +27,7 @@ namespace ETL_SQL.Tests.Reporting
 DECLARE @Category string INPUT = 'None';
 SELECT 'Direct' AS Category INTO #SourceTable;
 CREATE VISUAL InjectionResult AS TABLE (SOURCE = (SELECT * FROM #SourceTable WHERE Category = @Category));
-CREATE PAGE Main AS LAYOUT (STRUCTURE = 'A', MAP('A' = InjectionResult));
+CREATE PAGE Main AS (STRUCTURE = 'A', MAP('A' = InjectionResult));
 ");
 
             try 

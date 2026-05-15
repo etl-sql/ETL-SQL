@@ -32,7 +32,7 @@ CREATE VISUAL SelectedList AS TABLE (
 );
 
 -- Page Layout
-CREATE PAGE MultiselectKitchenSink AS LAYOUT (
+CREATE PAGE MultiselectKitchenSink AS (
     STRUCTURE = 'A B / C',
     MAP (
         'A' = CatFilterInline,
@@ -41,4 +41,4 @@ CREATE PAGE MultiselectKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = MultiselectKitchenSink) WITH PAGES (MultiselectKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = MultiselectKitchenSink, PAGES (MultiselectKitchenSink));

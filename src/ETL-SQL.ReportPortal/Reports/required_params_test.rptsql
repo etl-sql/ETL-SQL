@@ -18,7 +18,7 @@ CREATE VISUAL SalesCard AS CARD (
 
 -- Note: No SLICER is defined, so @Region and @Year should appear in the Auto-Panel.
 
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
     STRUCTURE = 'A',
     MAP ('A' = SalesCard)
 );

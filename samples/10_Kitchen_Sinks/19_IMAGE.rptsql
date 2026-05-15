@@ -31,7 +31,7 @@ CREATE VISUAL DynamicImage AS IMAGE (
 );
 
 -- Page Layout
-CREATE PAGE ImageKitchenSink AS LAYOUT (
+CREATE PAGE ImageKitchenSink AS (
     STRUCTURE = 'A / B C',
     MAP (
         'A' = RemoteImage,
@@ -40,4 +40,4 @@ CREATE PAGE ImageKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = ImageKitchenSink) WITH PAGES (ImageKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = ImageKitchenSink, PAGES (ImageKitchenSink));

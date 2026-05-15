@@ -1,6 +1,6 @@
 -- DIAGNOSTICS & SSH KEY Kitchen Sink
 -- Covers: SET PROFILING / SHOW PROFILE, EXPLAIN, LINT, SHOW VARIABLES,
---         SHOW VERSION, CREATE SSH_KEY_PAIR, SHOW TAGS, LINEAGE(),
+--         SHOW VERSION, CREATE SSH_KEY_PAIR, SHOW TAGS, SHOW LINEAGE,
 --         GET_TAGS, GET_TAG_VALUE, script metadata header tags
 /* 
    @author: Kitchen Sink Test
@@ -71,14 +71,14 @@ DECLARE @desc = GET_TAG_VALUE('#Tagged', 'UserId', 'd');
 PRINT 'Tags on UserId:', @tags;
 PRINT 'Description of UserId:', @desc;
 
--- 7. LINEAGE()
-PRINT 'Testing LINEAGE()...';
+-- 7. SHOW LINEAGE
+PRINT 'Testing SHOW LINEAGE...';
 
 -- Console / messages view
-LINEAGE(#Tagged);
+SHOW LINEAGE FOR #Tagged;
 
 -- Column-specific trace
-LINEAGE(#Tagged, 'UserId');
+SHOW LINEAGE FOR #Tagged COLUMN UserId;
 
 -- Queryable source
 SELECT Operation, TargetTable, SourceTables
@@ -88,7 +88,7 @@ SELECT * FROM #lin_check;
 
 -- Export to markdown (write to temp file)
 BEGIN TRY
-    LINEAGE(#Tagged) TO 'samples/output/lineage_output.md';
+    SHOW LINEAGE FOR #Tagged TO 'samples/output/lineage_output.md';
     PRINT 'Lineage exported to file.';
 END TRY
 BEGIN CATCH

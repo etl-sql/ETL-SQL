@@ -47,7 +47,7 @@ CREATE VISUAL StyledMap AS MAP (
 );
 
 -- Page Layout
-CREATE PAGE MapKitchenSink AS LAYOUT (
+CREATE PAGE MapKitchenSink AS (
     STRUCTURE = 'A / B / C',
     MAP (
         'A' = BasicMap,
@@ -56,4 +56,4 @@ CREATE PAGE MapKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = MapKitchenSink) WITH PAGES (MapKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = MapKitchenSink, PAGES (MapKitchenSink));

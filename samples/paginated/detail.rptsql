@@ -18,7 +18,7 @@ CREATE VISUAL DetailTable AS TABLE (
 );
 
 -- 3. Layout
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
     STRUCTURE = 'A',
     MAP ('A' = DetailTable),
     STYLE (PADDING = '20px')

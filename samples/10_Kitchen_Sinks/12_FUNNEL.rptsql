@@ -32,7 +32,7 @@ CREATE VISUAL StyledFunnel AS FUNNEL (
 );
 
 -- Page Layout
-CREATE PAGE FunnelKitchenSink AS LAYOUT (
+CREATE PAGE FunnelKitchenSink AS (
     STRUCTURE = 'A B',
     MAP (
         'A' = BasicFunnel,
@@ -40,4 +40,4 @@ CREATE PAGE FunnelKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = FunnelKitchenSink) WITH PAGES (FunnelKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = FunnelKitchenSink, PAGES (FunnelKitchenSink));

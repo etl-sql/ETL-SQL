@@ -33,7 +33,7 @@ CREATE VISUAL StyledRadar AS RADAR (
 );
 
 -- Page Layout
-CREATE PAGE RadarKitchenSink AS LAYOUT (
+CREATE PAGE RadarKitchenSink AS (
     STRUCTURE = 'A B',
     MAP (
         'A' = BasicRadar,
@@ -41,4 +41,4 @@ CREATE PAGE RadarKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = RadarKitchenSink) WITH PAGES (RadarKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = RadarKitchenSink, PAGES (RadarKitchenSink));

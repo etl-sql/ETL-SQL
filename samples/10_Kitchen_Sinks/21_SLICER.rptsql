@@ -24,7 +24,7 @@ CREATE VISUAL SelectedResult AS CARD (
 );
 
 -- Page Layout
-CREATE PAGE SlicerKitchenSink AS LAYOUT (
+CREATE PAGE SlicerKitchenSink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = RegionFilter,
@@ -32,4 +32,4 @@ CREATE PAGE SlicerKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = SlicerKitchenSink) WITH PAGES (SlicerKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = SlicerKitchenSink, PAGES (SlicerKitchenSink));

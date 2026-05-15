@@ -117,7 +117,7 @@ CREATE CONTAINER KpiRow AS BOX (
   VISUALS (TotalRevenue, TotalUnits, AvgRevenue)
 );
 
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
   STRUCTURE = 'A A B / C C C / D D D',
   MAP (
     'A' = KpiRow,
@@ -197,7 +197,7 @@ CREATE VISUAL PeriodTotal AS CARD (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE Trends AS LAYOUT (
+CREATE PAGE Trends AS (
   STRUCTURE = 'A B C / D D D',
   MAP (
     'A' = PeriodTotal,
@@ -290,7 +290,7 @@ CREATE VISUAL YoyTable AS TABLE (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE YoY AS LAYOUT (
+CREATE PAGE YoY AS (
   STRUCTURE = 'A A B / C C C',
   MAP (
     'A' = YoyLine,
@@ -364,7 +364,7 @@ CREATE VISUAL RegionReset AS SLICER (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE DrillDown AS LAYOUT (
+CREATE PAGE DrillDown AS (
   STRUCTURE = 'A A B / C C C',
   MAP (
     'A' = RegionChart,
@@ -455,7 +455,7 @@ CREATE VISUAL UnitTrend AS LINE (
 );
 
 -- ── Pages ─────────────────────────────────────────────────────────────────
-CREATE PAGE Overview AS LAYOUT (
+CREATE PAGE Overview AS (
   STRUCTURE = 'A B / C C',
   MAP (
     'A' = TotalRev,
@@ -465,7 +465,7 @@ CREATE PAGE Overview AS LAYOUT (
 )
 WITH PARAMETERS (@region = 'All');
 
-CREATE PAGE Trends AS LAYOUT (
+CREATE PAGE Trends AS (
   STRUCTURE = 'A B',
   MAP (
     'A' = RevTrend,
@@ -477,9 +477,9 @@ WITH PARAMETERS (@region = 'All');
 -- ── Navigation ────────────────────────────────────────────────────────────
 CREATE NAVIGATION MainNav AS TAB (
   ORIENTATION = HORIZONTAL,
-  DEFAULT     = Overview
-)
-WITH PAGES (Overview, Trends);
+  DEFAULT     = Overview,
+  PAGES (Overview, Trends)
+);
 ```
 
 > **How cross-page filtering works**: When the user changes `RegionFilter` on the Overview page, `SET_PARAMETER` sets `@region` in the dashboard session. The Trends page declares the same `@region` parameter — when the user navigates there, its visuals re-query using the already-set value.
@@ -549,7 +549,7 @@ CREATE VISUAL LowStockTable AS TABLE (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE Inventory AS LAYOUT (
+CREATE PAGE Inventory AS (
   STRUCTURE = 'A B C / D D D',
   MAP (
     'A' = StockHeatmap,
@@ -620,7 +620,7 @@ CREATE VISUAL RevenueGauge AS GAUGE (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE Financial AS LAYOUT (
+CREATE PAGE Financial AS (
   STRUCTURE = 'A A B / A A C',
   MAP (
     'A' = CashFlow,
@@ -692,7 +692,7 @@ CREATE VISUAL StackedRevenue AS BAR (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE Combo AS LAYOUT (
+CREATE PAGE Combo AS (
   STRUCTURE = 'A A / B B',
   MAP (
     'A' = RevUnitsCombo,
@@ -770,7 +770,7 @@ CREATE VISUAL PriceByCategory AS BAR (
 );
 
 -- ── Layout ────────────────────────────────────────────────────────────────
-CREATE PAGE Catalog AS LAYOUT (
+CREATE PAGE Catalog AS (
   STRUCTURE = 'A B C / D D E',
   MAP (
     'A' = CategoryPicker,
@@ -905,7 +905,7 @@ CREATE CONTAINER KpiRow AS BOX (
 );
 
 -- ── Page layout ───────────────────────────────────────────────────────────
-CREATE PAGE Overview AS LAYOUT (
+CREATE PAGE Overview AS (
   TITLE     = 'Sales Overview',
   STRUCTURE = 'A A / B C / D D',
   STYLE     = PanelFrame,
@@ -917,9 +917,9 @@ CREATE PAGE Overview AS LAYOUT (
 
 CREATE NAVIGATION MainNav AS TAB (
   ORIENTATION = HORIZONTAL,
-  DEFAULT     = Overview
-)
-WITH PAGES (Overview);
+  DEFAULT     = Overview,
+  PAGES (Overview)
+);
 ```
 
 ### Key Points

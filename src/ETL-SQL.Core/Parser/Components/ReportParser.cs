@@ -218,10 +218,7 @@ namespace ETL_SQL.Core.Parser.Components
                 if (!ReportCheck(TokenType.LPAREN)) Consume(TokenType.AS, "Expected AS after page name");
             }
 
-            // Support the optional LAYOUT keyword before ( (established syntax in established reports)
-            Match(TokenType.LAYOUT);
-
-            Consume(TokenType.LPAREN, "Expected '(' after AS [LAYOUT]");
+            Consume(TokenType.LPAREN, "Expected '(' after AS");
             
             string? visibility = "ON";
             string? structure = null;
@@ -282,7 +279,7 @@ namespace ETL_SQL.Core.Parser.Components
                 }
                 Match(TokenType.COMMA);
             }
-            Consume(TokenType.RPAREN, "Expected ')' to close CREATE PAGE LAYOUT");
+            Consume(TokenType.RPAREN, "Expected ')' to close CREATE PAGE");
 
             // Optional WITH (REFRESH = <seconds>) clause
             if (Match(TokenType.WITH))
@@ -735,20 +732,12 @@ namespace ETL_SQL.Core.Parser.Components
 
             Consume(TokenType.RPAREN, "Expected ')' to close CREATE NAVIGATION options");
 
-            if (pages.Count == 0)
+            if (Match(TokenType.WITH) || ReportCheck(TokenType.PAGES))
             {
-                bool hasPagesClause = Match(TokenType.WITH) || ReportCheck(TokenType.PAGES);
-                if (hasPagesClause)
-                {
-                    Match(TokenType.PAGES);
-                    Consume(TokenType.LPAREN, "Expected '(' after PAGES");
-                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
-                    {
-                        pages.Add(ConsumeIdentifier("Expected page name").Value);
-                        Match(TokenType.COMMA);
-                    }
-                    Consume(TokenType.RPAREN, "Expected ')' to close PAGES");
-                }
+                throw new SyntaxException(
+                    "Expected end of CREATE NAVIGATION after ')'.",
+                    _parser.Current.Line,
+                    _parser.Current.Column);
             }
 
             Match(TokenType.SEMICOLON);

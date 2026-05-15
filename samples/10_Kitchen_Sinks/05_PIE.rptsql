@@ -47,7 +47,7 @@ CREATE VISUAL StyledPie AS PIE (
 );
 
 -- Page Layout
-CREATE PAGE PieKitchenSink AS LAYOUT (
+CREATE PAGE PieKitchenSink AS (
     STRUCTURE = 'A B / C',
     MAP (
         'A' = BasicPie,
@@ -56,4 +56,4 @@ CREATE PAGE PieKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = PieKitchenSink) WITH PAGES (PieKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = PieKitchenSink, PAGES (PieKitchenSink));

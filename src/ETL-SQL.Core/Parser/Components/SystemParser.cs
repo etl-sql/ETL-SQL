@@ -472,8 +472,7 @@ namespace ETL_SQL.Core.Parser.Components
             }
             else if (Match(TokenType.LINEAGE))
             {
-                Match(TokenType.FOR);
-                stmt = new LineageStatement(_parser.ParseTableReference());
+                stmt = ParseShowLineage(startToken);
             }
             else if (Match(TokenType.VERSION)) stmt = new ShowVersionStatement();
             else if (Match(TokenType.SAFE))
@@ -533,12 +532,66 @@ namespace ETL_SQL.Core.Parser.Components
                     ShowSafeZonesStatement ssz   => ssz with { IntoTable = tempTable },
                     ShowSessionsStatement sess   => sess with { IntoTable = tempTable },
                     ShowDatasetsStatement sds    => sds with { IntoTable = tempTable },
+                    LineageStatement lin         => lin with { IntoTable = tempTable },
                     _                            => stmt
                 };
             }
 
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return stmt with { Line = startToken.Line, Column = startToken.Column };
+        }
+
+        private LineageStatement ParseShowLineage(Token startToken)
+        {
+            TableReference? targetTable = null;
+            string? columnName = null;
+            string? exportPath = null;
+            bool exportAsOpenLineage = false;
+
+            if (Match(TokenType.FOR))
+            {
+                if (Match(TokenType.REPORT))
+                {
+                    var reportName = ConsumeIdentifier("Expected report name after SHOW LINEAGE FOR REPORT").Value;
+                    targetTable = new TableReference("report:" + reportName);
+                }
+                else if (Match(TokenType.DATASET))
+                {
+                    var datasetName = ConsumeIdentifier("Expected dataset name after SHOW LINEAGE FOR DATASET").Value;
+                    targetTable = new TableReference(datasetName.StartsWith("&") ? "dataset:" + datasetName[1..] : "dataset:" + datasetName);
+                }
+                else
+                {
+                    if (Match(TokenType.TABLE)) { }
+                    targetTable = _parser.ParseTableReference(allowAlias: false);
+                    if (Match(TokenType.COLUMN))
+                        columnName = ConsumeIdentifier("Expected column name after COLUMN").Value;
+                }
+            }
+
+            if (_parser.Current.Type == TokenType.EXPORT)
+            {
+                Advance();
+                if (Match(TokenType.AS))
+                {
+                    var format = ConsumeIdentifier("Expected export format after AS").Value;
+                    if (!format.Equals("OPENLINEAGE", StringComparison.OrdinalIgnoreCase))
+                        throw new SyntaxException("Expected OPENLINEAGE after AS", _parser.Previous.Line, _parser.Previous.Column);
+                    exportAsOpenLineage = true;
+                }
+                Consume(TokenType.TO, "Expected TO after lineage export format");
+                exportPath = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
+            }
+            else if (Match(TokenType.TO))
+            {
+                exportPath = Consume(TokenType.STRING_LITERAL, "Expected file path after TO").Value;
+            }
+
+            return new LineageStatement(targetTable, columnName, exportPath, exportAsOpenLineage)
+            {
+                Line = startToken.Line,
+                Column = startToken.Column
+            };
         }
 
         public Statement ParseExplain(Token startToken)

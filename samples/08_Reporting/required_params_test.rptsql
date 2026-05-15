@@ -22,7 +22,7 @@ CREATE VISUAL SalesData AS TABLE (
     MAPPINGS (VALUE = Sales)
 );
 
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
     STRUCTURE = 'A / B',
     MAP ('A' = SalesCard, 'B' = SalesData)
 );

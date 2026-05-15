@@ -1940,7 +1940,9 @@ SHOW VARIABLES                 [INTO #temp];
 SHOW LOCAL VARIABLES           [INTO #temp];
 SHOW SESSIONS                  [INTO #temp];
 SHOW PROFILE                   [INTO #temp];
-SHOW LINEAGE [FOR <table_ref>] [INTO #temp];
+SHOW LINEAGE [FOR <table_ref> [COLUMN <column>]] [INTO #temp];
+SHOW LINEAGE FOR REPORT <report_name> [INTO #temp];
+SHOW LINEAGE FOR DATASET &<dataset_name> [INTO #temp];
 
 -- Metadata Tags
 SHOW TAGS FOR SCRIPT                         [INTO #temp];
@@ -2125,7 +2127,7 @@ Input visuals (`CHECKBOX`, `TEXTBOX`, `NUMBERBOX`) and some filter types support
 
 ### A.4 `CREATE PAGE`
 ```sql
-CREATE PAGE <name> AS LAYOUT (
+CREATE PAGE <name> AS (
   STRUCTURE = '<css-grid-template-areas>',
   MAP (
     '<slot>' = <VisualOrContainerName>
@@ -2160,11 +2162,6 @@ CREATE NAVIGATION <name> AS TAB|BUTTON|LINK (
   [DEFAULT = <PageName>,]
   [PAGES ( <PageName> [, ...] )]
 );
-
-CREATE NAVIGATION <name> AS TAB|BUTTON|LINK (
-  [ORIENTATION = HORIZONTAL|VERTICAL,]
-  [DEFAULT = <PageName>]
-) WITH PAGES ( <PageName> [, ...] );
 ```
 
 ### A.7 `CREATE STYLE`
@@ -2216,7 +2213,7 @@ DROP NAVIGATION    [IF EXISTS] <name>;
 DROP DATASET       [IF EXISTS] <name>;
 
 CREATE OR ALTER VISUAL     <name> AS <type> ( ... );
-CREATE OR ALTER PAGE       <name> AS LAYOUT ( ... );
+CREATE OR ALTER PAGE       <name> AS ( ... );
 CREATE OR ALTER DATASET    &<name> ... AS ( SELECT ... );
 CREATE OR ALTER STYLE      <name> ( ... );
 CREATE OR ALTER BUTTON     <name> AS BACK|REFRESH|CLEAR_FILTERS|<customType> ( ... );

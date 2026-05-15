@@ -30,7 +30,7 @@ DECLARE @Cat = 'A';
 CREATE CONNECTION test_csv ON FLATFILE('{csvPath}');
 CREATE VISUAL AffectedVisual AS TABLE (SOURCE = 'SELECT * FROM test_csv WHERE Category = @Cat');
 CREATE VISUAL StaticVisual AS TABLE (SOURCE = 'SELECT * FROM test_csv');
-CREATE PAGE Main AS LAYOUT (STRUCTURE = 'A B', MAP('A' = AffectedVisual, 'B' = StaticVisual));
+CREATE PAGE Main AS (STRUCTURE = 'A B', MAP('A' = AffectedVisual, 'B' = StaticVisual));
 ");
 
             try 

@@ -42,7 +42,7 @@ CREATE VISUAL SalesBar AS BAR (
   MAPPINGS (X = product, Y = revenue)
 );
 
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
   STRUCTURE = 'S / C',
   MAP ('S' = RegionSlicer, 'C' = SalesBar)
 );

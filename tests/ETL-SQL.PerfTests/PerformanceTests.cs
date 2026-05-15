@@ -111,6 +111,7 @@ namespace ETL_SQL.Tests
         public async Task TestSpillEnginesPaths()
         {
             var eval = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+            eval.RedirectOutput = true;
 
             // Lower spill thresholds below 50k so every operation is forced through spill.
             eval.JoinSpillThreshold    = 10_000;
@@ -152,7 +153,9 @@ namespace ETL_SQL.Tests
             await Execute(eval, "SELECT Grp, SUM(Val) AS Total FROM #spill_test GROUP BY Grp;");
             aggSw.Stop();
             var aggResult = eval.LastResult as DataTable;
-            Console.WriteLine($"GROUP BY (spill agg):   {aggSw.ElapsedMilliseconds:N0}ms → {aggResult?.Rows.Count ?? 0} groups");
+            Assert.NotNull(aggResult);
+            var aggGroupCount = aggResult!.Rows.Count;
+            Console.WriteLine($"GROUP BY (spill agg):   {aggSw.ElapsedMilliseconds:N0}ms → {aggGroupCount} groups");
 
             // 3. External join (JOIN over threshold → ExternalJoinEngine)
             await Execute(eval, "CREATE TABLE #spill_right (ID INT, Label VARCHAR(10));");
@@ -177,8 +180,7 @@ namespace ETL_SQL.Tests
             Assert.True(sortSw.ElapsedMilliseconds < 60_000, $"Spill sort took {sortSw.ElapsedMilliseconds}ms — expected < 60s");
             Assert.True(aggSw.ElapsedMilliseconds  < 60_000, $"Spill aggregate took {aggSw.ElapsedMilliseconds}ms — expected < 60s");
             Assert.True(joinSw.ElapsedMilliseconds < 60_000, $"Spill join took {joinSw.ElapsedMilliseconds}ms — expected < 60s");
-            Assert.NotNull(aggResult);
-            Assert.True(aggResult!.Rows.Count > 0, "GROUP BY returned no groups");
+            Assert.True(aggGroupCount > 0, "GROUP BY returned no groups");
         }
 
         private static Script Parse(string sql) => new Parser(new Lexer(sql).Tokenize()).Parse();

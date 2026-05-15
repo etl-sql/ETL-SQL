@@ -1,5 +1,6 @@
 using ETL_SQL.Common;
 using ETL_SQL.Analysis.Lineage;
+using ETL_SQL.Core;
 using ETL_SQL.Core.Common.Exceptions;
 using ETL_SQL.Data;
 using ETL_SQL.Engine.Lineage;
@@ -51,6 +52,21 @@ namespace ETL_SQL.Engine.Handlers
                     ? context.LineageTracker.GetColumnLineage(targetName, stmt.ColumnName)
                     : context.LineageTracker.GetLineage(targetName))
                 : context.LineageTracker.GetFullLineage()).ToList();
+
+            if (!string.IsNullOrEmpty(stmt.IntoTable))
+            {
+                var table = await BuildLineageTable(entries);
+                if (!context.Connections.ContainsKey(stmt.IntoTable))
+                {
+                    context.Connections[stmt.IntoTable] = new InMemoryDataSource();
+                }
+                var destination = await context.ResolveDataSourceAsync(new TableReference(stmt.IntoTable));
+                await destination.WriteBatches(new[] { table }.ToAsyncEnumerable());
+                context.LastResult = table;
+                context.LastResultSets.Add(table);
+                context.OnResultSet?.Invoke(table);
+                return;
+            }
 
             if (!entries.Any())
             {
@@ -133,6 +149,41 @@ namespace ETL_SQL.Engine.Handlers
                 }
             }
             _logger.WriteLine(new string('-', 80) + "\n");
+        }
+
+        private static async Task<DataTable> BuildLineageTable(IEnumerable<LineageEntry> entries)
+        {
+            var table = new DataTable();
+            table.SetColumns(new[]
+            {
+                "Timestamp", "Operation", "TargetTable", "TargetColumn",
+                "SourceTables", "SourceColumns", "Description", "Metadata",
+                "DerivedFromDescriptions", "SourceFile", "Line", "Column",
+                "TransformationKind", "TransformationExpression", "FunctionsApplied"
+            });
+
+            foreach (var entry in entries)
+            {
+                var row = new Row();
+                row["Timestamp"] = entry.Timestamp;
+                row["Operation"] = entry.Operation;
+                row["TargetTable"] = entry.TargetTable;
+                row["TargetColumn"] = entry.TargetColumn;
+                row["SourceTables"] = string.Join(", ", entry.SourceTables);
+                row["SourceColumns"] = string.Join(", ", entry.SourceColumns);
+                row["Description"] = entry.Description;
+                row["Metadata"] = System.Text.Json.JsonSerializer.Serialize(entry.Metadata);
+                row["DerivedFromDescriptions"] = entry.DerivedFromDescriptions;
+                row["SourceFile"] = entry.SourceFile;
+                row["Line"] = entry.Line;
+                row["Column"] = entry.Column;
+                row["TransformationKind"] = entry.TransformationKind == TransformationKind.Unknown ? null : entry.TransformationKind.ToString();
+                row["TransformationExpression"] = entry.TransformationExpression;
+                row["FunctionsApplied"] = entry.FunctionsApplied != null ? string.Join(", ", entry.FunctionsApplied) : null;
+                await table.AddRowAsync(row);
+            }
+
+            return table;
         }
     }
 }

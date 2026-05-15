@@ -46,7 +46,7 @@ CREATE VISUAL SalesTable AS TABLE (
 );
 
 -- Dashboard page
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
   STRUCTURE = 'A B C / D E E',
   MAP (
     'A' = TotalRevenue,

@@ -20,7 +20,7 @@ CREATE VISUAL CheckboxResult AS CARD (
 );
 
 -- Page Layout
-CREATE PAGE CheckboxKitchenSink AS LAYOUT (
+CREATE PAGE CheckboxKitchenSink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = InactiveToggle,
@@ -28,4 +28,4 @@ CREATE PAGE CheckboxKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = CheckboxKitchenSink) WITH PAGES (CheckboxKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = CheckboxKitchenSink, PAGES (CheckboxKitchenSink));

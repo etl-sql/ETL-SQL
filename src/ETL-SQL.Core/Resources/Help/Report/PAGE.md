@@ -2,7 +2,7 @@
 Defines a report page as a CSS grid layout. Visuals, containers, and buttons are mapped into named grid slots.
 
 Syntax:
-  CREATE PAGE <name> AS LAYOUT (
+  CREATE PAGE <name> AS (
     STRUCTURE = '<grid-template-areas>',
     MAP ('<slot>' = <visual_or_container>, ...),
     STYLE (KEY = value, ...)
@@ -17,7 +17,7 @@ Style options:
 
 ```sql
 -- Full-width header, then two equal columns
-CREATE PAGE Dashboard AS LAYOUT (
+CREATE PAGE Dashboard AS (
   STRUCTURE = 'H H / L R',
   MAP (
     'H' = KpiRow,
@@ -28,7 +28,7 @@ CREATE PAGE Dashboard AS LAYOUT (
 );
 
 -- Four-slot grid
-CREATE PAGE Detail AS LAYOUT (
+CREATE PAGE Detail AS (
   STRUCTURE = 'A B / C D',
   MAP (
     'A' = TrendLine,

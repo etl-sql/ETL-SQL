@@ -757,10 +757,10 @@ INTO #TaggedUsers
 FROM prod.Users /* @sensitivity: medium; */;
 
 -- View the lineage tree
-LINEAGE(#TaggedUsers);
+SHOW LINEAGE FOR #TaggedUsers;
 
 -- Export a Mermaid diagram + audit table
-LINEAGE(#TaggedUsers) TO 'C:\Reports\user_lineage.md';
+SHOW LINEAGE FOR #TaggedUsers TO 'C:\Reports\user_lineage.md';
 
 -- Query lineage programmatically
 SELECT Operation, SourceTables, TargetColumn

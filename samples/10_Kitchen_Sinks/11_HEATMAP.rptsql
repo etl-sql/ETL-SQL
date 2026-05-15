@@ -36,7 +36,7 @@ CREATE VISUAL StyledHeatmap AS HEATMAP (
 );
 
 -- Page Layout
-CREATE PAGE HeatmapKitchenSink AS LAYOUT (
+CREATE PAGE HeatmapKitchenSink AS (
     STRUCTURE = 'A B',
     MAP (
         'A' = BasicHeatmap,
@@ -44,4 +44,4 @@ CREATE PAGE HeatmapKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = HeatmapKitchenSink) WITH PAGES (HeatmapKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = HeatmapKitchenSink, PAGES (HeatmapKitchenSink));

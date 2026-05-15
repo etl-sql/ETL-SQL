@@ -331,7 +331,7 @@ namespace ETL_SQL.Tests.Engine
         {
             await Run(
                 "CREATE VISUAL v1 AS BAR (SOURCE (SELECT 1 AS n));" +
-                "CREATE PAGE pg1 AS LAYOUT (STRUCTURE = 'A', MAP ('A' = v1));" +
+                "CREATE PAGE pg1 AS (STRUCTURE = 'A', MAP ('A' = v1));" +
                 "ALTER PAGE pg1 (TITLE = 'New Title');");
         }
 

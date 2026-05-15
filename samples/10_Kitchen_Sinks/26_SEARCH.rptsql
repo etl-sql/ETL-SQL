@@ -29,7 +29,7 @@ CREATE VISUAL FilteredTable AS TABLE (
 );
 
 -- Page Layout
-CREATE PAGE SearchKitchenSink AS LAYOUT (
+CREATE PAGE SearchKitchenSink AS (
     STRUCTURE = 'A / B',
     MAP (
         'A' = GlobalSearch,
@@ -37,4 +37,4 @@ CREATE PAGE SearchKitchenSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = SearchKitchenSink) WITH PAGES (SearchKitchenSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = SearchKitchenSink, PAGES (SearchKitchenSink));

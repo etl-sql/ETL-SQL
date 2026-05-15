@@ -36,7 +36,7 @@ CREATE VISUAL CustomerCount AS CARD (SOURCE=#c, MAPPINGS(VALUE=customers, LABEL=
 CREATE VISUAL AvgOrder      AS CARD (SOURCE=#a, MAPPINGS(VALUE=avg_order,  LABEL=label),
                                      OPTIONS(FORMAT='C2'));
 
-CREATE PAGE Summary AS LAYOUT (
+CREATE PAGE Summary AS (
   STRUCTURE = 'A B',
   MAP ('A' = CustomerCount, 'B' = AvgOrder)
 );

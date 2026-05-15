@@ -39,7 +39,7 @@ CREATE VISUAL V2 AS CARD (
 DROP VISUAL V2;
 
 -- 7. Verification Page
-CREATE PAGE Main AS LAYOUT (
+CREATE PAGE Main AS (
     STRUCTURE = 'A B',
     MAP (
         'A' = V1,

@@ -67,7 +67,7 @@ CREATE BUTTON ToggleBtn AS CUSTOM (
 );
 
 -- Page Layout
-CREATE PAGE InteractionSink AS LAYOUT (
+CREATE PAGE InteractionSink AS (
     STRUCTURE = 'A A / B C / D E / F F',
     MAP (
         'A' = DrillinChart,
@@ -79,4 +79,4 @@ CREATE PAGE InteractionSink AS LAYOUT (
     )
 );
 
-CREATE NAVIGATION MainNav AS TAB (DEFAULT = InteractionSink) WITH PAGES (InteractionSink);
+CREATE NAVIGATION MainNav AS TAB (DEFAULT = InteractionSink, PAGES (InteractionSink));
