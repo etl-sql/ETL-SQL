@@ -1,0 +1,22 @@
+# Basic SLT test
+statement ok
+CREATE TABLE t1(a INT, b INT);
+
+statement ok
+INSERT INTO t1 VALUES(1, 10);
+
+statement ok
+INSERT INTO t1 VALUES(2, 20);
+
+query II
+SELECT a, b FROM t1 ORDER BY a;
+----
+1
+10
+2
+20
+
+query I
+SELECT SUM(b) FROM t1;
+----
+30

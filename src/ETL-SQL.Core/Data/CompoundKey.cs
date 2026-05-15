@@ -19,30 +19,65 @@ namespace ETL_SQL.Data
         public int Length => _values.Length;
         public object? this[int index] => _values[index];
 
+        public CompoundKey(object? val1) 
+        {
+            _setIndex = 0;
+            var n1 = NormalizeValue(val1);
+            _values = new[] { n1 };
+            _hashCode = HashCode.Combine(_setIndex, n1);
+        }
+
+        public CompoundKey(object? val1, object? val2)
+        {
+            _setIndex = 0;
+            var n1 = NormalizeValue(val1);
+            var n2 = NormalizeValue(val2);
+            _values = new[] { n1, n2 };
+            _hashCode = HashCode.Combine(_setIndex, n1, n2);
+        }
+
+        public CompoundKey(object? val1, object? val2, object? val3)
+        {
+            _setIndex = 0;
+            var n1 = NormalizeValue(val1);
+            var n2 = NormalizeValue(val2);
+            var n3 = NormalizeValue(val3);
+            _values = new[] { n1, n2, n3 };
+            _hashCode = HashCode.Combine(_setIndex, n1, n2, n3);
+        }
+
         public CompoundKey(params object?[] values) : this(0, values) { }
 
         public CompoundKey(int setIndex, params object?[] values)
         {
-            _values = values ?? Array.Empty<object?>();
             _setIndex = setIndex;
-            
-            // Pre-calculate hash code for performance in dictionary lookups
+            if (values == null || values.Length == 0)
+            {
+                _values = Array.Empty<object?>();
+                _hashCode = HashCode.Combine(_setIndex);
+                return;
+            }
+
+            _values = new object?[values.Length];
             var hash = new HashCode();
             hash.Add(_setIndex);
-            foreach (var val in _values)
+            for (int i = 0; i < values.Length; i++)
             {
-                hash.Add(NormalizeValue(val));
+                var normalized = NormalizeValue(values[i]);
+                _values[i] = normalized;
+                hash.Add(normalized);
             }
             _hashCode = hash.ToHashCode();
         }
 
         public bool Equals(CompoundKey other)
         {
+            if (_hashCode != other._hashCode) return false;
             if (_setIndex != other._setIndex) return false;
             if (_values.Length != other._values.Length) return false;
             for (int i = 0; i < _values.Length; i++)
             {
-                if (!ValuesEqual(_values[i], other._values[i])) return false;
+                if (!object.Equals(_values[i], other._values[i])) return false;
             }
             return true;
         }
@@ -101,16 +136,7 @@ namespace ETL_SQL.Data
             return val;
         }
 
-        private static bool ValuesEqual(object? a, object? b)
-        {
-            var normA = NormalizeValue(a);
-            var normB = NormalizeValue(b);
-
-            if (normA == null) return normB == null;
-            if (normB == null) return false;
-
-            return normA.Equals(normB);
-        }
+        // Values are now normalized in the constructor, so we can use object.Equals directly.
 
         public int CompareTo(CompoundKey other)
         {
@@ -126,10 +152,8 @@ namespace ETL_SQL.Data
             return _values.Length.CompareTo(other._values.Length);
         }
 
-        private static int CompareValues(object? a, object? b)
+        private static int CompareValues(object? normA, object? normB)
         {
-            var normA = NormalizeValue(a);
-            var normB = NormalizeValue(b);
 
             if (normA == null) return normB == null ? 0 : -1;
             if (normB == null) return 1;

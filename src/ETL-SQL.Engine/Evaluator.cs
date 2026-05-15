@@ -903,7 +903,7 @@ namespace ETL_SQL.Engine
         public Task<IDataSource> ResolveDataSourceAsync(TableReference table) => _dataSourceManager.ResolveDataSourceAsync(table, _connections, _transactionManager);
         public IAsyncEnumerable<DataTable> ResolveAndApplyOperators(TableReference table) => _dataSourceManager.ResolveAndApplyOperators(table, _connections, _transactionManager, BatchSize);
 
-        public async Task<object?> ExecuteValue(string expression, Row? context = null, bool decryptSensitive = false)
+        public async ValueTask<object?> ExecuteValue(string expression, Row? context = null, bool decryptSensitive = false)
         {
             var lexer = new ETL_SQL.Core.Parser.Lexer(expression);
             var tokens = lexer.Tokenize();
@@ -935,7 +935,7 @@ namespace ETL_SQL.Engine
             return LastResult!;
         }
 
-        public Task<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false) => _expressionEvaluator.Evaluate(expr, context, decryptSensitive);
+        public ValueTask<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false) => _expressionEvaluator.Evaluate(expr, context, decryptSensitive);
         public IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context) => _expressionEvaluator.EvaluateStream(expr, context);
         public CompiledSql CompileExpression(Expression e, string d = "MSSQL") => _queryCompiler.CompileExpression(e, d);
         public CompiledSql CompileQuery(Statement s, string d = "MSSQL") => _queryCompiler.CompileQuery(s, d);
@@ -1011,7 +1011,7 @@ namespace ETL_SQL.Engine
         public bool ProcedureExists(string name) => _variableScopeManager.TryGetProcedure(name, out _);
         public bool FunctionExists(string name) => _variableScopeManager.TryGetFunction(name, out _);
 
-        public Task<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context)
+        public ValueTask<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context)
             => _procedureExecutor.EvaluateUserDefinedFunction(f, args, context);
 
         public Task EvaluateProcedure(string name, List<(string? Name, object? Value)> args)
@@ -1029,7 +1029,7 @@ namespace ETL_SQL.Engine
             await handler.Execute(stmt, this);
         }
 
-        public async Task<bool> EvaluateCondition(Expression? expr, Row context)
+        public async ValueTask<bool> EvaluateCondition(Expression? expr, Row context)
         {
             if (expr == null) return true;
             var res = await EvaluateValue(expr, context);

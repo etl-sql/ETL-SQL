@@ -1,0 +1,34 @@
+# GROUP BY and HAVING
+statement ok
+CREATE TABLE sales(region STRING, amount INT);
+
+statement ok
+INSERT INTO sales VALUES('East', 100), ('West', 200), ('East', 150), ('West', 50), ('North', 300);
+
+query II
+SELECT region, SUM(amount) FROM sales GROUP BY region ORDER BY region;
+----
+East
+250
+North
+300
+West
+250
+
+query II
+SELECT region, COUNT(*) FROM sales GROUP BY region HAVING COUNT(*) > 1 ORDER BY region;
+----
+East
+2
+West
+2
+
+query II
+SELECT region, AVG(amount) FROM sales GROUP BY region ORDER BY AVG(amount) DESC, region;
+----
+North
+300
+East
+125
+West
+125

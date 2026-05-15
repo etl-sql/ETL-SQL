@@ -6,15 +6,17 @@
     <Nullable>disable</Nullable>
     <AssemblyName>ETL-SQL.Benchmarks</AssemblyName>
     <IsPackable>false</IsPackable>
-    <IsTestProject>false</IsTestProject>
+    <IsTestProject>true</IsTestProject>
     <StartupObject>ETL_SQL.Benchmarks.Program</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="Moq" />
     <PackageReference Include="Serilog" />
     <PackageReference Include="Spectre.Console" />
     <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
   </ItemGroup>
 

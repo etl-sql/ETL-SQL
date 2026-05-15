@@ -105,10 +105,10 @@ namespace ETL_SQL.Core
 
     public interface IEvaluationContext
     {
-        Task<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false);
+        ValueTask<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false);
         IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context);
-        Task<bool> EvaluateCondition(Expression? expr, Row context);
-        Task<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context);
+        ValueTask<bool> EvaluateCondition(Expression? expr, Row context);
+        ValueTask<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context);
         object? ResolveIdentifier(string name, Row? row);
         int CompareConstants(object? a, object? b);
         bool IsSoftEqual(object? a, object? b);

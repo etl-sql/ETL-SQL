@@ -1,0 +1,44 @@
+# Expressions and Functions
+statement ok
+CREATE TABLE t1(a INT, b INT, s STRING);
+
+statement ok
+INSERT INTO t1 VALUES(10, 2, 'hello'), (20, 5, 'world'), (30, 0, 'ETL-SQL');
+
+query II
+SELECT a + b, a * b FROM t1 ORDER BY a;
+----
+12
+20
+25
+100
+30
+0
+
+query I
+SELECT UPPER(s) FROM t1 ORDER BY s;
+----
+ETL-SQL
+HELLO
+WORLD
+
+query I
+SELECT LEN(s) FROM t1 ORDER BY s;
+----
+7
+5
+5
+
+query I
+SELECT CASE WHEN a > 15 THEN 'High' ELSE 'Low' END FROM t1 ORDER BY a;
+----
+Low
+High
+High
+
+query I
+SELECT CAST(a AS STRING) + '!' FROM t1 ORDER BY a;
+----
+10!
+20!
+30!

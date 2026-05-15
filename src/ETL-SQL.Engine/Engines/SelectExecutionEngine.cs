@@ -47,11 +47,11 @@ namespace ETL_SQL.Engine.Engines
 
             var inputStream = sourceBatches.SelectMany(b => b.Rows.Select(r => {
                 var cloned = r.Clone();
-                foreach (var kv in r.Columns.ToList())
+                foreach (var colName in r.GetColumnNames())
                 {
                     // Only qualify if not already qualified
-                    if (!kv.Key.Contains("."))
-                        cloned[$"{fromName}.{kv.Key}"] = kv.Value;
+                    if (!colName.Contains("."))
+                        cloned[$"{fromName}.{colName}"] = r[colName];
                 }
                 return cloned;
             }).ToAsyncEnumerable());
@@ -107,8 +107,7 @@ namespace ETL_SQL.Engine.Engines
                     aggInput = WhereStream(inputStream, stmt.WhereClause, _context);
                     whereApplied = true;
                 }
-                var externalAgg = new ExternalAggregateEngine(_context, _logger);
-                allRows = await externalAgg.ApplyAggregationExternal(aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet).ToListAsync();
+                allRows = await _aggregateEngine.ApplyAggregation(aggInput, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
             }
             else
             {
@@ -134,7 +133,7 @@ namespace ETL_SQL.Engine.Engines
                 }
                 else
                 {
-                    allRows = await _aggregateEngine.ApplyAggregation(allRows, stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
+                    allRows = await _aggregateEngine.ApplyAggregation(allRows.ToAsyncEnumerable(), stmt.GroupBy, finalColumns, colNames, stmt.HavingClause, stmt.GroupingSet);
                 }
             }
 

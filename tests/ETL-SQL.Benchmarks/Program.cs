@@ -6,7 +6,7 @@ namespace ETL_SQL.Benchmarks
     {
         public static void Main(string[] args)
         {
-            var summary = BenchmarkRunner.Run<ParserBenchmarks>();
+            var summary = BenchmarkRunner.Run<TpcHBenchmarks>();
         }
     }
 }

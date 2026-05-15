@@ -100,7 +100,7 @@ namespace ETL_SQL.Engine.Engines
                     foreach (var bucket in groups.Values)
                     {
                         var activeGroupBy = expandedSets != null ? expandedSets[bucket.SetIndex] : groupBy;
-                        var partResults = await _inMemoryEngine.ApplyAggregation(bucket.Rows, activeGroupBy, finalColumns, colNames, havingClause);
+                        var partResults = await _inMemoryEngine.ApplyAggregation(bucket.Rows.ToAsyncEnumerable(), activeGroupBy, finalColumns, colNames, havingClause);
                         
                         _context.Telemetry.AggregateGroupsCount += partResults.Count;
 
@@ -139,7 +139,7 @@ namespace ETL_SQL.Engine.Engines
                 if (!yieldedAny && finalColumns.Any(c => _inMemoryEngine.IsAggregate(c.Expression)) 
                     && (groupBy == null || groupBy.Count == 0) && (groupingSet == null || groupingSet.Type == GroupingSetType.None))
                 {
-                    var globals = await _inMemoryEngine.ApplyAggregation(new List<Row>(), groupBy, finalColumns, colNames, havingClause);
+                    var globals = await _inMemoryEngine.ApplyAggregation(AsyncEnumerable.Empty<Row>(), groupBy, finalColumns, colNames, havingClause);
                     foreach (var g in globals) yield return g;
                 }
             }

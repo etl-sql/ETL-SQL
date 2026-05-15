@@ -235,10 +235,10 @@ namespace ETL_SQL.Core.Common
             Messages.Add(new LogEntry(message, color, DateTime.UtcNow));
         }
 
-        public Task<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false) => Task.FromResult<object?>(null);
+        public ValueTask<object?> EvaluateValue(Expression? expr, Row context, bool decryptSensitive = false) => new ValueTask<object?>(null as object);
         public IAsyncEnumerable<Row> EvaluateStream(Expression? expr, Row context) => AsyncEnumerable.Empty<Row>();
-        public Task<bool> EvaluateCondition(Expression? expr, Row context) => Task.FromResult(false);
-        public Task<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context) => Task.FromResult<object?>(null);
+        public ValueTask<bool> EvaluateCondition(Expression? expr, Row context) => new ValueTask<bool>(false);
+        public ValueTask<object?> EvaluateUserDefinedFunction(FunctionCallExpression f, List<object?> args, Row context) => new ValueTask<object?>(null as object);
         public object? ResolveIdentifier(string name, Row? row) => null;
         public int CompareConstants(object? a, object? b) => 0;
         public bool IsSoftEqual(object? a, object? b) => object.Equals(a, b);

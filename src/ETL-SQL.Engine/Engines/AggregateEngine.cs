@@ -22,8 +22,8 @@ namespace ETL_SQL.Engine.Engines
             _logger = logger;
         }
 
-        /// <summary>Applies aggregation logic to a buffer of rows, grouping them and calculating aggregate functions.</summary>
-        public async Task<List<Row>> ApplyAggregation(List<Row> allBufferedRows, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null)
+        /// <summary>Applies aggregation logic to a stream of rows, grouping them and calculating aggregate functions.</summary>
+        public async Task<List<Row>> ApplyAggregation(IAsyncEnumerable<Row> inputStream, List<Expression>? groupBy, List<SelectColumn> finalColumns, List<string> colNames, Expression? havingClause = null, GroupingSetClause? groupingSet = null)
         {
             // When groupingSet is present, expand into multiple GROUP BY passes and union the results.
             if (groupingSet != null && groupingSet.Type != GroupingSetType.None)
@@ -32,7 +32,10 @@ namespace ETL_SQL.Engine.Engines
                 var allResults = new List<Row>();
                 foreach (var activeGroupBy in expandedSets)
                 {
-                    var setRows = await ApplyAggregation(allBufferedRows, activeGroupBy, finalColumns, colNames, havingClause, null);
+                    // For grouping sets, we unfortunately must buffer or re-read the stream. 
+                    // To keep it simple and correct, we materialize once here.
+                    var allBufferedRows = await inputStream.ToListAsync();
+                    var setRows = await ApplyAggregation(allBufferedRows.ToAsyncEnumerable(), activeGroupBy, finalColumns, colNames, havingClause, null);
                     // Mark which columns were NULL-substituted (GROUPING() support)
                     var activeKeys = new HashSet<string>(activeGroupBy.Select(e => e.ToSql()), StringComparer.OrdinalIgnoreCase);
                     foreach (var row in setRows)
@@ -57,102 +60,164 @@ namespace ETL_SQL.Engine.Engines
                 return allResults;
             }
 
-            var groups = new Dictionary<CompoundKey, List<Row>>();
             bool hasAgg = finalColumns.Any(c => IsAggregate(c.Expression));
+            var aggregateSpecs = new List<(int ColumnIndex, FunctionCallExpression Function, IAggregateState State)>();
+            var havingAggSpecs = new List<(FunctionCallExpression Function, IAggregateState State)>();
 
-            foreach (var row in allBufferedRows)
+            // Identify all aggregates in SELECT
+            for (int i = 0; i < finalColumns.Count; i++)
+            {
+                if (finalColumns[i].Expression is FunctionCallExpression f && IsAggregate(f))
+                {
+                    aggregateSpecs.Add((i, f, CreateState(f)));
+                }
+            }
+
+            // Identify all aggregates in HAVING
+            if (havingClause != null)
+            {
+                var havingAggs = new List<FunctionCallExpression>();
+                CollectAggregates(havingClause, havingAggs);
+                foreach (var f in havingAggs)
+                {
+                    havingAggSpecs.Add((f, CreateState(f)));
+                }
+            }
+
+            // Single-Pass Aggregation
+            var groupStates = new Dictionary<CompoundKey, (IAggregateState[] SelectStates, IAggregateState[] HavingStates)>();
+            
+            await foreach (var row in inputStream)
             {
                 CompoundKey key;
                 if (groupBy != null && groupBy.Count > 0)
                 {
-                    var vals = new object?[groupBy.Count];
-                    for (int i = 0; i < groupBy.Count; i++)
+                    if (groupBy.Count == 1)
                     {
-                        var expr = groupBy[i];
-                        // Resolve aliases: If grouping by an identifier, check if it's an alias in the current projection
-                        if (expr is IdentifierExpression id && finalColumns.FirstOrDefault(c => string.Equals(c.Alias, id.Name, StringComparison.OrdinalIgnoreCase)) is SelectColumn col)
-                        {
-                            vals[i] = await _context.EvaluateValue(col.Expression, row);
-                        }
-                        else
-                        {
-                            vals[i] = await _context.EvaluateValue(expr, row);
-                        }
+                        key = new CompoundKey(await EvaluateGroupExpr(groupBy[0], finalColumns, row));
                     }
-                    key = new CompoundKey(vals);
+                    else if (groupBy.Count == 2)
+                    {
+                        key = new CompoundKey(await EvaluateGroupExpr(groupBy[0], finalColumns, row), await EvaluateGroupExpr(groupBy[1], finalColumns, row));
+                    }
+                    else if (groupBy.Count == 3)
+                    {
+                        key = new CompoundKey(await EvaluateGroupExpr(groupBy[0], finalColumns, row), await EvaluateGroupExpr(groupBy[1], finalColumns, row), await EvaluateGroupExpr(groupBy[2], finalColumns, row));
+                    }
+                    else
+                    {
+                        var vals = new object?[groupBy.Count];
+                        for (int i = 0; i < groupBy.Count; i++) vals[i] = await EvaluateGroupExpr(groupBy[i], finalColumns, row);
+                        key = new CompoundKey(vals);
+                    }
                 }
                 else key = new CompoundKey("GLOBAL");
 
-                if (!groups.TryGetValue(key, out var list)) { list = new List<Row>(); groups[key] = list; }
-                list.Add(row);
+                if (!groupStates.TryGetValue(key, out var states))
+                {
+                    var sStates = aggregateSpecs.Select(s => CreateState(s.Function)).ToArray();
+                    var hStates = havingAggSpecs.Select(s => CreateState(s.Function)).ToArray();
+                    states = (sStates, hStates);
+                    groupStates[key] = states;
+                }
+
+                // Update states
+                for (int i = 0; i < aggregateSpecs.Count; i++)
+                {
+                    await states.SelectStates[i].Update(row, aggregateSpecs[i].Function, _context);
+                }
+                for (int i = 0; i < havingAggSpecs.Count; i++)
+                {
+                    await states.HavingStates[i].Update(row, havingAggSpecs[i].Function, _context);
+                }
             }
 
-            if (groups.Count == 0 && hasAgg && (groupBy == null || groupBy.Count == 0)) groups[new CompoundKey("GLOBAL")] = new List<Row>();
+            // Handle global aggregation if no rows but aggregates present
+            if (groupStates.Count == 0 && hasAgg && (groupBy == null || groupBy.Count == 0))
+            {
+                var sStates = aggregateSpecs.Select(s => CreateState(s.Function)).ToArray();
+                var hStates = havingAggSpecs.Select(s => CreateState(s.Function)).ToArray();
+                groupStates[new CompoundKey("GLOBAL")] = (sStates, hStates);
+            }
 
             var resultRows = new List<Row>();
-            var havingAggs = new List<FunctionCallExpression>();
-            if (havingClause != null) CollectAggregates(havingClause, havingAggs);
-
-            foreach (var groupRows in groups.Values)
+            foreach (var kvp in groupStates)
             {
-                // Verify HAVING clause before projecting
+                var key = kvp.Key;
+                var states = kvp.Value;
+
+                var resRow = new Row();
+                
+                // Finalize aggregates
+                for (int i = 0; i < aggregateSpecs.Count; i++)
+                {
+                    var val = await states.SelectStates[i].Finalize(this);
+                    resRow[colNames[aggregateSpecs[i].ColumnIndex]] = val;
+                    resRow[$"AGG_{aggregateSpecs[i].Function.ToSql().ToUpperInvariant()}"] = val;
+                }
+
+                // Check HAVING
                 if (havingClause != null)
                 {
-                    var havingContext = groupRows.Count > 0 ? groupRows[0].Clone() : new Row();
-                    foreach (var agg in havingAggs)
+                    var havingContext = resRow.Clone(); // Use finalized aggregates
+                    for (int i = 0; i < havingAggSpecs.Count; i++)
                     {
-                        var val = await EvaluateAggregate(agg, groupRows);
-                        var aggName = $"AGG_{agg.ToSql().ToUpperInvariant()}";
-                        havingContext[aggName] = val;
+                        var val = await states.HavingStates[i].Finalize(this);
+                        havingContext[$"AGG_{havingAggSpecs[i].Function.ToSql().ToUpperInvariant()}"] = val;
+                    }
+                    // For grouping columns in HAVING
+                    if (groupBy != null)
+                    {
+                        for (int i = 0; i < groupBy.Count; i++)
+                        {
+                            var colName = groupBy[i] is IdentifierExpression id ? id.Name.Split('.').Last() : groupBy[i].ToSql();
+                            havingContext[colName] = key[i];
+                        }
                     }
 
                     if (!await _context.EvaluateCondition(havingClause, havingContext)) continue;
                 }
 
-                var resRow = new Row();
-                var key = groups.FirstOrDefault(x => x.Value == groupRows).Key;
-
+                // Fill non-aggregate columns (grouping columns)
                 for (int i = 0; i < finalColumns.Count; i++)
                 {
-                    if (IsAggregate(finalColumns[i].Expression))
+                    if (resRow.HasColumn(colNames[i])) continue; // Already filled by aggregate
+
+                    int groupIdx = -1;
+                    if (groupBy != null)
                     {
-                        var val = await EvaluateAggregate(finalColumns[i].Expression, groupRows);
-                        resRow[colNames[i]] = val;
-                        // Also store with AGG_ prefix for subsequent steps (Window, OrderBy)
-                        var aggName = $"AGG_{finalColumns[i].Expression.ToSql().ToUpperInvariant()}";
-                        resRow[aggName] = val;
+                        groupIdx = groupBy.FindIndex(g => g.ToSql().Equals(finalColumns[i].ToSql(), StringComparison.OrdinalIgnoreCase));
+                        if (groupIdx == -1) // check for alias match
+                        {
+                            groupIdx = groupBy.FindIndex(g => g is IdentifierExpression id && string.Equals(id.Name, finalColumns[i].Alias, StringComparison.OrdinalIgnoreCase));
+                        }
                     }
+
+                    if (groupIdx >= 0 && groupIdx < key.Length)
+                    {
+                        resRow[colNames[i]] = key[groupIdx];
+                    }
+                    else if (IsWindowFunction(finalColumns[i].Expression)) { /* Handled later */ }
                     else
                     {
-                        // Optimization: If this column is part of the GROUP BY clause, use the already-calculated 
-                        // and normalized value from the CompoundKey.
-                        int groupIdx = -1;
-                        if (groupBy != null)
-                        {
-                            groupIdx = groupBy.FindIndex(g => g.ToSql().Equals(finalColumns[i].ToSql(), StringComparison.OrdinalIgnoreCase));
-                            if (groupIdx == -1) // check for alias match
-                            {
-                                groupIdx = groupBy.FindIndex(g => g is IdentifierExpression id && string.Equals(id.Name, finalColumns[i].Alias, StringComparison.OrdinalIgnoreCase));
-                            }
-                        }
-
-                        if (groupIdx >= 0 && groupIdx < key.Length)
-                        {
-                            resRow[colNames[i]] = key[groupIdx];
-                        }
-                        else if (IsWindowFunction(finalColumns[i].Expression))
-                        {
-                            // Skip: Window functions are handled after aggregation
-                        }
-                        else
-                        {
-                            resRow[colNames[i]] = groupRows.Count > 0 ? await _context.EvaluateValue(finalColumns[i].Expression, groupRows[0]) : null;
-                        }
+                        // For columns that are neither aggregate nor grouping, just use null or first value (though this is strictly invalid SQL without grouping)
+                        resRow[colNames[i]] = null;
                     }
                 }
+
                 resultRows.Add(resRow);
             }
+
             return resultRows;
+        }
+
+        private async Task<object?> EvaluateGroupExpr(Expression expr, List<SelectColumn> finalColumns, Row row)
+        {
+            if (expr is IdentifierExpression id && finalColumns.FirstOrDefault(c => string.Equals(c.Alias, id.Name, StringComparison.OrdinalIgnoreCase)) is SelectColumn col)
+            {
+                return await _context.EvaluateValue(col.Expression, row);
+            }
+            return await _context.EvaluateValue(expr, row);
         }
 
         /// <summary>Expands a GroupingSetClause into a list of effective GROUP BY lists (one per pass).</summary>
@@ -272,11 +337,14 @@ namespace ETL_SQL.Engine.Engines
                 {
                     case "COUNT":
                         if (f.Arguments.Count == 0) return (decimal)rows.Count;
-                        return (decimal)valsByArg[0].Count(v => v != null || (f.Arguments[0] is IdentifierExpression id && id.Name == "*"));
+                        var countVals = f.IsDistinct ? valsByArg[0].Distinct() : valsByArg[0];
+                        return (decimal)countVals.Count(v => v != null || (f.Arguments[0] is IdentifierExpression id && id.Name == "*"));
                     case "SUM":
-                        return (decimal)valsByArg[0].Where(v => v != null).Sum(v => SafeToDecimal(v));
+                        var sumVals = f.IsDistinct ? valsByArg[0].Distinct() : valsByArg[0];
+                        return (decimal)sumVals.Where(v => v != null).Sum(v => SafeToDecimal(v));
                     case "AVG":
-                        return (decimal)valsByArg[0].Where(v => v != null).Average(v => SafeToDecimal(v));
+                        var avgVals = f.IsDistinct ? valsByArg[0].Distinct() : valsByArg[0];
+                        return (decimal)avgVals.Where(v => v != null).Average(v => SafeToDecimal(v));
                     case "MIN":
                         return valsByArg[0].Where(v => v != null).Min();
                     case "MAX":
@@ -494,6 +562,176 @@ namespace ETL_SQL.Engine.Engines
             if (v is TimeSpan ts) throw new ExecutionException($"Cannot perform numeric aggregation on a time duration: '{ts}'.");
             try { return Convert.ToDecimal(v, System.Globalization.CultureInfo.InvariantCulture); }
             catch (Exception ex) { throw new ExecutionException($"Invalid numeric value for aggregation: '{v}'. Details: {ex.Message}"); }
+        }
+
+        private IAggregateState CreateState(FunctionCallExpression f)
+        {
+            var name = f.FunctionName.ToUpperInvariant();
+            return name switch
+            {
+                "SUM" => new SumState(f.IsDistinct),
+                "COUNT" => new CountState(f.IsDistinct, f.Arguments.Count == 0 || (f.Arguments[0] is IdentifierExpression id && id.Name == "*")),
+                "AVG" => new AvgState(f.IsDistinct),
+                "MIN" => new MinState(),
+                "MAX" => new MaxState(),
+                _ => new GenericState(f)
+            };
+        }
+
+        private interface IAggregateState
+        {
+            ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context);
+            ValueTask<object?> Finalize(AggregateEngine engine);
+        }
+
+        private class SumState : IAggregateState
+        {
+            private decimal _sum = 0;
+            private bool _hasValue = false;
+            private HashSet<object?>? _distinctValues;
+            private readonly bool _isDistinct;
+
+            public SumState(bool isDistinct) { _isDistinct = isDistinct; if (_isDistinct) _distinctValues = new HashSet<object?>(); }
+
+            public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+            {
+                var val = await context.EvaluateValue(f.Arguments[0], row);
+                if (val != null)
+                {
+                    if (_isDistinct)
+                    {
+                        if (_distinctValues!.Add(val))
+                        {
+                            _sum += SafeToDecimal(val);
+                            _hasValue = true;
+                        }
+                    }
+                    else
+                    {
+                        _sum += SafeToDecimal(val);
+                        _hasValue = true;
+                    }
+                }
+            }
+
+            public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_hasValue ? _sum : null);
+        }
+
+        private class CountState : IAggregateState
+        {
+            private long _count = 0;
+            private HashSet<object?>? _distinctValues;
+            private readonly bool _isDistinct;
+            private readonly bool _isStar;
+
+            public CountState(bool isDistinct, bool isStar) { _isDistinct = isDistinct; _isStar = isStar; if (_isDistinct) _distinctValues = new HashSet<object?>(); }
+
+            public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+            {
+                if (_isStar)
+                {
+                    _count++;
+                    return;
+                }
+
+                var val = await context.EvaluateValue(f.Arguments[0], row);
+                if (val != null)
+                {
+                    if (_isDistinct)
+                    {
+                        if (_distinctValues!.Add(val)) _count++;
+                    }
+                    else _count++;
+                }
+            }
+
+            public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>((decimal)_count);
+        }
+
+        private class AvgState : IAggregateState
+        {
+            private decimal _sum = 0;
+            private long _count = 0;
+            private HashSet<object?>? _distinctValues;
+            private readonly bool _isDistinct;
+
+            public AvgState(bool isDistinct) { _isDistinct = isDistinct; if (_isDistinct) _distinctValues = new HashSet<object?>(); }
+
+            public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+            {
+                var val = await context.EvaluateValue(f.Arguments[0], row);
+                if (val != null)
+                {
+                    if (_isDistinct)
+                    {
+                        if (_distinctValues!.Add(val))
+                        {
+                            _sum += SafeToDecimal(val);
+                            _count++;
+                        }
+                    }
+                    else
+                    {
+                        _sum += SafeToDecimal(val);
+                        _count++;
+                    }
+                }
+            }
+
+            public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_count > 0 ? _sum / _count : null);
+        }
+
+        private class MinState : IAggregateState
+        {
+            private object? _min = null;
+
+            public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+            {
+                var val = await context.EvaluateValue(f.Arguments[0], row);
+                if (val != null)
+                {
+                    if (_min == null || ((IComparable)CompoundKey.NormalizeValue(val)).CompareTo(CompoundKey.NormalizeValue(_min)) < 0)
+                        _min = val;
+                }
+            }
+
+            public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_min);
+        }
+
+        private class MaxState : IAggregateState
+        {
+            private object? _max = null;
+
+            public async ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+            {
+                var val = await context.EvaluateValue(f.Arguments[0], row);
+                if (val != null)
+                {
+                    if (_max == null || ((IComparable)CompoundKey.NormalizeValue(val)).CompareTo(CompoundKey.NormalizeValue(_max)) > 0)
+                        _max = val;
+                }
+            }
+
+            public ValueTask<object?> Finalize(AggregateEngine engine) => new ValueTask<object?>(_max);
+        }
+
+        private class GenericState : IAggregateState
+        {
+            private readonly FunctionCallExpression _f;
+            private readonly List<Row> _rows = new List<Row>();
+
+            public GenericState(FunctionCallExpression f) { _f = f; }
+
+            public ValueTask Update(Row row, FunctionCallExpression f, IExecutionContext context)
+            {
+                _rows.Add(row);
+                return default;
+            }
+
+            public async ValueTask<object?> Finalize(AggregateEngine engine)
+            {
+                return await engine.EvaluateAggregate(_f, _rows);
+            }
         }
     }
 }

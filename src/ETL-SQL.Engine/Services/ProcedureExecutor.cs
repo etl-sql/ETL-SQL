@@ -19,7 +19,7 @@ namespace ETL_SQL.Engine.Services
         /// Evaluates a user-defined function call by binding arguments, executing the body,
         /// and capturing the RETURN value.
         /// </summary>
-        public async Task<object?> EvaluateUserDefinedFunction(
+        public async ValueTask<object?> EvaluateUserDefinedFunction(
             FunctionCallExpression f, System.Collections.Generic.List<object?> args, Row row)
         {
              _context.CurrentRecursiveDepth++;

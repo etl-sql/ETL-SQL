@@ -1,0 +1,47 @@
+# Scalar functions
+statement ok
+CREATE TABLE t1(a STRING, b INT, c DECIMAL(10,2));
+
+statement ok
+INSERT INTO t1 VALUES('hello', 42, 123.45), ('  WORLD  ', -10, 0.67);
+
+query T
+SELECT UPPER(a) FROM t1 ORDER BY a;
+----
+  WORLD  
+HELLO
+
+query T
+SELECT TRIM(a) FROM t1 ORDER BY a;
+----
+WORLD
+hello
+
+query I
+SELECT ABS(b) FROM t1 ORDER BY b;
+----
+10
+42
+
+query R
+SELECT ROUND(c, 1) FROM t1 ORDER BY c;
+----
+0.7
+123.5
+
+query I
+SELECT LEN(a) FROM t1 ORDER BY a;
+----
+9
+5
+
+query T
+SELECT COALESCE(NULL, 'fallback') FROM t1 LIMIT 1;
+----
+fallback
+
+query T
+SELECT IIF(b > 0, 'positive', 'negative') FROM t1 ORDER BY b;
+----
+negative
+positive

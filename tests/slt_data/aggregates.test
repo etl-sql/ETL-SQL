@@ -1,0 +1,47 @@
+# Aggregation functions
+statement ok
+CREATE TABLE t1(a INT, b INT);
+
+statement ok
+INSERT INTO t1 VALUES(1, 10), (2, 20), (3, 30), (4, 40), (5, 50);
+
+query IIIII
+SELECT SUM(a), AVG(a), COUNT(a), MIN(a), MAX(a) FROM t1;
+----
+15
+3
+5
+1
+5
+
+query II
+SELECT SUM(b), AVG(b) FROM t1;
+----
+150
+30
+
+query I
+SELECT COUNT(*) FROM t1;
+----
+5
+
+query I
+SELECT COUNT(DISTINCT a) FROM t1;
+----
+5
+
+# Test with duplicates
+statement ok
+INSERT INTO t1 VALUES(1, 10), (1, 10);
+
+query II
+SELECT COUNT(a), COUNT(DISTINCT a) FROM t1;
+----
+7
+5
+
+query II
+SELECT SUM(a), SUM(DISTINCT a) FROM t1;
+----
+17
+15

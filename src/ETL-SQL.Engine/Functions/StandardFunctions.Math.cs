@@ -65,7 +65,7 @@ namespace ETL_SQL.Engine.Functions
             if (args.Count < 1 || args[0] == null) return null;
             if (!decimal.TryParse(args[0]?.ToString(), out var n)) return null;
             int decimals = args.Count >= 2 && int.TryParse(args[1]?.ToString(), out var d) ? d : 0;
-            return Math.Round(n, decimals);
+            return Math.Round(n, decimals, MidpointRounding.AwayFromZero);
         }
 
         private static IEnumerable<decimal> GetNumbers(object? arg)
