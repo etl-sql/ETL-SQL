@@ -127,7 +127,7 @@ namespace ETL_SQL.Common
 
         public static readonly HashSet<string> Functions = new(StringComparer.OrdinalIgnoreCase)
         {
-            "CAST", "CONCAT", "UPPER", "LOWER", "SUBSTR", "SUBSTRING", "LEN", "GETDATE", "SYSDATE", "ISNULL", "COALESCE",
+            "CAST", "CONCAT", "UPPER", "LOWER", "SUBSTR", "SUBSTRING", "LEN", "GETDATE", "SYSDATE", "RELDATE", "ISNULL", "COALESCE",
             "FORMAT", "COUNT", "SUM", "AVG", "MIN", "MAX", "DENSE_RANK", "ROW_NUMBER", "RANK",
             "CHARINDEX", "TRIM", "LTRIM", "RTRIM", "DATEPART", "DATEDIFF", "INSTR", "REPLACE",
             "ABS", "ROUND", "CEILING", "FLOOR", "LPAD", "RPAD", "INITCAP", "POSITION", "STRPOS",

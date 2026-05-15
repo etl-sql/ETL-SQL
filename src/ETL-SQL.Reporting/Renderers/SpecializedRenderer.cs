@@ -377,8 +377,8 @@ namespace ETL_SQL.Reporting.Renderers
                 return new object[] 
                 { 
                     catIdx, 
-                    startVal, 
-                    endVal, 
+                    FormatValue(startVal), 
+                    FormatValue(endVal), 
                     catName, 
                     color ?? GetColor(v, "primary") ?? "#5470c6" 
                 };

@@ -1,0 +1,303 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\22_MULTISELECT.rptsql",
+  "builtAt": "2026-05-14T23:52:29.3184991Z",
+  "title": "Kitchen Sink: MULTISELECT Visual",
+  "visuals": [
+    {
+      "name": "CatFilterInline",
+      "visualType": "MULTISELECT",
+      "chartConfig": null,
+      "columns": [
+        "Cat"
+      ],
+      "rows": [
+        [
+          "Electronics"
+        ],
+        [
+          "Furniture"
+        ],
+        [
+          "Clothing"
+        ],
+        [
+          "Toys"
+        ]
+      ],
+      "options": {
+        "title": "Categories (Inline)",
+        "mapping:value": "Cat"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@categories",
+          "valueExpression": "Cat",
+          "valueSource": "COLUMN",
+          "valueColumn": "Cat",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "CatFilterDropdown",
+      "visualType": "MULTISELECT",
+      "chartConfig": null,
+      "columns": [
+        "Cat"
+      ],
+      "rows": [
+        [
+          "Electronics"
+        ],
+        [
+          "Furniture"
+        ],
+        [
+          "Clothing"
+        ],
+        [
+          "Toys"
+        ]
+      ],
+      "options": {
+        "title": "Categories (Dropdown)",
+        "mapping:value": "Cat"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "SET_PARAMETER",
+          "trigger": "ON_CHANGE",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": "@categories",
+          "valueExpression": "Cat",
+          "valueSource": "COLUMN",
+          "valueColumn": "Cat",
+          "scriptPath": null,
+          "parameters": null
+        }
+      ],
+      "styles": {
+        "LAYOUT": "DROPDOWN",
+        "EXPORT": "OFF"
+      }
+    },
+    {
+      "name": "SelectedList",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "SelectedCategories"
+      ],
+      "rows": [
+        [
+          "System.Collections.Generic.List\u00601[System.Object],Furniture,Clothing"
+        ]
+      ],
+      "options": {},
+      "error": null,
+      "actions": [],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "MultiselectKitchenSink",
+      "structure": "A B / C",
+      "slotMap": {
+        "A": "CatFilterInline",
+        "B": "CatFilterDropdown",
+        "C": "SelectedList"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "MultiselectKitchenSink",
+      "pages": [
+        "MultiselectKitchenSink"
+      ]
+    }
+  ],
+  "parameters": {
+    "@categories": "System.Collections.Generic.List\u00601[System.Object],Furniture,Clothing",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "4"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 4,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[c9297c8b] [SELECT] Executing SelectStatement. Session: c9297c8b",
+      "color": "white",
+      "timestamp": "2026-05-14T23:52:29.2828183Z"
+    },
+    {
+      "message": "[c9297c8b] 4 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T23:52:29.3053526Z"
+    },
+    {
+      "message": "[c9297c8b] Visual \u0027CatFilterInline\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T23:52:29.3081246Z"
+    },
+    {
+      "message": "[c9297c8b] Visual \u0027CatFilterDropdown\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T23:52:29.3105275Z"
+    },
+    {
+      "message": "[c9297c8b] Visual \u0027SelectedList\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T23:52:29.3106595Z"
+    },
+    {
+      "message": "[c9297c8b] Page \u0027MultiselectKitchenSink\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T23:52:29.3119087Z"
+    },
+    {
+      "message": "[c9297c8b] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T23:52:29.3125813Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "b7ce1bc0-de89-48cb-b453-5953853b5cd0",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 41.4472,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "b97001f6-0b9d-47f0-8c7e-d8913971b921",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.3762,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "1e639734-a2b3-4052-a606-1c3b7e021f5a",
+          "name": "Declare",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.5144,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "fa97fd43-626e-43e2-baf8-9be05b8f4451",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 8,
+          "durationMs": 25.6525,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 311.86044245200276,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "c6297fec-7c3d-49f4-b6c7-05a5af0c4543",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9388,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "2959dbd6-d94b-4b4d-9e91-842fe8e7ca0d",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.5237,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d2c25170-e342-43c7-bcb5-feff7f11976a",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.1112,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "dde0b723-0172-4104-b31e-1cfcffad3488",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.0164,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "929f5280-bbc2-4bdf-9e9c-a0164509a55d",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2979,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

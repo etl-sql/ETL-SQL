@@ -1,6 +1,6 @@
 {
   "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\26_SEARCH.rptsql",
-  "builtAt": "2026-05-14T19:05:23.1101748Z",
+  "builtAt": "2026-05-14T23:52:50.3626845Z",
   "title": "Kitchen Sink: SEARCH Visual",
   "visuals": [
     {
@@ -109,54 +109,54 @@
   },
   "messages": [
     {
-      "message": "[7baf45ca] Visual \u0027GlobalSearch\u0027 created.",
+      "message": "[5b5b4602] Visual \u0027GlobalSearch\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:05:23.0789105Z"
+      "timestamp": "2026-05-14T23:52:50.3314497Z"
     },
     {
-      "message": "[7baf45ca] [SELECT] Executing SelectStatement. Session: 7baf45ca",
+      "message": "[5b5b4602] [SELECT] Executing SelectStatement. Session: 5b5b4602",
       "color": "white",
-      "timestamp": "2026-05-14T19:05:23.0829182Z"
+      "timestamp": "2026-05-14T23:52:50.3354494Z"
     },
     {
-      "message": "[7baf45ca] 4 rows affected.",
+      "message": "[5b5b4602] 4 rows affected.",
       "color": "white",
-      "timestamp": "2026-05-14T19:05:23.1010414Z"
+      "timestamp": "2026-05-14T23:52:50.3539527Z"
     },
     {
-      "message": "[7baf45ca] Visual \u0027FilteredTable\u0027 created.",
+      "message": "[5b5b4602] Visual \u0027FilteredTable\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:05:23.1025854Z"
+      "timestamp": "2026-05-14T23:52:50.3551856Z"
     },
     {
-      "message": "[7baf45ca] Page \u0027SearchKitchenSink\u0027 created.",
+      "message": "[5b5b4602] Page \u0027SearchKitchenSink\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:05:23.1037472Z"
+      "timestamp": "2026-05-14T23:52:50.3563322Z"
     },
     {
-      "message": "[7baf45ca] Navigation \u0027MainNav\u0027 registered.",
+      "message": "[5b5b4602] Navigation \u0027MainNav\u0027 registered.",
       "color": "white",
-      "timestamp": "2026-05-14T19:05:23.1044178Z"
+      "timestamp": "2026-05-14T23:52:50.3570003Z"
     }
   ],
   "executionTree": [
     {
-      "id": "b297625c-11e7-428a-8c4e-5ec1642f1552",
+      "id": "a7f64d15-a8ba-4dec-8871-e9f0d1379cfe",
       "name": "Script Execution",
       "status": "Completed",
       "rowsProcessed": 0,
-      "durationMs": 37.3242,
+      "durationMs": 37.1723,
       "iterationCount": 1,
       "isParallelBlock": false,
       "velocity": 0,
       "error": null,
       "children": [
         {
-          "id": "38f5eb34-ffa0-4603-a48c-f5367b0192b1",
+          "id": "3f085a8d-ba0b-4410-bae8-dd72bc559472",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.2461,
+          "durationMs": 1.3551,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -164,11 +164,11 @@
           "children": []
         },
         {
-          "id": "caa46a74-cb42-45af-bcc9-7ab123fc80b4",
+          "id": "4a6850d4-7e51-4300-acb7-6c76af303a70",
           "name": "Declare",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 2.9277,
+          "durationMs": 3.1522,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -176,11 +176,11 @@
           "children": []
         },
         {
-          "id": "1ccc8fbe-3fb8-40da-8deb-3a9d0609a9cb",
+          "id": "5a415427-11cd-4531-a4f0-548646cad2b4",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 2.4265,
+          "durationMs": 2.1876,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -188,23 +188,23 @@
           "children": []
         },
         {
-          "id": "5b2486d6-1c3d-4476-bd18-0e6657f20e71",
+          "id": "10dcfcd2-39be-4a9b-a62c-cb975fbc2007",
           "name": "SetOperation",
           "status": "Completed",
           "rowsProcessed": 8,
-          "durationMs": 19.6976,
+          "durationMs": 20.0621,
           "iterationCount": 1,
           "isParallelBlock": false,
-          "velocity": 406.14084964665744,
+          "velocity": 398.7618444729116,
           "error": null,
           "children": []
         },
         {
-          "id": "726cc116-522e-493c-a294-c80ffcece7d0",
+          "id": "9903b075-f172-4aad-b3e0-1941e31e2e01",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.4408,
+          "durationMs": 0.125,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -212,11 +212,11 @@
           "children": []
         },
         {
-          "id": "e6863900-e9ec-4038-8ce5-b498eccb0ec2",
+          "id": "f9f5f6c2-8f9a-4d4f-b8d5-d7456cfc2866",
           "name": "CreatePage",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.9352,
+          "durationMs": 0.9159,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -224,11 +224,11 @@
           "children": []
         },
         {
-          "id": "ac695c1b-7f5b-4e3c-9749-a373156978e1",
+          "id": "030574f3-0e59-4d6b-808b-e57a90b343ee",
           "name": "CreateNavigation",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2794,
+          "durationMs": 0.29,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,

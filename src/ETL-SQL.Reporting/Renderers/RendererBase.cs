@@ -90,6 +90,13 @@ namespace ETL_SQL.Reporting.Renderers
         protected static string? FindRole(VisualManifest v, string role) =>
             v.Options.TryGetValue("mapping:" + role, out var col) ? col : null;
 
+        protected static object? FormatValue(object? s)
+        {
+            if (s is DateTime dt) return dt.ToString("yyyy-MM-dd HH:mm:ss");
+            if (s is string str && DateTime.TryParse(str, out var dt2)) return dt2.ToString("yyyy-MM-dd HH:mm:ss");
+            return s;
+        }
+
         protected static double? ToDouble(object? s)
         {
             if (s == null) return null;

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -280,23 +281,47 @@ namespace ETL_SQL.ReportBuilder.CLI
         {
             string? scriptPath   = null;
             string? manifestPath = null;
+            string? dirPath      = null;
+            string? openReport   = null;
 
             int?    portArg      = null;
             for (int i = 1; i < args.Length; i++)
             {
                 if ((args[i] == "--manifest" || args[i] == "-m") && i + 1 < args.Length)
                     manifestPath = args[++i];
+                else if (args[i] == "--dir" && i + 1 < args.Length)
+                    dirPath = args[++i];
+                else if (args[i] == "--open" && i + 1 < args.Length)
+                    openReport = args[++i];
                 else if ((args[i] == "--port" || args[i] == "-p") && i + 1 < args.Length && int.TryParse(args[++i], out int p))
                     portArg = p;
                 else if (!args[i].StartsWith("-"))
                     scriptPath = args[i];
             }
 
+            // Auto-generate manifest if --dir is specified
+            string? tempManifest = null;
+            if (dirPath != null && manifestPath == null)
+            {
+                if (!Directory.Exists(dirPath)) { Console.Error.WriteLine($"error: directory not found: {dirPath}"); return 1; }
+                
+                var files = Directory.GetFiles(dirPath, "*.rptsql", SearchOption.TopDirectoryOnly);
+                var entries = ((IEnumerable<string>)files).Select(f => new { 
+                    Name = Path.GetFileNameWithoutExtension(f), 
+                    Description = $"Report: {Path.GetFileName(f)}",
+                    Path = Path.GetRelativePath(dirPath, f)
+                }).ToList();
+
+                tempManifest = Path.Combine(dirPath, $".etl_reports_{Guid.NewGuid():N}.tmp.json");
+                File.WriteAllText(tempManifest, JsonSerializer.Serialize(new { reports = entries }, new JsonSerializerOptions { WriteIndented = true }));
+                manifestPath = tempManifest;
+            }
+
             bool multiMode = manifestPath != null;
 
             if (!multiMode && scriptPath == null)
             {
-                Console.Error.WriteLine("error: no script path or --manifest specified.");
+                Console.Error.WriteLine("error: no script path, --dir, or --manifest specified.");
                 PrintUsage();
                 return 1;
             }
@@ -351,6 +376,7 @@ namespace ETL_SQL.ReportBuilder.CLI
 
             if (multiMode)
             {
+                if (tempManifest != null) Console.WriteLine($"Scanning directory: {dirPath}");
                 Console.WriteLine($"Starting ReportPlayer with manifest: {manifestPath}");
             }
             else
@@ -389,6 +415,14 @@ namespace ETL_SQL.ReportBuilder.CLI
 
             if (boundUrl != null)
             {
+                // If --open is specified, navigate to that report
+                if (!string.IsNullOrEmpty(openReport))
+                {
+                    string name = Path.GetFileNameWithoutExtension(openReport);
+                    if (!boundUrl.EndsWith("/")) boundUrl += "/";
+                    boundUrl += "reports/" + System.Net.WebUtility.UrlEncode(name);
+                }
+
                 try {
                     Process.Start(new ProcessStartInfo(boundUrl) { UseShellExecute = true });
                 }
@@ -396,6 +430,12 @@ namespace ETL_SQL.ReportBuilder.CLI
             }
 
             await proc.WaitForExitAsync();
+            
+            // Cleanup temp manifest
+            if (tempManifest != null && File.Exists(tempManifest)) {
+                try { File.Delete(tempManifest); } catch { }
+            }
+
             return proc.ExitCode;
         }
 
@@ -427,15 +467,18 @@ namespace ETL_SQL.ReportBuilder.CLI
             Console.WriteLine("Usage:");
             Console.WriteLine("  etl-sql-report build   <script.rptsql> [--output <file>] [--format md|json|pdf] [--parameter @p=v]");
             Console.WriteLine("  etl-sql-report refresh <script.rptsql>");
-            Console.WriteLine("  etl-sql-report serve   <script.rptsql>");
+            Console.WriteLine("  etl-sql-report serve   <script.rptsql> [--port <n>] [--no-browser]");
+            Console.WriteLine("  etl-sql-report serve   --manifest reports.json [--port <n>]");
+            Console.WriteLine("  etl-sql-report serve   --dir <path> [--open <file.rptsql>] [--port <n>]");
             Console.WriteLine("  etl-sql-report print   <script.rptsql> [--parameter @p=v]");
-            Console.WriteLine("  etl-sql-report serve   --manifest reports.json");
             Console.WriteLine();
             Console.WriteLine("Options:");
             Console.WriteLine("  --output, -o      Output file path (defaults to <script>.report.md|json|pdf).");
             Console.WriteLine("  --format, -f      Output format: md (default), json, or pdf.");
             Console.WriteLine("  --parameter, -p   Pass a variable to the script (e.g. -p @region=West).");
             Console.WriteLine("  --manifest, -m    Path to reports.json for multi-report hosting.");
+            Console.WriteLine("  --dir             Host all .rptsql files in the specified directory.");
+            Console.WriteLine("  --open            The initial report file to open when using --dir.");
         }
     }
 }

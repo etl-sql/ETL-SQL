@@ -1076,7 +1076,7 @@ namespace ETL_SQL.Engine
         public TableReference? GetIntoTable(Statement stmt)
         {
             if (stmt is SelectStatement s) return s.IntoTable;
-            if (stmt is SetOperationStatement setOp) return GetIntoTable(setOp.Left);
+            if (stmt is SetOperationStatement setOp) return GetIntoTable(setOp.Right) ?? GetIntoTable(setOp.Left);
             return null;
         }
 

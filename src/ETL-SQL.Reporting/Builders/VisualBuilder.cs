@@ -232,7 +232,42 @@ namespace ETL_SQL.Reporting.Builders
                 {
                     ResolveSetParameterAction(action, vm.Columns);
                 }
-                else if ((action.Type == "RUN_SCRIPT" || action.Type == "DRILL_REPORT") && action.Parameters is { Count: > 0 })
+                else if (action.Type == "DRILL_REPORT")
+                {
+                    var matchingColumn = FindColumn(vm.Columns, action.TargetReport ?? string.Empty);
+                    if (matchingColumn != null)
+                    {
+                        action.ValueSource = "COLUMN";
+                        action.ValueColumn = matchingColumn;
+                    }
+                    else
+                    {
+                        action.ValueSource = "LITERAL";
+                        action.LiteralValue = action.TargetReport;
+                    }
+
+                    if (action.Parameters is { Count: > 0 })
+                    {
+                        action.ParameterColumns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        action.LiteralParameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+                        foreach (var (name, expression) in action.Parameters)
+                        {
+                            var matchingParamColumn = FindColumn(vm.Columns, expression);
+                            if (matchingParamColumn != null)
+                                action.ParameterColumns[name] = matchingParamColumn;
+                            else
+                            {
+                                // Remove quotes if present for literal values
+                                var val = expression;
+                                if (val.StartsWith("'") && val.EndsWith("'") && val.Length >= 2)
+                                    val = val.Substring(1, val.Length - 2);
+                                action.LiteralParameters[name] = val;
+                            }
+                        }
+                    }
+                }
+                else if (action.Type == "RUN_SCRIPT" && action.Parameters is { Count: > 0 })
                 {
                     action.ParameterColumns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                     action.LiteralParameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

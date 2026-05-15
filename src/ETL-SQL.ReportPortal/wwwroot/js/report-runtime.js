@@ -2950,7 +2950,7 @@
             // Flush to server
             _postParametersInternal(batch).then(m => { if (m) renderManifest(m); });
         } else if (action.type === 'DRILL_REPORT') {
-            const targetReport = action.targetReport;
+            const targetReport = resolveActionValue(action, rowData, columns) || action.targetReport;
             if (!targetReport) return;
 
             const finalParams = resolveActionParameters(action, rowData, columns);

@@ -33,7 +33,8 @@ namespace ETL_SQL.Core.Parser
             TokenType.ALGORITHM, TokenType.PASSPHRASE, TokenType.COMMENT, TokenType.DATE,
             TokenType.GETDATE, TokenType.RETURNS, TokenType.CONFIG, TokenType.CLOSE,
             TokenType.MIN, TokenType.MAX, TokenType.SUM, TokenType.AVG, TokenType.COUNT,
-            TokenType.STEP, TokenType.TOP, TokenType.BOTTOM, TokenType.LEFT, TokenType.RIGHT
+            TokenType.STEP, TokenType.TOP, TokenType.BOTTOM, TokenType.LEFT, TokenType.RIGHT,
+            TokenType.ASC, TokenType.DESC
         };
 
         private static readonly HashSet<TokenType> DataTypeTokens = new()

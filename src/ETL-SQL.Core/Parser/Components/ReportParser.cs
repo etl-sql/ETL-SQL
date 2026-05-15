@@ -967,6 +967,7 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.BUBBLE))       return VisualType.Bubble;
             if (Match(TokenType.RADAR))        return VisualType.Radar;
             if (Match(TokenType.CANDLESTICK))  return VisualType.Candlestick;
+            if (Match(TokenType.GANTT))        return VisualType.Gantt;
             if (Match(TokenType.CHECKBOX))     return VisualType.Checkbox;
             if (Match(TokenType.TEXTBOX))      return VisualType.Textbox;
             if (Match(TokenType.NUMBERBOX))    return VisualType.Numberbox;
@@ -1255,23 +1256,24 @@ namespace ETL_SQL.Core.Parser.Components
         private string ConsumeReportOptionValue()
         {
             var t = _parser.Current.Type;
-            if (t == TokenType.STRING_LITERAL   || t == TokenType.NUMBER  ||
-                t == TokenType.IDENTIFIER || t == TokenType.TRUE  || t == TokenType.FALSE ||
-                t == TokenType.ON       || t == TokenType.OFF     ||
-                t == TokenType.TOP      || t == TokenType.BOTTOM  ||
-                t == TokenType.LEFT     || t == TokenType.RIGHT   ||
-                t == TokenType.GRID     || t == TokenType.DATA_LABELS ||
-                t == TokenType.NONE     || t == TokenType.HEADER || t == TokenType.FOOTER ||
-                t == TokenType.ALL      ||
-                t == TokenType.CENTER   || t == TokenType.FONT_SIZE ||
-                t == TokenType.INSIDE   || t == TokenType.INSIDE_TOP || t == TokenType.INSIDE_BOTTOM ||
-                t == TokenType.INSIDE_LEFT || t == TokenType.INSIDE_RIGHT ||
+            if (_parser.IsIdentifier(_parser.Current) ||
+                t == TokenType.STRING_LITERAL || t == TokenType.NUMBER  ||
+                t == TokenType.TRUE           || t == TokenType.FALSE   ||
+                t == TokenType.ON             || t == TokenType.OFF     ||
+                t == TokenType.TOP            || t == TokenType.BOTTOM  ||
+                t == TokenType.LEFT           || t == TokenType.RIGHT   ||
+                t == TokenType.GRID           || t == TokenType.DATA_LABELS ||
+                t == TokenType.NONE           || t == TokenType.HEADER  || t == TokenType.FOOTER ||
+                t == TokenType.ALL            ||
+                t == TokenType.CENTER         || t == TokenType.FONT_SIZE ||
+                t == TokenType.INSIDE         || t == TokenType.INSIDE_TOP || t == TokenType.INSIDE_BOTTOM ||
+                t == TokenType.INSIDE_LEFT    || t == TokenType.INSIDE_RIGHT ||
                 t == TokenType.INSIDE_TOP_LEFT || t == TokenType.INSIDE_TOP_RIGHT ||
                 t == TokenType.INSIDE_BOTTOM_LEFT || t == TokenType.INSIDE_BOTTOM_RIGHT ||
                 t == TokenType.DATA_LABELS_POSITION || t == TokenType.FONT_FAMILY ||
-                t == TokenType.FONT_WEIGHT || t == TokenType.GAUGE_STYLE ||
+                t == TokenType.FONT_WEIGHT    || t == TokenType.GAUGE_STYLE ||
                 t == TokenType.SHOW_NO_DATA_PLACEHOLDER ||
-                t == TokenType.VISIBLE ||
+                t == TokenType.VISIBLE        ||
                 _overlayKeywordTokens.Contains(t))
             {
                 var value = _parser.Current.Value;
@@ -1416,7 +1418,7 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.RUN_SCRIPT))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after RUN_SCRIPT");
-                    var scriptPath = Consume(TokenType.STRING_LITERAL, "Expected script path string").Value;
+                    var scriptPath = ConsumeReportOptionValue();
                     var actionParams = new Dictionary<string, string>();
                     while (Match(TokenType.COMMA))
                     {
@@ -1434,7 +1436,7 @@ namespace ETL_SQL.Core.Parser.Components
                     Consume(TokenType.LPAREN, "Expected '(' after DRILL_REPORT");
                     Advance(); // skip "FILE" identifier
                     Consume(TokenType.EQUALS, "Expected '=' after FILE");
-                    var targetReport = Consume(TokenType.STRING_LITERAL, "Expected report path string").Value;
+                    var targetReport = ConsumeReportOptionValue();
                     var actionParams = new Dictionary<string, string>();
                     if (Match(TokenType.COMMA))
                     {

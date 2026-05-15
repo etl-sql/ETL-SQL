@@ -1,0 +1,331 @@
+{
+  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\00_Index.rptsql",
+  "builtAt": "2026-05-14T23:53:42.6511581Z",
+  "title": "ETL-SQL: Visual Kitchen Sink Index",
+  "description": "Click any card to view the detailed demonstration for that visual type.",
+  "visuals": [
+    {
+      "name": "VisualIndex",
+      "visualType": "TABLE",
+      "chartConfig": null,
+      "columns": [
+        "Visual",
+        "Path",
+        "Desc"
+      ],
+      "rows": [
+        [
+          "BAR",
+          "01_BAR.rptsql",
+          "Vertical bars, stacking, overlays"
+        ],
+        [
+          "HBAR",
+          "02_HBAR.rptsql",
+          "Horizontal bars, stacking"
+        ],
+        [
+          "LINE",
+          "03_LINE.rptsql",
+          "Line charts, smoothing, regression"
+        ],
+        [
+          "SCATTER",
+          "04_SCATTER.rptsql",
+          "X/Y plots, linear/poly fits"
+        ],
+        [
+          "PIE",
+          "05_PIE.rptsql",
+          "Circular part-to-whole"
+        ],
+        [
+          "DONUT",
+          "06_DONUT.rptsql",
+          "Hollow pie charts"
+        ],
+        [
+          "COMBO",
+          "07_COMBO.rptsql",
+          "Bar \u002B Line combined"
+        ],
+        [
+          "GAUGE",
+          "08_GAUGE.rptsql",
+          "KPI gauges (Progress, Semi-circle, Ring)"
+        ],
+        [
+          "BOXPLOT",
+          "09_BOXPLOT.rptsql",
+          "Distribution box-and-whisker"
+        ],
+        [
+          "TREEMAP",
+          "10_TREEMAP.rptsql",
+          "Area-based hierarchy"
+        ],
+        [
+          "HEATMAP",
+          "11_HEATMAP.rptsql",
+          "Grid-based density"
+        ],
+        [
+          "FUNNEL",
+          "12_FUNNEL.rptsql",
+          "Conversion stages"
+        ],
+        [
+          "WATERFALL",
+          "13_WATERFALL.rptsql",
+          "Cumulative changes"
+        ],
+        [
+          "RADAR",
+          "14_RADAR.rptsql",
+          "Multi-metric spider charts"
+        ],
+        [
+          "BUBBLE",
+          "32_BUBBLE.rptsql",
+          "3D scatter (X, Y, Size)"
+        ],
+        [
+          "CANDLESTICK",
+          "15_CANDLESTICK.rptsql",
+          "Financial OHLC"
+        ],
+        [
+          "MAP",
+          "16_MAP.rptsql",
+          "Choropleth and Point maps"
+        ],
+        [
+          "TABLE",
+          "17_TABLE.rptsql",
+          "Data grids, summaries, formatting"
+        ],
+        [
+          "CARD",
+          "18_CARD.rptsql",
+          "Big KPI numbers"
+        ],
+        [
+          "IMAGE",
+          "19_IMAGE.rptsql",
+          "Static and dynamic images"
+        ],
+        [
+          "TEXT",
+          "20_TEXT.rptsql",
+          "Markdown and HTML content"
+        ],
+        [
+          "SLICER",
+          "21_SLICER.rptsql",
+          "Dropdown filters"
+        ],
+        [
+          "MULTISELECT",
+          "22_MULTISELECT.rptsql",
+          "Checkbox list filters"
+        ],
+        [
+          "DATEPICKER",
+          "23_DATEPICKER.rptsql",
+          "Calendar date selection"
+        ],
+        [
+          "RELDATEPICKER",
+          "24_RELDATEPICKER.rptsql",
+          "Relative expressions (D-7, M-1)"
+        ],
+        [
+          "SLIDER",
+          "25_SLIDER.rptsql",
+          "Numeric range controls"
+        ],
+        [
+          "SEARCH",
+          "26_SEARCH.rptsql",
+          "Free-text search"
+        ],
+        [
+          "INPUTS",
+          "27_CHECKBOX.rptsql",
+          "Form-like inputs (Checkbox, Textbox, Numberbox)"
+        ]
+      ],
+      "options": {
+        "title": "Visual Type Catalog"
+      },
+      "error": null,
+      "actions": [
+        {
+          "type": "DRILL_REPORT",
+          "trigger": "ON_CLICK",
+          "targetVisual": null,
+          "keyColumns": null,
+          "parameterName": null,
+          "valueExpression": null,
+          "scriptPath": null,
+          "parameters": {},
+          "targetReport": "Path"
+        }
+      ],
+      "styles": {}
+    }
+  ],
+  "pages": [
+    {
+      "name": "IndexPage",
+      "structure": "A",
+      "slotMap": {
+        "A": "VisualIndex"
+      }
+    }
+  ],
+  "datasets": [],
+  "navigations": [
+    {
+      "name": "MainNav",
+      "navType": "TAB",
+      "orientation": "HORIZONTAL",
+      "defaultPage": "IndexPage",
+      "pages": [
+        "IndexPage"
+      ]
+    }
+  ],
+  "parameters": {
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "28"
+  },
+  "parameterMetadata": {},
+  "telemetry": {
+    "rowsProcessed": 28,
+    "totalSpilledBytes": 0,
+    "subqueryCacheHits": 0,
+    "subqueryCacheMisses": 0,
+    "subquerySpillCount": 0,
+    "subquerySpilledBytes": 0,
+    "executionTimeMs": 0
+  },
+  "messages": [
+    {
+      "message": "[a1a361e3] [SELECT] Executing SelectStatement. Session: a1a361e3",
+      "color": "white",
+      "timestamp": "2026-05-14T23:53:42.616203Z"
+    },
+    {
+      "message": "[a1a361e3] 28 rows affected.",
+      "color": "white",
+      "timestamp": "2026-05-14T23:53:42.6380598Z"
+    },
+    {
+      "message": "[a1a361e3] Visual \u0027VisualIndex\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T23:53:42.6413162Z"
+    },
+    {
+      "message": "[a1a361e3] Page \u0027IndexPage\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-14T23:53:42.6444065Z"
+    },
+    {
+      "message": "[a1a361e3] Navigation \u0027MainNav\u0027 registered.",
+      "color": "white",
+      "timestamp": "2026-05-14T23:53:42.6450845Z"
+    }
+  ],
+  "executionTree": [
+    {
+      "id": "3e5ecb53-3cbc-4048-8dbf-b5fb3d8d32ee",
+      "name": "Script Execution",
+      "status": "Completed",
+      "rowsProcessed": 0,
+      "durationMs": 37.8166,
+      "iterationCount": 1,
+      "isParallelBlock": false,
+      "velocity": 0,
+      "error": null,
+      "children": [
+        {
+          "id": "ce7852c2-71f9-4363-8adf-37db59b0f19d",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 1.3096,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "0b47cf29-05c4-49b5-a835-7f0d6f7334c6",
+          "name": "SetReportMetadata",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.0345,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "359d3229-8822-497c-a092-b0ede714ebb4",
+          "name": "SetOperation",
+          "status": "Completed",
+          "rowsProcessed": 56,
+          "durationMs": 24.7333,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 2264.1539948167047,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "9fab2bff-74bb-4cb3-841c-6d24d4ee9e17",
+          "name": "CreateVisual",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9628,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "d222b99b-7abc-441d-a07d-69cac0dfd101",
+          "name": "CreatePage",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.9902,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        },
+        {
+          "id": "1d1e3ce4-97fc-48b2-a3e5-a81538397f36",
+          "name": "CreateNavigation",
+          "status": "Completed",
+          "rowsProcessed": 0,
+          "durationMs": 0.2828,
+          "iterationCount": 1,
+          "isParallelBlock": false,
+          "velocity": 0,
+          "error": null,
+          "children": []
+        }
+      ]
+    }
+  ]
+}

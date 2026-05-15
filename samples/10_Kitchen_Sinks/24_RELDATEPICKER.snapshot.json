@@ -1,6 +1,6 @@
 {
   "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\24_RELDATEPICKER.rptsql",
-  "builtAt": "2026-05-14T19:03:20.8308867Z",
+  "builtAt": "2026-05-14T23:52:40.9295725Z",
   "title": "Kitchen Sink: RELDATEPICKER Visual",
   "visuals": [
     {
@@ -35,10 +35,18 @@
       "name": "RelResult",
       "visualType": "TABLE",
       "chartConfig": null,
-      "columns": [],
-      "rows": [],
+      "columns": [
+        "Expression",
+        "ResolvedDate"
+      ],
+      "rows": [
+        [
+          "4/1/2026 12:00:00 AM",
+          "4/1/2026 12:00:00 AM"
+        ]
+      ],
       "options": {},
-      "error": "Unknown function: RELDATE. If this is a database-specific function, check that the query is being pushed down to the remote source (e.g. by avoiding local-only operations like joins with CSV files).",
+      "error": null,
       "actions": [],
       "styles": {}
     }
@@ -85,44 +93,44 @@
   },
   "messages": [
     {
-      "message": "[7912a4ed] Visual \u0027RelPicker\u0027 created.",
+      "message": "[7083ce52] Visual \u0027RelPicker\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:03:20.8208091Z"
+      "timestamp": "2026-05-14T23:52:40.9191597Z"
     },
     {
-      "message": "[7912a4ed] Visual \u0027RelResult\u0027 created.",
+      "message": "[7083ce52] Visual \u0027RelResult\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:03:20.8232542Z"
+      "timestamp": "2026-05-14T23:52:40.9216755Z"
     },
     {
-      "message": "[7912a4ed] Page \u0027RelDateKitchenSink\u0027 created.",
+      "message": "[7083ce52] Page \u0027RelDateKitchenSink\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:03:20.8244277Z"
+      "timestamp": "2026-05-14T23:52:40.9229559Z"
     },
     {
-      "message": "[7912a4ed] Navigation \u0027MainNav\u0027 registered.",
+      "message": "[7083ce52] Navigation \u0027MainNav\u0027 registered.",
       "color": "white",
-      "timestamp": "2026-05-14T19:03:20.8251318Z"
+      "timestamp": "2026-05-14T23:52:40.9236235Z"
     }
   ],
   "executionTree": [
     {
-      "id": "0e503da0-4796-47e2-9326-6f13caae3a30",
+      "id": "48d73ee4-7e40-460e-840b-5646481548fe",
       "name": "Script Execution",
       "status": "Completed",
       "rowsProcessed": 0,
-      "durationMs": 16.162,
+      "durationMs": 16.3971,
       "iterationCount": 1,
       "isParallelBlock": false,
       "velocity": 0,
       "error": null,
       "children": [
         {
-          "id": "4aee0a4e-d5f4-480c-bafb-17eda64e1d6b",
+          "id": "f8d31608-b63d-486d-ba26-76ba0ed50a27",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.2525,
+          "durationMs": 1.2645,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -130,11 +138,11 @@
           "children": []
         },
         {
-          "id": "21fa4bf7-ded6-46b4-8bd5-36d13994878b",
+          "id": "cebcd094-266f-4456-bd9b-ae4277c28aa8",
           "name": "Declare",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 2.7512,
+          "durationMs": 2.8938,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -142,11 +150,11 @@
           "children": []
         },
         {
-          "id": "979055b7-dc4d-4b6f-a001-be11b802eb82",
+          "id": "fd2348ce-44f6-432b-a4cb-b5b0765081a6",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 2.1492,
+          "durationMs": 2.3569,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -154,11 +162,11 @@
           "children": []
         },
         {
-          "id": "2b3e89ac-734c-4e64-be87-4995ad288ef3",
+          "id": "1b0c7083-f70f-4a33-a7f0-148f836b0dd1",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.3233,
+          "durationMs": 0.28,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -166,11 +174,11 @@
           "children": []
         },
         {
-          "id": "99e30ba5-2813-4720-bb8f-b068994c1052",
+          "id": "9e844f6b-c95d-4359-82cc-a4c3c1c02a8d",
           "name": "CreatePage",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.9699,
+          "durationMs": 1.0829,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -178,11 +186,11 @@
           "children": []
         },
         {
-          "id": "29a1e7f1-721b-4892-a61d-4755c702393f",
+          "id": "cc3504ae-4051-453f-8645-b23023dd5343",
           "name": "CreateNavigation",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2774,
+          "durationMs": 0.2794,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,

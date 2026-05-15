@@ -373,6 +373,13 @@ export class ReportPreviewPanel {
     <title>${manifest.title || 'ETL-SQL Report'}</title>
 </head>
 <body class="vscode-theme">
+    ${JSON.stringify(manifest).includes('"visualType":"Search"') || JSON.stringify(manifest).includes('"type":"Search"')
+        ? `<div style="background:var(--vscode-notifications-background); color:var(--vscode-notifications-foreground); padding:8px 12px; border-bottom:1px solid var(--vscode-notifications-border); font-size:12px; display:flex; align-items:center; gap:8px;">
+            <span style="color:var(--vscode-notificationsInfoIcon-foreground)">ⓘ</span>
+            <span>Note: <b>SEARCH</b> visuals are currently only interactive in the <b>ETL-SQL Web Portal</b>.</span>
+           </div>` 
+        : ''
+    }
     <div id="root"></div>
     <script nonce="${nonce}">
         // Injected manifest for the shared runtime
