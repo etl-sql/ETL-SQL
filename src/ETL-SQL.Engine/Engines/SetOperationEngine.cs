@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using ETL_SQL.Common;
 using ETL_SQL.Data;
+using ETL_SQL.Core.Data;
 
 namespace ETL_SQL.Engine.Engines
 {
@@ -66,20 +67,20 @@ namespace ETL_SQL.Engine.Engines
             var normalizedLeft = leftRows.Select(r => Normalize(r, targetColumns)).ToList();
             var normalizedRight = rightRows.Select(r => Normalize(r, targetColumns)).ToList();
             
-            var leftHashes = BuildHashSet(normalizedLeft);
-            var rightHashes = BuildHashSet(normalizedRight);
+            var leftKeys = BuildKeySet(normalizedLeft, targetColumns);
+            var rightKeys = BuildKeySet(normalizedRight, targetColumns);
 
             if (setOp.Operation == SetOpType.UNION)
             {
                 _logger.Debug("[SET_OP] Executing DISTINCT UNION");
-                var seen = new HashSet<long>();
+                var seen = new HashSet<CompoundKey>();
                 foreach (var r in normalizedLeft)
                 {
-                    if (seen.Add(GetRowHash(r))) await resultBatch.AddRowAsync(r);
+                    if (seen.Add(ToKey(r, targetColumns))) await resultBatch.AddRowAsync(r);
                 }
                 foreach (var r in normalizedRight)
                 {
-                    if (seen.Add(GetRowHash(r))) await resultBatch.AddRowAsync(r);
+                    if (seen.Add(ToKey(r, targetColumns))) await resultBatch.AddRowAsync(r);
                 }
             }
             else if (setOp.Operation == SetOpType.EXCEPT)
@@ -87,8 +88,8 @@ namespace ETL_SQL.Engine.Engines
                 _logger.Debug("[SET_OP] Executing EXCEPT");
                 foreach (var r in normalizedLeft)
                 {
-                    var hash = GetRowHash(r);
-                    if (!rightHashes.Contains(hash)) await resultBatch.AddRowAsync(r);
+                    var key = ToKey(r, targetColumns);
+                    if (!rightKeys.Contains(key)) await resultBatch.AddRowAsync(r);
                 }
             }
             else if (setOp.Operation == SetOpType.INTERSECT)
@@ -96,8 +97,8 @@ namespace ETL_SQL.Engine.Engines
                 _logger.Debug("[SET_OP] Executing INTERSECT");
                 foreach (var r in normalizedLeft)
                 {
-                    var hash = GetRowHash(r);
-                    if (rightHashes.Contains(hash)) await resultBatch.AddRowAsync(r);
+                    var key = ToKey(r, targetColumns);
+                    if (rightKeys.Contains(key)) await resultBatch.AddRowAsync(r);
                 }
             }
 
@@ -105,10 +106,10 @@ namespace ETL_SQL.Engine.Engines
             if (setOp.Operation != SetOpType.UNION && resultBatch.Rows.Count > 0)
             {
                 var finalRows = new List<Row>();
-                var seen = new HashSet<long>();
+                var seen = new HashSet<CompoundKey>();
                 foreach (var r in resultBatch.Rows)
                 {
-                    if (seen.Add(GetRowHash(r))) finalRows.Add(r);
+                    if (seen.Add(ToKey(r, targetColumns))) finalRows.Add(r);
                 }
                 resultBatch.Rows.Clear();
                 foreach (var r in finalRows) await resultBatch.AddRowAsync(r);
@@ -138,34 +139,18 @@ namespace ETL_SQL.Engine.Engines
             return rows;
         }
 
-        private HashSet<long> BuildHashSet(List<Row> rows)
+        private HashSet<CompoundKey> BuildKeySet(List<Row> rows, List<string> columns)
         {
-            var hashes = new HashSet<long>();
-            foreach (var r in rows) hashes.Add(GetRowHash(r));
-            return hashes;
+            var keys = new HashSet<CompoundKey>();
+            foreach (var r in rows) keys.Add(ToKey(r, columns));
+            return keys;
         }
 
-        private long GetRowHash(Row row)
+        private CompoundKey ToKey(Row row, List<string> columns)
         {
-            // SEC-9: Robust FNV-1a 64-bit hash for row equality comparison
-            const long fnvOffsetBasis = unchecked((long)14695981039346656037UL);
-            const long fnvPrime = 1099511628211;
-
-            long hash = fnvOffsetBasis;
-            foreach (var kv in row.Columns.OrderBy(k => k.Key))
-            {
-                var valStr = kv.Value?.ToString() ?? "NULL";
-                foreach (char c in valStr)
-                {
-                    hash ^= (byte)c;
-                    hash *= fnvPrime;
-                    hash ^= (byte)(c >> 8);
-                    hash *= fnvPrime;
-                }
-                hash ^= 0x7C; // Pipe separator
-                hash *= fnvPrime;
-            }
-            return hash;
+            var vals = new object?[columns.Count];
+            for (int i = 0; i < columns.Count; i++) vals[i] = row[columns[i]];
+            return new CompoundKey(vals);
         }
     }
 }

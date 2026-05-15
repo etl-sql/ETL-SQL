@@ -17,6 +17,8 @@ namespace ETL_SQL.Core.Common
             _map = new Dictionary<TKey, LinkedListNode<(TKey, TValue)>>(capacity, comparer);
         }
 
+        public Action<TValue>? OnEvicted { get; set; }
+
         public int Count => _map.Count;
         public IEnumerable<TValue> Values => System.Linq.Enumerable.Select(_list, n => n.value);
 
@@ -37,12 +39,14 @@ namespace ETL_SQL.Core.Common
         {
             if (_map.TryGetValue(key, out var existing))
             {
+                OnEvicted?.Invoke(existing.Value.value);
                 _list.Remove(existing);
                 _map.Remove(key);
             }
             else if (_map.Count >= _capacity)
             {
                 var lru = _list.Last!;
+                OnEvicted?.Invoke(lru.Value.value);
                 _list.RemoveLast();
                 _map.Remove(lru.Value.key);
             }
@@ -52,6 +56,10 @@ namespace ETL_SQL.Core.Common
 
         public void Clear()
         {
+            if (OnEvicted != null)
+            {
+                foreach (var item in _list) OnEvicted(item.value);
+            }
             _map.Clear();
             _list.Clear();
         }

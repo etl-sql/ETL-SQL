@@ -293,6 +293,12 @@ namespace ETL_SQL.Data
             _constraintCaches.Clear();
         }
 
+        public void Clear()
+        {
+            Rows.Clear();
+            _constraintCaches.Clear();
+        }
+
         public void AddColumn(string columnName)
         {
             Schema.AddColumn(columnName);

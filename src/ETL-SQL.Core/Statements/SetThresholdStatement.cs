@@ -26,8 +26,8 @@ namespace ETL_SQL.Core
         MaxGenerateRows,
         MaxInternalOperations,
         InteractiveMode,
-        CaseSensitive
-
+        CaseSensitive,
+        Lineage
     }
 
     public record SetThresholdStatement(ThresholdType Type, Expression Value) : Statement

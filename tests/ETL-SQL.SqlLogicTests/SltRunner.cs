@@ -25,7 +25,7 @@ using ETL_SQL.Services;
 
 namespace ETL_SQL.SqlLogicTests
 {
-    public class SltRunner
+    public class SltRunner : IDisposable
     {
         private readonly ILogger _logger;
         private readonly Evaluator _evaluator;
@@ -42,7 +42,9 @@ namespace ETL_SQL.SqlLogicTests
 
         private async Task InitializeAsync()
         {
-            var setup = @"CREATE CONNECTION slt ON MOCKDB();";
+            var setup = @"CREATE CONNECTION slt ON MOCKDB();
+SET LINEAGE = OFF;
+SET TELEMETRY = OFF;";
             var tokens = new Lexer(setup).Tokenize();
             var script = new Parser(tokens, setup).Parse();
             await _evaluator.Evaluate(script);
@@ -70,6 +72,10 @@ namespace ETL_SQL.SqlLogicTests
                     VerifyResults(record, _evaluator.LastResult);
                 }
                 
+                // Clear results to prevent memory accumulation during long test runs
+                _evaluator.LastResult = null;
+                _evaluator.LastResultSets.Clear();
+
                 if (!record.ExpectSuccess && record.Type == SltRecordType.Statement)
                 {
                     throw new Exception($"Line {record.LineNumber}: Expected failure, but statement succeeded.");
@@ -126,7 +132,12 @@ namespace ETL_SQL.SqlLogicTests
                 if (flat.Count != expectedCount)
                     throw new Exception($"Line {record.LineNumber}: Value count mismatch. Expected {expectedCount} values, got {flat.Count}.");
 
-                var actualHash = ComputeSltHash(flat);
+                // SLT requires sorting results before hashing if nosort is specified
+                var hashValues = flat;
+                if (record.SortMode == SltSortMode.NoSort)
+                    hashValues = flat.OrderBy(v => v, StringComparer.Ordinal).ToList();
+
+                var actualHash = ComputeSltHash(hashValues);
                 if (actualHash != expectedHash)
                     throw new Exception(
                         $"Line {record.LineNumber}: Hash mismatch. Expected {expectedHash}, got {actualHash}. " +
@@ -217,7 +228,9 @@ namespace ETL_SQL.SqlLogicTests
                 new CreateConnectionStatementHandler(connectors, l)
             };
 
-            return new Evaluator(handlers, serviceProvider, registry, tracker.Object, docker.Object, connectors, sessions.Object, security, l, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());
+            var evaluator = new Evaluator(handlers, serviceProvider, registry, tracker.Object, docker.Object, connectors, sessions.Object, security, l, new ETL_SQL.Core.Metadata.LanguageHelpRegistry(), new EvaluatorComponentRegistry());
+            evaluator.IsPersistentSession = false;
+            return evaluator;
         }
 
         private class ConsoleLogger : ILogger
@@ -247,6 +260,11 @@ namespace ETL_SQL.SqlLogicTests
             public void Info(string template, params object?[] args) => Log(LogLevel.Info, template);
             public void Warning(string template, params object?[] args) => Log(LogLevel.Warning, template);
             public void Error(string template, Exception? ex, params object?[] args) => Log(LogLevel.Error, template, ex);
+        }
+
+        public void Dispose()
+        {
+            _evaluator.DisposeAsync().AsTask().GetAwaiter().GetResult();
         }
     }
 }

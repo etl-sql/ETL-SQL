@@ -45,6 +45,7 @@ namespace ETL_SQL.Engine
 
         // --- Features ---
         public bool TelemetryEnabled { get; set; } = true;
+        public bool LineageEnabled { get; set; } = true;
         public bool SpillEncryptionEnabled { get; set; } = true;
         public bool SpillCompressionEnabled { get; set; } = true;
         public string SpillFormat { get; set; } = "Arrow";
@@ -55,6 +56,9 @@ namespace ETL_SQL.Engine
 
         // --- Date/Time ---
         public DayOfWeek WeekStartDay { get; set; } = DayOfWeek.Monday;
+
+        // --- Features ---
+        public bool CaseSensitiveComparison { get; set; }
 
         // --- Security ---
         public string ScriptHashPolicy { get; set; } = "Warn";

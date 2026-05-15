@@ -640,6 +640,7 @@ namespace ETL_SQL.Core.Formatting
         private static string FormatCase(CaseExpression e)
         {
             var sql = "CASE ";
+            if (e.InputExpression != null) sql += e.InputExpression.ToSql() + " ";
             foreach (var clause in e.WhenClauses)
                 sql += $"WHEN {clause.Condition.ToSql()} THEN {clause.Result.ToSql()} ";
             if (e.ElseResult != null) sql += $"ELSE {e.ElseResult.ToSql()} ";

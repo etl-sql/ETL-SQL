@@ -304,18 +304,40 @@ namespace ETL_SQL.Engine.Engines
 
         public bool IsAggregate(Expression? expr)
         {
+            if (expr == null) return false;
             if (expr is FunctionCallExpression f)
             {
                 if (f.Window != null) return false;
                 var name = f.FunctionName.ToUpperInvariant();
-                return name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX"
+                if (name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX"
                     || name == "STRING_AGG" || name == "LIST_AGG"
                     || name == "PERCENTILE_CONT" || name == "PERCENTILE_DISC"
                     || name == "VAR" || name == "VARP" || name == "VAR_SAMP" || name == "VAR_POP"
                     || name == "STDEV" || name == "STDEVP" || name == "STDDEV" || name == "STDDEV_SAMP" || name == "STDDEV_POP"
-                    || name == "CORR" || name == "COVAR_SAMP" || name == "COVAR_POP";
+                    || name == "CORR" || name == "COVAR_SAMP" || name == "COVAR_POP")
+                    return true;
+                
+                return f.Arguments.Any(a => IsAggregate(a));
             }
             if (expr is BinaryExpression b) return IsAggregate(b.Left) || IsAggregate(b.Right);
+            if (expr is UnaryExpression u) return IsAggregate(u.Expression);
+            if (expr is CaseExpression c)
+            {
+                if (IsAggregate(c.InputExpression)) return true;
+                if (c.WhenClauses.Any(w => IsAggregate(w.Condition) || IsAggregate(w.Result))) return true;
+                return IsAggregate(c.ElseResult);
+            }
+            if (expr is IsNullExpression isnull) return IsAggregate(isnull.Expression);
+            if (expr is InExpression inExpr)
+            {
+                if (IsAggregate(inExpr.Left)) return true;
+                if (inExpr.Right is ListExpression list) return list.Items.Any(e => IsAggregate(e));
+                return IsAggregate(inExpr.Right);
+            }
+            if (expr is BetweenExpression between) return IsAggregate(between.Left) || IsAggregate(between.Start) || IsAggregate(between.End);
+            if (expr is LikeExpression like) return IsAggregate(like.Left) || IsAggregate(like.Pattern) || IsAggregate(like.EscapeChar);
+            if (expr is ListExpression l) return l.Items.Any(e => IsAggregate(e));
+
             return false;
         }
 
@@ -323,28 +345,65 @@ namespace ETL_SQL.Engine.Engines
 
         private void CollectAggregates(Expression expr, List<FunctionCallExpression> aggs)
         {
-            if (expr is FunctionCallExpression f && IsAggregate(f))
+            if (expr == null) return;
+            if (expr is FunctionCallExpression f)
             {
-                var fSql = f.ToSql();
-                if (!aggs.Any(a => a.ToSql().Equals(fSql, StringComparison.OrdinalIgnoreCase))) 
-                    aggs.Add(f);
+                var name = f.FunctionName.ToUpperInvariant();
+                bool isAgg = name == "COUNT" || name == "SUM" || name == "AVG" || name == "MIN" || name == "MAX"
+                    || name == "STRING_AGG" || name == "LIST_AGG"
+                    || name == "PERCENTILE_CONT" || name == "PERCENTILE_DISC"
+                    || name == "VAR" || name == "VARP" || name == "VAR_SAMP" || name == "VAR_POP"
+                    || name == "STDEV" || name == "STDEVP" || name == "STDDEV" || name == "STDDEV_SAMP" || name == "STDDEV_POP"
+                    || name == "CORR" || name == "COVAR_SAMP" || name == "COVAR_POP";
+
+                if (isAgg && f.Window == null)
+                {
+                    var fSql = f.ToSql();
+                    if (!aggs.Any(a => a.ToSql().Equals(fSql, StringComparison.OrdinalIgnoreCase))) 
+                        aggs.Add(f);
+                }
+                else
+                {
+                    foreach (var arg in f.Arguments) CollectAggregates(arg, aggs);
+                }
             }
             else if (expr is BinaryExpression b)
             {
                 CollectAggregates(b.Left, aggs);
                 CollectAggregates(b.Right, aggs);
             }
-            else if (expr is LikeExpression l)
+            else if (expr is UnaryExpression u) CollectAggregates(u.Expression, aggs);
+            else if (expr is CaseExpression c)
             {
-                CollectAggregates(l.Left, aggs);
+                CollectAggregates(c.InputExpression, aggs);
+                foreach (var w in c.WhenClauses)
+                {
+                    CollectAggregates(w.Condition, aggs);
+                    CollectAggregates(w.Result, aggs);
+                }
+                CollectAggregates(c.ElseResult, aggs);
             }
-            else if (expr is InExpression i)
+            else if (expr is IsNullExpression isnull) CollectAggregates(isnull.Expression, aggs);
+            else if (expr is InExpression inExpr)
             {
-                CollectAggregates(i.Left, aggs);
+                CollectAggregates(inExpr.Left, aggs);
+                CollectAggregates(inExpr.Right, aggs);
             }
-            else if (expr is IsNullExpression n)
+            else if (expr is ListExpression l)
             {
-                CollectAggregates(n.Expression, aggs);
+                foreach (var item in l.Items) CollectAggregates(item, aggs);
+            }
+            else if (expr is BetweenExpression between)
+            {
+                CollectAggregates(between.Left, aggs);
+                CollectAggregates(between.Start, aggs);
+                CollectAggregates(between.End, aggs);
+            }
+            else if (expr is LikeExpression like)
+            {
+                CollectAggregates(like.Left, aggs);
+                CollectAggregates(like.Pattern, aggs);
+                CollectAggregates(like.EscapeChar, aggs);
             }
         }
 

@@ -147,8 +147,16 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParseSetThreshold(ThresholdType type)
         {
             var startToken = _parser.Previous;
-            Consume(TokenType.EQUALS, $"Expected '=' after SET {startToken.Value}");
-            var value = ParseExpression();
+            Expression value;
+
+            if (Match(TokenType.ON)) value = new LiteralExpression(true, TokenType.TRUE);
+            else if (Match(TokenType.OFF)) value = new LiteralExpression(false, TokenType.FALSE);
+            else
+            {
+                Consume(TokenType.EQUALS, $"Expected '=', ON, or OFF after SET {startToken.Value}");
+                value = ParseExpression();
+            }
+
             if (_parser.Current.Type == TokenType.SEMICOLON) Advance();
             return new SetThresholdStatement(type, value) { Line = startToken.Line, Column = startToken.Column };
         }

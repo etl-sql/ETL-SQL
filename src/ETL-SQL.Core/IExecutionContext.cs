@@ -332,6 +332,8 @@ namespace ETL_SQL.Core
         IServiceProvider ServiceProvider { get; }
         
         bool IsWhatIf { get; set; }
+        bool LineageEnabled { get; set; }
+        bool TelemetryEnabled { get; set; }
         bool DisplayExecuteTree { get; set; }
         /// <summary>The ID of the currently executing node in this task/context.</summary>
         Guid? CurrentNodeId { get; set; }

@@ -115,7 +115,7 @@ namespace ETL_SQL.Engine
         public double AggregateExpansionRatio => Telemetry.AggregateExpansionRatio;
 
         [System.Obsolete("Use Telemetry.TelemetryEnabled")]
-        public bool TelemetryEnabled { get => Telemetry.TelemetryEnabled; set => Telemetry.TelemetryEnabled = value; }
+        public bool TelemetryEnabled { get => _options.TelemetryEnabled; set { _options.TelemetryEnabled = value; Telemetry.TelemetryEnabled = value; } }
 
         [System.Obsolete("Use Telemetry.AggregateGroupsCount")]
         public long AggregateGroupsCount => Telemetry.AggregateGroupsCount;
@@ -187,7 +187,8 @@ namespace ETL_SQL.Engine
         /// <summary>Hash-mismatch policy for script integrity checks. Settable at runtime via SET SCRIPT_HASH_POLICY.</summary>
         public string ScriptHashPolicy { get => _options.ScriptHashPolicy; set => _options.ScriptHashPolicy = value; }
         /// <summary>When true, string comparisons are case-sensitive. Defaults to false. Settable at runtime via SET CASE_SENSITIVE.</summary>
-        public bool CaseSensitiveComparison { get; set; }
+        public bool CaseSensitiveComparison { get => _options.CaseSensitiveComparison; set => _options.CaseSensitiveComparison = value; }
+        public bool LineageEnabled { get => _options.LineageEnabled; set => _options.LineageEnabled = value; }
 
         /// <summary>Last script lexing duration in milliseconds.</summary>
         public long LastLexTimeMs { get; set; }
@@ -453,6 +454,9 @@ namespace ETL_SQL.Engine
             _options = options ?? new EvaluatorOptions();
             _registry = registry ?? new EvaluatorComponentRegistry();
             _subqueryCache = new ETL_SQL.Core.Common.LruCache<SubqueryCacheKey, ETL_SQL.Core.Data.SubqueryResult>(_options.SubqueryCacheSize);
+            _subqueryCache.OnEvicted = async (val) => {
+                try { await val.DisposeAsync(); } catch { }
+            };
 
             _variableScopeManager = variableScopeManager ?? new VariableScopeManager();
             _registry.Initialize(this, _logger, _variableScopeManager, reportContext);
@@ -550,6 +554,8 @@ namespace ETL_SQL.Engine
             ScriptHashPolicy = DefaultThresholds.ScriptHashPolicy(config);
             IsPersistentSession = DefaultThresholds.PersistenceDefault(config);
             CaseSensitiveComparison = DefaultThresholds.CaseSensitiveComparison(config);
+            LineageEnabled = DefaultThresholds.LineageEnabled(config);
+            TelemetryEnabled = DefaultThresholds.TelemetryEnabled(config);
         }
 
         private async Task AutoExportOpenLineageAsync(System.Threading.CancellationToken ct)
@@ -650,30 +656,44 @@ namespace ETL_SQL.Engine
         {
             if (CurrentRecursiveDepth == 0)
             {
+                foreach (var rs in LastResultSets) rs.Clear();
                 LastResultSets.Clear();
-                LastResult = null;
+                ClearResults();
                 _nodeReuseMap.Clear();
                 _operationCount = 0;
-                Telemetry.Clear();
-                // lock(_messagesLock) { Messages.Clear(); } // Don't clear messages on every evaluate, allows TUI history
+                // Lineage and Telemetry are session-persistent; clearing handled by ResetSessionAsync
+                _expressionEvaluator.ClearCaches();
+                _subqueryCache.Clear();
+                
+                if (!InteractiveMode)
+                {
+                    lock(_messagesLock) { Messages.Clear(); }
+                }
             }
             try
             {
-                var analyzer = new LineageAnalyzer(LineageTracker);
-                analyzer.Analyze(script);
+                if (LineageEnabled)
+                {
+                    var analyzer = new LineageAnalyzer(LineageTracker);
+                    analyzer.Analyze(script);
+                }
 
                 if (script.Diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error)) {
                     var firstError = script.Diagnostics.First(d => d.Severity == DiagnosticSeverity.Error);
                     throw new ExecutionException($"Syntax error: {firstError.Message} at {firstError.Line}:{firstError.Column}");
                 }
 
-                var scriptNode = new ExecutionNode {
-                    Name = "Script Execution",
-                    Status = ExecutionStatus.Running,
-                    StartTicks = Stopwatch.GetTimestamp()
-                };
-                Telemetry.ExecutionTree.AddNode(scriptNode);
-                CurrentNodeId = scriptNode.Id;
+                ExecutionNode? scriptNode = null;
+                if (TelemetryEnabled)
+                {
+                    scriptNode = new ExecutionNode {
+                        Name = "Script Execution",
+                        Status = ExecutionStatus.Running,
+                        StartTicks = Stopwatch.GetTimestamp()
+                    };
+                    Telemetry.ExecutionTree.AddNode(scriptNode);
+                    CurrentNodeId = scriptNode.Id;
+                }
 
                 // Inject script metadata into LineageTracker
                 LineageTracker.GlobalMetadata.Clear();
@@ -720,8 +740,11 @@ namespace ETL_SQL.Engine
                     }
                 }
 
-                scriptNode.Status = ExecutionStatus.Completed;
-                scriptNode.EndTicks = Stopwatch.GetTimestamp();
+                if (scriptNode != null)
+                {
+                    scriptNode.Status = ExecutionStatus.Completed;
+                    scriptNode.EndTicks = Stopwatch.GetTimestamp();
+                }
 
                 // Auto-export OpenLineage at top-level script completion
                 if (CurrentRecursiveDepth == 0)
@@ -747,7 +770,11 @@ namespace ETL_SQL.Engine
             }
         }
 
-        public void ClearResults() => LastResult = null;
+        public void ClearResults()
+        {
+            LastResult?.Clear();
+            LastResult = null;
+        }
         public (Dictionary<string, object?>, Dictionary<string, VariableMetadata>) GetGlobalState() => _variableScopeManager.GetGlobalState();
 
         private static List<List<Statement>> SplitIntoBatches(List<Statement> statements)
@@ -818,32 +845,32 @@ namespace ETL_SQL.Engine
             else if (statement is CreateTableStatement cts) nodeName = $"CREATE TABLE {cts.TargetTable.TableName}";
             else if (statement is InsertStatement inst) nodeName = $"INSERT INTO {inst.TargetTable.TableName}";
             
-            ExecutionNode node;
+            ExecutionNode? node = null;
             var cacheKey = (parentId, statement);
             
-            if (ReuseLoopNodes && _nodeReuseMap.TryGetValue(cacheKey, out var existingNode))
+            if (TelemetryEnabled)
             {
-                node = existingNode;
-                node.Status = ExecutionStatus.Running;
-                node.IterationCount++;
-                // Note: StartTicks is updated to reflect the CURRENT iteration start,
-                // while Cumulative Duration is implicitly handled by the UI or calculated via snapshot.
-                node.StartTicks = Stopwatch.GetTimestamp();
-                node.ErrorMessage = null;
-            }
-            else
-            {
-                node = new ExecutionNode { 
-                    Name = statement.GetType().Name.Replace("Statement", ""),
-                    Status = ExecutionStatus.Running,
-                    StartTicks = Stopwatch.GetTimestamp()
-                };
-                Telemetry.ExecutionTree.AddNode(node, parentId);
+                if (ReuseLoopNodes && _nodeReuseMap.TryGetValue(cacheKey, out var existingNode))
+                {
+                    node = existingNode;
+                    node.Status = ExecutionStatus.Running;
+                    node.IterationCount++;
+                    node.StartTicks = Stopwatch.GetTimestamp();
+                    node.ErrorMessage = null;
+                }
+                else
+                {
+                    node = new ExecutionNode { 
+                        Name = nodeName,
+                        Status = ExecutionStatus.Running,
+                        StartTicks = Stopwatch.GetTimestamp()
+                    };
+                    Telemetry.ExecutionTree.AddNode(node, parentId);
+                    if (ReuseLoopNodes) _nodeReuseMap[cacheKey] = node;
+                }
                 parentId = node.Id;
-                if (ReuseLoopNodes) _nodeReuseMap[cacheKey] = node;
+                CurrentNodeId = node.Id;
             }
-
-            CurrentNodeId = node.Id;
 
             Stopwatch? sw = null;
             long startRows = Telemetry.RowsProcessed;
@@ -863,25 +890,23 @@ namespace ETL_SQL.Engine
                 try
                 {
                     await handler.Execute(statement, this);
-                    node.Status = ExecutionStatus.Completed;
+                    if (node != null) node.Status = ExecutionStatus.Completed;
                 }
                 catch (Exception ex)
                 {
-                    node.Status = ExecutionStatus.Faulted;
-                    node.ErrorMessage = ex.Message;
+                    if (node != null)
+                    {
+                        node.Status = ExecutionStatus.Faulted;
+                        node.ErrorMessage = ex.Message;
+                    }
                     LastError = new ErrorInfo(50000, ex.Message, 16, 1, statement.Line, null);
                     throw;
                 }
 
                 finally
                 {
-                    node.EndTicks = Stopwatch.GetTimestamp();
+                    if (node != null) node.EndTicks = Stopwatch.GetTimestamp();
                     CurrentNodeId = parentId;
-                    
-                    // [STABILIZATION] Removed _localSources.Clear(). 
-                    // Temporary sources like CTEs are managed via scope/registry, and 
-                    // user #temp tables are now registered in the persistent Connections 
-                    // dictionary via DataSourceManager to ensure visibility across 
                     // statement boundaries (essential for CREATE VISUAL).
                 }
             }

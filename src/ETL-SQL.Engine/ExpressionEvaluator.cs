@@ -26,8 +26,14 @@ namespace ETL_SQL.Engine
         private readonly IExecutionContext _context;
         private readonly ILogger _logger;
         private static readonly ConcurrentDictionary<(Type, string), MemberInfo?> _reflectionCache = new();
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<Statement, List<string>> _outerRefCache = new();
+        private readonly ConcurrentDictionary<Statement, List<string>> _outerRefCache = new();
         private readonly ConcurrentDictionary<(TableSchema?, string), string?> _identifierCache = new();
+
+        public void ClearCaches()
+        {
+            _outerRefCache.Clear();
+            _identifierCache.Clear();
+        }
 
         public ExpressionEvaluator(IExecutionContext context)
         {
@@ -941,10 +947,25 @@ namespace ETL_SQL.Engine
         /// <summary>Evaluates a CASE expression.</summary>
         private async ValueTask<object?> EvaluateCase(CaseExpression c, Row context, bool decryptSensitive = false)
         {
+            object? inputVal = null;
+            bool hasInput = c.InputExpression != null;
+            if (hasInput)
+            {
+                inputVal = await EvaluateInternal(c.InputExpression, context, decryptSensitive);
+            }
+
             foreach (var clause in c.WhenClauses)
             {
-                var cond = await EvaluateInternal(clause.Condition, context, decryptSensitive);
-                if (cond != null && Convert.ToBoolean(cond)) return await EvaluateInternal(clause.Result, context, decryptSensitive);
+                if (hasInput)
+                {
+                    var whenVal = await EvaluateInternal(clause.Condition, context, decryptSensitive);
+                    if (IsSoftEqual(inputVal, whenVal)) return await EvaluateInternal(clause.Result, context, decryptSensitive);
+                }
+                else
+                {
+                    var cond = await EvaluateInternal(clause.Condition, context, decryptSensitive);
+                    if (cond != null && Convert.ToBoolean(cond)) return await EvaluateInternal(clause.Result, context, decryptSensitive);
+                }
             }
             return await EvaluateInternal(c.ElseResult, context, decryptSensitive);
         }

@@ -1666,11 +1666,13 @@ namespace ETL_SQL.Core
 
     public record CaseExpression : Expression
     {
+        public Expression? InputExpression { get; }
         public List<(Expression Condition, Expression Result)> WhenClauses { get; }
         public Expression? ElseResult { get; }
 
-        public CaseExpression(List<(Expression Condition, Expression Result)> whenClauses, Expression? elseResult)
+        public CaseExpression(List<(Expression Condition, Expression Result)> whenClauses, Expression? elseResult, Expression? inputExpression = null)
         {
+            InputExpression = inputExpression;
             WhenClauses = whenClauses;
             ElseResult = elseResult;
         }
@@ -1678,6 +1680,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceTables()
         {
             var sources = WhenClauses.SelectMany(c => c.Condition.GetSourceTables().Concat(c.Result.GetSourceTables()));
+            if (InputExpression != null) sources = sources.Concat(InputExpression.GetSourceTables());
             if (ElseResult != null) sources = sources.Concat(ElseResult.GetSourceTables());
             return sources.Distinct(StringComparer.OrdinalIgnoreCase);
         }
@@ -1685,6 +1688,7 @@ namespace ETL_SQL.Core
         public override IEnumerable<string> GetSourceColumns()
         {
             var columns = WhenClauses.SelectMany(c => c.Condition.GetSourceColumns().Concat(c.Result.GetSourceColumns()));
+            if (InputExpression != null) columns = columns.Concat(InputExpression.GetSourceColumns());
             if (ElseResult != null) columns = columns.Concat(ElseResult.GetSourceColumns());
             return columns.Distinct(StringComparer.OrdinalIgnoreCase);
         }

@@ -201,7 +201,7 @@ These paths are currently completely untested in the SLT suite:
 
 These were identified when writing the dark-path SLT files. Each has a failing or missing test case that proves the bug.
 
-- [ ] **`CASE expr WHEN val THEN ...` (simple CASE) not parsed** — the parser only handles the searched form (`CASE WHEN condition THEN ...`). Simple CASE raises "Expected END at the conclusion of CASE statement". Add to parser: `StatementParser` / expression parser needs a `CASE <expr> WHEN <val>` branch before the `WHEN <condition>` branch.
+- [x] **`CASE expr WHEN val THEN ...` (simple CASE) support** — the parser only handled the searched form (`CASE WHEN condition THEN ...`). Simple CASE raised "Expected END at the conclusion of CASE statement". Added parser support in `ExpressionParser` and evaluation logic in `ExpressionEvaluator`. Added `InputExpression` to `CaseExpression` AST.
 - [ ] **`CAST(3.9 AS INT)` does not truncate** — `CAST(x AS INT)` does not strip the fractional part; `CAST(3.9 AS INT)` returns `3.9` not `3`. Fix in `TypeConverter.Cast` — when target type is INT/BIGINT/TINYINT, apply `Math.Truncate` before converting.
 - [ ] **`NOT (condition)` returns 0 rows** — `WHERE NOT (a = 1)` excluded all rows in testing. Root cause not confirmed; likely a precedence or parenthesis-handling bug in the NOT operator evaluation. `WHERE a <> 1` works correctly as a workaround. Needs a targeted test and parser/evaluator fix.
 - [ ] **`hasAgg` does not detect aggregates nested inside `CASE` or scalar functions** — `CASE WHEN SUM(x) IS NULL THEN 0 ELSE SUM(x) END` and `COALESCE(SUM(x), 0)` are not recognized as aggregate expressions by `AggregateEngine.hasAgg`. The engine falls through to row-mode and returns multiple rows instead of one. Fix: extend `IsAggregate()` in `AggregateEngine` to recurse into `CaseExpression` branches and `FunctionCallExpression` arguments. This also blocks TPC-H Q12 and Q14.
@@ -219,3 +219,9 @@ These were identified when writing the dark-path SLT files. Each has a failing o
 - [ ] **Add a CI comparison step** — On each PR, re-run benchmarks and compare against the baseline. Fail CI if any benchmark regresses by more than 15% (mean time). A simple PowerShell script diffing the two JSON files is enough; no need for a dedicated tool.
 - [ ] **Add `[Benchmark]` variants at SF=1** for local profiling — mark them `[BenchmarkCategory("LargeScale")]` and exclude from CI with `--filter Category!=LargeScale` so they only run on demand.
 
+
+### Correctness regressions discovered in SLT corpus
+- [ ] **Value count mismatch (41 vs 42)** — Seen at Line 3229 in corpus runs. Indicates a materialization or row-count tracking error, possibly in the `SelectStatementHandler` or `AggregateEngine`.
+- [ ] **Non-deterministic Hash Mismatches** — Multiple corpus tests (e.g., Lines 2273, 94) reporting inconsistent results. Needs investigation into transient state leakage or race conditions in parallel execution paths.
+- [ ] **Memory Pressure & Performance Crawl** — Performance degrades during large SLT files. Even with lineage/telemetry off, memory pressure accumulates. Initial fixes (cache clearing, static cache removal) implemented, but needs further profiling of `DataTable`/`Row` allocation patterns.
+- [ ] **Persistent vs Transient parity** — Verify that `IsPersistentSession = false` (now default for SLT) does not diverge from disk-spill results.

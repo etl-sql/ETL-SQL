@@ -344,6 +344,12 @@ namespace ETL_SQL.Core.Parser
             if (_parser.Match(TokenType.CASE))
             {
                 var t = _parser.Previous;
+                Expression? inputExpr = null;
+                if (_parser.Current.Type != TokenType.WHEN)
+                {
+                    inputExpr = _parser.ParseExpression();
+                }
+
                 var clauses = new List<(Expression Condition, Expression Result)>();
                 Expression? elseResult = null;
 
@@ -361,7 +367,7 @@ namespace ETL_SQL.Core.Parser
                 }
 
                 _parser.Consume(TokenType.END, "Expected END at the conclusion of CASE statement");
-                return new CaseExpression(clauses, elseResult) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
+                return new CaseExpression(clauses, elseResult, inputExpr) { Line = t.Line, Column = t.Column, EndLine = _parser.LastTokenEndLine, EndColumn = _parser.LastTokenEndColumn };
             }
             if (_parser.Match(TokenType.PARAMETER))
             {

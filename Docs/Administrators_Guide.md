@@ -203,3 +203,39 @@ SET CASE_SENSITIVE = OFF;
 ```
 
 Set `true` to make case-sensitive comparison the server default. Individual scripts can override with `SET CASE_SENSITIVE` regardless of this setting.
+
+---
+
+## 9. Performance & Lineage Controls
+
+### 9.1 Data Lineage (`SET LINEAGE`)
+
+ETL-SQL tracks the flow of data from source to destination by default. This enables lineage reporting and automated metadata tagging. For high-performance batch operations where lineage is not required, it can be disabled to reduce memory overhead and CPU cycles.
+
+**Script override:**
+```sql
+SET LINEAGE = OFF;
+```
+
+**Global default** (`appsettings.json`):
+```json
+"Engine": {
+  "LineageEnabled": true
+}
+```
+
+### 9.2 Execution Telemetry (`SET TELEMETRY`)
+
+Telemetry collection gathers metrics such as row counts, partition distribution, and spill statistics. Disabling telemetry can provide a minor performance boost in "fire-and-forget" workloads.
+
+**Script override:**
+```sql
+SET TELEMETRY = OFF;
+```
+
+**Global default** (`appsettings.json`):
+```json
+"Engine": {
+  "TelemetryEnabled": true
+}
+```

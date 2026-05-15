@@ -448,6 +448,8 @@ Override `appsettings.json` defaults for the current session.
 | `SET EXTERNAL_SORT_CHUNK_SIZE = n` | 50,000 | Rows per chunk during external sort |
 | `SET BATCHSIZE = n` | 10,000 | Rows per batch in the engine pipeline |
 | `SET MAX_LAST_RESULT_ROWS = n` | 50,000 | Rows in the interactive display buffer |
+| `SET LINEAGE = ON\|OFF` | ON | Enables data lineage tracking for the current script session |
+| `SET TELEMETRY = ON\|OFF` | ON | Enables execution metrics and telemetry collection |
 | `SET MAX_RECURSIVE_DEPTH = n` | 10,000 | Max call depth for recursive CTEs or procedures |
 | `SET MAX_IN_MEMORY_BATCHES = n` | 100 | Batches held before automatic `#temp` spill |
 | `SET FOREACH_PAGE_SIZE = n` | 10,000 | Items fetched per page when iterating large collections |

@@ -68,5 +68,11 @@ namespace ETL_SQL.Engine.Services
 
         public static bool CaseSensitiveComparison(IConfiguration? config)
             => config?.GetValue<bool?>("Engine:CaseSensitiveComparison") ?? false;
+            
+        public static bool TelemetryEnabled(IConfiguration? config)
+            => config?.GetValue<bool?>("Engine:TelemetryEnabled") ?? true;
+
+        public static bool LineageEnabled(IConfiguration? config)
+            => config?.GetValue<bool?>("Engine:LineageEnabled") ?? true;
     }
 }

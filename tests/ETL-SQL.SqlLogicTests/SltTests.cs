@@ -13,7 +13,7 @@ namespace ETL_SQL.SqlLogicTests
         [MemberData(nameof(GetTestFiles))]
         public async Task RunSltTestFile(string filePath)
         {
-            var runner = new SltRunner();
+            using var runner = new SltRunner();
             var records = SltParser.ParseFile(filePath);
 
             foreach (var record in records)
