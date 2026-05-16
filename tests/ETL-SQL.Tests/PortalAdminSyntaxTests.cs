@@ -114,5 +114,60 @@ namespace ETL_SQL.Tests
                 d.Severity == DiagnosticSeverity.Error &&
                 d.Message.Contains("&dataset", StringComparison.OrdinalIgnoreCase));
         }
+
+        [Fact]
+        public void PortalReportAlterAndDrop_ParseCanonicalCommands()
+        {
+            var alterScript = TestHelpers.Parse(
+                "ALTER REPORT 'Monthly Sales' SET FOLDER = '/Archive', DESCRIPTION = 'Archived';");
+            var alter = Assert.IsType<AlterPortalReportStatement>(Assert.Single(alterScript.Statements));
+            Assert.Equal("Monthly Sales", alter.ReportName);
+            Assert.Equal("/Archive", alter.NewFolder);
+            Assert.Equal("Archived", alter.NewDescription);
+
+            var dropScript = TestHelpers.Parse("DROP REPORT 'Monthly Sales' CASCADE;");
+            var drop = Assert.IsType<DropPortalReportStatement>(Assert.Single(dropScript.Statements));
+            Assert.Equal("Monthly Sales", drop.ReportName);
+            Assert.True(drop.Cascade);
+        }
+
+        [Fact]
+        public void PortalPromotionPattern_ParsesSetsPublishAlterGrantsAndRefresh()
+        {
+            var script = TestHelpers.Parse(@"
+DECLARE @PortalEnvironment STRING = 'PROD';
+
+CREATE SETS !PROD
+BEGIN
+    @PortalEnvironment = 'PROD';
+    SET WITH_PROMPT ON;
+END;
+
+USE SETS !PROD;
+
+CREATE FOLDER '/Finance';
+GRANT EXECUTE ON FOLDER '/Finance' TO GROUP 'FinanceAnalysts';
+
+PUBLISH REPORT 'Monthly Sales'
+    FROM 'reports/prod/monthly_sales.rptsql'
+    IN FOLDER '/Finance'
+    WITH (DESCRIPTION = 'Certified monthly revenue by region');
+
+ALTER REPORT 'Monthly Sales'
+    SET DESCRIPTION = 'Certified monthly revenue by region';
+
+CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 6 * * *' AT orch;
+REFRESH REPORT 'Monthly Sales';");
+
+            Assert.DoesNotContain(script.Diagnostics, d => d.Severity == DiagnosticSeverity.Error);
+            Assert.Contains(script.Statements, s => s is CreateSetsStatement);
+            Assert.Contains(script.Statements, s => s is UseSetsStatement);
+            Assert.Contains(script.Statements, s => s is CreatePortalFolderStatement);
+            Assert.Contains(script.Statements, s => s is GrantPortalPermissionStatement);
+            Assert.Contains(script.Statements, s => s is PublishPortalReportStatement);
+            Assert.Contains(script.Statements, s => s is AlterPortalReportStatement);
+            Assert.Contains(script.Statements, s => s is CreatePortalRefreshJobStatement);
+            Assert.Contains(script.Statements, s => s is RefreshPortalReportStatement);
+        }
     }
 }

@@ -14,6 +14,13 @@ This guide describes the provided sample scripts in the `samples/` folder. These
 - Runs without external services or machine-specific credentials.
 - Shares one script across VS Code preview, standalone serve, Report Portal, and automated tests.
 
+### [report_portal_deployment/portal_promotion.etlsql](../samples/report_portal_deployment/portal_promotion.etlsql)
+**Purpose**: Script-first Report Portal promotion pattern for dev/prod deployments.
+- Uses `CREATE SETS` and `USE SETS` as the environment boundary.
+- Publishes and updates reports with canonical `PUBLISH REPORT` and `ALTER REPORT` syntax.
+- Grants folder permissions, creates refresh jobs, and refreshes the report after promotion.
+- Keeps portal object names and target paths as explicit string literals for reviewable deployments.
+
 ## Core Samples
 
 ### 1. [Basic_ETL.etlsql](../samples/01_Basics/Basic_ETL.etlsql)

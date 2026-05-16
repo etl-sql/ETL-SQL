@@ -1,0 +1,36 @@
+-- Report Portal promotion script
+-- Update the literal paths/folders for each environment, then run with the
+-- desired USE SETS statement active. Portal object names intentionally remain
+-- string literals so deployments are reviewable before they touch the portal.
+
+DECLARE @PortalEnvironment STRING = 'DEV';
+
+CREATE SETS !DEV
+BEGIN
+    @PortalEnvironment = 'DEV'
+END;
+
+CREATE SETS !PROD
+BEGIN
+    @PortalEnvironment = 'PROD';
+    SET WITH_PROMPT ON;
+END;
+
+-- Change this to !DEV for a non-production rehearsal and update the target
+-- folder/script literals below before replaying the promotion.
+USE SETS !PROD;
+
+CREATE FOLDER '/Finance';
+GRANT EXECUTE ON FOLDER '/Finance' TO GROUP 'FinanceAnalysts';
+GRANT MANAGE ON FOLDER '/Finance' TO GROUP 'FinanceAdmins';
+
+PUBLISH REPORT 'Monthly Sales'
+    FROM 'reports/prod/monthly_sales.rptsql'
+    IN FOLDER '/Finance'
+    WITH (DESCRIPTION = 'Certified monthly revenue by region');
+
+ALTER REPORT 'Monthly Sales'
+    SET DESCRIPTION = 'Certified monthly revenue by region';
+
+CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 6 * * *' AT orch;
+REFRESH REPORT 'Monthly Sales';

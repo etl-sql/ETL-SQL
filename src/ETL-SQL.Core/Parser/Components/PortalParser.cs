@@ -300,7 +300,6 @@ namespace ETL_SQL.Core.Parser.Components
         // ALTER REPORT 'name' SET FOLDER='/new' | DESCRIPTION='...'
         public Statement ParseAlterReport(Token start)
         {
-            Consume(TokenType.REPORT, "Expected REPORT");
             string name = ConsumeStringLiteral("Expected report name string literal");
             Consume(TokenType.SET, "Expected SET");
             string? newFolder = null, newDescription = null;
@@ -322,7 +321,6 @@ namespace ETL_SQL.Core.Parser.Components
         // DROP REPORT 'name' [CASCADE]
         public Statement ParseDropReport(Token start)
         {
-            Consume(TokenType.REPORT, "Expected REPORT");
             string name = ConsumeStringLiteral("Expected report name string literal");
             bool cascade = MatchIdentifier("CASCADE");
             return new DropPortalReportStatement(name, cascade)

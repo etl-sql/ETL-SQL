@@ -377,6 +377,8 @@ END
 
 Promotion is a normal script replay with a different active set and explicit portal literals for the target environment. Use `PUBLISH REPORT ...` for first publish or the portal's report update flow when replacing the script behind an existing catalog entry; follow with `REFRESH REPORT` after the publish step succeeds.
 
+The copy-pasteable sample lives at `samples/report_portal_deployment/portal_promotion.etlsql`. Keep promotion scripts in source control next to the report scripts they publish so folder grants, refresh jobs, and publish paths are reviewed together.
+
 ---
 
 ## 7. SMTP Connections
