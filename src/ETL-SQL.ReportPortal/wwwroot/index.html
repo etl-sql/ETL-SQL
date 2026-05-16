@@ -69,6 +69,25 @@
   </div>
 </div>
 
+<!-- ── Dependencies modal ───────────────────────────────────────────────── -->
+<div id="dependenciesModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="dependenciesTitle">
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Lineage</span>
+        <h3 class="modal-title" id="dependenciesTitle">Report Dependencies</h3>
+        <p class="modal-subtitle">Registered datasets, refresh jobs, and parseable source references for this report.</p>
+      </div>
+    </div>
+    <div class="modal-body" id="dependenciesBody">
+      <div class="loading-state"><span class="spinner"></span><span>Loading dependencies…</span></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="dependenciesCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Subscribe modal ──────────────────────────────────────────────────── -->
 <div id="subscribeModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="subscribeTitle">
   <div class="modal-card modal-lg modal-workflow">
@@ -712,6 +731,7 @@ function renderViewer(report, snapshot, initialPage = null) {
         </div>
         <div class="viewer-actions">
           <button class="btn btn-primary btn-sm" id="refreshBtn">Refresh</button>
+          <button class="btn btn-outline btn-sm" id="dependenciesBtn">Dependencies</button>
           <button class="btn btn-outline btn-sm" id="exportBtn">Export</button>
           <button class="btn btn-outline btn-sm" id="subBtn">Subscribe</button>
         </div>
@@ -726,6 +746,7 @@ function renderViewer(report, snapshot, initialPage = null) {
     if (currentFolderId) loadReportList(currentFolderId, currentFolderName);
   });
   document.getElementById('refreshBtn').addEventListener('click', () => runAndPoll(report.id, report));
+  document.getElementById('dependenciesBtn').addEventListener('click', () => showDependencies(report.id));
   document.getElementById('exportBtn').addEventListener('click', () => showExport(report.id));
   document.getElementById('subBtn').addEventListener('click', () => openSubscribeModal(report.id));
   const staleBtn = document.getElementById('staleRefreshBtn');
@@ -892,6 +913,59 @@ function showExport(id) {
   };
   document.getElementById('exportCancelBtn').onclick = () => { $modal.style.display = 'none'; };
 }
+
+async function showDependencies(id) {
+  const $modal = document.getElementById('dependenciesModal');
+  const $body = document.getElementById('dependenciesBody');
+  $modal.style.display = 'flex';
+  $body.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading dependencies…</span></div>`;
+
+  try {
+    const data = await reportsApi.dependencies(id);
+    $body.innerHTML = renderDependencies(data);
+  } catch (err) {
+    $body.innerHTML = `<div class="empty-state">Failed to load dependencies: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderDependencies(data) {
+  const snapshot = data.snapshot
+    ? `<span>Snapshot ${esc(formatBuiltAt(data.snapshot.builtAt))}</span>`
+    : '<span>No snapshot yet</span>';
+  const manifestRows = (data.manifestDatasets || []).map(d => `
+    <tr><td>${esc(d.tempTableName)}</td><td>${esc(d.rowCount ?? 0)}</td><td>${esc(d.refreshInterval || 'Manual')}</td><td>${esc(d.ttl || 'None')}</td></tr>`).join('');
+  const registryRows = (data.registeredDatasets || []).map(d => `
+    <tr><td>${esc(d.name)}</td><td>${esc(d.folderPath)}</td><td>${esc(d.accessLevel)}</td><td>${esc(d.rowCount ?? 0)}</td><td>${esc((d.sources || []).map(s => s.name).join(', ') || 'Not available')}</td></tr>`).join('');
+  const jobRows = (data.refreshJobs || []).map(j => `
+    <tr><td>${esc(j.orchestratorJobName)}</td><td>${esc(j.refreshInterval || 'Manual')}</td><td>${esc(j.lastRefreshedAt ? formatBuiltAt(j.lastRefreshedAt) : 'Never')}</td></tr>`).join('');
+  const sourceRows = (data.sources || []).map(s => `
+    <tr><td>${esc(s.connection || 'Engine')}</td><td>${esc(s.objectName || s.name)}</td><td>${esc(s.kind)}</td></tr>`).join('');
+
+  return `
+    <div class="dependency-summary">
+      <span>${esc(data.report?.folderPath || '')} / ${esc(data.report?.name || 'Report')}</span>
+      ${snapshot}
+    </div>
+    ${renderDependencyTable('Manifest Datasets', ['Dataset', 'Rows', 'Refresh', 'TTL'], manifestRows)}
+    ${renderDependencyTable('Registered Datasets', ['Dataset', 'Folder', 'Access', 'Rows', 'Sources'], registryRows)}
+    ${renderDependencyTable('Refresh Jobs', ['Job', 'Interval', 'Last Refresh'], jobRows)}
+    ${renderDependencyTable('Sources', ['Connection', 'Object', 'Kind'], sourceRows)}`;
+}
+
+function renderDependencyTable(title, headers, rows) {
+  return `
+    <div class="dependency-section">
+      <h4>${esc(title)}</h4>
+      ${rows ? `<div class="table-scroll"><table class="dependency-table">
+        <thead><tr>${headers.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>` : '<p class="text-muted">No data available.</p>'}
+    </div>`;
+}
+
+document.getElementById('dependenciesCloseBtn').addEventListener('click', () => {
+  document.getElementById('dependenciesModal').style.display = 'none';
+});
 
 document.querySelectorAll('.modal-overlay').forEach(modal => {
   modal.addEventListener('click', e => {

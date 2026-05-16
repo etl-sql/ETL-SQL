@@ -339,6 +339,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .reldate-quickpicks button:hover { background: var(--portal-accent-soft); color: var(--portal-accent); }
 .subs-table-wrap { overflow-x: auto; }
 .subs-table-wrap .data-table { min-width: 880px; }
+.dependency-summary { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+                      padding: 10px 12px; border: 1px solid var(--portal-border-soft);
+                      border-radius: var(--portal-radius-sm); background: var(--portal-surface-subtle);
+                      font-size: .86em; color: var(--portal-text-soft); }
+.dependency-section { margin-top: 16px; }
+.dependency-section h4 { margin: 0 0 8px; font-size: .92em; }
+.table-scroll { overflow-x: auto; }
+.dependency-table { width: 100%; min-width: 520px; border-collapse: collapse; border: 1px solid var(--portal-border);
+                    border-radius: var(--portal-radius-sm); overflow: hidden; background: var(--portal-surface); }
+.dependency-table th { background: var(--portal-surface-subtle); color: var(--portal-muted);
+                       font-size: .74em; text-transform: uppercase; letter-spacing: .04em; }
+.dependency-table th, .dependency-table td { padding: 8px 10px; border-bottom: 1px solid var(--portal-border-soft);
+                                             text-align: left; font-size: .84em; vertical-align: top; }
+.dependency-table tr:last-child td { border-bottom: none; }
 .dataset-table-wrap { overflow-x: auto; }
 .dataset-table-wrap .data-table { min-width: 1040px; }
 .asset-name { font-weight: 750; color: var(--portal-text); }

@@ -320,7 +320,13 @@ Reports inherit folder permissions. If a user belongs to multiple groups, the hi
 
 Admins can inspect operational usage with `GET /api/admin/metrics/usage?days=30`. The response includes total report views, unique viewers, reports viewed, refresh failure count, average refresh duration, subscription delivery failures, and per-report rows with view counts, unique viewers, last view time, refresh status/error/duration, and subscription failure counts.
 
-### 6.7 Catalog Search
+### 6.7 Report Dependencies
+
+Use `GET /api/reports/{id}/dependencies` to inspect the dependency view available from the report viewer. The response is permission-aware and includes the report identity, latest snapshot metadata, datasets found in the snapshot manifest, report-owned registered datasets, dataset refresh jobs, and source table references that can be parsed from the report script or dataset source queries.
+
+Source connection values are derived from two-part object names such as `sales.Orders`: `sales` is reported as the connection and `Orders` as the object. Raw column-level lineage remains available through engine lineage commands such as `SHOW LINEAGE`; the portal dependency endpoint only reports lineage details that are already present in portal metadata or parseable script text.
+
+### 6.8 Catalog Search
 
 Use `GET /api/catalog/search?q=<term>` to search visible folders and reports. Search is permission-aware: admins search the full catalog, while other users only see folders granted through group ACLs and reports inside those folders.
 
@@ -330,7 +336,7 @@ Use `GET /api/catalog/recent?limit=20` to list the caller's recently viewed repo
 
 Use `POST /api/reports/{id}/favorite` and `DELETE /api/reports/{id}/favorite` to manage a user's favorite reports. Use `GET /api/catalog/favorites?limit=50` to list the caller's favorite reports. Favorite catalog results use the same shape as search and include `isFavorite = true`.
 
-### 6.8 Environment Promotion Pattern
+### 6.9 Environment Promotion Pattern
 
 Use ETL-SQL environment sets as the deployment boundary. Do not create a separate portal deployment language for dev/test/prod. Scripts should define or load the environment values first, activate the target set, then use the same portal admin commands for folders, grants, publishing, subscriptions, and refresh jobs.
 

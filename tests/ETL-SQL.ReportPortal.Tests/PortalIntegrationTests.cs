@@ -479,6 +479,98 @@ CREATE VISUAL Total AS CARD (
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
+    public async Task ReportDependencies_ReturnsDatasetsJobsAndSources()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Dependency Folder", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"dependency_{Guid.NewGuid():N}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, @"
+SELECT *
+INTO #stage
+FROM sales.Orders;
+
+CREATE VISUAL Total AS CARD (
+    SOURCE = (SELECT 42 AS Answer),
+    MAPPINGS (VALUE = Answer)
+);
+");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = "Dependency Report",
+            description = "Dependency smoke test",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var manifestPath = Path.Combine(_factory.TempDir, "snapshots", $"dependency_{Guid.NewGuid():N}.snapshot.json");
+        await File.WriteAllTextAsync(manifestPath, """
+{
+  "source": "dependency.rptsql",
+  "builtAt": "2026-05-16T00:00:00Z",
+  "visuals": [],
+  "pages": [],
+  "datasets": [
+    { "tempTableName": "#stage", "refreshInterval": "Hourly", "ttl": "2h", "rowCount": 42 }
+  ],
+  "parameters": {},
+  "parameterMetadata": {}
+}
+""");
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            db.ReportSnapshots.Add(new ReportSnapshot
+            {
+                ReportId = reportId,
+                ManifestPath = manifestPath,
+                BuiltAt = DateTime.UtcNow,
+                BuiltBy = 1
+            });
+            db.Datasets.Add(new Dataset
+            {
+                Name = "Sales Summary",
+                FolderPath = "/Dependency",
+                ParquetFilePath = Path.Combine(_factory.TempDir, "datasets", "sales-summary.parquet"),
+                OwningReportId = reportId,
+                SourceQuery = "SELECT * FROM erp.InvoiceLines",
+                AccessLevel = DatasetAccessLevel.Private,
+                RowCount = 25,
+                RefreshInterval = "Hourly",
+                LastRefresh = DateTime.UtcNow
+            });
+            db.DatasetJobs.Add(new DatasetJob
+            {
+                ReportId = reportId,
+                OrchestratorJobName = "refresh_sales_summary",
+                RefreshInterval = "Hourly",
+                LastRefreshedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var res = await AuthGet(token, $"/api/reports/{reportId}/dependencies");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+
+        Assert.Equal("Dependency Report", body!["report"]!["name"]!.GetValue<string>());
+        Assert.Equal("#stage", body["manifestDatasets"]![0]!["tempTableName"]!.GetValue<string>());
+        Assert.Equal("Sales Summary", body["registeredDatasets"]![0]!["name"]!.GetValue<string>());
+        Assert.Equal("refresh_sales_summary", body["refreshJobs"]![0]!["orchestratorJobName"]!.GetValue<string>());
+        Assert.Contains(body["sources"]!.AsArray(), n => n!["name"]!.GetValue<string>() == "erp.InvoiceLines");
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task Report_FailedExecution_SurfacesCatalogFailureStatus()
     {
         var token = await GetAdminTokenAsync();

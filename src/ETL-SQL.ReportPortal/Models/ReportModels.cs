@@ -57,3 +57,51 @@ public record ReportDto(
     bool IsFavorite,
     bool IsStale,
     bool ScriptChanged);
+
+public record ReportDependencyDto(
+    ReportDependencyReportDto Report,
+    ReportDependencySnapshotDto? Snapshot,
+    IReadOnlyList<ReportDependencyManifestDatasetDto> ManifestDatasets,
+    IReadOnlyList<ReportDependencyDatasetDto> RegisteredDatasets,
+    IReadOnlyList<ReportDependencyRefreshJobDto> RefreshJobs,
+    IReadOnlyList<ReportDependencySourceDto> Sources);
+
+public record ReportDependencyReportDto(
+    int Id,
+    string Name,
+    string FolderPath,
+    string ScriptPath);
+
+public record ReportDependencySnapshotDto(
+    int Id,
+    string ManifestPath,
+    DateTime BuiltAt);
+
+public record ReportDependencyManifestDatasetDto(
+    string TempTableName,
+    string? RefreshInterval,
+    string? Ttl,
+    DateTime? LastRefresh,
+    long RowCount);
+
+public record ReportDependencyDatasetDto(
+    int Id,
+    string Name,
+    string FolderPath,
+    string AccessLevel,
+    long RowCount,
+    DateTime? LastRefresh,
+    string? RefreshInterval,
+    IReadOnlyList<ReportDependencySourceDto> Sources);
+
+public record ReportDependencyRefreshJobDto(
+    int Id,
+    string OrchestratorJobName,
+    string RefreshInterval,
+    DateTime? LastRefreshedAt);
+
+public record ReportDependencySourceDto(
+    string Name,
+    string? Connection,
+    string? ObjectName,
+    string Kind);

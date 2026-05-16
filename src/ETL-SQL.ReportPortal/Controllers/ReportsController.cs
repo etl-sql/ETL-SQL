@@ -10,6 +10,7 @@ using CoreParser = ETL_SQL.Core.Parser.Parser;
 using ETL_SQL.ReportPortal.Data;
 using ETL_SQL.ReportPortal.Models;
 using ETL_SQL.ReportPortal.Services;
+using ETL_SQL.Reporting;
 
 namespace ETL_SQL.ReportPortal.Controllers;
 
@@ -184,6 +185,71 @@ public class ReportsController : ControllerBase
 
         var isFavorite = await db.ReportFavorites.AnyAsync(f => f.UserId == CurrentUserId && f.ReportId == report.Id);
         return Ok(ToDto(report, report.Snapshots.FirstOrDefault(), isFavorite));
+    }
+
+    // ── GET /api/reports/{id}/dependencies ───────────────────────────────────
+
+    [HttpGet("reports/{id:int}/dependencies")]
+    public async Task<IActionResult> GetDependencies(int id)
+    {
+        var report = await db.Reports
+            .Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null) return Forbid();
+
+        var snapshot = await db.ReportSnapshots
+            .Where(s => s.ReportId == id)
+            .OrderByDescending(s => s.BuiltAt)
+            .FirstOrDefaultAsync();
+
+        var manifestDatasets = await ReadManifestDatasetsAsync(snapshot);
+
+        var registeredDatasets = await db.Datasets
+            .Where(d => d.OwningReportId == id)
+            .OrderBy(d => d.FolderPath)
+            .ThenBy(d => d.Name)
+            .ToListAsync();
+
+        var datasetDtos = registeredDatasets
+            .Select(d => new ReportDependencyDatasetDto(
+                d.Id,
+                d.Name,
+                d.FolderPath,
+                d.AccessLevel.ToString(),
+                d.RowCount,
+                d.LastRefresh,
+                d.RefreshInterval,
+                BuildSourceDtos(ParseSourceTables(d.SourceQuery), "DatasetSource")))
+            .ToList();
+
+        var jobs = await db.DatasetJobs
+            .Where(j => j.ReportId == id)
+            .OrderBy(j => j.OrchestratorJobName)
+            .Select(j => new ReportDependencyRefreshJobDto(
+                j.Id,
+                j.OrchestratorJobName,
+                j.RefreshInterval,
+                j.LastRefreshedAt))
+            .ToListAsync();
+
+        var sourceNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var source in await ReadScriptSourceTablesAsync(report.ScriptPath))
+            sourceNames.Add(source);
+        foreach (var source in registeredDatasets.SelectMany(d => ParseSourceTables(d.SourceQuery)))
+            sourceNames.Add(source);
+
+        var dto = new ReportDependencyDto(
+            new ReportDependencyReportDto(report.Id, report.Name, report.Folder?.Path ?? "", report.ScriptPath),
+            snapshot is null ? null : new ReportDependencySnapshotDto(snapshot.Id, snapshot.ManifestPath, snapshot.BuiltAt),
+            manifestDatasets,
+            datasetDtos,
+            jobs,
+            BuildSourceDtos(sourceNames.OrderBy(s => s, StringComparer.OrdinalIgnoreCase), "ScriptSource"));
+
+        return Ok(dto);
     }
 
     // ── PUT /api/reports/{id} ─────────────────────────────────────────────────
@@ -369,6 +435,78 @@ public class ReportsController : ControllerBase
         var script = new CoreParser(tokens, scriptText).Parse();
         return new Dictionary<string, string>(script.Metadata, StringComparer.OrdinalIgnoreCase);
     }
+
+    private async Task<IReadOnlyList<ReportDependencyManifestDatasetDto>> ReadManifestDatasetsAsync(ReportSnapshot? snapshot)
+    {
+        if (snapshot is null) return Array.Empty<ReportDependencyManifestDatasetDto>();
+        if (!PortalPathGuard.TryResolveSnapshot(portalConfig, snapshot.ManifestPath, out var resolvedManifestPath))
+            return Array.Empty<ReportDependencyManifestDatasetDto>();
+        if (!System.IO.File.Exists(resolvedManifestPath))
+            return Array.Empty<ReportDependencyManifestDatasetDto>();
+
+        try
+        {
+            await using var stream = System.IO.File.OpenRead(resolvedManifestPath);
+            var manifest = await JsonSerializer.DeserializeAsync<ReportManifest>(stream);
+            if (manifest is null) return Array.Empty<ReportDependencyManifestDatasetDto>();
+
+            return manifest.Datasets
+                .Select(d => new ReportDependencyManifestDatasetDto(
+                    d.TempTableName,
+                    d.RefreshInterval,
+                    d.Ttl,
+                    d.LastRefresh,
+                    d.RowCount))
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<ReportDependencyManifestDatasetDto>();
+        }
+    }
+
+    private async Task<IReadOnlyList<string>> ReadScriptSourceTablesAsync(string scriptPath)
+    {
+        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
+            return Array.Empty<string>();
+        if (!System.IO.File.Exists(resolvedScriptPath))
+            return Array.Empty<string>();
+
+        return ParseSourceTables(await System.IO.File.ReadAllTextAsync(resolvedScriptPath));
+    }
+
+    private static IReadOnlyList<string> ParseSourceTables(string? scriptText)
+    {
+        if (string.IsNullOrWhiteSpace(scriptText)) return Array.Empty<string>();
+        try
+        {
+            var tokens = new Lexer(scriptText).Tokenize();
+            var script = new CoreParser(tokens, scriptText).Parse();
+            return script.Statements
+                .SelectMany(s => s.GetSourceTables())
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch
+        {
+            return Array.Empty<string>();
+        }
+    }
+
+    private static IReadOnlyList<ReportDependencySourceDto> BuildSourceDtos(IEnumerable<string> sources, string kind) =>
+        sources
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(s =>
+            {
+                var parts = s.Split('.', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+                var connection = parts.Length == 2 && !parts[0].StartsWith("#", StringComparison.Ordinal) ? parts[0] : null;
+                var objectName = parts.Length == 2 ? parts[1] : s;
+                return new ReportDependencySourceDto(s, connection, objectName, kind);
+            })
+            .ToList();
 
     // ── DELETE /api/reports/{id} ──────────────────────────────────────────────
 

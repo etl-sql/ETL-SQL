@@ -138,6 +138,7 @@ export const reportsApi = {
     delete: (id)       => apiJson(`/api/reports/${id}`, { method: 'DELETE' }),
     favorite: (id)    => apiJson(`/api/reports/${id}/favorite`, { method: 'POST' }),
     unfavorite: (id)  => apiJson(`/api/reports/${id}/favorite`, { method: 'DELETE' }),
+    dependencies: (id) => apiJson(`/api/reports/${id}/dependencies`),
 
     getSnapshot: (id, includeManifest = false) =>
         apiJson(`/api/reports/${id}/snapshot?includeManifest=${includeManifest}`),
