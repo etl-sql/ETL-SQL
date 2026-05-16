@@ -166,9 +166,10 @@
 - [x] **Network Graph**: Force-directed graphs for lineage and relationship exploration.
 - [ ] **Maximize visual**: Maximize the space of the visual to the full screen and the chart fills the space, provide a minimize button to return to previous size and show other visuals.
 
-### Phase 7 — SQL Dialect Parity (T-SQL Compatibility)
+### Phase 7 — SQL Dialect Parity (Cross-Engine Compatibility)
 - [ ] **VALUES as a standalone table constructor**: Support `SELECT * FROM (VALUES (1, 'A'), (2, 'B')) AS t(id, name)`.
 - [ ] **APPROX_COUNT_DISTINCT**: Implement HyperLogLog-based approximate distinct count for large-scale datasets.
+- [ ] **PostgreSQL Operators**: Support `ILIKE` (case-insensitive LIKE), `~` (regex match), and `~*` (regex case-insensitive match).
 
 ---
 
