@@ -123,13 +123,13 @@
     - [x] Dataset registry/refresh status.
     - [ ] Lineage/dependency data where available.
 - [x] Standardize report metadata. Owner/contact/tags can already come from script metadata comments such as `/* @owner: TeamName */`; define the canonical portal tags and decide how they flow into catalog fields.
-- [ ] Standardize environment/deployment conventions. Dev/test/prod can already be handled with `CREATE SETS !DEV`, `CREATE SETS !TEST`, `CREATE SETS !PROD`, and `USE SETS !...`; define the portal/admin scripting pattern instead of adding a parallel deployment model too early.
+- [x] Standardize environment/deployment conventions. Dev/test/prod can already be handled with `CREATE SETS !DEV`, `CREATE SETS !TEST`, `CREATE SETS !PROD`, and `USE SETS !...`; define the portal/admin scripting pattern instead of adding a parallel deployment model too early.
 - [ ] Fill catalog quality-of-life gaps expected in BI portals, with scriptable equivalents where useful:
     - [x] Search reports/folders.
     - [ ] Favorites.
     - [ ] Recently viewed.
     - [x] Tags/categories.
-    - [ ] Last refreshed, last viewed, and failure status badges.
+    - [x] Last refreshed, last viewed, and failure status badges.
 - [ ] Fill governance/admin gaps:
     - [ ] Effective permissions view for a user/report/folder.
     - [ ] Admin-facing usage metrics: views, unique viewers, refresh duration/failures, subscription delivery failures.

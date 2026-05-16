@@ -442,6 +442,58 @@ CREATE VISUAL Total AS CARD (
         Assert.Equal(HttpStatusCode.OK, snapshotRes.StatusCode);
         var snapshot = await snapshotRes.Content.ReadFromJsonAsync<JsonObject>(_json);
         Assert.NotNull(snapshot!["manifest"]);
+
+        var listRes = await AuthGet(token, $"/api/folders/{folderId}/reports");
+        Assert.Equal(HttpStatusCode.OK, listRes.StatusCode);
+        var reports = await listRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        var listed = reports!.Single(r => r!["id"]!.GetValue<int>() == reportId)!.AsObject();
+        Assert.Equal("Completed", listed["lastRefreshStatus"]!.GetValue<string>());
+        Assert.NotNull(listed["snapshotBuiltAt"]);
+        Assert.NotNull(listed["lastViewedAt"]);
+        Assert.True(listed["lastRefreshDurationMs"]!.GetValue<long>() >= 0);
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task Report_FailedExecution_SurfacesCatalogFailureStatus()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Failed Exec Folder", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", "failed_execute_report.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "SET REPORT TITLE = 'Missing at run time';");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = "Failing Report",
+            description = "Smoke test failure status",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+        File.Delete(scriptPath);
+
+        var executeRes = await AuthPost(token, $"/api/reports/{reportId}/execute", new { parameters = new Dictionary<string, string>() });
+        Assert.Equal(HttpStatusCode.Accepted, executeRes.StatusCode);
+        var executeBody = await executeRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var jobId = executeBody!["jobId"]!.GetValue<string>();
+
+        var job = await WaitForJobAsync(token, jobId);
+        Assert.Equal("Failed", job["status"]!.GetValue<string>());
+
+        var listRes = await AuthGet(token, $"/api/folders/{folderId}/reports");
+        Assert.Equal(HttpStatusCode.OK, listRes.StatusCode);
+        var reports = await listRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        var listed = reports!.Single(r => r!["id"]!.GetValue<int>() == reportId)!.AsObject();
+        Assert.Equal("Failed", listed["lastRefreshStatus"]!.GetValue<string>());
+        Assert.False(string.IsNullOrWhiteSpace(listed["lastRefreshError"]!.GetValue<string>()));
+        Assert.True(listed["lastRefreshDurationMs"]!.GetValue<long>() >= 0);
     }
 
     [Fact]

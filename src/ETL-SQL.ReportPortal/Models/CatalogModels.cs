@@ -10,4 +10,9 @@ public record CatalogSearchResultDto(
     string? Tags,
     string? Category,
     string? Owner,
-    string? Certification);
+    string? Certification,
+    DateTime? SnapshotBuiltAt,
+    DateTime? LastViewedAt,
+    string? LastRefreshStatus,
+    string? LastRefreshError,
+    long? LastRefreshDurationMs);

@@ -401,6 +401,24 @@ namespace ETL_SQL.ReportPortal.Data.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("INTEGER");
 
+                    b.Property<DateTime?>("LastRefreshCompletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<long?>("LastRefreshDurationMs")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastRefreshError")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastRefreshStartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastRefreshStatus")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastViewedAt")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("MetadataJson")
                         .HasColumnType("TEXT");
 

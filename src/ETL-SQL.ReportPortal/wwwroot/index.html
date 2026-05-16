@@ -336,9 +336,11 @@ function renderReportList(reports, folderName) {
   }
 
   const cards = filteredReports.map(r => {
-    const staleBadge = r.isStale ? `<span class="badge badge-stale">Stale</span>` : `<span class="badge badge-ok">Ready</span>`;
-    const builtAt    = formatBuiltAt(r.lastBuiltAt);
-    const freshness  = r.lastBuiltAt ? timeAgo(r.lastBuiltAt) : 'Awaiting first run';
+    const statusBadge = renderReportStatusBadge(r);
+    const builtAt    = formatBuiltAt(r.snapshotBuiltAt);
+    const freshness  = r.snapshotBuiltAt ? timeAgo(r.snapshotBuiltAt) : 'Awaiting first run';
+    const viewedText = r.lastViewedAt ? `Viewed ${timeAgo(r.lastViewedAt)}` : 'Not viewed yet';
+    const refreshMeta = r.lastRefreshDurationMs ? `Refresh ${formatDuration(r.lastRefreshDurationMs)}` : builtAt;
     const name = r.name || '';
     const description = r.description || 'No description provided.';
     const previewHtml = buildRuntimeHtml(r.id, true).replace(/"/g, '&quot;');
@@ -354,9 +356,14 @@ function renderReportList(reports, folderName) {
             <h3>${esc(name)}</h3>
           </div>
           <p>${esc(description)}</p>
+          <div class="report-status-row">
+            ${statusBadge}
+            ${r.scriptChanged ? '<span class="badge badge-warning">Script changed</span>' : ''}
+          </div>
           <div class="report-card-meta">
-            <span title="${escAttr(builtAt)}">${esc(freshness)}</span>
-            ${staleBadge}
+            <span title="${escAttr(builtAt)}">Refreshed ${esc(freshness)}</span>
+            <span title="${escAttr(formatBuiltAt(r.lastViewedAt))}">${esc(viewedText)}</span>
+            <span title="${escAttr(refreshMeta)}">${esc(refreshMeta)}</span>
           </div>
         </div>
       </div>`;
@@ -428,14 +435,39 @@ function filterReports(reports) {
 function sortReports(reports) {
   return [...reports].sort((a, b) => {
     if (reportSortMode === 'recent') {
-      return new Date(b.lastBuiltAt || 0) - new Date(a.lastBuiltAt || 0);
+      return new Date(b.snapshotBuiltAt || 0) - new Date(a.snapshotBuiltAt || 0);
     }
     if (reportSortMode === 'stale') {
       return Number(b.isStale) - Number(a.isStale) ||
-             new Date(b.lastBuiltAt || 0) - new Date(a.lastBuiltAt || 0);
+             new Date(b.snapshotBuiltAt || 0) - new Date(a.snapshotBuiltAt || 0);
     }
     return String(a.name || '').localeCompare(String(b.name || ''));
   });
+}
+
+function renderReportStatusBadge(report) {
+  if (report.lastRefreshStatus === 'Failed')
+    return `<span class="badge badge-error" title="${escAttr(report.lastRefreshError || 'Last refresh failed')}">Failed</span>`;
+  if (report.lastRefreshStatus === 'Cancelled')
+    return `<span class="badge badge-warning">Cancelled</span>`;
+  if (report.lastRefreshStatus === 'Running')
+    return `<span class="badge badge-running">Refreshing</span>`;
+  if (report.isStale)
+    return `<span class="badge badge-stale">Stale</span>`;
+  if (report.hasSnapshot)
+    return `<span class="badge badge-ok">Ready</span>`;
+  return `<span class="badge badge-neutral">Not run</span>`;
+}
+
+function formatDuration(ms) {
+  const value = Number(ms);
+  if (!Number.isFinite(value)) return '';
+  if (value < 1000) return `${value} ms`;
+  const seconds = Math.round(value / 100) / 10;
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remaining = Math.round(seconds % 60);
+  return `${minutes}m ${remaining}s`;
 }
 
 function formatBuiltAt(value) {

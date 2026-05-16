@@ -308,7 +308,44 @@ Use `&dataset` only for report-owned dataset definitions inside `.rptsql` files.
 
 Use `GET /api/catalog/search?q=<term>` to search visible folders and reports. Search is permission-aware: admins search the full catalog, while other users only see folders granted through group ACLs and reports inside those folders.
 
-The search matches folder name/path and report name, description, owner, contact, tags, category, domain, steward, and certification fields. Results include a `type` of `Folder` or `Report`, the catalog `path`, and report metadata where applicable.
+The search matches folder name/path and report name, description, owner, contact, tags, category, domain, steward, and certification fields. Results include a `type` of `Folder` or `Report`, the catalog `path`, report metadata, and status fields such as `snapshotBuiltAt`, `lastViewedAt`, `lastRefreshStatus`, `lastRefreshError`, and `lastRefreshDurationMs` where applicable.
+
+### 6.6 Environment Promotion Pattern
+
+Use ETL-SQL environment sets as the deployment boundary. Do not create a separate portal deployment language for dev/test/prod. Scripts should define or load the environment values first, activate the target set, then use the same portal admin commands for folders, grants, publishing, subscriptions, and refresh jobs.
+
+```sql
+CREATE SETS !DEV
+BEGIN
+    @PortalEnvironment = 'DEV'
+END
+
+CREATE SETS !PROD
+BEGIN
+    @PortalEnvironment = 'PROD';
+    SET WITH_PROMPT ON;
+END
+
+USE SETS !PROD;
+
+IF @PortalEnvironment = 'PROD'
+BEGIN
+    CREATE FOLDER '/Finance';
+
+    PUBLISH REPORT 'Monthly Sales'
+        FROM 'C:\Reports\Prod\monthly_sales.rptsql'
+        IN FOLDER '/Finance'
+        WITH (
+            DESCRIPTION = 'Monthly revenue by region',
+            TAGS = 'finance,monthly,certified'
+        );
+
+    GRANT EXECUTE ON FOLDER '/Finance' TO GROUP 'FinanceAnalysts';
+    CREATE REFRESH JOB FOR REPORT 'Monthly Sales' SCHEDULE '0 6 * * *' AT orch;
+END
+```
+
+Promotion is a normal script replay with a different active set and explicit portal literals for the target environment. Use `PUBLISH REPORT ...` for first publish or the portal's report update flow when replacing the script behind an existing catalog entry; follow with `REFRESH REPORT` after the publish step succeeds.
 
 ---
 

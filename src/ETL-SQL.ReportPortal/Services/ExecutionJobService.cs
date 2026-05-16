@@ -100,6 +100,7 @@ public class ExecutionJobService : IDisposable
         await _gate.WaitAsync(cts.Token).ConfigureAwait(false);
         job.Status    = JobStatus.Running;
         job.StartedAt = DateTime.UtcNow;
+        await UpdateReportRefreshStatusAsync(job, "Running", null);
         _log.LogInformation("Execution job {JobId} started for report {ReportId}", job.Id, job.ReportId);
 
         try
@@ -198,7 +199,15 @@ public class ExecutionJobService : IDisposable
 
             // Update ScriptLastModified on the report
             if (report is not null && System.IO.File.Exists(scriptPath))
+            {
                 report.ScriptLastModified = System.IO.File.GetLastWriteTimeUtc(scriptPath);
+                report.LastRefreshCompletedAt = DateTime.UtcNow;
+                report.LastRefreshStatus      = "Completed";
+                report.LastRefreshError       = null;
+                report.LastRefreshDurationMs  = job.StartedAt is null
+                    ? null
+                    : (long)(report.LastRefreshCompletedAt.Value - job.StartedAt.Value).TotalMilliseconds;
+            }
 
             await db.SaveChangesAsync();
 
@@ -216,6 +225,7 @@ public class ExecutionJobService : IDisposable
             job.Status      = JobStatus.Cancelled;
             job.CompletedAt = DateTime.UtcNow;
             job.Error       = "Execution timed out or was cancelled";
+            await UpdateReportRefreshStatusAsync(job, "Cancelled", job.Error);
             _log.LogWarning("Execution job {JobId} cancelled/timed out", job.Id);
         }
         catch (Exception ex)
@@ -223,6 +233,7 @@ public class ExecutionJobService : IDisposable
             job.Status      = JobStatus.Failed;
             job.CompletedAt = DateTime.UtcNow;
             job.Error       = ex.Message;
+            await UpdateReportRefreshStatusAsync(job, "Failed", job.Error);
             _log.LogError(ex, "Execution job {JobId} failed: {Message}. StackTrace: {Stack}", 
                 job.Id, ex.Message, ex.StackTrace);
         }
@@ -231,6 +242,32 @@ public class ExecutionJobService : IDisposable
             _gate.Release();
             _activeRefreshes.TryRemove(new KeyValuePair<int, string>(job.ReportId, job.Id));
         }
+    }
+
+    private async Task UpdateReportRefreshStatusAsync(ExecutionJob job, string status, string? error)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+        var report = await db.Reports.FindAsync(job.ReportId);
+        if (report is null) return;
+
+        if (string.Equals(status, "Running", StringComparison.OrdinalIgnoreCase))
+        {
+            report.LastRefreshStartedAt   = job.StartedAt ?? DateTime.UtcNow;
+            report.LastRefreshCompletedAt = null;
+            report.LastRefreshDurationMs  = null;
+        }
+        else
+        {
+            report.LastRefreshCompletedAt = job.CompletedAt ?? DateTime.UtcNow;
+            report.LastRefreshDurationMs  = job.StartedAt is null
+                ? null
+                : (long)(report.LastRefreshCompletedAt.Value - job.StartedAt.Value).TotalMilliseconds;
+        }
+
+        report.LastRefreshStatus = status;
+        report.LastRefreshError  = error;
+        await db.SaveChangesAsync();
     }
 
     public void Dispose() => _gate.Dispose();

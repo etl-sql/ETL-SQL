@@ -97,6 +97,12 @@ public class Report
     public int       CreatedBy            { get; set; }
     public DateTime  CreatedAt          { get; set; } = DateTime.UtcNow;
     public DateTime  UpdatedAt          { get; set; } = DateTime.UtcNow;
+    public DateTime? LastViewedAt       { get; set; }
+    public DateTime? LastRefreshStartedAt   { get; set; }
+    public DateTime? LastRefreshCompletedAt { get; set; }
+    public string?   LastRefreshStatus      { get; set; }
+    public string?   LastRefreshError       { get; set; }
+    public long?     LastRefreshDurationMs  { get; set; }
     public bool      IsDeleted          { get; set; } = false;
 
     public ICollection<ReportSnapshot> Snapshots    { get; set; } = [];

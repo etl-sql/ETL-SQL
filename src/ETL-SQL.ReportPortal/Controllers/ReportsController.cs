@@ -79,6 +79,12 @@ public class ReportsController : ControllerBase
             r.ScriptLastModified,
             snap is not null,
             snap?.BuiltAt,
+            r.LastViewedAt,
+            r.LastRefreshStartedAt,
+            r.LastRefreshCompletedAt,
+            r.LastRefreshStatus,
+            r.LastRefreshError,
+            r.LastRefreshDurationMs,
             isStale,
             scriptChanged);
     }

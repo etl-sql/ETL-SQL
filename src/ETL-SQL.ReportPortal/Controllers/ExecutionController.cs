@@ -121,6 +121,8 @@ public class ExecutionController(
             manifest = JsonDocument.Parse(json).RootElement;
         }
 
+        report.LastViewedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
         await audit.LogAsync(CurrentUserId, "VIEW_SNAPSHOT", "Report", id.ToString());
         return Ok(new SnapshotResponse(id, snapshot.ManifestPath, snapshot.BuiltAt, isStale, manifest));
     }

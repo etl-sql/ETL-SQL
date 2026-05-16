@@ -34,6 +34,7 @@ public class CatalogController(PortalDbContext db) : ControllerBase
 
         var reports = await db.Reports
             .Include(r => r.Folder)
+            .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
             .Where(r => !r.IsDeleted && visibleFolderIds.Contains(r.FolderId))
             .OrderBy(r => r.Folder.Path)
             .ThenBy(r => r.Name)
@@ -42,7 +43,8 @@ public class CatalogController(PortalDbContext db) : ControllerBase
         var results = folders
             .Where(f => Matches(q, f.Name, f.Path))
             .Select(f => new CatalogSearchResultDto(
-                "Folder", f.Id, f.Name, f.Path, f.Id, null, null, null, null, null))
+                "Folder", f.Id, f.Name, f.Path, f.Id, null, null, null, null, null,
+                null, null, null, null, null))
             .Concat(reports
                 .Where(r => Matches(q, r.Name, r.Description, r.Folder.Path, r.Tags, r.Category, r.Owner, r.Contact, r.Domain, r.Steward, r.Certification))
                 .Select(r => new CatalogSearchResultDto(
@@ -55,7 +57,12 @@ public class CatalogController(PortalDbContext db) : ControllerBase
                     r.Tags,
                     r.Category,
                     r.Owner,
-                    r.Certification)))
+                    r.Certification,
+                    r.Snapshots.OrderByDescending(s => s.BuiltAt).FirstOrDefault()?.BuiltAt,
+                    r.LastViewedAt,
+                    r.LastRefreshStatus,
+                    r.LastRefreshError,
+                    r.LastRefreshDurationMs)))
             .Take(limit)
             .ToList();
 

@@ -304,6 +304,20 @@ EXECUTE portal BEGIN
         IN FOLDER '/Finance'
         WITH (DESCRIPTION = 'Monthly revenue by region');
     ALTER REPORT 'Monthly Sales' SET FOLDER = '/Finance/Archive';
+
+    CREATE SETS !PROD
+    BEGIN
+        @PortalEnvironment = 'PROD';
+        SET WITH_PROMPT ON;
+    END
+    USE SETS !PROD;
+    IF @PortalEnvironment = 'PROD'
+    BEGIN
+        PUBLISH REPORT 'Monthly Sales'
+            FROM 'C:\Reports\Prod\monthly_sales.rptsql'
+            IN FOLDER '/Finance'
+            WITH (TAGS = 'finance,monthly,certified');
+    END
     DROP REPORT 'Monthly Sales' CASCADE;
 
     -- Dataset refresh jobs (registered in the Orchestrator)

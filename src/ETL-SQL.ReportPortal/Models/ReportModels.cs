@@ -48,5 +48,11 @@ public record ReportDto(
     DateTime ScriptLastModified,
     bool HasSnapshot,
     DateTime? SnapshotBuiltAt,
+    DateTime? LastViewedAt,
+    DateTime? LastRefreshStartedAt,
+    DateTime? LastRefreshCompletedAt,
+    string? LastRefreshStatus,
+    string? LastRefreshError,
+    long? LastRefreshDurationMs,
     bool IsStale,
     bool ScriptChanged);

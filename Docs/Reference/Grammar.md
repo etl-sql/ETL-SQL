@@ -2346,6 +2346,22 @@ EXECUTE portal BEGIN
         IN FOLDER '/Finance'
         WITH (DESCRIPTION = 'Monthly revenue by region');
 
+    -- Environment promotion uses normal SETS, then normal portal commands.
+    -- Dev/test/prod should not use a parallel deployment grammar.
+    CREATE SETS !PROD
+    BEGIN
+        @PortalEnvironment = 'PROD';
+        SET WITH_PROMPT ON;
+    END
+    USE SETS !PROD;
+    IF @PortalEnvironment = 'PROD'
+    BEGIN
+        PUBLISH REPORT 'Monthly Sales'
+            FROM 'C:\Reports\Prod\monthly_sales.rptsql'
+            IN FOLDER '/Finance'
+            WITH (TAGS = 'finance,monthly,certified');
+    END
+
     ALTER REPORT 'Monthly Sales' SET FOLDER      = '/Finance/Archive';
     ALTER REPORT 'Monthly Sales' SET DESCRIPTION = 'Archived monthly revenue report';
     ALTER REPORT 'Monthly Sales' SET NAME        = 'Monthly Sales (Archive)';

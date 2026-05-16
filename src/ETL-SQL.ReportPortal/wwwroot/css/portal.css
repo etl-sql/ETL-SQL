@@ -146,6 +146,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .badge-stale    { background: var(--portal-warning-soft); color: var(--portal-warning); }
 .badge-refresh  { background: var(--portal-accent-soft); color: var(--portal-accent); }
 .badge-ok       { background: var(--portal-success-soft); color: var(--portal-success); }
+.badge-warning  { background: var(--portal-warning-soft); color: var(--portal-warning); }
+.badge-error    { background: #fdeaea; color: #9b1c1c; }
+.badge-running  { background: var(--portal-accent-soft); color: var(--portal-accent); }
+.badge-neutral  { background: var(--portal-surface-subtle); color: var(--portal-muted); }
 .report-grid { flex: 1; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; align-content: start; padding-bottom: 4px; }
 .report-card { background: var(--portal-surface); border: 1px solid var(--portal-border); border-radius: var(--portal-radius); overflow: hidden;
                display: flex; flex-direction: column; cursor: pointer; transition: border-color .15s, box-shadow .15s, transform .15s; }
@@ -168,7 +172,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .report-glyph::after { top: 11px; }
 .report-card h3 { font-size: 1.02em; margin: 0; color: var(--portal-text); line-height: 1.25; }
 .report-card p  { font-size: .84em; line-height: 1.4; color: var(--portal-muted); margin: 0; flex: 1; }
-.report-card-meta { font-size: .76em; color: var(--portal-muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.report-status-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-height: 22px; }
+.report-card-meta { font-size: .76em; color: var(--portal-muted); display: grid; grid-template-columns: 1fr; gap: 3px; }
 
 /* Viewer page */
 .viewer-header { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 16px;
