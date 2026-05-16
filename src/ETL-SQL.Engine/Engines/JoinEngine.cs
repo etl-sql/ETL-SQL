@@ -482,14 +482,30 @@ namespace ETL_SQL.Engine.Engines
                 {
                     if (bin.Left is IdentifierExpression lid && bin.Right is IdentifierExpression rid)
                     {
+                        // Exact match: left is leftAlias, right is rightAlias
                         if (lid.Name.StartsWith(leftAlias + ".", StringComparison.OrdinalIgnoreCase) && rid.Name.StartsWith(rightAlias + ".", StringComparison.OrdinalIgnoreCase))
                         {
-                            leftKeys.Add(lid.Name); rightKeys.Add(rid.Name); 
+                            leftKeys.Add(lid.Name); rightKeys.Add(rid.Name);
                             return true;
                         }
                         if (rid.Name.StartsWith(leftAlias + ".", StringComparison.OrdinalIgnoreCase) && lid.Name.StartsWith(rightAlias + ".", StringComparison.OrdinalIgnoreCase))
                         {
-                            leftKeys.Add(rid.Name); rightKeys.Add(lid.Name); 
+                            leftKeys.Add(rid.Name); rightKeys.Add(lid.Name);
+                            return true;
+                        }
+                        // Fallback for multi-join: the left key may be from any accumulated table,
+                        // not just the original FROM table. One side must be rightAlias; the other
+                        // must be qualified (contains ".") but not belong to rightAlias.
+                        if (rid.Name.StartsWith(rightAlias + ".", StringComparison.OrdinalIgnoreCase)
+                            && lid.Name.Contains('.') && !lid.Name.StartsWith(rightAlias + ".", StringComparison.OrdinalIgnoreCase))
+                        {
+                            leftKeys.Add(lid.Name); rightKeys.Add(rid.Name);
+                            return true;
+                        }
+                        if (lid.Name.StartsWith(rightAlias + ".", StringComparison.OrdinalIgnoreCase)
+                            && rid.Name.Contains('.') && !rid.Name.StartsWith(rightAlias + ".", StringComparison.OrdinalIgnoreCase))
+                        {
+                            leftKeys.Add(rid.Name); rightKeys.Add(lid.Name);
                             return true;
                         }
                     }

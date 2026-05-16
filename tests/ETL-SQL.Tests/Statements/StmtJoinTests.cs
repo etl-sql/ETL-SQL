@@ -225,6 +225,56 @@ namespace ETL_SQL.Tests.Statements
             }
         }
 
+        // Without predicate pushdown this would build a 500*500*500 = 125M-row Cartesian product before WHERE.
+        // With pushdown the two CROSS JOINs become INNER JOINs (hash join) and only the 500 matching rows are produced.
+        [Fact]
+        public async Task TestCommaJoin_PredicatePushdown_LargeData()
+        {
+            string testDir = Path.Combine(Path.GetTempPath(), "ETL_SQL_PushdownTest", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(testDir);
+            try
+            {
+                const int N = 500;
+
+                string pathA = Path.Combine(testDir, "pda.csv").Replace("\\", "/");
+                string pathB = Path.Combine(testDir, "pdb.csv").Replace("\\", "/");
+                string pathC = Path.Combine(testDir, "pdc.csv").Replace("\\", "/");
+
+                // Each table: N rows with id 1..N and a payload column
+                var csvA = "id,aval\n" + string.Join("\n", Enumerable.Range(1, N).Select(i => $"{i},A{i}"));
+                var csvB = "id,bval\n" + string.Join("\n", Enumerable.Range(1, N).Select(i => $"{i},B{i}"));
+                var csvC = "id,cval\n" + string.Join("\n", Enumerable.Range(1, N).Select(i => $"{i},C{i}"));
+
+                await File.WriteAllTextAsync(pathA, csvA);
+                await File.WriteAllTextAsync(pathB, csvB);
+                await File.WriteAllTextAsync(pathC, csvC);
+
+                var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+                await ev.Evaluate(Parse($"CREATE CONNECTION pda ON FLATFILE('{pathA}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION pdb ON FLATFILE('{pathB}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION pdc ON FLATFILE('{pathC}');"));
+
+                // Comma join: pda.id = pdb.id AND pdb.id = pdc.id → should match exactly N rows (identity join).
+                // Without predicate pushdown this creates a 500^3 = 125M-row Cartesian product before WHERE.
+                var sql = "SELECT pda.aval, pdb.bval, pdc.cval FROM pda, pdb, pdc WHERE pda.id = pdb.id AND pdb.id = pdc.id;";
+                var res = await ev.ExecuteQuery(Parse(sql).Statements[0]).ToListAsync();
+                var rows = res.SelectMany(b => b.Rows).ToList();
+
+                Assert.Equal(N, rows.Count);
+                // Every row must have matching a/b/c vals (e.g. "A7" pairs with "B7" and "C7")
+                foreach (var row in rows)
+                {
+                    var id = row["aval"]?.ToString()?[1..]; // strip leading "A"
+                    Assert.Equal($"B{id}", row["bval"]?.ToString());
+                    Assert.Equal($"C{id}", row["cval"]?.ToString());
+                }
+            }
+            finally
+            {
+                if (Directory.Exists(testDir)) Directory.Delete(testDir, true);
+            }
+        }
+
         [Fact]
         public async Task TestSubqueryInJoin()
         {

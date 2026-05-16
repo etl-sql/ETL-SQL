@@ -34,11 +34,15 @@ namespace ETL_SQL.Engine.Engines
         }
 
         public async IAsyncEnumerable<DataTable> ExecuteHeavyPipeline(
-            SelectStatement stmt, 
+            SelectStatement stmt,
             IAsyncEnumerable<DataTable> sourceBatches,
             List<SelectColumn> finalColumns,
             List<string> colNames)
         {
+            // Convert comma-join CROSS JOINs to INNER JOINs where WHERE predicates match,
+            // preventing O(n^k) Cartesian-product materialization.
+            stmt = CrossJoinPredicatePushdown.Optimize(stmt);
+
             string fromName = stmt.FromTable.Alias ?? stmt.FromTable.TableName;
             bool hasAggInColumns = stmt.Columns.Any(c => _aggregateEngine.IsAggregate(c.Expression));
             bool hasWindowInColumns = stmt.Columns.Any(c => _windowEngine.IsWindowFunction(c.Expression));

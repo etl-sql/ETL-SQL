@@ -115,32 +115,34 @@
 - [ ] Add Active Directory / LDAP / Windows-integrated identity support, or clearly define the first supported enterprise identity path.
 - [ ] Treat every portal capability as script-first. If it can be done in the UI, it must have a SQL-like administrative syntax, and if the engine already has a primitive, prefer exposing that primitive coherently instead of inventing a second model.
     - [x] Add script syntax for portal dataset registry refresh, metadata updates, deletion, and dataset ACL grants/revokes.
+    - [x] Add script syntax for favorites, report history, report dependencies, catalog search/recent lists, effective permissions, usage metrics, and report-script validation.
+    - [ ] Add script syntax for share links, embed tokens, saved parameter/filter views, and alerts as those capabilities land.
 - [ ] Polish and surface capabilities that already exist so they feel complete in the portal UI, docs, and scripting surface:
     - [x] Group-based permissions and folder ACLs.
     - [x] Publishing and republishing reports.
     - [x] Subscriptions and subscription history.
     - [x] Audit/activity log.
     - [x] Dataset registry/refresh status.
-    - [ ] Lineage/dependency data where available.
+    - [x] Lineage/dependency data where available.
 - [x] Standardize report metadata. Owner/contact/tags can already come from script metadata comments such as `/* @owner: TeamName */`; define the canonical portal tags and decide how they flow into catalog fields.
 - [x] Standardize environment/deployment conventions. Dev/test/prod can already be handled with `CREATE SETS !DEV`, `CREATE SETS !TEST`, `CREATE SETS !PROD`, and `USE SETS !...`; define the portal/admin scripting pattern instead of adding a parallel deployment model too early.
 - [ ] Fill catalog quality-of-life gaps expected in BI portals, with scriptable equivalents where useful:
     - [x] Search reports/folders.
-    - [ ] Favorites.
+    - [x] Favorites.
     - [x] Recently viewed.
     - [x] Tags/categories.
     - [x] Last refreshed, last viewed, and failure status badges.
 - [ ] Fill governance/admin gaps:
     - [x] Effective permissions view for a user/report/folder.
-    - [ ] Admin-facing usage metrics: views, unique viewers, refresh duration/failures, subscription delivery failures.
+    - [x] Admin-facing usage metrics: views, unique viewers, refresh duration/failures, subscription delivery failures.
     - [x] Content endorsement/certification or "trusted" marker.
 - [ ] Fill lifecycle/publishing gaps:
-    - Report version/history metadata.
-    - Replace/republish flow with validation before publish.
-    - Scripted promotion/deployment pattern built on `CREATE SETS` and portal `PUBLISH`/`ALTER REPORT` commands.
-    - Dependency/lineage view showing report -> datasets -> source connections if the raw lineage is already available but not exposed as a portal experience.
+    - [x] Report version/history metadata.
+    - [x] Replace/republish flow with validation before publish.
+    - [x] Scripted promotion/deployment pattern built on `CREATE SETS` and portal `PUBLISH`/`ALTER REPORT` commands.
+    - [x] Dependency/lineage view showing report -> datasets -> source connections if the raw lineage is already available but not exposed as a portal experience.
 - [ ] Fill sharing/consumption gaps:
-    - Share link with permissions check.
+    - [x] Share link with permissions check.
     - Embed link/token story for internal apps.
     - Per-user saved parameter/filter views, similar to bookmarks.
     - Comments/annotations can wait unless collaboration becomes a target v1 feature.
@@ -244,9 +246,9 @@ These were identified when writing the dark-path SLT files. Each has a failing o
 
 ## Memory & Join Performance Optimization (Discovered in `select4.test`)
 
-- [ ] **Fix Multi-Join Cartesian Product Explosion** — Comma-joins (implicit joins) are currently parsed as `CROSS JOIN (true)`, and the `WHERE` clause is applied only *after* all joins are materialized.
-    - [ ] **Implement Join Predicate Pushdown**: Move equality predicates from `WHERE` to the implicit `CROSS JOIN` conditions during parsing or pre-optimization. This is critical for 5+ table joins (e.g., `select4.test` L29188) where row counts hit billions before filtering.
-    - [ ] **Spill-to-Disk for Nested Loops**: Update `JoinEngine` to trigger "Hyper-Scale" disk-spilling for `CROSS JOIN` and nested loop joins when the estimated result set (product of row counts) or actual buffered count exceeds `JoinSpillThreshold`. Currently, only joins with equality predicates spill.
+- [x] **Fix Multi-Join Cartesian Product Explosion** — `CrossJoinPredicatePushdown.Optimize` (called at the top of `SelectExecutionEngine.ExecuteHeavyPipeline`) extracts AND-connected WHERE predicates and pushes them into CROSS JOIN conditions, converting `CROSS JOIN (true)` → `INNER JOIN (predicate)`. The engine then uses a hash join instead of nested-loop Cartesian product. Also fixed `TryExtractEqualityKeys` in `JoinEngine` to handle multi-join left keys (previously only the original FROM-table alias was accepted, so the 2nd+ join always fell back to nested loop). Validated by `TestCommaJoin_PredicatePushdown_LargeData` (500×500×500 = 125M rows without pushdown → 500 rows with pushdown, no OOM).
+    - [x] **Implement Join Predicate Pushdown**: Done — `CrossJoinPredicatePushdown.cs` in `ETL_SQL.Engine.Engines`. Handles chain joins, star joins, mixed explicit+comma joins, and unqualified predicates (conservative: stays in WHERE).
+    - [ ] **Spill-to-Disk for Nested Loops**: Still open. Comma-joins with non-equality predicates (e.g., OR conditions or unqualified columns) still use nested-loop and do not spill. Hash-join path already spills via `ExternalJoinEngine`.
 - [ ] **Optimize `Row` Materialization and Allocation Patterns**
     - [ ] **Eliminate Redundant Dictionary Copies**: `JoinEngine.CombineRows` currently calls `left.Columns` and `right.Columns`, each creating a new `Dictionary<string, object?>`. In a 100M row join, this creates 300M temporary dictionaries.
     - [ ] **Implement `FlyweightRow` or `CombinedRow`**: Create a row abstraction that holds references to the two parent rows instead of copying all data into a new dynamic dictionary.
@@ -254,3 +256,20 @@ These were identified when writing the dark-path SLT files. Each has a failing o
 - [ ] **Intermediate Pipeline Streaming**
     - [ ] Refactor `SelectExecutionEngine.ExecuteHeavyPipeline` to apply `WHERE` filters in a streaming fashion *immediately* after each join step. Materializing 10B rows just to filter them down to 100 rows in the next step is the primary cause of OOM and GC thrashing.
     - [ ] Add `allRows.Clear()` or similar hints to ensure the GC can reclaim intermediate lists as soon as a pipeline stage completes.
+
+## Engine Stability & Correctness (Code Review Findings)
+
+- [ ] **Fix Identifier Cache Collision for Dynamic Rows** — `ExpressionEvaluator._identifierCache` currently keys on `(null, name)` for all schema-less rows. In sessions with multiple dynamic row sets (like multi-join results), this causes cache hits that return incorrect column indices from previous rows.
+- [ ] **Fix Unsafe Spill Store Type Inference** — `SpillSerializationHelper.TryParseString` automatically coerces strings that look like numbers/dates when reading from disk. This leads to non-deterministic type changes between in-memory (preserved strings) and spilled (coerced types) execution.
+- [ ] **Enhance Join Equality Detection** — Update `JoinEngine.TryExtractEqualityKeys` to resolve unqualified identifiers against join participants. Currently, `WHERE id1 = id2` falls back to nested loops while `WHERE t1.id1 = t2.id2` uses hash joins.
+- [ ] **Robust External Join Partitioning** — `ExternalJoinEngine` should implement recursive partitioning if a single partition still exceeds memory. Currently, it assumes each partition of a large table will fit in a single `Dictionary<CompoundKey, List<Row>>`.
+- [ ] **Optimize Row property performance** — Refactor `Row.Columns` and `DataTable.AddRowAsync` to minimize allocations and redundant constraint-check traversals.
+- [ ] **Fix DataTable.RemoveColumn Complexity** — Current $O(N^2)$ implementation (rebuilding the index map) should be replaced with a more efficient schema update pattern.
+
+## JS/TS & VS Code Extension (Code Review Findings)
+
+- [ ] **Secure Password Passing** — Refactor `ReplManager` and `extension.ts` to pass the `--pass` argument via stdin or environment variables instead of command-line arguments to prevent exposure in process lists.
+- [ ] **Async File Discovery in Extension** — Replace synchronous `fs.existsSync` and `fs.readFileSync` calls in the extension activation path with async equivalents to prevent blocking the VS Code Extension Host.
+- [ ] **Dynamic Target Framework Detection** — Remove hardcoded `net10.0` paths in `extension.ts`; detect the target framework folder dynamically to support future .NET upgrades.
+- [ ] **Granular UI Updates in Report Runtime** — Investigate replacing `root.innerHTML = ''` in `report-runtime.js` with a lightweight diffing approach (e.g., Preact or manual DOM patching) to preserve UI state and prevent flickering.
+- [ ] **Cryptographic Nonces for CSP** — Update `ReportPreviewPanel` to use `crypto.getRandomValues()` for generating CSP nonces instead of `Math.random()`.

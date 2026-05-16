@@ -103,3 +103,50 @@ Premium
 Bob
 Standard
 200
+
+# Five-table chain comma join (exercises predicate pushdown through a chain of FK relationships)
+statement ok
+CREATE TABLE locs(loc_id INT, city STRING);
+
+statement ok
+CREATE TABLE mgrs(mgr_id INT, loc_id INT);
+
+statement ok
+CREATE TABLE projs(proj_id INT, mgr_id INT);
+
+statement ok
+CREATE TABLE emps(emp_id INT, proj_id INT, dept_id INT);
+
+statement ok
+CREATE TABLE depts(dept_id INT, dept_name STRING);
+
+statement ok
+INSERT INTO locs VALUES(10, 'NYC'), (20, 'LA'), (30, 'CHI');
+
+statement ok
+INSERT INTO mgrs VALUES(100, 10), (200, 20), (300, 30);
+
+statement ok
+INSERT INTO projs VALUES(1000, 100), (2000, 200), (3000, 300);
+
+statement ok
+INSERT INTO emps VALUES(1, 1000, 1), (2, 2000, 2), (3, 3000, 3);
+
+statement ok
+INSERT INTO depts VALUES(1, 'Eng'), (2, 'Sales'), (3, 'Ops');
+
+query TT
+SELECT depts.dept_name, locs.city
+FROM depts, emps, projs, mgrs, locs
+WHERE depts.dept_id = emps.dept_id
+  AND emps.proj_id = projs.proj_id
+  AND projs.mgr_id = mgrs.mgr_id
+  AND mgrs.loc_id = locs.loc_id
+ORDER BY depts.dept_name;
+----
+Eng
+NYC
+Ops
+CHI
+Sales
+LA
