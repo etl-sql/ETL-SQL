@@ -269,6 +269,8 @@ Use `GET /api/reports/{id}/history` to inspect the lifecycle metadata behind the
 
 Edit the `.rptsql` file on disk. The portal detects the modification timestamp and marks the report as **stale** until a new snapshot is built. The snapshot is not rebuilt automatically — a user with Execute permission (or an Orchestrator dataset job) must trigger a refresh. If you intentionally changed the script, re-publish the report (via `PUT /api/reports/{id}` or by deleting and re-publishing) to reset the pinned hash.
 
+Before publishing or replacing a report script, the portal validates that the file exists under `ScriptRootPath`, has a `.rptsql` extension, and parses successfully. Use `POST /api/reports/validate` with `{ "scriptPath": "sales/daily.rptsql" }` to run the same validation used by `POST /api/reports` and `PUT /api/reports/{id}`. The response includes the script hash, last modified time, script metadata tags, input parameters, and parse errors when validation fails. The Admin publish form runs this validation before saving.
+
 ### 6.3 Deleting a Report
 
 Soft-delete via the report's **Delete** button. The record is marked `IsDeleted = true` and hidden from users; snapshots are retained on disk. Hard deletion requires removing the database record and snapshot files manually.

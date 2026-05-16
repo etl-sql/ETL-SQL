@@ -284,6 +284,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .form-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .form-hint { font-size: .8em; color: var(--portal-muted); margin-bottom: 12px; }
 .stacked-form { margin-top: 16px; }
+.validation-panel { margin-top: 12px; padding: 10px 12px; border-radius: var(--portal-radius-sm);
+                    border: 1px solid var(--portal-border); font-size: .86em; }
+.validation-ok { background: var(--portal-success-soft); border-color: #b7dcc6; color: var(--portal-success); }
+.validation-bad { background: var(--portal-danger-soft); border-color: #efb6b6; color: var(--portal-danger); }
+.validation-title { font-weight: 750; margin-bottom: 4px; }
+.validation-line { color: var(--portal-text-soft); overflow-wrap: anywhere; }
+.validation-panel ul { margin: 4px 0 0 18px; padding: 0; }
 
 /* Modals and reusable layout primitives */
 .modal-overlay {

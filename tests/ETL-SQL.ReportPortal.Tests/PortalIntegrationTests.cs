@@ -734,6 +734,55 @@ CREATE VISUAL Total AS CARD (
     }
 
     [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task Report_PublishAndUpdateValidateScriptBeforeAccepting()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "Validate Publish", parentId = (int?)null });
+        var folder    = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId  = folder!["id"]!.GetValue<int>();
+
+        var invalidPath = Path.Combine(_factory.TempDir, "scripts", $"invalid_{Guid.NewGuid():N}.rptsql");
+        await File.WriteAllTextAsync(invalidPath, "SET REPORT TITLE = 'unterminated;");
+
+        var validateRes = await AuthPost(token, "/api/reports/validate", new { scriptPath = invalidPath });
+        Assert.Equal(HttpStatusCode.BadRequest, validateRes.StatusCode);
+        var validation = await validateRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.False(validation!["isValid"]!.GetValue<bool>());
+
+        var rejectedPublish = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = "Invalid Report",
+            description = "",
+            scriptPath = invalidPath
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, rejectedPublish.StatusCode);
+
+        var validPath = Path.Combine(_factory.TempDir, "scripts", $"valid_{Guid.NewGuid():N}.rptsql");
+        await File.WriteAllTextAsync(validPath, "SET REPORT TITLE = 'Valid';");
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = "Valid Report",
+            description = "",
+            scriptPath = validPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report   = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        var updateRes = await AuthPut(token, $"/api/reports/{reportId}", new { scriptPath = invalidPath });
+        Assert.Equal(HttpStatusCode.BadRequest, updateRes.StatusCode);
+
+        var afterRes = await AuthGet(token, $"/api/reports/{reportId}");
+        Assert.Equal(HttpStatusCode.OK, afterRes.StatusCode);
+        var after = await afterRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal(validPath, after!["scriptPath"]!.GetValue<string>());
+    }
+
+    [Fact]
     [Trait("Category", "Smoke.Security")]
     public async Task Report_ParametersRejectsPersistedSiblingScriptRootBypass()
     {

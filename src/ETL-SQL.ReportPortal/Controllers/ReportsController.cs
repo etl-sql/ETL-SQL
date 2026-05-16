@@ -129,18 +129,11 @@ public class ReportsController : ControllerBase
         if (!PortalPathGuard.TryResolveScript(portalConfig, req.ScriptPath, out var resolved))
             return BadRequest(new { error = "Script path must be within the configured ScriptRootPath" });
 
-        var lastModified = System.IO.File.Exists(resolved)
-            ? System.IO.File.GetLastWriteTimeUtc(resolved)
-            : DateTime.UtcNow;
+        var validation = await ValidateResolvedScriptAsync(resolved);
+        if (!validation.IsValid)
+            return BadRequest(validation);
 
-        string? publishedHash = null;
-        var scriptMetadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        if (System.IO.File.Exists(resolved))
-        {
-            publishedHash = "sha256:" + Convert.ToHexString(
-                SHA256.HashData(System.IO.File.ReadAllBytes(resolved))).ToLowerInvariant();
-            scriptMetadata = await ReadScriptMetadataAsync(resolved);
-        }
+        var scriptMetadata = new Dictionary<string, string>(validation.Metadata, StringComparer.OrdinalIgnoreCase);
 
         var report = new Report
         {
@@ -156,8 +149,8 @@ public class ReportsController : ControllerBase
             Certification       = FirstNonBlank(req.Certification, GetMetadata(scriptMetadata, "certification", "trusted")),
             MetadataJson        = SerializeMetadata(scriptMetadata),
             ScriptPath          = resolved,
-            ScriptLastModified  = lastModified,
-            PublishedScriptHash = publishedHash,
+            ScriptLastModified  = validation.LastModified ?? DateTime.UtcNow,
+            PublishedScriptHash = validation.Hash,
             CreatedBy           = CurrentUserId,
             CreatedAt           = DateTime.UtcNow,
             UpdatedAt           = DateTime.UtcNow
@@ -167,6 +160,26 @@ public class ReportsController : ControllerBase
         await audit.LogAsync(CurrentUserId, "PUBLISH_REPORT", "Report", report.Id.ToString(), report.Name);
 
         return CreatedAtAction(nameof(GetById), new { id = report.Id }, ToDto(report, null));
+    }
+
+    // ── POST /api/reports/validate ───────────────────────────────────────────
+
+    [HttpPost("reports/validate")]
+    [Authorize(Roles = "Admin,Publisher")]
+    public async Task<IActionResult> ValidateScript([FromBody] ValidateReportScriptRequest req)
+    {
+        if (!PortalPathGuard.TryResolveScript(portalConfig, req.ScriptPath, out var resolved))
+            return BadRequest(new ReportScriptValidationDto(
+                false,
+                req.ScriptPath,
+                null,
+                null,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                Array.Empty<ReportParameterDto>(),
+                ["Script path must be within the configured ScriptRootPath"]));
+
+        var validation = await ValidateResolvedScriptAsync(resolved);
+        return validation.IsValid ? Ok(validation) : BadRequest(validation);
     }
 
     // ── GET /api/reports/{id} ─────────────────────────────────────────────────
@@ -346,11 +359,14 @@ public class ReportsController : ControllerBase
             if (!System.IO.File.Exists(resolved))
                 return BadRequest(new { error = $"Script file not found: {req.ScriptPath}" });
 
+            var validation = await ValidateResolvedScriptAsync(resolved);
+            if (!validation.IsValid)
+                return BadRequest(validation);
+
             report.ScriptPath = resolved;
-            var bytes = await System.IO.File.ReadAllBytesAsync(resolved);
-            report.PublishedScriptHash = "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
-            report.ScriptLastModified  = System.IO.File.GetLastWriteTimeUtc(resolved);
-            var scriptMetadata = await ReadScriptMetadataAsync(resolved);
+            report.PublishedScriptHash = validation.Hash;
+            report.ScriptLastModified  = validation.LastModified ?? DateTime.UtcNow;
+            var scriptMetadata = new Dictionary<string, string>(validation.Metadata, StringComparer.OrdinalIgnoreCase);
             report.MetadataJson = SerializeMetadata(scriptMetadata);
             report.Description   = FirstNonBlank(req.Description, GetMetadata(scriptMetadata, "description", "d"), report.Description);
             report.Owner         = FirstNonBlank(req.Owner, GetMetadata(scriptMetadata, "owner"), report.Owner);
@@ -486,6 +502,72 @@ public class ReportsController : ControllerBase
         var tokens = new Lexer(scriptText).Tokenize();
         var script = new CoreParser(tokens, scriptText).Parse();
         return new Dictionary<string, string>(script.Metadata, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static async Task<ReportScriptValidationDto> ValidateResolvedScriptAsync(string resolvedScriptPath)
+    {
+        if (!System.IO.File.Exists(resolvedScriptPath))
+        {
+            return new ReportScriptValidationDto(
+                false,
+                resolvedScriptPath,
+                null,
+                null,
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                Array.Empty<ReportParameterDto>(),
+                ["Script file not found."]);
+        }
+
+        if (!resolvedScriptPath.EndsWith(".rptsql", StringComparison.OrdinalIgnoreCase))
+        {
+            return new ReportScriptValidationDto(
+                false,
+                resolvedScriptPath,
+                null,
+                System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath),
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                Array.Empty<ReportParameterDto>(),
+                ["Only .rptsql files may be published as reports."]);
+        }
+
+        var scriptText = await System.IO.File.ReadAllTextAsync(resolvedScriptPath);
+        try
+        {
+            var tokens = new Lexer(scriptText).Tokenize();
+            var script = new CoreParser(tokens, scriptText).Parse();
+            var parameters = script.Statements
+                .OfType<DeclareStatement>()
+                .Where(d => d.IsInput)
+                .Select(d => new ReportParameterDto(
+                    d.VariableName,
+                    d.DataType,
+                    d.InitialValue is LiteralExpression lit ? lit.Value?.ToString() : null,
+                    d.InitialValue is null,
+                    d.Description))
+                .ToList();
+            var hash = "sha256:" + Convert.ToHexString(
+                SHA256.HashData(await System.IO.File.ReadAllBytesAsync(resolvedScriptPath))).ToLowerInvariant();
+
+            return new ReportScriptValidationDto(
+                true,
+                resolvedScriptPath,
+                hash,
+                System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath),
+                new Dictionary<string, string>(script.Metadata, StringComparer.OrdinalIgnoreCase),
+                parameters,
+                Array.Empty<string>());
+        }
+        catch (Exception ex)
+        {
+            return new ReportScriptValidationDto(
+                false,
+                resolvedScriptPath,
+                null,
+                System.IO.File.GetLastWriteTimeUtc(resolvedScriptPath),
+                new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                Array.Empty<ReportParameterDto>(),
+                [ex.Message]);
+        }
     }
 
     private async Task<IReadOnlyList<ReportDependencyManifestDatasetDto>> ReadManifestDatasetsAsync(ReportSnapshot? snapshot)

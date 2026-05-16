@@ -30,6 +30,17 @@ public record UpdateReportRequest(
     string? Steward = null,
     string? Certification = null);
 
+public record ValidateReportScriptRequest(string ScriptPath);
+
+public record ReportScriptValidationDto(
+    bool IsValid,
+    string ScriptPath,
+    string? Hash,
+    DateTime? LastModified,
+    IReadOnlyDictionary<string, string> Metadata,
+    IReadOnlyList<ReportParameterDto> Parameters,
+    IReadOnlyList<string> Errors);
+
 public record ReportDto(
     int Id,
     int FolderId,

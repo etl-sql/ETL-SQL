@@ -160,6 +160,7 @@ export const reportsApi = {
     exportUrl: (id, format) => `/api/reports/${id}/export/${format}`,
 
     getParameters: (id) => apiJson(`/api/reports/${id}/parameters`),
+    validateScript: (scriptPath) => apiJson('/api/reports/validate', { method: 'POST', body: { scriptPath } }),
     listAvailableScripts: () => apiJson('/api/reports/available-scripts')
 };
 
