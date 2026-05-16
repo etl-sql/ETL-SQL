@@ -2919,6 +2919,31 @@
         return result;
     }
 
+    function navigateToPage(pageName) {
+        if (!pageName) return;
+
+        const navItem = document.querySelector(`[data-page="${CSS.escape(pageName)}"]`);
+        if (navItem) {
+            navItem.click();
+            return;
+        }
+
+        const targetPage = document.getElementById('page-' + String(pageName).toLowerCase());
+        if (!targetPage) return;
+
+        document.querySelectorAll('.page').forEach(page => {
+            page.style.display = page === targetPage ? 'block' : 'none';
+        });
+
+        document.querySelectorAll('[data-page]').forEach(item => item.classList.remove('active'));
+        _lastActivePage = pageName;
+        resizeChartsIn(targetPage);
+
+        if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'etl-page-changed', page: pageName, userTriggered: true }, '*');
+        }
+    }
+
     function executeAction(action, rowData, columns, visualName, visualCtx) {
         if (action.type === 'DRILL_IN') {
             const hierarchy = action.hierarchy || [];
@@ -3035,6 +3060,8 @@
             else exportExcel(visual);
         } else if (action.type === 'EXPORT_PDF') {
             window.print();
+        } else if (action.type === 'NAVIGATE_PAGE') {
+            navigateToPage(action.targetPage);
         } else if (action.type === 'DRILL_REPORT') {
             const targetReport = resolveActionValue(action, rowData, columns) || action.targetReport;
             if (!targetReport) return;

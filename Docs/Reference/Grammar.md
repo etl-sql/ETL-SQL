@@ -2076,6 +2076,7 @@ ON_CHANGE = SET_PARAMETER(@paramName, <columnRef>)
 ON_CLICK  = RUN_SCRIPT('<path>', @param = <columnRef> [, ...])
 ON_CLICK  = CLEAR_FILTERS
 ON_CLICK  = APPLY_PARAMETERS
+ON_CLICK  = NAVIGATE_PAGE(<PageName>)
 ON_CLICK  = SET_UI_STATE(<Target>, <Key>, <Value>)
 ```
 

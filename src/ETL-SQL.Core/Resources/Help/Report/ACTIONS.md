@@ -53,6 +53,12 @@ Clears visual-level selections and returns cross-filtered visuals to their unfil
 ON_CLICK = CLEAR_FILTERS
 ```
 
+### NAVIGATE_PAGE
+Shows another page in the current report. This is the canonical button action for page navigation, including pages hidden from the navigation bar.
+```sql
+ON_CLICK = NAVIGATE_PAGE(Details)
+```
+
 ### SET_UI_STATE
 Changes the visual state of report objects (Visibility, Color, Class) without a server round-trip.
 ```sql

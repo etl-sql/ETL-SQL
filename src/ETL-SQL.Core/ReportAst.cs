@@ -183,6 +183,12 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
+    public record NavigatePageAction : VisualAction
+    {
+        public required string TargetPage { get; init; }
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
     public record SetUiStateAction : VisualAction
     {
         public required List<string> Targets { get; init; }

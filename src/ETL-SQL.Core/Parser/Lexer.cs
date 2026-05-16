@@ -192,6 +192,7 @@ namespace ETL_SQL.Core.Parser
             dict["RUN_SCRIPT"]    = TokenType.RUN_SCRIPT;
             dict["SET_UI_STATE"]  = TokenType.SET_UI_STATE;
             dict["APPLY_PARAMETERS"] = TokenType.APPLY_PARAMETERS;
+            dict["NAVIGATE_PAGE"] = TokenType.NAVIGATE_PAGE;
             
 
             return dict;

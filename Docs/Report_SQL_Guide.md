@@ -1236,6 +1236,14 @@ ON_CLICK = APPLY_PARAMETERS
 
 Triggers a full report refresh in **Staged Mode**. Useful for paginated reports where you want the user to set multiple filters and then click "Run" to fetch data once. 
 
+#### NAVIGATE_PAGE
+
+```sql
+ON_CLICK = NAVIGATE_PAGE(<PageName>)
+```
+
+Shows the named page in the current report. This is the canonical action for report-page navigation from a button. It can navigate to pages that are hidden from the navigation bar with `VISIBLE = OFF`.
+
 #### SET_UI_STATE
 
 ```sql
@@ -1811,6 +1819,12 @@ CREATE BUTTON DrillBtn AS (
   TITLE   = 'View Detail',
   ACTIONS (ON_CLICK = DRILL_DOWN(Target = DetailPage, Key = id))
 );
+
+-- Navigate to a report page
+CREATE BUTTON DetailsButton AS (
+  TITLE   = 'Details',
+  ACTIONS (ON_CLICK = NAVIGATE_PAGE(Details))
+);
 ```
 
 ### Button actions
@@ -1821,6 +1835,11 @@ CREATE BUTTON DrillBtn AS (
 | `REFRESH_REPORT` | Reloads the manifest from the server and re-renders all visuals |
 | `EXPORT_CSV` | Downloads the `TARGET` visual's data as a `.csv` file (client-side, no server round-trip) |
 | `EXPORT_EXCEL` | Downloads the `TARGET` visual's data as a `.xls` file (Excel-compatible HTML table format) |
+| `EXPORT_PDF` | Opens the browser print flow for PDF output |
+| `NAVIGATE_PAGE(PageName)` | Shows another page in the same report |
+| `SET_UI_STATE(Target, Key, Value)` | Shows, hides, collapses, opens, recolors, or reclasses report objects |
+| `CLEAR_FILTERS` | Clears active visual selections and resets parameters to the baseline manifest values |
+| `APPLY_PARAMETERS` | Applies staged parameter changes in deferred-run reports |
 
 `EXPORT_CSV` and `EXPORT_EXCEL` require `OPTIONS (TARGET = VisualName)` where `VisualName` is the name of any visual currently rendered on the same page. The exported data reflects the rows in the manifest — if the visual is cross-filtered, the full dataset (not the filtered view) is exported.
 

@@ -292,6 +292,24 @@ CREATE BUTTON RefreshButton AS (
         }
 
         [Fact]
+        public void ParseCreateButton_NavigatePageAction_ParsesTargetPage()
+        {
+            var sql = @"
+CREATE BUTTON DetailsButton AS (
+    TITLE = 'Details',
+    ACTIONS (ON_CLICK = NAVIGATE_PAGE(Details))
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateButtonStatement>().FirstOrDefault();
+
+            Assert.NotNull(stmt);
+            var action = stmt!.Actions.OfType<NavigatePageAction>().SingleOrDefault();
+            Assert.NotNull(action);
+            Assert.Equal("Details", action!.TargetPage);
+            Assert.Equal("ON_CLICK", action.Trigger);
+        }
+
+        [Fact]
         public void ParseCreateButton_OldTypedSyntax_ReportsSyntaxError()
         {
             var script = Parse("CREATE BUTTON OldRefresh AS REFRESH (TITLE = 'Refresh');");

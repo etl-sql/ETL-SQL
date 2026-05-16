@@ -1597,6 +1597,13 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     action = commandAction;
                 }
+                else if (Match(TokenType.NAVIGATE_PAGE))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after NAVIGATE_PAGE");
+                    var targetPage = ConsumeIdentifierOrString("Expected target page name").Value;
+                    Consume(TokenType.RPAREN, "Expected ')' to close NAVIGATE_PAGE");
+                    action = new NavigatePageAction { Trigger = trigger, TargetPage = targetPage };
+                }
                 else if (Match(TokenType.SET_UI_STATE))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after SET_UI_STATE");
@@ -1632,7 +1639,7 @@ namespace ETL_SQL.Core.Parser.Components
                 else
                 {
                     throw new SyntaxException(
-                        $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, CLEAR_FILTERS, APPLY_PARAMETERS, BACK, REFRESH_REPORT, EXPORT_CSV, EXPORT_EXCEL, EXPORT_PDF, or SET_UI_STATE after {trigger} =",
+                        $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, CLEAR_FILTERS, APPLY_PARAMETERS, BACK, REFRESH_REPORT, EXPORT_CSV, EXPORT_EXCEL, EXPORT_PDF, NAVIGATE_PAGE, or SET_UI_STATE after {trigger} =",
                         _parser.Current.Line, _parser.Current.Column);
                 }
 

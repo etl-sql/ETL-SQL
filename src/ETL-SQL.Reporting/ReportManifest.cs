@@ -360,6 +360,10 @@ namespace ETL_SQL.Reporting
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? TargetReport { get; set; }
 
+        [JsonPropertyName("targetPage")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? TargetPage { get; set; }
+
         [JsonPropertyName("parameterColumns")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? ParameterColumns { get; set; }

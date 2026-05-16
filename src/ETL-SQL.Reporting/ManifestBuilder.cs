@@ -341,6 +341,12 @@ namespace ETL_SQL.Reporting
                     ParameterColumns = dr.Parameters.Where(p => !p.Value.StartsWith("'") && !p.Value.StartsWith("@")).ToDictionary(p => p.Key, p => p.Value),
                     LiteralParameters = dr.Parameters.Where(p => p.Value.StartsWith("'") || p.Value.StartsWith("@")).ToDictionary(p => p.Key, p => p.Value.Trim('\''))
                 },
+                NavigatePageAction np => new VisualActionManifest
+                {
+                    Type       = "NAVIGATE_PAGE",
+                    Trigger    = np.Trigger,
+                    TargetPage = np.TargetPage
+                },
                 ApplyParametersAction ap => new VisualActionManifest { Type = "APPLY_PARAMETERS", Trigger = action.Trigger },
                 ReportCommandAction command => new VisualActionManifest { Type = command.Command, Trigger = action.Trigger },
                 DrillInAction di => new VisualActionManifest { Type = "DRILL_IN", Trigger = action.Trigger, Hierarchy = di.Hierarchy },

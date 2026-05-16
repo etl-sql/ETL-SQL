@@ -13,6 +13,8 @@ Actions:
   ON_CLICK = SET_PARAMETER(@var, value)  — update a variable and re-render
   ON_CLICK = CLEAR_FILTERS               — clear visual selections
   ON_CLICK = APPLY_PARAMETERS             — apply staged parameter changes
+  ON_CLICK = NAVIGATE_PAGE(PageName)      — show another page in this report
+  ON_CLICK = SET_UI_STATE(Target, Key, Value) — show, hide, open, collapse, or style report objects
 
 ```sql
 CREATE BUTTON GoBack AS (
@@ -28,6 +30,11 @@ CREATE BUTTON RefreshData AS (
 CREATE BUTTON ResetFilters AS (
   TITLE   = 'Reset',
   ACTIONS (ON_CLICK = CLEAR_FILTERS)
+);
+
+CREATE BUTTON DetailsButton AS (
+  TITLE   = 'Details',
+  ACTIONS (ON_CLICK = NAVIGATE_PAGE(Details))
 );
 
 CREATE PAGE Summary AS (

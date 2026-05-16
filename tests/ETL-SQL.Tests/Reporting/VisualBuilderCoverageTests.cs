@@ -311,6 +311,30 @@ CREATE PAGE P AS (STRUCTURE = 'A B', MAP('A' = Summary, 'B' = Detail));
             Assert.Equal("Detail", dd.TargetVisual, StringComparer.OrdinalIgnoreCase);
         }
 
+        [Fact]
+        public async Task Action_NavigatePage_RecordedOnManifest()
+        {
+            var path = Write("action_nav_page.rptsql", @"
+CREATE BUTTON DetailsButton AS (
+    TITLE = 'Details',
+    ACTIONS (ON_CLICK = NAVIGATE_PAGE(Details))
+);
+CREATE PAGE Overview AS (STRUCTURE = 'A', MAP('A' = DetailsButton));
+CREATE PAGE Details AS (STRUCTURE = 'A', MAP('A' = DetailsButton), VISIBLE = OFF);
+CREATE NAVIGATION MainNav AS TAB (
+    DEFAULT = Overview,
+    PAGES (Overview)
+);
+");
+            await using var svc = Svc(path);
+            var m = await svc.GetManifestAsync();
+            var button = m.Buttons!.First(x => x.Name == "DetailsButton");
+
+            var action = button.Actions.FirstOrDefault(a => a.Type == "NAVIGATE_PAGE");
+            Assert.NotNull(action);
+            Assert.Equal("Details", action!.TargetPage, StringComparer.OrdinalIgnoreCase);
+        }
+
         // ── GRID style option ─────────────────────────────────────────────────────
 
         [Fact]
