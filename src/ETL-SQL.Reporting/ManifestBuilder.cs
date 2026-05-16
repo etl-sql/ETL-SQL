@@ -347,6 +347,12 @@ namespace ETL_SQL.Reporting
                     Trigger    = np.Trigger,
                     TargetPage = np.TargetPage
                 },
+                RefreshVisualsAction rv => new VisualActionManifest
+                {
+                    Type = "REFRESH_VISUALS",
+                    Trigger = action.Trigger,
+                    Targets = rv.Targets
+                },
                 ApplyParametersAction ap => new VisualActionManifest { Type = "APPLY_PARAMETERS", Trigger = action.Trigger },
                 ReportCommandAction command => new VisualActionManifest { Type = command.Command, Trigger = action.Trigger },
                 DrillInAction di => new VisualActionManifest { Type = "DRILL_IN", Trigger = action.Trigger, Hierarchy = di.Hierarchy },

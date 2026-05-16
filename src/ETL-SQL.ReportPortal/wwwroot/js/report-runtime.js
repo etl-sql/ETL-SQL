@@ -3121,6 +3121,14 @@
                     .then(m => renderManifest(m))
                     .catch(e => console.error('Refresh failed:', e));
             }
+        } else if (action.type === 'REFRESH_VISUALS') {
+            const targets = (action.targets || []).filter(Boolean);
+            if (targets.length === 0) return;
+            if (vscode) {
+                vscode.postMessage({ type: 'refreshVisuals', visuals: targets });
+            } else {
+                postRefreshVisuals(targets).then(m => { if (m) renderManifest(m); });
+            }
         } else if (action.type === 'EXPORT_CSV' || action.type === 'EXPORT_EXCEL') {
             const targetName = action.targetVisual || (visualCtx && visualCtx.options && visualCtx.options.TARGET);
             const visual = targetName ? findVisualData(targetName) : null;
@@ -3342,6 +3350,24 @@
             return await res.json();
         } catch (e) {
             return { message: `Request failed: ${e.message}` };
+        }
+    }
+
+    async function postRefreshVisuals(visuals) {
+        try {
+            const res = await fetch(apiBase + '/refresh-visuals', {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ visuals })
+            });
+            if (!res.ok) {
+                console.error('Visual refresh failed:', res.status, await res.text());
+                return null;
+            }
+            return await res.json();
+        } catch (e) {
+            console.error('Visual refresh request failed:', e);
+            return null;
         }
     }
 

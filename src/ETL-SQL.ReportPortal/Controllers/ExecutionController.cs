@@ -263,6 +263,28 @@ public class ExecutionController(
         return manifest is null ? NotFound() : Ok(manifest);
     }
 
+    // ── 2.4  POST /api/reports/{id}/refresh-visuals ──────────────────────────
+
+    [HttpPost("reports/{id:int}/refresh-visuals")]
+    public async Task<IActionResult> RefreshVisuals(int id, [FromBody] RefreshVisualsRequest req)
+    {
+        var report = await db.Reports.FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null) return Forbid();
+
+        if (req.Visuals is null || req.Visuals.Count == 0 || req.Visuals.All(string.IsNullOrWhiteSpace))
+            return BadRequest(new { error = "visuals is required" });
+
+        if (!PortalPathGuard.TryResolveScript(portalConfig, report.ScriptPath, out var resolvedScriptPath))
+            return Forbid();
+
+        var svc      = await GetOrRebuildSessionAsync(id, resolvedScriptPath);
+        var manifest = await svc.RefreshVisualsAsync(req.Visuals);
+        return manifest is null ? NotFound() : Ok(manifest);
+    }
+
     // ── Session helper ────────────────────────────────────────────────────────
 
     private async Task<ETL_SQL.ReportHosting.DashboardService> GetOrRebuildSessionAsync(

@@ -25,3 +25,5 @@ public record ParameterUpdateRequest(string Name, string Value, bool IsInteracti
 public record BatchParameterRequest(List<ParameterUpdateRequest> Params, bool IsInteraction = false);
 
 public record DrillRequest(string VisualName, string Direction, string? ClickedValue, int TargetDepth = 0);
+
+public record RefreshVisualsRequest(List<string> Visuals);

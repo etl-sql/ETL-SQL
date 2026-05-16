@@ -59,6 +59,12 @@ Shows another page in the current report. This is the canonical button action fo
 ON_CLICK = NAVIGATE_PAGE(Details)
 ```
 
+### REFRESH_VISUALS
+Re-evaluates selected visuals in the current report session without rebuilding the entire report.
+```sql
+ON_CLICK = REFRESH_VISUALS(SalesTable, RevenueChart)
+```
+
 ### SET_UI_STATE
 Changes the visual state of report objects (Visibility, Color, Class) without a server round-trip.
 ```sql

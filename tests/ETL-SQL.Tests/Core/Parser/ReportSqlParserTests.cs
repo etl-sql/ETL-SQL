@@ -310,6 +310,25 @@ CREATE BUTTON DetailsButton AS (
         }
 
         [Fact]
+        public void ParseCreateButton_RefreshVisualsAction_ParsesTargets()
+        {
+            var sql = @"
+CREATE BUTTON RefreshSelection AS (
+    TITLE = 'Refresh Selection',
+    ACTIONS (ON_CLICK = REFRESH_VISUALS(SalesTable, RevenueChart))
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateButtonStatement>().FirstOrDefault();
+
+            Assert.NotNull(stmt);
+            var action = stmt!.Actions.OfType<RefreshVisualsAction>().SingleOrDefault();
+            Assert.NotNull(action);
+            Assert.Equal(new[] { "SalesTable", "RevenueChart" }, action!.Targets);
+            Assert.Equal("ON_CLICK", action.Trigger);
+            Assert.Equal("REFRESH_VISUALS(SalesTable, RevenueChart)", action.ToSql());
+        }
+
+        [Fact]
         public void ParseCreateButton_OldTypedSyntax_ReportsSyntaxError()
         {
             var script = Parse("CREATE BUTTON OldRefresh AS REFRESH (TITLE = 'Refresh');");

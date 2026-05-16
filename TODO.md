@@ -85,7 +85,7 @@
     ACTIONS (ON_CLICK = REFRESH_REPORT)
   );
   ```
-- [ ] Add button/report actions for common workflow needs:
+- [x] Add button/report actions for common workflow needs:
     - Show or hide `VISIBLE = OFF` visuals.
     - Refresh report or selected visuals.
     - Export CSV/Excel/PDF.

@@ -1803,6 +1803,12 @@ CREATE BUTTON RefreshData AS (
   STYLE (BACKGROUND-COLOR = '#2563eb', COLOR = '#ffffff', BORDER-RADIUS = '4px')
 );
 
+-- Refresh selected visuals
+CREATE BUTTON RefreshMetrics AS (
+  TITLE   = 'Refresh Metrics',
+  ACTIONS (ON_CLICK = REFRESH_VISUALS(SalesTable, RevenueChart))
+);
+
 -- Export a specific visual's data to CSV
 CREATE BUTTON DownloadCsv AS (
   TITLE   = 'Download CSV',
@@ -1837,6 +1843,7 @@ CREATE BUTTON DetailsButton AS (
 |---|---|
 | `BACK` | Calls `window.history.back()` |
 | `REFRESH_REPORT` | Reloads the manifest from the server and re-renders all visuals |
+| `REFRESH_VISUALS(VisualName [, ...])` | Re-evaluates only the listed visuals in the current report session |
 | `EXPORT_CSV` | Downloads the `TARGET` visual's data as a `.csv` file (client-side, no server round-trip) |
 | `EXPORT_EXCEL` | Downloads the `TARGET` visual's data as a `.xls` file (Excel-compatible HTML table format) |
 | `EXPORT_PDF` | Opens the browser print flow for PDF output |

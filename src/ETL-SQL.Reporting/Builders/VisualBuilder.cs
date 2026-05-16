@@ -166,6 +166,12 @@ namespace ETL_SQL.Reporting.Builders
                         TargetReport = dr.TargetReport,
                         Parameters   = dr.Parameters
                     },
+                    RefreshVisualsAction rv => new VisualActionManifest
+                    {
+                        Type    = "REFRESH_VISUALS",
+                        Trigger = rv.Trigger,
+                        Targets = rv.Targets
+                    },
                     _ => throw new NotSupportedException($"Action type {action.GetType().Name} not supported in manifest.")
                 });
             }

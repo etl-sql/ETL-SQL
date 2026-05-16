@@ -2212,6 +2212,8 @@ CREATE BUTTON <name> AS (
 );
 ```
 
+Common button actions include `BACK`, `REFRESH_REPORT`, `REFRESH_VISUALS(VisualName [, ...])`, `EXPORT_CSV`, `EXPORT_EXCEL`, `EXPORT_PDF`, `NAVIGATE_PAGE(PageName)`, `CLEAR_FILTERS`, `APPLY_PARAMETERS`, and `SET_UI_STATE(Target, Key, Value)`.
+
 ### A.9 `ALTER` / `DROP` / `CREATE OR ALTER`
 All report object types support these forms:
 

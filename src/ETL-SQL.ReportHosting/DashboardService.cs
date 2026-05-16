@@ -261,6 +261,41 @@ namespace ETL_SQL.ReportHosting
             }
         }
 
+        public async Task<ReportManifest?> RefreshVisualsAsync(IEnumerable<string> visualNames)
+        {
+            if (_manifest == null || _evaluator == null)
+                await GetManifestAsync();
+            if (_manifest == null || _evaluator == null) return null;
+
+            var targets = visualNames
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Select(name => name.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (targets.Count == 0) return null;
+
+            await _lock.WaitAsync();
+            try
+            {
+                var builder = new ManifestBuilder(_evaluator);
+                foreach (var target in targets)
+                {
+                    var vm = _manifest.Visuals.FirstOrDefault(v => v.Name.Equals(target, StringComparison.OrdinalIgnoreCase));
+                    if (vm == null) return null;
+                    if (!_evaluator.ReportContext.VisualDefinitions.TryGetValue(vm.Name, out var vStmt))
+                        return null;
+
+                    _drillStates.TryGetValue(vm.Name, out var drillState);
+                    await builder.RefreshVisualAsync(vStmt, vm, null, drillState);
+                }
+
+                _manifest.BuiltAt = DateTime.UtcNow;
+                _manifest.IsInteraction = true;
+                return _manifest;
+            }
+            finally { _lock.Release(); }
+        }
+
         /// <summary>Full rebuild: re-evaluate the script and re-snapshot all visuals.</summary>
         public async Task<ReportManifest> RebuildAsync()
         {

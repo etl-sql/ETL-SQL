@@ -10,6 +10,7 @@ Syntax:
 Actions:
   ON_CLICK = BACK                         — navigate to the previous page
   ON_CLICK = REFRESH_REPORT               — re-evaluate the report and re-render visuals
+  ON_CLICK = REFRESH_VISUALS(Visual [, ...]) — re-evaluate selected visuals
   ON_CLICK = SET_PARAMETER(@var, value)  — update a variable and re-render
   ON_CLICK = CLEAR_FILTERS               — clear visual selections
   ON_CLICK = APPLY_PARAMETERS             — apply staged parameter changes
@@ -25,6 +26,11 @@ CREATE BUTTON GoBack AS (
 CREATE BUTTON RefreshData AS (
   TITLE = 'Refresh',
   ACTIONS (ON_CLICK = REFRESH_REPORT)
+);
+
+CREATE BUTTON RefreshMetrics AS (
+  TITLE = 'Refresh Metrics',
+  ACTIONS (ON_CLICK = REFRESH_VISUALS(SalesTable, RevenueChart))
 );
 
 CREATE BUTTON ResetFilters AS (

@@ -179,6 +179,16 @@ namespace ETL_SQL.Core.Formatting
             MergeDeleteClause          _ => "THEN DELETE",
             MergeInsertClause          n => FormatMergeInsert(n),
             MergeActionClause          n => FormatMergeAction(n),
+            DrillDownAction            n => $"DRILL_DOWN(Target = {n.TargetVisual}, Key = ({string.Join(", ", n.KeyColumns)}))",
+            DrillInAction              n => $"DRILL_IN(HIERARCHY = ({string.Join(", ", n.Hierarchy)}))",
+            RunScriptAction            n => $"RUN_SCRIPT('{n.ScriptPath}'{FormatActionParameters(n.Parameters)})",
+            ClearFiltersAction         _ => "CLEAR_FILTERS",
+            ApplyParametersAction      _ => "APPLY_PARAMETERS",
+            ReportCommandAction        n => n.Command == "REFRESH" ? "REFRESH_REPORT" : n.Command,
+            DrillReportAction          n => $"DRILL_REPORT('{n.TargetReport}'{FormatActionParameters(n.Parameters)})",
+            NavigatePageAction         n => $"NAVIGATE_PAGE({n.TargetPage})",
+            RefreshVisualsAction       n => $"REFRESH_VISUALS({string.Join(", ", n.Targets)})",
+            SetUiStateAction           n => $"SET_UI_STATE({FormatActionTargets(n.Targets)}, {n.Key}, {n.Value})",
 
             _ => node is Statement ? "UNKNOWN STATEMENT" : node.GetType().Name
         };
@@ -192,6 +202,19 @@ namespace ETL_SQL.Core.Formatting
         public static string Format(ExecuteParameter p)    => p.Expression.ToSql() + (p.IsOutput ? " OUTPUT" : "") + (p.IsInput ? " INPUT" : "");
 
         // ── Statement formatters ─────────────────────────────────────────────
+
+        private static string FormatActionParameters(Dictionary<string, string> parameters)
+        {
+            if (parameters.Count == 0) return "";
+            return ", " + string.Join(", ", parameters.Select(p => $"{p.Key} = {p.Value}"));
+        }
+
+        private static string FormatActionTargets(IReadOnlyCollection<string> targets)
+        {
+            return targets.Count == 1
+                ? targets.First()
+                : "(" + string.Join(", ", targets) + ")";
+        }
 
         private static string FormatSelect(SelectStatement s)
         {

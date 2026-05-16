@@ -56,6 +56,9 @@ export class ReportPreviewPanel {
                     case 'refreshReport':
                         this._refreshContent(message.parameters, /* usePostMessage */ true, message.isInteraction);
                         break;
+                    case 'refreshVisuals':
+                        this._refreshContent(undefined, /* usePostMessage */ true, true);
+                        break;
                     case 'exportReport':
                         this._handleExport(message.format);
                         break;

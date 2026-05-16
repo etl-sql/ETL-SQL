@@ -227,6 +227,18 @@ if (multiMode)
         return manifest is null ? Results.NotFound() : Results.Json(manifest, noCache);
     });
 
+    app.MapPost("/reports/{name}/api/refresh-visuals",
+        async (string name, HttpContext ctx, DashboardServiceFactory fac) =>
+    {
+        var svc = fac.GetService(name);
+        if (svc == null) return Results.NotFound();
+        var body = await JsonSerializer.DeserializeAsync<RefreshVisualsRequest>(ctx.Request.Body, webOptions);
+        if (body == null || body.Visuals == null || body.Visuals.Count == 0)
+            return Results.BadRequest("visuals is required");
+        var manifest = await svc.RefreshVisualsAsync(body.Visuals);
+        return manifest is null ? Results.NotFound() : Results.Json(manifest, noCache);
+    });
+
     app.MapGet("/reports/{name}/api/refresh", async (string name, DashboardServiceFactory fac) =>
     {
         var svc = fac.GetService(name);
@@ -279,6 +291,15 @@ else
         var manifest = body.Direction?.ToUpperInvariant() == "UP"
             ? await svc.DrillUpAsync(body.VisualName, body.TargetDepth)
             : await svc.DrillInAsync(body.VisualName, body.ClickedValue ?? "");
+        return manifest is null ? Results.NotFound() : Results.Json(manifest, noCache);
+    });
+
+    app.MapPost("/api/refresh-visuals", async (HttpContext ctx, DashboardService svc) =>
+    {
+        var body = await JsonSerializer.DeserializeAsync<RefreshVisualsRequest>(ctx.Request.Body, webOptions);
+        if (body == null || body.Visuals == null || body.Visuals.Count == 0)
+            return Results.BadRequest("visuals is required");
+        var manifest = await svc.RefreshVisualsAsync(body.Visuals);
         return manifest is null ? Results.NotFound() : Results.Json(manifest, noCache);
     });
 
@@ -620,4 +641,9 @@ public class DrillRequest
     public string? Direction    { get; set; }  // "IN" or "UP"
     public string? ClickedValue { get; set; }
     public int     TargetDepth  { get; set; }
+}
+
+public class RefreshVisualsRequest
+{
+    public List<string>? Visuals { get; set; }
 }
