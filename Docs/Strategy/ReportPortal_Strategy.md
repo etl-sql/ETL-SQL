@@ -280,7 +280,7 @@ EXECUTE portal BEGIN
     CREATE USER 'john.doe'
         WITH (EMAIL = 'john@company.com', PASSWORD = ENC:..., ROLE = Viewer);
     ALTER USER 'john.doe' SET ROLE = Publisher;
-    ALTER USER 'john.doe' DISABLE;
+    ALTER USER 'john.doe' SET DISABLE;
     DROP USER 'john.doe' CASCADE;
 
     -- Groups
@@ -310,7 +310,7 @@ EXECUTE portal BEGIN
     CREATE REFRESH JOB FOR REPORT 'Monthly Sales'
         SCHEDULE '0 2 * * *'
         AT orch;
-    TRIGGER REFRESH FOR REPORT 'Monthly Sales';
+    REFRESH REPORT 'Monthly Sales';
     DROP REFRESH JOB FOR REPORT 'Monthly Sales';
 
     -- Snapshots
@@ -338,7 +338,7 @@ EXECUTE portal BEGIN
         AT corporate-smtp;
 
     ALTER SUBSCRIPTION 5 SET SCHEDULE = '0 9 * * MON';
-    ALTER SUBSCRIPTION 5 ENABLE;
+    ALTER SUBSCRIPTION 5 SET ENABLE;
     DROP SUBSCRIPTION 5;
 
     -- Session management

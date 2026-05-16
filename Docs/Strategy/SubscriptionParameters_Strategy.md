@@ -173,31 +173,26 @@ DECLARE @region VARCHAR(100) = 'All' INPUT;  -- defaults to 'All' if not supplie
 Full proposed syntax:
 
 ```sql
-CREATE SUBSCRIPTION <name>
+CREATE SUBSCRIPTION ['<name>']
 FOR REPORT '<script-path>'
 DELIVER TO '<email>' | GROUP '<group-name>'
 SCHEDULE '<cron-expression>' | ON REFRESH
-FORMAT PDF | CSV | BOTH | LINK
+FORMAT PDF | CSV | BOTH
 AT <smtp-alias>
 [ PARAMETERS (
-    @param1 = <value>,
-    @param2 = <value>,
+    @param1 = '<value>',
+    @param2 = '<value>',
     ...
 ) ];
 ```
 
-`<name>` is an optional human-readable label. If omitted, the subscription is anonymous and identified by its ID in `ALTER` / `DROP` statements.
+`'<name>'` is an optional human-readable label. If omitted, the subscription is anonymous and identified by its ID in `ALTER` / `DROP` statements.
 
-Parameter values follow the same quoting rules as `SET @var`:
-- Strings: single-quoted
-- Numbers: unquoted
-- RELDATE expressions: single-quoted strings (e.g. `'D-1'`, `'ME-1'`)
-- LIST values: single-quoted comma-separated string (e.g. `'North,South'`)
-- NULL: the literal `NULL`
+Parameter values are stored as strings and must be single-quoted. RELDATE expressions are stored as strings and resolved fresh at delivery time.
 
 ```sql
 -- Daily sales report: always yesterday's data
-CREATE SUBSCRIPTION DailySales
+CREATE SUBSCRIPTION 'DailySales'
 FOR REPORT '/Reports/Sales/Daily'
 DELIVER TO 'john@example.com'
 SCHEDULE '0 6 * * *'
@@ -206,11 +201,11 @@ AT corporate-smtp
 PARAMETERS (
     @start  = 'D-1',
     @end    = 'D',
-    @region = NULL
+    @region = 'All'
 );
 
 -- Monthly executive summary
-CREATE SUBSCRIPTION MonthlyExec
+CREATE SUBSCRIPTION 'MonthlyExec'
 FOR REPORT '/Reports/Executive/MonthlySummary'
 DELIVER TO GROUP 'Executives'
 SCHEDULE '0 7 1 * *'
@@ -222,7 +217,7 @@ PARAMETERS (
 );
 
 -- Ad-hoc fixed date range
-CREATE SUBSCRIPTION Q1Review
+CREATE SUBSCRIPTION 'Q1Review'
 FOR REPORT '/Reports/Finance/Quarterly'
 DELIVER TO 'cfo@example.com'
 SCHEDULE '0 8 * * 1'
@@ -239,25 +234,26 @@ PARAMETERS (
 ### ALTER SUBSCRIPTION
 
 ```sql
-ALTER SUBSCRIPTION <name-or-id>
-[ SET SCHEDULE '<cron-expression>' ]
-[ SET FORMAT PDF | CSV | BOTH | LINK ]
-[ SET ACTIVE | INACTIVE ]
-[ PARAMETERS (
-    @param1 = <value>,
+ALTER SUBSCRIPTION <id> SET
+    SCHEDULE = '<cron-expression>' |
+    FORMAT = PDF | CSV | BOTH |
+    SMTP = '<smtp-alias>' |
+    ENABLE |
+    DISABLE |
+    PARAMETERS (
+    @param1 = '<value>',
     ...
-) ];
+);
 ```
 
 `PARAMETERS(...)` in `ALTER` **replaces** the full parameter set for the subscription. To clear all parameters, use `PARAMETERS ()` (empty list). To leave parameters unchanged, omit the clause entirely.
 
 ```sql
 -- Change schedule only
-ALTER SUBSCRIPTION DailySales
-SET SCHEDULE '0 8 * * 1-5';
+ALTER SUBSCRIPTION 5 SET SCHEDULE = '0 8 * * 1-5';
 
 -- Update parameters only
-ALTER SUBSCRIPTION DailySales
+ALTER SUBSCRIPTION 5 SET
 PARAMETERS (
     @start  = 'W-1',
     @end    = 'W',
@@ -265,7 +261,7 @@ PARAMETERS (
 );
 
 -- Pause a subscription
-ALTER SUBSCRIPTION MonthlyExec SET INACTIVE;
+ALTER SUBSCRIPTION 6 SET DISABLE;
 ```
 
 ---
@@ -273,10 +269,10 @@ ALTER SUBSCRIPTION MonthlyExec SET INACTIVE;
 ### DROP SUBSCRIPTION
 
 ```sql
-DROP SUBSCRIPTION <name-or-id>;
+DROP SUBSCRIPTION <id>;
 ```
 
-(Syntax likely already exists; verify naming.)
+(Subscriptions are mutated by ID after creation.)
 
 ---
 
@@ -393,18 +389,18 @@ These are pure engine changes with no UI surface. They can be built and unit-tes
 ### Phase 2 — Subscription SQL Syntax
 
 **`ETL-SQL.Core`**
-- [ ] `ReportPortalAst.cs` (or wherever portal AST lives): Add `Name?` (string) and `Parameters: IReadOnlyList<SubscriptionParameter>` to `CreatePortalSubscriptionStatement`.
-- [ ] New record: `SubscriptionParameter(string Name, string Value)` — value is always stored as a string; typed parsing happens at execution time.
-- [ ] Add `AlterPortalSubscriptionStatement` record with: `NameOrId`, `Schedule?`, `Format?`, `IsActive?`, `Parameters?` (null = don't change; empty list = clear all).
-- [ ] `TokenType.cs`: Add `PARAMETERS` token if not present.
-- [ ] `ReportParser.cs` (or portal-specific parser partial): Parse optional `<name>` at start of `CREATE SUBSCRIPTION`.
-- [ ] `ReportParser.cs`: Parse `PARAMETERS(...)` clause — `@name = value` pairs separated by commas, terminated by `)`.
-- [ ] `ReportParser.cs`: Parse `ALTER SUBSCRIPTION` statement.
-- [ ] `Grammar.md`: Add CREATE SUBSCRIPTION and ALTER SUBSCRIPTION productions.
+- [x] `Ast.cs`: Add `Name?` (string) and `Parameters: IReadOnlyList<SubscriptionParameter>` to `CreatePortalSubscriptionStatement`.
+- [x] New record: `SubscriptionParameter(string Name, string Value)` — value is always stored as a string; typed parsing happens at execution time.
+- [x] Add `AlterPortalSubscriptionStatement` record with: subscription ID, `Schedule?`, `Format?`, `IsActive?`, `Parameters?` (null = don't change; empty list = clear all).
+- [x] `TokenType.cs`: Add portal/subscription tokens.
+- [x] `PortalParser.cs`: Parse optional string-literal name at start of `CREATE SUBSCRIPTION`.
+- [x] `PortalParser.cs`: Parse `PARAMETERS(...)` clause — `@name = 'value'` pairs separated by commas, terminated by `)`.
+- [x] `PortalParser.cs`: Parse `ALTER SUBSCRIPTION` statement.
+- [x] `Grammar.md`: Add CREATE SUBSCRIPTION and ALTER SUBSCRIPTION productions.
 
 **`ETL-SQL.Engine`**
-- [ ] `CreatePortalSubscriptionHandler.cs`: Persist `Name` and `ParametersJson` (serialize to JSON).
-- [ ] `AlterPortalSubscriptionHandler.cs` (new): Handle `ALTER SUBSCRIPTION` — update schedule, format, active state, parameters. Replace full parameter set when clause is present; leave unchanged when absent; clear when clause is empty.
+- [x] `CreatePortalSubscriptionHandler.cs`: Persist `Name` and parameters into the generated subscription job script.
+- [x] `AlterPortalSubscriptionHandler.cs`: Handle `ALTER SUBSCRIPTION` — update schedule, format, active state, parameters. Replace full parameter set when clause is present; leave unchanged when absent; clear when clause is empty.
 
 ---
 

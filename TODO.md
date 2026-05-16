@@ -104,12 +104,12 @@
   );
   ```
 - [x] Review report datasets and portal datasets together. Keep `CREATE DATASET &name AS (...)` for report-owned reusable data, but make the naming story clear for `&dataset`, `#temp`, `USE DATASET`, `REFRESH DATASET`, and portal-registered datasets.
-- [ ] Keep portal admin syntax as a separate command family:
+- [x] Keep portal admin syntax as a separate command family:
     - Prefer `WITH (...)` for metadata/config on portal objects.
     - Prefer command verbs for operations: `PUBLISH REPORT`, `REFRESH REPORT`, `REBUILD SNAPSHOT`, `DROP SNAPSHOT`.
     - Decide whether paths are always string literals and names are always identifiers or strings; avoid mixing forms without a rule.
     - Keep secrets in expression positions so `ENC:` and future secret providers work consistently.
-- [ ] Review subscription and refresh-job syntax for clarity. `CREATE REFRESH JOB FOR REPORT ... SCHEDULE ... AT ...` and `CREATE SUBSCRIPTION FOR REPORT ... DELIVER TO ...` are readable, but should be documented as portal commands rather than report-definition syntax.
+- [x] Review subscription and refresh-job syntax for clarity. `CREATE REFRESH JOB FOR REPORT ... SCHEDULE ... AT ...` and `CREATE SUBSCRIPTION FOR REPORT ... DELIVER TO ...` are readable, but should be documented as portal commands rather than report-definition syntax.
 
 ### Phase 4 — Portal scriptability and baseline UX gaps
 - [ ] Add Active Directory / LDAP / Windows-integrated identity support, or clearly define the first supported enterprise identity path.

@@ -2249,6 +2249,8 @@ CREATE OR ALTER NAVIGATION <name> AS TAB|BUTTON|LINK ( ... );
 
 Portal admin statements execute inside an `EXECUTE portal BEGIN...END` block. The `portal` alias must be a connection created with `ON REPORTPORTAL(...)`.
 
+Portal catalog names, user names, group names, recipients, report names, and paths are string literals. Local aliases such as `portal`, `orch`, and `smtp` are identifiers. Secret-bearing fields such as `PASSWORD` remain expression positions so `ENC:` values and variables are accepted.
+
 ```sql
 CREATE CONNECTION portal ON REPORTPORTAL(
     HOST = 'report-server.company.com',
@@ -2268,8 +2270,8 @@ EXECUTE portal BEGIN
     ALTER USER 'john.doe' SET EMAIL       = 'john.doe@newdomain.com';
     ALTER USER 'john.doe' SET ROLE        = Publisher;
     ALTER USER 'john.doe' SET PASSWORD    = ENC:...;
-    ALTER USER 'john.doe' ENABLE;
-    ALTER USER 'john.doe' DISABLE;
+    ALTER USER 'john.doe' SET ENABLE;
+    ALTER USER 'john.doe' SET DISABLE;
 
     DROP USER 'john.doe';
     DROP USER 'john.doe' CASCADE;   -- also removes subscriptions, sessions, group memberships
@@ -2345,6 +2347,7 @@ EXECUTE portal BEGIN
     -- =========================================================
     -- SNAPSHOTS
     -- =========================================================
+    REFRESH REPORT 'Monthly Sales';                    -- queue a report refresh
     DROP SNAPSHOT FOR REPORT 'Monthly Sales';        -- force rebuild on next view
     REBUILD SNAPSHOT FOR REPORT 'Monthly Sales';     -- rebuild now in background
 
@@ -2356,7 +2359,7 @@ EXECUTE portal BEGIN
     -- PARAMETERS values are stored as-is; RELDATE expressions are resolved
     -- fresh each time the subscription fires.
     -- =========================================================
-    CREATE SUBSCRIPTION DailySales
+    CREATE SUBSCRIPTION 'DailySales'
         FOR REPORT '/Finance/MonthlySales'
         DELIVER TO 'john.doe'
         SCHEDULE '0 8 * * MON'
@@ -2365,10 +2368,10 @@ EXECUTE portal BEGIN
         PARAMETERS (
             @start  = 'D-1',
             @end    = 'D',
-            @region = NULL
+            @region = 'All'
         );
 
-    CREATE SUBSCRIPTION MonthlyExec
+    CREATE SUBSCRIPTION 'MonthlyExec'
         FOR REPORT '/Finance/MonthlySales'
         DELIVER TO GROUP 'Finance'
         ON REFRESH                  -- fires whenever the dataset refreshes
@@ -2383,26 +2386,25 @@ EXECUTE portal BEGIN
     CREATE SUBSCRIPTION FOR REPORT '/Ops/StatusReport'
         DELIVER TO 'ops@example.com'
         SCHEDULE '0 9 * * *'
-        FORMAT LINK
+        FORMAT PDF
         AT smtp;
 
     -- ALTER: change schedule or format only (PARAMETERS unchanged when clause omitted)
-    ALTER SUBSCRIPTION DailySales SET SCHEDULE '0 9 * * MON-FRI';
-    ALTER SUBSCRIPTION DailySales SET FORMAT CSV;
-    ALTER SUBSCRIPTION DailySales SET ACTIVE;
-    ALTER SUBSCRIPTION DailySales SET INACTIVE;
+    ALTER SUBSCRIPTION 5 SET SCHEDULE = '0 9 * * MON-FRI';
+    ALTER SUBSCRIPTION 5 SET FORMAT = CSV;
+    ALTER SUBSCRIPTION 5 SET ENABLE;
+    ALTER SUBSCRIPTION 5 SET DISABLE;
 
     -- ALTER: replace full parameter set (empty list clears all parameters)
-    ALTER SUBSCRIPTION DailySales
+    ALTER SUBSCRIPTION 5 SET
         PARAMETERS (
             @start  = 'W-1',
             @end    = 'W',
             @region = 'North'
         );
 
-    ALTER SUBSCRIPTION DailySales PARAMETERS ();   -- clears all parameters
+    ALTER SUBSCRIPTION 5 SET PARAMETERS ();   -- clears all parameters
 
-    DROP SUBSCRIPTION DailySales;
     DROP SUBSCRIPTION 5;            -- by ID
 
     SHOW SUBSCRIPTIONS                                    [INTO #subs];

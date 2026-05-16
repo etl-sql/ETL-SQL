@@ -98,7 +98,12 @@ namespace ETL_SQL.Core.Parser
                     _parser.Current.Line, _parser.Current.Column);
             };
             _dispatchMap[TokenType.TOKENS]       = () => { var t = _parser.Previous; return PortalParser.ParseRevokeTokens(t); };
-            _dispatchMap[TokenType.REFRESH]      = () => { var t = _parser.Previous; return DataParser.ParseRefreshDataset(t); };
+            _dispatchMap[TokenType.REFRESH]      = () =>
+            {
+                var t = _parser.Previous;
+                if (_parser.Match(TokenType.REPORT)) return PortalParser.ParseRefreshReport(t);
+                return DataParser.ParseRefreshDataset(t);
+            };
         }
 
         public Statement ParseStatement()

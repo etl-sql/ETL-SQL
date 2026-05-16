@@ -1,20 +1,17 @@
 SUBSCRIPTION — Portal subscription management statements (requires a REPORTPORTAL connection).
 
-CREATE SUBSCRIPTION [<name>]
+CREATE SUBSCRIPTION ['<name>']
   FOR REPORT '<script-path>'
   DELIVER TO '<email>'
   SCHEDULE '<cron>'
-  FORMAT PDF|CSV|BOTH|LINK
+  FORMAT PDF|CSV|BOTH
   AT <smtp-alias>
   [ PARAMETERS (@param = 'value', ...) ];
 
-ALTER SUBSCRIPTION <name-or-id>
-  [ SET SCHEDULE '<cron>' ]
-  [ SET FORMAT PDF|CSV|BOTH|LINK ]
-  [ SET ACTIVE | INACTIVE ]
-  [ PARAMETERS (@param = 'value', ...) ];   -- replaces full set; PARAMETERS() clears all
+ALTER SUBSCRIPTION <id> SET
+  SCHEDULE = '<cron>' | FORMAT = PDF|CSV|BOTH | SMTP = '<smtp-alias>' | ENABLE | DISABLE | PARAMETERS (...);
 
-DROP SUBSCRIPTION <name-or-id>;
+DROP SUBSCRIPTION <id>;
 
 SHOW SUBSCRIPTIONS [FOR REPORT '<path>'] [INTO #temp];
 
@@ -24,7 +21,7 @@ RELDATE parameter values (resolved fresh on each delivery):
   'Y-1'   Jan 1 of last year    'N-2H'  2 hours ago
 
 Example:
-  CREATE SUBSCRIPTION DailySales
+  CREATE SUBSCRIPTION 'DailySales'
     FOR REPORT '/Reports/Sales/Daily'
     DELIVER TO 'team@example.com'
     SCHEDULE '0 7 * * MON-FRI'

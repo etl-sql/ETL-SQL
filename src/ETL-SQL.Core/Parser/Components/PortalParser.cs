@@ -17,7 +17,7 @@ namespace ETL_SQL.Core.Parser.Components
         // CREATE USER 'username' WITH (EMAIL=..., PASSWORD=..., ROLE=...[, FIRST_NAME=..., LAST_NAME=...])
         public Statement ParseCreateUser(Token start)
         {
-            string username = ConsumeString("Expected username");
+            string username = ConsumeStringLiteral("Expected username string literal");
             Consume(TokenType.WITH, "Expected WITH after username");
             Consume(TokenType.LPAREN, "Expected '('");
 
@@ -30,11 +30,11 @@ namespace ETL_SQL.Core.Parser.Components
                 Consume(TokenType.EQUALS, "Expected '='");
                 switch (key.ToUpperInvariant())
                 {
-                    case "EMAIL":      email     = ConsumeString("Expected email");   break;
+                    case "EMAIL":      email     = ConsumeStringLiteral("Expected email string literal");   break;
                     case "PASSWORD":   password  = ParseExpression();                  break;
                     case "ROLE":       role      = Advance().Value;                    break;
-                    case "FIRST_NAME": firstName = ConsumeString("Expected first name"); break;
-                    case "LAST_NAME":  lastName  = ConsumeString("Expected last name");  break;
+                    case "FIRST_NAME": firstName = ConsumeStringLiteral("Expected first name string literal"); break;
+                    case "LAST_NAME":  lastName  = ConsumeStringLiteral("Expected last name string literal");  break;
                     default: ParseExpression(); break; // skip unknown
                 }
             });
@@ -50,7 +50,7 @@ namespace ETL_SQL.Core.Parser.Components
         // ALTER USER 'username' SET ROLE=... | DISABLE | ENABLE | SET PASSWORD=...
         public Statement ParseAlterUser(Token start)
         {
-            string username = ConsumeString("Expected username");
+            string username = ConsumeStringLiteral("Expected username string literal");
             Consume(TokenType.SET, "Expected SET");
 
             string? newRole = null, newEmail = null;
@@ -68,7 +68,7 @@ namespace ETL_SQL.Core.Parser.Components
                 switch (key.ToUpperInvariant())
                 {
                     case "ROLE":     newRole     = Advance().Value;           break;
-                    case "EMAIL":    newEmail    = ConsumeString("Expected email"); break;
+                    case "EMAIL":    newEmail    = ConsumeStringLiteral("Expected email string literal"); break;
                     case "PASSWORD": newPassword = ParseExpression();          break;
                     default: ParseExpression(); break;
                 }
@@ -81,7 +81,7 @@ namespace ETL_SQL.Core.Parser.Components
         // DROP USER 'username' [CASCADE]
         public Statement ParseDropUser(Token start)
         {
-            string username = ConsumeString("Expected username");
+            string username = ConsumeStringLiteral("Expected username string literal");
             bool cascade = MatchIdentifier("CASCADE");
             return new DropPortalUserStatement(username, cascade)
             { Line = start.Line, Column = start.Column };
@@ -92,7 +92,7 @@ namespace ETL_SQL.Core.Parser.Components
         // CREATE GROUP 'name' [WITH (DESCRIPTION=...)]
         public Statement ParseCreateGroup(Token start)
         {
-            string name = ConsumeString("Expected group name");
+            string name = ConsumeStringLiteral("Expected group name string literal");
             string? description = null;
             if (Match(TokenType.WITH))
             {
@@ -102,7 +102,7 @@ namespace ETL_SQL.Core.Parser.Components
                     string key = Advance().Value;
                     Consume(TokenType.EQUALS, "Expected '='");
                     if (key.Equals("DESCRIPTION", StringComparison.OrdinalIgnoreCase))
-                        description = ConsumeString("Expected description");
+                        description = ConsumeStringLiteral("Expected description string literal");
                     else
                         ParseExpression();
                 });
@@ -114,7 +114,7 @@ namespace ETL_SQL.Core.Parser.Components
         // DROP GROUP 'name' [CASCADE]
         public Statement ParseDropGroup(Token start)
         {
-            string name = ConsumeString("Expected group name");
+            string name = ConsumeStringLiteral("Expected group name string literal");
             bool cascade = MatchIdentifier("CASCADE");
             return new DropPortalGroupStatement(name, cascade)
             { Line = start.Line, Column = start.Column };
@@ -124,10 +124,10 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParseAddUserToGroup(Token start)
         {
             // Arrived after ADD USER
-            string username = ConsumeString("Expected username");
+            string username = ConsumeStringLiteral("Expected username string literal");
             Consume(TokenType.TO, "Expected TO");
             Consume(TokenType.GROUP, "Expected GROUP");
-            string group = ConsumeString("Expected group name");
+            string group = ConsumeStringLiteral("Expected group name string literal");
             return new AddUserToPortalGroupStatement(username, group)
             { Line = start.Line, Column = start.Column };
         }
@@ -137,7 +137,7 @@ namespace ETL_SQL.Core.Parser.Components
         // CREATE FOLDER '/path'
         public Statement ParseCreateFolder(Token start)
         {
-            string path = ConsumeString("Expected folder path");
+            string path = ConsumeStringLiteral("Expected folder path string literal");
             return new CreatePortalFolderStatement(path)
             { Line = start.Line, Column = start.Column };
         }
@@ -145,7 +145,7 @@ namespace ETL_SQL.Core.Parser.Components
         // DROP FOLDER '/path' [CASCADE]
         public Statement ParseDropFolder(Token start)
         {
-            string path = ConsumeString("Expected folder path");
+            string path = ConsumeStringLiteral("Expected folder path string literal");
             bool cascade = MatchIdentifier("CASCADE");
             return new DropPortalFolderStatement(path, cascade)
             { Line = start.Line, Column = start.Column };
@@ -159,10 +159,10 @@ namespace ETL_SQL.Core.Parser.Components
             var perm = ParseFolderPermission();
             Consume(TokenType.ON, "Expected ON");
             Consume(TokenType.FOLDER, "Expected FOLDER");
-            string path = ConsumeString("Expected folder path");
+            string path = ConsumeStringLiteral("Expected folder path string literal");
             Consume(TokenType.TO, "Expected TO");
             Consume(TokenType.GROUP, "Expected GROUP");
-            string group = ConsumeString("Expected group name");
+            string group = ConsumeStringLiteral("Expected group name string literal");
             return new GrantPortalPermissionStatement(path, group, perm)
             { Line = start.Line, Column = start.Column };
         }
@@ -173,10 +173,10 @@ namespace ETL_SQL.Core.Parser.Components
             var perm = ParseFolderPermission();
             Consume(TokenType.ON, "Expected ON");
             Consume(TokenType.FOLDER, "Expected FOLDER");
-            string path = ConsumeString("Expected folder path");
+            string path = ConsumeStringLiteral("Expected folder path string literal");
             Consume(TokenType.FROM, "Expected FROM");
             Consume(TokenType.GROUP, "Expected GROUP");
-            string group = ConsumeString("Expected group name");
+            string group = ConsumeStringLiteral("Expected group name string literal");
             return new RevokePortalPermissionStatement(path, group, perm)
             { Line = start.Line, Column = start.Column };
         }
@@ -187,12 +187,12 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParsePublishReport(Token start)
         {
             Consume(TokenType.REPORT, "Expected REPORT");
-            string name = ConsumeString("Expected report name");
+            string name = ConsumeStringLiteral("Expected report name string literal");
             ConsumeIdentifierValue("FROM", "Expected FROM");
-            string scriptPath = ConsumeString("Expected script path");
+            string scriptPath = ConsumeStringLiteral("Expected script path string literal");
             Consume(TokenType.IN, "Expected IN");
             Consume(TokenType.FOLDER, "Expected FOLDER");
-            string folder = ConsumeString("Expected folder path");
+            string folder = ConsumeStringLiteral("Expected folder path string literal");
             string? description = null;
             if (Match(TokenType.WITH))
             {
@@ -202,7 +202,7 @@ namespace ETL_SQL.Core.Parser.Components
                     string key = Advance().Value;
                     Consume(TokenType.EQUALS, "Expected '='");
                     if (key.Equals("DESCRIPTION", StringComparison.OrdinalIgnoreCase))
-                        description = ConsumeString("Expected description");
+                        description = ConsumeStringLiteral("Expected description string literal");
                     else
                         ParseExpression();
                 });
@@ -215,7 +215,7 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParseAlterReport(Token start)
         {
             Consume(TokenType.REPORT, "Expected REPORT");
-            string name = ConsumeString("Expected report name");
+            string name = ConsumeStringLiteral("Expected report name string literal");
             Consume(TokenType.SET, "Expected SET");
             string? newFolder = null, newDescription = null;
             do
@@ -224,8 +224,8 @@ namespace ETL_SQL.Core.Parser.Components
                 Consume(TokenType.EQUALS, "Expected '='");
                 switch (key.ToUpperInvariant())
                 {
-                    case "FOLDER":      newFolder      = ConsumeString("Expected folder path"); break;
-                    case "DESCRIPTION": newDescription = ConsumeString("Expected description"); break;
+                    case "FOLDER":      newFolder      = ConsumeStringLiteral("Expected folder path string literal"); break;
+                    case "DESCRIPTION": newDescription = ConsumeStringLiteral("Expected description string literal"); break;
                     default: ParseExpression(); break;
                 }
             } while (Match(TokenType.COMMA));
@@ -237,7 +237,7 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParseDropReport(Token start)
         {
             Consume(TokenType.REPORT, "Expected REPORT");
-            string name = ConsumeString("Expected report name");
+            string name = ConsumeStringLiteral("Expected report name string literal");
             bool cascade = MatchIdentifier("CASCADE");
             return new DropPortalReportStatement(name, cascade)
             { Line = start.Line, Column = start.Column };
@@ -252,23 +252,21 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.JOB, "Expected JOB");
             Consume(TokenType.FOR, "Expected FOR");
             Consume(TokenType.REPORT, "Expected REPORT");
-            string report = ConsumeString("Expected report name");
+            string report = ConsumeStringLiteral("Expected report name string literal");
             ConsumeIdentifierValue("SCHEDULE", "Expected SCHEDULE");
-            string schedule = ConsumeString("Expected cron expression");
+            string schedule = ConsumeStringLiteral("Expected cron expression string literal");
             Consume(TokenType.AT, "Expected AT");
             string alias = Advance().Value;
             return new CreatePortalRefreshJobStatement(report, schedule, alias)
             { Line = start.Line, Column = start.Column };
         }
 
-        // TRIGGER REFRESH FOR REPORT 'name'
-        public Statement ParseTriggerRefresh(Token start)
+        // REFRESH REPORT 'name'
+        public Statement ParseRefreshReport(Token start)
         {
-            Consume(TokenType.REFRESH, "Expected REFRESH");
-            Consume(TokenType.FOR, "Expected FOR");
-            Consume(TokenType.REPORT, "Expected REPORT");
-            string report = ConsumeString("Expected report name");
-            return new TriggerPortalRefreshStatement(report)
+            string report = ConsumeStringLiteral("Expected report name string literal");
+            Match(TokenType.SEMICOLON);
+            return new RefreshPortalReportStatement(report)
             { Line = start.Line, Column = start.Column };
         }
 
@@ -279,7 +277,7 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.JOB, "Expected JOB");
             Consume(TokenType.FOR, "Expected FOR");
             Consume(TokenType.REPORT, "Expected REPORT");
-            string report = ConsumeString("Expected report name");
+            string report = ConsumeStringLiteral("Expected report name string literal");
             return new DropPortalRefreshJobStatement(report)
             { Line = start.Line, Column = start.Column };
         }
@@ -292,7 +290,7 @@ namespace ETL_SQL.Core.Parser.Components
             ConsumeIdentifierValue("SNAPSHOT", "Expected SNAPSHOT");
             Consume(TokenType.FOR, "Expected FOR");
             Consume(TokenType.REPORT, "Expected REPORT");
-            string report = ConsumeString("Expected report name");
+            string report = ConsumeStringLiteral("Expected report name string literal");
             return new DropPortalSnapshotStatement(report)
             { Line = start.Line, Column = start.Column };
         }
@@ -303,7 +301,7 @@ namespace ETL_SQL.Core.Parser.Components
             ConsumeIdentifierValue("SNAPSHOT", "Expected SNAPSHOT");
             Consume(TokenType.FOR, "Expected FOR");
             Consume(TokenType.REPORT, "Expected REPORT");
-            string report = ConsumeString("Expected report name");
+            string report = ConsumeStringLiteral("Expected report name string literal");
             return new RebuildPortalSnapshotStatement(report)
             { Line = start.Line, Column = start.Column };
         }
@@ -322,17 +320,17 @@ namespace ETL_SQL.Core.Parser.Components
 
             Consume(TokenType.FOR, "Expected FOR");
             Consume(TokenType.REPORT, "Expected REPORT");
-            string reportPath = ConsumeString("Expected report path");
+            string reportPath = ConsumeStringLiteral("Expected report path string literal");
             ConsumeIdentifierValue("DELIVER", "Expected DELIVER");
             Consume(TokenType.TO, "Expected TO");
 
             bool isGroup = Match(TokenType.GROUP);
-            string recipient = ConsumeString("Expected recipient");
+            string recipient = ConsumeStringLiteral("Expected recipient string literal");
 
             string? schedule = null;
             bool onRefresh = false;
             if (Match(TokenType.SCHEDULE))
-                schedule = ConsumeString("Expected cron expression");
+                schedule = ConsumeStringLiteral("Expected cron expression string literal");
             else if (Match(TokenType.ON))
             {
                 Consume(TokenType.REFRESH, "Expected REFRESH");
@@ -376,11 +374,11 @@ namespace ETL_SQL.Core.Parser.Components
                 string key = Advance().Value;
                 Consume(TokenType.EQUALS, "Expected '='");
                 if (key.Equals("SCHEDULE", StringComparison.OrdinalIgnoreCase))
-                    newSchedule = ConsumeString("Expected cron expression");
+                    newSchedule = ConsumeStringLiteral("Expected cron expression string literal");
                 else if (key.Equals("FORMAT", StringComparison.OrdinalIgnoreCase))
                     newFormat = ParseSubscriptionFormat();
                 else if (key.Equals("SMTP", StringComparison.OrdinalIgnoreCase))
-                    newSmtpAlias = ConsumeString("Expected SMTP alias");
+                    newSmtpAlias = ConsumeStringLiteral("Expected SMTP alias string literal");
                 else
                     ParseExpression();
             } while (Match(TokenType.COMMA));
@@ -404,7 +402,7 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParseDisconnectUser(Token start)
         {
             Consume(TokenType.USER, "Expected USER");
-            string username = ConsumeString("Expected username");
+            string username = ConsumeStringLiteral("Expected username string literal");
             return new DisconnectPortalUserStatement(username)
             { Line = start.Line, Column = start.Column };
         }
@@ -415,7 +413,7 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.TOKENS, "Expected TOKENS");
             Consume(TokenType.FOR, "Expected FOR");
             Consume(TokenType.USER, "Expected USER");
-            string username = ConsumeString("Expected username");
+            string username = ConsumeStringLiteral("Expected username string literal");
             return new RevokePortalTokensStatement(username)
             { Line = start.Line, Column = start.Column };
         }
@@ -448,7 +446,7 @@ namespace ETL_SQL.Core.Parser.Components
                 if (Match(TokenType.IN))
                 {
                     Consume(TokenType.FOLDER, "Expected FOLDER");
-                    folder = ConsumeString("Expected folder path");
+                    folder = ConsumeStringLiteral("Expected folder path string literal");
                 }
                 return new ShowPortalReportsStatement(folder)
                 { Line = start.Line, Column = start.Column };
@@ -466,11 +464,9 @@ namespace ETL_SQL.Core.Parser.Components
 
         // ── Helpers ───────────────────────────────────────────────────────────
 
-        private string ConsumeString(string message)
+        private string ConsumeStringLiteral(string message)
         {
             if (_parser.Current.Type == TokenType.STRING_LITERAL)
-                return _parser.Advance().Value;
-            if (_parser.IsIdentifier(_parser.Current))
                 return _parser.Advance().Value;
             throw new SyntaxException(message, _parser.Current.Line, _parser.Current.Column);
         }
@@ -559,7 +555,7 @@ namespace ETL_SQL.Core.Parser.Components
                         _parser.Current.Line, _parser.Current.Column);
                 string paramName = Advance().Value;
                 Consume(TokenType.EQUALS, $"Expected '=' after {paramName}");
-                string paramValue = ConsumeString($"Expected value for {paramName}");
+                string paramValue = ConsumeStringLiteral($"Expected string literal value for {paramName}");
                 result.Add(new SubscriptionParameter(paramName, paramValue));
                 if (!Match(TokenType.COMMA)) break;
             }

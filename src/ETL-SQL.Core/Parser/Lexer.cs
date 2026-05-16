@@ -194,6 +194,20 @@ namespace ETL_SQL.Core.Parser
             dict["APPLY_PARAMETERS"] = TokenType.APPLY_PARAMETERS;
             dict["NAVIGATE_PAGE"] = TokenType.NAVIGATE_PAGE;
             dict["REFRESH_VISUALS"] = TokenType.REFRESH_VISUALS;
+
+            // ── Report Portal admin command keywords ──────────────────────
+            dict["USER"]         = TokenType.USER;
+            dict["FOLDER"]       = TokenType.FOLDER;
+            dict["GRANT"]        = TokenType.GRANT;
+            dict["REVOKE"]       = TokenType.REVOKE;
+            dict["PUBLISH"]      = TokenType.PUBLISH;
+            dict["SUBSCRIPTION"] = TokenType.SUBSCRIPTION;
+            dict["DISCONNECT"]   = TokenType.DISCONNECT;
+            dict["TOKENS"]       = TokenType.TOKENS;
+            dict["RESTART"]      = TokenType.RESTART;
+            dict["SHUTDOWN"]     = TokenType.SHUTDOWN;
+            dict["PORTAL"]       = TokenType.PORTAL;
+            dict["REPORTPORTAL"] = TokenType.REPORTPORTAL;
             
 
             return dict;

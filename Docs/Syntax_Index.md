@@ -300,7 +300,7 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `ALTER REPORT` | Portal | Modifies report metadata |
 | `DROP REPORT` | Portal | Deletes a report |
 | `CREATE REFRESH JOB`| Portal | Schedules automated snapshot refresh |
-| `TRIGGER REFRESH` | Portal | Manually starts a refresh cycle |
+| `REFRESH REPORT` | Portal | Manually starts a report refresh cycle |
 | `DROP REFRESH JOB` | Portal | Removes a refresh schedule |
 | `REBUILD SNAPSHOT` | Portal | Forces a data refresh |
 | `DROP SNAPSHOT` | Portal | Deletes existing snapshot data |

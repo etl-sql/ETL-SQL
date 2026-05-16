@@ -2095,7 +2095,7 @@ namespace ETL_SQL.Core
     public record CreatePortalRefreshJobStatement(
         string ReportName, string Schedule, string OrchestratorAlias) : Statement;
 
-    public record TriggerPortalRefreshStatement(string ReportName) : Statement;
+    public record RefreshPortalReportStatement(string ReportName) : Statement;
 
     public record DropPortalRefreshJobStatement(string ReportName) : Statement;
 

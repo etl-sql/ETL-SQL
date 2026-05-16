@@ -320,28 +320,28 @@ Administrators can create and modify subscriptions using ETL-SQL script syntax. 
 #### CREATE SUBSCRIPTION
 
 ```sql
-CREATE SUBSCRIPTION <name>
+CREATE SUBSCRIPTION ['<name>']
 FOR REPORT '<script-path>'
 DELIVER TO '<email>' | GROUP '<group-name>'
 SCHEDULE '<cron-expression>'
-FORMAT PDF | CSV | BOTH | LINK
+FORMAT PDF | CSV | BOTH
 AT <smtp-alias>
 [ PARAMETERS (
-    @param1 = <value>,
-    @param2 = <value>,
+    @param1 = '<value>',
+    @param2 = '<value>',
     ...
 ) ];
 ```
 
-The `<name>` is a human-readable label shown in subscription lists. It is optional — if omitted the subscription is identified by its generated ID.
+The optional `'<name>'` is a human-readable label shown in subscription lists. It is optional — if omitted the subscription is identified by its generated ID.
 
-Parameter values use standard ETL-SQL quoting: strings in single quotes, numbers unquoted, `NULL` for no value.
+Parameter values are stored as strings and must be single-quoted. Use the report script's defaults when you want an unset parameter.
 
 **Examples:**
 
 ```sql
 -- Daily sales report: always yesterday's data
-CREATE SUBSCRIPTION DailySales
+CREATE SUBSCRIPTION 'DailySales'
 FOR REPORT '/Reports/Sales/Daily'
 DELIVER TO 'john@example.com'
 SCHEDULE '0 6 * * *'
@@ -350,11 +350,11 @@ AT corporate-smtp
 PARAMETERS (
     @start  = 'D-1',
     @end    = 'D',
-    @region = NULL
+    @region = 'All'
 );
 
 -- Monthly executive summary delivered to a group
-CREATE SUBSCRIPTION MonthlyExec
+CREATE SUBSCRIPTION 'MonthlyExec'
 FOR REPORT '/Reports/Executive/MonthlySummary'
 DELIVER TO GROUP 'Executives'
 SCHEDULE '0 7 1 * *'
@@ -366,7 +366,7 @@ PARAMETERS (
 );
 
 -- Fixed date range for a one-time review
-CREATE SUBSCRIPTION Q1Review
+CREATE SUBSCRIPTION 'Q1Review'
 FOR REPORT '/Reports/Finance/Quarterly'
 DELIVER TO 'cfo@example.com'
 SCHEDULE '0 8 * * 1'
@@ -414,25 +414,26 @@ PARAMETERS (
 Modify an existing subscription without recreating it:
 
 ```sql
-ALTER SUBSCRIPTION <name-or-id>
-[ SET SCHEDULE '<cron-expression>' ]
-[ SET FORMAT PDF | CSV | BOTH | LINK ]
-[ SET ACTIVE | INACTIVE ]
-[ PARAMETERS (
-    @param1 = <value>,
-    ...
-) ];
+ALTER SUBSCRIPTION <id> SET
+    SCHEDULE = '<cron-expression>' |
+    FORMAT = PDF | CSV | BOTH |
+    SMTP = '<smtp-alias>' |
+    ENABLE |
+    DISABLE |
+    PARAMETERS (
+        @param1 = '<value>',
+        ...
+    );
 ```
 
 The `PARAMETERS(...)` clause **replaces the full parameter set** for the subscription. To clear all parameters use `PARAMETERS ()` (empty). To leave parameters unchanged, omit the clause.
 
 ```sql
 -- Change schedule only
-ALTER SUBSCRIPTION DailySales
-SET SCHEDULE '0 8 * * 1-5';
+ALTER SUBSCRIPTION 5 SET SCHEDULE = '0 8 * * 1-5';
 
 -- Update parameters only
-ALTER SUBSCRIPTION DailySales
+ALTER SUBSCRIPTION 5 SET
 PARAMETERS (
     @start  = 'W-1',
     @end    = 'W',
@@ -440,13 +441,13 @@ PARAMETERS (
 );
 
 -- Pause a subscription
-ALTER SUBSCRIPTION MonthlyExec SET INACTIVE;
+ALTER SUBSCRIPTION 6 SET DISABLE;
 ```
 
 #### DROP SUBSCRIPTION
 
 ```sql
-DROP SUBSCRIPTION <name-or-id>;
+DROP SUBSCRIPTION <id>;
 ```
 
 ---
