@@ -2354,6 +2354,23 @@ EXECUTE portal BEGIN
     SHOW SNAPSHOTS                       [INTO #snaps];
 
     -- =========================================================
+    -- DATASET REGISTRY
+    -- Portal dataset commands operate on catalog names and folders.
+    -- Report-local datasets continue to use &dataset names.
+    -- =========================================================
+    REFRESH DATASET 'Sales Summary' IN FOLDER '/Finance';
+
+    ALTER DATASET 'Sales Summary' IN FOLDER '/Finance'
+        SET ACCESS = PUBLIC, TTL = '2h';
+
+    GRANT VIEWER ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'Finance';
+    GRANT EDITOR ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'FinanceAnalysts';
+    GRANT OWNER  ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'FinanceAdmins';
+    REVOKE EDITOR ON DATASET 'Sales Summary' IN FOLDER '/Finance' FROM GROUP 'FinanceAnalysts';
+
+    DROP DATASET 'Sales Summary' IN FOLDER '/Finance';
+
+    -- =========================================================
     -- SUBSCRIPTIONS
     -- Group membership is evaluated at delivery time, not creation time.
     -- PARAMETERS values are stored as-is; RELDATE expressions are resolved

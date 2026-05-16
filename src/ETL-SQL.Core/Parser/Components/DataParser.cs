@@ -158,7 +158,12 @@ namespace ETL_SQL.Core.Parser.Components
             if (Match(TokenType.CONTAINER))  return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Container);
             if (Match(TokenType.STYLE))      return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Style);
             if (Match(TokenType.NAVIGATION)) return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Navigation);
-            if (Match(TokenType.DATASET))    return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Dataset);
+            if (Match(TokenType.DATASET))
+            {
+                if (_parser.Current.Type == TokenType.STRING_LITERAL)
+                    return _parent.PortalParser.ParseAlterDataset(startToken);
+                return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Dataset);
+            }
             if (Match(TokenType.TEMPLATE))   return _parent.ReportParser.ParseAlterReportObject(ReportObjectType.Template);
 
             // Portal admin
@@ -265,6 +270,8 @@ namespace ETL_SQL.Core.Parser.Components
             }
             else if (Match(TokenType.DATASET))
             {
+                if (_parser.Current.Type == TokenType.STRING_LITERAL)
+                    return _parent.PortalParser.ParseDropDataset(startToken);
                 if (Match(TokenType.IF)) { Consume(TokenType.EXISTS, "Expected EXISTS"); ifExists = true; }
                 var name = ConsumeIdentifier("Expected dataset name").Value;
                 if (_parser.Current.Type == TokenType.SEMICOLON) Advance();

@@ -154,30 +154,116 @@ namespace ETL_SQL.Core.Parser.Components
         // ── Permissions ───────────────────────────────────────────────────────
 
         // GRANT READ|EXECUTE|MANAGE ON FOLDER '/path' TO GROUP 'name'
+        // GRANT VIEWER|EDITOR|OWNER ON DATASET 'name' IN FOLDER '/path' TO GROUP 'name'
         public Statement ParseGrant(Token start)
         {
-            var perm = ParseFolderPermission();
+            var permissionToken = _parser.Advance();
             Consume(TokenType.ON, "Expected ON");
-            Consume(TokenType.FOLDER, "Expected FOLDER");
-            string path = ConsumeStringLiteral("Expected folder path string literal");
-            Consume(TokenType.TO, "Expected TO");
-            Consume(TokenType.GROUP, "Expected GROUP");
-            string group = ConsumeStringLiteral("Expected group name string literal");
-            return new GrantPortalPermissionStatement(path, group, perm)
-            { Line = start.Line, Column = start.Column };
+
+            if (Match(TokenType.FOLDER))
+            {
+                var perm = ParseFolderPermission(permissionToken);
+                string path = ConsumeStringLiteral("Expected folder path string literal");
+                Consume(TokenType.TO, "Expected TO");
+                Consume(TokenType.GROUP, "Expected GROUP");
+                string group = ConsumeStringLiteral("Expected group name string literal");
+                return new GrantPortalPermissionStatement(path, group, perm)
+                { Line = start.Line, Column = start.Column };
+            }
+
+            if (Match(TokenType.DATASET))
+            {
+                var perm = ParseDatasetPermission(permissionToken);
+                var dataset = ParsePortalDatasetReference();
+                Consume(TokenType.TO, "Expected TO");
+                Consume(TokenType.GROUP, "Expected GROUP");
+                string group = ConsumeStringLiteral("Expected group name string literal");
+                return new GrantPortalDatasetPermissionStatement(dataset.Name, dataset.FolderPath, group, perm)
+                { Line = start.Line, Column = start.Column };
+            }
+
+            throw new SyntaxException("Expected FOLDER or DATASET after ON", _parser.Current.Line, _parser.Current.Column);
         }
 
         // REVOKE READ|EXECUTE|MANAGE ON FOLDER '/path' FROM GROUP 'name'
+        // REVOKE VIEWER|EDITOR|OWNER ON DATASET 'name' IN FOLDER '/path' FROM GROUP 'name'
         public Statement ParseRevoke(Token start)
         {
-            var perm = ParseFolderPermission();
+            var permissionToken = _parser.Advance();
             Consume(TokenType.ON, "Expected ON");
-            Consume(TokenType.FOLDER, "Expected FOLDER");
-            string path = ConsumeStringLiteral("Expected folder path string literal");
-            Consume(TokenType.FROM, "Expected FROM");
-            Consume(TokenType.GROUP, "Expected GROUP");
-            string group = ConsumeStringLiteral("Expected group name string literal");
-            return new RevokePortalPermissionStatement(path, group, perm)
+
+            if (Match(TokenType.FOLDER))
+            {
+                var perm = ParseFolderPermission(permissionToken);
+                string path = ConsumeStringLiteral("Expected folder path string literal");
+                Consume(TokenType.FROM, "Expected FROM");
+                Consume(TokenType.GROUP, "Expected GROUP");
+                string group = ConsumeStringLiteral("Expected group name string literal");
+                return new RevokePortalPermissionStatement(path, group, perm)
+                { Line = start.Line, Column = start.Column };
+            }
+
+            if (Match(TokenType.DATASET))
+            {
+                var perm = ParseDatasetPermission(permissionToken);
+                var dataset = ParsePortalDatasetReference();
+                Consume(TokenType.FROM, "Expected FROM");
+                Consume(TokenType.GROUP, "Expected GROUP");
+                string group = ConsumeStringLiteral("Expected group name string literal");
+                return new RevokePortalDatasetPermissionStatement(dataset.Name, dataset.FolderPath, group, perm)
+                { Line = start.Line, Column = start.Column };
+            }
+
+            throw new SyntaxException("Expected FOLDER or DATASET after ON", _parser.Current.Line, _parser.Current.Column);
+        }
+
+        // ALTER DATASET 'name' IN FOLDER '/path' SET ACCESS = PUBLIC|PRIVATE, TTL = '2h'
+        public Statement ParseAlterDataset(Token start)
+        {
+            var dataset = ParsePortalDatasetReference();
+            Consume(TokenType.SET, "Expected SET");
+
+            string? accessLevel = null;
+            string? ttl = null;
+            do
+            {
+                string key = Advance().Value;
+                Consume(TokenType.EQUALS, "Expected '='");
+                switch (key.ToUpperInvariant())
+                {
+                    case "ACCESS":
+                    case "ACCESS_LEVEL":
+                        accessLevel = ParsePortalDatasetAccessLevel();
+                        break;
+                    case "TTL":
+                        ttl = ConsumeStringLiteral("Expected TTL string literal");
+                        break;
+                    default:
+                        ParseExpression();
+                        break;
+                }
+            } while (Match(TokenType.COMMA));
+
+            Match(TokenType.SEMICOLON);
+            return new AlterPortalDatasetStatement(dataset.Name, dataset.FolderPath, accessLevel, ttl)
+            { Line = start.Line, Column = start.Column };
+        }
+
+        // REFRESH DATASET 'name' IN FOLDER '/path'
+        public Statement ParseRefreshDataset(Token start)
+        {
+            var dataset = ParsePortalDatasetReference();
+            Match(TokenType.SEMICOLON);
+            return new RefreshPortalDatasetStatement(dataset.Name, dataset.FolderPath)
+            { Line = start.Line, Column = start.Column };
+        }
+
+        // DROP DATASET 'name' IN FOLDER '/path'
+        public Statement ParseDropDataset(Token start)
+        {
+            var dataset = ParsePortalDatasetReference();
+            Match(TokenType.SEMICOLON);
+            return new DropPortalDatasetStatement(dataset.Name, dataset.FolderPath)
             { Line = start.Line, Column = start.Column };
         }
 
@@ -495,9 +581,17 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.RPAREN, "Expected ')'");
         }
 
-        private PortalFolderPermission ParseFolderPermission()
+        private (string Name, string FolderPath) ParsePortalDatasetReference()
         {
-            var tok = _parser.Advance();
+            string name = ConsumeStringLiteral("Expected dataset name string literal");
+            Consume(TokenType.IN, "Expected IN");
+            Consume(TokenType.FOLDER, "Expected FOLDER");
+            string folder = ConsumeStringLiteral("Expected folder path string literal");
+            return (name, folder);
+        }
+
+        private PortalFolderPermission ParseFolderPermission(Token tok)
+        {
             return tok.Value.ToUpperInvariant() switch
             {
                 "READ"    => PortalFolderPermission.Read,
@@ -505,6 +599,32 @@ namespace ETL_SQL.Core.Parser.Components
                 "MANAGE"  => PortalFolderPermission.Manage,
                 _ => throw new SyntaxException(
                     $"Expected READ, EXECUTE, or MANAGE, got '{tok.Value}'",
+                    tok.Line, tok.Column)
+            };
+        }
+
+        private PortalDatasetPermission ParseDatasetPermission(Token tok)
+        {
+            return tok.Value.ToUpperInvariant() switch
+            {
+                "VIEWER" => PortalDatasetPermission.Viewer,
+                "EDITOR" => PortalDatasetPermission.Editor,
+                "OWNER"  => PortalDatasetPermission.Owner,
+                _ => throw new SyntaxException(
+                    $"Expected VIEWER, EDITOR, or OWNER, got '{tok.Value}'",
+                    tok.Line, tok.Column)
+            };
+        }
+
+        private string ParsePortalDatasetAccessLevel()
+        {
+            var tok = _parser.Advance();
+            return tok.Value.ToUpperInvariant() switch
+            {
+                "PUBLIC"  => "Public",
+                "PRIVATE" => "Private",
+                _ => throw new SyntaxException(
+                    $"Expected PUBLIC or PRIVATE, got '{tok.Value}'",
                     tok.Line, tok.Column)
             };
         }

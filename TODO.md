@@ -114,6 +114,7 @@
 ### Phase 4 — Portal scriptability and baseline UX gaps
 - [ ] Add Active Directory / LDAP / Windows-integrated identity support, or clearly define the first supported enterprise identity path.
 - [ ] Treat every portal capability as script-first. If it can be done in the UI, it must have a SQL-like administrative syntax, and if the engine already has a primitive, prefer exposing that primitive coherently instead of inventing a second model.
+    - [x] Add script syntax for portal dataset registry refresh, metadata updates, deletion, and dataset ACL grants/revokes.
 - [ ] Polish and surface capabilities that already exist so they feel complete in the portal UI, docs, and scripting surface:
     - Group-based permissions and folder ACLs.
     - Publishing and republishing reports.

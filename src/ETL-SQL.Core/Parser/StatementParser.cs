@@ -102,6 +102,11 @@ namespace ETL_SQL.Core.Parser
             {
                 var t = _parser.Previous;
                 if (_parser.Match(TokenType.REPORT)) return PortalParser.ParseRefreshReport(t);
+                if (_parser.Current.Type == TokenType.DATASET && _parser.Peek.Type == TokenType.STRING_LITERAL)
+                {
+                    _parser.Advance();
+                    return PortalParser.ParseRefreshDataset(t);
+                }
                 return DataParser.ParseRefreshDataset(t);
             };
         }

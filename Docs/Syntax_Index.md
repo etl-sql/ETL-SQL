@@ -294,13 +294,16 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `ADD USER ... TO GROUP` | Portal | Manages group membership |
 | `CREATE FOLDER` | Portal | Adds a navigation folder |
 | `DROP FOLDER` | Portal | Deletes a navigation folder |
-| `GRANT` | Portal | Assigns folder permissions |
-| `REVOKE` | Portal | Removes folder permissions |
+| `GRANT` | Portal | Assigns folder or dataset permissions |
+| `REVOKE` | Portal | Removes folder or dataset permissions |
 | `PUBLISH REPORT` | Portal | Deploys a report script |
 | `ALTER REPORT` | Portal | Modifies report metadata |
 | `DROP REPORT` | Portal | Deletes a report |
 | `CREATE REFRESH JOB`| Portal | Schedules automated snapshot refresh |
 | `REFRESH REPORT` | Portal | Manually starts a report refresh cycle |
+| `REFRESH DATASET` | Portal | Marks a portal dataset stale and queues refresh when possible |
+| `ALTER DATASET` | Portal | Updates portal dataset access/TTL metadata |
+| `DROP DATASET` | Portal | Removes a portal dataset registry entry |
 | `DROP REFRESH JOB` | Portal | Removes a refresh schedule |
 | `REBUILD SNAPSHOT` | Portal | Forces a data refresh |
 | `DROP SNAPSHOT` | Portal | Deletes existing snapshot data |

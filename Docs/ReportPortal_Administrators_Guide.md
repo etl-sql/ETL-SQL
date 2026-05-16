@@ -262,6 +262,24 @@ Dataset permissions are independent of folder ACLs. Folder permissions control r
 
 All dataset file paths are also constrained to `Portal:DatasetRootPath`. ACLs cannot grant access to a dataset record whose backing file is outside that configured root.
 
+Dataset registry administration is scriptable with the same catalog name and folder values shown in the portal UI:
+
+```sql
+REFRESH DATASET 'Sales Summary' IN FOLDER '/Finance';
+
+ALTER DATASET 'Sales Summary' IN FOLDER '/Finance'
+    SET ACCESS = PUBLIC, TTL = '2h';
+
+GRANT VIEWER ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'Finance';
+GRANT EDITOR ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'FinanceAnalysts';
+GRANT OWNER  ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'FinanceAdmins';
+REVOKE EDITOR ON DATASET 'Sales Summary' IN FOLDER '/Finance' FROM GROUP 'FinanceAnalysts';
+
+DROP DATASET 'Sales Summary' IN FOLDER '/Finance';
+```
+
+Use `&dataset` only for report-owned dataset definitions inside `.rptsql` files. Portal registry commands use string-literal catalog names plus `IN FOLDER` so they cannot be confused with engine `#temp` tables or report dataset declarations.
+
 ---
 
 ## 7. SMTP Connections

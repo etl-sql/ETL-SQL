@@ -2084,6 +2084,21 @@ namespace ETL_SQL.Core
     public record RevokePortalPermissionStatement(
         string FolderPath, string GroupName, PortalFolderPermission Permission) : Statement;
 
+    public enum PortalDatasetPermission { Viewer, Editor, Owner }
+
+    public record AlterPortalDatasetStatement(
+        string DatasetName, string FolderPath, string? AccessLevel, string? Ttl) : Statement;
+
+    public record RefreshPortalDatasetStatement(string DatasetName, string FolderPath) : Statement;
+
+    public record DropPortalDatasetStatement(string DatasetName, string FolderPath) : Statement;
+
+    public record GrantPortalDatasetPermissionStatement(
+        string DatasetName, string FolderPath, string GroupName, PortalDatasetPermission Permission) : Statement;
+
+    public record RevokePortalDatasetPermissionStatement(
+        string DatasetName, string FolderPath, string GroupName, PortalDatasetPermission Permission) : Statement;
+
     public record PublishPortalReportStatement(
         string ReportName, string ScriptPath, string FolderPath, string? Description) : Statement;
 

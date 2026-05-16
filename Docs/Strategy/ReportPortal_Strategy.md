@@ -313,6 +313,14 @@ EXECUTE portal BEGIN
     REFRESH REPORT 'Monthly Sales';
     DROP REFRESH JOB FOR REPORT 'Monthly Sales';
 
+    -- Dataset registry
+    REFRESH DATASET 'Sales Summary' IN FOLDER '/Finance';
+    ALTER DATASET 'Sales Summary' IN FOLDER '/Finance'
+        SET ACCESS = PUBLIC, TTL = '2h';
+    GRANT EDITOR ON DATASET 'Sales Summary' IN FOLDER '/Finance' TO GROUP 'FinanceAnalysts';
+    REVOKE EDITOR ON DATASET 'Sales Summary' IN FOLDER '/Finance' FROM GROUP 'FinanceAnalysts';
+    DROP DATASET 'Sales Summary' IN FOLDER '/Finance';
+
     -- Snapshots
     DROP SNAPSHOT FOR REPORT 'Monthly Sales';
     REBUILD SNAPSHOT FOR REPORT 'Monthly Sales';
