@@ -87,6 +87,7 @@
     const _registeredMaps = new Set();
     const _crossFilterStates = {}; // Keyed by page element ID; persists across renderManifest re-builds
     const _uiStates = {};          // Keyed by object name; persists across re-renders (e.g. collapsed: true)
+    let _maximizedVisualCard = null;
 
     /**
      * Entry point: obtain manifest and render all visuals + pages.
@@ -605,6 +606,69 @@
         });
     }
 
+    function addVisualToolbar(card) {
+        const toolbar = document.createElement('div');
+        toolbar.className = 'visual-toolbar';
+
+        const maxBtn = document.createElement('button');
+        maxBtn.type = 'button';
+        maxBtn.className = 'visual-tool-btn';
+        maxBtn.textContent = '[]';
+        maxBtn.title = 'Maximize visual';
+        maxBtn.setAttribute('aria-label', 'Maximize visual');
+        maxBtn.addEventListener('click', e => {
+            e.stopPropagation();
+            toggleVisualMaximize(card, maxBtn);
+        });
+
+        toolbar.appendChild(maxBtn);
+        card.appendChild(toolbar);
+    }
+
+    function toggleVisualMaximize(card, button) {
+        if (_maximizedVisualCard && _maximizedVisualCard !== card) {
+            closeMaximizedVisual();
+        }
+
+        const isOpening = !card.classList.contains('visual-maximized');
+        if (!isOpening) {
+            closeMaximizedVisual();
+            return;
+        }
+
+        _maximizedVisualCard = card;
+        card.classList.add('visual-maximized');
+        document.body.classList.add('visual-maximize-active');
+        if (button) {
+            button.textContent = 'x';
+            button.title = 'Restore visual';
+            button.setAttribute('aria-label', 'Restore visual');
+        }
+        setTimeout(() => resizeChartsIn(card), 50);
+    }
+
+    function closeMaximizedVisual() {
+        if (!_maximizedVisualCard) return;
+
+        const card = _maximizedVisualCard;
+        card.classList.remove('visual-maximized');
+        document.body.classList.remove('visual-maximize-active');
+
+        const button = card.querySelector('.visual-tool-btn');
+        if (button) {
+            button.textContent = '[]';
+            button.title = 'Maximize visual';
+            button.setAttribute('aria-label', 'Maximize visual');
+        }
+
+        _maximizedVisualCard = null;
+        setTimeout(() => resizeChartsIn(card), 50);
+    }
+
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeMaximizedVisual();
+    });
+
     function renderPage(manifest, page, pageSections, pageTheme) {
         console.debug(`[Layout] Rendering Page: ${page.name}`);
         const div = document.createElement('div');
@@ -905,6 +969,7 @@
         if (specificTitle) title.style.display = 'none';
 
         card.appendChild(title);
+        addVisualToolbar(card);
 
         if (visual.error) {
             card.appendChild(errorEl(visual.error));

@@ -92,7 +92,7 @@
     - Navigate to page.
     - Open modal/drawer.
     - Clear filters.
-- [ ] Add portal/viewer support for maximizing a single visual. Treat this as a layout/viewer capability, not a chart-specific option.
+- [x] Add portal/viewer support for maximizing a single visual. Treat this as a layout/viewer capability, not a chart-specific option.
 
 ### Phase 3 — Navigation, datasets, publishing, and portal admin grammar
 - [x] Define navigation pages inside the `CREATE NAVIGATION` body:

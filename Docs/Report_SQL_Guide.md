@@ -323,6 +323,10 @@ Accepted values: `ON` (default), `OFF`, `TRUE`, `FALSE`, `1`, `0`.
 > [!TIP]
 > Use `VISIBLE = OFF` on heavy visuals that depend on a parameter the user must set first (e.g. a date range or region filter). They are included in the manifest and page layout but their `SOURCE` query is skipped until the first rebuild triggered by a parameter change.
 
+### Viewer controls
+
+The report viewer adds a maximize control to every visual card. This is a viewer capability, not Report-SQL syntax or a chart option: the script defines what the visual is, and the host decides how the user can inspect it. Maximizing a visual preserves the current manifest state and resizes charts to fit the expanded card. Press `Esc` or click the restore control to return to the page layout.
+
 
 ### Visual types
 
