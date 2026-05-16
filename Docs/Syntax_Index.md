@@ -34,6 +34,9 @@ Statements are the top-level actions in an ETL-SQL script.
 | `CONTINUE` | Flow Control | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L796) | [CONTINUE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CONTINUE.md) |
 | `RETURN` | Flow Control | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L796) | [RETURN.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RETURN.md) |
 | `THROW` | Flow Control | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [THROW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/THROW.md) |
+| `BEGIN TRANSACTION` | Session | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [TRANSACTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
+| `COMMIT` | Session | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [TRANSACTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
+| `ROLLBACK` | Session | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [TRANSACTION.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/TRANSACTION.md) |
 | `PRINT` | IO | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [PRINT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/PRINT.md) |
 | `EXECUTE` | Orchestration | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [EXECUTE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/EXECUTE.md) |
 | `RUN SCRIPT` | Orchestration | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L302) | [RUN.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/RUN.md) |
@@ -45,20 +48,27 @@ Statements are the top-level actions in an ETL-SQL script.
 | `EXPLAIN` | Diagnostics | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | - |
 | `SHOW PROFILE` | Diagnostics | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L408) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
 | `SHOW VARIABLES` | Diagnostics | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L375) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `SHOW LOCAL VARIABLES`| Diagnostics| [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L375) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `SHOW CONNECTION` | Diagnostics| [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L674) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
+| `SHOW CONNECTIONS` | Diagnostics| [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L674) | [SHOW.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SHOW.md) |
 | `CLEAR SESSION` | Session | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L335) | [CLEAR.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CLEAR.md) |
 | `USE PASSWORD` | Session / Security | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L327) | [USE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
+| `USE SETS` | Session | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L345) | [USE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/USE.md) |
+| `CREATE SETS` | Session | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L345) | [CREATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/CREATE.md) |
+| `DROP SETS` | Session | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L345) | [DROP.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DROP.md) |
 | `REQUIRE VERSION` | Session | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md#L366) | [REQUIRE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/REQUIRE.md) |
 | `BULK INSERT` | File IO | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [BULK.INSERT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/BULK.INSERT.md) |
 | `COPY FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [COPY.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/COPY.md) |
-| `MOVE FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [MOVE.md] |
-| `DELETE FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DELETE.md] |
+| `MOVE FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [MOVE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/MOVE.md) |
+| `DELETE FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DELETE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/DELETE.md) |
 | `ENCRYPT FILE` | File IO | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [ENCRYPT.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/ENCRYPT.md) |
-| `SEND FILE` | File IO / Conn | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [SEND/FILE.md] |
-| `RECEIVE FILE` | File IO / Conn | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [RECEIVE/FILE.md] |
-| `SEND EMAIL` | Notifications | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | - |
+| `SEND FILE` | File IO / Conn | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [SEND/FILE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/SEND/FILE.md) |
+| `RECEIVE FILE` | File IO / Conn | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [RECEIVE/FILE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/RECEIVE/FILE.md) |
+| `SEND EMAIL` | Notifications | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [SEND/EMAIL.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/SEND/EMAIL.md) |
 | `DOCKER` | Containers | [Specialized_Operations.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Specialized_Operations.md) | [DOCKER.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Operations/DOCKER.md) |
 | `CREATE JOB` | Orchestration | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [SCHEDULE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/SCHEDULE.md) |
 | `KILL JOB` | Orchestration | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | - |
+| `GENERATE` | DML | [Grammar.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Grammar.md) | [GENERATE.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Keywords/GENERATE.md) |
 
 ---
 
@@ -129,8 +139,25 @@ Functions used within `SELECT`, `WHERE`, `SET`, and other expressions.
 | `FILE_EXISTS(p)` | File | [FILE_EXISTS.md] | 1 if file exists, 0 otherwise |
 | `DIRECTORY_EXISTS(p)` | File | [DIRECTORY_EXISTS.md] | 1 if dir exists, 0 otherwise |
 | `FILE_LIST(p, m)` | File | [FILE_LIST.md] | Returns table of files in path |
+| `SUM(v)` | Aggregate | [SUM.md] | Sum of values |
+| `COUNT(v)` | Aggregate | [COUNT.md] | Count of non-null values |
+| `AVG(v)` | Aggregate | [AVG.md] | Average of values |
+| `MAX(v)` | Aggregate | [MAX.md] | Maximum value |
+| `MIN(v)` | Aggregate | [MIN.md] | Minimum value |
+| `ROW_NUMBER()` | Window | [ROW_NUMBER.md] | Sequential row number |
+| `RANK()` | Window | [RANK.md] | Rank with gaps |
+| `DENSE_RANK()` | Window | [DENSE_RANK.md] | Rank without gaps |
+| `LAG(v, n)` | Window | [LAG.md] | Value from n rows before |
+| `LEAD(v, n)` | Window | [LEAD.md] | Value from n rows after |
+| `REGEXP_LIKE(s, p)` | Regex | [REGEXP_LIKE.md] | 1 if string matches regex |
+| `REGEXP_REPLACE(s, p, r)` | Regex | [REGEXP_REPLACE.md] | Replace matches in string |
+| `LISTAGG(v, s)` | Aggregate | [LISTAGG.md] | Concatenates values with separator |
+| `STRING_AGG(v, s)` | Aggregate | [STRING_AGG.md] | Concatenates strings with separator |
+| `ADD_TO_LIST(l, v)` | List | [ADD_TO_LIST.md] | Appends value to a LIST |
+| `SORT_LIST(l)` | List | [SORT_LIST.md] | Returns sorted copy of list |
+| `GENERATE_SERIES(s, e, t)`| System | [GENERATE_SERIES.md] | Returns table of numbers/dates |
 
-*Note: Over 159 functions are registered. See [Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md) for the full list.*
+*Note: Over 159 functions are registered. See [Standard_Library.md](file:///c:/Users/chuck/scratch/ETL-SQL/Docs/Reference/Standard_Library.md) for the full list of signatures.*
 
 ---
 
@@ -187,6 +214,25 @@ Options configured via `SET <Option> = <Value>` or `SET <Option> ON|OFF`.
 | `MAX_PARALLEL_DEGREE` | Performance | CPU Count | [Options/INDEX.md] |
 | `ALLOW_FILE_TYPE_ACCESS` | Security | OFF | [Options/INDEX.md] |
 | `WEEK_START_DAY` | Localization | Monday | [Options/INDEX.md] |
+| `ALLOW_FILE_OPERATIONS` | Security | 100 | [Options/INDEX.md] |
+| `ALLOW_RECURSIVE_LAYERS` | Security | 5 | [Options/INDEX.md] |
+| `EXTERNAL_HASH_PARTITIONS` | Performance | 32 | [Options/INDEX.md] |
+| `EXTERNAL_SORT_CHUNK_SIZE` | Performance | 50,000 | [Options/INDEX.md] |
+| `FOREACH_PAGE_SIZE` | Performance | 10,000 | [Options/INDEX.md] |
+| `INTERACTIVE_MODE` | Session | OFF | [Options/INDEX.md] |
+| `MAX_FILE_OPERATIONS` | Security | 100 | [Options/INDEX.md] |
+| `MAX_GENERATE_ROWS` | Performance | 1,000,000 | [Options/INDEX.md] |
+| `MAX_GROUPING_SETS` | Performance | 100 | [Options/INDEX.md] |
+| `MAX_IN_MEMORY_BATCHES` | Performance | 100 | [Options/INDEX.md] |
+| `MAX_MESSAGES` | Diagnostics | 1,000 | [Options/INDEX.md] |
+| `MAX_RECURSIVE_DEPTH` | Flow | 10,000 | [Options/INDEX.md] |
+| `MAX_SESSION_SIZE` | Performance | 500 MB | [Options/INDEX.md] |
+| `MAX_STRING_RESULT_SIZE` | Performance | 5 MB | [Options/INDEX.md] |
+| `PERSIST` | Session | ON | [Options/INDEX.md] |
+| `REGEX_MATCH_TIMEOUT` | Flow | 1,000ms | [Options/INDEX.md] |
+| `SPILL_COMPRESSION` | Performance | ON | [Options/INDEX.md] |
+| `SPILL_ENCRYPTION` | Performance | ON | [Options/INDEX.md] |
+| `SPILL_FORMAT` | Performance | AUTO | [Options/INDEX.md] |
 
 ---
 
@@ -218,7 +264,19 @@ Specific to `.rptsql` files and the reporting engine.
 | `CARD` | KPI | [Visuals/CARD.md] |
 | `SLICER` | Filter | [Visuals/SLICER.md] |
 | `DATEPICKER` | Filter | [Visuals/DATEPICKER.md] |
+| `RELDATEPICKER` | Filter | [Visuals/RELDATEPICKER.md] |
 | `SEARCH` | Filter | [Visuals/SEARCH.md] |
+| `SLIDER` | Filter | [Visuals/SLIDER.md] |
+| `GAUGE` | Chart | [Visuals/GAUGE.md] |
+| `HEATMAP` | Chart | [Visuals/HEATMAP.md] |
+| `GANTT` | Chart | [Visuals/GANTT.md] |
+| `TREEMAP` | Chart | [Visuals/TREEMAP.md] |
+| `WATERFALL` | Chart | [Visuals/WATERFALL.md] |
+| `MATRIX` | Data | [Visuals/MATRIX.md] |
+| `MULTISELECT` | Filter | [Visuals/MULTISELECT.md] |
+| `RADAR` | Chart | [Visuals/RADAR.md] |
+| `TEXT` | Static | [Visuals/TEXT.md] |
+| `IMAGE` | Static | [Visuals/IMAGE.md] |
 
 ---
 
@@ -229,13 +287,36 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | Command | Context | Purpose |
 | :--- | :--- | :--- |
 | `CREATE USER` | Portal | Adds a portal user |
-| `GRANT` / `REVOKE` | Portal | Manages folder permissions |
-| `PUBLISH REPORT` | Portal | Deploys a script to the portal |
-| `CREATE SUBSCRIPTION` | Portal | Schedules email/PDF delivery |
-| `RESTART PORTAL` | Portal | Restarts the portal service |
-| `CREATE JOB` | Orch | Schedules a recurring task |
-| `KILL JOB` | Orch | Stops a running task |
-| `SHOW JOBS` | Orch | Lists scheduled tasks |
+| `ALTER USER` | Portal | Modifies user properties or status |
+| `DROP USER` | Portal | Deletes a user |
+| `CREATE GROUP` | Portal | Adds a security group |
+| `DROP GROUP` | Portal | Deletes a security group |
+| `ADD USER ... TO GROUP` | Portal | Manages group membership |
+| `CREATE FOLDER` | Portal | Adds a navigation folder |
+| `DROP FOLDER` | Portal | Deletes a navigation folder |
+| `GRANT` | Portal | Assigns folder permissions |
+| `REVOKE` | Portal | Removes folder permissions |
+| `PUBLISH REPORT` | Portal | Deploys a report script |
+| `ALTER REPORT` | Portal | Modifies report metadata |
+| `DROP REPORT` | Portal | Deletes a report |
+| `CREATE REFRESH JOB`| Portal | Schedules automated snapshot refresh |
+| `TRIGGER REFRESH` | Portal | Manually starts a refresh cycle |
+| `DROP REFRESH JOB` | Portal | Removes a refresh schedule |
+| `REBUILD SNAPSHOT` | Portal | Forces a data refresh |
+| `DROP SNAPSHOT` | Portal | Deletes existing snapshot data |
+| `CREATE SUBSCRIPTION`| Portal | Schedules email/PDF report delivery |
+| `ALTER SUBSCRIPTION` | Portal | Modifies subscription settings |
+| `DROP SUBSCRIPTION` | Portal | Deletes a subscription |
+| `DISCONNECT USER` | Portal | Force-closes an active session |
+| `REVOKE TOKENS` | Portal | Invalidates all user authentication tokens |
+| `RESTART PORTAL` | Portal | Restarts the portal web service |
+| `SHUTDOWN PORTAL` | Portal | Stops the portal web service |
+| `CREATE JOB` | Orch | Schedules a recurring script task |
+| `KILL JOB` | Orch | Stops a running background task |
+| `SHOW USERS` | Portal | Lists all registered users |
+| `SHOW REPORTS` | Portal | Lists reports in a folder |
+| `SHOW ACTIVE SESSIONS`| Portal| Lists current web sessions |
+| `SHOW JOBS` | Orch | Lists scheduled background tasks |
 
 ---
 
@@ -253,3 +334,16 @@ Commands executed via `EXECUTE portal BEGIN ... END` or `EXECUTE orch BEGIN ... 
 | `[` ... `]` | Delimiter | Quotes for identifiers with spaces |
 | `''` | String | Single quotes for literal strings |
 | `ENC:` | Encrypted | Prefix for ciphertext strings |
+| `+`, `-`, `*`, `/`, `%` | Arithmetic | Standard math operators |
+| `=`, `<>`, `!=`, `<`, `<=`, `>`, `>=` | Comparison | Equality and range operators |
+| `AND`, `OR`, `NOT` | Logical | Boolean logic operators |
+| `IS NULL`, `IS NOT NULL` | Nullity | Testing for null values |
+| `LIKE`, `IN`, `BETWEEN`, `EXISTS` | Membership | SQL-style predicate operators |
+| `(` ... `)` | Grouping | Expression and function call grouping |
+| `,` | Separator | Argument and list separator |
+| `;` | Terminator | Optional statement terminator |
+| `--`, `/* ... */` | Comments | Single and multi-line comments |
+| `@` | User Var | Prefix for user variables (e.g. `@name`) |
+| `@@` | System Var | Prefix for system variables (e.g. `@@ROWCOUNT`) |
+| `#` | Temp Table | Prefix for in-memory tables (e.g. `#staging`) |
+| `!` | Env Set | Prefix for environment sets (e.g. `!PROD`) |
