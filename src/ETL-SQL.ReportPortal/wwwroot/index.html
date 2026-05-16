@@ -88,6 +88,25 @@
   </div>
 </div>
 
+<!-- ── History modal ─────────────────────────────────────────────────────── -->
+<div id="historyModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="historyTitle">
+  <div class="modal-card modal-lg">
+    <div class="modal-header">
+      <div>
+        <span class="library-kicker">Lifecycle</span>
+        <h3 class="modal-title" id="historyTitle">Report History</h3>
+        <p class="modal-subtitle">Published hash, script drift, snapshot builds, and report change activity.</p>
+      </div>
+    </div>
+    <div class="modal-body" id="historyBody">
+      <div class="loading-state"><span class="spinner"></span><span>Loading history…</span></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="historyCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Subscribe modal ──────────────────────────────────────────────────── -->
 <div id="subscribeModal" class="modal-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="subscribeTitle">
   <div class="modal-card modal-lg modal-workflow">
@@ -732,6 +751,7 @@ function renderViewer(report, snapshot, initialPage = null) {
         <div class="viewer-actions">
           <button class="btn btn-primary btn-sm" id="refreshBtn">Refresh</button>
           <button class="btn btn-outline btn-sm" id="dependenciesBtn">Dependencies</button>
+          <button class="btn btn-outline btn-sm" id="historyBtn">History</button>
           <button class="btn btn-outline btn-sm" id="exportBtn">Export</button>
           <button class="btn btn-outline btn-sm" id="subBtn">Subscribe</button>
         </div>
@@ -747,6 +767,7 @@ function renderViewer(report, snapshot, initialPage = null) {
   });
   document.getElementById('refreshBtn').addEventListener('click', () => runAndPoll(report.id, report));
   document.getElementById('dependenciesBtn').addEventListener('click', () => showDependencies(report.id));
+  document.getElementById('historyBtn').addEventListener('click', () => showHistory(report.id));
   document.getElementById('exportBtn').addEventListener('click', () => showExport(report.id));
   document.getElementById('subBtn').addEventListener('click', () => openSubscribeModal(report.id));
   const staleBtn = document.getElementById('staleRefreshBtn');
@@ -965,6 +986,56 @@ function renderDependencyTable(title, headers, rows) {
 
 document.getElementById('dependenciesCloseBtn').addEventListener('click', () => {
   document.getElementById('dependenciesModal').style.display = 'none';
+});
+
+async function showHistory(id) {
+  const $modal = document.getElementById('historyModal');
+  const $body = document.getElementById('historyBody');
+  $modal.style.display = 'flex';
+  $body.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading history…</span></div>`;
+
+  try {
+    const data = await reportsApi.history(id);
+    $body.innerHTML = renderHistory(data);
+  } catch (err) {
+    $body.innerHTML = `<div class="empty-state">Failed to load history: ${esc(err.message)}</div>`;
+  }
+}
+
+function renderHistory(data) {
+  const drift = data.scriptChanged
+    ? '<span class="viewer-meta-pill viewer-meta-warning">Script changed</span>'
+    : '<span class="viewer-meta-pill viewer-meta-ready">Pinned hash current</span>';
+  const snapshotRows = (data.snapshots || []).map(s => `
+    <tr>
+      <td>${esc(formatBuiltAt(s.builtAt))}</td>
+      <td>${esc(s.builtBy)}</td>
+      <td>${esc(s.hashMatched === null || s.hashMatched === undefined ? 'Unknown' : (s.hashMatched ? 'Matched' : 'Changed'))}</td>
+      <td>${esc(s.scriptHashAtRunTime || 'Not recorded')}</td>
+    </tr>`).join('');
+  const changeRows = (data.changes || []).map(c => `
+    <tr>
+      <td>${esc(formatBuiltAt(c.timestamp))}</td>
+      <td>${esc(c.action)}</td>
+      <td>${esc(c.userId ?? '')}</td>
+      <td>${esc(c.detail || '')}</td>
+    </tr>`).join('');
+
+  return `
+    <div class="dependency-summary">
+      <span>${esc(data.report?.folderPath || '')} / ${esc(data.report?.name || 'Report')}</span>
+      ${drift}
+    </div>
+    <div class="history-hash-grid">
+      <div><span>Published hash</span><code>${esc(data.publishedScriptHash || 'Not recorded')}</code></div>
+      <div><span>Current hash</span><code>${esc(data.currentScriptHash || 'Unavailable')}</code></div>
+    </div>
+    ${renderDependencyTable('Snapshots', ['Built', 'User', 'Hash', 'Runtime Hash'], snapshotRows)}
+    ${renderDependencyTable('Changes', ['Time', 'Action', 'User', 'Detail'], changeRows)}`;
+}
+
+document.getElementById('historyCloseBtn').addEventListener('click', () => {
+  document.getElementById('historyModal').style.display = 'none';
 });
 
 document.querySelectorAll('.modal-overlay').forEach(modal => {

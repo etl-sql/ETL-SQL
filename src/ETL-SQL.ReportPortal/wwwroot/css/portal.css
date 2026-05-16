@@ -353,6 +353,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .dependency-table th, .dependency-table td { padding: 8px 10px; border-bottom: 1px solid var(--portal-border-soft);
                                              text-align: left; font-size: .84em; vertical-align: top; }
 .dependency-table tr:last-child td { border-bottom: none; }
+.history-hash-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 12px; }
+.history-hash-grid div { padding: 10px 12px; border: 1px solid var(--portal-border-soft);
+                         border-radius: var(--portal-radius-sm); background: var(--portal-surface); }
+.history-hash-grid span { display: block; color: var(--portal-muted); font-size: .76em; text-transform: uppercase;
+                          letter-spacing: .04em; margin-bottom: 4px; }
+.history-hash-grid code { display: block; overflow-wrap: anywhere; font-size: .8em; color: var(--portal-text-soft); }
 .dataset-table-wrap { overflow-x: auto; }
 .dataset-table-wrap .data-table { min-width: 1040px; }
 .asset-name { font-weight: 750; color: var(--portal-text); }

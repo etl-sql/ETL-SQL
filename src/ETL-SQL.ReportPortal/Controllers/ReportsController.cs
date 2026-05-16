@@ -252,6 +252,58 @@ public class ReportsController : ControllerBase
         return Ok(dto);
     }
 
+    // ── GET /api/reports/{id}/history ────────────────────────────────────────
+
+    [HttpGet("reports/{id:int}/history")]
+    public async Task<IActionResult> GetHistory(int id)
+    {
+        var report = await db.Reports
+            .Include(r => r.Folder)
+            .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var perm = await GetEffectivePermissionAsync(report.FolderId);
+        if (perm is null) return Forbid();
+
+        var snapshots = await db.ReportSnapshots
+            .Where(s => s.ReportId == id)
+            .OrderByDescending(s => s.BuiltAt)
+            .Select(s => new ReportHistorySnapshotDto(
+                s.Id,
+                s.BuiltAt,
+                s.BuiltBy,
+                s.ManifestPath,
+                s.ScriptHashAtRunTime,
+                s.HashMatched,
+                s.ParametersJson))
+            .ToListAsync();
+
+        var resourceId = id.ToString();
+        var changes = await db.AuditLogs
+            .Where(a => a.ResourceType == "Report" && a.ResourceId == resourceId)
+            .OrderByDescending(a => a.Timestamp)
+            .Select(a => new ReportHistoryChangeDto(
+                a.Id,
+                a.Action,
+                a.Timestamp,
+                a.UserId,
+                a.Detail))
+            .ToListAsync();
+
+        var currentHash = await ReadCurrentScriptHashAsync(report.ScriptPath);
+        var scriptChanged = currentHash is not null
+            && report.PublishedScriptHash is not null
+            && !string.Equals(currentHash, report.PublishedScriptHash, StringComparison.OrdinalIgnoreCase);
+
+        return Ok(new ReportHistoryDto(
+            new ReportDependencyReportDto(report.Id, report.Name, report.Folder?.Path ?? "", report.ScriptPath),
+            report.PublishedScriptHash,
+            currentHash,
+            scriptChanged,
+            snapshots,
+            changes));
+    }
+
     // ── PUT /api/reports/{id} ─────────────────────────────────────────────────
 
     [HttpPut("reports/{id:int}")]
@@ -473,6 +525,17 @@ public class ReportsController : ControllerBase
             return Array.Empty<string>();
 
         return ParseSourceTables(await System.IO.File.ReadAllTextAsync(resolvedScriptPath));
+    }
+
+    private async Task<string?> ReadCurrentScriptHashAsync(string scriptPath)
+    {
+        if (!PortalPathGuard.TryResolveScript(portalConfig, scriptPath, out var resolvedScriptPath))
+            return null;
+        if (!System.IO.File.Exists(resolvedScriptPath))
+            return null;
+
+        var bytes = await System.IO.File.ReadAllBytesAsync(resolvedScriptPath);
+        return "sha256:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     }
 
     private static IReadOnlyList<string> ParseSourceTables(string? scriptText)

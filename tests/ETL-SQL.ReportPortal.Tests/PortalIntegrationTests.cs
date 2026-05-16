@@ -571,6 +571,64 @@ CREATE VISUAL Total AS CARD (
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
+    public async Task ReportHistory_ReturnsSnapshotsHashesAndChanges()
+    {
+        var token = await GetAdminTokenAsync();
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = "History Folder", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"history_{Guid.NewGuid():N}.rptsql");
+        await File.WriteAllTextAsync(scriptPath, "SET REPORT TITLE = 'History';");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = "History Report",
+            description = "History smoke test",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+        var report = await publishRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var reportId = report!["id"]!.GetValue<int>();
+
+        string publishedHash;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+            var entity = await db.Reports.FindAsync(reportId);
+            publishedHash = entity!.PublishedScriptHash!;
+            db.ReportSnapshots.Add(new ReportSnapshot
+            {
+                ReportId = reportId,
+                ManifestPath = Path.Combine(_factory.TempDir, "snapshots", "history.snapshot.json"),
+                BuiltAt = DateTime.UtcNow,
+                BuiltBy = 1,
+                ScriptHashAtRunTime = publishedHash,
+                HashMatched = true,
+                ParametersJson = "{\"@Region\":\"NA\"}"
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await File.AppendAllTextAsync(scriptPath, Environment.NewLine + "SET REPORT DESCRIPTION = 'Changed';");
+
+        var res = await AuthGet(token, $"/api/reports/{reportId}/history");
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var body = await res.Content.ReadFromJsonAsync<JsonObject>(_json);
+
+        Assert.Equal("History Report", body!["report"]!["name"]!.GetValue<string>());
+        Assert.Equal(publishedHash, body["publishedScriptHash"]!.GetValue<string>());
+        Assert.True(body["scriptChanged"]!.GetValue<bool>());
+        Assert.NotEqual(publishedHash, body["currentScriptHash"]!.GetValue<string>());
+        Assert.Equal(publishedHash, body["snapshots"]![0]!["scriptHashAtRunTime"]!.GetValue<string>());
+        Assert.Contains(body["changes"]!.AsArray(), n => n!["action"]!.GetValue<string>() == "PUBLISH_REPORT");
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task Report_FailedExecution_SurfacesCatalogFailureStatus()
     {
         var token = await GetAdminTokenAsync();

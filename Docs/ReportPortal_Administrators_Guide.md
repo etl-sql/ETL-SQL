@@ -263,6 +263,8 @@ At every execution (snapshot build), the portal computes a fresh hash of the fil
 
 > **Note:** the hash is advisory — execution is not blocked by a mismatch in the Report Portal (unlike the Orchestrator's `BLOCK` policy). Use `scriptChanged = true` as a signal to re-publish the report after intentional changes or to investigate unexpected modifications.
 
+Use `GET /api/reports/{id}/history` to inspect the lifecycle metadata behind the History button in the viewer. The response includes the pinned publish hash, the current script hash when the script is still available under `ScriptRootPath`, a `scriptChanged` flag, snapshot build rows with runtime hashes, and report audit entries such as publish, update, favorite, and delete activity.
+
 ### 6.2 Updating a Report
 
 Edit the `.rptsql` file on disk. The portal detects the modification timestamp and marks the report as **stale** until a new snapshot is built. The snapshot is not rebuilt automatically — a user with Execute permission (or an Orchestrator dataset job) must trigger a refresh. If you intentionally changed the script, re-publish the report (via `PUT /api/reports/{id}` or by deleting and re-publishing) to reset the pinned hash.

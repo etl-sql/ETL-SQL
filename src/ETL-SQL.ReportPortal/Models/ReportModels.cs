@@ -105,3 +105,27 @@ public record ReportDependencySourceDto(
     string? Connection,
     string? ObjectName,
     string Kind);
+
+public record ReportHistoryDto(
+    ReportDependencyReportDto Report,
+    string? PublishedScriptHash,
+    string? CurrentScriptHash,
+    bool ScriptChanged,
+    IReadOnlyList<ReportHistorySnapshotDto> Snapshots,
+    IReadOnlyList<ReportHistoryChangeDto> Changes);
+
+public record ReportHistorySnapshotDto(
+    int Id,
+    DateTime BuiltAt,
+    int BuiltBy,
+    string ManifestPath,
+    string? ScriptHashAtRunTime,
+    bool? HashMatched,
+    string? ParametersJson);
+
+public record ReportHistoryChangeDto(
+    int Id,
+    string Action,
+    DateTime Timestamp,
+    int? UserId,
+    string? Detail);
