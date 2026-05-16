@@ -22,14 +22,16 @@ CREATE VISUAL RegionSlicer AS SLICER (
 CREATE VISUAL BarByRegion AS BAR (
   SOURCE = (SELECT region, SUM(sales) AS total FROM #sales WHERE (@region IS NULL OR @region = '' OR region = @region) GROUP BY region),
   MAPPINGS (X = region, Y = total),
-  OPTIONS (CROSS_FILTER = ON, CROSS_VISUAL_ACTION = HIGHLIGHT, TITLE = 'Revenue by Region')
+  OPTIONS (TITLE = 'Revenue by Region'),
+  INTERACTIONS (ON_SELECT = HIGHLIGHT)
 );
 
 -- Visual 2: Sales by Category
 CREATE VISUAL BarByCategory AS BAR (
   SOURCE = (SELECT category, SUM(sales) AS total FROM #sales WHERE (@region IS NULL OR @region = '' OR region = @region) AND category = ISNULL(@category, category) GROUP BY category),
   MAPPINGS (X = category, Y = total),
-  OPTIONS (CROSS_FILTER = ON, CROSS_VISUAL_ACTION = HIGHLIGHT, TITLE = 'Revenue by Category')
+  OPTIONS (TITLE = 'Revenue by Category'),
+  INTERACTIONS (ON_SELECT = HIGHLIGHT)
 );
 
 -- Page Layout

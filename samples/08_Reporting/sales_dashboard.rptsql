@@ -64,7 +64,7 @@ CREATE VISUAL SalesTrend AS LINE (
 );
 
 -- Buttons
-CREATE BUTTON GoToDetails AS PRIMARY (
+CREATE BUTTON GoToDetails AS (
     TITLE = 'View Raw Transaction History',
     STYLE (ICON = 'list'),
     ACTIONS (ON_CLICK = DRILL_DOWN(TARGET = DetailsTable, KEY = region))
@@ -75,8 +75,9 @@ CREATE VISUAL DetailsTable AS TABLE (
     STYLE (TITLE = 'Recent Transactions', HEIGHT = '600px')
 );
 
-CREATE BUTTON BackButton AS BACK (
-    TITLE = 'Back to Dashboard'
+CREATE BUTTON BackButton AS (
+    TITLE = 'Back to Dashboard',
+    ACTIONS (ON_CLICK = BACK)
 );
 
 -- Layout

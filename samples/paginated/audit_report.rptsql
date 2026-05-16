@@ -33,7 +33,7 @@ CREATE VISUAL EndPicker AS RELDATEPICKER (
     ACTIONS (ON_CHANGE = SET_PARAMETER(@end, value))
 );
 
-CREATE BUTTON RunBtn AS BUTTON (
+CREATE BUTTON RunBtn AS (
     TITLE = 'Generate Report',
     STYLE (
         BACKGROUND-COLOR = '#2563eb', 
@@ -45,7 +45,7 @@ CREATE BUTTON RunBtn AS BUTTON (
     ),
     ACTIONS (
         ON_CLICK = (
-            RUN_REPORT,
+            APPLY_PARAMETERS,
             SET_UI_STATE('FilterPanel', 'COLLAPSED', ON)
         )
     )
@@ -64,15 +64,18 @@ CREATE VISUAL AuditTable AS TABLE (
 );
 
 -- 4. Containers
-CREATE CONTAINER FilterPanel AS BOX (
+CREATE CONTAINER FilterPanel AS DRAWER (
     TITLE = 'Query Filters',
-    COLLAPSIBLE = ON,
-    ICON = 'FILTER',
-    STRUCTURE = 'A B C',
-    MAP (
-        'A' = StartPicker,
-        'B' = EndPicker,
-        'C' = RunBtn
+    LAYOUT (
+        STRUCTURE = 'A B C',
+        MAP (
+            'A' = StartPicker,
+            'B' = EndPicker,
+            'C' = RunBtn
+        )
+    ),
+    OPTIONS (
+        ICON = 'FILTER'
     ),
     STYLE (
         BACKGROUND-COLOR = '#f8fafc',

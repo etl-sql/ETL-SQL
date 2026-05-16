@@ -132,7 +132,6 @@ namespace ETL_SQL.Core.Parser
             dict["FORMATTING"]  = TokenType.FORMATTING;
             dict["EXPECT"]      = TokenType.EXPECT;
             dict["PLACEHOLDER"] = TokenType.PLACEHOLDER;
-            dict["COLLAPSIBLE"] = TokenType.COLLAPSIBLE;
             dict["ICON"]        = TokenType.ICON;
             dict["PINNABLE"]    = TokenType.PINNABLE;
             dict["CONTENT"]     = TokenType.CONTENT;
@@ -165,7 +164,7 @@ namespace ETL_SQL.Core.Parser
             dict["FONT_WEIGHT"]          = TokenType.FONT_WEIGHT;
             dict["GAUGE_STYLE"]          = TokenType.GAUGE_STYLE;
             dict["SHOW_NO_DATA_PLACEHOLDER"] = TokenType.SHOW_NO_DATA_PLACEHOLDER;
-            dict["CROSS_VISUAL_ACTION"]  = TokenType.CROSS_VISUAL_ACTION;
+            dict["INTERACTIONS"]         = TokenType.INTERACTIONS;
             dict["HIGHLIGHT"]            = TokenType.HIGHLIGHT;
             dict["CENTER"]        = TokenType.CENTER;
             dict["FONT_SIZE"]     = TokenType.FONT_SIZE;
@@ -193,7 +192,6 @@ namespace ETL_SQL.Core.Parser
             dict["RUN_SCRIPT"]    = TokenType.RUN_SCRIPT;
             dict["SET_UI_STATE"]  = TokenType.SET_UI_STATE;
             dict["APPLY_PARAMETERS"] = TokenType.APPLY_PARAMETERS;
-            dict["RUN_REPORT"]    = TokenType.APPLY_PARAMETERS; // Alias
             
 
             return dict;

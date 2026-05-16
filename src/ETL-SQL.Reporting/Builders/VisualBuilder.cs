@@ -63,6 +63,13 @@ namespace ETL_SQL.Reporting.Builders
                 }
             }
 
+            if (vStmt.Interactions.Count > 0)
+            {
+                vm.Interactions = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var interaction in vStmt.Interactions)
+                    vm.Interactions[interaction.Key] = interaction.Value;
+            }
+
             // Styles
             var resolvedStyles = styleBuilder.ResolveStyles(vStmt.StyleName, vStmt.Styles);
             if (resolvedStyles.Count > 0)
@@ -140,6 +147,11 @@ namespace ETL_SQL.Reporting.Builders
                     {
                         Type    = "CLEAR_FILTERS",
                         Trigger = cf.Trigger
+                    },
+                    ReportCommandAction command => new VisualActionManifest
+                    {
+                        Type    = command.Command,
+                        Trigger = command.Trigger
                     },
                     DrillInAction di => new VisualActionManifest
                     {
@@ -376,7 +388,9 @@ namespace ETL_SQL.Reporting.Builders
             }
             else return;
 
-            var actionType = vm.Options.TryGetValue("CROSS_VISUAL_ACTION", out var action) ? action.ToUpperInvariant() : null;
+            var actionType = vm.Interactions != null && vm.Interactions.TryGetValue("ON_SELECT", out var action)
+                ? action.ToUpperInvariant()
+                : null;
             if (vm.VisualType == "TABLE" || vm.VisualType == "SLICER") actionType ??= "FILTER";
             actionType ??= "HIGHLIGHT";
 

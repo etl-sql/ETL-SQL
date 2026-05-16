@@ -15,7 +15,7 @@ This sample demonstrates a comprehensive audit log analysis dashboard using **Ti
     - `HBAR`: Most frequently accessed resources.
     - `TABLE`: Paginated log detail.
 - **Layout**:
-    - **Collapsible Drawer**: The filters are tucked into a `COLLAPSIBLE` container at the top of the page.
+    - **Filter Drawer**: The filters are tucked into a `DRAWER` container at the top of the page.
     - **Tabbed Navigation**: Separate "Summary" and "Details" pages.
 
 ## Usage

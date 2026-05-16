@@ -459,13 +459,15 @@ CREATE VISUAL KpiAvgTxn AS CARD (
 
 -- KPI container — horizontal strip
 CREATE CONTAINER KpiStrip AS BOX (
-    STRUCTURE = 'A B C D E',
-    MAP (
-        'A' = KpiRevenue,
-        'B' = KpiQty,
-        'C' = KpiDiscount,
-        'D' = KpiReturns,
-        'E' = KpiAvgTxn
+    LAYOUT (
+        STRUCTURE = 'A B C D E',
+        MAP (
+            'A' = KpiRevenue,
+            'B' = KpiQty,
+            'C' = KpiDiscount,
+            'D' = KpiReturns,
+            'E' = KpiAvgTxn
+        )
     )
 );
 
@@ -491,8 +493,8 @@ CREATE VISUAL DrillRegionDetail AS BAR (
     TITLE    = 'Category Breakdown',
     SUBTITLE = 'Click a region bar above to see cross-highlighting',
     MAPPINGS (X = Category, Y = Revenue),
+    INTERACTIONS (ON_SELECT = HIGHLIGHT),
     OPTIONS  (
-        CROSS_VISUAL_ACTION = HIGHLIGHT,
         Y_AXIS (LABEL = 'Revenue ($)', MIN = 0),
         X_AXIS (LABEL = 'Category')
     ),
@@ -505,8 +507,8 @@ CREATE VISUAL BarByRegion AS BAR (
     TITLE    = 'Revenue by Region',
     SUBTITLE = 'Click a bar to drill into category breakdown • Highlights detail table',
     MAPPINGS (X = Region, Y = Revenue),
+    INTERACTIONS (ON_SELECT = HIGHLIGHT),
     OPTIONS  (
-        CROSS_VISUAL_ACTION = HIGHLIGHT,
         DATA_LABELS  = ON WITH (POSITION = 'INSIDE_TOP', COLOR = '#ffffff', FORMAT = 'C0'),
         Y_AXIS (LABEL = 'Net Revenue ($)', MIN = 0),
         X_AXIS (LABEL = 'Region'),
@@ -843,26 +845,30 @@ Changes to any control above propagate instantly to all dependent visuals (witho
 -- TEXT — Buttons reference (since buttons can't be placed in page slots directly)
 CREATE VISUAL ButtonsText AS TEXT (
     TITLE   = 'Action Buttons (CREATE BUTTON)',
-    CONTENT = '### Buttons\n`CREATE BUTTON` defines interactive **BACK**, **REFRESH**, and custom action buttons.\n\n| Name | Type | Purpose |\n|------|------|---------|\n| BtnRefresh | `REFRESH` | Force rebuild of all visual snapshots |\n| BtnBack | `BACK` | Navigate to previous browser page |\n| BtnExport | `REFRESH` | Custom export trigger (custom types pending engine support) |\n\n> Buttons cannot currently be placed directly in page `MAP` slots — they require a dedicated button bar component (tracked in TODO.md).'
+    CONTENT = '### Buttons\n`CREATE BUTTON` defines interactive command buttons with `ACTIONS`.\n\n| Name | Action | Purpose |\n|------|--------|---------|\n| BtnRefresh | `REFRESH_REPORT` | Force rebuild of all visual snapshots |\n| BtnBack | `BACK` | Navigate to previous browser page |\n| BtnExport | `EXPORT_CSV` | Export the transaction table |\n\n> Buttons cannot currently be placed directly in page `MAP` slots — they require a dedicated button bar component (tracked in TODO.md).'
 );
 
 -- BUTTON — Refresh data
-CREATE BUTTON BtnRefresh AS REFRESH (
+CREATE BUTTON BtnRefresh AS (
     TITLE   = '⟳ Refresh Data',
     TOOLTIP = 'Force a full rebuild of all visual snapshots.',
+    ACTIONS (ON_CLICK = REFRESH_REPORT),
     STYLE   = AccentButton
 );
 
 -- BUTTON — Navigate back (demonstration — useful on deep-link pages)
-CREATE BUTTON BtnBack AS BACK (
+CREATE BUTTON BtnBack AS (
     TITLE   = '← Back',
-    TOOLTIP = 'Return to the previous page in browser history.'
+    TOOLTIP = 'Return to the previous page in browser history.',
+    ACTIONS (ON_CLICK = BACK)
 );
 
--- BUTTON — Custom export CTA (uses REFRESH type — custom types not yet supported by parser)
-CREATE BUTTON BtnExport AS REFRESH (
+-- BUTTON — Export CTA
+CREATE BUTTON BtnExport AS (
     TITLE   = '↓ Export CSV',
     TOOLTIP = 'Trigger downstream export pipeline.',
+    OPTIONS (TARGET = TxnTable),
+    ACTIONS (ON_CLICK = EXPORT_CSV),
     STYLE   = AccentButton
 );
 
@@ -1091,9 +1097,11 @@ CREATE VISUAL AuditLogTable AS TABLE (
 CREATE CONTAINER AuditScroll AS SCROLL (
     TITLE     = 'Scrollable Audit Log (SCROLL Container)',
     STYLE     (HEIGHT = 300),
-    STRUCTURE = 'A',
-    MAP (
-        'A' = AuditLogTable
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP (
+            'A' = AuditLogTable
+        )
     )
 );
 
@@ -1209,21 +1217,25 @@ CREATE PAGE Composition AS (
 );
 
 CREATE CONTAINER ButtonBar AS BOX (
-    STRUCTURE = 'A B C',
-    MAP (
-        'A' = BtnRefresh,
-        'B' = BtnBack,
-        'C' = BtnExport
+    LAYOUT (
+        STRUCTURE = 'A B C',
+        MAP (
+            'A' = BtnRefresh,
+            'B' = BtnBack,
+            'C' = BtnExport
+        )
     )
 );
 
 CREATE CONTAINER DateControls AS BOX (
-    STRUCTURE = 'A B / C D',
-    MAP (
-        'A' = DateStart,
-        'B' = DateEnd,
-        'C' = StartPicker,
-        'D' = EndPicker
+    LAYOUT (
+        STRUCTURE = 'A B / C D',
+        MAP (
+            'A' = DateStart,
+            'B' = DateEnd,
+            'C' = StartPicker,
+            'D' = EndPicker
+        )
     )
 );
 

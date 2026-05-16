@@ -19,19 +19,22 @@ DECLARE @category VARCHAR = NULL;
 CREATE VISUAL BarByRegion AS BAR (
   SOURCE = (SELECT region, SUM(sales) AS total FROM #sales WHERE region = ISNULL(@region, region) GROUP BY region),
   MAPPINGS (X = region, Y = total),
-  OPTIONS (TITLE = 'Revenue by Region', CROSS_FILTER = 'True', CROSS_VISUAL_ACTION = 'HIGHLIGHT')
+  OPTIONS (TITLE = 'Revenue by Region'),
+  INTERACTIONS (ON_SELECT = HIGHLIGHT)
 );
 
 -- Visual 2: Category Details (Should dim when region is selected)
 CREATE VISUAL BarByCategory AS BAR (
   SOURCE = (SELECT category, SUM(sales) AS total FROM #sales WHERE region = ISNULL(@region, region) AND category = ISNULL(@category, category) GROUP BY category),
   MAPPINGS (X = category, Y = total),
-  OPTIONS (TITLE = 'Revenue by Category', CROSS_VISUAL_ACTION = 'HIGHLIGHT')
+  OPTIONS (TITLE = 'Revenue by Category'),
+  INTERACTIONS (ON_SELECT = HIGHLIGHT)
 );
 
 -- Visual 3: Clear Filters Button
-CREATE BUTTON ResetBtn AS CLEAR_FILTERS (
+CREATE BUTTON ResetBtn AS (
     TITLE = 'Clear All Filters',
+    ACTIONS (ON_CLICK = CLEAR_FILTERS),
     STYLE (
         BACKGROUND = '#e74c3c',
         COLOR = '#ffffff'

@@ -7,8 +7,9 @@ CREATE VISUAL txt AS TEXTBOX (
     ACTIONS (ON_CHANGE = SET_PARAMETER(@text_val, VALUE))
 );
 
-CREATE BUTTON run_btn AS RUN (
+CREATE BUTTON run_btn AS (
     TITLE = 'Run Report',
+    ACTIONS (ON_CLICK = APPLY_PARAMETERS),
     STYLE (BACKGROUND = '#28a745', COLOR = 'white', PADDING = '10px 20px')
 );
 

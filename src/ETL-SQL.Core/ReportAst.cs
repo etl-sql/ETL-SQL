@@ -113,6 +113,13 @@ namespace ETL_SQL.Core
         public override string ToSql() => AstSerializer.Format(this);
     }
 
+    public record VisualInteraction : AstNode
+    {
+        public required string Key   { get; init; }
+        public required string Value { get; init; }
+        public override string ToSql() => AstSerializer.Format(this);
+    }
+
     public record AxisOptions : AstNode
     {
         public required string Axis             { get; init; }  // "X" or "Y"
@@ -161,6 +168,12 @@ namespace ETL_SQL.Core
     public record ApplyParametersAction : VisualAction
     {
         public override string ToSql() => "APPLY_PARAMETERS";
+    }
+
+    public record ReportCommandAction : VisualAction
+    {
+        public required string Command { get; init; }
+        public override string ToSql() => Command;
     }
 
     public record DrillReportAction : VisualAction
@@ -245,6 +258,7 @@ namespace ETL_SQL.Core
         public List<VisualOption> Options              { get; init; } = new();
         public List<AxisOptions> AxisOptions           { get; init; } = new();
         public List<VisualAction> Actions              { get; init; } = new();
+        public List<VisualInteraction> Interactions     { get; init; } = new();
         public List<TypedSeries> TypedSeries           { get; init; } = new();
         public List<FormattingRule> FormattingRules    { get; init; } = new();
         public List<VisualOverlay> Overlays            { get; init; } = new();
@@ -296,7 +310,7 @@ namespace ETL_SQL.Core
     public record CreateContainerStatement : Statement
     {
         public required string Name { get; init; }
-        public required string ContainerType { get; init; }  // "BOX" or "SCROLL"
+        public required string ContainerType { get; init; }  // BOX, SCROLL, DRAWER, SIDEBAR, TABS, ACCORDION, MODAL, or POPOVER
         public string? Structure { get; init; }
         public Dictionary<string, string> SlotMap { get; init; } = new();
         public Dictionary<string, string> Styles { get; init; } = new();

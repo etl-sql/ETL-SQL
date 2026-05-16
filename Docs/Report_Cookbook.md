@@ -114,7 +114,14 @@ CREATE VISUAL SalesDetail AS TABLE (
 
 -- ── Layout ────────────────────────────────────────────────────────────────
 CREATE CONTAINER KpiRow AS BOX (
-  VISUALS (TotalRevenue, TotalUnits, AvgRevenue)
+  LAYOUT (
+    STRUCTURE = 'A B C',
+    MAP (
+      'A' = TotalRevenue,
+      'B' = TotalUnits,
+      'C' = AvgRevenue
+    )
+  )
 );
 
 CREATE PAGE Main AS (
@@ -901,7 +908,13 @@ CREATE VISUAL SummaryTable AS TABLE (
 -- Wrap KPI cards in a styled horizontal container
 CREATE CONTAINER KpiRow AS BOX (
   STYLE   = PanelFrame,
-  VISUALS (TotalRevenue, TotalOrders)
+  LAYOUT (
+    STRUCTURE = 'A B',
+    MAP (
+      'A' = TotalRevenue,
+      'B' = TotalOrders
+    )
+  )
 );
 
 -- ── Page layout ───────────────────────────────────────────────────────────

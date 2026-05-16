@@ -83,8 +83,10 @@ CREATE VISUAL SalesTable AS TABLE (
 
 -- KPI container
 CREATE CONTAINER KpiRow AS BOX (
-  STRUCTURE = 'A',
-  MAP('A' = TotalRevenue)
+  LAYOUT (
+    STRUCTURE = 'A',
+    MAP('A' = TotalRevenue)
+  )
 );
 
 -- Navigation

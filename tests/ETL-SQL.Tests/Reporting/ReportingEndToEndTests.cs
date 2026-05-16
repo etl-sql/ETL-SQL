@@ -309,14 +309,17 @@ CREATE VISUAL SalesCard AS CARD (
     MAPPINGS (VALUE = Amount)
 );
 
-CREATE BUTTON RefreshButton AS RUN (
+CREATE BUTTON RefreshButton AS (
     TITLE 'Run',
+    ACTIONS (ON_CLICK = APPLY_PARAMETERS),
     STYLE (COLOR = '#ffffff')
 );
 
 CREATE CONTAINER Shell AS BOX (
-    STRUCTURE = 'A B',
-    MAP('A' = SalesCard, 'B' = RefreshButton),
+    LAYOUT (
+        STRUCTURE = 'A B',
+        MAP('A' = SalesCard, 'B' = RefreshButton)
+    ),
     STYLE (THEME = 'corporate', HEIGHT = '360px')
 );
 
@@ -380,7 +383,7 @@ CREATE VISUAL SalesTable AS TABLE (
     )
 );
 
-CREATE BUTTON SearchButton AS RUN (
+CREATE BUTTON SearchButton AS (
     TITLE 'Search',
     ACTIONS (ON_CLICK = SET_PARAMETER(@Search, SearchLiteral))
 );
@@ -523,8 +526,9 @@ CREATE VISUAL ActiveOnly AS CHECKBOX (
     DEFAULT = 'TRUE',
     ACTIONS (ON_CHANGE = SET_PARAMETER(@Active, VALUE))
 );
-CREATE BUTTON RunReport AS RUN (
-    TITLE 'Run'
+CREATE BUTTON RunReport AS (
+    TITLE 'Run',
+    ACTIONS (ON_CLICK = APPLY_PARAMETERS)
 );",
                 new Action<ETL_SQL.Reporting.ReportManifest>(m =>
                 {
@@ -586,10 +590,12 @@ CREATE VISUAL SalesTable AS TABLE (
     SOURCE = (SELECT Region, Category, Sales FROM #Sales),
     FORMATTING (Sales >= 20 THEN '#22c55e')
 );
-CREATE BUTTON Apply AS RUN (TITLE 'Apply');
+CREATE BUTTON Apply AS (TITLE 'Apply', ACTIONS (ON_CLICK = APPLY_PARAMETERS));
 CREATE CONTAINER Filters AS BOX (
-    STRUCTURE = 'A B',
-    MAP('A' = RegionFilter, 'B' = Apply)
+    LAYOUT (
+        STRUCTURE = 'A B',
+        MAP('A' = RegionFilter, 'B' = Apply)
+    )
 );
 CREATE PAGE Dashboard AS (
     STRUCTURE = 'A / B C',

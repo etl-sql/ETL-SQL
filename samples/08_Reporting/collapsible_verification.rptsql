@@ -1,5 +1,5 @@
--- Collapsible & Pinnable Container Verification
--- This script tests the new COLLAPSIBLE, ICON, and PINNABLE options.
+-- Drawer & Pinnable Container Verification
+-- This script tests the DRAWER container type with ICON and PINNABLE options.
 
 CREATE CONNECTION mock ON MOCKDB();
 
@@ -16,14 +16,17 @@ CREATE VISUAL RegionFilter AS SLICER (
     ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region))
 );
 
--- Define a collapsible container for filters
-CREATE CONTAINER FilterPanel AS BOX (
+-- Define a drawer container for filters
+CREATE CONTAINER FilterPanel AS DRAWER (
     TITLE = 'Filters',
-    COLLAPSIBLE = ON,
-    ICON = 'FILTER',
-    PINNABLE = ON,
-    STRUCTURE = 'A',
-    MAP ('A' = RegionFilter)
+    LAYOUT (
+        STRUCTURE = 'A',
+        MAP ('A' = RegionFilter)
+    ),
+    OPTIONS (
+        ICON = 'FILTER',
+        PINNABLE = ON
+    )
 );
 
 -- Page layout: A is the collapsible filter, B is the main content

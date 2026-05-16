@@ -1139,8 +1139,8 @@
         }
 
         const clickActions = actionsFor(visual, 'ON_CLICK');
-        const crossFilter  = isOn((visual.options || {})['CROSS_FILTER']) 
-                           || !!(visual.options || {})['CROSS_VISUAL_ACTION'];
+        const interactionMode = ((visual.interactions || {})['ON_SELECT'] || '').toUpperCase();
+        const crossFilter  = !!interactionMode && interactionMode !== 'NONE';
         const xMappingCol  = (visual.options || {})['mapping:x'];
 
         const wrapper = document.createElement('div');
@@ -1315,7 +1315,7 @@
                         if (match) rowData = match;
                     }
 
-                    // CROSS_FILTER handling
+                    // INTERACTIONS handling
                     if (crossFilter) {
                         const clickedValue = params.name || params.value || (rowData.length > 0 ? rowData[0] : null);
                         const colName = xMappingCol || (visual.columns && visual.columns[0]);
@@ -1510,11 +1510,12 @@
             return;
         }
 
-        const clickActions  = actionsFor(visual, 'ON_CLICK');
-        const isClickable   = clickActions.length > 0;
-        const crossFilter   = isOn((visual.options || {})['CROSS_FILTER']);
+        const clickActions     = actionsFor(visual, 'ON_CLICK');
+        const isClickable      = clickActions.length > 0;
+        const interactionMode  = ((visual.interactions || {})['ON_SELECT'] || '').toUpperCase();
+        const crossFilter      = !!interactionMode && interactionMode !== 'NONE';
 
-        // Register as a cross-filter target so applyPageCrossFilter can find it
+        // Register as an interaction target so applyPageCrossFilter can find it
         if (crossFilter) {
             container.setAttribute('data-cross-filter', '1');
             container._visualData = visual;
@@ -2719,46 +2720,17 @@
         if (!brd) btnEl.style.border = 'none';
         if (!fw)  btnEl.style.fontWeight = '600';
 
-        const type = (btn.buttonType || '').toUpperCase();
         // Mark RUN buttons so updateStagedUI can target them precisely
         if ((btn.actions || []).some(a => a.type === 'APPLY_PARAMETERS')) {
             btnEl.dataset.isRunBtn = 'true';
         }
         btnEl.addEventListener('click', () => {
-            if (type === 'BACK') {
-                window.history.back();
-            } else if (type === 'EXPORT_CSV' || type === 'EXPORT_EXCEL') {
-                const targetName = (btn.options || {})['TARGET'];
-                const visual = targetName ? findVisualData(targetName) : null;
-                if (!visual) { console.warn('EXPORT button: no TARGET visual found:', targetName); return; }
-                if (type === 'EXPORT_CSV') exportCsv(visual);
-                else exportExcel(visual);
-            } else if (type === 'REFRESH') {
-                if (isInteractive) {
-                    fetch(apiBase + '/manifest')
-                        .then(r => r.json())
-                        .then(m => renderManifest(m))
-                        .catch(e => console.error('Refresh failed:', e));
-                }
-            } else if (type === 'CLEAR_FILTERS') {
-                if (vscode) {
-                    vscode.postMessage({ type: 'refreshReport', parameters: {} });
-                } else if (isWebMode) {
-                    postParameters({}).then(m => { if (m) renderManifest(m); });
-                }
-            } else {
-                // Custom button — execute ON_CLICK actions
-                const clickActions = actionsFor(btn, 'ON_CLICK');
-                
-                if (clickActions.length === 0) return;
+            const clickActions = actionsFor(btn, 'ON_CLICK');
+            if (clickActions.length === 0) return;
 
-                // If there are multiple actions, execute them all
-                // Special handling: if we have mixed actions, we execute them in sequence.
-                // Note: APPLY_PARAMETERS and CLEAR_FILTERS trigger async re-renders.
-                clickActions.forEach(action => {
-                    executeAction(action, [], [], btn.name, btn);
-                });
-            }
+            clickActions.forEach(action => {
+                executeAction(action, [], [], btn.name, btn);
+            });
         });
 
         container.appendChild(btnEl);
@@ -3050,6 +3022,23 @@
             
             // Flush to server
             _postParametersInternal(batch).then(m => { if (m) renderManifest(m); });
+        } else if (action.type === 'BACK') {
+            window.history.back();
+        } else if (action.type === 'REFRESH') {
+            if (isInteractive) {
+                fetch(apiBase + '/manifest')
+                    .then(r => r.json())
+                    .then(m => renderManifest(m))
+                    .catch(e => console.error('Refresh failed:', e));
+            }
+        } else if (action.type === 'EXPORT_CSV' || action.type === 'EXPORT_EXCEL') {
+            const targetName = action.targetVisual || (visualCtx && visualCtx.options && visualCtx.options.TARGET);
+            const visual = targetName ? findVisualData(targetName) : null;
+            if (!visual) { console.warn('EXPORT action: no target visual found:', targetName); return; }
+            if (action.type === 'EXPORT_CSV') exportCsv(visual);
+            else exportExcel(visual);
+        } else if (action.type === 'EXPORT_PDF') {
+            window.print();
         } else if (action.type === 'DRILL_REPORT') {
             const targetReport = resolveActionValue(action, rowData, columns) || action.targetReport;
             if (!targetReport) return;

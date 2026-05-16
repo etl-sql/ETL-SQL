@@ -233,6 +233,11 @@ namespace ETL_SQL.Reporting
         [JsonPropertyName("actions")]
         public List<VisualActionManifest> Actions { get; set; } = new();
 
+        /// <summary>Cross-visual selection/filter/highlight behavior from INTERACTIONS.</summary>
+        [JsonPropertyName("interactions")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Dictionary<string, string>? Interactions { get; set; }
+
         [JsonPropertyName("styles")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, string>? Styles { get; set; }

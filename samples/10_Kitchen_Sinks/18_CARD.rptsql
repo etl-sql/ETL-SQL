@@ -31,8 +31,10 @@ CREATE VISUAL StyledCard AS CARD (
 
 -- 4. Multiple Cards in a Row (using Container)
 CREATE CONTAINER KpiGrid AS BOX (
-    STRUCTURE = 'A B',
-    MAP ('A' = BasicCard, 'B' = StyledCard)
+    LAYOUT (
+        STRUCTURE = 'A B',
+        MAP ('A' = BasicCard, 'B' = StyledCard)
+    )
 );
 
 -- Page Layout

@@ -146,6 +146,7 @@ export interface VisualManifest {
     options: Record<string, string>;
     error?: string;
     actions: any[];
+    interactions?: Record<string, string>;
     styles?: Record<string, string>;
     defaultValue?: string;
     summaryData?: TableSummaryData;

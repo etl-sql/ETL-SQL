@@ -1,12 +1,12 @@
 {
-  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\10_Kitchen_Sinks\\30_INTERACTIONS.rptsql",
-  "builtAt": "2026-05-14T19:07:05.393293Z",
+  "source": "samples/10_Kitchen_Sinks/30_INTERACTIONS.rptsql",
+  "builtAt": "2026-05-16T01:44:15.185814Z",
   "title": "Kitchen Sink: Interactive Actions",
   "visuals": [
     {
       "name": "DrillinChart",
       "visualType": "BAR",
-      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Drill-In (Hierarchical: Year \\u003E Qtr \\u003E Month)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00222024\u0022,\u00222025\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Rev\u0022,\u0022data\u0022:[100,200]}]}",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Drill-In (Hierarchical: Year \\u003E Qtr \\u003E Month)\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u00222024\u0022,\u00222025\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022Rev\u0022,\u0022data\u0022:[150,200]}]}",
       "columns": [
         "Year",
         "Quarter",
@@ -15,10 +15,10 @@
       ],
       "rows": [
         [
-          "2025",
+          "2024",
           "Q1",
           "Jan",
-          "200"
+          "100"
         ],
         [
           "2024",
@@ -33,10 +33,10 @@
           "150"
         ],
         [
-          "2024",
+          "2025",
           "Q1",
           "Jan",
-          "100"
+          "200"
         ]
       ],
       "options": {
@@ -182,11 +182,13 @@
         ]
       ],
       "options": {
-        "title": "Filtered Table (responds to Region click)",
-        "CROSS_VISUAL_ACTION": "FILTER"
+        "title": "Filtered Table (responds to Region click)"
       },
       "error": null,
       "actions": [],
+      "interactions": {
+        "ON_SELECT": "FILTER"
+      },
       "styles": {}
     },
     {
@@ -222,13 +224,15 @@
       ],
       "options": {
         "title": "Highlighted Bar (responds to Region click)",
-        "CROSS_VISUAL_ACTION": "HIGHLIGHT",
         "mapping:x": "Cat",
         "mapping:y": "Sales",
         "mapping:series": "Region"
       },
       "error": null,
       "actions": [],
+      "interactions": {
+        "ON_SELECT": "HIGHLIGHT"
+      },
       "styles": {}
     }
   ],
@@ -261,7 +265,7 @@
   "buttons": [
     {
       "name": "ToggleBtn",
-      "buttonType": "CUSTOM",
+      "buttonType": "BUTTON",
       "title": "Toggle Detail Chart Visibility",
       "options": {},
       "actions": [
@@ -306,89 +310,89 @@
   },
   "messages": [
     {
-      "message": "[bcd1c1ff] [SELECT] Executing SelectStatement. Session: bcd1c1ff",
+      "message": "[966ef4e1] [SELECT] Executing SelectStatement. Session: 966ef4e1",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.3596545Z"
+      "timestamp": "2026-05-16T01:44:15.1519769Z"
     },
     {
-      "message": "[bcd1c1ff] 4 rows affected.",
+      "message": "[966ef4e1] 4 rows affected.",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.3796462Z"
+      "timestamp": "2026-05-16T01:44:15.1720819Z"
     },
     {
-      "message": "[bcd1c1ff] [SELECT] Executing SelectStatement. Session: bcd1c1ff",
+      "message": "[966ef4e1] [SELECT] Executing SelectStatement. Session: 966ef4e1",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.3806439Z"
+      "timestamp": "2026-05-16T01:44:15.1734095Z"
     },
     {
-      "message": "[bcd1c1ff] 4 rows affected.",
+      "message": "[966ef4e1] 4 rows affected.",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.3807794Z"
+      "timestamp": "2026-05-16T01:44:15.1735514Z"
     },
     {
-      "message": "[bcd1c1ff] Visual \u0027DrillinChart\u0027 created.",
+      "message": "[966ef4e1] Visual \u0027DrillinChart\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.3824201Z"
+      "timestamp": "2026-05-16T01:44:15.1752791Z"
     },
     {
-      "message": "[bcd1c1ff] Visual \u0027DetailChart\u0027 created.",
+      "message": "[966ef4e1] Visual \u0027DetailChart\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.384516Z"
+      "timestamp": "2026-05-16T01:44:15.1774985Z"
     },
     {
-      "message": "[bcd1c1ff] Visual \u0027MasterChart\u0027 created.",
+      "message": "[966ef4e1] Visual \u0027MasterChart\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.384934Z"
+      "timestamp": "2026-05-16T01:44:15.1779132Z"
     },
     {
-      "message": "[bcd1c1ff] Visual \u0027RegionChart\u0027 created.",
+      "message": "[966ef4e1] Visual \u0027RegionChart\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.3850218Z"
+      "timestamp": "2026-05-16T01:44:15.1779921Z"
     },
     {
-      "message": "[bcd1c1ff] Visual \u0027FilteredTable\u0027 created.",
+      "message": "[966ef4e1] Visual \u0027FilteredTable\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.3850918Z"
+      "timestamp": "2026-05-16T01:44:15.1781047Z"
     },
     {
-      "message": "[bcd1c1ff] Visual \u0027HighlightedBar\u0027 created.",
+      "message": "[966ef4e1] Visual \u0027HighlightedBar\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.385561Z"
+      "timestamp": "2026-05-16T01:44:15.178194Z"
     },
     {
-      "message": "[bcd1c1ff] Button \u0027ToggleBtn\u0027 created.",
+      "message": "[966ef4e1] Button \u0027ToggleBtn\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.3859984Z"
+      "timestamp": "2026-05-16T01:44:15.178625Z"
     },
     {
-      "message": "[bcd1c1ff] Page \u0027InteractionSink\u0027 created.",
+      "message": "[966ef4e1] Page \u0027InteractionSink\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.3870774Z"
+      "timestamp": "2026-05-16T01:44:15.1796999Z"
     },
     {
-      "message": "[bcd1c1ff] Navigation \u0027MainNav\u0027 registered.",
+      "message": "[966ef4e1] Navigation \u0027MainNav\u0027 registered.",
       "color": "white",
-      "timestamp": "2026-05-14T19:07:05.3876939Z"
+      "timestamp": "2026-05-16T01:44:15.1803566Z"
     }
   ],
   "executionTree": [
     {
-      "id": "b26ba4be-00a6-4460-924e-7d0121338639",
+      "id": "2a67a372-2e17-4121-940a-23fb16270ccf",
       "name": "Script Execution",
       "status": "Completed",
       "rowsProcessed": 0,
-      "durationMs": 36.2175,
+      "durationMs": 37.3588,
       "iterationCount": 1,
       "isParallelBlock": false,
       "velocity": 0,
       "error": null,
       "children": [
         {
-          "id": "ec3bbe08-71a1-498d-bc2f-4bc4c8bb72d9",
+          "id": "29c491d2-e44e-423f-b638-07b40b3c9a2d",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.2271,
+          "durationMs": 1.351,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -396,35 +400,35 @@
           "children": []
         },
         {
-          "id": "6d676e36-4e7d-4fae-8b7e-dc4787d0d31a",
+          "id": "08e2966e-7824-4275-aa2e-a5aee180f9bd",
           "name": "SetOperation",
           "status": "Completed",
           "rowsProcessed": 8,
-          "durationMs": 22.6036,
+          "durationMs": 22.8913,
           "iterationCount": 1,
           "isParallelBlock": false,
-          "velocity": 353.9259233042524,
+          "velocity": 349.47774918855634,
           "error": null,
           "children": []
         },
         {
-          "id": "036bdb85-f90e-4ac2-ad84-9c08fb12275e",
+          "id": "f1457449-9833-4f53-a95a-678eba1d64c5",
           "name": "SetOperation",
           "status": "Completed",
           "rowsProcessed": 7,
-          "durationMs": 0.2052,
+          "durationMs": 0.5913,
           "iterationCount": 1,
           "isParallelBlock": false,
-          "velocity": 34113.0604288499,
+          "velocity": 11838.322340605444,
           "error": null,
           "children": []
         },
         {
-          "id": "e5db8b67-5f06-426d-9e72-8d1039239400",
+          "id": "3cac92fd-15e8-47e2-b9b7-a42a5548b9a6",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.8006,
+          "durationMs": 0.8394,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -432,11 +436,11 @@
           "children": []
         },
         {
-          "id": "ae684928-7c9f-4dd4-a41f-1f5e4031e727",
+          "id": "82164819-50a9-4382-a11d-a8121cf12824",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0798,
+          "durationMs": 0.0852,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -444,11 +448,11 @@
           "children": []
         },
         {
-          "id": "7422e279-6bcd-4542-83f0-8747e6265792",
+          "id": "bb3c529f-0555-4891-a325-cb604f2776cd",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0568,
+          "durationMs": 0.0594,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -456,11 +460,11 @@
           "children": []
         },
         {
-          "id": "4cf6f0b7-3f8e-4055-878e-1989546c2d88",
+          "id": "7158815d-99ee-457f-8d69-c738df1fa0bc",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0314,
+          "durationMs": 0.0325,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -468,11 +472,11 @@
           "children": []
         },
         {
-          "id": "66f98311-015f-4eda-a047-4c8a905fc9bb",
+          "id": "0c12a4d0-a79c-4b5b-8a8f-f33ac7c0cc7a",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0611,
+          "durationMs": 0.0711,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -480,11 +484,11 @@
           "children": []
         },
         {
-          "id": "296398bc-44db-4482-a5fd-d350e38388ef",
+          "id": "47a241b3-e300-4af2-9d8b-745efd3962a4",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.4616,
+          "durationMs": 0.078,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -492,11 +496,11 @@
           "children": []
         },
         {
-          "id": "24d94c5a-5344-4365-8670-98f2defe062c",
+          "id": "010b15e6-0264-4eed-9eca-58ff97d27b1b",
           "name": "CreateButton",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2838,
+          "durationMs": 0.2804,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -504,11 +508,11 @@
           "children": []
         },
         {
-          "id": "29c38cd9-5e8f-4754-8de7-48ee19c27e93",
+          "id": "cb4ced38-fa97-422d-9faa-e3a011fcef65",
           "name": "CreatePage",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.9185,
+          "durationMs": 0.9097,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -516,11 +520,11 @@
           "children": []
         },
         {
-          "id": "1f391304-d0a1-4c0f-8303-bfd94ede93b8",
+          "id": "1dadd3b3-60b9-4267-aa60-cff3f7775188",
           "name": "CreateNavigation",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.2682,
+          "durationMs": 0.2735,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,

@@ -308,13 +308,14 @@ describe('DRILL_IN action', () => {
 
 // ── Cross-filter / DRILL THROUGH HIGHLIGHT ────────────────────────────────────
 
-describe('cross-filter (CROSS_FILTER = ON)', () => {
-    /** A visual with cross-filter enabled and a well-defined x mapping. */
+describe('interactions (ON_SELECT)', () => {
+    /** A visual with interactions enabled and a well-defined x mapping. */
     function cfVisual(overrides: any = {}) {
         return {
             name: 'SalesByCategory',
             visualType: 'BAR',
-            options: { 'mapping:x': 'Category', CROSS_FILTER: 'ON' },
+            options: { 'mapping:x': 'Category' },
+            interactions: { ON_SELECT: 'HIGHLIGHT' },
             columns: ['Category', 'Sales'],
             rows: [['Electronics', '50000'], ['Clothing', '30000'], ['Food', '20000']],
             chartConfig: { series: [{ type: 'bar', data: ['Electronics', 'Clothing', 'Food'] }] },

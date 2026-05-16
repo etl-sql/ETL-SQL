@@ -1,22 +1,22 @@
 {
-  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\interaction_p1_feedback.rptsql",
-  "builtAt": "2026-05-08T01:01:17.4032604Z",
+  "source": "samples/08_Reporting/interaction_p1_feedback.rptsql",
+  "builtAt": "2026-05-16T01:44:03.3662453Z",
   "visuals": [
     {
       "name": "BarByRegion",
       "visualType": "BAR",
-      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022BarByRegion\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022East\u0022,\u0022North\u0022,\u0022South\u0022,\u0022West\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022total\u0022,\u0022data\u0022:[700,250,250,400]}]}",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Revenue by Region\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022East\u0022,\u0022North\u0022,\u0022South\u0022,\u0022West\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022total\u0022,\u0022data\u0022:[700,250,250,400]}]}",
       "columns": [
         "region",
         "total"
       ],
       "rows": [
         [
-          "West",
-          "400"
+          "North",
+          "250"
         ],
         [
-          "North",
+          "South",
           "250"
         ],
         [
@@ -24,44 +24,51 @@
           "700"
         ],
         [
-          "South",
-          "250"
+          "West",
+          "400"
         ]
       ],
       "options": {
-        "CROSS_FILTER": "True",
-        "CROSS_VISUAL_ACTION": "HIGHLIGHT",
+        "TITLE": "Revenue by Region",
         "mapping:x": "region",
         "mapping:y": "total"
       },
       "error": null,
-      "actions": []
+      "actions": [],
+      "interactions": {
+        "ON_SELECT": "HIGHLIGHT"
+      },
+      "styles": {}
     },
     {
       "name": "BarByCategory",
       "visualType": "BAR",
-      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022BarByCategory\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Hardware\u0022,\u0022Software\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022total\u0022,\u0022data\u0022:[850,750]}]}",
+      "chartConfig": "{\u0022title\u0022:{\u0022text\u0022:\u0022Revenue by Category\u0022},\u0022tooltip\u0022:{\u0022trigger\u0022:\u0022axis\u0022},\u0022legend\u0022:{\u0022orient\u0022:\u0022horizontal\u0022,\u0022bottom\u0022:\u0022bottom\u0022},\u0022xAxis\u0022:{\u0022type\u0022:\u0022category\u0022,\u0022data\u0022:[\u0022Hardware\u0022,\u0022Software\u0022]},\u0022yAxis\u0022:{\u0022type\u0022:\u0022value\u0022},\u0022series\u0022:[{\u0022type\u0022:\u0022bar\u0022,\u0022name\u0022:\u0022total\u0022,\u0022data\u0022:[850,750]}]}",
       "columns": [
         "category",
         "total"
       ],
       "rows": [
         [
-          "Software",
-          "750"
-        ],
-        [
           "Hardware",
           "850"
+        ],
+        [
+          "Software",
+          "750"
         ]
       ],
       "options": {
-        "CROSS_VISUAL_ACTION": "HIGHLIGHT",
+        "TITLE": "Revenue by Category",
         "mapping:x": "category",
         "mapping:y": "total"
       },
       "error": null,
-      "actions": []
+      "actions": [],
+      "interactions": {
+        "ON_SELECT": "HIGHLIGHT"
+      },
+      "styles": {}
     }
   ],
   "pages": [
@@ -79,7 +86,7 @@
   "buttons": [
     {
       "name": "ResetBtn",
-      "buttonType": "CLEAR_FILTERS",
+      "buttonType": "BUTTON",
       "title": "Clear All Filters",
       "options": {},
       "actions": [
@@ -96,14 +103,22 @@
       ],
       "styles": {
         "BACKGROUND": "#e74c3c",
-        "COLOR": "#ffffff"
+        "COLOR": "#ffffff",
+        "EXPORT": "OFF"
       }
     }
   ],
   "parameters": {
     "@region": "",
-    "@category": ""
+    "@category": "",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": "",
+    "@@ROWCOUNT": "8"
   },
+  "parameterMetadata": {},
   "telemetry": {
     "rowsProcessed": 8,
     "totalSpilledBytes": 0,
@@ -115,61 +130,66 @@
   },
   "messages": [
     {
-      "message": "[2d6067d7] [SELECT] Executing SelectStatement. Session: 2d6067d7",
+      "message": "[8ef3803c] [SELECT] Executing SelectStatement. Session: 8ef3803c",
       "color": "white",
-      "timestamp": "2026-05-08T01:01:17.3676345Z"
+      "timestamp": "2026-05-16T01:44:03.3313255Z"
     },
     {
-      "message": "[2d6067d7] Visual \u0027BarByRegion\u0027 created.",
+      "message": "[8ef3803c] 8 rows affected.",
       "color": "white",
-      "timestamp": "2026-05-08T01:01:17.3942432Z"
+      "timestamp": "2026-05-16T01:44:03.3520696Z"
     },
     {
-      "message": "[2d6067d7] Visual \u0027BarByCategory\u0027 created.",
+      "message": "[8ef3803c] Visual \u0027BarByRegion\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-08T01:01:17.3968527Z"
+      "timestamp": "2026-05-16T01:44:03.3568975Z"
     },
     {
-      "message": "[2d6067d7] Button \u0027ResetBtn\u0027 created.",
+      "message": "[8ef3803c] Visual \u0027BarByCategory\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-08T01:01:17.3973427Z"
+      "timestamp": "2026-05-16T01:44:03.3589095Z"
     },
     {
-      "message": "[2d6067d7] Page \u0027TestPage\u0027 created.",
+      "message": "[8ef3803c] Button \u0027ResetBtn\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-08T01:01:17.3984845Z"
+      "timestamp": "2026-05-16T01:44:03.3593785Z"
+    },
+    {
+      "message": "[8ef3803c] Page \u0027TestPage\u0027 created.",
+      "color": "white",
+      "timestamp": "2026-05-16T01:44:03.3605009Z"
     }
   ],
   "executionTree": [
     {
-      "id": "00368dd8-a14d-4204-8a5d-ac10e9a62fca",
+      "id": "5a84ecb2-ee39-4c9e-b633-8cbd19ec792c",
       "name": "Script Execution",
       "status": "Completed",
       "rowsProcessed": 0,
-      "durationMs": 38.9098,
+      "durationMs": 36.7401,
       "iterationCount": 1,
       "isParallelBlock": false,
       "velocity": 0,
       "error": null,
       "children": [
         {
-          "id": "09428c16-14b1-47d7-b162-143e407e5ecb",
+          "id": "f82c0dc3-73c4-4567-8c34-f57c7f85a68a",
           "name": "SetOperation",
           "status": "Completed",
           "rowsProcessed": 16,
-          "durationMs": 26.1208,
+          "durationMs": 24.9315,
           "iterationCount": 1,
           "isParallelBlock": false,
-          "velocity": 612.538666503323,
+          "velocity": 641.7584180654994,
           "error": null,
           "children": []
         },
         {
-          "id": "6a9d6d20-8842-4bf5-aa21-83a002fff19b",
+          "id": "bdc1eaf9-9334-4317-8478-f323fac2c899",
           "name": "Declare",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.1191,
+          "durationMs": 1.039,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -177,11 +197,11 @@
           "children": []
         },
         {
-          "id": "1116e4b4-94fd-43b7-8e39-efab28841d62",
+          "id": "6c1fca62-f6af-4189-9931-bf4df37f8696",
           "name": "Declare",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0212,
+          "durationMs": 0.0134,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -189,11 +209,11 @@
           "children": []
         },
         {
-          "id": "956327e9-238c-42c4-8328-c59f0d17fdad",
+          "id": "4388b114-04db-4f4c-90a0-6e37bdf653eb",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.1514,
+          "durationMs": 0.8712,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -201,11 +221,11 @@
           "children": []
         },
         {
-          "id": "94b3d8d5-2198-4272-814c-90f87800fe45",
+          "id": "91f2d5b9-df56-41f1-96ab-f0fab3f214f6",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.5434,
+          "durationMs": 0.0848,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -213,11 +233,11 @@
           "children": []
         },
         {
-          "id": "d8dab8a9-89f8-4c6b-b477-86e6bc88d91e",
+          "id": "a120c65e-029b-4f8c-b429-c75a836926fd",
           "name": "CreateButton",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.3081,
+          "durationMs": 0.3041,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -225,11 +245,11 @@
           "children": []
         },
         {
-          "id": "79575cd6-a0f1-4203-b10d-69bd87bf75c7",
+          "id": "a4ed1a52-00a7-4dd8-98d2-fcc583d2ec1d",
           "name": "CreatePage",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.9716,
+          "durationMs": 0.9585,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,

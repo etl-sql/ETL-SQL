@@ -177,20 +177,6 @@ namespace ETL_SQL.Reporting
                     foreach (var opt in bStmt.Options)
                         bm.Options[opt.Key] = opt.Value;
 
-                    // Implied actions for special types if none specified
-                    if (bStmt.Actions.Count == 0)
-                    {
-                        var type = bStmt.ButtonType.ToUpperInvariant();
-                        if (type == "CLEAR_FILTERS")
-                            bm.Actions.Add(new VisualActionManifest { Type = "CLEAR_FILTERS", Trigger = "ON_CLICK" });
-                        else if (type == "REFRESH")
-                            bm.Actions.Add(new VisualActionManifest { Type = "REFRESH", Trigger = "ON_CLICK" });
-                        else if (type == "BACK")
-                            bm.Actions.Add(new VisualActionManifest { Type = "BACK", Trigger = "ON_CLICK" });
-                        else if (type == "RUN")
-                            bm.Actions.Add(new VisualActionManifest { Type = "APPLY_PARAMETERS", Trigger = "ON_CLICK" });
-                    }
-
                     foreach (var action in bStmt.Actions)
                     {
                         bm.Actions.Add(TranslateAction(action));
@@ -301,6 +287,7 @@ namespace ETL_SQL.Reporting
             vm.ChartConfig = newVm.ChartConfig;
             vm.Options = newVm.Options;
             vm.Actions = newVm.Actions;
+            vm.Interactions = newVm.Interactions;
             vm.Styles = newVm.Styles;
             vm.SeriesDefs = newVm.SeriesDefs;
             vm.FormattingRules = newVm.FormattingRules;
@@ -355,6 +342,7 @@ namespace ETL_SQL.Reporting
                     LiteralParameters = dr.Parameters.Where(p => p.Value.StartsWith("'") || p.Value.StartsWith("@")).ToDictionary(p => p.Key, p => p.Value.Trim('\''))
                 },
                 ApplyParametersAction ap => new VisualActionManifest { Type = "APPLY_PARAMETERS", Trigger = action.Trigger },
+                ReportCommandAction command => new VisualActionManifest { Type = command.Command, Trigger = action.Trigger },
                 DrillInAction di => new VisualActionManifest { Type = "DRILL_IN", Trigger = action.Trigger, Hierarchy = di.Hierarchy },
                 SetUiStateAction su => new VisualActionManifest
                 {

@@ -10,8 +10,9 @@ CREATE VISUAL d AS DATEPICKER(
 
 )
 */
-CREATE BUTTON run_btn AS RUN (
+CREATE BUTTON run_btn AS (
     TITLE = 'Run Report',
+    ACTIONS (ON_CLICK = APPLY_PARAMETERS),
     STYLE (BACKGROUND = '#28a745', COLOR = 'white', PADDING = '10px 20px')
 );
 

@@ -220,7 +220,7 @@ CREATE VISUAL RevenueByRegion AS BAR (
 CREATE PAGE Overview AS (
   STRUCTURE = 'A',
   MAP ('A' = RevenueByRegion),
-  STYLE (GAP = '16px')
+  GAP = '16px'
 );
 ```
 
@@ -430,8 +430,10 @@ CREATE VISUAL RegionSparkline AS LINE (
 );
 
 CREATE CONTAINER RegionTooltip AS BOX (
-  STRUCTURE = 'A',
-  MAP ('A' = RegionSparkline)
+  LAYOUT (
+    STRUCTURE = 'A',
+    MAP ('A' = RegionSparkline)
+  )
 );
 
 CREATE VISUAL RevenueByRegion AS BAR (
@@ -1064,7 +1066,7 @@ Multiple `GOAL` lines are supported — just add additional `GOAL(n)` entries. `
 
 
 > [!TIP]
-> **Cross-filtering is live.** Add `OPTIONS (CROSS_VISUAL_ACTION = 'HIGHLIGHT')` to a chart visual and it will respond to click selections on other visuals on the same page — matching data stays solid while non-matching data dims to a ghost. Use `'FILTER'` instead to re-query and hide non-matching rows entirely. See [CROSS_VISUAL_ACTION](#cross_visual_action) below.
+> **Cross-filtering is live.** Add `INTERACTIONS (ON_SELECT = HIGHLIGHT)` to a chart visual and it will respond to click selections on other visuals on the same page — matching data stays solid while non-matching data dims to a ghost. Use `FILTER` instead to re-query and hide non-matching rows entirely. See [INTERACTIONS](#interactions) below.
 
 
 ### STYLE
@@ -1215,17 +1217,16 @@ ON_CLICK = CLEAR_FILTERS
 Resets all active filters and cross-highlighting states on the current page. Typically used on a dedicated reset button:
 
 ```sql
-CREATE BUTTON ResetAll AS CUSTOM (
+CREATE BUTTON ResetAll AS (
   TITLE   = 'Clear All Filters',
   ACTIONS (ON_CLICK = CLEAR_FILTERS)
 );
 ```
 
-#### APPLY_PARAMETERS / RUN_REPORT
+#### APPLY_PARAMETERS
 
 ```sql
 ON_CLICK = APPLY_PARAMETERS
-ON_CLICK = RUN_REPORT        -- Alias for APPLY_PARAMETERS
 ```
 
 Triggers a full report refresh in **Staged Mode**. Useful for paginated reports where you want the user to set multiple filters and then click "Run" to fetch data once. 
@@ -1247,11 +1248,11 @@ Changes the ephemeral visual state of report objects without triggering a data r
 
 **Example: Collapse a filter panel after running report**
 ```sql
-CREATE BUTTON RunBtn AS BUTTON (
-  TEXT    = 'Run Report',
+CREATE BUTTON RunBtn AS (
+  TITLE   = 'Run Report',
   ACTIONS (
     ON_CLICK = (
-      RUN_REPORT,
+      APPLY_PARAMETERS,
       SET_UI_STATE('FilterPanel', 'COLLAPSED', ON)
     )
   )
@@ -1259,13 +1260,14 @@ CREATE BUTTON RunBtn AS BUTTON (
 ```
 ```
 
-### CROSS_VISUAL_ACTION {#cross_visual_action}
+### INTERACTIONS {#interactions}
 
-Controls how a visual responds when the user clicks an element on **another** chart on the same page. Set as an `OPTIONS` key.
+Controls how a visual responds when the user clicks an element on **another** chart on the same page.
 
 ```sql
-OPTIONS (
-  CROSS_VISUAL_ACTION = 'HIGHLIGHT' | 'FILTER' | 'NONE'
+INTERACTIONS (
+  ON_SELECT = HIGHLIGHT | FILTER | NONE,
+  MATCHING = Region
 )
 ```
 
@@ -1279,12 +1281,12 @@ OPTIONS (
 CREATE VISUAL CategoryBreakdown AS BAR (
   SOURCE  = #sales,
   MAPPINGS (X = Category, Y = Revenue),
-  OPTIONS  (CROSS_VISUAL_ACTION = 'HIGHLIGHT')
+  INTERACTIONS (ON_SELECT = HIGHLIGHT)
 );
 
 CREATE VISUAL SalesTable AS TABLE (
   SOURCE  = #sales,
-  OPTIONS (CROSS_VISUAL_ACTION = 'FILTER')   -- rows disappear when a bar is clicked
+  INTERACTIONS (ON_SELECT = FILTER)   -- rows disappear when a bar is clicked
 );
 ```
 
@@ -1388,8 +1390,8 @@ CREATE PAGE DetailView AS (
 A button or chart click action can navigate to a hidden page:
 
 ```sql
-CREATE BUTTON ShowDetail AS CUSTOM (
-  LABEL   = 'View Details',
+CREATE BUTTON ShowDetail AS (
+  TITLE   = 'View Details',
   ACTIONS (ON_CLICK = DRILL_DOWN(Target = DetailView, Key = id))
 );
 ```
@@ -1595,53 +1597,65 @@ The manifest contains resolved `styles` objects for report, page, container, but
 ## CREATE CONTAINER
 
 ```
-CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL (
+CREATE [OR ALTER] CONTAINER <name> AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|MODAL|POPOVER (
   [TITLE = '<string>',]
   [SUBTITLE = '<string>',]
   [TOOLTIP = '<string>',]
   [STYLE = <styleName> | STYLE (key = value, ...),]
-  [VISUALS (VisualA, VisualB, ...),]
-  [STRUCTURE = '<grid-template-areas>',]
-  [MAP ('<slot>' = VisualOrContainerName, ...),]
-  [COLLAPSIBLE = ON|OFF,]
-  [PINNABLE = ON|OFF,]
-  [VISIBLE = ON|OFF,]
-  [ICON = '<name>']
+  LAYOUT (
+    STRUCTURE = '<grid-template-areas>',
+    MAP ('<slot>' = VisualOrContainerName, ...)
+  ),
+  [OPTIONS (
+    PINNABLE = ON|OFF,
+    VISIBLE = ON|OFF,
+    ICON = '<name>'
+  )]
 );
 ```
 
 | Type | Description |
 |------|-------------|
-| `BOX` | Layout region. If `VISUALS` is used, they are stacked. If `STRUCTURE` is used, it follows the grid layout. |
+| `BOX` | General layout region. |
 | `SCROLL` | Scrollable region. Overflow content scrolls within fixed container height. |
+| `DRAWER` | Filter or control panel that can be pinned or shown as an overlay. |
+| `SIDEBAR` | Persistent side panel for navigation, filters, or context. |
+| `TABS` | Tabbed child region. |
+| `ACCORDION` | Collapsible stacked child sections. |
+| `MODAL` | Dialog-like child surface opened by actions. |
+| `POPOVER` | Lightweight floating child surface for contextual detail. |
 
 ### VISIBLE
 
-`VISIBLE = OFF` on a container hides the entire container (and all its children) until toggled via an action. For `COLLAPSIBLE = ON` containers, this controls whether the drawer starts opened or closed.
+`VISIBLE = OFF` in `OPTIONS` hides the entire container (and all its children) until toggled via an action. For drawer containers, this controls whether the drawer starts opened or closed.
 
 ### Layout
 
-Containers use the same `STRUCTURE` and `MAP` logic as pages, enabling arbitrarily nested grid layouts. Every container must have a `STRUCTURE` and a `MAP`.
+Containers use the same `STRUCTURE` and `MAP` logic as pages, but nested placement is always inside `LAYOUT (...)`. Every container with children must have a `STRUCTURE` and a `MAP`.
 
 ```sql
 -- Single visual (single-slot STRUCTURE)
 CREATE CONTAINER KpiRow AS BOX (
-  STRUCTURE = 'A B C',
-  MAP (
-    'A' = TotalRevenue,
-    'B' = TotalUnits,
-    'C' = AvgOrderValue
+  LAYOUT (
+    STRUCTURE = 'A B C',
+    MAP (
+      'A' = TotalRevenue,
+      'B' = TotalUnits,
+      'C' = AvgOrderValue
+    )
   )
 );
 
 -- Multi-row layout
 CREATE CONTAINER InfoPanel AS BOX (
   TITLE = 'Product Insights',
-  STRUCTURE = 'A B / C C',
-  MAP (
-    'A' = ProductImage,
-    'B' = PriceCard,
-    'C' = DescriptionText
+  LAYOUT (
+    STRUCTURE = 'A B / C C',
+    MAP (
+      'A' = ProductImage,
+      'B' = PriceCard,
+      'C' = DescriptionText
+    )
   )
 );
 ```
@@ -1661,25 +1675,27 @@ CREATE PAGE Main AS (
 
 ### Collapsible Drawer Containers
 
-Adding `COLLAPSIBLE = ON` turns a container into an **overlay drawer** — it appears as a floating panel on top of the layout and can be toggled via a trigger icon pinned to the page edge.
+Use `DRAWER` for filter panels that can float over the page and be toggled via a trigger icon pinned to the page edge.
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| `COLLAPSIBLE` | `OFF` | When `ON`, the container is rendered as a collapsible drawer overlay. |
-| `PINNABLE` | `ON` | When `ON` (and `COLLAPSIBLE = ON`), the user can pin the drawer inline so it pushes the rest of the layout aside rather than floating over it. |
+| `PINNABLE` | `ON` | When `ON`, the user can pin the drawer inline so it pushes the rest of the layout aside rather than floating over it. |
 | `ICON` | _(none)_ | Icon name shown in the trigger button (e.g. `'filter'`, `'settings'`, `'info'`). Supports standard icon set names recognized by the runtime theme. |
 
 ```sql
-CREATE CONTAINER FilterDrawer AS BOX (
+CREATE CONTAINER FilterDrawer AS DRAWER (
   TITLE      = 'Filters',
-  COLLAPSIBLE = ON,
-  PINNABLE   = ON,
-  ICON       = 'filter',
-  STRUCTURE  = 'A / B / C',
-  MAP (
-    'A' = RegionFilter,
-    'B' = YearSlider,
-    'C' = CategoryFilter
+  LAYOUT (
+    STRUCTURE  = 'A / B / C',
+    MAP (
+      'A' = RegionFilter,
+      'B' = YearSlider,
+      'C' = CategoryFilter
+    )
+  ),
+  OPTIONS (
+    PINNABLE = ON,
+    ICON = 'filter'
   )
 );
 
@@ -1741,7 +1757,7 @@ The `ORIENTATION` option determines the placement and behavior of the navigation
 Adds an interactive button to a page. Buttons are placed in `MAP` slots just like visuals.
 
 ```
-CREATE [OR ALTER] BUTTON <name> AS BACK|REFRESH|<customType> (
+CREATE [OR ALTER] BUTTON <name> AS (
   [TITLE   = '<string>',]
   [TOOLTIP = '<string>',]
   [OPTIONS (key = value, ...),]
@@ -1750,60 +1766,56 @@ CREATE [OR ALTER] BUTTON <name> AS BACK|REFRESH|<customType> (
 );
 ```
 
-### Button types
-
-| Type | Behavior |
-|------|----------|
-| `BACK` | Navigates to the previous page in the browser history. |
-| `REFRESH` | Forces a full report refresh (equivalent to hitting `/api/refresh`). |
-| `RUN` | Enables **Staged Mode**. Implies `APPLY_PARAMETERS` — use this for paginated reports where data should only load after a user clicks. |
-| `<identifier>` | Custom type — behavior driven entirely by the `ACTIONS` clause. |
+Buttons are command emitters. Use `ACTIONS (ON_CLICK = ...)` for behavior.
 
 ### Examples
 
 ```sql
 -- Navigation button
-CREATE BUTTON GoBack AS BACK (
+CREATE BUTTON GoBack AS (
   TITLE   = '← Back',
-  TOOLTIP = 'Return to the previous page'
+  TOOLTIP = 'Return to the previous page',
+  ACTIONS (ON_CLICK = BACK)
 );
 
 -- Refresh button
-CREATE BUTTON RefreshData AS REFRESH (
+CREATE BUTTON RefreshData AS (
   TITLE   = 'Refresh',
   TOOLTIP = 'Reload all visuals from source data',
+  ACTIONS (ON_CLICK = REFRESH_REPORT),
   STYLE (BACKGROUND-COLOR = '#2563eb', COLOR = '#ffffff', BORDER-RADIUS = '4px')
 );
 
 -- Export a specific visual's data to CSV
-CREATE BUTTON DownloadCsv AS EXPORT_CSV (
+CREATE BUTTON DownloadCsv AS (
   TITLE   = 'Download CSV',
-  OPTIONS (TARGET = SalesDetail)
+  OPTIONS (TARGET = SalesDetail),
+  ACTIONS (ON_CLICK = EXPORT_CSV)
 );
 
 -- Export a specific visual's data to Excel
-CREATE BUTTON DownloadExcel AS EXPORT_EXCEL (
+CREATE BUTTON DownloadExcel AS (
   TITLE   = 'Download Excel',
   OPTIONS (TARGET = SalesDetail),
+  ACTIONS (ON_CLICK = EXPORT_EXCEL),
   STYLE (BACKGROUND-COLOR = '#217346', COLOR = '#ffffff')
 );
 
 -- Custom action button
-CREATE BUTTON DrillBtn AS CUSTOM (
+CREATE BUTTON DrillBtn AS (
   TITLE   = 'View Detail',
   ACTIONS (ON_CLICK = DRILL_DOWN(Target = DetailPage, Key = id))
 );
 ```
 
-### Built-in button types
+### Button actions
 
-| Type | Behavior |
+| Action | Behavior |
 |---|---|
 | `BACK` | Calls `window.history.back()` |
-| `REFRESH` | Reloads the manifest from the server and re-renders all visuals |
+| `REFRESH_REPORT` | Reloads the manifest from the server and re-renders all visuals |
 | `EXPORT_CSV` | Downloads the `TARGET` visual's data as a `.csv` file (client-side, no server round-trip) |
 | `EXPORT_EXCEL` | Downloads the `TARGET` visual's data as a `.xls` file (Excel-compatible HTML table format) |
-| Any other string | Custom button — executes `ON_CLICK` actions (`SET_PARAMETER`, `DRILL_DOWN`) |
 
 `EXPORT_CSV` and `EXPORT_EXCEL` require `OPTIONS (TARGET = VisualName)` where `VisualName` is the name of any visual currently rendered on the same page. The exported data reflects the rows in the manifest — if the visual is cross-filtered, the full dataset (not the filtered view) is exported.
 
@@ -1839,9 +1851,9 @@ ALTER PAGE Overview (
   TOOLTIP = 'Live sales data, refreshed hourly'
 );
 
--- Update container visuals list
+-- Update container metadata
 ALTER CONTAINER KpiRow (
-  VISUALS (TotalRevenue, TotalUnits, AvgOrderValue)
+  TITLE = 'KPI Summary'
 );
 
 -- Change a button's label
@@ -2245,10 +2257,12 @@ CREATE VISUAL BrandLogo AS IMAGE (
 
 -- KPI container using modern grid layout
 CREATE CONTAINER KpiRow AS BOX (
-  STRUCTURE = 'A B',
-  MAP (
-    'A' = BrandLogo,
-    'B' = TotalRevenue
+  LAYOUT (
+    STRUCTURE = 'A B',
+    MAP (
+      'A' = BrandLogo,
+      'B' = TotalRevenue
+    )
   )
 );
 
@@ -2286,7 +2300,7 @@ CREATE NAVIGATION MainNav AS TAB (
 
 ### How do I create a "Run-to-Data" paginated report?
 For reports with heavy queries or many parameters, you should avoid refreshing the report on every character change. Use the **Run-to-Data** pattern:
-1.  **Use `AS RUN`**: Create a button with `AS RUN`. This automatically puts the dashboard into "Staged Mode," meaning parameters are collected but not applied until the button is clicked.
+1.  **Use `ACTIONS (ON_CLICK = APPLY_PARAMETERS)`**: This puts the dashboard into staged mode, meaning parameters are collected but not applied until the button is clicked.
 2.  **Use `VISIBLE = OFF`**: Set the results visual (e.g., a TABLE) to `VISIBLE = OFF`. The engine will show a placeholder message ("Configure parameters and click Run") instead of loading empty data on the initial page load.
 
 ### Why do I get a "Failed to cast" error when using `RELDATE` parameters?
@@ -2311,8 +2325,9 @@ Yes. The `STYLE (...)` block on a `CREATE BUTTON` supports standard CSS properti
 - `BOX-SHADOW` (e.g., `0 2px 4px rgba(0,0,0,0.2)`)
 
 ```sql
-CREATE BUTTON RunBtn AS RUN (
+CREATE BUTTON RunBtn AS (
     TITLE = 'Run Report',
+    ACTIONS (ON_CLICK = APPLY_PARAMETERS),
     STYLE (
         BACKGROUND = '#2563eb', 
         COLOR = '#ffffff', 

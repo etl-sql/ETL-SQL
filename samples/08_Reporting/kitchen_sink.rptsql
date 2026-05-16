@@ -51,8 +51,9 @@ CREATE VISUAL date_range AS RELDATEPICKER (
     ACTIONS (ON_CHANGE = SET_PARAMETER(@DateRange, VALUE))
 );
 
-CREATE BUTTON run_report AS RUN (
+CREATE BUTTON run_report AS (
     TITLE = 'Apply & Run',
+    ACTIONS (ON_CLICK = APPLY_PARAMETERS),
     STYLE (BACKGROUND = '#007bff', COLOR = 'white', PADDING = '10px 30px')
 );
 

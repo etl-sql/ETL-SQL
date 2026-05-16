@@ -50,7 +50,7 @@ namespace ETL_SQL.Reporting
                 // Visual is affected if it directly uses the variable.
                 // For interactions (Highlight), we refresh all visuals that have an interaction mode enabled
                 // to ensure cross-filtering/ghosting is applied correctly across the page.
-                var action = visualDef.Options.FirstOrDefault(o => string.Equals(o.Key, "CROSS_VISUAL_ACTION", StringComparison.OrdinalIgnoreCase))?.Value;
+                var action = visualDef.Interactions.FirstOrDefault(o => string.Equals(o.Key, "ON_SELECT", StringComparison.OrdinalIgnoreCase))?.Value;
                 bool hasInteraction = action != null && !string.Equals(action, "NONE", StringComparison.OrdinalIgnoreCase);
                 
                 bool isAffected = (isInteraction && hasInteraction) || affectedNames.Any(n => DependsOnVariable(visualDef, n));

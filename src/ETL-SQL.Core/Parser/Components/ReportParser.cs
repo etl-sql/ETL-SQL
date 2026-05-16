@@ -32,6 +32,7 @@ namespace ETL_SQL.Core.Parser.Components
             var options         = new List<VisualOption>();
             var axisOptions     = new List<AxisOptions>();
             var actions         = new List<VisualAction>();
+            var interactions    = new List<VisualInteraction>();
             var styles          = new Dictionary<string, string>();
             var typedSeries     = new List<TypedSeries>();
             var formattingRules = new List<FormattingRule>();
@@ -83,6 +84,12 @@ namespace ETL_SQL.Core.Parser.Components
                     Consume(TokenType.LPAREN, "Expected '(' after ACTIONS");
                     actions.AddRange(ParseActions());
                     Consume(TokenType.RPAREN, "Expected ')' to close ACTIONS");
+                }
+                else if (Match(TokenType.INTERACTIONS))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after INTERACTIONS");
+                    interactions.AddRange(ParseInteractions());
+                    Consume(TokenType.RPAREN, "Expected ')' to close INTERACTIONS");
                 }
                 else if (Match(TokenType.STYLE))
                 {
@@ -193,6 +200,7 @@ namespace ETL_SQL.Core.Parser.Components
                 Options         = options,
                 AxisOptions     = axisOptions,
                 Actions         = actions,
+                Interactions    = interactions,
                 TypedSeries     = typedSeries,
                 FormattingRules = formattingRules,
                 Overlays        = overlays,
@@ -212,11 +220,7 @@ namespace ETL_SQL.Core.Parser.Components
         public Statement ParseCreatePage(Token startToken, ObjectCreationMode mode = ObjectCreationMode.Create)
         {
             var name = ConsumeIdentifier("Expected page name").Value;
-            if (!Match(TokenType.AS))
-            {
-                // Backward compatibility: AS is now preferred but we'll accept ( if name is clearly an identifier.
-                if (!ReportCheck(TokenType.LPAREN)) Consume(TokenType.AS, "Expected AS after page name");
-            }
+            Consume(TokenType.AS, "Expected AS after page name");
 
             Consume(TokenType.LPAREN, "Expected '(' after AS");
             
@@ -253,6 +257,12 @@ namespace ETL_SQL.Core.Parser.Components
                 else if (Match(TokenType.STYLE))
                 {
                     ParseStyleClause(pageStyles, ref pageStyleName);
+                }
+                else if (IsCurrentValue("GAP"))
+                {
+                    Advance();
+                    Consume(TokenType.EQUALS, "Expected '=' after GAP");
+                    pageStyles["GAP"] = ConsumeReportOptionValue();
                 }
                 else if (Match(TokenType.TITLE))
                 {
@@ -549,8 +559,13 @@ namespace ETL_SQL.Core.Parser.Components
             else if (Match(TokenType.SCROLL))  containerType = "SCROLL";
             else
             {
-                var raw = ConsumeIdentifier("Expected BOX or SCROLL after AS").Value.ToUpperInvariant();
-                containerType = raw is "BOX" or "SCROLL" ? raw : "BOX";
+                var raw = ConsumeIdentifier("Expected container type after AS").Value.ToUpperInvariant();
+                containerType = raw is "BOX" or "SCROLL" or "DRAWER" or "SIDEBAR" or "TABS" or "ACCORDION" or "MODAL" or "POPOVER"
+                    ? raw
+                    : throw new SyntaxException(
+                        $"Unknown container type '{raw}'. Expected BOX, SCROLL, DRAWER, SIDEBAR, TABS, ACCORDION, MODAL, or POPOVER.",
+                        _parser.Previous.Line,
+                        _parser.Previous.Column);
             }
 
             Consume(TokenType.LPAREN, "Expected '(' after container type");
@@ -562,7 +577,8 @@ namespace ETL_SQL.Core.Parser.Components
             string? structure = null;
             var slotMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             var styles  = new Dictionary<string, string>();
-            bool isCollapsible = false, isPinnable = true;
+            bool isCollapsible = containerType == "DRAWER";
+            bool isPinnable = true;
             string? visibility = "ON";
             string? icon = null;
 
@@ -585,43 +601,17 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     tooltip = ParseTooltipDefinition();
                 }
-                else if (Match(TokenType.STRUCTURE))
+                else if (Match(TokenType.LAYOUT))
                 {
-                    Consume(TokenType.EQUALS, "Expected '=' after STRUCTURE");
-                    structure = Consume(TokenType.STRING_LITERAL, "Expected string literal for STRUCTURE").Value;
+                    Consume(TokenType.LPAREN, "Expected '(' after LAYOUT");
+                    ParseContainerLayout(ref structure, slotMap, styles);
+                    Consume(TokenType.RPAREN, "Expected ')' to close LAYOUT");
                 }
-                else if (Match(TokenType.MAP))
+                else if (Match(TokenType.OPTIONS))
                 {
-                    Consume(TokenType.LPAREN, "Expected '(' after MAP");
-                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
-                    {
-                        var slot   = Consume(TokenType.STRING_LITERAL, "Expected slot letter (e.g. 'A')").Value;
-                        Consume(TokenType.EQUALS, "Expected '=' in MAP entry");
-                        var visual = ConsumeIdentifier("Expected visual or container name after '='").Value;
-                        slotMap[slot] = visual;
-                        Match(TokenType.COMMA);
-                    }
-                    Consume(TokenType.RPAREN, "Expected ')' to close MAP");
-                }
-                else if (Match(TokenType.COLLAPSIBLE))
-                {
-                    Consume(TokenType.EQUALS, "Expected '=' after COLLAPSIBLE");
-                    isCollapsible = ParseOnOffValue() == "ON";
-                }
-                else if (Match(TokenType.ICON))
-                {
-                    Consume(TokenType.EQUALS, "Expected '=' after ICON");
-                    icon = Consume(TokenType.STRING_LITERAL, "Expected string literal for ICON").Value;
-                }
-                else if (Match(TokenType.PINNABLE))
-                {
-                    Consume(TokenType.EQUALS, "Expected '=' after PINNABLE");
-                    isPinnable = ParseOnOffValue() == "ON";
-                }
-                else if (Match(TokenType.VISIBLE))
-                {
-                    Match(TokenType.EQUALS);
-                    visibility = ParseOnOffValue();
+                    Consume(TokenType.LPAREN, "Expected '(' after OPTIONS");
+                    ParseContainerOptions(ref isPinnable, ref visibility, ref icon);
+                    Consume(TokenType.RPAREN, "Expected ')' to close OPTIONS");
                 }
                 else
                 {
@@ -657,6 +647,71 @@ namespace ETL_SQL.Core.Parser.Components
                 Column             = startToken.Column
             };
         }
+
+        private void ParseContainerLayout(ref string? structure, Dictionary<string, string> slotMap, Dictionary<string, string> styles)
+        {
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                if (Match(TokenType.STRUCTURE))
+                {
+                    Consume(TokenType.EQUALS, "Expected '=' after STRUCTURE");
+                    structure = Consume(TokenType.STRING_LITERAL, "Expected string literal for STRUCTURE").Value;
+                }
+                else if (Match(TokenType.MAP))
+                {
+                    Consume(TokenType.LPAREN, "Expected '(' after MAP");
+                    while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+                    {
+                        var slot = Consume(TokenType.STRING_LITERAL, "Expected slot letter (e.g. 'A')").Value;
+                        Consume(TokenType.EQUALS, "Expected '=' in MAP entry");
+                        var visual = ConsumeIdentifier("Expected visual or container name after '='").Value;
+                        slotMap[slot] = visual;
+                        Match(TokenType.COMMA);
+                    }
+                    Consume(TokenType.RPAREN, "Expected ')' to close MAP");
+                }
+                else
+                {
+                    var key = ConsumeIdentifier("Expected layout option name").Value.ToUpperInvariant();
+                    Match(TokenType.EQUALS);
+                    styles[key] = ConsumeReportOptionValue();
+                }
+                Match(TokenType.COMMA);
+            }
+        }
+
+        private void ParseContainerOptions(ref bool isPinnable, ref string? visibility, ref string? icon)
+        {
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                if (Match(TokenType.PINNABLE))
+                {
+                    Consume(TokenType.EQUALS, "Expected '=' after PINNABLE");
+                    isPinnable = ParseOnOffValue() == "ON";
+                }
+                else if (Match(TokenType.VISIBLE))
+                {
+                    Match(TokenType.EQUALS);
+                    visibility = ParseOnOffValue();
+                }
+                else if (Match(TokenType.ICON))
+                {
+                    Consume(TokenType.EQUALS, "Expected '=' after ICON");
+                    icon = Consume(TokenType.STRING_LITERAL, "Expected string literal for ICON").Value;
+                }
+                else
+                {
+                    throw new SyntaxException(
+                        $"Unexpected token '{_parser.Current.Value}' in CREATE CONTAINER OPTIONS",
+                        _parser.Current.Line,
+                        _parser.Current.Column);
+                }
+                Match(TokenType.COMMA);
+            }
+        }
+
+        private bool IsCurrentValue(string value) =>
+            string.Equals(_parser.Current.Value, value, StringComparison.OrdinalIgnoreCase);
 
         // ── CREATE NAVIGATION ─────────────────────────────────────────────────
 
@@ -762,15 +817,8 @@ namespace ETL_SQL.Core.Parser.Components
             var name = ConsumeIdentifier("Expected button name after CREATE BUTTON").Value;
             Consume(TokenType.AS, "Expected AS after button name");
 
-            string buttonType;
-            if (Match(TokenType.BACK))         buttonType = "BACK";
-            else if (Match(TokenType.REFRESH)) buttonType = "REFRESH";
-            else if (Match(TokenType.CLEAR_FILTERS)) buttonType = "CLEAR_FILTERS";
-            else if (_parser.Current.Type != TokenType.LPAREN && _parser.Current.Type != TokenType.EOF)
-                buttonType = _parser.Advance().Value.ToUpperInvariant(); // accept any keyword as custom button type
-            else throw new SyntaxException("Expected button type (BACK, REFRESH, or custom identifier) after AS", _parser.Current.Line, _parser.Current.Column);
-
-            Consume(TokenType.LPAREN, "Expected '(' after button type");
+            const string buttonType = "BUTTON";
+            Consume(TokenType.LPAREN, "Expected '(' after AS. Put behavior in ACTIONS (ON_CLICK = ...).");
 
             Expression? title      = null;
             TooltipDefinition? tooltip = null;
@@ -1129,6 +1177,20 @@ namespace ETL_SQL.Core.Parser.Components
             return result;
         }
 
+        private IEnumerable<VisualInteraction> ParseInteractions()
+        {
+            var result = new List<VisualInteraction>();
+            while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
+            {
+                var key = ConsumeIdentifier("Expected interaction key").Value.ToUpperInvariant();
+                Consume(TokenType.EQUALS, $"Expected '=' after interaction key '{key}'");
+                var value = ConsumeReportOptionValue().ToUpperInvariant();
+                result.Add(new VisualInteraction { Key = key, Value = value });
+                Match(TokenType.COMMA);
+            }
+            return result;
+        }
+
         private void ParseOptions(List<VisualOption> options, List<AxisOptions> axisOptions)
         {
             while (!ReportCheck(TokenType.RPAREN) && !ReportAtEnd())
@@ -1221,6 +1283,13 @@ namespace ETL_SQL.Core.Parser.Components
                         break;
                     var keyToken = _parser.Advance();
                     var key = keyToken.Value.ToUpperInvariant();
+                    if (key is "CROSS_VISUAL_ACTION" or "CROSS_FILTER")
+                    {
+                        throw new SyntaxException(
+                            $"Unexpected option '{key}'. Use INTERACTIONS (ON_SELECT = HIGHLIGHT|FILTER|NONE) for cross-visual behavior.",
+                            keyToken.Line,
+                            keyToken.Column);
+                    }
                     Match(TokenType.EQUALS);
                     var val = ParseExpression();
                     options.Add(new VisualOption { Key = key, Value = val is LiteralExpression lit ? lit.Value?.ToString() ?? "" : val.ToSql() });
@@ -1259,6 +1328,7 @@ namespace ETL_SQL.Core.Parser.Components
                 t == TokenType.STRING_LITERAL || t == TokenType.NUMBER  ||
                 t == TokenType.TRUE           || t == TokenType.FALSE   ||
                 t == TokenType.ON             || t == TokenType.OFF     ||
+                t == TokenType.FILTER         ||
                 t == TokenType.TOP            || t == TokenType.BOTTOM  ||
                 t == TokenType.LEFT           || t == TokenType.RIGHT   ||
                 t == TokenType.GRID           || t == TokenType.DATA_LABELS ||
@@ -1463,6 +1533,10 @@ namespace ETL_SQL.Core.Parser.Components
                 {
                     action = new ApplyParametersAction { Trigger = trigger };
                 }
+                else if (TryParseReportCommandAction(trigger, out var commandAction))
+                {
+                    action = commandAction;
+                }
                 else if (Match(TokenType.SET_UI_STATE))
                 {
                     Consume(TokenType.LPAREN, "Expected '(' after SET_UI_STATE");
@@ -1498,11 +1572,34 @@ namespace ETL_SQL.Core.Parser.Components
                 else
                 {
                     throw new SyntaxException(
-                        $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, CLEAR_FILTERS, APPLY_PARAMETERS, or SET_UI_STATE after {trigger} =",
+                        $"Expected DRILL_DOWN, DRILL_IN, SET_PARAMETER, CLEAR_FILTERS, APPLY_PARAMETERS, BACK, REFRESH_REPORT, EXPORT_CSV, EXPORT_EXCEL, EXPORT_PDF, or SET_UI_STATE after {trigger} =",
                         _parser.Current.Line, _parser.Current.Column);
                 }
 
                 return action;
+        }
+
+        private bool TryParseReportCommandAction(string trigger, out ReportCommandAction? action)
+        {
+            action = null;
+            var token = _parser.Current;
+            var command = token.Value.ToUpperInvariant();
+            var manifestType = command switch
+            {
+                "BACK" => "BACK",
+                "REFRESH_REPORT" => "REFRESH",
+                "EXPORT_CSV" => "EXPORT_CSV",
+                "EXPORT_EXCEL" => "EXPORT_EXCEL",
+                "EXPORT_PDF" => "EXPORT_PDF",
+                _ => null
+            };
+
+            if (manifestType == null)
+                return false;
+
+            Advance();
+            action = new ReportCommandAction { Trigger = trigger, Command = manifestType };
+            return true;
         }
 
         private IEnumerable<TypedSeries> ParseTypedSeries()

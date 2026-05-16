@@ -1,6 +1,6 @@
 {
-  "source": "c:\\Users\\chuck\\scratch\\ETL-SQL\\samples\\inputs_deferred_run.rptsql",
-  "builtAt": "2026-05-09T22:50:04.0574218Z",
+  "source": "samples/08_Reporting/inputs_deferred_run.rptsql",
+  "builtAt": "2026-05-16T01:43:54.6679675Z",
   "title": "Deferred Execution Test",
   "visuals": [
     {
@@ -44,7 +44,8 @@
         ]
       ],
       "options": {
-        "title": "Results (Only updates after Run)"
+        "title": "Results (Only updates after Run)",
+        "VISIBLE": "False"
       },
       "error": null,
       "actions": [],
@@ -66,7 +67,7 @@
   "buttons": [
     {
       "name": "run_btn",
-      "buttonType": "RUN",
+      "buttonType": "BUTTON",
       "title": "Run Report",
       "options": {},
       "actions": [
@@ -90,7 +91,12 @@
     }
   ],
   "parameters": {
-    "@text_val": "Change Me"
+    "@text_val": "Change Me",
+    "@hover_value": "",
+    "@click_value": "",
+    "@selected_value": "",
+    "@drill_value": "",
+    "@param_value": ""
   },
   "parameterMetadata": {
     "@text_val": {
@@ -107,48 +113,48 @@
     "subqueryCacheMisses": 0,
     "subquerySpillCount": 0,
     "subquerySpilledBytes": 0,
-    "executionTimeMs": 0
+    "executionTimeMs": 1
   },
   "messages": [
     {
-      "message": "[8ed1034a] Visual \u0027txt\u0027 created.",
+      "message": "[66ac9d56] Visual \u0027txt\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-09T22:50:04.0488049Z"
+      "timestamp": "2026-05-16T01:43:54.6569739Z"
     },
     {
-      "message": "[8ed1034a] Button \u0027run_btn\u0027 created.",
+      "message": "[66ac9d56] Button \u0027run_btn\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-09T22:50:04.0511502Z"
+      "timestamp": "2026-05-16T01:43:54.6597999Z"
     },
     {
-      "message": "[8ed1034a] Visual \u0027out_table\u0027 created.",
+      "message": "[66ac9d56] Visual \u0027out_table\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-09T22:50:04.0515528Z"
+      "timestamp": "2026-05-16T01:43:54.6603715Z"
     },
     {
-      "message": "[8ed1034a] Page \u0027Main\u0027 created.",
+      "message": "[66ac9d56] Page \u0027Main\u0027 created.",
       "color": "white",
-      "timestamp": "2026-05-09T22:50:04.0526519Z"
+      "timestamp": "2026-05-16T01:43:54.6617784Z"
     }
   ],
   "executionTree": [
     {
-      "id": "61778d90-1674-46b6-afd6-d96ffab705aa",
+      "id": "cffac097-0be3-4245-9829-28b5d692577e",
       "name": "Script Execution",
       "status": "Completed",
       "rowsProcessed": 0,
-      "durationMs": 15.1646,
+      "durationMs": 16.0478,
       "iterationCount": 1,
       "isParallelBlock": false,
       "velocity": 0,
       "error": null,
       "children": [
         {
-          "id": "01fc5259-97fd-4532-ab2a-e61c86afccca",
+          "id": "fa05b0ad-c23d-401e-8535-1a007b99f52b",
           "name": "SetReportMetadata",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 1.4275,
+          "durationMs": 1.3292,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -156,11 +162,11 @@
           "children": []
         },
         {
-          "id": "471bd3a3-4130-4ce1-a86c-073ae925c7f4",
+          "id": "8870022e-fb10-43c8-90b8-14b0c1ea24a8",
           "name": "Declare",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 2.7902,
+          "durationMs": 2.2437,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -168,11 +174,11 @@
           "children": []
         },
         {
-          "id": "3354986e-1d27-4d7e-9487-695ce4cf945b",
+          "id": "1761f1c6-5109-4d62-b73c-e7738ba2f5a1",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 2.3026,
+          "durationMs": 2.4111,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -180,11 +186,11 @@
           "children": []
         },
         {
-          "id": "ae5d0b05-764f-420a-b454-01148ba49853",
+          "id": "836a5f5e-2829-4d81-823e-0b0b285e4f99",
           "name": "CreateButton",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.4938,
+          "durationMs": 0.5802,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -192,11 +198,11 @@
           "children": []
         },
         {
-          "id": "a39157c6-eabb-490c-bcda-a9aa29bfb757",
+          "id": "bc100f51-1056-4081-a56d-ad143b2b9d53",
           "name": "CreateVisual",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.0623,
+          "durationMs": 0.0906,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,
@@ -204,11 +210,11 @@
           "children": []
         },
         {
-          "id": "15d79ad6-12c6-444b-ab76-99624ed841e0",
+          "id": "264726a9-0a6c-42c4-919a-146b30da963c",
           "name": "CreatePage",
           "status": "Completed",
           "rowsProcessed": 0,
-          "durationMs": 0.9486,
+          "durationMs": 1.1198,
           "iterationCount": 1,
           "isParallelBlock": false,
           "velocity": 0,

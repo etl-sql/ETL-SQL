@@ -1,5 +1,5 @@
 -- Kitchen Sink: INTERACTIVE ACTIONS
--- This script demonstrates DRILL_DOWN, DRILL_IN, CROSS_VISUAL_ACTION, and SET_UI_STATE.
+-- This script demonstrates DRILL_DOWN, DRILL_IN, INTERACTIONS, and SET_UI_STATE.
 
 SET REPORT TITLE = 'Kitchen Sink: Interactive Actions';
 
@@ -38,7 +38,7 @@ CREATE VISUAL MasterChart AS BAR (
     ACTIONS (ON_CLICK = DRILL_DOWN(Target = DetailChart, Key = Region))
 );
 
--- 5. CROSS_VISUAL_ACTION (Highlight vs Filter)
+-- 5. INTERACTIONS (Highlight vs Filter)
 CREATE VISUAL RegionChart AS PIE (
     SOURCE = (SELECT Region, SUM(Sales) AS Sales FROM #sales GROUP BY Region),
     TITLE = 'Region (Interaction Source)',
@@ -48,18 +48,18 @@ CREATE VISUAL RegionChart AS PIE (
 CREATE VISUAL FilteredTable AS TABLE (
     SOURCE = #sales,
     TITLE = 'Filtered Table (responds to Region click)',
-    OPTIONS (CROSS_VISUAL_ACTION = 'FILTER')
+    INTERACTIONS (ON_SELECT = FILTER)
 );
 
 CREATE VISUAL HighlightedBar AS BAR (
     SOURCE = #sales,
     TITLE = 'Highlighted Bar (responds to Region click)',
     MAPPINGS (X = Cat, Y = Sales, SERIES = Region),
-    OPTIONS (CROSS_VISUAL_ACTION = 'HIGHLIGHT')
+    INTERACTIONS (ON_SELECT = HIGHLIGHT)
 );
 
 -- 6. SET_UI_STATE (Toggling visibility)
-CREATE BUTTON ToggleBtn AS CUSTOM (
+CREATE BUTTON ToggleBtn AS (
     TITLE = 'Toggle Detail Chart Visibility',
     ACTIONS (ON_CLICK = SET_UI_STATE('DetailChart', 'VISIBLE', 'TOGGLE')) -- Wait, is TOGGLE supported? 
     -- Guide says "Value: ON/OFF, colors...". I'll use ON/OFF or explicit toggle logic if possible.

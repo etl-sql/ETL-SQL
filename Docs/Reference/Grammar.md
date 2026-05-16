@@ -2022,8 +2022,9 @@ CREATE VISUAL <name> AS <type> (
   [OPTIONS    ( key = value [, ...]
                 [, X_AXIS (...)] [, Y_AXIS (...)]
                 [, COLORS ( key = '#hex' [, ...] )]
-                [, LEGEND ( position = top|bottom|left|right )]
-                [, CROSS_VISUAL_ACTION = 'FILTER'|'HIGHLIGHT'|'NONE'] ),]
+                [, LEGEND ( position = top|bottom|left|right )] ),]
+  [INTERACTIONS ( ON_SELECT = FILTER|HIGHLIGHT|NONE
+                  [, MATCHING = <column> ] ),]
   [STYLE      ( key = value [, ...] ),]
   [SERIES     ( BAR|LINE column [, ...] ),]
   [FORMATTING ( column op threshold THEN '<color>' [, ...] ),]
@@ -2074,7 +2075,7 @@ ON_CLICK  = DRILL_IN(HIERARCHY = (<col1>, <col2>, ...))
 ON_CHANGE = SET_PARAMETER(@paramName, <columnRef>)
 ON_CLICK  = RUN_SCRIPT('<path>', @param = <columnRef> [, ...])
 ON_CLICK  = CLEAR_FILTERS
-ON_CLICK  = APPLY_PARAMETERS | RUN_REPORT
+ON_CLICK  = APPLY_PARAMETERS
 ON_CLICK  = SET_UI_STATE(<Target>, <Key>, <Value>)
 ```
 
@@ -2133,6 +2134,7 @@ CREATE PAGE <name> AS (
     '<slot>' = <VisualOrContainerName>
     [, '<slot>' = <name> ...]
   )
+  [, GAP = '<css-size>']
   [, STYLE ( key = value [, ...] )]
 )
 ;
@@ -2142,16 +2144,22 @@ CREATE PAGE <name> AS (
 
 ### A.5 `CREATE CONTAINER`
 ```sql
-CREATE CONTAINER <name> AS BOX|SCROLL (
+CREATE CONTAINER <name> AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|MODAL|POPOVER (
   [TITLE = '<string>',]
   [SUBTITLE = '<string>',]
   [TOOLTIP = '<string>' | <ContainerName>,]
   [STYLE = <styleName> | STYLE ( key = value [, ...] ),]
-  [STRUCTURE = '<css-grid-template-areas>',]
-  [MAP ('<slot>' = <VisualOrContainerName> [, ...] ),]
-  [COLLAPSIBLE = ON|OFF,]
-  [PINNABLE = ON|OFF,]
-  [ICON = '<name>']
+  LAYOUT (
+    STRUCTURE = '<css-grid-template-areas>',
+    MAP ('<slot>' = <VisualOrContainerName> [, ...] )
+    [, GAP = '<css-size>']
+    [, <layout_key> = <value> ...]
+  ),
+  [OPTIONS (
+    PINNABLE = ON|OFF,
+    VISIBLE = ON|OFF,
+    ICON = '<name>'
+  )]
 );
 ```
 
@@ -2183,7 +2191,7 @@ CREATE STYLE <name> (
 
 ### A.8 `CREATE BUTTON`
 ```sql
-CREATE BUTTON <name> AS BACK|REFRESH|CLEAR_FILTERS|<customType> (
+CREATE BUTTON <name> AS (
   [TITLE   = '<string>',]
   [TOOLTIP = '<string>' | <ContainerName>,]
   [OPTIONS ( key = value [, ...] ),]
@@ -2216,8 +2224,8 @@ CREATE OR ALTER VISUAL     <name> AS <type> ( ... );
 CREATE OR ALTER PAGE       <name> AS ( ... );
 CREATE OR ALTER DATASET    &<name> ... AS ( SELECT ... );
 CREATE OR ALTER STYLE      <name> ( ... );
-CREATE OR ALTER BUTTON     <name> AS BACK|REFRESH|CLEAR_FILTERS|<customType> ( ... );
-CREATE OR ALTER CONTAINER  <name> AS BOX|SCROLL ( ... );
+CREATE OR ALTER BUTTON     <name> AS ( ... );
+CREATE OR ALTER CONTAINER  <name> AS BOX|SCROLL|DRAWER|SIDEBAR|TABS|ACCORDION|MODAL|POPOVER ( ... );
 CREATE OR ALTER NAVIGATION <name> AS TAB|BUTTON|LINK ( ... );
 ```
 

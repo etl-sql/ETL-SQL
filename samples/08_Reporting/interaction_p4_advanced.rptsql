@@ -16,14 +16,16 @@ INSERT INTO #sales VALUES
 CREATE VISUAL PieByRegion AS PIE (
   SOURCE = (SELECT region, SUM(sales) AS total FROM #sales WHERE category = ISNULL(@category, category) GROUP BY region),
   MAPPINGS (LABEL = region, VALUE = total),
-  OPTIONS (CROSS_FILTER = ON, TITLE = 'Revenue share by Region')
+  OPTIONS (TITLE = 'Revenue share by Region'),
+  INTERACTIONS (ON_SELECT = HIGHLIGHT)
 );
 
 -- Visual 2: Sales vs Growth (Scatter)
 CREATE VISUAL ScatterSalesGrowth AS SCATTER (
   SOURCE = (SELECT sales, growth, category, region FROM #sales WHERE region = ISNULL(@region, region)),
   MAPPINGS (X = sales, Y = growth, SERIES = category, TOOLTIP = region),
-  OPTIONS (CROSS_FILTER = ON, TITLE = 'Sales vs Growth Correlation')
+  OPTIONS (TITLE = 'Sales vs Growth Correlation'),
+  INTERACTIONS (ON_SELECT = HIGHLIGHT)
 );
 
 -- Visual 3: Sales Trend (Multi-series Line)
@@ -31,7 +33,8 @@ CREATE VISUAL ScatterSalesGrowth AS SCATTER (
 CREATE VISUAL LineByCategory AS LINE (
   SOURCE = (SELECT category, SUM(sales) AS total, region FROM #sales GROUP BY category, region),
   MAPPINGS (X = region, Y = total, SERIES = category),
-  OPTIONS (CROSS_FILTER = ON, TITLE = 'Sales by Category & Region')
+  OPTIONS (TITLE = 'Sales by Category & Region'),
+  INTERACTIONS (ON_SELECT = HIGHLIGHT)
 );
 
 -- Slicer

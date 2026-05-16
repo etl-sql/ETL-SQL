@@ -24,7 +24,7 @@ ALTER VISUAL V1 (
 );
 
 -- 5. CREATE BUTTON
-CREATE BUTTON RefreshBtn AS REFRESH (
+CREATE BUTTON RefreshBtn AS (
     TITLE = 'Refresh Data',
     TOOLTIP = 'Re-executes the script',
     ACTIONS (ON_CLICK = SET_PARAMETER(@refresh, '1'))

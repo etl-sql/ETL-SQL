@@ -26,8 +26,8 @@
 - [ ] Update `Docs/Report_SQL_Guide.md`, editor help, samples, and tests after the remaining grammar direction is settled.
 
 ### Phase 1 — Report layout syntax
-- [ ] Make `LAYOUT (...)` an explicit bucket for containers; pages use the page body itself for layout placement.
-- [ ] Implement the canonical page syntax:
+- [x] Make `LAYOUT (...)` an explicit bucket for containers; pages use the page body itself for layout placement.
+- [x] Implement the canonical page syntax:
   ```sql
   CREATE PAGE overview AS (
     TITLE = 'Executive Overview',
@@ -42,7 +42,7 @@
     STYLE (THEME = light)
   );
   ```
-- [ ] Keep containers typed because container behavior matters:
+- [x] Keep containers typed because container behavior matters:
   ```sql
   CREATE CONTAINER FilterDrawer AS DRAWER (
     TITLE = 'Filters',
@@ -60,12 +60,12 @@
     )
   );
   ```
-- [ ] Candidate container types: `BOX`, `SCROLL`, `DRAWER`, `SIDEBAR`, `TABS`, `ACCORDION`, `MODAL`, `POPOVER`. Avoid decorative/geometric container types unless there is a real reporting workflow need.
+- [x] Candidate container types: `BOX`, `SCROLL`, `DRAWER`, `SIDEBAR`, `TABS`, `ACCORDION`, `MODAL`, `POPOVER`. Avoid decorative/geometric container types unless there is a real reporting workflow need.
 - [ ] Move layout-related settings such as `GAP`, responsive breakpoints, pinned panels, drawer placement, tabs, modals, and maximize behavior into `LAYOUT (...)` where possible.
 - [ ] Update parser, AST, manifest builder, report runtime, VS Code preview, Report Portal renderer, docs, and samples together.
 
 ### Phase 2 — Actions, interactions, and buttons
-- [ ] Replace `OPTIONS (CROSS_VISUAL_ACTION = HIGHLIGHT|FILTER|NONE)` with a dedicated interaction clause:
+- [x] Replace `OPTIONS (CROSS_VISUAL_ACTION = HIGHLIGHT|FILTER|NONE)` with a dedicated interaction clause:
   ```sql
   INTERACTIONS (
     ON_SELECT = HIGHLIGHT,
@@ -78,7 +78,7 @@
     - Slicers/search/date/slider/textbox/numberbox/checkbox controls: `ON_CHANGE`.
     - Buttons: `ON_CLICK`.
     - Text/card/image visuals: no actions unless intentionally made clickable.
-- [ ] Normalize button behavior so built-in buttons and custom buttons do not feel split-brained. Preferred direction: buttons are command emitters and `ACTIONS` defines behavior.
+- [x] Normalize button behavior so built-in buttons and custom buttons do not feel split-brained. Preferred direction: buttons are command emitters and `ACTIONS` defines behavior.
   ```sql
   CREATE BUTTON RefreshData AS BUTTON (
     TITLE = 'Refresh',
@@ -153,7 +153,7 @@
 - [ ] Add parser tests for every changed statement form.
 - [ ] Add report runtime tests for interactions, buttons, layout containers, navigation, and maximize.
 - [ ] Add portal integration tests for publish, permissions, subscriptions, refresh, export, audit, and catalog search.
-- [ ] Update `AGENTS.md`, `Docs/Report_SQL_Guide.md`, `Docs/Reference/Grammar.md`, `Docs/Strategy/ReportPortal_Strategy.md`, editor help, and sample guide so all agents and users generate the same syntax.
+- [ ] Update `AGENTS.md`, `Docs/Report_SQL_Guide.md`, `Docs/Reference/Grammar.md`, `Docs/Strategy/ReportPortal_Strategy.md`, editor help, and sample guide so all agents and users generate the same syntax.  Make sure very container type, action, style, etc is documented.
 - [ ] Remove old docs/examples for replaced syntax before launch unless a deliberate compatibility decision is made.
 
 - [ ] **Phase 6 — Advanced Visualization Capability Gaps (BI Parity)**
@@ -163,6 +163,7 @@
     - [x] **Small Multiples (Trellis)**: Repeat a visual across a grid for each category value.
     - [x] **Selection Primitives**: Brush/Lasso selection on Scatter/Scatter3D to drive parameter filters (Industry Standard: Tableau Brush).
     - [x] **Network Graph**: Force-directed graphs for lineage and relationship exploration.
+    - [ ] **Maximize visual** Maximize the space of the visual to the full screen and the chart fills the space, provide a minimize button to return to previous size and show other visuals.
 
 ---
 

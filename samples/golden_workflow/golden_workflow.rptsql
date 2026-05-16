@@ -118,17 +118,20 @@ CREATE VISUAL IssueToggle AS CHECKBOX (
     ACTIONS (ON_CHANGE = SET_PARAMETER(@ShowIssues, VALUE))
 );
 
-CREATE BUTTON ApplyWorkflow AS RUN (
-    TITLE = 'Apply Workflow'
+CREATE BUTTON ApplyWorkflow AS (
+    TITLE = 'Apply Workflow',
+    ACTIONS (ON_CLICK = APPLY_PARAMETERS)
 );
 
 CREATE CONTAINER WorkflowControls AS BOX (
-    STRUCTURE = 'A B C D',
-    MAP (
-        'A' = RegionFilter,
-        'B' = MarginThreshold,
-        'C' = IssueToggle,
-        'D' = ApplyWorkflow
+    LAYOUT (
+        STRUCTURE = 'A B C D',
+        MAP (
+            'A' = RegionFilter,
+            'B' = MarginThreshold,
+            'C' = IssueToggle,
+            'D' = ApplyWorkflow
+        )
     ),
     STYLE (HEIGHT = '120px')
 );

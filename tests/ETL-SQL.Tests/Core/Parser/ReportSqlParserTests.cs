@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Xunit;
 using ETL_SQL.Core;
+using ETL_SQL.Core.Common;
 using ETL_SQL.Core.Parser;
 
 namespace ETL_SQL.Tests.Core.Parsing
@@ -163,13 +164,25 @@ CREATE PAGE Dashboard AS (
             var sql = @"
 CREATE PAGE SimplePage AS (
     STRUCTURE = 'A',
-    MAP ('A' = Chart1)
+    MAP ('A' = Chart1),
+    GAP = '12px'
 );";
             var script = Parse(sql);
             var stmt = script.Statements.OfType<CreatePageStatement>().FirstOrDefault();
 
             Assert.NotNull(stmt);
             Assert.Equal("A", stmt!.Structure);
+            Assert.Equal("12px", stmt.Styles["GAP"]);
+        }
+
+        [Fact]
+        public void ParseCreatePage_MissingAs_ReportsSyntaxError()
+        {
+            var script = Parse("CREATE PAGE OldPage (STRUCTURE = 'A', MAP ('A' = Chart1));");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("Expected AS after page name", StringComparison.OrdinalIgnoreCase));
         }
 
         // ── CREATE DATASET ────────────────────────────────────────────────────
@@ -233,6 +246,62 @@ CREATE VISUAL SalesChart AS BAR (
         }
 
         [Fact]
+        public void ParseCreateVisual_WithInteractions_ParsesOnSelect()
+        {
+            var sql = @"
+CREATE VISUAL SalesChart AS BAR (
+    SOURCE = #sales,
+    MAPPINGS (X = region, Y = total),
+    INTERACTIONS (ON_SELECT = HIGHLIGHT, MATCHING = region)
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateVisualStatement>().FirstOrDefault();
+
+            Assert.NotNull(stmt);
+            Assert.Equal("HIGHLIGHT", stmt!.Interactions.Single(i => i.Key == "ON_SELECT").Value);
+            Assert.Equal("REGION", stmt.Interactions.Single(i => i.Key == "MATCHING").Value);
+        }
+
+        [Fact]
+        public void ParseCreateVisual_CrossVisualActionOption_ReportsSyntaxError()
+        {
+            var script = Parse("CREATE VISUAL OldChart AS BAR (SOURCE = #sales, OPTIONS (CROSS_VISUAL_ACTION = HIGHLIGHT));");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("INTERACTIONS", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void ParseCreateButton_ActionFirstSyntax_ParsesCommandActions()
+        {
+            var sql = @"
+CREATE BUTTON RefreshButton AS (
+    TITLE = 'Refresh',
+    OPTIONS (TARGET = SalesTable),
+    ACTIONS (ON_CLICK = (REFRESH_REPORT, EXPORT_CSV))
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateButtonStatement>().FirstOrDefault();
+
+            Assert.NotNull(stmt);
+            Assert.Equal("BUTTON", stmt!.ButtonType);
+            Assert.Equal(2, stmt.Actions.Count);
+            Assert.Contains(stmt.Actions.OfType<ReportCommandAction>(), a => a.Command == "REFRESH");
+            Assert.Contains(stmt.Actions.OfType<ReportCommandAction>(), a => a.Command == "EXPORT_CSV");
+        }
+
+        [Fact]
+        public void ParseCreateButton_OldTypedSyntax_ReportsSyntaxError()
+        {
+            var script = Parse("CREATE BUTTON OldRefresh AS REFRESH (TITLE = 'Refresh');");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("Expected '(' after AS", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
         public void ParseCreateNavigation_PagesInBody_ParsesCorrectly()
         {
             var sql = @"
@@ -248,6 +317,57 @@ CREATE NAVIGATION MainNav AS TAB (
             Assert.Equal("MainNav", stmt!.Name);
             Assert.Equal("Overview", stmt.DefaultPage);
             Assert.Equal(new[] { "Overview", "Details" }, stmt.Pages);
+        }
+
+        [Fact]
+        public void ParseCreateContainer_LayoutAndOptions_ParsesCorrectly()
+        {
+            var sql = @"
+CREATE CONTAINER FilterDrawer AS DRAWER (
+    TITLE = 'Filters',
+    LAYOUT (
+        STRUCTURE = 'A / B',
+        MAP ('A' = RegionFilter, 'B' = YearSlider),
+        GAP = '8px'
+    ),
+    OPTIONS (
+        PINNABLE = OFF,
+        VISIBLE = ON,
+        ICON = 'filter'
+    )
+);";
+            var script = Parse(sql);
+            var stmt = script.Statements.OfType<CreateContainerStatement>().FirstOrDefault();
+
+            Assert.NotNull(stmt);
+            Assert.Equal("DRAWER", stmt!.ContainerType);
+            Assert.True(stmt.IsCollapsible);
+            Assert.False(stmt.IsPinnable);
+            Assert.Equal("A / B", stmt.Structure);
+            Assert.Equal("RegionFilter", stmt.SlotMap["A"]);
+            Assert.Equal("YearSlider", stmt.SlotMap["B"]);
+            Assert.Equal("8px", stmt.Styles["GAP"]);
+            Assert.Equal("filter", stmt.Icon);
+        }
+
+        [Fact]
+        public void ParseCreateContainer_TopLevelStructure_ReportsSyntaxError()
+        {
+            var script = Parse("CREATE CONTAINER OldPanel AS BOX (STRUCTURE = 'A', MAP ('A' = Visual1));");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("Unexpected token 'STRUCTURE'", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void ParseCreateContainer_CollapsibleOption_ReportsSyntaxError()
+        {
+            var script = Parse("CREATE CONTAINER OldDrawer AS BOX (OPTIONS (COLLAPSIBLE = ON));");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("COLLAPSIBLE", StringComparison.OrdinalIgnoreCase));
         }
 
         [Fact]

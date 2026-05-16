@@ -581,10 +581,11 @@ const ReportChart: React.FC<{
             });
 
             chartInstance.current.on('click', (params: any) => {
-                const crossFilter = visual.actions?.find(a => a.type === 'CROSS_FILTER');
-                if (crossFilter) {
+                const interactionMode = visual.interactions?.ON_SELECT?.toUpperCase();
+                if (interactionMode && interactionMode !== 'NONE') {
                     const val = params.name || (Array.isArray(params.data) ? params.data[0] : params.data);
-                    onParameterChange(crossFilter.parameterName, String(val), visual.name);
+                    const matchingColumn = visual.interactions?.MATCHING || visual.options?.['mapping:x'] || visual.columns?.[0];
+                    onParameterChange(`@${matchingColumn}`, String(val), visual.name);
                     
                     // Highlight source bar, dim others
                     chartInstance.current?.dispatchAction({ type: 'downplay' });
