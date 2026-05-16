@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -44,29 +45,32 @@ public class CatalogController(PortalDbContext db) : ControllerBase
             .Where(f => Matches(q, f.Name, f.Path))
             .Select(f => new CatalogSearchResultDto(
                 "Folder", f.Id, f.Name, f.Path, f.Id, null, null, null, null, null,
-                null, null, null, null, null))
+                null, null, null, null, null, null, null, null))
             .Concat(reports
                 .Where(r => Matches(q, r.Name, r.Description, r.Folder.Path, r.Tags, r.Category, r.Owner, r.Contact, r.Domain, r.Steward, r.Certification))
-                .Select(r => new CatalogSearchResultDto(
-                    "Report",
-                    r.Id,
-                    r.Name,
-                    CombinePath(r.Folder.Path, r.Name),
-                    r.FolderId,
-                    r.Description,
-                    r.Tags,
-                    r.Category,
-                    r.Owner,
-                    r.Certification,
-                    r.Snapshots.OrderByDescending(s => s.BuiltAt).FirstOrDefault()?.BuiltAt,
-                    r.LastViewedAt,
-                    r.LastRefreshStatus,
-                    r.LastRefreshError,
-                    r.LastRefreshDurationMs)))
+                .Select(ToCatalogResult))
             .Take(limit)
             .ToList();
 
         return Ok(results);
+    }
+
+    [HttpGet("recent")]
+    public async Task<IActionResult> Recent([FromQuery] int limit = 20)
+    {
+        limit = Math.Clamp(limit, 1, 100);
+        var visibleFolderIds = await GetVisibleFolderIdsAsync();
+
+        var reports = await db.Reports
+            .Include(r => r.Folder)
+            .Include(r => r.Snapshots.OrderByDescending(s => s.BuiltAt).Take(1))
+            .Where(r => !r.IsDeleted && r.LastViewedAt != null && visibleFolderIds.Contains(r.FolderId))
+            .OrderByDescending(r => r.LastViewedAt)
+            .ThenBy(r => r.Name)
+            .Take(limit)
+            .ToListAsync();
+
+        return Ok(reports.Select(ToCatalogResult).ToList());
     }
 
     private async Task<HashSet<int>> GetVisibleFolderIdsAsync()
@@ -90,4 +94,40 @@ public class CatalogController(PortalDbContext db) : ControllerBase
 
     private static string CombinePath(string folderPath, string reportName) =>
         folderPath.EndsWith('/') ? folderPath + reportName : $"{folderPath}/{reportName}";
+
+    private static CatalogSearchResultDto ToCatalogResult(Report r)
+    {
+        var snapshot = r.Snapshots.OrderByDescending(s => s.BuiltAt).FirstOrDefault();
+        var isStale = snapshot is not null
+            && System.IO.File.Exists(r.ScriptPath)
+            && System.IO.File.GetLastWriteTimeUtc(r.ScriptPath) > snapshot.BuiltAt;
+
+        var scriptChanged = false;
+        if (!string.IsNullOrWhiteSpace(r.PublishedScriptHash) && System.IO.File.Exists(r.ScriptPath))
+        {
+            var currentHash = "sha256:" + Convert.ToHexString(
+                SHA256.HashData(System.IO.File.ReadAllBytes(r.ScriptPath))).ToLowerInvariant();
+            scriptChanged = !string.Equals(currentHash, r.PublishedScriptHash, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return new CatalogSearchResultDto(
+            "Report",
+            r.Id,
+            r.Name,
+            CombinePath(r.Folder.Path, r.Name),
+            r.FolderId,
+            r.Description,
+            r.Tags,
+            r.Category,
+            r.Owner,
+            r.Certification,
+            snapshot?.BuiltAt,
+            r.LastViewedAt,
+            r.LastRefreshStatus,
+            r.LastRefreshError,
+            r.LastRefreshDurationMs,
+            snapshot is not null,
+            isStale,
+            scriptChanged);
+    }
 }

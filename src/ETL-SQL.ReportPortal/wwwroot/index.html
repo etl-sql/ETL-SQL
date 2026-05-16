@@ -14,6 +14,7 @@
     <span class="topbar-brand"><span class="brand-mark">E</span> ETL-SQL <span>Portal</span></span>
     <nav class="topbar-nav">
       <a href="/index.html" class="active" id="navReports">Reports</a>
+      <a href="#" id="navRecent">Recently Viewed</a>
       <a href="#" id="navSubscriptions">My Subscriptions</a>
     </nav>
     <nav class="topbar-nav">
@@ -166,7 +167,7 @@
 </div>
 
 <script type="module">
-import { auth, authApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
+import { auth, authApi, catalogApi, foldersApi, reportsApi, subscriptionsApi } from '/js/api.js';
 
 if (!auth.isLoggedIn()) { window.location.href = '/login.html'; }
 
@@ -231,6 +232,10 @@ async function init() {
   document.getElementById('navSubscriptions').addEventListener('click', e => {
     e.preventDefault();
     showMySubscriptions();
+  });
+  document.getElementById('navRecent').addEventListener('click', e => {
+    e.preventDefault();
+    showRecentlyViewed();
   });
 
   wireSubscribeModal();
@@ -421,6 +426,83 @@ function wireLibraryToolbar() {
   document.getElementById('reportSortSelect')?.addEventListener('change', e => {
     reportSortMode = e.target.value;
     renderReportList(currentReports, currentFolderName);
+  });
+}
+
+// ── Recently viewed ───────────────────────────────────────────────────────────
+async function showRecentlyViewed() {
+  document.querySelectorAll('.folder-item').forEach(el => el.classList.remove('active'));
+  currentFolderId = null;
+  currentFolderName = 'Recently Viewed';
+  const $main = document.getElementById('mainContent');
+  $main.innerHTML = `<div class="loading-state"><span class="spinner"></span><span>Loading recent reports…</span></div>`;
+
+  try {
+    const reports = await catalogApi.recent(30);
+    renderCatalogReportList(reports);
+  } catch {
+    $main.innerHTML = `
+      <div class="empty-state empty-state-panel empty-state-error">
+        <div class="empty-state-icon empty-state-icon-alert" aria-hidden="true"></div>
+        <h2>Recent reports did not load</h2>
+        <p>Refresh the page or try again after checking the portal connection.</p>
+      </div>`;
+  }
+}
+
+function renderCatalogReportList(reports) {
+  const $main = document.getElementById('mainContent');
+  const rows = reports.map(r => {
+    const statusBadge = renderReportStatusBadge(r);
+    const viewedText = r.lastViewedAt ? timeAgo(r.lastViewedAt) : 'Not viewed yet';
+    const builtAt = formatBuiltAt(r.snapshotBuiltAt);
+    const refreshMeta = r.lastRefreshDurationMs ? `Refresh ${formatDuration(r.lastRefreshDurationMs)}` : builtAt;
+    const folderPath = r.path ? r.path.replace(/\/[^/]*$/, '') : '';
+    return `
+      <div class="catalog-report-row" data-id="${r.id}" data-folder-id="${r.folderId}" data-folder-path="${escAttr(folderPath)}">
+        <span class="report-glyph" aria-hidden="true"></span>
+        <div class="catalog-report-main">
+          <h3>${esc(r.name || '')}</h3>
+          <p>${esc(r.description || r.path || 'No description provided.')}</p>
+          <div class="report-status-row">
+            ${statusBadge}
+            ${r.certification ? `<span class="badge badge-ok">${esc(r.certification)}</span>` : ''}
+            ${r.scriptChanged ? '<span class="badge badge-warning">Script changed</span>' : ''}
+          </div>
+        </div>
+        <div class="catalog-report-meta">
+          <span title="${escAttr(formatBuiltAt(r.lastViewedAt))}">Viewed ${esc(viewedText)}</span>
+          <span title="${escAttr(builtAt)}">Refreshed ${esc(r.snapshotBuiltAt ? timeAgo(r.snapshotBuiltAt) : 'Awaiting first run')}</span>
+          <span title="${escAttr(refreshMeta)}">${esc(refreshMeta)}</span>
+        </div>
+      </div>`;
+  }).join('');
+
+  $main.innerHTML = `
+    <div class="library-toolbar">
+      <div class="library-title">
+        <span class="library-kicker">Catalog</span>
+        <h2>Recently Viewed</h2>
+      </div>
+      <span class="badge badge-refresh">${reports.length} report${reports.length === 1 ? '' : 's'}</span>
+      <div class="library-toolbar-spacer"></div>
+      <button class="btn btn-outline" id="refreshRecentBtn" type="button">Refresh</button>
+    </div>
+    ${reports.length
+      ? `<div class="catalog-report-list">${rows}</div>`
+      : `<div class="empty-state empty-state-panel">
+          <div class="empty-state-icon empty-state-icon-report" aria-hidden="true"></div>
+          <h2>No recently viewed reports</h2>
+          <p>Open a report snapshot and it will appear here.</p>
+        </div>`}`;
+
+  document.getElementById('refreshRecentBtn')?.addEventListener('click', () => showRecentlyViewed());
+  $main.querySelectorAll('.catalog-report-row').forEach(el => {
+    el.addEventListener('click', () => {
+      currentFolderId = +el.dataset.folderId;
+      currentFolderName = el.dataset.folderPath || 'Reports';
+      openReport(+el.dataset.id);
+    });
   });
 }
 

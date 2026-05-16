@@ -15,4 +15,7 @@ public record CatalogSearchResultDto(
     DateTime? LastViewedAt,
     string? LastRefreshStatus,
     string? LastRefreshError,
-    long? LastRefreshDurationMs);
+    long? LastRefreshDurationMs,
+    bool? HasSnapshot,
+    bool? IsStale,
+    bool? ScriptChanged);

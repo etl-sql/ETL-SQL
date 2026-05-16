@@ -127,7 +127,7 @@
 - [ ] Fill catalog quality-of-life gaps expected in BI portals, with scriptable equivalents where useful:
     - [x] Search reports/folders.
     - [ ] Favorites.
-    - [ ] Recently viewed.
+    - [x] Recently viewed.
     - [x] Tags/categories.
     - [x] Last refreshed, last viewed, and failure status badges.
 - [ ] Fill governance/admin gaps:

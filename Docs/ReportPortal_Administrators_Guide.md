@@ -310,6 +310,8 @@ Use `GET /api/catalog/search?q=<term>` to search visible folders and reports. Se
 
 The search matches folder name/path and report name, description, owner, contact, tags, category, domain, steward, and certification fields. Results include a `type` of `Folder` or `Report`, the catalog `path`, report metadata, and status fields such as `snapshotBuiltAt`, `lastViewedAt`, `lastRefreshStatus`, `lastRefreshError`, and `lastRefreshDurationMs` where applicable.
 
+Use `GET /api/catalog/recent?limit=20` to list the caller's recently viewed reports. This endpoint is also permission-aware and uses the same catalog result shape as search, including snapshot, stale, script-changed, and refresh status fields. A report enters the recent list when the caller opens a snapshot through `GET /api/reports/{id}/snapshot`.
+
 ### 6.6 Environment Promotion Pattern
 
 Use ETL-SQL environment sets as the deployment boundary. Do not create a separate portal deployment language for dev/test/prod. Scripts should define or load the environment values first, activate the target set, then use the same portal admin commands for folders, grants, publishing, subscriptions, and refresh jobs.

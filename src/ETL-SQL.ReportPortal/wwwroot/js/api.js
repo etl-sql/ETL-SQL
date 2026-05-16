@@ -187,6 +187,15 @@ export const datasetsApi = {
         apiJson(`/api/datasets/${id}/acl/${groupId}`, { method: 'DELETE' })
 };
 
+// ── Catalog ───────────────────────────────────────────────────────────────────
+
+export const catalogApi = {
+    search: (q, limit = 50) =>
+        apiJson(`/api/catalog/search?q=${encodeURIComponent(q)}&limit=${limit}`),
+    recent: (limit = 20) =>
+        apiJson(`/api/catalog/recent?limit=${limit}`)
+};
+
 // ── Admin — users ──────────────────────────────────────────────────────────────
 
 export const adminApi = {

@@ -451,6 +451,14 @@ CREATE VISUAL Total AS CARD (
         Assert.NotNull(listed["snapshotBuiltAt"]);
         Assert.NotNull(listed["lastViewedAt"]);
         Assert.True(listed["lastRefreshDurationMs"]!.GetValue<long>() >= 0);
+
+        var recentRes = await AuthGet(token, "/api/catalog/recent?limit=5");
+        Assert.Equal(HttpStatusCode.OK, recentRes.StatusCode);
+        var recent = await recentRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        var recentHit = recent!.Single(r => r!["id"]!.GetValue<int>() == reportId)!.AsObject();
+        Assert.Equal("Executable Report", recentHit["name"]!.GetValue<string>());
+        Assert.True(recentHit["hasSnapshot"]!.GetValue<bool>());
+        Assert.False(recentHit["isStale"]!.GetValue<bool>());
     }
 
     [Fact]
