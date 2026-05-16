@@ -29,5 +29,6 @@
     <Project Path="tests/ETL-SQL.PerfTests/ETL-SQL.PerfTests.csproj" />
     <Project Path="tests/ETL-SQL.Benchmarks/ETL-SQL.Benchmarks.csproj" />
     <Project Path="tests/ETL-SQL.LintTests/ETL-SQL.LintTests.csproj" />
+    <Project Path="tests/ETL-SQL.SqlLogicTests/ETL-SQL.SqlLogicTests.csproj" />
   </Folder>
 </Solution>

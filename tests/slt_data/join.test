@@ -57,3 +57,49 @@ SELECT a.id AS id1, b.id AS id2 FROM users a CROSS JOIN users b WHERE a.id < b.i
 3
 2
 3
+
+# Comma join (SQL-89 implicit CROSS JOIN filtered by WHERE)
+query ITI
+SELECT u.id, u.name, o.amount FROM users u, orders o WHERE u.id = o.user_id ORDER BY u.id, o.amount;
+----
+1
+Alice
+50
+1
+Alice
+100
+2
+Bob
+200
+
+# Three-table comma join
+statement ok
+CREATE TABLE categories(cat_id INT, label STRING);
+
+statement ok
+INSERT INTO categories VALUES(1, 'Premium'), (2, 'Standard');
+
+statement ok
+CREATE TABLE user_categories(user_id INT, cat_id INT);
+
+statement ok
+INSERT INTO user_categories VALUES(1, 1), (2, 2);
+
+query ITTI
+SELECT u.id, u.name, c.label, o.amount
+FROM users u, user_categories uc, categories c, orders o
+WHERE u.id = uc.user_id AND uc.cat_id = c.cat_id AND u.id = o.user_id
+ORDER BY u.id, o.amount;
+----
+1
+Alice
+Premium
+50
+1
+Alice
+Premium
+100
+2
+Bob
+Standard
+200

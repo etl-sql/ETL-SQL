@@ -153,6 +153,79 @@ namespace ETL_SQL.Tests.Statements
         }
 
         [Fact]
+        public async Task TestCommaJoin_TwoTables()
+        {
+            string testDir = Path.Combine(Path.GetTempPath(), "ETL_SQL_CommaJoin", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(testDir);
+            try
+            {
+                var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+                string pathU = Path.Combine(testDir, "cj_u.csv").Replace("\\", "/");
+                string pathO = Path.Combine(testDir, "cj_o.csv").Replace("\\", "/");
+                await File.WriteAllTextAsync(pathU, "id,name\n1,Alice\n2,Bob");
+                await File.WriteAllTextAsync(pathO, "uid,amount\n1,100\n1,50\n2,200");
+
+                await ev.Evaluate(Parse($"CREATE CONNECTION cj_u ON FLATFILE('{pathU}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION cj_o ON FLATFILE('{pathO}');"));
+
+                var res = await ev.ExecuteQuery(
+                    Parse("SELECT cj_u.name, cj_o.amount FROM cj_u, cj_o WHERE cj_u.id = cj_o.uid ORDER BY cj_u.name, cj_o.amount;").Statements[0]
+                ).ToListAsync();
+                var rows = res.SelectMany(b => b.Rows).ToList();
+
+                Assert.Equal(3, rows.Count);
+                Assert.Equal("Alice", rows[0]["name"]?.ToString());
+                Assert.Equal("50", rows[0]["amount"]?.ToString());
+                Assert.Equal("Alice", rows[1]["name"]?.ToString());
+                Assert.Equal("100", rows[1]["amount"]?.ToString());
+                Assert.Equal("Bob", rows[2]["name"]?.ToString());
+                Assert.Equal("200", rows[2]["amount"]?.ToString());
+            }
+            finally
+            {
+                if (Directory.Exists(testDir)) Directory.Delete(testDir, true);
+            }
+        }
+
+        [Fact]
+        public async Task TestCommaJoin_ThreeTables()
+        {
+            string testDir = Path.Combine(Path.GetTempPath(), "ETL_SQL_CommaJoin3", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(testDir);
+            try
+            {
+                var ev = DependencyInjectionSetup.BuildServiceProvider().GetRequiredService<Evaluator>();
+
+                string pathU = Path.Combine(testDir, "t1.csv").Replace("\\", "/");
+                string pathO = Path.Combine(testDir, "t2.csv").Replace("\\", "/");
+                string pathC = Path.Combine(testDir, "t3.csv").Replace("\\", "/");
+                await File.WriteAllTextAsync(pathU, "id,val\n1,A\n2,B");
+                await File.WriteAllTextAsync(pathO, "id,fk\n10,1\n11,2");
+                await File.WriteAllTextAsync(pathC, "fk2,label\n10,X\n11,Y");
+
+                await ev.Evaluate(Parse($"CREATE CONNECTION t1 ON FLATFILE('{pathU}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION t2 ON FLATFILE('{pathO}');"));
+                await ev.Evaluate(Parse($"CREATE CONNECTION t3 ON FLATFILE('{pathC}');"));
+
+                var res = await ev.ExecuteQuery(
+                    Parse("SELECT t1.val, t3.label FROM t1, t2, t3 WHERE t1.id = t2.fk AND t2.id = t3.fk2 ORDER BY t1.val;").Statements[0]
+                ).ToListAsync();
+                var rows = res.SelectMany(b => b.Rows).ToList();
+
+                Assert.Equal(2, rows.Count);
+                Assert.Equal("A", rows[0]["val"]?.ToString());
+                Assert.Equal("X", rows[0]["label"]?.ToString());
+                Assert.Equal("B", rows[1]["val"]?.ToString());
+                Assert.Equal("Y", rows[1]["label"]?.ToString());
+            }
+            finally
+            {
+                if (Directory.Exists(testDir)) Directory.Delete(testDir, true);
+            }
+        }
+
+        [Fact]
         public async Task TestSubqueryInJoin()
         {
             string testDir = Path.Combine(Path.GetTempPath(), "ETL_SQL_Tests", Guid.NewGuid().ToString("N"));

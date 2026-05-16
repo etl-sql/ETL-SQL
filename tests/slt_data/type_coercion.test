@@ -1,16 +1,22 @@
 # Type coercion and CAST behavior
 
-# Division always returns decimal (engine does not truncate)
-query R
+# Integer literal division truncates (both operands have scale 0)
+query I
 SELECT 7 / 2;
 ----
-3.5
+3
 
-# Decimal literal division
+# Decimal literal division returns real (7.0 has scale 1, so decimal division applies)
 query R
 SELECT 7.0 / 2;
 ----
 3.5
+
+# Integer division — negative truncates toward zero
+query I
+SELECT -7 / 2;
+----
+-3
 
 # CAST integer to decimal
 query R
@@ -41,6 +47,28 @@ query I
 SELECT CAST('3' AS INT);
 ----
 3
+
+# CAST decimal to INT truncates toward zero (does not round)
+query I
+SELECT CAST(3.9 AS INT);
+----
+3
+
+query I
+SELECT CAST(3.1 AS INT);
+----
+3
+
+query I
+SELECT CAST(-3.9 AS INT);
+----
+-3
+
+# CAST to BIGINT also truncates
+query I
+SELECT CAST(9.7 AS BIGINT);
+----
+9
 
 # Implicit string-to-number in arithmetic (numeric context)
 query I

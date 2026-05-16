@@ -85,12 +85,25 @@ namespace ETL_SQL.Engine.Engines
             var aggregateSpecs = new List<(int ColumnIndex, FunctionCallExpression Function, IAggregateState State)>();
             var havingAggSpecs = new List<(FunctionCallExpression Function, IAggregateState State)>();
 
-            // Identify all aggregates in SELECT
+            // Identify all aggregates in SELECT.
+            // Top-level aggregate functions map to a column index; aggregates nested inside CASE /
+            // scalar wrappers (e.g. COALESCE(SUM(x), 0)) use ColumnIndex=-1 and are accessed
+            // via the AGG_<expr> key written into the result row during finalization.
             for (int i = 0; i < finalColumns.Count; i++)
             {
                 if (finalColumns[i].Expression is FunctionCallExpression f && IsAggregate(f))
                 {
                     aggregateSpecs.Add((i, f, CreateState(f)));
+                }
+                else if (IsAggregate(finalColumns[i].Expression))
+                {
+                    var nestedAggs = new List<FunctionCallExpression>();
+                    CollectAggregates(finalColumns[i].Expression, nestedAggs);
+                    foreach (var nested in nestedAggs)
+                    {
+                        if (!aggregateSpecs.Any(s => s.Function.ToSql().Equals(nested.ToSql(), StringComparison.OrdinalIgnoreCase)))
+                            aggregateSpecs.Add((-1, nested, CreateState(nested)));
+                    }
                 }
             }
 
@@ -173,7 +186,8 @@ namespace ETL_SQL.Engine.Engines
                 for (int i = 0; i < aggregateSpecs.Count; i++)
                 {
                     var val = await states.SelectStates[i].Finalize(this);
-                    resRow[colNames[aggregateSpecs[i].ColumnIndex]] = val;
+                    if (aggregateSpecs[i].ColumnIndex >= 0)
+                        resRow[colNames[aggregateSpecs[i].ColumnIndex]] = val;
                     resRow[$"AGG_{aggregateSpecs[i].Function.ToSql().ToUpperInvariant()}"] = val;
                 }
 

@@ -29,12 +29,24 @@ namespace ETL_SQL.Benchmarks
     [SimpleJob(launchCount: 1, warmupCount: 1, iterationCount: 3)]
     public class TpcHBenchmarks
     {
+        private readonly double _scaleFactor;
+
+        public TpcHBenchmarks() => _scaleFactor = 0.01;
+        public TpcHBenchmarks(double scaleFactor) => _scaleFactor = scaleFactor;
 
         private Evaluator _evaluator;
         private string _q1;
         private string _q6;
+        private string _q3;
+        private string _q5;
+        private string _q12;
+        private string _q14;
         private Script _q1Script;
         private Script _q6Script;
+        private Script _q3Script;
+        private Script _q5Script;
+        private Script _q12Script;
+        private Script _q14Script;
         public DataTable? LastResult => _evaluator?.LastResult;
 
         [GlobalSetup]
@@ -64,7 +76,7 @@ namespace ETL_SQL.Benchmarks
                 var bufferManager = new Mock<IBufferManager>();
                 
                 var connectors = new ConnectorRegistry();
-                var tpcHSeeder = new TpcHMockDataSeeder(0.01);
+                var tpcHSeeder = new TpcHMockDataSeeder(_scaleFactor);
                 connectors.Register(new TpcHMockConnector(tpcHSeeder));
 
                 var docker = new Mock<IDockerManager>();
@@ -131,8 +143,69 @@ namespace ETL_SQL.Benchmarks
                         AND l_shipdate < '1995-01-01'
                         AND l_discount BETWEEN 0.05 AND 0.07
                         AND l_quantity < 24;";
-                _q1Script = new Parser(new Lexer(_q1).Tokenize()).Parse();
-                _q6Script = new Parser(new Lexer(_q6).Tokenize()).Parse();
+                _q3 = @"
+                    SELECT
+                        l_orderkey,
+                        SUM(l_extendedprice * (1 - l_discount)) AS revenue,
+                        o_orderdate,
+                        o_shippriority
+                    FROM tpch.lineitem
+                    INNER JOIN tpch.orders ON l_orderkey = o_orderkey
+                    INNER JOIN tpch.customer ON o_custkey = c_custkey
+                    WHERE c_mktsegment = 'BUILDING'
+                        AND o_orderdate < '1995-03-15'
+                        AND l_shipdate > '1995-03-15'
+                    GROUP BY l_orderkey, o_orderdate, o_shippriority
+                    ORDER BY revenue DESC, o_orderdate
+                    LIMIT 10;";
+
+                _q5 = @"
+                    SELECT
+                        n_name,
+                        SUM(l_extendedprice * (1 - l_discount)) AS revenue
+                    FROM tpch.lineitem
+                    INNER JOIN tpch.orders ON l_orderkey = o_orderkey
+                    INNER JOIN tpch.customer ON o_custkey = c_custkey
+                    INNER JOIN tpch.supplier ON l_suppkey = s_suppkey
+                    INNER JOIN tpch.nation ON s_nationkey = n_nationkey
+                    INNER JOIN tpch.region ON n_regionkey = r_regionkey
+                    WHERE r_name = 'ASIA'
+                        AND c_nationkey = s_nationkey
+                        AND o_orderdate >= '1994-01-01'
+                        AND o_orderdate < '1995-01-01'
+                    GROUP BY n_name
+                    ORDER BY revenue DESC;";
+
+                _q12 = @"
+                    SELECT
+                        l_shipmode,
+                        SUM(CASE WHEN o_orderpriority = '1-URGENT' OR o_orderpriority = '2-HIGH' THEN 1 ELSE 0 END) AS high_line_count,
+                        SUM(CASE WHEN o_orderpriority <> '1-URGENT' AND o_orderpriority <> '2-HIGH' THEN 1 ELSE 0 END) AS low_line_count
+                    FROM tpch.lineitem
+                    INNER JOIN tpch.orders ON o_orderkey = l_orderkey
+                    WHERE l_shipmode IN ('MAIL', 'SHIP')
+                        AND l_commitdate < l_receiptdate
+                        AND l_shipdate < l_commitdate
+                        AND l_receiptdate >= '1994-01-01'
+                        AND l_receiptdate < '1995-01-01'
+                    GROUP BY l_shipmode
+                    ORDER BY l_shipmode;";
+
+                _q14 = @"
+                    SELECT
+                        100.00 * SUM(CASE WHEN p_type LIKE 'PROMO%' THEN l_extendedprice * (1 - l_discount) ELSE 0 END)
+                               / SUM(l_extendedprice * (1 - l_discount)) AS promo_revenue
+                    FROM tpch.lineitem
+                    INNER JOIN tpch.part ON l_partkey = p_partkey
+                    WHERE l_shipdate >= '1995-09-01'
+                        AND l_shipdate < '1995-10-01';";
+
+                _q1Script  = new Parser(new Lexer(_q1).Tokenize()).Parse();
+                _q6Script  = new Parser(new Lexer(_q6).Tokenize()).Parse();
+                _q3Script  = new Parser(new Lexer(_q3).Tokenize()).Parse();
+                _q5Script  = new Parser(new Lexer(_q5).Tokenize()).Parse();
+                _q12Script = new Parser(new Lexer(_q12).Tokenize()).Parse();
+                _q14Script = new Parser(new Lexer(_q14).Tokenize()).Parse();
             }
             catch (Exception ex)
             {
@@ -152,6 +225,30 @@ namespace ETL_SQL.Benchmarks
         public async Task RunQ6()
         {
             await _evaluator.Evaluate(_q6Script);
+        }
+
+        [Benchmark]
+        public async Task RunQ3()
+        {
+            await _evaluator.Evaluate(_q3Script);
+        }
+
+        [Benchmark]
+        public async Task RunQ5()
+        {
+            await _evaluator.Evaluate(_q5Script);
+        }
+
+        [Benchmark]
+        public async Task RunQ12()
+        {
+            await _evaluator.Evaluate(_q12Script);
+        }
+
+        [Benchmark]
+        public async Task RunQ14()
+        {
+            await _evaluator.Evaluate(_q14Script);
         }
     }
 

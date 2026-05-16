@@ -57,7 +57,8 @@ namespace ETL_SQL.Core.Data
                     "+" => da + db,
                     "-" => da - db,
                     "*" => da * db,
-                    "/" => db == 0 ? throw new ExecutionException("Divide by zero error encountered.", null, 0, 0, 8134, 16, 1) : da / db,
+                    "/" => db == 0 ? throw new ExecutionException("Divide by zero error encountered.", null, 0, 0, 8134, 16, 1)
+                               : (IsIntegerScale(da) && IsIntegerScale(db) ? Math.Truncate(da / db) : da / db),
                     "%" => db == 0 ? throw new ExecutionException("Divide by zero error encountered.", null, 0, 0, 8134, 16, 1) : da % db,
                     _ => null
                 };
@@ -67,6 +68,10 @@ namespace ETL_SQL.Core.Data
                 return null;
             }
         }
+
+        // Scale 0 means no decimal digits were written (e.g. 7, not 7.0 or 7.5).
+        // Convert.ToDecimal(intValue) always produces scale 0, so INT column values qualify.
+        private static bool IsIntegerScale(decimal d) => ((decimal.GetBits(d)[3] >> 16) & 0x7F) == 0;
 
         /// <summary>Executes a binary operation for the given token type.</summary>
         public static object? Execute(TokenType op, object? left, object? right)

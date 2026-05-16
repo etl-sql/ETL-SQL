@@ -59,6 +59,30 @@ SET TELEMETRY = OFF;";
 
         public string? CurrentFile { get; set; }
 
+        public long TempTableSpillThresholdRows
+        {
+            get => _evaluator.TempTableSpillThresholdRows;
+            set => _evaluator.TempTableSpillThresholdRows = value;
+        }
+
+        public bool IsPersistentSession
+        {
+            get => _evaluator.IsPersistentSession;
+            set => _evaluator.IsPersistentSession = value;
+        }
+
+        public string? SessionId
+        {
+            get => _evaluator.SessionId;
+            set => _evaluator.SessionId = value;
+        }
+
+        public string SessionRoot
+        {
+            get => _evaluator.SessionRoot;
+            set => _evaluator.SessionRoot = value;
+        }
+
         public async Task RunTestAsync(SltRecord record)
         {
             // skipif etlsql → skip; onlyif etlsql → run; otherwise opposite

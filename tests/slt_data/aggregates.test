@@ -45,3 +45,36 @@ SELECT SUM(a), SUM(DISTINCT a) FROM t1;
 ----
 17
 15
+
+# Aggregates nested inside CASE (hasAgg must recurse into CaseExpression branches)
+statement ok
+CREATE TABLE t3(x INT);
+
+statement ok
+INSERT INTO t3 VALUES(1), (2), (3);
+
+# CASE WHEN SUM(x) IS NULL THEN 0 ELSE SUM(x) END — aggregate nested in CASE
+query I
+SELECT CASE WHEN SUM(x) IS NULL THEN 0 ELSE SUM(x) END FROM t3;
+----
+6
+
+# COALESCE(SUM(x), 0) — aggregate nested inside scalar function
+query I
+SELECT COALESCE(SUM(x), 0) FROM t3;
+----
+6
+
+# Empty table: SUM is NULL, CASE/COALESCE should apply the fallback
+statement ok
+CREATE TABLE t4(x INT);
+
+query I
+SELECT CASE WHEN SUM(x) IS NULL THEN 0 ELSE SUM(x) END FROM t4;
+----
+0
+
+query I
+SELECT COALESCE(SUM(x), 0) FROM t4;
+----
+0
