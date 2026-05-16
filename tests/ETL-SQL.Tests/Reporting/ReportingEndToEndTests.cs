@@ -176,6 +176,66 @@ CREATE PAGE Main AS (
         }
 
         [Fact]
+        [Trait("Category", "Smoke.Reporting")]
+        public async Task InteractionHighlight_UnmatchedDimension_DoesNotMarkAllRowsSelected()
+        {
+            string scriptPath = Path.Combine(Path.GetTempPath(), $"interaction_unmatched_dimension_{Guid.NewGuid()}.rptsql");
+            File.WriteAllText(scriptPath, @"
+DECLARE @Category STRING INPUT = 'All';
+
+SELECT 'North' AS Region, 'Hardware' AS Category, 100 AS Sales INTO #Sales;
+INSERT INTO #Sales (Region, Category, Sales) VALUES ('South', 'Services', 200);
+
+SELECT Region, SUM(Sales) AS Sales
+INTO #ByRegion
+FROM #Sales
+GROUP BY Region;
+
+CREATE VISUAL BarByRegion AS BAR (
+    SOURCE = (SELECT Region, Sales FROM #ByRegion),
+    MAPPINGS (X = Region, Y = Sales),
+    INTERACTIONS (ON_SELECT = HIGHLIGHT)
+);
+
+CREATE VISUAL DetailByCategory AS BAR (
+    SOURCE = (
+        SELECT Category, SUM(Sales) AS Sales
+        FROM #Sales
+        WHERE @Category = 'All' OR Category = @Category
+        GROUP BY Category
+    ),
+    MAPPINGS (X = Category, Y = Sales),
+    INTERACTIONS (ON_SELECT = HIGHLIGHT)
+);
+
+CREATE PAGE Main AS (
+    STRUCTURE = 'A B',
+    MAP('A' = BarByRegion, 'B' = DetailByCategory)
+);
+");
+
+            try
+            {
+                await using var service = new DashboardService(scriptPath, DashboardTestHelper.CreateMockScopeFactory());
+
+                await service.GetManifestAsync();
+                var manifest = await service.SetParameterAsync("Category", "Hardware", isInteraction: true);
+
+                var region = manifest.Visuals.Single(v => v.Name == "BarByRegion");
+                var detail = manifest.Visuals.Single(v => v.Name == "DetailByCategory");
+
+                Assert.Null(region.HighlightRows);
+                Assert.NotNull(detail.HighlightRows);
+                Assert.Single(detail.HighlightRows!);
+                Assert.Equal("Hardware", detail.HighlightRows![0][0]);
+            }
+            finally
+            {
+                if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            }
+        }
+
+        [Fact]
         [Trait("Category", "Smoke.Security")]
         public async Task DashboardService_RunScriptAsync_RejectsSiblingDirectoryBypass()
         {

@@ -407,7 +407,7 @@ namespace ETL_SQL.Reporting.Builders
                     {
                         foreach (var kvp in interactionValues)
                         {
-                            if (ctx.VarContext.ContainsVariable(kvp.Key))
+                            if (InteractionVariableApplies(queryStmt, kvp.Key) && ctx.VarContext.ContainsVariable(kvp.Key))
                             {
                                 backup[kvp.Key] = ctx.VarContext.GetVariable(kvp.Key);
                                 ctx.VarContext.SetVariable(kvp.Key, kvp.Value);
@@ -438,7 +438,7 @@ namespace ETL_SQL.Reporting.Builders
                     {
                         foreach (var kvp in interactionValues)
                         {
-                            if (ctx.VarContext.ContainsVariable(kvp.Key))
+                            if (InteractionVariableApplies(queryStmt, kvp.Key) && ctx.VarContext.ContainsVariable(kvp.Key))
                             {
                                 backup[kvp.Key] = ctx.VarContext.GetVariable(kvp.Key);
                                 ctx.VarContext.SetVariable(kvp.Key, kvp.Value);
@@ -463,6 +463,14 @@ namespace ETL_SQL.Reporting.Builders
                 // Standard fetch (no interaction context provided)
                 await ExecuteAndPopulateRowsAsync(queryStmt, vStmt, vm.Rows, vm.RowStyles, vm);
             }
+        }
+
+        private static bool InteractionVariableApplies(Statement queryStmt, string variableName)
+        {
+            if (!variableName.StartsWith("@", StringComparison.Ordinal))
+                variableName = "@" + variableName;
+
+            return ParameterScanner.Scan(queryStmt).Contains(variableName);
         }
 
         private async Task ExecuteAndPopulateRowsAsync(Statement queryStmt, CreateVisualStatement vStmt, List<List<string?>> targetRows, List<string?>? targetStyles, VisualManifest vm)

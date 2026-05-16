@@ -72,7 +72,7 @@
     MATCHING = Region
   )
   ```
-- [ ] Fix bidirectional cross-highlight behavior using `samples/kitchen_sinks/report_kitchen_sink.rptsql` as the reference. Current bug: clicking `BarByRegion` highlights `DrillRegionDetail`, but clicking `DrillRegionDetail` does not highlight `BarByRegion` after clearing the first selection.
+- [x] Fix bidirectional cross-highlight behavior using `samples/10_Kitchen_Sinks/report_kitchen_sink.rptsql` as the reference. Current bug: clicking `BarByRegion` highlights `DrillRegionDetail`, but clicking `DrillRegionDetail` does not highlight `BarByRegion` after clearing the first selection.
 - [x] Decide and document valid triggers per object type:
     - Charts and tables: `ON_CLICK`.
     - Slicers/search/date/slider/textbox/numberbox/checkbox controls: `ON_CHANGE`.
