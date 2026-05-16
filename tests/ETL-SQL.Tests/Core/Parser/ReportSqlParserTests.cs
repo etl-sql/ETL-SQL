@@ -302,6 +302,46 @@ CREATE BUTTON RefreshButton AS (
         }
 
         [Fact]
+        public void ParseCreateVisual_ChartOnChangeAction_ReportsSyntaxError()
+        {
+            var script = Parse("CREATE VISUAL SalesChart AS BAR (SOURCE = #sales, ACTIONS (ON_CHANGE = SET_PARAMETER(@region, region)));");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("BAR visuals only support ACTIONS (ON_CLICK", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void ParseCreateVisual_ControlOnClickAction_ReportsSyntaxError()
+        {
+            var script = Parse("CREATE VISUAL RegionFilter AS SLICER (SOURCE = #regions, ACTIONS (ON_CLICK = SET_PARAMETER(@region, region)));");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("SLICER visuals only support ACTIONS (ON_CHANGE", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void ParseCreateVisual_PassiveVisualWithActions_ReportsSyntaxError()
+        {
+            var script = Parse("CREATE VISUAL HelpText AS TEXT (CONTENT = 'Pick a region', ACTIONS (ON_CLICK = SET_UI_STATE('Filters', 'VISIBLE', ON)));");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("TEXT visuals do not support ACTIONS", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
+        public void ParseCreateButton_OnChangeAction_ReportsSyntaxError()
+        {
+            var script = Parse("CREATE BUTTON ApplyFilters AS (TITLE = 'Apply', ACTIONS (ON_CHANGE = APPLY_PARAMETERS));");
+
+            Assert.Contains(script.Diagnostics, d =>
+                d.Severity == DiagnosticSeverity.Error &&
+                d.Message.Contains("BUTTON actions only support ACTIONS (ON_CLICK", StringComparison.OrdinalIgnoreCase));
+        }
+
+        [Fact]
         public void ParseCreateNavigation_PagesInBody_ParsesCorrectly()
         {
             var sql = @"

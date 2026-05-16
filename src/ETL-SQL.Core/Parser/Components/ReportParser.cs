@@ -163,6 +163,8 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.RPAREN, "Expected ')' to close CREATE VISUAL");
             Match(TokenType.SEMICOLON);
 
+            ValidateVisualActionTriggers(visualType, actions, startToken);
+
             if (source == null)
             {
                 if (visualType == VisualType.Text
@@ -864,6 +866,8 @@ namespace ETL_SQL.Core.Parser.Components
             Consume(TokenType.RPAREN, "Expected ')' to close CREATE BUTTON");
             Match(TokenType.SEMICOLON);
 
+            ValidateButtonActionTriggers(actions, startToken);
+
             return new CreateButtonStatement
             {
                 Name       = name,
@@ -1069,6 +1073,62 @@ namespace ETL_SQL.Core.Parser.Components
                 $"Expected visual type (BAR, LINE, SCATTER, PIE, TABLE, CARD, SLICER, HEATMAP, DONUT, HBAR, BOXPLOT, TREEMAP, TEXT, COMBO, DATEPICKER, RELDATEPICKER, SLIDER, MULTISELECT, SEARCH, GAUGE, FUNNEL, WATERFALL, BUBBLE, RADAR, CANDLESTICK, MAP, GANTT, SANKEY, SUNBURST, NETWORK, TRELLIS, MATRIX, CHECKBOX, TEXTBOX, NUMBERBOX) but got '{_parser.Current.Value}'",
                 _parser.Current.Line, _parser.Current.Column);
         }
+
+        private static void ValidateVisualActionTriggers(VisualType visualType, List<VisualAction> actions, Token startToken)
+        {
+            if (actions.Count == 0)
+                return;
+
+            if (IsPassiveVisual(visualType))
+            {
+                throw new SyntaxException(
+                    $"{visualType.ToString().ToUpperInvariant()} visuals do not support ACTIONS. Use a BUTTON for clickable behavior.",
+                    startToken.Line,
+                    startToken.Column);
+            }
+
+            var expectedTrigger = IsControlVisual(visualType) ? "ON_CHANGE" : "ON_CLICK";
+            foreach (var action in actions)
+            {
+                if (!string.Equals(action.Trigger, expectedTrigger, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new SyntaxException(
+                        $"{visualType.ToString().ToUpperInvariant()} visuals only support ACTIONS ({expectedTrigger} = ...).",
+                        startToken.Line,
+                        startToken.Column);
+                }
+            }
+        }
+
+        private static void ValidateButtonActionTriggers(List<VisualAction> actions, Token startToken)
+        {
+            foreach (var action in actions)
+            {
+                if (!string.Equals(action.Trigger, "ON_CLICK", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new SyntaxException(
+                        "BUTTON actions only support ACTIONS (ON_CLICK = ...).",
+                        startToken.Line,
+                        startToken.Column);
+                }
+            }
+        }
+
+        private static bool IsControlVisual(VisualType visualType) => visualType is
+            VisualType.Slicer
+            or VisualType.DatePicker
+            or VisualType.RelDatePicker
+            or VisualType.Slider
+            or VisualType.MultiSelect
+            or VisualType.Search
+            or VisualType.Checkbox
+            or VisualType.Textbox
+            or VisualType.Numberbox;
+
+        private static bool IsPassiveVisual(VisualType visualType) => visualType is
+            VisualType.Text
+            or VisualType.Card
+            or VisualType.Image;
 
         private VisualSourceExpression ParseVisualSource()
         {

@@ -2079,6 +2079,17 @@ ON_CLICK  = APPLY_PARAMETERS
 ON_CLICK  = SET_UI_STATE(<Target>, <Key>, <Value>)
 ```
 
+**Valid triggers by object type:**
+
+| Object type | Valid trigger |
+| :--- | :--- |
+| Charts and tables | `ON_CLICK` |
+| Controls (`SLICER`, `MULTISELECT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, `NUMBERBOX`) | `ON_CHANGE` |
+| Buttons | `ON_CLICK` |
+| `TEXT`, `CARD`, `IMAGE` | none |
+
+Invalid trigger/object combinations are syntax errors.
+
 #### A.3.1 Filter Visuals (`SLICER`, `DATEPICKER`, etc.)
 Filter visuals differ from charts in that they typically bind to a parameter via `ON_CHANGE`.
 

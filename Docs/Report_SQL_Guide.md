@@ -1112,15 +1112,20 @@ Actions wire up interactive behavior in the live dashboard:
 
 ```sql
 ACTIONS (
-  ON_CLICK  = DRILL_DOWN(Target = DetailChart, Key = region),
-  ON_CHANGE = SET_PARAMETER(@region, region)
+  ON_CLICK = DRILL_DOWN(Target = DetailChart, Key = region)
 )
 ```
 
-| Trigger | Description |
-|---------|-------------|
-| `ON_CLICK` | Fires when the user clicks a chart element (bar, slice, point). |
-| `ON_CHANGE` | Fires when a SLICER, MULTISELECT, DATEPICKER, RELDATEPICKER, SLIDER, or SEARCH value changes. |
+Each report object type has one valid trigger shape:
+
+| Object type | Valid trigger | Notes |
+|-------------|---------------|-------|
+| Charts and tables | `ON_CLICK` | Fires when the user clicks a chart element, point, map region, or table row. |
+| Controls | `ON_CHANGE` | Applies to `SLICER`, `MULTISELECT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, and `NUMBERBOX`. |
+| Buttons | `ON_CLICK` | Used for commands such as refresh, export, clear filters, and apply parameters. |
+| `TEXT`, `CARD`, `IMAGE` | none | These display-only visuals do not accept `ACTIONS`; use `CREATE BUTTON` for clickable behavior. |
+
+Invalid trigger/object combinations are syntax errors. For example, a `BAR` visual cannot declare `ON_CHANGE`, and a `SLICER` cannot declare `ON_CLICK`.
 
 #### DRILL_DOWN
 

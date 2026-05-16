@@ -1,17 +1,22 @@
 # ACTIONS
-Interactive visuals (charts, tables, slicers) and buttons can trigger one or more actions when a user interacts with them.
+Interactive charts, tables, controls, and buttons can trigger one or more actions when a user interacts with them.
 
 Syntax:
 ```sql
 ACTIONS (
-  ON_CLICK = <action>,
-  ON_CHANGE = <action>
+  ON_CLICK = <action>
 )
 ```
 
 ## Supported Triggers
-- **ON_CLICK**: Triggered when a user clicks a chart element (bar, slice, point) or a row in a table.
-- **ON_CHANGE**: Triggered when a user changes a filter value (slicer, multiselect, datepicker, etc.).
+| Object type | Valid trigger | Description |
+|-------------|---------------|-------------|
+| Charts and tables | `ON_CLICK` | Fires when the user clicks a chart element, point, map region, or table row. |
+| Controls | `ON_CHANGE` | Applies to `SLICER`, `MULTISELECT`, `DATEPICKER`, `RELDATEPICKER`, `SLIDER`, `SEARCH`, `CHECKBOX`, `TEXTBOX`, and `NUMBERBOX`. |
+| Buttons | `ON_CLICK` | Fires when the button is clicked. |
+| `TEXT`, `CARD`, `IMAGE` | none | Display-only visuals do not accept `ACTIONS`; use `CREATE BUTTON` for clickable behavior. |
+
+Invalid trigger/object combinations are syntax errors.
 
 ## Supported Actions
 
