@@ -304,6 +304,12 @@ DROP DATASET 'Sales Summary' IN FOLDER '/Finance';
 
 Use `&dataset` only for report-owned dataset definitions inside `.rptsql` files. Portal registry commands use string-literal catalog names plus `IN FOLDER` so they cannot be confused with engine `#temp` tables or report dataset declarations.
 
+### 6.5 Catalog Search
+
+Use `GET /api/catalog/search?q=<term>` to search visible folders and reports. Search is permission-aware: admins search the full catalog, while other users only see folders granted through group ACLs and reports inside those folders.
+
+The search matches folder name/path and report name, description, owner, contact, tags, category, domain, steward, and certification fields. Results include a `type` of `Folder` or `Report`, the catalog `path`, and report metadata where applicable.
+
 ---
 
 ## 7. SMTP Connections

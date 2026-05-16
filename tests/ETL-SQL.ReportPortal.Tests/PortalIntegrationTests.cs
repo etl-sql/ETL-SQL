@@ -274,6 +274,47 @@ public class PortalIntegrationTests : IClassFixture<PortalWebFactory>
 
     [Fact]
     [Trait("Category", "Smoke.Portal")]
+    public async Task CatalogSearch_FindsReportsByMetadataAndFoldersByPath()
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        var folderRes = await AuthPost(token, "/api/folders", new { name = $"Search {suffix}", parentId = (int?)null });
+        Assert.Equal(HttpStatusCode.Created, folderRes.StatusCode);
+        var folder = await folderRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        var folderId = folder!["id"]!.GetValue<int>();
+
+        var scriptPath = Path.Combine(_factory.TempDir, "scripts", $"search_{suffix}.rptsql");
+        await File.WriteAllTextAsync(scriptPath,
+            $"/* @owner: Search Team; @tags: alpha-{suffix},quarterly; @category: Discovery */\n" +
+            "SET REPORT TITLE = 'Catalog Search';\n");
+
+        var publishRes = await AuthPost(token, "/api/reports", new
+        {
+            folderId,
+            name = $"Searchable Report {suffix}",
+            description = "Catalog search integration report",
+            scriptPath
+        });
+        Assert.Equal(HttpStatusCode.Created, publishRes.StatusCode);
+
+        var reportSearch = await AuthGet(token, $"/api/catalog/search?q=alpha-{suffix}");
+        Assert.Equal(HttpStatusCode.OK, reportSearch.StatusCode);
+        var reportResults = await reportSearch.Content.ReadFromJsonAsync<JsonArray>(_json);
+        var reportHit = Assert.Single(reportResults!, r => r!["type"]!.GetValue<string>() == "Report");
+        Assert.Equal($"Searchable Report {suffix}", reportHit!["name"]!.GetValue<string>());
+        Assert.Equal("Discovery", reportHit["category"]!.GetValue<string>());
+
+        var folderSearch = await AuthGet(token, $"/api/catalog/search?q=Search%20{suffix}");
+        Assert.Equal(HttpStatusCode.OK, folderSearch.StatusCode);
+        var folderResults = await folderSearch.Content.ReadFromJsonAsync<JsonArray>(_json);
+        Assert.Contains(folderResults!, r =>
+            r!["type"]!.GetValue<string>() == "Folder" &&
+            r["path"]!.GetValue<string>() == $"/Search {suffix}");
+    }
+
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
     public async Task GoldenWorkflow_PublishExecuteInteractAndExport_RoundTrips()
     {
         var token = await GetAdminTokenAsync();

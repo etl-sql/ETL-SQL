@@ -378,6 +378,7 @@ secrets file.
 - `POST /api/auth/refresh` — exchange refresh token for new JWT
 - `GET /api/folders` — ACL-filtered folder tree
 - `GET /api/folders/{id}/reports` — reports the user can Read
+- `GET /api/catalog/search?q=...` — permission-aware search across visible folders and reports
 - `POST /api/folders` — create folder (Publisher+)
 - `POST /api/reports` — publish a report (Publisher+)
 - `PUT /api/reports/{id}` — update metadata (Manage)
