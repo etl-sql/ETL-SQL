@@ -29,6 +29,7 @@ namespace ETL_SQL.SqlLogicTests
     {
         private readonly ILogger _logger;
         private readonly Evaluator _evaluator;
+        private int _queryCount;
 
         public SltRunner(ILogger? logger = null)
         {
@@ -75,6 +76,9 @@ SET TELEMETRY = OFF;";
                 // Clear results to prevent memory accumulation during long test runs
                 _evaluator.LastResult = null;
                 _evaluator.LastResultSets.Clear();
+
+                if (++_queryCount % 500 == 0)
+                    GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
 
                 if (!record.ExpectSuccess && record.Type == SltRecordType.Statement)
                 {

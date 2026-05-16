@@ -95,6 +95,7 @@ namespace ETL_SQL.Engine.Services
 
                 mem.SetSchema(colDefs);
                 await mem.WriteBatches(new[] { currentStep }.ToAsyncEnumerable());
+                if (context.LocalSources.TryGetValue(cte.Name, out var prev)) await prev.DisposeAsync();
                 context.LocalSources[cte.Name] = mem;
 
                 var nextStep = new DataTable();
@@ -137,6 +138,7 @@ namespace ETL_SQL.Engine.Services
             finalMem.MaxInMemoryBatches = context.MaxInMemoryBatches;
             finalMem.SetSchema(colDefs);
             await finalMem.WriteBatches(new[] { finalResult }.ToAsyncEnumerable());
+            if (context.LocalSources.TryGetValue(cte.Name, out var prevFinal)) await prevFinal.DisposeAsync();
             context.LocalSources[cte.Name] = finalMem;
         }
 
@@ -162,6 +164,7 @@ namespace ETL_SQL.Engine.Services
             mem.MaxInMemoryBatches = context.MaxInMemoryBatches;
             mem.SetSchema(cteResult.ColumnNames.Select(c => new ColumnDefinition(c, "STRING", false)));
             await mem.WriteBatches(new[] { cteResult }.ToAsyncEnumerable());
+            if (context.LocalSources.TryGetValue(cte.Name, out var prevStd)) await prevStd.DisposeAsync();
             context.LocalSources[cte.Name] = mem;
         }
 

@@ -62,7 +62,13 @@ namespace ETL_SQL.Engine.Services
 
             if (connName.StartsWith("#") && stmt.TargetTable.ConnectionName == null)
             {
-                if (!connections.Remove(connName) && !stmt.IfExists) throw new ExecutionException($"Table not found: {connName}");
+                if (connections.TryGetValue(connName, out var src))
+                {
+                    await src.DisposeAsync();
+                    connections.Remove(connName);
+                }
+                else if (!stmt.IfExists)
+                    throw new ExecutionException($"Table not found: {connName}");
             }
             else if (connections.TryGetValue(connName, out var conn) && conn is IDatabaseSource sqlConn)
             {

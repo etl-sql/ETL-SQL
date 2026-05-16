@@ -664,7 +664,10 @@ namespace ETL_SQL.Engine
                 // Lineage and Telemetry are session-persistent; clearing handled by ResetSessionAsync
                 _expressionEvaluator.ClearCaches();
                 _subqueryCache.Clear();
-                
+                foreach (var src in _localSources.Values)
+                    try { await src.DisposeAsync(); } catch { }
+                _localSources.Clear();
+
                 if (!InteractiveMode)
                 {
                     lock(_messagesLock) { Messages.Clear(); }
@@ -1244,6 +1247,9 @@ namespace ETL_SQL.Engine
             foreach (var conn in _connections.Values) await conn.DisposeAsync();
             await DockerManager.DisposeAsync();
             _connections.Clear();
+            foreach (var src in _localSources.Values)
+                try { await src.DisposeAsync(); } catch { }
+            _localSources.Clear();
         }
 
         public async Task<bool> ValidateCheckConstraint(Expression expression, Row row)

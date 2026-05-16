@@ -27,33 +27,33 @@ namespace ETL_SQL.SqlLogicTests
     {
         public static IEnumerable<SltRecord> ParseFile(string path)
         {
-            var lines = File.ReadAllLines(path);
-            int i = 0;
-            while (i < lines.Length)
+            using var reader = new StreamReader(path);
+            var buffer = new LineBuffer(reader);
+
+            while (buffer.TryPeek(out var line))
             {
-                var line = lines[i].Trim();
-                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#"))
+                var trimmed = line!.Trim();
+                if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#"))
                 {
-                    i++;
+                    buffer.Consume();
                     continue;
                 }
 
-                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 var cmd = parts[0].ToLowerInvariant();
 
                 if (cmd == "statement")
                 {
-                    var record = new SltRecord { Type = SltRecordType.Statement, LineNumber = i + 1 };
-                    record.ExpectSuccess = parts[1].ToLowerInvariant() == "ok";
-                    i++;
-                    record.Sql = ReadSql(lines, ref i);
+                    var record = new SltRecord { Type = SltRecordType.Statement, LineNumber = buffer.LineNumber };
+                    record.ExpectSuccess = parts.Length > 1 && parts[1].ToLowerInvariant() == "ok";
+                    buffer.Consume();
+                    record.Sql = ReadSql(buffer);
                     yield return record;
                 }
                 else if (cmd == "query")
                 {
-                    var record = new SltRecord { Type = SltRecordType.Query, LineNumber = i + 1 };
+                    var record = new SltRecord { Type = SltRecordType.Query, LineNumber = buffer.LineNumber };
                     if (parts.Length > 1) record.ColumnTypes = parts[1];
-                    // parts[2] is sort mode keyword or a label; parts[3] (if present) is the label
                     int labelIdx = 2;
                     if (parts.Length > 2)
                     {
@@ -65,39 +65,37 @@ namespace ETL_SQL.SqlLogicTests
                         }
                     }
                     if (parts.Length > labelIdx) record.Label = parts[labelIdx];
-                    i++;
-                    record.Sql = ReadSql(lines, ref i);
-                    record.ExpectedResult = ReadResults(lines, ref i);
+                    buffer.Consume();
+                    record.Sql = ReadSql(buffer);
+                    record.ExpectedResult = ReadResults(buffer);
                     yield return record;
                 }
                 else if (cmd == "halt")
                 {
-                    yield return new SltRecord { Type = SltRecordType.Halt, LineNumber = i + 1 };
+                    yield return new SltRecord { Type = SltRecordType.Halt, LineNumber = buffer.LineNumber };
                     yield break;
                 }
                 else if (cmd == "skipif" || cmd == "onlyif")
                 {
                     var engineName = parts.Length > 1 ? parts[1].ToLowerInvariant() : "";
                     var recordType = cmd == "skipif" ? SltRecordType.SkipIf : SltRecordType.OnlyIf;
-                    i++;
-                    // Consume and yield the following statement/query so the runner can decide whether to run it
-                    while (i < lines.Length && string.IsNullOrWhiteSpace(lines[i])) i++;
-                    if (i < lines.Length)
+                    buffer.Consume();
+                    while (buffer.TryPeek(out var blank) && string.IsNullOrWhiteSpace(blank)) buffer.Consume();
+                    if (buffer.TryPeek(out var innerLine))
                     {
-                        var innerLine = lines[i].Trim();
-                        var innerParts = innerLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                        var innerParts = innerLine!.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
                         var innerCmd = innerParts[0].ToLowerInvariant();
                         if (innerCmd == "statement")
                         {
-                            var record = new SltRecord { Type = recordType, LineNumber = i + 1, EngineCondition = engineName };
+                            var record = new SltRecord { Type = recordType, LineNumber = buffer.LineNumber, EngineCondition = engineName };
                             record.ExpectSuccess = innerParts.Length > 1 && innerParts[1].ToLowerInvariant() == "ok";
-                            i++;
-                            record.Sql = ReadSql(lines, ref i);
+                            buffer.Consume();
+                            record.Sql = ReadSql(buffer);
                             yield return record;
                         }
                         else if (innerCmd == "query")
                         {
-                            var record = new SltRecord { Type = recordType, LineNumber = i + 1, EngineCondition = engineName };
+                            var record = new SltRecord { Type = recordType, LineNumber = buffer.LineNumber, EngineCondition = engineName };
                             if (innerParts.Length > 1) record.ColumnTypes = innerParts[1];
                             int labelIdx = 2;
                             if (innerParts.Length > 2)
@@ -110,50 +108,75 @@ namespace ETL_SQL.SqlLogicTests
                                 }
                             }
                             if (innerParts.Length > labelIdx) record.Label = innerParts[labelIdx];
-                            i++;
-                            record.Sql = ReadSql(lines, ref i);
-                            record.ExpectedResult = ReadResults(lines, ref i);
+                            buffer.Consume();
+                            record.Sql = ReadSql(buffer);
+                            record.ExpectedResult = ReadResults(buffer);
                             yield return record;
                         }
                         else
                         {
-                            i++; // Unknown inner directive, skip it
+                            buffer.Consume();
                         }
                     }
                 }
                 else if (cmd == "hash-threshold")
                 {
-                    i++; // hash-threshold is not implemented; consume the line
+                    buffer.Consume();
                 }
                 else
                 {
-                    i++;
+                    buffer.Consume();
                 }
             }
         }
 
-        private static string ReadSql(string[] lines, ref int i)
+        private static string ReadSql(LineBuffer buffer)
         {
             var sb = new StringBuilder();
-            while (i < lines.Length && !string.IsNullOrWhiteSpace(lines[i]) && lines[i].Trim() != "----")
+            while (buffer.TryPeek(out var line) && !string.IsNullOrWhiteSpace(line) && line!.Trim() != "----")
             {
-                sb.AppendLine(lines[i]);
-                i++;
+                sb.AppendLine(line);
+                buffer.Consume();
             }
             return sb.ToString().Trim();
         }
 
-        private static string ReadResults(string[] lines, ref int i)
+        private static string ReadResults(LineBuffer buffer)
         {
-            if (i >= lines.Length || lines[i].Trim() != "----") return "";
-            i++; // skip ----
+            if (!buffer.TryPeek(out var sep) || sep!.Trim() != "----") return "";
+            buffer.Consume();
             var sb = new StringBuilder();
-            while (i < lines.Length && !string.IsNullOrWhiteSpace(lines[i]) && lines[i].Trim() != "----")
+            while (buffer.TryPeek(out var line) && !string.IsNullOrWhiteSpace(line) && line!.Trim() != "----")
             {
-                sb.AppendLine(lines[i]);
-                i++;
+                sb.AppendLine(line);
+                buffer.Consume();
             }
             return sb.ToString();
+        }
+
+        private sealed class LineBuffer(StreamReader reader)
+        {
+            private string? _peeked;
+            private bool _hasPeeked;
+            public int LineNumber { get; private set; }
+
+            public bool TryPeek(out string? line)
+            {
+                if (!_hasPeeked)
+                {
+                    _peeked = reader.ReadLine();
+                    _hasPeeked = true;
+                    if (_peeked != null) LineNumber++;
+                }
+                line = _peeked;
+                return _peeked != null;
+            }
+
+            public void Consume()
+            {
+                _hasPeeked = false;
+                _peeked = null;
+            }
         }
     }
 }
