@@ -116,24 +116,24 @@
 - [ ] Treat every portal capability as script-first. If it can be done in the UI, it must have a SQL-like administrative syntax, and if the engine already has a primitive, prefer exposing that primitive coherently instead of inventing a second model.
     - [x] Add script syntax for portal dataset registry refresh, metadata updates, deletion, and dataset ACL grants/revokes.
 - [ ] Polish and surface capabilities that already exist so they feel complete in the portal UI, docs, and scripting surface:
-    - Group-based permissions and folder ACLs.
-    - Publishing and republishing reports.
-    - Subscriptions and subscription history.
-    - Audit/activity log.
-    - Dataset registry/refresh status.
-    - Lineage/dependency data where available.
+    - [x] Group-based permissions and folder ACLs.
+    - [x] Publishing and republishing reports.
+    - [x] Subscriptions and subscription history.
+    - [x] Audit/activity log.
+    - [x] Dataset registry/refresh status.
+    - [ ] Lineage/dependency data where available.
 - [x] Standardize report metadata. Owner/contact/tags can already come from script metadata comments such as `/* @owner: TeamName */`; define the canonical portal tags and decide how they flow into catalog fields.
 - [ ] Standardize environment/deployment conventions. Dev/test/prod can already be handled with `CREATE SETS !DEV`, `CREATE SETS !TEST`, `CREATE SETS !PROD`, and `USE SETS !...`; define the portal/admin scripting pattern instead of adding a parallel deployment model too early.
 - [ ] Fill catalog quality-of-life gaps expected in BI portals, with scriptable equivalents where useful:
-    - Search reports/folders.
-    - Favorites.
-    - Recently viewed.
-    - Tags/categories.
-    - Last refreshed, last viewed, and failure status badges.
+    - [ ] Search reports/folders.
+    - [ ] Favorites.
+    - [ ] Recently viewed.
+    - [x] Tags/categories.
+    - [ ] Last refreshed, last viewed, and failure status badges.
 - [ ] Fill governance/admin gaps:
-    - Effective permissions view for a user/report/folder.
-    - Admin-facing usage metrics: views, unique viewers, refresh duration/failures, subscription delivery failures.
-    - Content endorsement/certification or "trusted" marker.
+    - [ ] Effective permissions view for a user/report/folder.
+    - [ ] Admin-facing usage metrics: views, unique viewers, refresh duration/failures, subscription delivery failures.
+    - [x] Content endorsement/certification or "trusted" marker.
 - [ ] Fill lifecycle/publishing gaps:
     - Report version/history metadata.
     - Replace/republish flow with validation before publish.
@@ -164,7 +164,7 @@
 - [x] **Small Multiples (Trellis)**: Repeat a visual across a grid for each category value.
 - [x] **Selection Primitives**: Brush/Lasso selection on Scatter/Scatter3D to drive parameter filters (Industry Standard: Tableau Brush).
 - [x] **Network Graph**: Force-directed graphs for lineage and relationship exploration.
-- [ ] **Maximize visual**: Maximize the space of the visual to the full screen and the chart fills the space, provide a minimize button to return to previous size and show other visuals.
+- [x] **Maximize visual**: Maximize the space of the visual to the full screen and the chart fills the space, provide a minimize button to return to previous size and show other visuals.
 
 - [ ] **Phase 7 — SQL Dialect Parity & Modern Standards (Cross-Engine Compatibility)**
     - [ ] **VALUES as a standalone table constructor**: Support `SELECT * FROM (VALUES (1, 'A'), (2, 'B')) AS t(id, name)`.
