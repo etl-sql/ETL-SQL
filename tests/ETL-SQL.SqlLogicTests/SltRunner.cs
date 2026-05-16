@@ -27,6 +27,10 @@ namespace ETL_SQL.SqlLogicTests
 {
     public class SltRunner : IDisposable
     {
+        private static readonly long TotalSystemMemoryBytes = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+        private static readonly System.Diagnostics.Process CurrentProcess = System.Diagnostics.Process.GetCurrentProcess();
+        private const double MemoryGuardFraction = 0.75;
+
         private readonly ILogger _logger;
         private readonly Evaluator _evaluator;
         private int _queryCount;
@@ -64,6 +68,8 @@ SET TELEMETRY = OFF;";
             if (string.IsNullOrWhiteSpace(record.Sql)) return;
 
             _queryCount++;
+            if (_queryCount % 10 == 0)
+                ThrowIfMemoryExceeded();
             LogProgress(record);
 
             var tokens = new Lexer(record.Sql).Tokenize();
@@ -97,6 +103,21 @@ SET TELEMETRY = OFF;";
                     throw new Exception($"Line {record.LineNumber}: Statement failed: {ex.Message}", ex);
                 }
             }
+        }
+
+        private void ThrowIfMemoryExceeded()
+        {
+            CurrentProcess.Refresh();
+            var workingSet = CurrentProcess.WorkingSet64;
+            var limitBytes = (long)(TotalSystemMemoryBytes * MemoryGuardFraction);
+            if (workingSet <= limitBytes) return;
+
+            var usedMB  = workingSet / 1024 / 1024;
+            var limitMB = limitBytes / 1024 / 1024;
+            var totalMB = TotalSystemMemoryBytes / 1024 / 1024;
+            throw new InvalidOperationException(
+                $"SLT memory guard: working set {usedMB}MB exceeds 75% of system memory " +
+                $"({totalMB}MB total, limit={limitMB}MB). Aborted at query {_queryCount}.");
         }
 
         private void LogProgress(SltRecord record)
