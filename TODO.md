@@ -166,10 +166,18 @@
 - [x] **Network Graph**: Force-directed graphs for lineage and relationship exploration.
 - [ ] **Maximize visual**: Maximize the space of the visual to the full screen and the chart fills the space, provide a minimize button to return to previous size and show other visuals.
 
-### Phase 7 — SQL Dialect Parity (Cross-Engine Compatibility)
-- [ ] **VALUES as a standalone table constructor**: Support `SELECT * FROM (VALUES (1, 'A'), (2, 'B')) AS t(id, name)`.
-- [ ] **APPROX_COUNT_DISTINCT**: Implement HyperLogLog-based approximate distinct count for large-scale datasets.
-- [ ] **PostgreSQL Operators**: Support `ILIKE` (case-insensitive LIKE), `~` (regex match), and `~*` (regex case-insensitive match).
+- [ ] **Phase 7 — SQL Dialect Parity & Modern Standards (Cross-Engine Compatibility)**
+    - [ ] **VALUES as a standalone table constructor**: Support `SELECT * FROM (VALUES (1, 'A'), (2, 'B')) AS t(id, name)`.
+    - [ ] **APPROX_COUNT_DISTINCT**: Implement HyperLogLog-based approximate distinct count for large-scale datasets.
+    - [ ] **PostgreSQL Operators**: Support `ILIKE` (case-insensitive LIKE), `~` (regex match), and `~*` (regex case-insensitive match).
+    - [ ] **Filtered Aggregates**: Fully implement the `FILTER (WHERE ...)` clause in `AggregateEngine` (currently parsed but ignored).
+    - [ ] **Standard JSON_TABLE**: Implement the full SQL:2016 `JSON_TABLE` with `COLUMNS` clause (currently supports a simplified 2-arg TVF).
+    - [ ] **Standard SQL:2008 OFFSET/FETCH**: Support `FETCH FIRST n ROWS ONLY` as an alternative to `LIMIT`.
+    - [ ] **Advanced Window Frames**: Support `GROUPS` mode and frame exclusion clauses (`EXCLUDE CURRENT ROW`, etc.).
+    - [ ] **Temporal Queries**: Support `FOR SYSTEM_TIME AS OF` for system-versioned tables.
+    - [ ] **Row Pattern Matching**: Implement `MATCH_RECOGNIZE` for pattern matching in sequences.
+    - [ ] **Generated Columns**: Support `GENERATED ALWAYS AS (expr)` in `CREATE TABLE`.
+    - [ ] **Standard Aggregates**: Support `EVERY`, `ANY`, and `SOME` as aggregate functions.
 
 ---
 
