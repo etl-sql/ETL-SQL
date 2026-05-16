@@ -131,7 +131,7 @@
     - [x] Tags/categories.
     - [x] Last refreshed, last viewed, and failure status badges.
 - [ ] Fill governance/admin gaps:
-    - [ ] Effective permissions view for a user/report/folder.
+    - [x] Effective permissions view for a user/report/folder.
     - [ ] Admin-facing usage metrics: views, unique viewers, refresh duration/failures, subscription delivery failures.
     - [x] Content endorsement/certification or "trusted" marker.
 - [ ] Fill lifecycle/publishing gaps:

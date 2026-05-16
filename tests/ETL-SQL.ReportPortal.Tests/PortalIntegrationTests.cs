@@ -817,6 +817,76 @@ CREATE VISUAL Total AS CARD (
         Assert.Equal(4, (await registry.ListAll("Admin")).Count(d => d.FolderPath == folder.Path));
     }
 
+    [Fact]
+    [Trait("Category", "Smoke.Portal")]
+    public async Task AdminEffectivePermissions_ReturnsUserFolderAndReportAccess()
+    {
+        var token = await GetAdminTokenAsync();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+
+        int userId;
+        int folderId;
+        int reportId;
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<PortalDbContext>();
+
+            var user = new PortalUser { UserName = $"perm_user_{suffix}", Email = $"perm_user_{suffix}@test.local" };
+            var group = new Group { Name = $"Perm Group {suffix}" };
+            db.Users.Add(user);
+            db.Groups.Add(group);
+            await db.SaveChangesAsync();
+
+            db.UserGroups.Add(new UserGroup { UserId = user.Id, GroupId = group.Id });
+            var folder = new Folder { Name = $"Perm Folder {suffix}", Path = $"/perm-{suffix}", OwnerId = user.Id };
+            db.Folders.Add(folder);
+            await db.SaveChangesAsync();
+
+            db.FolderAcls.Add(new FolderAcl
+            {
+                FolderId = folder.Id,
+                GroupId = group.Id,
+                Permission = FolderPermission.Execute
+            });
+            var report = new Report
+            {
+                FolderId = folder.Id,
+                Name = $"Perm Report {suffix}",
+                ScriptPath = Path.Combine(_factory.TempDir, "scripts", $"perm_{suffix}.rptsql"),
+                ScriptLastModified = DateTime.UtcNow,
+                CreatedBy = user.Id
+            };
+            db.Reports.Add(report);
+            await db.SaveChangesAsync();
+
+            userId = user.Id;
+            folderId = folder.Id;
+            reportId = report.Id;
+        }
+
+        var userRes = await AuthGet(token, $"/api/admin/permissions/effective/user/{userId}");
+        Assert.Equal(HttpStatusCode.OK, userRes.StatusCode);
+        var userBody = await userRes.Content.ReadFromJsonAsync<JsonObject>(_json);
+        Assert.Equal($"perm_user_{suffix}", userBody!["username"]!.GetValue<string>());
+        var folderHit = userBody["folders"]!.AsArray().Single(f => f!["resourceId"]!.GetValue<int>() == folderId)!.AsObject();
+        Assert.Equal("Execute", folderHit["permission"]!.GetValue<string>());
+        var reportHit = userBody["reports"]!.AsArray().Single(r => r!["resourceId"]!.GetValue<int>() == reportId)!.AsObject();
+        Assert.Equal("Execute", reportHit["permission"]!.GetValue<string>());
+
+        var folderRes = await AuthGet(token, $"/api/admin/permissions/effective/folder/{folderId}");
+        Assert.Equal(HttpStatusCode.OK, folderRes.StatusCode);
+        var folderBody = await folderRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        var folderUser = folderBody!.Single(u => u!["userId"]!.GetValue<int>() == userId)!.AsObject();
+        Assert.Equal("Execute", folderUser["permission"]!.GetValue<string>());
+
+        var reportRes = await AuthGet(token, $"/api/admin/permissions/effective/report/{reportId}");
+        Assert.Equal(HttpStatusCode.OK, reportRes.StatusCode);
+        var reportBody = await reportRes.Content.ReadFromJsonAsync<JsonArray>(_json);
+        var reportUser = reportBody!.Single(u => u!["userId"]!.GetValue<int>() == userId)!.AsObject();
+        Assert.Equal("Execute", reportUser["permission"]!.GetValue<string>());
+    }
+
     // ── 5. Subscription CRUD ──────────────────────────────────────────────────
 
     [Fact]

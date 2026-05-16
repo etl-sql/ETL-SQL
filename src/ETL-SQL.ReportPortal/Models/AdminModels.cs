@@ -47,3 +47,25 @@ public record AuditLogDto(
     string? Detail);
 
 public record PagedResult<T>(IList<T> Items, int Total, int Page, int PageSize);
+
+public record EffectivePermissionEntryDto(
+    string ResourceType,
+    int ResourceId,
+    string Name,
+    string Path,
+    string Permission,
+    IReadOnlyList<string> Sources);
+
+public record EffectiveUserPermissionsDto(
+    int UserId,
+    string Username,
+    IReadOnlyList<string> Groups,
+    IReadOnlyList<EffectivePermissionEntryDto> Folders,
+    IReadOnlyList<EffectivePermissionEntryDto> Reports);
+
+public record EffectivePrincipalPermissionDto(
+    int UserId,
+    string Username,
+    IReadOnlyList<string> Groups,
+    string Permission,
+    IReadOnlyList<string> Sources);

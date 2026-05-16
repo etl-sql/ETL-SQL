@@ -304,7 +304,19 @@ DROP DATASET 'Sales Summary' IN FOLDER '/Finance';
 
 Use `&dataset` only for report-owned dataset definitions inside `.rptsql` files. Portal registry commands use string-literal catalog names plus `IN FOLDER` so they cannot be confused with engine `#temp` tables or report dataset declarations.
 
-### 6.5 Catalog Search
+### 6.5 Effective Permissions
+
+Admins can inspect resolved portal access without mentally joining users, groups, folders, reports, and ACL rows:
+
+| Endpoint | Purpose |
+| :--- | :--- |
+| `GET /api/admin/permissions/effective/user/{userId}` | Lists the folders and reports a user can access, including the group source for each effective permission. |
+| `GET /api/admin/permissions/effective/folder/{folderId}` | Lists users with effective access to a folder. |
+| `GET /api/admin/permissions/effective/report/{reportId}` | Lists users with effective access to a report through its folder ACLs. |
+
+Reports inherit folder permissions. If a user belongs to multiple groups, the highest permission wins (`Read < Execute < Manage`) and the response lists the group or groups that supplied that winning level.
+
+### 6.6 Catalog Search
 
 Use `GET /api/catalog/search?q=<term>` to search visible folders and reports. Search is permission-aware: admins search the full catalog, while other users only see folders granted through group ACLs and reports inside those folders.
 
@@ -312,7 +324,7 @@ The search matches folder name/path and report name, description, owner, contact
 
 Use `GET /api/catalog/recent?limit=20` to list the caller's recently viewed reports. This endpoint is also permission-aware and uses the same catalog result shape as search, including snapshot, stale, script-changed, and refresh status fields. A report enters the recent list when the caller opens a snapshot through `GET /api/reports/{id}/snapshot`.
 
-### 6.6 Environment Promotion Pattern
+### 6.7 Environment Promotion Pattern
 
 Use ETL-SQL environment sets as the deployment boundary. Do not create a separate portal deployment language for dev/test/prod. Scripts should define or load the environment values first, activate the target set, then use the same portal admin commands for folders, grants, publishing, subscriptions, and refresh jobs.
 

@@ -307,6 +307,98 @@ public class AdminController(
         return Ok(reports);
     }
 
+    // ── Effective permissions ────────────────────────────────────────────────
+
+    [HttpGet("permissions/effective/user/{userId:int}")]
+    public async Task<IActionResult> GetEffectivePermissionsForUser(int userId)
+    {
+        var user = await userManager.Users
+            .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
+            .FirstOrDefaultAsync(u => u.Id == userId);
+        if (user is null) return NotFound();
+
+        var groupIds = user.UserGroups.Select(ug => ug.GroupId).ToHashSet();
+        var groupNames = user.UserGroups.Select(ug => ug.Group.Name).OrderBy(n => n).ToList();
+
+        var folders = await db.Folders
+            .Include(f => f.Acls).ThenInclude(a => a.Group)
+            .OrderBy(f => f.Path)
+            .ToListAsync();
+
+        var folderEntries = folders
+            .Select(f => BuildFolderPermissionEntry(f, groupIds))
+            .Where(e => e is not null)
+            .Select(e => e!)
+            .ToList();
+
+        var reportRows = await db.Reports
+            .Include(r => r.Folder).ThenInclude(f => f.Acls).ThenInclude(a => a.Group)
+            .Where(r => !r.IsDeleted)
+            .OrderBy(r => r.Folder.Path)
+            .ThenBy(r => r.Name)
+            .ToListAsync();
+
+        var reports = reportRows
+            .Select(r =>
+            {
+                var entry = BuildFolderPermissionEntry(r.Folder, groupIds);
+                return entry is null
+                    ? null
+                    : new EffectivePermissionEntryDto(
+                        "Report",
+                        r.Id,
+                        r.Name,
+                        CombinePath(r.Folder.Path, r.Name),
+                        entry.Permission,
+                        entry.Sources);
+            })
+            .Where(e => e is not null)
+            .Select(e => e!)
+            .ToList();
+
+        return Ok(new EffectiveUserPermissionsDto(user.Id, user.UserName!, groupNames, folderEntries, reports));
+    }
+
+    [HttpGet("permissions/effective/folder/{folderId:int}")]
+    public async Task<IActionResult> GetEffectivePermissionsForFolder(int folderId)
+    {
+        var folder = await db.Folders
+            .Include(f => f.Acls).ThenInclude(a => a.Group)
+            .FirstOrDefaultAsync(f => f.Id == folderId);
+        if (folder is null) return NotFound();
+
+        var users = await userManager.Users
+            .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
+            .OrderBy(u => u.UserName)
+            .ToListAsync();
+
+        return Ok(users
+            .Select(u => BuildPrincipalPermission(u, folder.Acls))
+            .Where(e => e is not null)
+            .Select(e => e!)
+            .ToList());
+    }
+
+    [HttpGet("permissions/effective/report/{reportId:int}")]
+    public async Task<IActionResult> GetEffectivePermissionsForReport(int reportId)
+    {
+        var report = await db.Reports
+            .Include(r => r.Folder).ThenInclude(f => f.Acls).ThenInclude(a => a.Group)
+            .FirstOrDefaultAsync(r => r.Id == reportId && !r.IsDeleted);
+        if (report is null) return NotFound();
+
+        var users = await userManager.Users
+            .Include(u => u.UserGroups).ThenInclude(ug => ug.Group)
+            .OrderBy(u => u.UserName)
+            .ToListAsync();
+
+        return Ok(users
+            .Select(u => BuildPrincipalPermission(u, report.Folder.Acls))
+            .Where(e => e is not null)
+            .Select(e => e!)
+            .ToList());
+    }
+
     // ── Audit log ─────────────────────────────────────────────────────────────
 
     [HttpGet("audit")]
@@ -410,4 +502,60 @@ public class AdminController(
             return $"\"{value.Replace("\"", "\"\"")}\"";
         return value;
     }
+
+    private static EffectivePermissionEntryDto? BuildFolderPermissionEntry(Folder folder, ISet<int> groupIds)
+    {
+        var matching = folder.Acls
+            .Where(a => groupIds.Contains(a.GroupId))
+            .OrderByDescending(a => a.Permission)
+            .ThenBy(a => a.Group.Name)
+            .ToList();
+        if (matching.Count == 0) return null;
+
+        var effective = matching.First().Permission;
+        var sources = matching
+            .Where(a => a.Permission == effective)
+            .Select(a => $"GROUP {a.Group.Name}")
+            .OrderBy(s => s)
+            .ToList();
+
+        return new EffectivePermissionEntryDto(
+            "Folder",
+            folder.Id,
+            folder.Name,
+            folder.Path,
+            effective.ToString(),
+            sources);
+    }
+
+    private static EffectivePrincipalPermissionDto? BuildPrincipalPermission(
+        PortalUser user,
+        IEnumerable<FolderAcl> acls)
+    {
+        var groupIds = user.UserGroups.Select(ug => ug.GroupId).ToHashSet();
+        var matching = acls
+            .Where(a => groupIds.Contains(a.GroupId))
+            .OrderByDescending(a => a.Permission)
+            .ThenBy(a => a.Group.Name)
+            .ToList();
+        if (matching.Count == 0) return null;
+
+        var effective = matching.First().Permission;
+        var groups = user.UserGroups.Select(ug => ug.Group.Name).OrderBy(n => n).ToList();
+        var sources = matching
+            .Where(a => a.Permission == effective)
+            .Select(a => $"GROUP {a.Group.Name}")
+            .OrderBy(s => s)
+            .ToList();
+
+        return new EffectivePrincipalPermissionDto(
+            user.Id,
+            user.UserName!,
+            groups,
+            effective.ToString(),
+            sources);
+    }
+
+    private static string CombinePath(string folderPath, string reportName) =>
+        folderPath.EndsWith('/') ? folderPath + reportName : $"{folderPath}/{reportName}";
 }
