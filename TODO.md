@@ -73,14 +73,14 @@
   )
   ```
 - [ ] Fix bidirectional cross-highlight behavior using `samples/kitchen_sinks/report_kitchen_sink.rptsql` as the reference. Current bug: clicking `BarByRegion` highlights `DrillRegionDetail`, but clicking `DrillRegionDetail` does not highlight `BarByRegion` after clearing the first selection.
-- [ ] Decide and document valid triggers per object type:
+- [x] Decide and document valid triggers per object type:
     - Charts and tables: `ON_CLICK`.
     - Slicers/search/date/slider/textbox/numberbox/checkbox controls: `ON_CHANGE`.
     - Buttons: `ON_CLICK`.
     - Text/card/image visuals: no actions unless intentionally made clickable.
 - [x] Normalize button behavior so built-in buttons and custom buttons do not feel split-brained. Preferred direction: buttons are command emitters and `ACTIONS` defines behavior.
   ```sql
-  CREATE BUTTON RefreshData AS BUTTON (
+  CREATE BUTTON RefreshData AS (
     TITLE = 'Refresh',
     ACTIONS (ON_CLICK = REFRESH_REPORT)
   );
