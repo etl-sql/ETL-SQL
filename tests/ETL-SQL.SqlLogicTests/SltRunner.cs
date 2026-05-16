@@ -29,6 +29,7 @@ namespace ETL_SQL.SqlLogicTests
     {
         private readonly ILogger _logger;
         private readonly Evaluator _evaluator;
+        public DataTable? LastResult => _evaluator.LastResult;
         private int _queryCount;
 
         public SltRunner(ILogger? logger = null)
@@ -53,6 +54,13 @@ SET TELEMETRY = OFF;";
 
         private const string OurEngineName = "etlsql";
 
+        public string? CurrentFile { get; set; }
+
+        public async Task RunStatementDirectly(ETL_SQL.Core.Script script)
+        {
+            await _evaluator.Evaluate(script);
+        }
+
         public async Task RunTestAsync(SltRecord record)
         {
             // skipif etlsql → skip; onlyif etlsql → run; otherwise opposite
@@ -61,23 +69,26 @@ SET TELEMETRY = OFF;";
 
             if (string.IsNullOrWhiteSpace(record.Sql)) return;
 
+            _queryCount++;
+            LogProgress(record);
+
             var tokens = new Lexer(record.Sql).Tokenize();
             var script = new Parser(tokens, record.Sql).Parse();
 
             try
             {
                 await _evaluator.Evaluate(script);
-                
+
                 if (record.Type == SltRecordType.Query)
                 {
                     VerifyResults(record, _evaluator.LastResult);
                 }
-                
+
                 // Clear results to prevent memory accumulation during long test runs
                 _evaluator.LastResult = null;
                 _evaluator.LastResultSets.Clear();
 
-                if (++_queryCount % 500 == 0)
+                if (_queryCount % 500 == 0)
                     GC.Collect(2, GCCollectionMode.Optimized, blocking: false);
 
                 if (!record.ExpectSuccess && record.Type == SltRecordType.Statement)
@@ -91,6 +102,27 @@ SET TELEMETRY = OFF;";
                 {
                     throw new Exception($"Line {record.LineNumber}: Statement failed: {ex.Message}", ex);
                 }
+            }
+        }
+
+        private void LogProgress(SltRecord record)
+        {
+            // Always print the about-to-run line so the last output before a crash/cancel is informative.
+            var sql = record.Sql?.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim() ?? "";
+            if (sql.Length > 80) sql = sql[..80] + "…";
+            var file = CurrentFile != null ? System.IO.Path.GetFileName(CurrentFile) + " " : "";
+            var prefix = $"[{_queryCount,5}] {file}L{record.LineNumber}: {sql}";
+
+            // Every 50 queries also emit memory stats so you can spot the spike.
+            if (_queryCount % 50 == 0)
+            {
+                var managedMB = GC.GetTotalMemory(false) / 1024 / 1024;
+                var workingMB = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64 / 1024 / 1024;
+                Console.Error.WriteLine($"{prefix}  | managed={managedMB}MB working={workingMB}MB");
+            }
+            else
+            {
+                Console.Error.WriteLine(prefix);
             }
         }
 
@@ -136,12 +168,7 @@ SET TELEMETRY = OFF;";
                 if (flat.Count != expectedCount)
                     throw new Exception($"Line {record.LineNumber}: Value count mismatch. Expected {expectedCount} values, got {flat.Count}.");
 
-                // SLT requires sorting results before hashing if nosort is specified
-                var hashValues = flat;
-                if (record.SortMode == SltSortMode.NoSort)
-                    hashValues = flat.OrderBy(v => v, StringComparer.Ordinal).ToList();
-
-                var actualHash = ComputeSltHash(hashValues);
+                var actualHash = ComputeSltHash(flat);
                 if (actualHash != expectedHash)
                     throw new Exception(
                         $"Line {record.LineNumber}: Hash mismatch. Expected {expectedHash}, got {actualHash}. " +

@@ -129,6 +129,9 @@ Connectors define how to communicate with external data sources.
 | `DIRECTORY` | Service | [DIRECTORY.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/DIRECTORY.md) | PATH, RECURSIVE, ... |
 | `MOCKDB` | Testing | [MOCKDB.md](file:///c:/Users/chuck/scratch/ETL-SQL/src/ETL-SQL.Core/Resources/Help/Connectors/MOCKDB.md) | - |
 
+### 3.1 File based table name
+FILE - Default name of the "table" for any file based connections
+
 ---
 
 ## 3. Standard Library (Functions)

@@ -299,22 +299,26 @@ namespace ETL_SQL.Engine.Engines
                     var expr = orderBy[i].Expression;
                     if (expr is LiteralExpression lit && lit.Type == TokenType.NUMBER && decimal.TryParse(lit.Value?.ToString(), out var num) && num > 0 && num <= colNames.Count)
                     {
-                        keys[i] = row[colNames[(int)num - 1]];
+                        var colIdx = (int)num - 1;
+                        var colName = colNames[colIdx];
+                        // Use direct column lookup if the projected column already exists (post-aggregation/window),
+                        // otherwise evaluate the SELECT expression directly on the pre-projection source row.
+                        keys[i] = row.HasColumn(colName)
+                            ? row[colName]
+                            : await _context.EvaluateValue(finalColumns[colIdx].Expression, row);
+                        continue;
                     }
-                    Row? evalRow = null;
                     if (expr is IdentifierExpression id && colNames.Contains(id.Name, StringComparer.OrdinalIgnoreCase))
                     {
                         keys[i] = row[id.Name];
                     }
                     else if (expr is IdentifierExpression idAlias && finalColumns.FirstOrDefault(c => string.Equals(c.Alias, idAlias.Name, StringComparison.OrdinalIgnoreCase)) is SelectColumn col)
                     {
-                        evalRow = row;
-                        keys[i] = await _context.EvaluateValue(col.Expression, evalRow);
+                        keys[i] = await _context.EvaluateValue(col.Expression, row);
                     }
                     else
                     {
-                        evalRow = row;
-                        keys[i] = await _context.EvaluateValue(expr, evalRow);
+                        keys[i] = await _context.EvaluateValue(expr, row);
                     }
                 }
                 rowSortKeys.Add((row, keys));

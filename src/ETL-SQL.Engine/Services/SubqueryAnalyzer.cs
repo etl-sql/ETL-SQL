@@ -56,25 +56,19 @@ namespace ETL_SQL.Engine.Services
             {
                 if (id.Name == "*") return;
 
-                bool isLocal = false;
-                if (id.Name.Contains("."))
-                {
-                    var parts = id.Name.Split('.');
-                    var qualifier = string.Join(".", parts.Take(parts.Length - 1));
-                    foreach (var scope in _localAliasStack)
-                    {
-                        if (scope.Contains(qualifier)) { isLocal = true; break; }
-                    }
-                }
-                else
-                {
-                    foreach (var scope in _localAliasStack)
-                    {
-                        if (scope.Contains(id.Name)) { isLocal = true; break; }
-                    }
-                }
+                // Only qualified identifiers (e.g. "t1.col") can be outer references.
+                // Unqualified identifiers resolve against the current row and are never outer references —
+                // checking them against the table-alias stack (which contains alias names, not column names)
+                // produces false positives that break scalar subquery caching.
+                if (!id.Name.Contains(".")) return;
 
-                if (!isLocal) outerRefs.Add(id.Name);
+                var parts = id.Name.Split('.');
+                var qualifier = string.Join(".", parts.Take(parts.Length - 1));
+                foreach (var scope in _localAliasStack)
+                {
+                    if (scope.Contains(qualifier)) return;
+                }
+                outerRefs.Add(id.Name);
                 return;
             }
 
